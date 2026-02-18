@@ -12,6 +12,7 @@ This folder contains detailed task documentation for future improvements to the 
 | 02 | [Extract Transaction Service](02-extract-transaction-service.md) | 🟢 LOW | 2-3 hours | 📋 TODO |
 | 03 | [Add Notifications (Telegram)](03-add-notifications.md) | 🟡 MEDIUM | 4-5 hours | 📋 TODO |
 | 04 | [Centralize Utilities (DRY)](04-centralize-utilities.md) | 🟢 LOW | 30 min | 📋 TODO |
+| 05 | [Enhance GitHub Release Page](05-enhance-release-page.md) | 🟡 MEDIUM | 2-3 hours | 📋 TODO |
 
 ---
 
@@ -50,14 +51,16 @@ This folder contains detailed task documentation for future improvements to the 
 ### For Quality First (Recommended)
 1. **Task 04** (30 min warm-up - DRY utilities)
 2. **Task 01** (foundation - tests + CI/CD)
-3. **Task 02** (refactoring - clean code)
-4. **Task 03** (feature - notifications)
+3. **Task 05** (better releases - polish)
+4. **Task 02** (refactoring - clean code)
+5. **Task 03** (feature - notifications)
 
 ### For Features First
 1. **Task 04** (quick win)
-2. **Task 03** (useful notifications)
-3. **Task 02** (cleaner code)
-4. **Task 01** (protect your work)
+2. **Task 05** (professional releases)
+3. **Task 03** (useful notifications)
+4. **Task 02** (cleaner code)
+5. **Task 01** (protect your work)
 
 ---
 
