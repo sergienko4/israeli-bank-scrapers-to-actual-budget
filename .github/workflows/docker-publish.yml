@@ -8,6 +8,10 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+
 env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
 
