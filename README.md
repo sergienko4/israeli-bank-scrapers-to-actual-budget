@@ -35,6 +35,7 @@ Cal (Visa Cal), Max, Isracard, Amex Israel, Beyahad Bishvilha, Behatsdaa, Pagi, 
 
 ## ✨ Features
 
+### Core Features
 - ✅ Automatic scheduled imports (cron)
 - ✅ 18 Israeli banks and credit cards
 - ✅ Duplicate detection
@@ -42,6 +43,14 @@ Cal (Visa Cal), Max, Isracard, Amex Israel, Beyahad Bishvilha, Behatsdaa, Pagi, 
 - ✅ Date filtering (import only recent transactions)
 - ✅ Multiple accounts mapping
 - ✅ Optional reconciliation
+
+### Stability & Resilience (Phase 3)
+- ✅ **TypeScript** - Full type safety and clean architecture
+- ✅ **10-minute timeout** - No more indefinite hangs
+- ✅ **3 retry attempts** - Automatic recovery from transient failures
+- ✅ **Exponential backoff** - Smart retry timing (1s, 2s, 4s)
+- ✅ **Clear error messages** - User-friendly error categorization
+- ✅ **Graceful shutdown** - Clean SIGTERM/SIGINT handling
 
 ---
 
