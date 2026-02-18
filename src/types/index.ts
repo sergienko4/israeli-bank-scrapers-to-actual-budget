@@ -66,3 +66,8 @@ export const DEFAULT_RESILIENCE_CONFIG: ResilienceConfig = {
   maxRetryAttempts: 3,
   initialBackoffMs: 1000 // 1 second
 };
+
+export interface ReconciliationResult {
+  status: 'created' | 'skipped' | 'already-reconciled';
+  diff: number;  // Amount in cents
+}
