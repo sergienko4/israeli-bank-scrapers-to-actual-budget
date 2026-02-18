@@ -44,10 +44,19 @@ tmpclaude-*
 # Sensitive data scan (dev use only)
 sensitive-data-scan.md
 
-# Internal development files (not for public GitHub)
+# Internal development files (keep locally, not in git)
+CODE-ANALYSIS.md
+DEPLOYMENT-SUMMARY.md
+DOCKER-IMMUTABILITY-FIX.md
+DOCS-REORGANIZATION.md
+IMPROVEMENTS-IMPLEMENTED.md
+NEXT-TASKS.md
+RELEASE-INSTRUCTIONS.md
+RELEASE-PLAN.md
+SECURITY-TEST-RESULTS.md
+SECURITY-UPDATES.md
+TEST-RESULTS.md
 IMPLEMENTATION-ROADMAP.md
 NEW-SESSION-PROMPT.md
 IMPROVEMENTS-SUMMARY.md
 PROJECT-SUMMARY.md
-IMPROVEMENTS-IMPLEMENTED.md
-TEST-RESULTS.md

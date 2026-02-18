@@ -392,10 +392,10 @@ After each import run, you'll see a comprehensive summary:
 
 | File | Description |
 |------|-------------|
-| [BANKS.md](BANKS.md) | All 18 banks with credential requirements |
-| [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) | Detailed deployment instructions |
-| [CODE-ANALYSIS.md](CODE-ANALYSIS.md) | Code quality analysis & improvement roadmap |
+| [docs/BANKS.md](docs/BANKS.md) | All 18 banks with credential requirements |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Detailed deployment instructions |
 | [SECURITY.md](SECURITY.md) | Security best practices and guidelines |
+| [CHANGELOG.md](CHANGELOG.md) | Version history and release notes |
 | [config.json.example](config.json.example) | Example configuration |
 
 ---

@@ -214,20 +214,37 @@ Security patches will be released as:
 
 ## 🔍 Security Features
 
-### Current Security Measures
+### Current Security Measures (v1.4.1)
 
-- ✅ Non-root container user
+#### Container Security
+- ✅ Non-root container user (`node`, UID 1000)
 - ✅ Secure directory permissions (755)
-- ✅ Config file not baked into image
-- ✅ Read-only config mount supported
+- ✅ Read-only application files (cannot be tampered)
+- ✅ Base image pinned to digest (supply chain protection)
 - ✅ Minimal base image (node:22-slim)
-- ✅ Credentials not logged
+- ✅ Health checks enabled (auto-restart on failure)
+
+#### Application Security
+- ✅ Config file not baked into image
+- ✅ Read-only config mount supported (`:ro`)
+- ✅ Credentials never logged
 - ✅ `.gitignore` prevents credential commits
-- ✅ Dependency vulnerability scanning (npm audit)
+- ✅ Comprehensive input validation (UUIDs, URLs, dates, emails)
 
-### Planned Security Enhancements
+#### Dependency Security
+- ✅ npm audit: 0 vulnerabilities (verified 2026-02-18)
+- ✅ Automated security scanning in CI/CD
+- ✅ Latest security patches applied:
+  - Node.js v22.22.0 (latest LTS)
+  - npm 11.10.0 (major security update)
+  - TypeScript 5.9.3
+  - All OS packages updated (`apt-get upgrade`)
 
-See [IMPLEMENTATION-ROADMAP.md](IMPLEMENTATION-ROADMAP.md) for upcoming security improvements.
+#### Build Security
+- ✅ Digest-pinned base image (immutable, reproducible)
+- ✅ Multi-stage security in CI/CD
+- ✅ Automated vulnerability scanning
+- ✅ OWASP Docker Security compliance: 9/10
 
 ---
 
@@ -262,5 +279,29 @@ This security policy is part of the Israeli Bank Importer project and is license
 
 ---
 
+---
+
+## 🔄 Security Update History
+
+### v1.4.1 (2026-02-18) - Security Hardening
+- ✅ Base image pinned to digest for supply chain protection
+- ✅ OS security patches applied (`apt-get upgrade`)
+- ✅ npm updated from 10.x to 11.x (major security update)
+- ✅ TypeScript updated to 5.9.3
+- ✅ File permissions hardened (read-only application files)
+- ✅ Docker health checks added
+- ✅ Automated security scanning in CI/CD
+- ✅ npm audit: 0 vulnerabilities
+
+### v1.4.0 (2026-02-18) - Observability
+- ✅ Configuration validation at startup
+- ✅ Metrics collection for monitoring
+
+### v1.3.0 (2026-02-18) - TypeScript Migration
+- ✅ Full type safety
+- ✅ Error handling improvements
+
+---
+
 **Last Updated**: 2026-02-18
-**Version**: 1.0.0
+**Version**: 1.4.1
