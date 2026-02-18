@@ -121,6 +121,7 @@ export class ConfigLoader implements IConfigLoader {
   }
 
   private validate(config: ImporterConfig): void {
+    // Validate Actual Budget configuration
     if (!config.actual.init.password) {
       throw new ConfigurationError('ACTUAL_PASSWORD is required (set via environment variable or config.json)');
     }
@@ -129,8 +130,138 @@ export class ConfigLoader implements IConfigLoader {
       throw new ConfigurationError('ACTUAL_BUDGET_SYNC_ID is required (set via environment variable or config.json)');
     }
 
+    // Validate syncId format (should be UUID)
+    if (!this.isValidUUID(config.actual.budget.syncId)) {
+      throw new ConfigurationError(`Invalid ACTUAL_BUDGET_SYNC_ID format. Expected UUID, got: ${config.actual.budget.syncId}`);
+    }
+
+    // Validate serverURL format
+    if (!config.actual.init.serverURL.startsWith('http://') && !config.actual.init.serverURL.startsWith('https://')) {
+      throw new ConfigurationError(`Invalid serverURL format. Must start with http:// or https://, got: ${config.actual.init.serverURL}`);
+    }
+
+    // Validate at least one bank is configured
     if (Object.keys(config.banks).length === 0) {
       throw new ConfigurationError('No bank credentials configured. Please set environment variables or use config.json');
+    }
+
+    // Validate each bank configuration
+    for (const [bankName, bankConfig] of Object.entries(config.banks)) {
+      this.validateBank(bankName, bankConfig);
+    }
+  }
+
+  private isValidUUID(uuid: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+  }
+
+  private validateBank(bankName: string, config: BankConfig): void {
+    // Validate startDate if present
+    if (config.startDate) {
+      const date = new Date(config.startDate);
+      if (isNaN(date.getTime())) {
+        throw new ConfigurationError(
+          `Invalid startDate format for ${bankName}: "${config.startDate}". Expected YYYY-MM-DD format (e.g., "2026-02-15")`
+        );
+      }
+      if (date > new Date()) {
+        throw new ConfigurationError(
+          `startDate cannot be in the future for ${bankName}. Got: ${config.startDate}`
+        );
+      }
+      // Warn if date is more than 1 year ago
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      if (date < oneYearAgo) {
+        console.warn(`⚠️  Warning: startDate for ${bankName} is more than 1 year ago (${config.startDate}). This may result in a large number of transactions.`);
+      }
+    }
+
+    // Validate targets array exists and not empty
+    if (!config.targets || config.targets.length === 0) {
+      throw new ConfigurationError(`No targets configured for ${bankName}. At least one target is required.`);
+    }
+
+    // Validate each target
+    config.targets.forEach((target, idx) => {
+      // Validate actualAccountId format (UUID)
+      if (!target.actualAccountId) {
+        throw new ConfigurationError(`Missing actualAccountId for ${bankName} target ${idx}`);
+      }
+      if (!this.isValidUUID(target.actualAccountId)) {
+        throw new ConfigurationError(
+          `Invalid actualAccountId format for ${bankName} target ${idx}.\n` +
+          `  Expected: UUID format (e.g., "12345678-1234-1234-1234-123456789abc")\n` +
+          `  Got: "${target.actualAccountId}"`
+        );
+      }
+
+      // Validate accounts field
+      if (!target.accounts) {
+        throw new ConfigurationError(`Missing accounts field for ${bankName} target ${idx}. Use "all" or an array of account numbers.`);
+      }
+      if (target.accounts !== 'all' && (!Array.isArray(target.accounts) || target.accounts.length === 0)) {
+        throw new ConfigurationError(`Invalid accounts field for ${bankName} target ${idx}. Must be "all" or a non-empty array.`);
+      }
+
+      // Validate reconcile is boolean
+      if (typeof target.reconcile !== 'boolean') {
+        throw new ConfigurationError(`Invalid reconcile field for ${bankName} target ${idx}. Must be true or false.`);
+      }
+    });
+
+    // Bank-specific validation
+    this.validateBankCredentials(bankName, config);
+  }
+
+  private validateBankCredentials(bankName: string, config: BankConfig): void {
+    const lowerName = bankName.toLowerCase();
+
+    // Validate email format if present
+    if (config.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(config.email)) {
+        throw new ConfigurationError(`Invalid email format for ${bankName}: "${config.email}"`);
+      }
+    }
+
+    // Validate phone format if present (basic validation)
+    if (config.phoneNumber) {
+      const phoneRegex = /^\+?\d{10,15}$/;
+      if (!phoneRegex.test(config.phoneNumber.replace(/[\s-]/g, ''))) {
+        throw new ConfigurationError(`Invalid phone number format for ${bankName}: "${config.phoneNumber}". Expected 10-15 digits.`);
+      }
+    }
+
+    // Validate card6Digits format if present
+    if (config.card6Digits) {
+      if (!/^\d{6}$/.test(config.card6Digits)) {
+        throw new ConfigurationError(`Invalid card6Digits format for ${bankName}: "${config.card6Digits}". Expected 6 digits.`);
+      }
+    }
+
+    // Bank-specific required fields
+    if (lowerName === 'discount') {
+      if (!config.id || !config.password || !config.num) {
+        throw new ConfigurationError(`Discount bank requires: id, password, num. Missing: ${!config.id ? 'id ' : ''}${!config.password ? 'password ' : ''}${!config.num ? 'num' : ''}`);
+      }
+    } else if (lowerName === 'leumi' || lowerName === 'union') {
+      if (!config.username || !config.password) {
+        throw new ConfigurationError(`${bankName} requires: username, password`);
+      }
+    } else if (lowerName === 'hapoalim') {
+      if (!config.userCode || !config.password) {
+        throw new ConfigurationError(`Hapoalim requires: userCode, password`);
+      }
+    } else if (lowerName === 'yahav') {
+      if (!config.nationalID || !config.password) {
+        throw new ConfigurationError(`Yahav requires: nationalID, password`);
+      }
+    } else if (lowerName === 'onezero') {
+      if (!config.email || !config.password || !config.phoneNumber) {
+        throw new ConfigurationError(`OneZero requires: email, password, phoneNumber`);
+      }
     }
   }
 }

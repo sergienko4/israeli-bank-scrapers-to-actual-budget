@@ -10,6 +10,8 @@ import { ErrorFormatter } from './errors/ErrorFormatter.js';
 import { ExponentialBackoffRetry } from './resilience/RetryStrategy.js';
 import { TimeoutWrapper } from './resilience/TimeoutWrapper.js';
 import { GracefulShutdownHandler } from './resilience/GracefulShutdown.js';
+import { ReconciliationService } from './services/ReconciliationService.js';
+import { MetricsService } from './services/MetricsService.js';
 import { ImporterConfig, BankConfig, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
 
 // Initialize resilience components
@@ -21,6 +23,8 @@ const retryStrategy = new ExponentialBackoffRetry({
 });
 const timeoutWrapper = new TimeoutWrapper();
 const errorFormatter = new ErrorFormatter();
+const reconciliationService = new ReconciliationService(api);
+const metrics = new MetricsService();
 
 // Load configuration
 const configLoader = new ConfigLoader();
@@ -113,6 +117,11 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
 
 async function importFromBank(bankName: string, bankConfig: BankConfig): Promise<void> {
   console.log(`\n📊 Processing ${bankName}...`);
+  metrics.startBank(bankName);
+
+  // Track metrics across all accounts for this bank
+  let totalImported = 0;
+  let totalSkipped = 0;
 
   try {
     const scrapeResult = await scrapeBankWithResilience(bankName, bankConfig);
@@ -163,12 +172,13 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
         } as any);
       }
 
+      // Track transaction imports for this account
+      let imported = 0;
+      let skipped = 0;
+
       // Import transactions
       if (account.txns && account.txns.length > 0) {
         console.log(`     📥 Importing ${account.txns.length} transactions...`);
-
-        let imported = 0;
-        let skipped = 0;
 
         for (const txn of account.txns) {
           try {
@@ -196,32 +206,32 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
         }
 
         console.log(`     ✅ Imported: ${imported}, Skipped (duplicates): ${skipped}`);
+
+        // Add to bank totals
+        totalImported += imported;
+        totalSkipped += skipped;
       }
 
       // Handle reconciliation
       if (target.reconcile && account.balance !== undefined) {
-        console.log(`     🔄 Creating reconciliation transaction...`);
+        console.log(`     🔄 Reconciling account balance...`);
         try {
-          const actualBalance = await api.runQuery(
-            api.q('transactions')
-              .filter({ account: actualAccountId })
-              .calculate({ $sum: '$amount' })
-          ).then((result: any) => result.data || 0);
+          const result = await reconciliationService.reconcile(
+            actualAccountId,
+            account.balance,
+            account.currency || 'ILS'
+          );
 
-          const expectedBalance = toCents(account.balance);
-          const diff = expectedBalance - actualBalance;
+          // Record reconciliation metrics
+          metrics.recordReconciliation(bankName, result.status, result.diff);
 
-          if (Math.abs(diff) > 0) {
-            await api.addTransactions(actualAccountId, [{
-              date: formatDate(new Date()),
-              amount: diff,
-              payee_name: 'Reconciliation',
-              notes: `Balance adjustment: Expected ${account.balance} ${account.currency || 'ILS'}`,
-              cleared: true
-            }]);
-            console.log(`     ✅ Reconciled: ${diff > 0 ? '+' : ''}${(diff / 100).toFixed(2)}`);
-          } else {
+          if (result.status === 'created') {
+            const sign = result.diff > 0 ? '+' : '';
+            console.log(`     ✅ Reconciled: ${sign}${(result.diff / 100).toFixed(2)} ILS`);
+          } else if (result.status === 'skipped') {
             console.log(`     ✅ Already balanced`);
+          } else {
+            console.log(`     ✅ Already reconciled today (skipped duplicate)`);
           }
         } catch (error: any) {
           console.error(`     ❌ Reconciliation error:`, error.message);
@@ -229,8 +239,12 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
       }
     }
 
+    // Record bank success metrics
+    metrics.recordBankSuccess(bankName, totalImported, totalSkipped);
     console.log(`\n✅ Completed ${bankName}`);
   } catch (error) {
+    // Record bank failure metrics
+    metrics.recordBankFailure(bankName, error as Error);
     const formattedError = errorFormatter.format(error as Error, bankName);
     console.error(formattedError);
     if (error instanceof Error) {
@@ -270,6 +284,9 @@ async function main(): Promise<void> {
     console.log('✅ Budget loaded successfully\n');
     console.log('='.repeat(60));
 
+    // Start metrics collection
+    metrics.startImport();
+
     // Process each bank
     for (const [bankName, bankConfig] of Object.entries(config.banks || {})) {
       if (shutdownHandler.isShuttingDown()) {
@@ -280,12 +297,16 @@ async function main(): Promise<void> {
       await importFromBank(bankName, bankConfig);
     }
 
-    console.log('\n' + '='.repeat(60));
-    console.log('🎉 All imports completed successfully!\n');
+    // Print metrics summary
+    metrics.printSummary();
+
+    console.log('\n🎉 Import process completed!\n');
 
     // Shutdown
     await api.shutdown();
-    process.exit(0);
+
+    // Exit with appropriate code based on metrics
+    process.exit(metrics.hasFailures() ? 1 : 0);
 
   } catch (error) {
     const formattedError = errorFormatter.format(error as Error);

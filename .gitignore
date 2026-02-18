@@ -29,6 +29,7 @@ build/
 *.swp
 *.swo
 *~
+.claude/
 
 # Testing
 coverage/
@@ -38,17 +39,15 @@ coverage/
 tmp/
 temp/
 *.tmp
+tmpclaude-*
 
 # Sensitive data scan (dev use only)
 sensitive-data-scan.md
 
 # Internal development files (not for public GitHub)
-CODE-ANALYSIS.md
 IMPLEMENTATION-ROADMAP.md
 NEW-SESSION-PROMPT.md
-PHASE1-PROGRESS.md
-PHASE2-PROGRESS.md
-PHASE3-PROGRESS.md
 IMPROVEMENTS-SUMMARY.md
 PROJECT-SUMMARY.md
-RELEASE-PLAN.md
+IMPROVEMENTS-IMPLEMENTED.md
+TEST-RESULTS.md

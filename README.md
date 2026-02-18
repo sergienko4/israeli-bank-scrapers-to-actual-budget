@@ -52,6 +52,19 @@ Cal (Visa Cal), Max, Isracard, Amex Israel, Beyahad Bishvilha, Behatsdaa, Pagi, 
 - ✅ **Clear error messages** - User-friendly error categorization
 - ✅ **Graceful shutdown** - Clean SIGTERM/SIGINT handling
 
+### Idempotent Reconciliation (Phase 4)
+- ✅ **Duplicate-free reconciliation** - No duplicate reconciliation transactions
+- ✅ **One reconciliation per day** - Idempotent using `imported_id` pattern
+- ✅ **Automatic detection** - Skips if reconciliation already exists
+- ✅ **Proper balancing** - Matches bank balance with Actual Budget
+
+### Observability & Metrics (Phase 4+)
+- ✅ **Import metrics** - Track success rates, duration, and transaction counts
+- ✅ **Performance tracking** - See which banks are slowest
+- ✅ **Duplicate detection stats** - Know how many duplicates were prevented
+- ✅ **Comprehensive validation** - Config errors caught at startup (not runtime)
+- ✅ **Detailed summary** - See complete import statistics after each run
+
 ---
 
 ## 🚀 Quick Start
@@ -271,16 +284,26 @@ Use `SCHEDULE` environment variable (cron format):
 
 ## 🔄 Reconciliation
 
-When `"reconcile": true`, the tool creates a transaction to match your Actual Budget balance with the bank balance.
+When `"reconcile": true`, the tool automatically reconciles your Actual Budget balance with the bank balance.
 
-**Important:**
-- Creates a **NEW** transaction each run (does not update existing)
-- Credit card balances are negative (this is normal!)
-- You may want to delete old reconciliation transactions periodically
+**How it works:**
+- ✅ **Idempotent** - Creates only ONE reconciliation transaction per day per account
+- ✅ **Smart detection** - Skips if already balanced
+- ✅ **Duplicate prevention** - Running multiple times won't create duplicates
+- ✅ **Automatic adjustment** - Creates adjustment transaction if balances differ
+
+**Reconciliation Status Messages:**
+```
+✅ Already balanced             - No adjustment needed
+✅ Reconciled: +123.45 ILS      - Created adjustment transaction
+✅ Already reconciled today     - Duplicate prevented (already exists)
+```
 
 **When to use:**
-- ✅ `true` - For checking, savings, credit cards
+- ✅ `true` - For checking, savings, credit cards (recommended)
 - ❌ `false` - If you manually reconcile in Actual Budget
+
+**Note:** Credit card balances are negative (this is normal!)
 
 ---
 
@@ -323,12 +346,50 @@ docker run --rm ^
 
 ---
 
+## 📊 Metrics & Monitoring
+
+After each import run, you'll see a comprehensive summary:
+
+```
+============================================================
+📊 Import Summary
+
+  Total banks: 3
+  Successful: 3 (100.0%)
+  Failed: 0 (0.0%)
+  Total transactions: 45
+  Duplicates prevented: 12
+  Total duration: 38.2s
+  Average per bank: 12.7s
+
+🏦 Bank Performance:
+
+  ✅ discount: 12.3s (18 txns, 5 duplicates)
+     ✅ Reconciliation: balanced
+  ✅ leumi: 15.1s (22 txns, 7 duplicates)
+     🔄 Reconciliation: +123.45 ILS
+  ✅ hapoalim: 10.8s (5 txns, 0 duplicates)
+     ✅ Reconciliation: already reconciled
+============================================================
+```
+
+**Benefits:**
+- 📈 Track import success rates over time
+- ⚡ Identify slow banks that need investigation
+- 🔍 See how many duplicates are being prevented
+- 📊 Monitor reconciliation accuracy
+- 🐛 Quickly identify which bank is failing
+
+---
+
 ## 📚 Documentation
 
 | File | Description |
 |------|-------------|
 | [BANKS.md](BANKS.md) | All 18 banks with credential requirements |
 | [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) | Detailed deployment instructions |
+| [CODE-ANALYSIS.md](CODE-ANALYSIS.md) | Code quality analysis & improvement roadmap |
+| [SECURITY.md](SECURITY.md) | Security best practices and guidelines |
 | [config.json.example](config.json.example) | Example configuration |
 
 ---
