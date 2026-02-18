@@ -12,8 +12,20 @@ env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
 
 jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run npm audit
+        run: |
+          npm install --package-lock-only
+          npm audit --audit-level=moderate || true
+
   build-and-push:
     runs-on: ubuntu-latest
+    needs: security-scan
 
     steps:
       - name: Checkout code
