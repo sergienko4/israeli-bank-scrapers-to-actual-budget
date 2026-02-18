@@ -136,8 +136,8 @@ cp config.json.example config.json
 **Option A: Use pre-built image (easiest)**
 
 ```bash
-# Pull from Docker Hub
-docker pull sergienko4/israeli-bank-importer:latest
+# Pull from Docker Hub (use specific version for stability)
+docker pull sergienko4/israeli-bank-importer:1.4
 
 # Run
 docker run --rm --cap-add SYS_ADMIN \
@@ -145,8 +145,14 @@ docker run --rm --cap-add SYS_ADMIN \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
-  sergienko4/israeli-bank-importer:latest
+  sergienko4/israeli-bank-importer:1.4
 ```
+
+**Available tags:**
+- `1.4`, `1` - Latest stable version (recommended)
+- `v1.4.0` - Specific version (pinned)
+- `20260218-214500` - Timestamped builds
+- `main-abc123` - Commit-based builds
 
 **Option B: Build from source**
 
@@ -173,7 +179,7 @@ Create `docker-compose.yml`:
 version: '3.8'
 services:
   israeli_bank_importer:
-    image: sergienko4/israeli-bank-importer:latest
+    image: sergienko4/israeli-bank-importer:1.4
     restart: always
     cap_add:
       - SYS_ADMIN
