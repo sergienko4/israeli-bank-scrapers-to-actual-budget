@@ -1,23 +1,26 @@
-import { spawn } from 'child_process';
+/**
+ * Scheduler for running imports on a cron schedule
+ */
+
+import { spawn, ChildProcess } from 'child_process';
 import parser from 'cron-parser';
 
 console.log('🚀 Israeli Bank Importer Scheduler Starting...');
 console.log(`📅 Timezone: ${process.env.TZ || 'UTC'}`);
 
-// Function to run the importer
-function runImport() {
+function runImport(): Promise<number> {
   return new Promise((resolve) => {
     const startTime = new Date();
     console.log(`\n⏰ ${startTime.toISOString()}: Starting import...`);
 
-    const child = spawn('node', ['/app/index.js'], {
+    const child: ChildProcess = spawn('node', ['/app/dist/index.js'], {
       stdio: 'inherit',
       env: process.env
     });
 
     child.on('exit', (code) => {
       const endTime = new Date();
-      const duration = Math.round((endTime - startTime) / 1000);
+      const duration = Math.round((endTime.getTime() - startTime.getTime()) / 1000);
 
       if (code === 0) {
         console.log(`✅ ${endTime.toISOString()}: Import completed successfully (took ${duration}s)`);
@@ -25,7 +28,7 @@ function runImport() {
         console.error(`❌ ${endTime.toISOString()}: Import failed with exit code ${code} (took ${duration}s)`);
       }
 
-      resolve(code);
+      resolve(code || 0);
     });
 
     child.on('error', (err) => {
@@ -35,8 +38,7 @@ function runImport() {
   });
 }
 
-// Main scheduling logic
-async function main() {
+async function main(): Promise<void> {
   const schedule = process.env.SCHEDULE;
 
   if (!schedule) {
@@ -54,7 +56,7 @@ async function main() {
       });
 
       console.log(`📅 Next scheduled run: ${interval.next().toString()}`);
-    } catch (err) {
+    } catch (err: any) {
       console.error(`❌ Invalid SCHEDULE format: ${err.message}`);
       console.error('   Example: "0 */8 * * *" (every 8 hours)');
       process.exit(1);
@@ -79,7 +81,7 @@ async function main() {
         // Run the import
         await runImport();
 
-      } catch (err) {
+      } catch (err: any) {
         console.error(`❌ Scheduler error: ${err.message}`);
         await new Promise(resolve => setTimeout(resolve, 60000)); // Wait 1 minute on error
       }

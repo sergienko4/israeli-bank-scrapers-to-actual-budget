@@ -39,12 +39,19 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm install --production
+# Install ALL dependencies (including devDependencies for build)
+RUN npm install
 
-# Copy application files
-COPY index.js scheduler.js ./
+# Copy source code
+COPY src ./src
+
+# Build TypeScript
+RUN npm run build
+
+# Remove devDependencies to reduce image size
+RUN npm prune --production
 
 # Note: config.json should be mounted as a volume at runtime, not copied into the image
 # This prevents credentials from being baked into the Docker image
@@ -57,5 +64,5 @@ RUN mkdir -p /app/data /app/cache /app/chrome-data && \
 # Run as non-root user
 USER node
 
-# Start the scheduler (which will run index.js based on SCHEDULE env var)
-CMD ["node", "scheduler.js"]
+# Start the scheduler (which will run dist/index.js based on SCHEDULE env var)
+CMD ["node", "dist/scheduler.js"]
