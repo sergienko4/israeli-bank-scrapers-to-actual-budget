@@ -1,0 +1,49 @@
+# Git
+.git/
+.gitignore
+
+# Documentation (not needed in container)
+*.md
+LICENSE
+
+# Config files (user-provided at runtime via volume mount)
+config.json
+config.json.example
+
+# Runtime data (mounted as volumes)
+data/
+cache/
+chrome-data/
+
+# Node.js
+node_modules/
+npm-debug.log
+*.log
+
+# Environment files
+.env
+.env.template
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+*.tar.gz
+dist/
+build/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary
+tmp/
+temp/
+*.tmp

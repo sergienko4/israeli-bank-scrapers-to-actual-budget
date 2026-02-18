@@ -1,0 +1,20 @@
+{
+  "name": "israeli-bank-actual-importer",
+  "version": "1.0.0",
+  "description": "Import transactions from Israeli banks into Actual Budget",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@actual-app/api": "^26.2.0",
+    "israeli-bank-scrapers": "^6.7.1",
+    "cron-parser": "^4.9.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "author": "",
+  "license": "MIT"
+}

@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  # Add this to your existing docker-compose.yml on the VM
+  # alongside your actual_server and caddy services
+
+  israeli_bank_importer:
+    image: YOUR_DOCKERHUB_USERNAME/israeli-bank-importer:latest
+    container_name: israeli_bank_importer
+    restart: always
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      - TZ=Asia/Jerusalem
+      # Cron schedule: run every 8 hours (at midnight, 8am, 4pm)
+      - SCHEDULE=0 */8 * * *
+    volumes:
+      - /home/ubuntu/actual-importer/config.json:/app/config.json:ro
+      - /home/ubuntu/actual-importer/data:/app/data
+      - /home/ubuntu/actual-importer/cache:/app/cache
+      - /home/ubuntu/actual-importer/chrome-data:/app/chrome-data
+    depends_on:
+      - actual_server
+    networks:
+      - actual_network
+
+# Make sure your actual_server is on this network too
+networks:
+  actual_network:
+    name: actual_network

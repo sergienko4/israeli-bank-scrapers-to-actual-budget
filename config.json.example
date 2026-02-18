@@ -1,0 +1,94 @@
+{
+  "_comment": "Israeli Bank Scrapers to Actual Budget - Configuration File",
+  "_instructions": [
+    "1. Copy this file to config.json: cp config.json.example config.json",
+    "2. Fill in your Actual Budget server details",
+    "3. Add your bank credentials (see BANKS.md for credential requirements)",
+    "4. Remove banks you don't use",
+    "5. Never commit config.json to git (it's in .gitignore)"
+  ],
+
+  "actual": {
+    "init": {
+      "serverURL": "http://localhost:5006",
+      "password": "your_actual_server_password",
+      "dataDir": "./data"
+    },
+    "budget": {
+      "syncId": "your_budget_sync_id",
+      "password": null
+    }
+  },
+
+  "_howToFind": {
+    "serverURL": "Your Actual Budget server URL (e.g., http://localhost:5006 or https://budget.example.com)",
+    "password": "Your Actual Budget server password",
+    "syncId": "Settings → Show Advanced Settings → Sync ID",
+    "actualAccountId": "Click account in Actual Budget → copy ID from URL"
+  },
+
+  "banks": {
+    "_comment": "Add only the banks you use. Remove others. See BANKS.md for all 18 supported banks.",
+
+    "discount": {
+      "_comment": "Bank Discount (דיסקונט) - Example",
+      "id": "123456789",
+      "password": "your_bank_password",
+      "num": "ABC123",
+      "startDate": "2026-01-19",
+      "targets": [{
+        "actualAccountId": "uuid-from-actual-budget",
+        "reconcile": true,
+        "accounts": "all"
+      }]
+    },
+
+    "leumi": {
+      "_comment": "Bank Leumi (לאומי) - Example (DELETE if not using)",
+      "username": "your_username",
+      "password": "your_password",
+      "startDate": "2026-01-19",
+      "targets": [{
+        "actualAccountId": "uuid-from-actual-budget",
+        "reconcile": true,
+        "accounts": "all"
+      }]
+    }
+  },
+
+  "_examples": {
+    "_comment": "Configuration examples - DELETE THIS ENTIRE SECTION after reading",
+
+    "multipleCardsToSeparateAccounts": {
+      "_comment": "Split credit cards into different Actual Budget accounts",
+      "visaCal": {
+        "username": "your_username",
+        "password": "your_password",
+        "targets": [
+          {
+            "actualAccountId": "visa-card-1-uuid",
+            "reconcile": true,
+            "accounts": ["8538"]
+          },
+          {
+            "actualAccountId": "visa-card-2-uuid",
+            "reconcile": true,
+            "accounts": ["7697"]
+          }
+        ]
+      }
+    },
+
+    "dateFiltering": {
+      "_comment": "Import only recent transactions",
+      "startDate": "2026-01-19",
+      "_explanation": "Last 30 days: 2026-01-19, Last 7 days: 2026-02-11, Omit for ~1 year"
+    },
+
+    "reconciliation": {
+      "_comment": "Auto-adjust balance to match bank",
+      "reconcile": true,
+      "_explanation": "true = create reconciliation transaction, false = no reconciliation"
+    }
+  }
+}

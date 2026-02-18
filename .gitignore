@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Sensitive configuration
+config.json
+.env
+
+# Runtime data (contains sensitive budget data)
+data/
+cache/
+chrome-data/
+
+# Logs
+npm-debug.log
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.tar.gz
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Sensitive data scan (dev use only)
+sensitive-data-scan.md
+
+# Internal development files (not for public GitHub)
+CODE-ANALYSIS.md
+IMPLEMENTATION-ROADMAP.md
+NEW-SESSION-PROMPT.md
+PHASE1-PROGRESS.md
+PROJECT-SUMMARY.md
+RELEASE-PLAN.md
