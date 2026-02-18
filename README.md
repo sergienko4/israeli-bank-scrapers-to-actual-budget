@@ -29,7 +29,7 @@ Bank Hapoalim, Leumi, Discount, Mizrahi Tefahot, Mercantile, Otsar Hahayal, Bank
 ### Credit Cards (7)
 Cal (Visa Cal), Max, Isracard, Amex Israel, Beyahad Bishvilha, Behatsdaa, Pagi, OneZero
 
-**See [BANKS.md](BANKS.md) for credential requirements**
+**See [BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/BANKS.md) for credential requirements**
 
 ---
 
@@ -392,11 +392,11 @@ After each import run, you'll see a comprehensive summary:
 
 | File | Description |
 |------|-------------|
-| [docs/BANKS.md](docs/BANKS.md) | All 18 banks with credential requirements |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Detailed deployment instructions |
-| [SECURITY.md](SECURITY.md) | Security best practices and guidelines |
-| [CHANGELOG.md](CHANGELOG.md) | Version history and release notes |
-| [config.json.example](config.json.example) | Example configuration |
+| [docs/BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) | All 18 banks with credential requirements |
+| [docs/DEPLOYMENT.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/DEPLOYMENT.md) | Detailed deployment instructions |
+| [SECURITY.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/SECURITY.md) | Security best practices and guidelines |
+| [CHANGELOG.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/CHANGELOG.md) | Version history and release notes |
+| [config.json.example](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/config.json.example) | Example configuration |
 
 ---
 
@@ -433,7 +433,7 @@ After each import run, you'll see a comprehensive summary:
 
 ## 📄 License
 
-MIT License - See [LICENSE](LICENSE)
+MIT License - See [LICENSE](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/LICENSE)
 
 ---
 
