@@ -13,6 +13,7 @@ This folder contains detailed task documentation for future improvements to the 
 | 03 | [Add Notifications (Telegram)](03-add-notifications.md) | 🟡 MEDIUM | 4-5 hours | 📋 TODO |
 | 04 | [Centralize Utilities (DRY)](04-centralize-utilities.md) | 🟢 LOW | 30 min | 📋 TODO |
 | 05 | [Enhance GitHub Release Page](05-enhance-release-page.md) | 🟡 MEDIUM | 2-3 hours | 📋 TODO |
+| 06 | [Fix Documentation Links](06-fix-documentation-links.md) | 🔴 HIGH | 30 min | 📋 TODO |
 
 ---
 
@@ -49,18 +50,20 @@ This folder contains detailed task documentation for future improvements to the 
 ## 💡 Recommended Order
 
 ### For Quality First (Recommended)
-1. **Task 04** (30 min warm-up - DRY utilities)
-2. **Task 01** (foundation - tests + CI/CD)
-3. **Task 05** (better releases - polish)
-4. **Task 02** (refactoring - clean code)
-5. **Task 03** (feature - notifications)
+1. **Task 06** (30 min - fix broken links) ⚡ URGENT
+2. **Task 04** (30 min warm-up - DRY utilities)
+3. **Task 01** (foundation - tests + CI/CD)
+4. **Task 05** (better releases - polish)
+5. **Task 02** (refactoring - clean code)
+6. **Task 03** (feature - notifications)
 
 ### For Features First
-1. **Task 04** (quick win)
-2. **Task 05** (professional releases)
-3. **Task 03** (useful notifications)
-4. **Task 02** (cleaner code)
-5. **Task 01** (protect your work)
+1. **Task 06** (fix broken links) ⚡ URGENT
+2. **Task 04** (quick win)
+3. **Task 05** (professional releases)
+4. **Task 03** (useful notifications)
+5. **Task 02** (cleaner code)
+6. **Task 01** (protect your work)
 
 ---
 
