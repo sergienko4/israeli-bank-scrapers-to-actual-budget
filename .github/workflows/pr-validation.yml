@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   validate:
+    name: Build, Test & Audit
     runs-on: ubuntu-latest
 
     strategy:
