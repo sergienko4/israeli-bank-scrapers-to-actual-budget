@@ -71,6 +71,29 @@ describe('WebhookNotifier', () => {
       expect(body.content).toContain('**Import Summary**');
       expect(body.content).toContain('discount');
     });
+
+    it('sends error with Discord formatting', async () => {
+      const notifier = new WebhookNotifier({ url: 'https://discord.com/api/webhooks/test', format: 'discord' });
+      await notifier.sendError('Auth failed');
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.content).toContain('**Import Failed**');
+    });
+
+    it('sends message with Discord content', async () => {
+      const notifier = new WebhookNotifier({ url: 'https://discord.com/api/webhooks/test', format: 'discord' });
+      await notifier.sendMessage('Hello');
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.content).toBe('Hello');
+    });
+  });
+
+  describe('slack format messages', () => {
+    it('sends message with Slack text', async () => {
+      const notifier = new WebhookNotifier({ url: 'https://hooks.slack.com/test', format: 'slack' });
+      await notifier.sendMessage('Hello');
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.text).toBe('Hello');
+    });
   });
 
   describe('error handling', () => {
