@@ -4,6 +4,7 @@
  */
 
 import type api from '@actual-app/api';
+import { BankTransaction } from '../types/index.js';
 import { formatDate, toCents } from '../utils/index.js';
 
 export interface ImportedTransaction {
@@ -38,7 +39,7 @@ export class TransactionService {
     bankName: string,
     accountNumber: string,
     actualAccountId: string,
-    transactions: any[]
+    transactions: BankTransaction[]
   ): Promise<ImportResult> {
     let imported = 0;
     let skipped = 0;
@@ -49,7 +50,7 @@ export class TransactionService {
     for (const txn of transactions) {
       try {
         const importedId = `${bankName}-${accountNumber}-${txn.identifier || `${formatDate(txn.date)}-${txn.chargedAmount || txn.originalAmount}`}`;
-        const amount = toCents(txn.chargedAmount || txn.originalAmount);
+        const amount = toCents(txn.chargedAmount ?? txn.originalAmount ?? 0);
         const date = formatDate(txn.date);
         const description = txn.description || 'Unknown';
 

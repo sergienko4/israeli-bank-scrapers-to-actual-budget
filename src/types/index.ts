@@ -50,6 +50,15 @@ export interface BankConfig {
   [key: string]: any; // Allow other bank-specific fields
 }
 
+export interface BankTransaction {
+  identifier?: string;
+  chargedAmount?: number;
+  originalAmount?: number;
+  date: Date | string;
+  description?: string;
+  memo?: string;
+}
+
 export type MessageFormat = 'compact' | 'ledger' | 'emoji' | 'summary';
 
 export interface TelegramConfig {

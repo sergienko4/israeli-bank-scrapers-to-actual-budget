@@ -66,7 +66,7 @@ describe('MetricsService', () => {
       metrics.recordBankFailure('leumi', error);
 
       const bankMetrics = metrics.getBankMetrics('leumi');
-      expect(bankMetrics?.error).toBe('AuthenticationError');
+      expect(bankMetrics?.error).toBe('AuthenticationError: Something broke');
     });
   });
 
@@ -203,8 +203,8 @@ describe('MetricsService', () => {
       metrics.recordBankFailure('hapoalim', authError);
 
       const breakdown = metrics.getErrorBreakdown();
-      expect(breakdown['AuthenticationError']).toBe(2);
-      expect(breakdown['NetworkError']).toBe(1);
+      expect(breakdown['AuthenticationError: Auth failed']).toBe(2);
+      expect(breakdown['NetworkError: Connection lost']).toBe(1);
     });
   });
 

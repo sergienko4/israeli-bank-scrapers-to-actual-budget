@@ -24,31 +24,22 @@ Add notification service to send alerts on import success/failure. Start with Te
 
 ---
 
-## 📦 Dependencies to Add
+## 📦 Dependencies
 
-```json
-{
-  "dependencies": {
-    "node-telegram-bot-api": "^0.66.0"
-  },
-  "devDependencies": {
-    "@types/node-telegram-bot-api": "^0.64.0"
-  }
-}
-```
+**Zero external dependencies** - uses native Node.js 22+ `fetch()` API directly.
+Original spec planned `node-telegram-bot-api` but native fetch is better (0 vulnerabilities, smaller image).
 
 ---
 
-## 🗂️ Files to Create
+## 🗂️ Files Created
 
 ```
-src/services/NotificationService.ts
+src/services/NotificationService.ts       # Orchestrator
 src/services/notifications/
-├── BaseNotifier.ts
-├── TelegramNotifier.ts
-├── DiscordNotifier.ts (future)
-├── SlackNotifier.ts (future)
-└── EmailNotifier.ts (future)
+├── INotifier.ts                          # Interface (Open/Closed Principle)
+└── TelegramNotifier.ts                   # Telegram via native fetch()
+tests/services/NotificationService.test.ts
+tests/services/notifications/TelegramNotifier.test.ts
 ```
 
 ---

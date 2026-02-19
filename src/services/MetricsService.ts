@@ -110,7 +110,7 @@ export class MetricsService {
       metrics.endTime = Date.now();
       metrics.duration = metrics.endTime - metrics.startTime;
       metrics.status = 'failure';
-      metrics.error = error.name;
+      metrics.error = error.message ? `${error.name}: ${error.message}` : error.name;
     }
   }
 

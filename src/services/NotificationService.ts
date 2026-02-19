@@ -34,7 +34,8 @@ export class NotificationService {
 
     for (const result of results) {
       if (result.status === 'rejected') {
-        console.error('⚠️  Notification failed:', result.reason?.message || result.reason);
+        const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        console.error('⚠️  Notification failed:', msg);
       }
     }
   }
@@ -48,7 +49,8 @@ export class NotificationService {
 
     for (const result of results) {
       if (result.status === 'rejected') {
-        console.error('⚠️  Notification failed:', result.reason?.message || result.reason);
+        const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        console.error('⚠️  Notification failed:', msg);
       }
     }
   }

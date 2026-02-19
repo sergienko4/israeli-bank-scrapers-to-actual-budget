@@ -478,24 +478,91 @@ Add this section to your `config.json` (after `banks`):
 }
 ```
 
-### What You'll Receive
+### Message Formats
 
-After each import:
+Add `"messageFormat"` to choose how notifications look. Set in `config.json`:
+
+```json
+"telegram": {
+  "botToken": "...",
+  "chatId": "...",
+  "messageFormat": "compact"
+}
+```
+
+<details><summary><b>summary</b> (default) - Banks overview only</summary>
+
 ```
 ✅ Import Summary
-Banks: 1/1 successful (100%)
-Transactions: 2 imported, 0 duplicates
-Duration: 5.1s
 
-Banks:
-  ✅ discount: 2 txns (5.1s)
+🏦 Banks: 3/3 (100%)
+📥 Transactions: 47 imported
+🔄 Duplicates: 12 skipped
+⏱ Duration: 38.2s
+
+✅ discount: 18 txns 12.3s
+✅ leumi: 22 txns 15.1s
+✅ hapoalim: 7 txns 10.8s
 ```
+</details>
 
-On failure:
+<details><summary><b>compact</b> - Transaction details with amounts</summary>
+
+```
+✅ Import Summary
+3/3 banks | 47 txns | 38.2s
+
+✅ Discount · 0152228812
+14/02  משכורת חודשית
+       +12,500.00
+14/02  שופרסל דיזנגוף
+       -342.50
+14/02  חברת חשמל
+       -289.00
+💰 45,230.50 ILS
+✅ Balance matched
+```
+</details>
+
+<details><summary><b>ledger</b> - Monospace table layout</summary>
+
+```
+✅ Import Summary
+47 transactions · 38.2s
+
+✅ Discount (0152228812)
+14/02 משכורת חודשית
+        +12,500.00
+14/02 שופרסל דיזנגוף
+           -342.50
+14/02 חברת חשמל
+           -289.00
+Balance: 45,230.50 ILS
+✅ Balance matched
+```
+</details>
+
+<details><summary><b>emoji</b> - Visual deposit/payment indicators</summary>
+
+```
+✅ Import Summary
+
+📊 3/3 banks · 47 txns · 38.2s
+
+💳 Discount
+  📥 +12,500.00  משכורת חודשית
+  📤 -342.50  שופרסל דיזנגוף
+  📤 -289.00  חברת חשמל
+  💰 45,230.50 ILS
+  ✅ Balance matched
+```
+</details>
+
+### On Failure
 ```
 🚨 Import Failed
 
-🔐 Authentication Error (discount): Please verify your credentials.
+🔐 Authentication Error (discount): Invalid credentials. Please verify your password.
 ```
 
 ### Disable Notifications

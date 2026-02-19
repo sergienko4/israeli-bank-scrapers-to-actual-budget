@@ -41,13 +41,18 @@ export class TelegramNotifier implements INotifier {
   }
 
   private async send(text: string): Promise<void> {
+    const MAX_LENGTH = 4096;
+    const message = text.length > MAX_LENGTH
+      ? text.slice(0, MAX_LENGTH - 20) + '\n\n... (truncated)'
+      : text;
+
     const url = `${TELEGRAM_API}/bot${this.botToken}/sendMessage`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: this.chatId,
-        text,
+        text: message,
         parse_mode: 'HTML'
       })
     });
