@@ -436,34 +436,71 @@ npm run validate
 
 ---
 
-## 📱 Telegram Notifications
+## 📱 Telegram Notifications (Optional)
 
-Get import summaries and error alerts via Telegram.
+Get import summaries and error alerts via Telegram after each run.
 
-### Setup
-1. Open Telegram, search **@BotFather**
-2. Send `/newbot`, follow the prompts, copy the **bot token**
-3. Add the bot to a group, or message it directly
-4. Get your **chat ID** via **@userinfobot** (or group ID from the group URL)
-5. Add to `config.json`:
+### Step 1: Create a Telegram Bot (2 minutes)
+
+1. Open Telegram on your phone or desktop
+2. Search for **@BotFather** and start a chat
+3. Send: `/newbot`
+4. BotFather will ask for a name - type anything (e.g., `My Bank Importer`)
+5. BotFather will ask for a username - must end in `bot` (e.g., `my_bank_importer_bot`)
+6. BotFather replies with your **bot token** - copy it:
+   ```
+   123456789:ABCDefGHijKlMnOpQrStUvWxYz
+   ```
+
+### Step 2: Get Your Chat ID (1 minute)
+
+**For personal notifications:**
+1. Search for **@userinfobot** in Telegram and start a chat
+2. It replies with your **chat ID** (a number like `123456789`)
+
+**For group notifications:**
+1. Add your new bot to a Telegram group
+2. Send any message in the group
+3. Open: `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
+4. Find `"chat":{"id":-100XXXXXXX}` - that's your group **chat ID**
+
+### Step 3: Add to config.json
+
+Add this section to your `config.json` (after `banks`):
 
 ```json
 "notifications": {
   "enabled": true,
   "telegram": {
-    "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
-    "chatId": "-1001234567890"
+    "botToken": "YOUR_BOT_TOKEN_HERE",
+    "chatId": "YOUR_CHAT_ID_HERE"
   }
 }
 ```
 
-After each import you'll receive a summary like:
+### What You'll Receive
+
+After each import:
 ```
 ✅ Import Summary
 Banks: 1/1 successful (100%)
 Transactions: 2 imported, 0 duplicates
 Duration: 5.1s
+
+Banks:
+  ✅ discount: 2 txns (5.1s)
 ```
+
+On failure:
+```
+🚨 Import Failed
+
+🔐 Authentication Error (discount): Please verify your credentials.
+```
+
+### Disable Notifications
+
+Set `"enabled": false` or remove the `notifications` section entirely.
 
 ---
 
