@@ -21,10 +21,11 @@ const summaryWithTxns: ImportSummary = {
       accountNumber: '0152228812',
       balance: 16242.97,
       currency: 'ILS',
-      transactions: [
+      newTransactions: [
         { date: '2026-02-14', description: 'Transfer from account', amount: 1000 },
         { date: '2026-02-14', description: 'Amex charge', amount: -66211 }
-      ]
+      ],
+      existingTransactions: []
     }]
   }]
 };
@@ -149,9 +150,10 @@ describe('TelegramNotifier', () => {
           ...summaryWithTxns.banks[0],
           accounts: [{
             ...summaryWithTxns.banks[0].accounts[0],
-            transactions: [
+            newTransactions: [
               { date: '2026-02-14', description: 'Very long transaction description that exceeds limit', amount: 1000 }
-            ]
+            ],
+            existingTransactions: []
           }]
         }]
       };

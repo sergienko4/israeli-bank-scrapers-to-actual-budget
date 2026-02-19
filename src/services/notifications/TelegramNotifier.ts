@@ -9,8 +9,8 @@
  *   "emoji"    (C) - Emoji indicators for deposits/payments
  */
 
-import { TelegramConfig, MessageFormat } from '../../types/index.js';
-import { ImportSummary, BankMetrics, AccountMetrics } from '../MetricsService.js';
+import { TelegramConfig, MessageFormat, ShowTransactions } from '../../types/index.js';
+import { ImportSummary, BankMetrics, AccountMetrics, TransactionRecord } from '../MetricsService.js';
 import { INotifier } from './INotifier.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
@@ -19,11 +19,13 @@ export class TelegramNotifier implements INotifier {
   private botToken: string;
   private chatId: string;
   private format: MessageFormat;
+  private showTransactions: ShowTransactions;
 
   constructor(config: TelegramConfig) {
     this.botToken = config.botToken;
     this.chatId = config.chatId;
     this.format = config.messageFormat || 'summary';
+    this.showTransactions = config.showTransactions || 'new';
   }
 
   async sendSummary(summary: ImportSummary): Promise<void> {
@@ -114,7 +116,8 @@ export class TelegramNotifier implements INotifier {
         lines.push('');
         lines.push(`${bi} <b>${bank.bankName}</b> · ${account.accountNumber}`);
 
-        for (const txn of account.transactions) {
+        const txns = this.getTransactions(account);
+        for (const txn of txns) {
           const amt = this.fmtAmount(txn.amount);
           lines.push(`${this.fmtDate(txn.date)}  ${this.escapeHtml(txn.description)}`);
           lines.push(`       <b>${amt}</b>`);
@@ -146,9 +149,10 @@ export class TelegramNotifier implements INotifier {
         lines.push('');
         lines.push(`${bi} <b>${bank.bankName}</b> · ${account.accountNumber}`);
 
-        if (account.transactions.length > 0) {
+        const txns = this.getTransactions(account);
+        if (txns.length > 0) {
           lines.push('<code>');
-          for (const txn of account.transactions) {
+          for (const txn of txns) {
             const d = this.fmtDate(txn.date);
             const desc = txn.description.length > 18
               ? txn.description.slice(0, 18) + '..'
@@ -187,7 +191,8 @@ export class TelegramNotifier implements INotifier {
         lines.push('');
         lines.push(`💳 <b>${bank.bankName}</b>`);
 
-        for (const txn of account.transactions) {
+        const txns = this.getTransactions(account);
+        for (const txn of txns) {
           const ti = txn.amount >= 0 ? '📥' : '📤';
           lines.push(`${ti} <b>${this.fmtAmount(txn.amount)}</b>  ${this.escapeHtml(txn.description)}`);
         }
@@ -224,6 +229,12 @@ export class TelegramNotifier implements INotifier {
     } else if (bank.reconciliationStatus === 'already-reconciled') {
       lines.push(`✅ Already reconciled`);
     }
+  }
+
+  private getTransactions(account: AccountMetrics): TransactionRecord[] {
+    if (this.showTransactions === 'none') return [];
+    if (this.showTransactions === 'all') return [...account.newTransactions, ...account.existingTransactions];
+    return account.newTransactions; // 'new' (default)
   }
 
   private fmtAmount(cents: number): string {

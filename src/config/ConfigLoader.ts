@@ -171,6 +171,10 @@ export class ConfigLoader implements IConfigLoader {
       if (config.telegram.messageFormat && !validFormats.includes(config.telegram.messageFormat)) {
         throw new ConfigurationError(`Invalid messageFormat "${config.telegram.messageFormat}". Must be one of: ${validFormats.join(', ')}`);
       }
+      const validShow = ['new', 'all', 'none'];
+      if (config.telegram.showTransactions && !validShow.includes(config.telegram.showTransactions)) {
+        throw new ConfigurationError(`Invalid showTransactions "${config.telegram.showTransactions}". Must be one of: ${validShow.join(', ')}`);
+      }
     }
   }
 

@@ -63,7 +63,9 @@
       "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
       "chatId": "-1001234567890",
       "messageFormat": "compact",
-      "_formats": "summary (default) | compact (A) | ledger (B) | emoji (C)"
+      "showTransactions": "new",
+      "_formats": "summary (default) | compact (A) | ledger (B) | emoji (C)",
+      "_showOptions": "new (default) | all | none"
     }
   },
 

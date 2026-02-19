@@ -163,7 +163,7 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
         metrics.recordAccountTransactions(
           bankName, account.accountNumber,
           account.balance, account.currency || 'ILS',
-          result.transactions
+          result.newTransactions, result.existingTransactions
         );
       }
 

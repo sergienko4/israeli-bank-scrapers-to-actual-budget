@@ -12,7 +12,8 @@ export interface AccountMetrics {
   accountNumber: string;
   balance?: number;
   currency?: string;
-  transactions: TransactionRecord[];
+  newTransactions: TransactionRecord[];
+  existingTransactions: TransactionRecord[];
 }
 
 export interface BankMetrics {
@@ -75,11 +76,12 @@ export class MetricsService {
     accountNumber: string,
     balance: number | undefined,
     currency: string | undefined,
-    transactions: TransactionRecord[]
+    newTransactions: TransactionRecord[],
+    existingTransactions: TransactionRecord[]
   ): void {
     const metrics = this.banks.get(bankName);
     if (metrics) {
-      metrics.accounts.push({ accountNumber, balance, currency, transactions });
+      metrics.accounts.push({ accountNumber, balance, currency, newTransactions, existingTransactions });
     }
   }
 

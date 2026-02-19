@@ -16,7 +16,8 @@ export interface ImportedTransaction {
 export interface ImportResult {
   imported: number;
   skipped: number;
-  transactions: ImportedTransaction[];
+  newTransactions: ImportedTransaction[];
+  existingTransactions: ImportedTransaction[];
 }
 
 export class TransactionService {
@@ -43,18 +44,20 @@ export class TransactionService {
   ): Promise<ImportResult> {
     let imported = 0;
     let skipped = 0;
-    const importedTxns: ImportedTransaction[] = [];
+    const newTransactions: ImportedTransaction[] = [];
+    const existingTransactions: ImportedTransaction[] = [];
 
     console.log(`     📥 Importing ${transactions.length} transactions...`);
 
     for (const txn of transactions) {
-      try {
-        const importedId = `${bankName}-${accountNumber}-${txn.identifier || `${formatDate(txn.date)}-${txn.chargedAmount || txn.originalAmount}`}`;
-        const amount = toCents(txn.chargedAmount ?? txn.originalAmount ?? 0);
-        const date = formatDate(txn.date);
-        const description = txn.description || 'Unknown';
+      const amount = toCents(txn.chargedAmount ?? txn.originalAmount ?? 0);
+      const date = formatDate(txn.date);
+      const description = txn.description || 'Unknown';
 
-        const transaction = {
+      try {
+        const importedId = `${bankName}-${accountNumber}-${txn.identifier || `${date}-${txn.chargedAmount || txn.originalAmount}`}`;
+
+        await this.api.importTransactions(actualAccountId, [{
           account: actualAccountId,
           date,
           amount,
@@ -62,14 +65,14 @@ export class TransactionService {
           imported_id: importedId,
           notes: txn.memo || txn.description || '',
           cleared: true
-        };
+        }]);
 
-        await this.api.importTransactions(actualAccountId, [transaction]);
         imported++;
-        importedTxns.push({ date, description, amount });
+        newTransactions.push({ date, description, amount });
       } catch (error: any) {
         if (error.message && error.message.includes('already exists')) {
           skipped++;
+          existingTransactions.push({ date, description, amount });
         } else {
           console.error(`     ❌ Error importing transaction:`, error.message);
         }
@@ -77,7 +80,7 @@ export class TransactionService {
     }
 
     console.log(`     ✅ Imported: ${imported}, Skipped (duplicates): ${skipped}`);
-    return { imported, skipped, transactions: importedTxns };
+    return { imported, skipped, newTransactions, existingTransactions };
   }
 
   /**

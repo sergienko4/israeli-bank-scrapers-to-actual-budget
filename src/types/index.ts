@@ -60,11 +60,13 @@ export interface BankTransaction {
 }
 
 export type MessageFormat = 'compact' | 'ledger' | 'emoji' | 'summary';
+export type ShowTransactions = 'new' | 'all' | 'none';
 
 export interface TelegramConfig {
   botToken: string;
   chatId: string;
-  messageFormat?: MessageFormat; // Default: 'summary'
+  messageFormat?: MessageFormat;       // Default: 'summary'
+  showTransactions?: ShowTransactions;  // Default: 'new'
 }
 
 export interface NotificationConfig {
