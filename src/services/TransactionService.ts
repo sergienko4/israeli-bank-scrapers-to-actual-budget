@@ -50,29 +50,27 @@ export class TransactionService {
     console.log(`     📥 Importing ${transactions.length} transactions...`);
 
     for (const txn of transactions) {
-      const amount = toCents(txn.chargedAmount ?? txn.originalAmount ?? 0);
-      const date = formatDate(txn.date);
-      const description = txn.description || 'Unknown';
+      const parsed = this.parseTransaction(txn);
 
       try {
-        const importedId = `${bankName}-${accountNumber}-${txn.identifier || `${date}-${txn.chargedAmount || txn.originalAmount}`}`;
+        const importedId = `${bankName}-${accountNumber}-${txn.identifier || `${parsed.date}-${txn.chargedAmount || txn.originalAmount}`}`;
 
         await this.api.importTransactions(actualAccountId, [{
           account: actualAccountId,
-          date,
-          amount,
-          payee_name: description,
+          date: parsed.date,
+          amount: parsed.amount,
+          payee_name: parsed.description,
           imported_id: importedId,
-          notes: txn.memo || txn.description || '',
+          notes: txn.memo ?? parsed.description,
           cleared: true
         }]);
 
         imported++;
-        newTransactions.push({ date, description, amount });
+        newTransactions.push(parsed);
       } catch (error: any) {
         if (error.message && error.message.includes('already exists')) {
           skipped++;
-          existingTransactions.push({ date, description, amount });
+          existingTransactions.push(parsed);
         } else {
           console.error(`     ❌ Error importing transaction:`, error.message);
         }
@@ -106,5 +104,16 @@ export class TransactionService {
     }
 
     return account;
+  }
+
+  /**
+   * Convert external bank transaction to typed internal format
+   */
+  private parseTransaction(txn: BankTransaction): ImportedTransaction {
+    return {
+      date: formatDate(txn.date),
+      description: txn.description ?? 'Unknown',
+      amount: toCents(txn.chargedAmount ?? txn.originalAmount ?? 0)
+    };
   }
 }
