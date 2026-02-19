@@ -17,6 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.6.0] - 2026-02-19
+
+### Added
+- **Webhook notifications — Slack, Discord, plain JSON** (Task 16)
+  - `WebhookNotifier` implementing `INotifier` interface (OCP — no changes to existing code)
+  - 3 formats: Slack (`{ text }`), Discord (`{ content }`), plain JSON (`{ event, ... }`)
+  - Config: `notifications.webhook.url` + `notifications.webhook.format`
+  - Config validation for URL format and allowed formats
+  - 8 unit tests for WebhookNotifier
+
+---
+
 ## [2.3.0] - 2026-02-19
 
 ### Added

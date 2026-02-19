@@ -76,9 +76,17 @@ export interface TelegramConfig {
   listenForCommands?: boolean;         // Default: false
 }
 
+export type WebhookFormat = 'slack' | 'discord' | 'plain';
+
+export interface WebhookConfig {
+  url: string;
+  format?: WebhookFormat;  // Default: 'plain'
+}
+
 export interface NotificationConfig {
   enabled: boolean;
   telegram?: TelegramConfig;
+  webhook?: WebhookConfig;
 }
 
 export interface ImporterConfig {

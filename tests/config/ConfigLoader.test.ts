@@ -623,4 +623,38 @@ describe('ConfigLoader', () => {
       expect(() => loader.load()).toThrow('Invalid accounts field');
     });
   });
+
+  describe('webhook validation', () => {
+    it('accepts valid webhook config', () => {
+      const config = makeValidConfig();
+      config.notifications = { enabled: true, webhook: { url: 'https://hooks.slack.com/test', format: 'slack' } };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      expect(() => new ConfigLoader('/test/config.json').load()).not.toThrow();
+    });
+
+    it('throws when webhook url is missing', () => {
+      const config = makeValidConfig();
+      config.notifications = { enabled: true, webhook: { url: '', format: 'plain' } };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('Webhook url is required');
+    });
+
+    it('throws when webhook url is not http', () => {
+      const config = makeValidConfig();
+      config.notifications = { enabled: true, webhook: { url: 'ftp://bad.com', format: 'plain' } };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('Invalid webhook url format');
+    });
+
+    it('throws when webhook format is invalid', () => {
+      const config = makeValidConfig();
+      config.notifications = { enabled: true, webhook: { url: 'https://example.com', format: 'invalid' } };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('Invalid webhook format');
+    });
+  });
 });
