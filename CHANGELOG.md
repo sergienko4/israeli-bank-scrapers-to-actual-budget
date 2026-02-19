@@ -239,8 +239,6 @@ None yet.
 
 ---
 
-For detailed upgrade instructions, see [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md).
+For detailed upgrade instructions, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 For security considerations, see [SECURITY.md](SECURITY.md).
-
-For code quality analysis, see [CODE-ANALYSIS.md](CODE-ANALYSIS.md).
