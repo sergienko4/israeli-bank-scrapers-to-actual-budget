@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.0] - 2026-02-19
+
+### Added
+- **Rate limiting between bank imports** (Task 18)
+  - `delayBetweenBanks` config option (milliseconds, default: 0 = no delay)
+  - Prevents bank API throttling when scraping multiple banks
+  - Logs delay: "Waiting 5s before next bank..."
+
+---
+
 ## [2.3.0] - 2026-02-19
 
 ### Added
