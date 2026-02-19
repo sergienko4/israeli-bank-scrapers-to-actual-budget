@@ -38,7 +38,7 @@ jobs:
 
       - name: Check for any types in source
         run: |
-          MAX_ALLOWED=8
+          MAX_ALLOWED=0
           ANYS=$(grep -rn ": any" src/ --include="*.ts" | grep -v "node_modules\|\[key: string\]: any" | wc -l)
           echo "Found $ANYS uses of ': any' (max allowed: $MAX_ALLOWED)"
           if [ "$ANYS" -gt "$MAX_ALLOWED" ]; then
