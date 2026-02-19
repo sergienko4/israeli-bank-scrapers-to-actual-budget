@@ -4,7 +4,7 @@
  */
 
 import api from '@actual-app/api';
-import { createScraper, CompanyTypes } from 'israeli-bank-scrapers';
+import { createScraper, CompanyTypes, ScraperOptions, ScraperCredentials, ScraperScrapingResult } from 'israeli-bank-scrapers';
 import { ConfigLoader } from './config/ConfigLoader.js';
 import { ErrorFormatter } from './errors/ErrorFormatter.js';
 import { ExponentialBackoffRetry } from './resilience/RetryStrategy.js';
@@ -68,7 +68,38 @@ const companyTypeMap: Record<string, typeof CompanyTypes[keyof typeof CompanyTyp
   'onezero': CompanyTypes.oneZero
 };
 
-async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig): Promise<any> {
+function computeStartDate(bankConfig: BankConfig): Date {
+  if (bankConfig.daysBack) {
+    const date = new Date();
+    date.setDate(date.getDate() - bankConfig.daysBack);
+    return date;
+  }
+  return bankConfig.startDate ? new Date(bankConfig.startDate) : new Date();
+}
+
+function buildCredentials(bankConfig: BankConfig, otpRetriever?: () => Promise<string>): ScraperCredentials {
+  const { id, password, num, username, userCode, nationalID, card6Digits, email, phoneNumber, otpLongTermToken } = bankConfig;
+  if (otpRetriever) {
+    return { email: email!, password: password!, otpCodeRetriever: otpRetriever, phoneNumber: phoneNumber! } as ScraperCredentials;
+  }
+  if (otpLongTermToken) {
+    return { email: email!, password: password!, otpLongTermToken } as ScraperCredentials;
+  }
+  return { id, password, num, username, userCode, nationalID, card6Digits, email, phoneNumber } as ScraperCredentials;
+}
+
+function logDateRange(bankConfig: BankConfig): void {
+  if (bankConfig.daysBack) {
+    const startDate = computeStartDate(bankConfig);
+    console.log(`  📅 Date range: last ${bankConfig.daysBack} days (from ${startDate.toISOString().split('T')[0]})`);
+  } else if (bankConfig.startDate) {
+    console.log(`  📅 Date range: from ${bankConfig.startDate} to today`);
+  } else {
+    console.log(`  📅 Date range: using bank default (usually ~1 year)`);
+  }
+}
+
+async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig): Promise<ScraperScrapingResult> {
   const companyType = companyTypeMap[bankName.toLowerCase()];
   if (!companyType) {
     throw new Error(`Unknown bank: ${bankName}`);
@@ -77,9 +108,9 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
   console.log(`  🔧 Creating scraper for ${bankName}...`);
 
   const chromeDataDir = process.env.CHROME_DATA_DIR || '/app/chrome-data';
-  const scraperConfig: any = {
+  const scraperOptions: ScraperOptions = {
     companyId: companyType,
-    ...bankConfig,
+    startDate: computeStartDate(bankConfig),
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
     args: [
       '--no-sandbox',
@@ -89,33 +120,25 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
     ]
   };
 
-  // Convert daysBack to startDate if specified
-  if (bankConfig.daysBack) {
-    const date = new Date();
-    date.setDate(date.getDate() - bankConfig.daysBack);
-    scraperConfig.startDate = date.toISOString().split('T')[0];
-    console.log(`  📅 Date range: last ${bankConfig.daysBack} days (from ${scraperConfig.startDate})`);
-  } else if (bankConfig.startDate) {
-    console.log(`  📅 Date range: from ${bankConfig.startDate} to today`);
-  } else {
-    console.log(`  📅 Date range: using bank default (usually ~1 year)`);
-  }
+  logDateRange(bankConfig);
 
-  // Inject 2FA callback if bank has twoFactorAuth enabled and no long-term token
+  // Build credentials; inject 2FA if bank has twoFactorAuth enabled and no long-term token
+  let otpRetriever: (() => Promise<string>) | undefined;
   if (bankConfig.twoFactorAuth && !bankConfig.otpLongTermToken && telegramNotifier) {
     const twoFactor = new TwoFactorService(telegramNotifier, bankConfig.twoFactorTimeout);
-    scraperConfig.otpCodeRetriever = twoFactor.createOtpRetriever(bankName);
+    otpRetriever = twoFactor.createOtpRetriever(bankName);
     console.log(`  🔐 2FA enabled for ${bankName} (via Telegram)`);
   }
+  const credentials = buildCredentials(bankConfig, otpRetriever);
 
-  const scraper = createScraper(scraperConfig);
+  const scraper = createScraper(scraperOptions);
 
   console.log(`  🔍 Scraping transactions from ${bankName}...`);
 
   return await retryStrategy.execute(
     async () => {
       return await timeoutWrapper.wrap(
-        scraper.scrape(scraperConfig as any),
+        scraper.scrape(credentials),
         DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs,
         `Scraping ${bankName}`
       );
@@ -150,8 +173,9 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
         break;
       }
 
-      console.log(`\n  💳 Processing account: ${account.accountNumber} (${account.type})`);
-      console.log(`     Balance: ${account.balance} ${account.currency || 'ILS'}`);
+      const currency = account.txns[0]?.originalCurrency || 'ILS';
+      console.log(`\n  💳 Processing account: ${account.accountNumber}`);
+      console.log(`     Balance: ${account.balance} ${currency}`);
       console.log(`     Transactions: ${account.txns?.length || 0}`);
 
       const target = bankConfig.targets?.find(t =>
@@ -180,7 +204,7 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
         // Record transaction details for notifications
         metrics.recordAccountTransactions(
           bankName, account.accountNumber,
-          account.balance, account.currency || 'ILS',
+          account.balance, currency,
           result.newTransactions, result.existingTransactions
         );
       }
@@ -190,7 +214,7 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
         console.log(`     🔄 Reconciling account balance...`);
         try {
           const result = await reconciliationService.reconcile(
-            actualAccountId, account.balance, account.currency || 'ILS'
+            actualAccountId, account.balance, currency
           );
           metrics.recordReconciliation(bankName, result.status, result.diff);
 

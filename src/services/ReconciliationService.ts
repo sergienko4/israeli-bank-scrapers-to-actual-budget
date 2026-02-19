@@ -6,7 +6,7 @@
  */
 
 import type api from '@actual-app/api';
-import { formatDate, toCents } from '../utils/index.js';
+import { formatDate, toCents, extractQueryData } from '../utils/index.js';
 
 export interface ReconciliationResult {
   status: 'created' | 'skipped' | 'already-reconciled';
@@ -35,11 +35,14 @@ export class ReconciliationService {
   ): Promise<ReconciliationResult> {
     try {
       // 1. Get current account balance from Actual Budget
-      const actualBalance = await this.api.runQuery(
-        this.api.q('transactions')
-          .filter({ account: accountId })
-          .calculate({ $sum: '$amount' })
-      ).then((result: any) => result.data || 0);
+      const actualBalance = extractQueryData<number>(
+        await this.api.runQuery(
+          this.api.q('transactions')
+            .filter({ account: accountId })
+            .calculate({ $sum: '$amount' })
+        ),
+        0
+      );
 
       // 2. Calculate difference
       const expectedBalanceCents = toCents(expectedBalance);
@@ -66,9 +69,9 @@ export class ReconciliationService {
       }]);
 
       return { status: 'created', diff };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If duplicate, it means reconciliation already exists for today
-      if (error.message && error.message.includes('already exists')) {
+      if (error instanceof Error && error.message.includes('already exists')) {
         return { status: 'already-reconciled', diff: 0 };
       }
       throw error;

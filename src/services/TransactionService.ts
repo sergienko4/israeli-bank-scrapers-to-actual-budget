@@ -4,8 +4,8 @@
  */
 
 import type api from '@actual-app/api';
-import { BankTransaction, TransactionRecord } from '../types/index.js';
-import { formatDate, toCents } from '../utils/index.js';
+import { BankTransaction, TransactionRecord, ActualAccount } from '../types/index.js';
+import { formatDate, toCents, extractQueryData } from '../utils/index.js';
 
 export interface ImportResult {
   imported: number;
@@ -61,11 +61,12 @@ export class TransactionService {
           cleared: true
         }]);
         target.push(parsed);
-      } catch (error: any) {
-        if (error.message?.includes('already exists')) {
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('already exists')) {
           existingTransactions.push(parsed);
         } else {
-          console.error(`     ❌ Error importing transaction:`, error.message);
+          console.error(`     ❌ Error importing transaction:`, msg);
         }
       }
     }
@@ -83,19 +84,19 @@ export class TransactionService {
     accountId: string,
     bankName: string,
     accountNumber: string
-  ): Promise<any> {
-    let account = await this.api.getAccounts().then((accounts: any[]) =>
-      accounts.find((a: any) => a.id === accountId)
-    );
+  ): Promise<ActualAccount | string> {
+    let account: ActualAccount | string | undefined = await this.api.getAccounts()
+      .then((accounts: ActualAccount[]) => accounts.find((a) => a.id === accountId));
 
     if (!account) {
       console.log(`     ➕ Creating new account: ${accountId}`);
+      // Actual accepts id to set specific UUID, though not in official type
       account = await this.api.createAccount({
         id: accountId,
         name: `${bankName} - ${accountNumber}`,
         offbudget: false,
         closed: false
-      } as any);
+      } as Omit<ActualAccount, 'id'>);
     }
 
     return account;
@@ -112,13 +113,13 @@ export class TransactionService {
   }
 
   private async getExistingImportedIds(accountId: string): Promise<Set<string>> {
-    const result: any = await this.api.runQuery(
+    const result = await this.api.runQuery(
       this.api.q('transactions')
         .filter({ account: accountId, imported_id: { $ne: null } })
         .select(['imported_id'])
     );
-    const ids = (result?.data ?? []).map((t: any) => t.imported_id);
-    return new Set(ids);
+    const rows = extractQueryData<Array<{ imported_id: string }>>(result, []);
+    return new Set(rows.map((t) => t.imported_id));
   }
 
   /**
