@@ -15,10 +15,7 @@ export class NotificationService {
   private notifiers: INotifier[] = [];
 
   constructor(config?: NotificationConfig) {
-    if (!config?.enabled) {
-      return;
-    }
-
+    if (!config?.enabled) return;
     if (config.telegram) {
       this.notifiers.push(new TelegramNotifier(config.telegram));
       console.log('📱 Telegram notifications enabled');
@@ -26,27 +23,16 @@ export class NotificationService {
   }
 
   async sendSummary(summary: ImportSummary): Promise<void> {
-    if (this.notifiers.length === 0) return;
-
-    const results = await Promise.allSettled(
-      this.notifiers.map(n => n.sendSummary(summary))
-    );
-
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
-        console.error('⚠️  Notification failed:', msg);
-      }
-    }
+    await this.notifyAll(n => n.sendSummary(summary));
   }
 
   async sendError(error: string): Promise<void> {
+    await this.notifyAll(n => n.sendError(error));
+  }
+
+  private async notifyAll(action: (n: INotifier) => Promise<void>): Promise<void> {
     if (this.notifiers.length === 0) return;
-
-    const results = await Promise.allSettled(
-      this.notifiers.map(n => n.sendError(error))
-    );
-
+    const results = await Promise.allSettled(this.notifiers.map(action));
     for (const result of results) {
       if (result.status === 'rejected') {
         const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);

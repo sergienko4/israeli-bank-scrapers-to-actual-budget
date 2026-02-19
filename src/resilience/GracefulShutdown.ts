@@ -30,23 +30,18 @@ export class GracefulShutdownHandler implements IShutdownHandler {
   }
 
   private async handleShutdown(signal: string): Promise<void> {
-    if (this.shuttingDown) {
-      return; // Already shutting down
-    }
-
+    if (this.shuttingDown) return;
     console.log(`\n⚠️  Received ${signal} signal, initiating graceful shutdown...`);
     this.shuttingDown = true;
-
-    // Execute all registered callbacks
-    for (const callback of this.callbacks) {
-      try {
-        await callback();
-      } catch (error) {
-        console.error('Error during shutdown callback:', error);
-      }
-    }
-
+    await this.executeCallbacks();
     console.log('✅ Graceful shutdown complete');
     process.exit(0);
+  }
+
+  private async executeCallbacks(): Promise<void> {
+    for (const callback of this.callbacks) {
+      try { await callback(); }
+      catch (error) { console.error('Error during shutdown callback:', error); }
+    }
   }
 }

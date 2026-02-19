@@ -31,50 +31,41 @@ export class TransactionService {
    * @returns ImportResult with imported and skipped counts
    */
   async importTransactions(
-    bankName: string,
-    accountNumber: string,
-    actualAccountId: string,
-    transactions: BankTransaction[]
+    bankName: string, accountNumber: string,
+    actualAccountId: string, transactions: BankTransaction[]
   ): Promise<ImportResult> {
-    let imported = 0;
-    let skipped = 0;
     const newTransactions: TransactionRecord[] = [];
     const existingTransactions: TransactionRecord[] = [];
-
     console.log(`     📥 Importing ${transactions.length} transactions...`);
 
     const existingIds = await this.getExistingImportedIds(actualAccountId);
-
     for (const txn of transactions) {
       const parsed = this.parseTransaction(txn);
       const importedId = this.buildImportedId(bankName, accountNumber, txn, parsed);
       const target = existingIds.has(importedId) ? existingTransactions : newTransactions;
-
-      try {
-        await this.api.importTransactions(actualAccountId, [{
-          account: actualAccountId,
-          date: parsed.date,
-          amount: parsed.amount,
-          payee_name: parsed.description,
-          imported_id: importedId,
-          notes: txn.memo ?? parsed.description,
-          cleared: true
-        }]);
-        target.push(parsed);
-      } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
-        if (msg.includes('already exists')) {
-          existingTransactions.push(parsed);
-        } else {
-          console.error(`     ❌ Error importing transaction:`, msg);
-        }
-      }
+      await this.importSingleTransaction(actualAccountId, txn, parsed, importedId, target, existingTransactions);
     }
 
-    imported = newTransactions.length;
-    skipped = existingTransactions.length;
-    console.log(`     ✅ New: ${imported}, Existing: ${skipped}`);
-    return { imported, skipped, newTransactions, existingTransactions };
+    console.log(`     ✅ New: ${newTransactions.length}, Existing: ${existingTransactions.length}`);
+    return { imported: newTransactions.length, skipped: existingTransactions.length, newTransactions, existingTransactions };
+  }
+
+  private async importSingleTransaction(
+    actualAccountId: string, txn: BankTransaction, parsed: TransactionRecord,
+    importedId: string, target: TransactionRecord[], existingTransactions: TransactionRecord[]
+  ): Promise<void> {
+    try {
+      await this.api.importTransactions(actualAccountId, [{
+        account: actualAccountId, date: parsed.date, amount: parsed.amount,
+        payee_name: parsed.description, imported_id: importedId,
+        notes: txn.memo ?? parsed.description, cleared: true
+      }]);
+      target.push(parsed);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('already exists')) { existingTransactions.push(parsed); }
+      else { console.error(`     ❌ Error importing transaction:`, msg); }
+    }
   }
 
   /**
