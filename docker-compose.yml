@@ -1,22 +1,41 @@
-version: '3.8'
+# Israeli Bank Importer - Docker Compose Production Setup
+#
+# Usage:
+#   docker compose up -d                              Start in background
+#   docker compose logs -f                             Follow logs
+#   docker compose down                                Stop
+#   docker compose pull && docker compose up -d        Update to latest
+#
+# Prerequisites:
+#   - config.json in the same directory (see config.json.example)
+#   - Actual Budget server running and accessible
 
 services:
-  israeli_bank_importer:
-    image: israeli-bank-importer:latest
-    container_name: israeli_bank_importer
-    restart: always
+  importer:
+    image: sergienko4/israeli-bank-importer:latest
+    container_name: israeli-bank-importer
+    restart: unless-stopped
     cap_add:
-      - SYS_ADMIN
+      - SYS_ADMIN    # Required for Chromium sandboxing
     environment:
       - TZ=Asia/Jerusalem
       # Cron schedule: run every 8 hours (at midnight, 8am, 4pm)
       # Remove SCHEDULE to run once and exit
       - SCHEDULE=0 */8 * * *
     volumes:
-      - ./config.json:/app/config.json:ro
-      - ./data:/app/data
-      - ./cache:/app/cache
-      - ./chrome-data:/app/chrome-data
-    # Optional: only enable if you have an actual_server in the same compose stack
-    # depends_on:
-    #   - actual_server
+      - ./config.json:/app/config.json:ro   # Read-only config (credentials)
+      - importer-data:/app/data             # Actual Budget sync data
+      - importer-cache:/app/cache           # App cache
+      - importer-chrome:/app/chrome-data    # Browser session (2FA persistence)
+    healthcheck:
+      test: ["CMD", "ps", "aux"]
+      interval: 5m
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+# Named volumes for data persistence (survive container recreation)
+volumes:
+  importer-data:
+  importer-cache:
+  importer-chrome:

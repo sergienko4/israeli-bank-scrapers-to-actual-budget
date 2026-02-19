@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0] - 2026-02-19
+
+### Added
+- **Docker Compose production setup** (Task 10)
+  - `docker-compose.yml` with restart policy, named volumes, health check
+  - Named volumes (`importer-data`, `importer-cache`, `importer-chrome`) survive container recreation
+  - `unless-stopped` restart policy, 5m health check interval
+  - Removed deprecated `version` field (modern Docker Compose)
+  - README updated with `docker compose up -d` quick start
+
+---
+
 ## [2.2.0] - 2026-02-19
 
 ### Refactored
