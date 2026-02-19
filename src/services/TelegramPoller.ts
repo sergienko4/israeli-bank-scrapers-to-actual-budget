@@ -9,6 +9,7 @@ const POLL_TIMEOUT = 30; // seconds (Telegram long polling)
 export class TelegramPoller {
   private offset = 0;
   private running = false;
+  private startedAt = 0;
 
   constructor(
     private botToken: string,
@@ -18,6 +19,8 @@ export class TelegramPoller {
 
   async start(): Promise<void> {
     this.running = true;
+    this.startedAt = Math.floor(Date.now() / 1000);
+    await this.clearOldMessages();
     console.log('🤖 Telegram command listener started');
 
     while (this.running) {
@@ -49,8 +52,24 @@ export class TelegramPoller {
       const message = update.message;
       if (!message?.text) continue;
       if (String(message.chat.id) !== this.chatId) continue;
+      if (message.date < this.startedAt) continue; // Ignore messages sent before bot started
 
       await this.onMessage(message.text);
+    }
+  }
+
+  private async clearOldMessages(): Promise<void> {
+    try {
+      const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=-1`;
+      const response = await fetch(url);
+      if (!response.ok) return;
+
+      const data: any = await response.json();
+      if (data.ok && data.result?.length > 0) {
+        this.offset = data.result[data.result.length - 1].update_id + 1;
+      }
+    } catch {
+      // Ignore - will start from current
     }
   }
 

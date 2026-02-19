@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramPoller } from '../../src/services/TelegramPoller.js';
 
+const emptyResponse = () => Promise.resolve({
+  ok: true,
+  json: () => Promise.resolve({ ok: true, result: [] })
+});
+
 describe('TelegramPoller', () => {
   let fetchMock: any;
 
@@ -18,7 +23,10 @@ describe('TelegramPoller', () => {
     let callCount = 0;
     fetchMock.mockImplementation(() => {
       callCount++;
-      if (callCount === 1) {
+      // Call 1: clearOldMessages
+      if (callCount === 1) return emptyResponse();
+      // Call 2: actual poll with message
+      if (callCount === 2) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
@@ -28,10 +36,7 @@ describe('TelegramPoller', () => {
         });
       }
       poller.stop();
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ ok: true, result: [] })
-      });
+      return emptyResponse();
     });
 
     await poller.start();
@@ -45,7 +50,8 @@ describe('TelegramPoller', () => {
     let callCount = 0;
     fetchMock.mockImplementation(() => {
       callCount++;
-      if (callCount === 1) {
+      if (callCount === 1) return emptyResponse();
+      if (callCount === 2) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
@@ -55,14 +61,38 @@ describe('TelegramPoller', () => {
         });
       }
       poller.stop();
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ ok: true, result: [] })
-      });
+      return emptyResponse();
     });
 
     await poller.start();
     expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  it('clears old messages on start', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        // clearOldMessages returns last update
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{ update_id: 100 }]
+          })
+        });
+      }
+      poller.stop();
+      return emptyResponse();
+    });
+
+    await poller.start();
+
+    // Second call should use offset=101 (cleared past old messages)
+    const secondCallUrl = fetchMock.mock.calls[1]?.[0] ?? '';
+    expect(secondCallUrl).toContain('offset=101');
   });
 
   it('stops when stop() is called', async () => {
@@ -70,13 +100,9 @@ describe('TelegramPoller', () => {
 
     fetchMock.mockImplementation(() => {
       poller.stop();
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ ok: true, result: [] })
-      });
+      return emptyResponse();
     });
 
     await poller.start();
-    // Completed without hanging
   });
 });
