@@ -10,6 +10,7 @@ import { TelegramPoller } from './services/TelegramPoller.js';
 import { TelegramCommandHandler } from './services/TelegramCommandHandler.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
 import { ImporterConfig } from './types/index.js';
+import { AuditLogService } from './services/AuditLogService.js';
 import { errorMessage } from './utils/index.js';
 
 console.log('🚀 Israeli Bank Importer Scheduler Starting...');
@@ -65,7 +66,7 @@ function startTelegramCommands(): void {
 
   try {
     const notifier = new TelegramNotifier(telegram);
-    const handler = new TelegramCommandHandler(runImportLocked, notifier);
+    const handler = new TelegramCommandHandler(runImportLocked, notifier, new AuditLogService());
     activePoller = new TelegramPoller(telegram.botToken, telegram.chatId, (text) => handler.handle(text));
     activePoller.start().catch((err: unknown) => {
       console.error('Telegram command listener crashed:', errorMessage(err));

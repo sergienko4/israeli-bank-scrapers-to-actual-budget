@@ -10,6 +10,7 @@ import { NotificationConfig } from '../types/index.js';
 import { ImportSummary } from './MetricsService.js';
 import { INotifier } from './notifications/INotifier.js';
 import { TelegramNotifier } from './notifications/TelegramNotifier.js';
+import { WebhookNotifier } from './notifications/WebhookNotifier.js';
 
 export class NotificationService {
   private notifiers: INotifier[] = [];
@@ -19,6 +20,10 @@ export class NotificationService {
     if (config.telegram) {
       this.notifiers.push(new TelegramNotifier(config.telegram));
       console.log('📱 Telegram notifications enabled');
+    }
+    if (config.webhook) {
+      this.notifiers.push(new WebhookNotifier(config.webhook));
+      console.log(`🔗 Webhook notifications enabled (${config.webhook.format || 'plain'})`);
     }
   }
 

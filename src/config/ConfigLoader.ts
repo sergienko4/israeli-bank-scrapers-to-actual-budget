@@ -136,12 +136,24 @@ export class ConfigLoader implements IConfigLoader {
   }
 
   private validateNotifications(config: NotificationConfig): void {
-    if (!config.telegram) return;
-    if (!config.telegram.botToken) throw new ConfigurationError('Telegram botToken is required when telegram notifications are configured');
-    if (!/^\d+:.+$/.test(config.telegram.botToken)) throw new ConfigurationError('Invalid Telegram botToken format. Expected format: "123456789:ABCdef..."');
-    if (!config.telegram.chatId) throw new ConfigurationError('Telegram chatId is required when telegram notifications are configured');
-    this.validateEnumField(config.telegram.messageFormat, ['summary', 'compact', 'ledger', 'emoji'], 'messageFormat');
-    this.validateEnumField(config.telegram.showTransactions, ['new', 'all', 'none'], 'showTransactions');
+    if (config.telegram) this.validateTelegramConfig(config.telegram);
+    if (config.webhook) this.validateWebhookConfig(config.webhook);
+  }
+
+  private validateTelegramConfig(telegram: NonNullable<NotificationConfig['telegram']>): void {
+    if (!telegram.botToken) throw new ConfigurationError('Telegram botToken is required when telegram notifications are configured');
+    if (!/^\d+:.+$/.test(telegram.botToken)) throw new ConfigurationError('Invalid Telegram botToken format. Expected format: "123456789:ABCdef..."');
+    if (!telegram.chatId) throw new ConfigurationError('Telegram chatId is required when telegram notifications are configured');
+    this.validateEnumField(telegram.messageFormat, ['summary', 'compact', 'ledger', 'emoji'], 'messageFormat');
+    this.validateEnumField(telegram.showTransactions, ['new', 'all', 'none'], 'showTransactions');
+  }
+
+  private validateWebhookConfig(webhook: NonNullable<NotificationConfig['webhook']>): void {
+    if (!webhook.url) throw new ConfigurationError('Webhook url is required when webhook notifications are configured');
+    if (!webhook.url.startsWith('http://') && !webhook.url.startsWith('https://')) {
+      throw new ConfigurationError(`Invalid webhook url format. Must start with http:// or https://, got: ${webhook.url}`);
+    }
+    this.validateEnumField(webhook.format, ['slack', 'discord', 'plain'], 'webhook format');
   }
 
   private validateEnumField(value: string | undefined, allowed: string[], fieldName: string): void {

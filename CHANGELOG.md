@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.5.0] - 2026-02-19
+
+### Added
+- **Import audit log** (Task 17)
+  - `AuditLogService` — persists import history to `/app/data/audit-log.json`
+  - Each entry: timestamp, bank results, durations, transaction counts, errors
+  - Auto-rotates: keeps last 90 entries
+  - `/status` command shows last 3 import runs from audit log
+  - 8 unit tests for AuditLogService
+
+---
+
 ## [2.4.0] - 2026-02-19
 
 ### Added
@@ -14,6 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `delayBetweenBanks` config option (milliseconds, default: 0 = no delay)
   - Prevents bank API throttling when scraping multiple banks
   - Logs delay: "Waiting 5s before next bank..."
+
+---
+
+## [2.6.0] - 2026-02-19
+
+### Added
+- **Webhook notifications — Slack, Discord, plain JSON** (Task 16)
+  - `WebhookNotifier` implementing `INotifier` interface (OCP — no changes to existing code)
+  - 3 formats: Slack (`{ text }`), Discord (`{ content }`), plain JSON (`{ event, ... }`)
+  - Config: `notifications.webhook.url` + `notifications.webhook.format`
+  - Config validation for URL format and allowed formats
+  - 8 unit tests for WebhookNotifier
 
 ---
 
