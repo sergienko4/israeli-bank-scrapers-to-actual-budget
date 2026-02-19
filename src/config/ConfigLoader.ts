@@ -149,6 +149,25 @@ export class ConfigLoader implements IConfigLoader {
     for (const [bankName, bankConfig] of Object.entries(config.banks)) {
       this.validateBank(bankName, bankConfig);
     }
+
+    // Validate notifications (optional)
+    if (config.notifications?.enabled) {
+      this.validateNotifications(config.notifications);
+    }
+  }
+
+  private validateNotifications(config: import('../types/index.js').NotificationConfig): void {
+    if (config.telegram) {
+      if (!config.telegram.botToken) {
+        throw new ConfigurationError('Telegram botToken is required when telegram notifications are configured');
+      }
+      if (!/^\d+:.+$/.test(config.telegram.botToken)) {
+        throw new ConfigurationError('Invalid Telegram botToken format. Expected format: "123456789:ABCdef..."');
+      }
+      if (!config.telegram.chatId) {
+        throw new ConfigurationError('Telegram chatId is required when telegram notifications are configured');
+      }
+    }
   }
 
   private isValidUUID(uuid: string): boolean {

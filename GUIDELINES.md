@@ -13,39 +13,48 @@ Rules for contributing to this project. All contributors (including AI assistant
 
 ---
 
+## Security & Privacy
+
+5. **Security first** - Every task must consider security and privacy implications
+6. **Never commit credentials** - No tokens, passwords, or API keys in code or config committed to git
+7. **Validate external input** - Sanitize data from banks, APIs, and user config
+8. **Minimize dependencies** - Prefer native APIs (e.g., `fetch()`) over third-party packages to reduce attack surface
+
+---
+
 ## Quality Standards
 
-5. **Evaluate every change** - Each modification must be checked, measured, and have clear metrics
-6. **Explain improvements** - Document how the change improves the project
-7. **Justify the change** - Explain why we should do it
-8. **Document risks** - Explain why not (tradeoffs, risks, downsides)
-9. **Clean code** - Follow clean code principles at all times
-10. **SOLID principles** - Follow Open/Closed principle and other SOLID principles
+9. **Evaluate every change** - Each modification must be checked, measured, and have clear metrics
+10. **Explain improvements** - Document how the change improves the project
+11. **Justify the change** - Explain why we should do it
+12. **Document risks** - Explain why not (tradeoffs, risks, downsides)
+13. **Clean code** - Follow clean code principles at all times
+14. **SOLID principles** - Follow Open/Closed principle and other SOLID principles
 
 ---
 
 ## Verification Before PR
 
-11. **Build locally** - `npm run build` must pass with zero errors
-12. **Run tests** - `npm test` must pass all tests
-13. **Run validate** - `npm run validate` (build + tests combined)
-14. **Build Docker image** - `docker build -t israeli-bank-importer:test .`
-15. **Run Docker locally** - Run the container with `config.json` and verify it works with real bank data
+15. **Build locally** - `npm run build` must pass with zero errors
+16. **Run tests** - `npm test` must pass all tests
+17. **Run validate** - `npm run validate` (build + tests combined)
+18. **Build Docker image** - `docker build -t israeli-bank-importer:test .`
+19. **Run Docker locally** - Run the container with `config.json` and verify it works with real bank data
 
 ---
 
 ## Documentation
 
-16. **Always update documentation** - Every code change must include relevant doc updates
-17. **Update .md files before work** - Plan and document in task files before implementation begins
-18. **Update CHANGELOG.md** - Add entry for every change
-19. **Remove unused files** - Keep the repository clean, no dead or orphaned files
+20. **Always update documentation** - Every code change must include relevant doc updates
+21. **Update .md files before work** - Plan and document in task files before implementation begins
+22. **Update CHANGELOG.md** - Add entry for every change
+23. **Remove unused files** - Keep the repository clean, no dead or orphaned files
 
 ---
 
 ## Development Process
 
-20. **Plan first, then implement** - Create a plan, wait for review and approval before coding
+24. **Plan first, then implement** - Create a plan, wait for review and approval before coding
 
 ---
 

@@ -13,6 +13,7 @@ import { GracefulShutdownHandler } from './resilience/GracefulShutdown.js';
 import { ReconciliationService } from './services/ReconciliationService.js';
 import { MetricsService } from './services/MetricsService.js';
 import { TransactionService } from './services/TransactionService.js';
+import { NotificationService } from './services/NotificationService.js';
 import { ImporterConfig, BankConfig, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
 
 // Initialize resilience components
@@ -31,6 +32,7 @@ const metrics = new MetricsService();
 // Load configuration
 const configLoader = new ConfigLoader();
 const config: ImporterConfig = configLoader.load();
+const notificationService = new NotificationService(config.notifications);
 
 console.log('🚀 Starting Israeli Bank Importer for Actual Budget\n');
 
@@ -246,6 +248,9 @@ async function main(): Promise<void> {
     // Print metrics summary
     metrics.printSummary();
 
+    // Send notification
+    await notificationService.sendSummary(metrics.getSummary());
+
     console.log('\n🎉 Import process completed!\n');
 
     // Shutdown
@@ -260,6 +265,7 @@ async function main(): Promise<void> {
     if (error instanceof Error) {
       console.error('Stack trace:', error.stack);
     }
+    await notificationService.sendError(formattedError);
     try {
       await api.shutdown();
     } catch {}

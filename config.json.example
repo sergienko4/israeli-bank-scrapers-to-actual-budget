@@ -56,6 +56,15 @@
     }
   },
 
+  "notifications": {
+    "_comment": "Optional. Enable to receive import summaries via Telegram.",
+    "enabled": false,
+    "telegram": {
+      "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
+      "chatId": "-1001234567890"
+    }
+  },
+
   "_examples": {
     "_comment": "Configuration examples - DELETE THIS ENTIRE SECTION after reading",
 

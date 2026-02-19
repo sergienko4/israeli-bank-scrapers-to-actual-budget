@@ -436,6 +436,37 @@ npm run validate
 
 ---
 
+## 📱 Telegram Notifications
+
+Get import summaries and error alerts via Telegram.
+
+### Setup
+1. Open Telegram, search **@BotFather**
+2. Send `/newbot`, follow the prompts, copy the **bot token**
+3. Add the bot to a group, or message it directly
+4. Get your **chat ID** via **@userinfobot** (or group ID from the group URL)
+5. Add to `config.json`:
+
+```json
+"notifications": {
+  "enabled": true,
+  "telegram": {
+    "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
+    "chatId": "-1001234567890"
+  }
+}
+```
+
+After each import you'll receive a summary like:
+```
+✅ Import Summary
+Banks: 1/1 successful (100%)
+Transactions: 2 imported, 0 duplicates
+Duration: 5.1s
+```
+
+---
+
 ## 🔐 Security
 
 - ✅ Keep `config.json` private (in `.gitignore`)

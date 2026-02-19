@@ -50,9 +50,20 @@ export interface BankConfig {
   [key: string]: any; // Allow other bank-specific fields
 }
 
+export interface TelegramConfig {
+  botToken: string;
+  chatId: string;
+}
+
+export interface NotificationConfig {
+  enabled: boolean;
+  telegram?: TelegramConfig;
+}
+
 export interface ImporterConfig {
   actual: ActualConfig;
   banks: Record<string, BankConfig>;
+  notifications?: NotificationConfig;
 }
 
 export interface ResilienceConfig {

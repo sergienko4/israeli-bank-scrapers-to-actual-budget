@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-02-19
+
+### Added
+- **Telegram Notifications** - Task 03
+  - Send import summary to Telegram after each run
+  - Send error alerts on critical failures
+  - Uses native `fetch()` (zero new dependencies, no vulnerabilities)
+  - Extensible `INotifier` interface for future channels (Slack, Discord, Email)
+  - Single `enabled` flag: any channel with valid config is active
+  - Non-blocking: notification failures never break imports
+  - Config validation for bot token and chat ID
+
+### Configuration
+```json
+"notifications": {
+  "enabled": true,
+  "telegram": { "botToken": "...", "chatId": "..." }
+}
+```
+
+---
+
 ## [1.6.0] - 2026-02-19
 
 ### Refactored
