@@ -10,6 +10,7 @@ import { TelegramPoller } from './services/TelegramPoller.js';
 import { TelegramCommandHandler } from './services/TelegramCommandHandler.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
 import { ImporterConfig } from './types/index.js';
+import { errorMessage } from './utils/index.js';
 
 console.log('🚀 Israeli Bank Importer Scheduler Starting...');
 console.log(`📅 Timezone: ${process.env.TZ || 'UTC'}`);
@@ -67,10 +68,10 @@ function startTelegramCommands(): void {
     const handler = new TelegramCommandHandler(runImportLocked, notifier);
     activePoller = new TelegramPoller(telegram.botToken, telegram.chatId, (text) => handler.handle(text));
     activePoller.start().catch((err: unknown) => {
-      console.error('Telegram command listener crashed:', err instanceof Error ? err.message : String(err));
+      console.error('Telegram command listener crashed:', errorMessage(err));
     });
   } catch (error: unknown) {
-    console.error('⚠️  Failed to start Telegram commands:', error instanceof Error ? error.message : String(error));
+    console.error('⚠️  Failed to start Telegram commands:', errorMessage(error));
   }
 }
 
@@ -81,7 +82,7 @@ function validateSchedule(schedule: string): void {
     const interval = parser.parseExpression(schedule, { tz: process.env.TZ || 'UTC' });
     console.log(`📅 Next scheduled run: ${interval.next().toString()}`);
   } catch (err: unknown) {
-    console.error(`❌ Invalid SCHEDULE format: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`❌ Invalid SCHEDULE format: ${errorMessage(err)}`);
     console.error('   Example: "0 */8 * * *" (every 8 hours)');
     process.exit(1);
   }
@@ -97,7 +98,7 @@ async function scheduleLoop(schedule: string): Promise<never> {
       await new Promise(resolve => setTimeout(resolve, msUntilNext));
       await runImportLocked();
     } catch (err: unknown) {
-      console.error(`❌ Scheduler error: ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`❌ Scheduler error: ${errorMessage(err)}`);
       await new Promise(resolve => setTimeout(resolve, 60000));
     }
   }

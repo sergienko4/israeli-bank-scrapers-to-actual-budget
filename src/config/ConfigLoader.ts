@@ -42,8 +42,7 @@ export class ConfigLoader implements IConfigLoader {
     try {
       console.log('📄 Loading configuration from config.json');
       return JSON.parse(readFileSync(this.configPath, 'utf8')) as ImporterConfig;
-    } catch (error) {
-      if (error instanceof ConfigurationError) throw error;
+    } catch {
       console.warn('⚠️  Failed to parse config.json, falling back to environment variables');
       return null;
     }

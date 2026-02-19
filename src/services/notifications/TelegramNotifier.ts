@@ -108,13 +108,13 @@ export class TelegramNotifier implements INotifier {
   // ─── Format dispatch ───
 
   private formatSummary(summary: ImportSummary): string {
-    switch (this.format) {
-      case 'compact': return this.formatCompact(summary);
-      case 'ledger': return this.formatLedger(summary);
-      case 'emoji': return this.formatEmoji(summary);
-      case 'summary':
-      default: return this.formatDefault(summary);
-    }
+    const formatters: Record<MessageFormat, (s: ImportSummary) => string> = {
+      compact: (s) => this.formatCompact(s),
+      ledger: (s) => this.formatLedger(s),
+      emoji: (s) => this.formatEmoji(s),
+      summary: (s) => this.formatDefault(s),
+    };
+    return (formatters[this.format] ?? formatters.summary)(summary);
   }
 
   // ─── Shared format helpers ───

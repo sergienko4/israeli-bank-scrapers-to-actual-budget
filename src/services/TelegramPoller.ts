@@ -4,6 +4,7 @@
  */
 
 import { TelegramApiResponse } from '../types/index.js';
+import { errorMessage } from '../utils/index.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const POLL_TIMEOUT = 30;
@@ -29,8 +30,7 @@ export class TelegramPoller {
       try {
         await this.poll();
       } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.error('⚠️  Telegram poll error:', msg);
+        console.error('⚠️  Telegram poll error:', errorMessage(error));
         await this.sleep(5000);
       }
     }

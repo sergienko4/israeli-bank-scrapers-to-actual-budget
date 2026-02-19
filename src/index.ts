@@ -16,7 +16,8 @@ import { ReconciliationService } from './services/ReconciliationService.js';
 import { NotificationService } from './services/NotificationService.js';
 import { TwoFactorService } from './services/TwoFactorService.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
-import { ImporterConfig, BankConfig, BankTarget, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
+import { ImporterConfig, BankConfig, BankTarget, BankTransaction, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
+import { errorMessage } from './utils/index.js';
 
 // Initialize resilience components
 const shutdownHandler = new GracefulShutdownHandler();
@@ -155,10 +156,10 @@ function findTargetForAccount(bankConfig: BankConfig, accountNumber: string): Ba
 
 async function importAndRecordTransactions(
   bankName: string, accountNumber: string, actualAccountId: string,
-  txns: unknown[], balance: number | undefined, currency: string
+  txns: BankTransaction[], balance: number | undefined, currency: string
 ): Promise<ImportResult | null> {
   if (!txns || txns.length === 0) return null;
-  const result = await transactionService.importTransactions(bankName, accountNumber, actualAccountId, txns as never[]);
+  const result = await transactionService.importTransactions(bankName, accountNumber, actualAccountId, txns);
   metrics.recordAccountTransactions(bankName, accountNumber, balance, currency, result.newTransactions, result.existingTransactions);
   return result;
 }
@@ -173,14 +174,13 @@ async function reconcileIfConfigured(
     metrics.recordReconciliation(bankName, result.status, result.diff);
     console.log(reconciliationMessages[result.status](result.diff));
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error(`     ❌ Reconciliation error:`, msg);
+    console.error(`     ❌ Reconciliation error:`, errorMessage(error));
   }
 }
 
 async function processAccount(
   bankName: string, bankConfig: BankConfig,
-  account: { accountNumber: string; balance?: number; txns: unknown[] }, currency: string
+  account: { accountNumber: string; balance?: number; txns: BankTransaction[] }, currency: string
 ): Promise<{ imported: number; skipped: number }> {
   const target = findTargetForAccount(bankConfig, account.accountNumber);
   if (!target) { console.log(`     ⚠️  No target configured for this account, skipping`); return { imported: 0, skipped: 0 }; }
@@ -199,27 +199,31 @@ function logAccountInfo(accountNumber: string, balance: number | undefined, curr
   console.log(`     Transactions: ${txnCount}`);
 }
 
+async function processAllAccounts(
+  bankName: string, bankConfig: BankConfig, scrapeResult: ScraperScrapingResult
+): Promise<{ imported: number; skipped: number }> {
+  let totalImported = 0, totalSkipped = 0;
+  for (const account of scrapeResult.accounts || []) {
+    if (shutdownHandler.isShuttingDown()) { console.log('  ⚠️  Shutdown requested, stopping import...'); break; }
+    const currency = account.txns[0]?.originalCurrency || 'ILS';
+    logAccountInfo(account.accountNumber, account.balance, currency, account.txns?.length || 0);
+    const counts = await processAccount(bankName, bankConfig, account, currency);
+    totalImported += counts.imported;
+    totalSkipped += counts.skipped;
+  }
+  return { imported: totalImported, skipped: totalSkipped };
+}
+
 async function importFromBank(bankName: string, bankConfig: BankConfig): Promise<void> {
   console.log(`\n📊 Processing ${bankName}...`);
   metrics.startBank(bankName);
-  let totalImported = 0, totalSkipped = 0;
-
   try {
     const scrapeResult = await scrapeBankWithResilience(bankName, bankConfig);
     if (!scrapeResult.success) { console.error(`  ❌ Failed to scrape ${bankName}:`, scrapeResult.errorMessage || 'Unknown error'); return; }
     console.log(`  ✅ Successfully scraped ${bankName}`);
     console.log(`  📝 Found ${scrapeResult.accounts?.length || 0} accounts`);
-
-    for (const account of scrapeResult.accounts || []) {
-      if (shutdownHandler.isShuttingDown()) { console.log('  ⚠️  Shutdown requested, stopping import...'); break; }
-      const currency = account.txns[0]?.originalCurrency || 'ILS';
-      logAccountInfo(account.accountNumber, account.balance, currency, account.txns?.length || 0);
-      const counts = await processAccount(bankName, bankConfig, account, currency);
-      totalImported += counts.imported;
-      totalSkipped += counts.skipped;
-    }
-
-    metrics.recordBankSuccess(bankName, totalImported, totalSkipped);
+    const totals = await processAllAccounts(bankName, bankConfig, scrapeResult);
+    metrics.recordBankSuccess(bankName, totals.imported, totals.skipped);
     console.log(`\n✅ Completed ${bankName}`);
   } catch (error) {
     metrics.recordBankFailure(bankName, error as Error);
