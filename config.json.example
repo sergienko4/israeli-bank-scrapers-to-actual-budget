@@ -64,8 +64,10 @@
       "chatId": "-1001234567890",
       "messageFormat": "compact",
       "showTransactions": "new",
+      "listenForCommands": true,
       "_formats": "summary (default) | compact (A) | ledger (B) | emoji (C)",
-      "_showOptions": "new (default) | all | none"
+      "_showOptions": "new (default) | all | none",
+      "_listenForCommands": "true = bot listens for /scan, /status, /help"
     }
   },
 

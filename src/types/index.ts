@@ -67,6 +67,7 @@ export interface TelegramConfig {
   chatId: string;
   messageFormat?: MessageFormat;       // Default: 'summary'
   showTransactions?: ShowTransactions;  // Default: 'new'
+  listenForCommands?: boolean;         // Default: false - bot listens for /scan, /status, /help
 }
 
 export interface NotificationConfig {
@@ -96,4 +97,20 @@ export interface TransactionRecord {
   date: string;
   description: string;
   amount: number;
+}
+
+export interface TelegramMessageData {
+  chat: { id: number };
+  text?: string;
+  date: number;
+}
+
+export interface TelegramUpdate {
+  update_id: number;
+  message?: TelegramMessageData;
+}
+
+export interface TelegramApiResponse {
+  ok: boolean;
+  result?: TelegramUpdate[];
 }
