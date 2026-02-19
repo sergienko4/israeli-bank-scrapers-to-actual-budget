@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'vitest.config.ts'
+      - 'Dockerfile'
+      - '.github/workflows/**'
   pull_request:
     branches:
       - main
@@ -73,7 +82,7 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-  # Release pipeline - only on push to main (tests already passed on PR)
+  # Release pipeline - only on push to main with app changes
   auto-version:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -234,7 +243,6 @@ jobs:
         id: changelog
         run: |
           VERSION="${{ needs.auto-version.outputs.new_tag }}"
-          # Extract the changelog section for this version
           awk "/## \[${VERSION#v}\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md > release_notes.md
           echo "Release notes extracted for $VERSION"
 
