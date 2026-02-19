@@ -87,7 +87,13 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
     ]
   };
 
-  if (bankConfig.startDate) {
+  // Convert daysBack to startDate if specified
+  if (bankConfig.daysBack) {
+    const date = new Date();
+    date.setDate(date.getDate() - bankConfig.daysBack);
+    scraperConfig.startDate = date.toISOString().split('T')[0];
+    console.log(`  📅 Date range: last ${bankConfig.daysBack} days (from ${scraperConfig.startDate})`);
+  } else if (bankConfig.startDate) {
     console.log(`  📅 Date range: from ${bankConfig.startDate} to today`);
   } else {
     console.log(`  📅 Date range: using bank default (usually ~1 year)`);

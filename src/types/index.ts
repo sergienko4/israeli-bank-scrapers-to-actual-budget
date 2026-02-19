@@ -22,7 +22,8 @@ export interface BankTarget {
 
 export interface BankConfig {
   // Common fields
-  startDate?: string;
+  startDate?: string;   // Fixed date: "2026-02-15"
+  daysBack?: number;    // Relative: 14 = last 14 days (overrides startDate)
   targets?: BankTarget[];
 
   // Bank-specific credentials (different per bank)

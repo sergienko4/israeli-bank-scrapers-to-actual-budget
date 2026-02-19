@@ -184,6 +184,22 @@ export class ConfigLoader implements IConfigLoader {
   }
 
   private validateBank(bankName: string, config: BankConfig): void {
+    // Validate startDate and daysBack are mutually exclusive
+    if (config.startDate && config.daysBack) {
+      throw new ConfigurationError(
+        `${bankName}: cannot use both "startDate" and "daysBack". Choose one.`
+      );
+    }
+
+    // Validate daysBack if present
+    if (config.daysBack !== undefined) {
+      if (!Number.isInteger(config.daysBack) || config.daysBack < 1 || config.daysBack > 365) {
+        throw new ConfigurationError(
+          `${bankName}: "daysBack" must be an integer between 1 and 365. Got: ${config.daysBack}`
+        );
+      }
+    }
+
     // Validate startDate if present
     if (config.startDate) {
       const date = new Date(config.startDate);
