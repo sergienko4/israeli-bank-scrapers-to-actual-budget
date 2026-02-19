@@ -36,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 4096 char truncation for Telegram limit
 
 ### Changed
-- **Removed auto-reconciliation** - user validates transactions in Actual Budget
+- **Reconciliation re-enabled** - opt-in per bank with `"reconcile": false` (default)
 - **Transaction detection** - uses `imported_id` lookup to detect new vs existing
 - **Shared import lock** - prevents cron + /scan overlap
 - `tasks/` folder removed from git (kept local only)

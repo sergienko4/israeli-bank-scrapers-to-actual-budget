@@ -25,23 +25,25 @@
       "id": "123456789",
       "password": "your_password",
       "num": "ABC123",
-      "startDate": "2026-01-19",
-      "targets": [{ "actualAccountId": "uuid", "reconcile": true, "accounts": "all" }]
+      "daysBack": 7,
+      "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
     },
 
     "leumi": {
       "username": "your_username",
       "password": "your_password",
-      "targets": [{ "actualAccountId": "uuid", "reconcile": true, "accounts": "all" }]
+      "startDate": "2026-01-25",
+      "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
     },
 
     "oneZero": {
       "email": "your@email.com",
       "password": "your_password",
-      "phoneNumber": "0501234567",
+      "phoneNumber": "+972501234567",
       "twoFactorAuth": true,
       "twoFactorTimeout": 300,
-      "targets": [{ "actualAccountId": "uuid", "reconcile": true, "accounts": "all" }]
+      "daysBack": 14,
+      "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
     }
   },
 
@@ -57,10 +59,14 @@
   },
 
   "_reference": {
+    "daysBack": "1-30. Import last N days. Cannot use with startDate",
+    "startDate": "YYYY-MM-DD. Fixed date, max 1 year back. Cannot use with daysBack",
+    "reconcile": "false (default). true = auto-adjust balance to match bank",
+    "twoFactorAuth": "false (default). true = bot asks for SMS OTP via Telegram",
+    "twoFactorTimeout": "Seconds to wait for OTP reply. Default: 300",
     "messageFormat": "summary | compact | ledger | emoji",
     "showTransactions": "new | all | none",
-    "twoFactorAuth": "true = bot asks for SMS OTP via Telegram",
-    "twoFactorTimeout": "Seconds to wait for OTP. Default: 300",
+    "listenForCommands": "true = bot listens for /scan, /status, /help",
     "syncId": "Settings → Show Advanced Settings → Sync ID",
     "actualAccountId": "Click account in Actual Budget → ID from URL"
   }
