@@ -14,6 +14,18 @@ import { ImporterConfig } from './types/index.js';
 console.log('🚀 Israeli Bank Importer Scheduler Starting...');
 console.log(`📅 Timezone: ${process.env.TZ || 'UTC'}`);
 
+let activeImport: Promise<number> | null = null;
+
+function runImportLocked(): Promise<number> {
+  if (activeImport) {
+    console.log('⚠️  Import already running, skipping');
+    return activeImport;
+  }
+
+  activeImport = runImport().finally(() => { activeImport = null; });
+  return activeImport;
+}
+
 function runImport(): Promise<number> {
   return new Promise((resolve) => {
     const startTime = new Date();
@@ -55,7 +67,7 @@ function startTelegramCommands(): void {
     if (!config.notifications?.enabled || !telegram?.listenForCommands) return;
 
     const notifier = new TelegramNotifier(telegram);
-    const handler = new TelegramCommandHandler(runImport, notifier);
+    const handler = new TelegramCommandHandler(runImportLocked, notifier);
     const poller = new TelegramPoller(
       telegram.botToken,
       telegram.chatId,
@@ -111,7 +123,7 @@ async function main(): Promise<void> {
         console.log(`⏳ Waiting until ${nextRun.toISOString()} (${Math.round(msUntilNext / 1000 / 60)} minutes)`);
 
         await new Promise(resolve => setTimeout(resolve, msUntilNext));
-        await runImport();
+        await runImportLocked();
 
       } catch (err: unknown) {
         console.error(`❌ Scheduler error: ${err instanceof Error ? err.message : String(err)}`);
