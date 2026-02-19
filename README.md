@@ -21,15 +21,30 @@ Your Bank → israeli-bank-scrapers → This Tool → Actual Budget
 
 ---
 
-## 🏦 Supported Banks (19)
+## 🏦 Supported Institutions (18)
 
-### Banks (11)
-Bank Hapoalim, Leumi, Discount, Mizrahi Tefahot, Mercantile, Otsar Hahayal, Union, Beinleumi, Massad, Yahav, OneZero
+| Type | Institution | Config key | Login fields |
+|------|-------------|-----------|-------------|
+| 🏦 Bank | Bank Hapoalim | `hapoalim` | userCode, password |
+| 🏦 Bank | Bank Leumi | `leumi` | username, password |
+| 🏦 Bank | Discount Bank | `discount` | id, password, num |
+| 🏦 Bank | Mizrahi Tefahot | `mizrahi` | username, password |
+| 🏦 Bank | Mercantile | `mercantile` | id, password, num |
+| 🏦 Bank | Otsar Hahayal | `otsarHahayal` | username, password |
+| 🏦 Bank | Union | `union` | username, password |
+| 🏦 Bank | Beinleumi | `beinleumi` | username, password |
+| 🏦 Bank | Massad | `massad` | username, password |
+| 🏦 Bank | Yahav | `yahav` | username, nationalID, password |
+| 🏦 Bank | Beyahad Bishvilha | `beyahadBishvilha` | id, password |
+| 🏦 Bank | Behatsdaa | `behatsdaa` | id, password |
+| 🏦 Bank | Pagi | `pagi` | username, password |
+| 🏦 Bank | One Zero | `oneZero` | email, password, phoneNumber |
+| 💳 Card | Visa Cal | `visaCal` | username, password |
+| 💳 Card | Max | `max` | username, password |
+| 💳 Card | Isracard | `isracard` | id, card6Digits, password |
+| 💳 Card | Amex | `amex` | id, card6Digits, password |
 
-### Credit Cards (8)
-Cal (Visa Cal), Max, Isracard, Amex Israel, Beyahad Bishvilha, Behatsdaa, Pagi
-
-**See [BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) for credential requirements**
+Use the **Config key** as the bank name in your `config.json`. See [BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) for details.
 
 ---
 
@@ -37,7 +52,7 @@ Cal (Visa Cal), Max, Isracard, Amex Israel, Beyahad Bishvilha, Behatsdaa, Pagi
 
 ### Core
 - ✅ Automatic scheduled imports (cron) with Docker Compose
-- ✅ 19 Israeli banks and credit cards
+- ✅ 18 Israeli banks and credit cards
 - ✅ Duplicate detection via `imported_id`
 - ✅ 2FA via Telegram (OneZero OTP)
 - ✅ Relative date import (`daysBack`) or fixed `startDate`
