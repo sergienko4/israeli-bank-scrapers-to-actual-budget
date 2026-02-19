@@ -89,6 +89,13 @@ function validateSchedule(schedule: string): void {
   }
 }
 
+// Max safe setTimeout value (2^31 - 1 ms ≈ 24.8 days) — prevents overflow to 1ms
+const MAX_TIMEOUT_MS = 2147483647;
+
+function safeSleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, Math.min(ms, MAX_TIMEOUT_MS)));
+}
+
 async function scheduleLoop(schedule: string): Promise<never> {
   while (true) {
     try {
@@ -96,11 +103,12 @@ async function scheduleLoop(schedule: string): Promise<never> {
       const nextRun = interval.next().toDate();
       const msUntilNext = nextRun.getTime() - Date.now();
       console.log(`⏳ Waiting until ${nextRun.toISOString()} (${Math.round(msUntilNext / 1000 / 60)} minutes)`);
-      await new Promise(resolve => setTimeout(resolve, msUntilNext));
+      await safeSleep(msUntilNext);
+      if (Date.now() < nextRun.getTime()) continue; // Woke early from clamped timeout, re-check
       await runImportLocked();
     } catch (err: unknown) {
       console.error(`❌ Scheduler error: ${errorMessage(err)}`);
-      await new Promise(resolve => setTimeout(resolve, 60000));
+      await safeSleep(60000);
     }
   }
 }
