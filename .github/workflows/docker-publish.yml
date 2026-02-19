@@ -1,7 +1,10 @@
-name: Docker Build and Push
+name: CI / CD
 
 on:
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -9,15 +12,71 @@ on:
 permissions:
   contents: write
   packages: write
+  security-events: write
 
 env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
 
 jobs:
-  # Auto-versioning job - runs only on main branch pushes
+  # Test job - runs on every push and PR
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+  # CodeQL security scanning - runs on every push and PR
+  code-scanning:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  # Auto-versioning job - runs only on main branch pushes (after tests pass)
   auto-version:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
+    needs: [test, code-scanning]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     outputs:
       new_tag: ${{ steps.semver.outputs.new_tag }}
 
