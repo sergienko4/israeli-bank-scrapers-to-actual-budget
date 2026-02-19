@@ -4,20 +4,14 @@
  */
 
 import type api from '@actual-app/api';
-import { BankTransaction } from '../types/index.js';
+import { BankTransaction, TransactionRecord } from '../types/index.js';
 import { formatDate, toCents } from '../utils/index.js';
-
-export interface ImportedTransaction {
-  date: string;
-  description: string;
-  amount: number; // in cents
-}
 
 export interface ImportResult {
   imported: number;
   skipped: number;
-  newTransactions: ImportedTransaction[];
-  existingTransactions: ImportedTransaction[];
+  newTransactions: TransactionRecord[];
+  existingTransactions: TransactionRecord[];
 }
 
 export class TransactionService {
@@ -44,8 +38,8 @@ export class TransactionService {
   ): Promise<ImportResult> {
     let imported = 0;
     let skipped = 0;
-    const newTransactions: ImportedTransaction[] = [];
-    const existingTransactions: ImportedTransaction[] = [];
+    const newTransactions: TransactionRecord[] = [];
+    const existingTransactions: TransactionRecord[] = [];
 
     console.log(`     📥 Importing ${transactions.length} transactions...`);
 
@@ -109,7 +103,7 @@ export class TransactionService {
   /**
    * Convert external bank transaction to typed internal format
    */
-  private parseTransaction(txn: BankTransaction): ImportedTransaction {
+  private parseTransaction(txn: BankTransaction): TransactionRecord {
     return {
       date: formatDate(txn.date),
       description: txn.description ?? 'Unknown',

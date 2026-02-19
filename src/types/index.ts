@@ -92,7 +92,8 @@ export const DEFAULT_RESILIENCE_CONFIG: ResilienceConfig = {
   initialBackoffMs: 1000 // 1 second
 };
 
-export interface ReconciliationResult {
-  status: 'created' | 'skipped' | 'already-reconciled';
-  diff: number;  // Amount in cents
+export interface TransactionRecord {
+  date: string;
+  description: string;
+  amount: number;
 }

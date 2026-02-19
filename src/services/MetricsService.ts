@@ -2,11 +2,9 @@
  * Metrics collection service for tracking import performance and success rates
  */
 
-export interface TransactionRecord {
-  date: string;
-  description: string;
-  amount: number; // in cents
-}
+import { TransactionRecord } from '../types/index.js';
+
+export { TransactionRecord };
 
 export interface AccountMetrics {
   accountNumber: string;
