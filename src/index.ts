@@ -158,6 +158,13 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
         );
         totalImported += result.imported;
         totalSkipped += result.skipped;
+
+        // Record transaction details for notifications
+        metrics.recordAccountTransactions(
+          bankName, account.accountNumber,
+          account.balance, account.currency || 'ILS',
+          result.transactions
+        );
       }
 
       // Handle reconciliation

@@ -61,7 +61,9 @@
     "enabled": false,
     "telegram": {
       "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
-      "chatId": "-1001234567890"
+      "chatId": "-1001234567890",
+      "messageFormat": "compact",
+      "_formats": "summary (default) | compact (A) | ledger (B) | emoji (C)"
     }
   },
 

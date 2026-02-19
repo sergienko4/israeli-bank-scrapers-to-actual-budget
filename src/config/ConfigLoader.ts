@@ -167,6 +167,10 @@ export class ConfigLoader implements IConfigLoader {
       if (!config.telegram.chatId) {
         throw new ConfigurationError('Telegram chatId is required when telegram notifications are configured');
       }
+      const validFormats = ['summary', 'compact', 'ledger', 'emoji'];
+      if (config.telegram.messageFormat && !validFormats.includes(config.telegram.messageFormat)) {
+        throw new ConfigurationError(`Invalid messageFormat "${config.telegram.messageFormat}". Must be one of: ${validFormats.join(', ')}`);
+      }
     }
   }
 

@@ -6,9 +6,16 @@
 import type api from '@actual-app/api';
 import { formatDate, toCents } from '../utils/index.js';
 
+export interface ImportedTransaction {
+  date: string;
+  description: string;
+  amount: number; // in cents
+}
+
 export interface ImportResult {
   imported: number;
   skipped: number;
+  transactions: ImportedTransaction[];
 }
 
 export class TransactionService {
@@ -35,18 +42,22 @@ export class TransactionService {
   ): Promise<ImportResult> {
     let imported = 0;
     let skipped = 0;
+    const importedTxns: ImportedTransaction[] = [];
 
     console.log(`     📥 Importing ${transactions.length} transactions...`);
 
     for (const txn of transactions) {
       try {
         const importedId = `${bankName}-${accountNumber}-${txn.identifier || `${formatDate(txn.date)}-${txn.chargedAmount || txn.originalAmount}`}`;
+        const amount = toCents(txn.chargedAmount || txn.originalAmount);
+        const date = formatDate(txn.date);
+        const description = txn.description || 'Unknown';
 
         const transaction = {
           account: actualAccountId,
-          date: formatDate(txn.date),
-          amount: toCents(txn.chargedAmount || txn.originalAmount),
-          payee_name: txn.description || 'Unknown',
+          date,
+          amount,
+          payee_name: description,
           imported_id: importedId,
           notes: txn.memo || txn.description || '',
           cleared: true
@@ -54,6 +65,7 @@ export class TransactionService {
 
         await this.api.importTransactions(actualAccountId, [transaction]);
         imported++;
+        importedTxns.push({ date, description, amount });
       } catch (error: any) {
         if (error.message && error.message.includes('already exists')) {
           skipped++;
@@ -64,7 +76,7 @@ export class TransactionService {
     }
 
     console.log(`     ✅ Imported: ${imported}, Skipped (duplicates): ${skipped}`);
-    return { imported, skipped };
+    return { imported, skipped, transactions: importedTxns };
   }
 
   /**

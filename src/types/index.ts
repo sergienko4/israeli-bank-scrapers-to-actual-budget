@@ -50,9 +50,12 @@ export interface BankConfig {
   [key: string]: any; // Allow other bank-specific fields
 }
 
+export type MessageFormat = 'compact' | 'ledger' | 'emoji' | 'summary';
+
 export interface TelegramConfig {
   botToken: string;
   chatId: string;
+  messageFormat?: MessageFormat; // Default: 'summary'
 }
 
 export interface NotificationConfig {

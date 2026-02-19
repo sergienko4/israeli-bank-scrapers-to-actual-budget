@@ -2,6 +2,19 @@
  * Metrics collection service for tracking import performance and success rates
  */
 
+export interface TransactionRecord {
+  date: string;
+  description: string;
+  amount: number; // in cents
+}
+
+export interface AccountMetrics {
+  accountNumber: string;
+  balance?: number;
+  currency?: string;
+  transactions: TransactionRecord[];
+}
+
 export interface BankMetrics {
   bankName: string;
   startTime: number;
@@ -13,6 +26,7 @@ export interface BankMetrics {
   transactionsSkipped: number;
   reconciliationStatus?: 'created' | 'skipped' | 'already-reconciled';
   reconciliationAmount?: number;
+  accounts: AccountMetrics[];
 }
 
 export interface ImportSummary {
@@ -48,8 +62,25 @@ export class MetricsService {
       startTime: Date.now(),
       status: 'pending',
       transactionsImported: 0,
-      transactionsSkipped: 0
+      transactionsSkipped: 0,
+      accounts: []
     });
+  }
+
+  /**
+   * Record account transactions for a bank
+   */
+  recordAccountTransactions(
+    bankName: string,
+    accountNumber: string,
+    balance: number | undefined,
+    currency: string | undefined,
+    transactions: TransactionRecord[]
+  ): void {
+    const metrics = this.banks.get(bankName);
+    if (metrics) {
+      metrics.accounts.push({ accountNumber, balance, currency, transactions });
+    }
   }
 
   /**
