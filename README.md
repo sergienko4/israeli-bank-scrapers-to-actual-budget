@@ -436,6 +436,141 @@ npm run validate
 
 ---
 
+## 📱 Telegram Notifications (Optional)
+
+Get import summaries and error alerts via Telegram after each run.
+
+### Step 1: Create a Telegram Bot (2 minutes)
+
+1. Open Telegram on your phone or desktop
+2. Search for **@BotFather** and start a chat
+3. Send: `/newbot`
+4. BotFather will ask for a name - type anything (e.g., `My Bank Importer`)
+5. BotFather will ask for a username - must end in `bot` (e.g., `my_bank_importer_bot`)
+6. BotFather replies with your **bot token** - copy it:
+   ```
+   123456789:ABCDefGHijKlMnOpQrStUvWxYz
+   ```
+
+### Step 2: Get Your Chat ID (1 minute)
+
+**For personal notifications:**
+1. Search for **@userinfobot** in Telegram and start a chat
+2. It replies with your **chat ID** (a number like `123456789`)
+
+**For group notifications:**
+1. Add your new bot to a Telegram group
+2. Send any message in the group
+3. Open: `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
+4. Find `"chat":{"id":-100XXXXXXX}` - that's your group **chat ID**
+
+### Step 3: Add to config.json
+
+Add this section to your `config.json` (after `banks`):
+
+```json
+"notifications": {
+  "enabled": true,
+  "telegram": {
+    "botToken": "YOUR_BOT_TOKEN_HERE",
+    "chatId": "YOUR_CHAT_ID_HERE"
+  }
+}
+```
+
+### Message Formats
+
+Add `"messageFormat"` to choose how notifications look. Set in `config.json`:
+
+```json
+"telegram": {
+  "botToken": "...",
+  "chatId": "...",
+  "messageFormat": "compact"
+}
+```
+
+<details><summary><b>summary</b> (default) - Banks overview only</summary>
+
+```
+✅ Import Summary
+
+🏦 Banks: 3/3 (100%)
+📥 Transactions: 47 imported
+🔄 Duplicates: 12 skipped
+⏱ Duration: 38.2s
+
+✅ discount: 18 txns 12.3s
+✅ leumi: 22 txns 15.1s
+✅ hapoalim: 7 txns 10.8s
+```
+</details>
+
+<details><summary><b>compact</b> - Transaction details with amounts</summary>
+
+```
+✅ Import Summary
+3/3 banks | 47 txns | 38.2s
+
+✅ Discount · 0152228812
+14/02  משכורת חודשית
+       +12,500.00
+14/02  שופרסל דיזנגוף
+       -342.50
+14/02  חברת חשמל
+       -289.00
+💰 45,230.50 ILS
+✅ Balance matched
+```
+</details>
+
+<details><summary><b>ledger</b> - Monospace table layout</summary>
+
+```
+✅ Import Summary
+47 transactions · 38.2s
+
+✅ Discount (0152228812)
+14/02 משכורת חודשית
+        +12,500.00
+14/02 שופרסל דיזנגוף
+           -342.50
+14/02 חברת חשמל
+           -289.00
+Balance: 45,230.50 ILS
+✅ Balance matched
+```
+</details>
+
+<details><summary><b>emoji</b> - Visual deposit/payment indicators</summary>
+
+```
+✅ Import Summary
+
+📊 3/3 banks · 47 txns · 38.2s
+
+💳 Discount
+  📥 +12,500.00  משכורת חודשית
+  📤 -342.50  שופרסל דיזנגוף
+  📤 -289.00  חברת חשמל
+  💰 45,230.50 ILS
+  ✅ Balance matched
+```
+</details>
+
+### On Failure
+```
+🚨 Import Failed
+
+🔐 Authentication Error (discount): Invalid credentials. Please verify your password.
+```
+
+### Disable Notifications
+
+Set `"enabled": false` or remove the `notifications` section entirely.
+
+---
+
 ## 🔐 Security
 
 - ✅ Keep `config.json` private (in `.gitignore`)

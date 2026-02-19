@@ -50,9 +50,34 @@ export interface BankConfig {
   [key: string]: any; // Allow other bank-specific fields
 }
 
+export interface BankTransaction {
+  identifier?: string;
+  chargedAmount?: number;
+  originalAmount?: number;
+  date: Date | string;
+  description?: string;
+  memo?: string;
+}
+
+export type MessageFormat = 'compact' | 'ledger' | 'emoji' | 'summary';
+export type ShowTransactions = 'new' | 'all' | 'none';
+
+export interface TelegramConfig {
+  botToken: string;
+  chatId: string;
+  messageFormat?: MessageFormat;       // Default: 'summary'
+  showTransactions?: ShowTransactions;  // Default: 'new'
+}
+
+export interface NotificationConfig {
+  enabled: boolean;
+  telegram?: TelegramConfig;
+}
+
 export interface ImporterConfig {
   actual: ActualConfig;
   banks: Record<string, BankConfig>;
+  notifications?: NotificationConfig;
 }
 
 export interface ResilienceConfig {
@@ -67,7 +92,8 @@ export const DEFAULT_RESILIENCE_CONFIG: ResilienceConfig = {
   initialBackoffMs: 1000 // 1 second
 };
 
-export interface ReconciliationResult {
-  status: 'created' | 'skipped' | 'already-reconciled';
-  diff: number;  // Amount in cents
+export interface TransactionRecord {
+  date: string;
+  description: string;
+  amount: number;
 }

@@ -10,9 +10,9 @@ import { ErrorFormatter } from './errors/ErrorFormatter.js';
 import { ExponentialBackoffRetry } from './resilience/RetryStrategy.js';
 import { TimeoutWrapper } from './resilience/TimeoutWrapper.js';
 import { GracefulShutdownHandler } from './resilience/GracefulShutdown.js';
-import { ReconciliationService } from './services/ReconciliationService.js';
 import { MetricsService } from './services/MetricsService.js';
 import { TransactionService } from './services/TransactionService.js';
+import { NotificationService } from './services/NotificationService.js';
 import { ImporterConfig, BankConfig, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
 
 // Initialize resilience components
@@ -24,13 +24,13 @@ const retryStrategy = new ExponentialBackoffRetry({
 });
 const timeoutWrapper = new TimeoutWrapper();
 const errorFormatter = new ErrorFormatter();
-const reconciliationService = new ReconciliationService(api);
 const transactionService = new TransactionService(api);
 const metrics = new MetricsService();
 
 // Load configuration
 const configLoader = new ConfigLoader();
 const config: ImporterConfig = configLoader.load();
+const notificationService = new NotificationService(config.notifications);
 
 console.log('🚀 Starting Israeli Bank Importer for Actual Budget\n');
 
@@ -156,33 +156,15 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
         );
         totalImported += result.imported;
         totalSkipped += result.skipped;
+
+        // Record transaction details for notifications
+        metrics.recordAccountTransactions(
+          bankName, account.accountNumber,
+          account.balance, account.currency || 'ILS',
+          result.newTransactions, result.existingTransactions
+        );
       }
 
-      // Handle reconciliation
-      if (target.reconcile && account.balance !== undefined) {
-        console.log(`     🔄 Reconciling account balance...`);
-        try {
-          const result = await reconciliationService.reconcile(
-            actualAccountId,
-            account.balance,
-            account.currency || 'ILS'
-          );
-
-          // Record reconciliation metrics
-          metrics.recordReconciliation(bankName, result.status, result.diff);
-
-          if (result.status === 'created') {
-            const sign = result.diff > 0 ? '+' : '';
-            console.log(`     ✅ Reconciled: ${sign}${(result.diff / 100).toFixed(2)} ILS`);
-          } else if (result.status === 'skipped') {
-            console.log(`     ✅ Already balanced`);
-          } else {
-            console.log(`     ✅ Already reconciled today (skipped duplicate)`);
-          }
-        } catch (error: any) {
-          console.error(`     ❌ Reconciliation error:`, error.message);
-        }
-      }
     }
 
     // Record bank success metrics
@@ -246,6 +228,9 @@ async function main(): Promise<void> {
     // Print metrics summary
     metrics.printSummary();
 
+    // Send notification
+    await notificationService.sendSummary(metrics.getSummary());
+
     console.log('\n🎉 Import process completed!\n');
 
     // Shutdown
@@ -260,6 +245,7 @@ async function main(): Promise<void> {
     if (error instanceof Error) {
       console.error('Stack trace:', error.stack);
     }
+    await notificationService.sendError(formattedError);
     try {
       await api.shutdown();
     } catch {}

@@ -56,6 +56,19 @@
     }
   },
 
+  "notifications": {
+    "_comment": "Optional. Enable to receive import summaries via Telegram.",
+    "enabled": false,
+    "telegram": {
+      "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
+      "chatId": "-1001234567890",
+      "messageFormat": "compact",
+      "showTransactions": "new",
+      "_formats": "summary (default) | compact (A) | ledger (B) | emoji (C)",
+      "_showOptions": "new (default) | all | none"
+    }
+  },
+
   "_examples": {
     "_comment": "Configuration examples - DELETE THIS ENTIRE SECTION after reading",
 
@@ -85,10 +98,9 @@
       "_explanation": "Last 30 days: 2026-01-19, Last 7 days: 2026-02-11, Omit for ~1 year"
     },
 
-    "reconciliation": {
-      "_comment": "Auto-adjust balance to match bank",
-      "reconcile": true,
-      "_explanation": "true = create reconciliation transaction, false = no reconciliation"
+    "dateFiltering2": {
+      "_comment": "Date filtering tips",
+      "_explanation": "Transactions are imported as uncleared. Review and approve them in Actual Budget."
     }
   }
 }

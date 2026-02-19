@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] - 2026-02-19
+
+### Added
+- **Telegram Notifications**
+  - 4 message formats: summary, compact, ledger, emoji
+  - `showTransactions`: new (only new) | all | none
+  - Smart detection: checks `imported_id` to distinguish new vs existing
+  - Zero new dependencies (native `fetch()`)
+  - Extensible `INotifier` interface for future channels
+  - Non-blocking: notification failures never break imports
+  - 4096 char truncation for Telegram limit
+
+### Changed
+- **Removed auto-reconciliation** - user validates transactions in Actual Budget
+- **Transaction detection** - uses `imported_id` lookup to detect new vs existing
+- `tasks/` folder removed from git (kept local only)
+
+### Refactored
+- Deduplicated types: single `TransactionRecord` in types/index.ts
+- Added `BankTransaction` type (replaces `any[]`)
+- Clean `parseTransaction()` boundary conversion
+- `buildImportedId()` and `getExistingImportedIds()` extracted as methods
+
+### Configuration
+```json
+"notifications": {
+  "enabled": true,
+  "telegram": {
+    "botToken": "...",
+    "chatId": "...",
+    "messageFormat": "compact",
+    "showTransactions": "new"
+  }
+}
+```
+
+---
+
 ## [1.6.0] - 2026-02-19
 
 ### Refactored
