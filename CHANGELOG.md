@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] - 2026-02-19
+
+### Refactored
+- **Extract TransactionService** - Task 02
+  - New `src/services/TransactionService.ts` with `importTransactions()` and `getOrCreateAccount()`
+  - Removed ~50 lines of inline transaction logic from `src/index.ts`
+  - `index.ts` now uses service for clean orchestration
+  - 14 new unit tests for TransactionService (153 total tests)
+  - No behavior changes, pure refactoring
+
+---
+
 ## [1.5.0] - 2026-02-19
 
 ### Added
