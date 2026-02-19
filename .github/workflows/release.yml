@@ -1,4 +1,4 @@
-name: CI / CD
+name: Release
 
 on:
   push:
@@ -13,95 +13,18 @@ on:
       - 'vitest.config.ts'
       - 'Dockerfile'
       - '.github/workflows/**'
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
   contents: write
   packages: write
-  security-events: write
 
 env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
 
 jobs:
-  # Test + CodeQL - only on PRs (gate for merging)
-  test:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-
-    strategy:
-      matrix:
-        node-version: [22.x]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Check for vulnerable dependencies
-        run: npm audit --audit-level=moderate || true
-
-      - name: Build TypeScript (strict mode)
-        run: npm run build
-
-      - name: Check for any types in source
-        run: |
-          MAX_ALLOWED=8
-          ANYS=$(grep -rn ": any" src/ --include="*.ts" | grep -v "node_modules\|\[key: string\]: any" | wc -l)
-          echo "Found $ANYS uses of ': any' (max allowed: $MAX_ALLOWED)"
-          if [ "$ANYS" -gt "$MAX_ALLOWED" ]; then
-            echo "New 'any' types added! Fix before merging:"
-            grep -rn ": any" src/ --include="*.ts" | grep -v "node_modules\|\[key: string\]: any"
-            exit 1
-          fi
-
-      - name: Run tests with coverage
-        run: npm run test:coverage
-
-      - name: Verify coverage thresholds
-        run: |
-          echo "Coverage thresholds enforced by vitest.config.ts"
-          echo "Lines: 80%, Functions: 80%, Branches: 70%, Statements: 80%"
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-report
-          path: coverage/
-          retention-days: 30
-
-  code-scanning:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: javascript-typescript
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
-
-  # Release pipeline - only on push to main with app changes
   auto-version:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     outputs:
       new_tag: ${{ steps.semver.outputs.new_tag }}
 
@@ -128,17 +51,11 @@ jobs:
         id: semver
         run: |
           LATEST_TAG="${{ steps.get_latest_tag.outputs.latest_tag }}"
-
-          # Get commits since last tag
           COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null || git log --pretty=format:"%s")
-
-          # Parse current version
           CURRENT_VERSION=${LATEST_TAG#v}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
 
-          # Determine version bump based on commit messages
           BUMP_TYPE="none"
-
           while IFS= read -r commit; do
             if echo "$commit" | grep -qiE '^(break|breaking change|major):'; then
               BUMP_TYPE="major"
@@ -150,27 +67,15 @@ jobs:
             fi
           done <<< "$COMMITS"
 
-          # If no conventional commits found, default to patch
           [ "$BUMP_TYPE" = "none" ] && BUMP_TYPE="patch"
 
-          # Calculate new version
           case $BUMP_TYPE in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
           esac
 
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-
           echo "Bump type: $BUMP_TYPE"
           echo "New version: $NEW_VERSION"
           echo "new_tag=$NEW_VERSION" >> $GITHUB_OUTPUT
@@ -261,7 +166,6 @@ jobs:
           VERSION="${{ needs.auto-version.outputs.new_tag }}"
           PREV_TAG=$(git describe --tags --abbrev=0 ${VERSION}^ 2>/dev/null || echo "")
 
-          # --- Release statistics ---
           if [ -n "$PREV_TAG" ]; then
             COMMIT_COUNT=$(git rev-list --count ${PREV_TAG}..${VERSION})
             FILES_CHANGED=$(git diff --name-only ${PREV_TAG}..${VERSION} | wc -l | tr -d ' ')
@@ -277,7 +181,6 @@ jobs:
             COMPARE_URL=""
           fi
 
-          # --- Build release_notes.md ---
           {
             echo "## Docker"
             echo ""
@@ -286,7 +189,6 @@ jobs:
             echo '```'
             echo ""
 
-            # Changelog from CHANGELOG.md
             CHANGELOG=$(awk "/## \[${VERSION#v}\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md)
             if [ -n "$CHANGELOG" ]; then
               echo "## What's Changed"
@@ -295,7 +197,6 @@ jobs:
               echo ""
             fi
 
-            # Commit list
             echo "## Commits"
             echo ""
             if [ -n "$PREV_TAG" ]; then
@@ -306,7 +207,6 @@ jobs:
             echo ""
             echo ""
 
-            # Release stats
             echo "## Release Statistics"
             echo ""
             echo "| Metric | Value |"
@@ -321,7 +221,6 @@ jobs:
             echo "---"
             echo ""
 
-            # Docker quick start
             echo "## Quick Start"
             echo ""
             echo '```bash'
@@ -335,7 +234,6 @@ jobs:
             echo '```'
             echo ""
 
-            # Docker Compose
             echo "<details><summary>Docker Compose example</summary>"
             echo ""
             echo '```yaml'
@@ -358,7 +256,6 @@ jobs:
             echo "</details>"
             echo ""
 
-            # Upgrade instructions
             echo "## Upgrading"
             echo ""
             echo '```bash'
@@ -370,7 +267,6 @@ jobs:
             echo "---"
             echo ""
 
-            # Documentation links
             echo "**Docs:** [README](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget) | [Supported Banks](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) | [Deployment Guide](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/DEPLOYMENT.md) | [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer)"
             echo ""
 
