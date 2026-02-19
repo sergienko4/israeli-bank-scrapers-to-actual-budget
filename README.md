@@ -171,32 +171,33 @@ docker run --rm --cap-add SYS_ADMIN \
 
 **Windows users:** Replace `$(pwd)` with full path: `-v "C:\path\to\config.json:/app/config.json"`
 
-**Scheduled run (recommended):**
+**Option C: Docker Compose (recommended for production)**
 
-Create `docker-compose.yml`:
+A ready-to-use `docker-compose.yml` is included in the repo:
+
+```bash
+# Edit config.json with your credentials, then:
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Update to latest version
+docker compose pull && docker compose up -d
+
+# Stop
+docker compose down
+```
+
+Customize schedule and timezone by editing `docker-compose.yml`:
 
 ```yaml
-version: '3.8'
-services:
-  israeli_bank_importer:
-    image: sergienko4/israeli-bank-importer:1.4
-    restart: always
-    cap_add:
-      - SYS_ADMIN
-    environment:
-      - TZ=Asia/Jerusalem
-      - SCHEDULE=0 */8 * * *  # Every 8 hours
-    volumes:
-      - ./config.json:/app/config.json:ro
-      - ./data:/app/data
-      - ./cache:/app/cache
-      - ./chrome-data:/app/chrome-data
+environment:
+  - TZ=Asia/Jerusalem
+  - SCHEDULE=0 */8 * * *    # Every 8 hours
 ```
 
-Start:
-```bash
-docker-compose up -d
-```
+Uses named volumes for data persistence — your data survives container recreation.
 
 ---
 
