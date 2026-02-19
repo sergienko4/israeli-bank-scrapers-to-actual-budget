@@ -121,5 +121,46 @@ describe('ReconciliationService', () => {
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.notes).toContain('ILS');
     });
+
+    it('handles expected balance of zero', async () => {
+      mockApi.runQuery.mockResolvedValue({ data: 10000 });
+      mockApi.importTransactions.mockResolvedValue(undefined);
+
+      const result = await service.reconcile('account-123', 0, 'ILS');
+
+      expect(result.status).toBe('created');
+      expect(result.diff).toBe(-10000);
+    });
+
+    it('uses custom currency in notes', async () => {
+      mockApi.runQuery.mockResolvedValue({ data: 10000 });
+      mockApi.importTransactions.mockResolvedValue(undefined);
+
+      await service.reconcile('account-123', 150.00, 'USD');
+
+      const transaction = mockApi.importTransactions.mock.calls[0][1][0];
+      expect(transaction.notes).toContain('USD');
+      expect(transaction.notes).toContain('Expected 150');
+    });
+
+    it('handles very large balance differences', async () => {
+      mockApi.runQuery.mockResolvedValue({ data: 0 });
+      mockApi.importTransactions.mockResolvedValue(undefined);
+
+      const result = await service.reconcile('account-123', 999999.99, 'ILS');
+
+      expect(result.status).toBe('created');
+      expect(result.diff).toBe(99999999);
+    });
+
+    it('creates transaction with correct date format', async () => {
+      mockApi.runQuery.mockResolvedValue({ data: 10000 });
+      mockApi.importTransactions.mockResolvedValue(undefined);
+
+      await service.reconcile('account-123', 150.00, 'ILS');
+
+      const transaction = mockApi.importTransactions.mock.calls[0][1][0];
+      expect(transaction.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
   });
 });

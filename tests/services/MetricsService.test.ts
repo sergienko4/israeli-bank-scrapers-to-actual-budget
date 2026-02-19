@@ -233,5 +233,54 @@ describe('MetricsService', () => {
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();
     });
+
+    it('prints already-reconciled status', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      metrics.startBank('discount');
+      metrics.recordBankSuccess('discount', 5, 0);
+      metrics.recordReconciliation('discount', 'already-reconciled');
+
+      metrics.printSummary();
+
+      const calls = consoleSpy.mock.calls.map(c => c[0]);
+      expect(calls.some((c: string) => typeof c === 'string' && c.includes('already reconciled'))).toBe(true);
+      consoleSpy.mockRestore();
+    });
+
+    it('prints skipped/balanced reconciliation status', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      metrics.startBank('discount');
+      metrics.recordBankSuccess('discount', 5, 0);
+      metrics.recordReconciliation('discount', 'skipped');
+
+      metrics.printSummary();
+
+      const calls = consoleSpy.mock.calls.map(c => c[0]);
+      expect(calls.some((c: string) => typeof c === 'string' && c.includes('balanced'))).toBe(true);
+      consoleSpy.mockRestore();
+    });
+
+    it('prints negative reconciliation amount', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      metrics.startBank('discount');
+      metrics.recordBankSuccess('discount', 5, 0);
+      metrics.recordReconciliation('discount', 'created', -5000);
+
+      metrics.printSummary();
+
+      const calls = consoleSpy.mock.calls.map(c => c[0]);
+      expect(calls.some((c: string) => typeof c === 'string' && c.includes('-50.00'))).toBe(true);
+      consoleSpy.mockRestore();
+    });
+
+    it('prints with no banks', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      metrics.printSummary();
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
   });
 });

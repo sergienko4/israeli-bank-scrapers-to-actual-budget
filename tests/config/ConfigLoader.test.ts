@@ -529,4 +529,102 @@ describe('ConfigLoader', () => {
       expect(() => loader.load()).not.toThrow();
     });
   });
+
+  describe('environment variable loading - account splitting', () => {
+    afterEach(() => {
+      delete process.env.ACTUAL_PASSWORD;
+      delete process.env.ACTUAL_BUDGET_SYNC_ID;
+      delete process.env.DISCOUNT_ID;
+      delete process.env.DISCOUNT_PASSWORD;
+      delete process.env.DISCOUNT_NUM;
+      delete process.env.DISCOUNT_ACCOUNT_ID;
+      delete process.env.DISCOUNT_ACCOUNTS;
+      delete process.env.LEUMI_USERNAME;
+      delete process.env.LEUMI_PASSWORD;
+      delete process.env.LEUMI_ACCOUNT_ID;
+      delete process.env.LEUMI_ACCOUNTS;
+      delete process.env.HAPOALIM_USER_CODE;
+      delete process.env.HAPOALIM_PASSWORD;
+      delete process.env.HAPOALIM_ACCOUNT_ID;
+      delete process.env.HAPOALIM_ACCOUNTS;
+    });
+
+    it('splits comma-separated LEUMI_ACCOUNTS into array', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
+      process.env.LEUMI_USERNAME = 'user';
+      process.env.LEUMI_PASSWORD = 'pass';
+      process.env.LEUMI_ACCOUNT_ID = VALID_UUID;
+      process.env.LEUMI_ACCOUNTS = '1234,5678';
+
+      const loader = new ConfigLoader('/nonexistent');
+      const config = loader.load();
+
+      expect(config.banks.leumi?.targets?.[0].accounts).toEqual(['1234', '5678']);
+    });
+
+    it('splits comma-separated HAPOALIM_ACCOUNTS into array', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
+      process.env.HAPOALIM_USER_CODE = 'code';
+      process.env.HAPOALIM_PASSWORD = 'pass';
+      process.env.HAPOALIM_ACCOUNT_ID = VALID_UUID;
+      process.env.HAPOALIM_ACCOUNTS = '111,222,333';
+
+      const loader = new ConfigLoader('/nonexistent');
+      const config = loader.load();
+
+      expect(config.banks.hapoalim?.targets?.[0].accounts).toEqual(['111', '222', '333']);
+    });
+
+    it('splits comma-separated DISCOUNT_ACCOUNTS into array', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
+      process.env.DISCOUNT_ID = '123';
+      process.env.DISCOUNT_PASSWORD = 'pass';
+      process.env.DISCOUNT_NUM = 'ABC';
+      process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
+      process.env.DISCOUNT_ACCOUNTS = '9999,8888';
+
+      const loader = new ConfigLoader('/nonexistent');
+      const config = loader.load();
+
+      expect(config.banks.discount?.targets?.[0].accounts).toEqual(['9999', '8888']);
+    });
+
+    it('uses "all" as default for LEUMI_ACCOUNTS', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
+      process.env.LEUMI_USERNAME = 'user';
+      process.env.LEUMI_PASSWORD = 'pass';
+      process.env.LEUMI_ACCOUNT_ID = VALID_UUID;
+
+      const loader = new ConfigLoader('/nonexistent');
+      const config = loader.load();
+
+      expect(config.banks.leumi?.targets?.[0].accounts).toBe('all');
+    });
+  });
+
+  describe('validation - empty accounts array', () => {
+    it('throws on empty array accounts', () => {
+      const config = makeValidConfig({
+        banks: {
+          discount: {
+            id: '123', password: 'pass', num: 'ABC',
+            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: [] }]
+          }
+        }
+      });
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+
+      const loader = new ConfigLoader('/test/config.json');
+      expect(() => loader.load()).toThrow('Invalid accounts field');
+    });
+  });
 });
