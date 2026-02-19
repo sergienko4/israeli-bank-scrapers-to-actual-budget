@@ -2,7 +2,7 @@
 
 **Priority:** 🟡 MEDIUM
 **Effort:** 2-3 hours
-**Status:** 📋 TODO
+**Status:** ✅ DONE
 
 ---
 
