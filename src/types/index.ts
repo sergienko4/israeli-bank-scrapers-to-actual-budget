@@ -67,6 +67,7 @@ export interface TelegramConfig {
   chatId: string;
   messageFormat?: MessageFormat;       // Default: 'summary'
   showTransactions?: ShowTransactions;  // Default: 'new'
+  listenForCommands?: boolean;         // Default: false - bot listens for /scan, /status, /help
 }
 
 export interface NotificationConfig {

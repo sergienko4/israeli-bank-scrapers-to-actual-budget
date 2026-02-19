@@ -33,6 +33,10 @@ export class TelegramNotifier implements INotifier {
     await this.send(message);
   }
 
+  async sendMessage(text: string): Promise<void> {
+    await this.send(text);
+  }
+
   async sendError(error: string): Promise<void> {
     const message = [
       '🚨 <b>Import Failed</b>',
