@@ -12,7 +12,7 @@ This folder contains detailed task documentation for future improvements to the 
 | 02 | [Extract Transaction Service](02-extract-transaction-service.md) | 🟢 LOW | 2-3 hours | 📋 TODO |
 | 03 | [Add Notifications (Telegram)](03-add-notifications.md) | 🟡 MEDIUM | 4-5 hours | 📋 TODO |
 | 04 | [Centralize Utilities (DRY)](04-centralize-utilities.md) | 🟢 LOW | 30 min | ✅ DONE |
-| 05 | [Enhance GitHub Release Page](05-enhance-release-page.md) | 🟡 MEDIUM | 2-3 hours | 📋 TODO |
+| 05 | [Enhance GitHub Release Page](05-enhance-release-page.md) | 🟡 MEDIUM | 2-3 hours | ✅ DONE |
 | 06 | [Fix Documentation Links](06-fix-documentation-links.md) | 🔴 HIGH | 30 min | ✅ DONE |
 
 ---
