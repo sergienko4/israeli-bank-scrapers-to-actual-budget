@@ -44,3 +44,4 @@ tmpclaude-*
 # Internal development files (not committed to git)
 *.tmp.md
 *-INTERNAL.md
+tasks/
