@@ -57,7 +57,7 @@ export interface BankConfig {
 }
 
 export interface BankTransaction {
-  identifier?: string;
+  identifier?: string | number;
   chargedAmount?: number;
   originalAmount?: number;
   date: Date | string;
@@ -103,6 +103,14 @@ export interface TransactionRecord {
   date: string;
   description: string;
   amount: number;
+}
+
+/** Matches @actual-app/api's APIAccountEntity shape */
+export interface ActualAccount {
+  id: string;
+  name: string;
+  offbudget?: boolean;
+  closed?: boolean;
 }
 
 export interface TelegramMessageData {

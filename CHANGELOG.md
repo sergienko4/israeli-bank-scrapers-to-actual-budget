@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0] - 2026-02-19
+
+### Refactored
+- **Full `any` type elimination** (Task 08)
+  - Separated `scraperConfig: any` into typed `ScraperOptions` + `ScraperCredentials`
+  - `scrapeBankWithResilience` returns typed `ScraperScrapingResult` instead of `any`
+  - Replaced `error: any` with `unknown` + type guards in TransactionService and ReconciliationService
+  - Typed account lookups with `ActualAccount` interface (matches @actual-app/api shape)
+  - Typed query results with `extractQueryData<T>` utility (replaces `result: any`)
+  - `BankTransaction.identifier` widened to `string | number` to match library's `Transaction` type
+  - Fixed `account.type` and `account.currency` accesses (never existed on `TransactionsAccount`)
+  - CI `any` ratchet lowered from 8 to 0 — zero tolerance for new `any` types
+
+### Added
+- `ActualAccount` type in `src/types/index.ts`
+- `extractQueryData<T>()` utility in `src/utils/index.ts` with 7 unit tests
+
+---
+
 ## [2.0.0] - 2026-02-19
 
 ### Added
