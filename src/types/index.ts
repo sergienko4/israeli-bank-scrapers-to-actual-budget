@@ -22,7 +22,8 @@ export interface BankTarget {
 
 export interface BankConfig {
   // Common fields
-  startDate?: string;
+  startDate?: string;   // Fixed date: "2026-02-15"
+  daysBack?: number;    // Relative: 14 = last 14 days (overrides startDate)
   targets?: BankTarget[];
 
   // Bank-specific credentials (different per bank)
@@ -46,6 +47,11 @@ export interface BankConfig {
   // OneZero
   email?: string;
   phoneNumber?: string;
+  otpLongTermToken?: string; // Persisted after first OTP login
+
+  // 2FA settings (per bank)
+  twoFactorAuth?: boolean;          // Default: false. Set true for banks requiring OTP
+  twoFactorTimeout?: number;        // Seconds to wait for OTP reply. Default: 300
 
   [key: string]: any; // Allow other bank-specific fields
 }
@@ -67,7 +73,7 @@ export interface TelegramConfig {
   chatId: string;
   messageFormat?: MessageFormat;       // Default: 'summary'
   showTransactions?: ShowTransactions;  // Default: 'new'
-  listenForCommands?: boolean;         // Default: false - bot listens for /scan, /status, /help
+  listenForCommands?: boolean;         // Default: false
 }
 
 export interface NotificationConfig {

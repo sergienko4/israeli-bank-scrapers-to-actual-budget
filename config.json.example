@@ -1,11 +1,10 @@
 {
-  "_comment": "Israeli Bank Scrapers to Actual Budget - Configuration File",
   "_instructions": [
-    "1. Copy this file to config.json: cp config.json.example config.json",
+    "1. Copy this file to config.json",
     "2. Fill in your Actual Budget server details",
-    "3. Add your bank credentials (see BANKS.md for credential requirements)",
+    "3. Add your bank credentials",
     "4. Remove banks you don't use",
-    "5. Never commit config.json to git (it's in .gitignore)"
+    "5. Never commit config.json to git"
   ],
 
   "actual": {
@@ -20,89 +19,49 @@
     }
   },
 
-  "_howToFind": {
-    "serverURL": "Your Actual Budget server URL (e.g., http://localhost:5006 or https://budget.example.com)",
-    "password": "Your Actual Budget server password",
-    "syncId": "Settings → Show Advanced Settings → Sync ID",
-    "actualAccountId": "Click account in Actual Budget → copy ID from URL"
-  },
-
   "banks": {
-    "_comment": "Add only the banks you use. Remove others. See BANKS.md for all 18 supported banks.",
 
     "discount": {
-      "_comment": "Bank Discount (דיסקונט) - Example",
       "id": "123456789",
-      "password": "your_bank_password",
+      "password": "your_password",
       "num": "ABC123",
       "startDate": "2026-01-19",
-      "targets": [{
-        "actualAccountId": "uuid-from-actual-budget",
-        "reconcile": true,
-        "accounts": "all"
-      }]
+      "targets": [{ "actualAccountId": "uuid", "reconcile": true, "accounts": "all" }]
     },
 
     "leumi": {
-      "_comment": "Bank Leumi (לאומי) - Example (DELETE if not using)",
       "username": "your_username",
       "password": "your_password",
-      "startDate": "2026-01-19",
-      "targets": [{
-        "actualAccountId": "uuid-from-actual-budget",
-        "reconcile": true,
-        "accounts": "all"
-      }]
+      "targets": [{ "actualAccountId": "uuid", "reconcile": true, "accounts": "all" }]
+    },
+
+    "oneZero": {
+      "email": "your@email.com",
+      "password": "your_password",
+      "phoneNumber": "0501234567",
+      "twoFactorAuth": true,
+      "twoFactorTimeout": 300,
+      "targets": [{ "actualAccountId": "uuid", "reconcile": true, "accounts": "all" }]
     }
   },
 
   "notifications": {
-    "_comment": "Optional. Enable to receive import summaries via Telegram.",
     "enabled": false,
     "telegram": {
       "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
       "chatId": "-1001234567890",
       "messageFormat": "compact",
       "showTransactions": "new",
-      "listenForCommands": true,
-      "_formats": "summary (default) | compact (A) | ledger (B) | emoji (C)",
-      "_showOptions": "new (default) | all | none",
-      "_listenForCommands": "true = bot listens for /scan, /status, /help"
+      "listenForCommands": true
     }
   },
 
-  "_examples": {
-    "_comment": "Configuration examples - DELETE THIS ENTIRE SECTION after reading",
-
-    "multipleCardsToSeparateAccounts": {
-      "_comment": "Split credit cards into different Actual Budget accounts",
-      "visaCal": {
-        "username": "your_username",
-        "password": "your_password",
-        "targets": [
-          {
-            "actualAccountId": "visa-card-1-uuid",
-            "reconcile": true,
-            "accounts": ["8538"]
-          },
-          {
-            "actualAccountId": "visa-card-2-uuid",
-            "reconcile": true,
-            "accounts": ["7697"]
-          }
-        ]
-      }
-    },
-
-    "dateFiltering": {
-      "_comment": "Import only recent transactions",
-      "startDate": "2026-01-19",
-      "_explanation": "Last 30 days: 2026-01-19, Last 7 days: 2026-02-11, Omit for ~1 year"
-    },
-
-    "dateFiltering2": {
-      "_comment": "Date filtering tips",
-      "_explanation": "Transactions are imported as uncleared. Review and approve them in Actual Budget."
-    }
+  "_reference": {
+    "messageFormat": "summary | compact | ledger | emoji",
+    "showTransactions": "new | all | none",
+    "twoFactorAuth": "true = bot asks for SMS OTP via Telegram",
+    "twoFactorTimeout": "Seconds to wait for OTP. Default: 300",
+    "syncId": "Settings → Show Advanced Settings → Sync ID",
+    "actualAccountId": "Click account in Actual Budget → ID from URL"
   }
 }

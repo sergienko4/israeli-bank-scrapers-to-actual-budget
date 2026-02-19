@@ -9,7 +9,7 @@
  *   "emoji"    (C) - Emoji indicators for deposits/payments
  */
 
-import { TelegramConfig, MessageFormat, ShowTransactions } from '../../types/index.js';
+import { TelegramConfig, MessageFormat, ShowTransactions, TelegramApiResponse } from '../../types/index.js';
 import { ImportSummary, BankMetrics, AccountMetrics, TransactionRecord } from '../MetricsService.js';
 import { INotifier } from './INotifier.js';
 
@@ -35,6 +35,40 @@ export class TelegramNotifier implements INotifier {
 
   async sendMessage(text: string): Promise<void> {
     await this.send(text);
+  }
+
+  async waitForReply(prompt: string, timeoutMs: number): Promise<string> {
+    // Clear pending messages, then send prompt
+    let offset = await this.getLatestOffset();
+    await this.send(prompt);
+    const sentAt = Math.floor(Date.now() / 1000);
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=${offset}&timeout=5`;
+      const response = await fetch(url);
+      if (!response.ok) continue;
+
+      const data = await response.json() as TelegramApiResponse;
+      for (const update of data.result ?? []) {
+        offset = update.update_id + 1;
+        const msg = update.message;
+        if (!msg?.text || String(msg.chat.id) !== this.chatId) continue;
+        if (msg.date < sentAt) continue;           // Ignore messages before prompt
+        if (msg.text.startsWith('/')) continue;     // Ignore commands
+        return msg.text;
+      }
+    }
+
+    throw new Error('2FA timeout: no reply received');
+  }
+
+  private async getLatestOffset(): Promise<number> {
+    const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=-1`;
+    const response = await fetch(url);
+    if (!response.ok) return 0;
+    const data = await response.json() as TelegramApiResponse;
+    return data.result?.length ? data.result[data.result.length - 1].update_id + 1 : 0;
   }
 
   async sendError(error: string): Promise<void> {
@@ -158,9 +192,10 @@ export class TelegramNotifier implements INotifier {
           lines.push('<code>');
           for (const txn of txns) {
             const d = this.fmtDate(txn.date);
-            const desc = txn.description.length > 18
+            const raw = txn.description.length > 18
               ? txn.description.slice(0, 18) + '..'
               : txn.description;
+            const desc = this.escapeHtml(raw);
             const amt = this.fmtAmount(txn.amount).padStart(9);
             lines.push(`${d} ${desc}`);
             lines.push(`${''.padStart(6)}${amt}`);

@@ -587,6 +587,43 @@ Set `"enabled": false` or remove the `notifications` section entirely.
 
 ---
 
+## 📅 Date Range
+
+Control how far back to import transactions per bank:
+
+```json
+"daysBack": 14
+```
+Imports the last 14 days. Recalculated on every run. Max: 30 days.
+
+Or use a fixed date:
+```json
+"startDate": "2026-02-01"
+```
+Max: 1 year back. Cannot use both `daysBack` and `startDate` on the same bank.
+
+---
+
+## 🔐 2FA (OneZero)
+
+OneZero requires SMS verification. The bot asks for the OTP code via Telegram:
+
+```json
+"oneZero": {
+  "email": "...",
+  "password": "...",
+  "phoneNumber": "+972...",
+  "twoFactorAuth": true,
+  "twoFactorTimeout": 300
+}
+```
+
+Flow: login → SMS sent → bot asks "Enter OTP code" → you reply → import completes.
+
+After first login, you can add `"otpLongTermToken": "..."` to skip OTP on future runs.
+
+---
+
 ## 🔐 Security
 
 - ✅ Keep `config.json` private (in `.gitignore`)
