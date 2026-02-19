@@ -249,10 +249,18 @@ async function initializeApi(): Promise<void> {
 }
 
 async function processAllBanks(): Promise<void> {
-  for (const [bankName, bankConfig] of Object.entries(config.banks || {})) {
+  const banks = Object.entries(config.banks || {});
+  for (let i = 0; i < banks.length; i++) {
     if (shutdownHandler.isShuttingDown()) { console.log('⚠️  Shutdown requested, stopping imports...'); break; }
-    await importFromBank(bankName, bankConfig);
+    if (i > 0) await delayBeforeNextBank(config.delayBetweenBanks);
+    await importFromBank(banks[i][0], banks[i][1]);
   }
+}
+
+async function delayBeforeNextBank(delayMs?: number): Promise<void> {
+  if (!delayMs || delayMs <= 0) return;
+  console.log(`\n⏳ Waiting ${(delayMs / 1000).toFixed(0)}s before next bank...`);
+  await new Promise(resolve => setTimeout(resolve, delayMs));
 }
 
 async function finalizeImport(): Promise<void> {

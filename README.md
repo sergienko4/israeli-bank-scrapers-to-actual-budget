@@ -605,6 +605,18 @@ Max: 1 year back. Cannot use both `daysBack` and `startDate` on the same bank.
 
 ---
 
+## 🐢 Rate Limiting
+
+Prevent bank API throttling by adding a delay between bank imports:
+
+```json
+"delayBetweenBanks": 5000
+```
+
+Waits 5 seconds between each bank import. Default: 0 (no delay). Set at the top level of `config.json`, not per-bank.
+
+---
+
 ## 🔐 2FA (OneZero)
 
 OneZero requires SMS verification. The bot asks for the OTP code via Telegram:
