@@ -150,8 +150,8 @@ cp config.json.example config.json
 **Option A: Use pre-built image (easiest)**
 
 ```bash
-# Pull from Docker Hub (use specific version for stability)
-docker pull sergienko4/israeli-bank-importer:1.4
+# Pull latest release from Docker Hub
+docker pull sergienko4/israeli-bank-importer
 
 # Run
 docker run --rm --cap-add SYS_ADMIN \
@@ -159,13 +159,10 @@ docker run --rm --cap-add SYS_ADMIN \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
-  sergienko4/israeli-bank-importer:1.4
+  sergienko4/israeli-bank-importer
 ```
 
-**Available tags:**
-- `latest` - Most recent build from main
-- `v2.6.0` - Specific version (pinned, recommended for production)
-- Timestamped and commit-based tags also available
+See [Releases](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/releases) for all available versions and tags.
 
 **Option B: Build from source**
 
