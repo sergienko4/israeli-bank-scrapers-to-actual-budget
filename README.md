@@ -397,6 +397,7 @@ After each import run, you'll see a comprehensive summary:
 | [SECURITY.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/SECURITY.md) | Security best practices and guidelines |
 | [CHANGELOG.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/CHANGELOG.md) | Version history and release notes |
 | [config.json.example](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/config.json.example) | Example configuration |
+| [GUIDELINES.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/GUIDELINES.md) | Development guidelines for contributors |
 
 ---
 
@@ -409,6 +410,29 @@ After each import run, you'll see a comprehensive summary:
 | Node.js | 22 | Runtime |
 | Chromium | Latest | Browser automation |
 | Docker | - | Containerization |
+| [Vitest](https://vitest.dev/) | 4.x | Unit testing |
+
+---
+
+## 🧪 Testing
+
+![Tests](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/test.yml/badge.svg)
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage report
+npm run test:coverage
+
+# Watch mode (re-runs on file changes)
+npm run test:watch
+
+# Build + test (validate before committing)
+npm run validate
+```
+
+**Coverage target:** 80%+ lines, functions, statements; 70%+ branches
 
 ---
 

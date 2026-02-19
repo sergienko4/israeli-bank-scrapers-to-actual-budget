@@ -8,18 +8,24 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "validate": "npm run build && npm test",
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix",
     "outdated": "npm outdated"
   },
   "dependencies": {
     "@actual-app/api": "^26.2.0",
-    "israeli-bank-scrapers": "^6.7.1",
-    "cron-parser": "^4.9.0"
+    "cron-parser": "^4.9.0",
+    "israeli-bank-scrapers": "^6.7.1"
   },
   "devDependencies": {
     "@types/node": "^22.19.11",
-    "typescript": "^5.9.3"
+    "@vitest/coverage-v8": "^4.0.18",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=22.0.0",

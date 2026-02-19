@@ -7,7 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.4.1] - 2026-02-19
+## [1.5.0] - 2026-02-19
+
+### Added
+- **Unit test suite with Vitest** - Task 01
+  - 118 tests across 10 test files
+  - Coverage: 92% statements, 79% branches, 95% functions, 93% lines
+  - Tests for all services: ConfigLoader, MetricsService, ReconciliationService
+  - Tests for resilience: RetryStrategy, TimeoutWrapper, GracefulShutdown
+  - Tests for errors: ErrorTypes, ErrorFormatter
+  - Tests for utilities: currency, date
+- **GitHub Actions CI workflow** (`test.yml`)
+  - Runs on every push to main and all PRs
+  - TypeScript build verification
+  - Test execution with coverage reporting
+  - Coverage artifact upload
+- **New npm scripts**: `test`, `test:watch`, `test:coverage`, `validate`
+- **Testing documentation** section in README.md
+- **CI badge** in README.md
 
 ### Refactored
 - **Centralized utility functions (DRY)** - Task 04
