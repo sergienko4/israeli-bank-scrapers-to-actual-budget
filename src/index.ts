@@ -13,6 +13,7 @@ import { GracefulShutdownHandler } from './resilience/GracefulShutdown.js';
 import { ReconciliationService } from './services/ReconciliationService.js';
 import { MetricsService } from './services/MetricsService.js';
 import { ImporterConfig, BankConfig, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
+import { formatDate, toCents } from './utils/index.js';
 
 // Initialize resilience components
 const shutdownHandler = new GracefulShutdownHandler();
@@ -31,19 +32,6 @@ const configLoader = new ConfigLoader();
 const config: ImporterConfig = configLoader.load();
 
 console.log('🚀 Starting Israeli Bank Importer for Actual Budget\n');
-
-// Helper functions
-function formatDate(date: Date | string): string {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function toCents(amount: number): number {
-  return Math.round(amount * 100);
-}
 
 // Company type mapping
 const companyTypeMap: Record<string, typeof CompanyTypes[keyof typeof CompanyTypes]> = {

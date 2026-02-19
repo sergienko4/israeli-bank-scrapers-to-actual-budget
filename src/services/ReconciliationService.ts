@@ -6,6 +6,7 @@
  */
 
 import type api from '@actual-app/api';
+import { formatDate, toCents } from '../utils/index.js';
 
 export interface ReconciliationResult {
   status: 'created' | 'skipped' | 'already-reconciled';
@@ -17,24 +18,6 @@ export class ReconciliationService {
 
   constructor(actualApi: typeof api) {
     this.api = actualApi;
-  }
-
-  /**
-   * Convert currency units to cents
-   */
-  private toCents(amount: number): number {
-    return Math.round(amount * 100);
-  }
-
-  /**
-   * Format date as YYYY-MM-DD
-   */
-  private formatDate(date: Date | string): string {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
   }
 
   /**
@@ -59,7 +42,7 @@ export class ReconciliationService {
       ).then((result: any) => result.data || 0);
 
       // 2. Calculate difference
-      const expectedBalanceCents = this.toCents(expectedBalance);
+      const expectedBalanceCents = toCents(expectedBalance);
       const diff = expectedBalanceCents - actualBalance;
 
       // 3. Skip if already balanced (within 1 cent tolerance for rounding)
@@ -69,7 +52,7 @@ export class ReconciliationService {
 
       // 4. Create reconciliation transaction with unique imported_id
       // This prevents duplicates - one reconciliation per account per day
-      const today = this.formatDate(new Date());
+      const today = formatDate(new Date());
       const reconciliationId = `reconciliation-${accountId}-${today}`;
 
       await this.api.importTransactions(accountId, [{

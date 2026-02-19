@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-02-19
+
+### Refactored
+- **Centralized utility functions (DRY)** - Task 04
+  - Created `src/utils/currency.ts` with `toCents()` and `fromCents()`
+  - Created `src/utils/date.ts` with `formatDate()`
+  - Removed duplicate implementations from `src/index.ts` and `src/services/ReconciliationService.ts`
+  - Single source of truth for shared utilities
+
+### Fixed
+- **Documentation links** - Task 06
+  - Fixed broken BANKS.md link in README.md
+  - Fixed DEPLOYMENT-GUIDE.md reference in CHANGELOG.md
+  - Removed broken CODE-ANALYSIS.md link
+
+---
+
 ## [1.4.0] - 2026-02-18
 
 ### 🎉 Phase 4: Idempotent Reconciliation + Observability

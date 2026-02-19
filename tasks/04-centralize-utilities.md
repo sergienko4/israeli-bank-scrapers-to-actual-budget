@@ -2,7 +2,7 @@
 
 **Priority:** 🟢 LOW
 **Effort:** 30 minutes
-**Status:** 📋 TODO
+**Status:** ✅ DONE
 
 ---
 
