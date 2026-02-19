@@ -437,6 +437,30 @@ npm run validate
 
 ---
 
+## 🔗 Webhook Notifications (Slack, Discord, Generic)
+
+Send import summaries to any webhook URL — Slack, Discord, or custom integration.
+
+```json
+"notifications": {
+  "enabled": true,
+  "webhook": {
+    "url": "https://hooks.slack.com/services/T.../B.../...",
+    "format": "slack"
+  }
+}
+```
+
+| Format | Target | Payload |
+|--------|--------|---------|
+| `slack` | Slack Incoming Webhook | `{ "text": "✅ *Import Summary*..." }` |
+| `discord` | Discord Webhook | `{ "content": "✅ **Import Summary**..." }` |
+| `plain` | Any HTTP endpoint | `{ "event": "import_complete", "totalTransactions": 5, ... }` |
+
+Can be used alongside Telegram — both channels fire independently.
+
+---
+
 ## 📱 Telegram Notifications (Optional)
 
 Get import summaries and error alerts via Telegram after each run.
