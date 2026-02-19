@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0] - 2026-02-19
 
 ### Added
+- **Telegram Bot Commands** (`listenForCommands: true`)
+  - `/scan` or `/import` - trigger import from Telegram
+  - `/status` - show last run info
+  - `/help` - list commands
+  - Runs alongside cron scheduler
+  - Prevents concurrent imports
+  - Ignores old messages on restart
 - **Telegram Notifications**
   - 4 message formats: summary, compact, ledger, emoji
   - `showTransactions`: new (only new) | all | none

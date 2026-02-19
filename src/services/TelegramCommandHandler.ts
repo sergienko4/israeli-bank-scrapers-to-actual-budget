@@ -3,40 +3,44 @@
  * Commands: /scan, /import, /status, /help
  */
 
-import { TelegramNotifier } from './notifications/TelegramNotifier.js';
+import { INotifier } from './notifications/INotifier.js';
 
 export class TelegramCommandHandler {
-  private importing = false;
+  private importPromise: Promise<void> | null = null;
   private lastRunTime: Date | null = null;
   private lastRunResult: string | null = null;
 
   constructor(
     private runImport: () => Promise<number>,
-    private notifier: TelegramNotifier
+    private notifier: INotifier
   ) {}
 
   async handle(text: string): Promise<void> {
     const command = text.trim().toLowerCase().split(' ')[0];
 
-    switch (command) {
-      case '/scan':
-      case '/import':
-        return this.handleScan();
-      case '/status':
-        return this.handleStatus();
-      case '/help':
-      case '/start':
-        return this.handleHelp();
-    }
+    const handlers: Record<string, () => Promise<void>> = {
+      '/scan': () => this.handleScan(),
+      '/import': () => this.handleScan(),
+      '/status': () => this.handleStatus(),
+      '/help': () => this.handleHelp(),
+      '/start': () => this.handleHelp(),
+    };
+
+    const handler = handlers[command];
+    if (handler) await handler();
   }
 
   private async handleScan(): Promise<void> {
-    if (this.importing) {
+    if (this.importPromise) {
       await this.reply('⏳ Import already running. Please wait.');
       return;
     }
 
-    this.importing = true;
+    this.importPromise = this.executeImport();
+    await this.importPromise;
+  }
+
+  private async executeImport(): Promise<void> {
     await this.reply('⏳ Starting import...');
 
     try {
@@ -44,21 +48,19 @@ export class TelegramCommandHandler {
       this.lastRunTime = new Date();
       this.lastRunResult = exitCode === 0 ? 'success' : 'failed';
     } finally {
-      this.importing = false;
+      this.importPromise = null;
     }
   }
 
   private async handleStatus(): Promise<void> {
     const lines: string[] = ['📊 <b>Status</b>', ''];
 
-    if (this.lastRunTime) {
-      const ago = this.timeSince(this.lastRunTime);
-      lines.push(`Last run: ${ago} ago (${this.lastRunResult})`);
-    } else {
-      lines.push('No imports run yet');
-    }
+    lines.push(this.lastRunTime
+      ? `Last run: ${this.timeSince(this.lastRunTime)} ago (${this.lastRunResult})`
+      : 'No imports run yet'
+    );
 
-    lines.push(`Currently: ${this.importing ? '⏳ importing...' : '✅ idle'}`);
+    lines.push(`Currently: ${this.importPromise ? '⏳ importing...' : '✅ idle'}`);
     await this.reply(lines.join('\n'));
   }
 
@@ -76,8 +78,9 @@ export class TelegramCommandHandler {
   private async reply(text: string): Promise<void> {
     try {
       await this.notifier.sendMessage(text);
-    } catch {
-      // Non-blocking
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.debug('Failed to send reply:', msg);
     }
   }
 

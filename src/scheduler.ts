@@ -62,9 +62,13 @@ function startTelegramCommands(): void {
       (text) => handler.handle(text)
     );
 
-    poller.start();
-  } catch (error: any) {
-    console.error('⚠️  Failed to start Telegram commands:', error.message);
+    poller.start().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Telegram command listener crashed:', msg);
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('⚠️  Failed to start Telegram commands:', msg);
   }
 }
 
@@ -88,8 +92,8 @@ async function main(): Promise<void> {
       });
 
       console.log(`📅 Next scheduled run: ${interval.next().toString()}`);
-    } catch (err: any) {
-      console.error(`❌ Invalid SCHEDULE format: ${err.message}`);
+    } catch (err: unknown) {
+      console.error(`❌ Invalid SCHEDULE format: ${err instanceof Error ? err.message : String(err)}`);
       console.error('   Example: "0 */8 * * *" (every 8 hours)');
       process.exit(1);
     }
@@ -109,8 +113,8 @@ async function main(): Promise<void> {
         await new Promise(resolve => setTimeout(resolve, msUntilNext));
         await runImport();
 
-      } catch (err: any) {
-        console.error(`❌ Scheduler error: ${err.message}`);
+      } catch (err: unknown) {
+        console.error(`❌ Scheduler error: ${err instanceof Error ? err.message : String(err)}`);
         await new Promise(resolve => setTimeout(resolve, 60000));
       }
     }

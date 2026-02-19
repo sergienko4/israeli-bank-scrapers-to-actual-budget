@@ -3,8 +3,10 @@
  * Filters by chatId for security, dispatches commands to handler
  */
 
+import { TelegramApiResponse } from '../types/index.js';
+
 const TELEGRAM_API = 'https://api.telegram.org';
-const POLL_TIMEOUT = 30; // seconds (Telegram long polling)
+const POLL_TIMEOUT = 30;
 
 export class TelegramPoller {
   private offset = 0;
@@ -26,8 +28,9 @@ export class TelegramPoller {
     while (this.running) {
       try {
         await this.poll();
-      } catch (error: any) {
-        console.error('⚠️  Telegram poll error:', error.message);
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('⚠️  Telegram poll error:', msg);
         await this.sleep(5000);
       }
     }
@@ -43,7 +46,7 @@ export class TelegramPoller {
 
     if (!response.ok) return;
 
-    const data: any = await response.json();
+    const data = await response.json() as TelegramApiResponse;
     if (!data.ok || !data.result?.length) return;
 
     for (const update of data.result) {
@@ -52,7 +55,7 @@ export class TelegramPoller {
       const message = update.message;
       if (!message?.text) continue;
       if (String(message.chat.id) !== this.chatId) continue;
-      if (message.date < this.startedAt) continue; // Ignore messages sent before bot started
+      if (message.date < this.startedAt) continue;
 
       await this.onMessage(message.text);
     }
@@ -64,8 +67,8 @@ export class TelegramPoller {
       const response = await fetch(url);
       if (!response.ok) return;
 
-      const data: any = await response.json();
-      if (data.ok && data.result?.length > 0) {
+      const data = await response.json() as TelegramApiResponse;
+      if (data.ok && data.result?.length) {
         this.offset = data.result[data.result.length - 1].update_id + 1;
       }
     } catch {

@@ -98,3 +98,19 @@ export interface TransactionRecord {
   description: string;
   amount: number;
 }
+
+export interface TelegramMessageData {
+  chat: { id: number };
+  text?: string;
+  date: number;
+}
+
+export interface TelegramUpdate {
+  update_id: number;
+  message?: TelegramMessageData;
+}
+
+export interface TelegramApiResponse {
+  ok: boolean;
+  result?: TelegramUpdate[];
+}
