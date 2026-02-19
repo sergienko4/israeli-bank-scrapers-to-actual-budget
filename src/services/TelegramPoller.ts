@@ -4,6 +4,7 @@
  */
 
 import { TelegramApiResponse } from '../types/index.js';
+import { errorMessage } from '../utils/index.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const POLL_TIMEOUT = 30;
@@ -29,8 +30,7 @@ export class TelegramPoller {
       try {
         await this.poll();
       } catch (error: unknown) {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.error('⚠️  Telegram poll error:', msg);
+        console.error('⚠️  Telegram poll error:', errorMessage(error));
         await this.sleep(5000);
       }
     }
@@ -43,22 +43,21 @@ export class TelegramPoller {
   private async poll(): Promise<void> {
     const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=${this.offset}&timeout=${POLL_TIMEOUT}`;
     const response = await fetch(url);
-
     if (!response.ok) return;
 
     const data = await response.json() as TelegramApiResponse;
     if (!data.ok || !data.result?.length) return;
-
     for (const update of data.result) {
       this.offset = update.update_id + 1;
-
-      const message = update.message;
-      if (!message?.text) continue;
-      if (String(message.chat.id) !== this.chatId) continue;
-      if (message.date < this.startedAt) continue;
-
-      await this.onMessage(message.text);
+      await this.processUpdate(update.message);
     }
+  }
+
+  private async processUpdate(message: { text?: string; chat: { id: number }; date: number } | undefined): Promise<void> {
+    if (!message?.text) return;
+    if (String(message.chat.id) !== this.chatId) return;
+    if (message.date < this.startedAt) return;
+    await this.onMessage(message.text);
   }
 
   private async clearOldMessages(): Promise<void> {
