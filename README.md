@@ -35,14 +35,14 @@ Your Bank → israeli-bank-scrapers → This Tool → Actual Budget
 | 🏦 Bank | Beinleumi | `beinleumi` | username, password |
 | 🏦 Bank | Massad | `massad` | username, password |
 | 🏦 Bank | Yahav | `yahav` | username, nationalID, password |
+| 🏦 Bank | Beyahad Bishvilha | `beyahadBishvilha` | id, password |
+| 🏦 Bank | Behatsdaa | `behatsdaa` | id, password |
+| 🏦 Bank | Pagi | `pagi` | username, password |
+| 🏦 Bank | One Zero | `oneZero` | email, password, phoneNumber |
 | 💳 Card | Visa Cal | `visaCal` | username, password |
 | 💳 Card | Max | `max` | username, password |
 | 💳 Card | Isracard | `isracard` | id, card6Digits, password |
 | 💳 Card | Amex | `amex` | id, card6Digits, password |
-| 💳 Card | Beyahad Bishvilha | `beyahadBishvilha` | id, password |
-| 💳 Card | Behatsdaa | `behatsdaa` | id, password |
-| 💳 Card | Pagi | `pagi` | username, password |
-| 🏦 Digital | One Zero | `oneZero` | email, password, phoneNumber |
 
 Use the **Config key** as the bank name in your `config.json`. See [BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) for details.
 
