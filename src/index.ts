@@ -13,6 +13,8 @@ import { GracefulShutdownHandler } from './resilience/GracefulShutdown.js';
 import { MetricsService } from './services/MetricsService.js';
 import { TransactionService } from './services/TransactionService.js';
 import { NotificationService } from './services/NotificationService.js';
+import { TwoFactorService } from './services/TwoFactorService.js';
+import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
 import { ImporterConfig, BankConfig, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
 
 // Initialize resilience components
@@ -31,6 +33,12 @@ const metrics = new MetricsService();
 const configLoader = new ConfigLoader();
 const config: ImporterConfig = configLoader.load();
 const notificationService = new NotificationService(config.notifications);
+
+// Initialize 2FA service if Telegram is configured
+const telegram = config.notifications?.telegram;
+const twoFactorService = telegram
+  ? new TwoFactorService(new TelegramNotifier(telegram), telegram.twoFactor?.timeoutSeconds)
+  : null;
 
 console.log('🚀 Starting Israeli Bank Importer for Actual Budget\n');
 
@@ -87,9 +95,14 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
     console.log(`  📅 Date range: using bank default (usually ~1 year)`);
   }
 
+  // Inject 2FA callback for OneZero (or any bank with otpCodeRetriever support)
+  if (bankName.toLowerCase() === 'onezero' && !bankConfig.otpLongTermToken && twoFactorService) {
+    scraperConfig.otpCodeRetriever = twoFactorService.createOtpRetriever(bankName);
+    console.log(`  🔐 2FA enabled for ${bankName} (via Telegram)`);
+  }
+
   const scraper = createScraper(scraperConfig);
 
-  // Scrape with timeout and retry
   console.log(`  🔍 Scraping transactions from ${bankName}...`);
 
   return await retryStrategy.execute(

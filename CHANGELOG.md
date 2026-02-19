@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0] - 2026-02-19
 
 ### Added
+- **2FA via Telegram** (Task 07)
+  - OneZero bank: bot asks for SMS OTP code via Telegram
+  - Long-term token support: skip OTP after first login
+  - `waitForReply()` on TelegramNotifier for interactive messages
+  - TwoFactorService with code extraction and validation
+  - Configurable timeout (default 5 min)
 - **Telegram Bot Commands** (`listenForCommands: true`)
   - `/scan` or `/import` - trigger import from Telegram
   - `/status` - show last run info

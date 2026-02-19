@@ -53,6 +53,18 @@
         "reconcile": true,
         "accounts": "all"
       }]
+    },
+
+    "oneZero": {
+      "_comment": "OneZero (requires 2FA). Bot will ask for SMS code via Telegram.",
+      "email": "your@email.com",
+      "password": "your_password",
+      "phoneNumber": "0501234567",
+      "targets": [{
+        "actualAccountId": "uuid-from-actual-budget",
+        "reconcile": true,
+        "accounts": "all"
+      }]
     }
   },
 
@@ -65,9 +77,11 @@
       "messageFormat": "compact",
       "showTransactions": "new",
       "listenForCommands": true,
+      "twoFactor": { "timeoutSeconds": 300 },
       "_formats": "summary (default) | compact (A) | ledger (B) | emoji (C)",
       "_showOptions": "new (default) | all | none",
-      "_listenForCommands": "true = bot listens for /scan, /status, /help"
+      "_listenForCommands": "true = bot listens for /scan, /status, /help",
+      "_twoFactor": "Enable 2FA OTP via Telegram (for OneZero bank)"
     }
   },
 

@@ -9,7 +9,7 @@
  *   "emoji"    (C) - Emoji indicators for deposits/payments
  */
 
-import { TelegramConfig, MessageFormat, ShowTransactions } from '../../types/index.js';
+import { TelegramConfig, MessageFormat, ShowTransactions, TelegramApiResponse } from '../../types/index.js';
 import { ImportSummary, BankMetrics, AccountMetrics, TransactionRecord } from '../MetricsService.js';
 import { INotifier } from './INotifier.js';
 
@@ -35,6 +35,38 @@ export class TelegramNotifier implements INotifier {
 
   async sendMessage(text: string): Promise<void> {
     await this.send(text);
+  }
+
+  async waitForReply(prompt: string, timeoutMs: number): Promise<string> {
+    await this.send(prompt);
+
+    const startTime = Date.now();
+    let offset = await this.getLatestOffset();
+
+    while (Date.now() - startTime < timeoutMs) {
+      const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=${offset}&timeout=5`;
+      const response = await fetch(url);
+      if (!response.ok) continue;
+
+      const data = await response.json() as TelegramApiResponse;
+      for (const update of data.result ?? []) {
+        offset = update.update_id + 1;
+        const msg = update.message;
+        if (msg?.text && String(msg.chat.id) === this.chatId) {
+          return msg.text;
+        }
+      }
+    }
+
+    throw new Error('2FA timeout: no reply received');
+  }
+
+  private async getLatestOffset(): Promise<number> {
+    const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=-1`;
+    const response = await fetch(url);
+    if (!response.ok) return 0;
+    const data = await response.json() as TelegramApiResponse;
+    return data.result?.length ? data.result[data.result.length - 1].update_id + 1 : 0;
   }
 
   async sendError(error: string): Promise<void> {

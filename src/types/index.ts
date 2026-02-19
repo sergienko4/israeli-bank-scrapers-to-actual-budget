@@ -46,6 +46,7 @@ export interface BankConfig {
   // OneZero
   email?: string;
   phoneNumber?: string;
+  otpLongTermToken?: string; // Persisted after first OTP login
 
   [key: string]: any; // Allow other bank-specific fields
 }
@@ -62,12 +63,17 @@ export interface BankTransaction {
 export type MessageFormat = 'compact' | 'ledger' | 'emoji' | 'summary';
 export type ShowTransactions = 'new' | 'all' | 'none';
 
+export interface TwoFactorConfig {
+  timeoutSeconds?: number; // Default: 300 (5 min)
+}
+
 export interface TelegramConfig {
   botToken: string;
   chatId: string;
   messageFormat?: MessageFormat;       // Default: 'summary'
   showTransactions?: ShowTransactions;  // Default: 'new'
-  listenForCommands?: boolean;         // Default: false - bot listens for /scan, /status, /help
+  listenForCommands?: boolean;         // Default: false
+  twoFactor?: TwoFactorConfig;        // Enable 2FA OTP via Telegram
 }
 
 export interface NotificationConfig {
