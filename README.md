@@ -306,8 +306,8 @@ When `"reconcile": true`, the tool automatically reconciles your Actual Budget b
 ```
 
 **When to use:**
-- ✅ `true` - For checking, savings, credit cards (recommended)
-- ❌ `false` - If you manually reconcile in Actual Budget
+- `false` (default) - You review and reconcile manually in Actual Budget
+- `true` - Auto-adjust balance to match bank (for trusted accounts)
 
 **Note:** Credit card balances are negative (this is normal!)
 

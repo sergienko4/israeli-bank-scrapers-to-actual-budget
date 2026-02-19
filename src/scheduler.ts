@@ -15,6 +15,7 @@ console.log('🚀 Israeli Bank Importer Scheduler Starting...');
 console.log(`📅 Timezone: ${process.env.TZ || 'UTC'}`);
 
 let activeImport: Promise<number> | null = null;
+let activePoller: TelegramPoller | null = null;
 
 function runImportLocked(): Promise<number> {
   if (activeImport) {
@@ -22,7 +23,14 @@ function runImportLocked(): Promise<number> {
     return activeImport;
   }
 
-  activeImport = runImport().finally(() => { activeImport = null; });
+  // Pause poller during import so waitForReply (2FA OTP) is the only consumer
+  activePoller?.stop();
+
+  activeImport = runImport().finally(() => {
+    activeImport = null;
+    // Resume poller after import completes
+    activePoller?.start().catch(() => {});
+  });
   return activeImport;
 }
 
@@ -68,13 +76,13 @@ function startTelegramCommands(): void {
 
     const notifier = new TelegramNotifier(telegram);
     const handler = new TelegramCommandHandler(runImportLocked, notifier);
-    const poller = new TelegramPoller(
+    activePoller = new TelegramPoller(
       telegram.botToken,
       telegram.chatId,
       (text) => handler.handle(text)
     );
 
-    poller.start().catch((err: unknown) => {
+    activePoller.start().catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('Telegram command listener crashed:', msg);
     });

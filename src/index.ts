@@ -12,6 +12,7 @@ import { TimeoutWrapper } from './resilience/TimeoutWrapper.js';
 import { GracefulShutdownHandler } from './resilience/GracefulShutdown.js';
 import { MetricsService } from './services/MetricsService.js';
 import { TransactionService } from './services/TransactionService.js';
+import { ReconciliationService } from './services/ReconciliationService.js';
 import { NotificationService } from './services/NotificationService.js';
 import { TwoFactorService } from './services/TwoFactorService.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
@@ -27,6 +28,7 @@ const retryStrategy = new ExponentialBackoffRetry({
 const timeoutWrapper = new TimeoutWrapper();
 const errorFormatter = new ErrorFormatter();
 const transactionService = new TransactionService(api);
+const reconciliationService = new ReconciliationService(api);
 const metrics = new MetricsService();
 
 // Load configuration
@@ -183,6 +185,26 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
         );
       }
 
+      // Reconcile balance if configured
+      if (target.reconcile && account.balance !== undefined) {
+        console.log(`     🔄 Reconciling account balance...`);
+        try {
+          const result = await reconciliationService.reconcile(
+            actualAccountId, account.balance, account.currency || 'ILS'
+          );
+          metrics.recordReconciliation(bankName, result.status, result.diff);
+
+          const statusMsg: Record<string, string> = {
+            created: `     ✅ Reconciled: ${result.diff > 0 ? '+' : ''}${(result.diff / 100).toFixed(2)} ILS`,
+            skipped: `     ✅ Already balanced`,
+            'already-reconciled': `     ✅ Already reconciled today`,
+          };
+          console.log(statusMsg[result.status]);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.error(`     ❌ Reconciliation error:`, msg);
+        }
+      }
     }
 
     // Record bank success metrics
