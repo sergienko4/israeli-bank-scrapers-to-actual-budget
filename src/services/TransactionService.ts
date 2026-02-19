@@ -43,12 +43,14 @@ export class TransactionService {
 
     console.log(`     📥 Importing ${transactions.length} transactions...`);
 
+    const existingIds = await this.getExistingImportedIds(actualAccountId);
+
     for (const txn of transactions) {
       const parsed = this.parseTransaction(txn);
+      const importedId = this.buildImportedId(bankName, accountNumber, txn, parsed);
+      const target = existingIds.has(importedId) ? existingTransactions : newTransactions;
 
       try {
-        const importedId = `${bankName}-${accountNumber}-${txn.identifier || `${parsed.date}-${txn.chargedAmount || txn.originalAmount}`}`;
-
         await this.api.importTransactions(actualAccountId, [{
           account: actualAccountId,
           date: parsed.date,
@@ -58,12 +60,9 @@ export class TransactionService {
           notes: txn.memo ?? parsed.description,
           cleared: true
         }]);
-
-        imported++;
-        newTransactions.push(parsed);
+        target.push(parsed);
       } catch (error: any) {
-        if (error.message && error.message.includes('already exists')) {
-          skipped++;
+        if (error.message?.includes('already exists')) {
           existingTransactions.push(parsed);
         } else {
           console.error(`     ❌ Error importing transaction:`, error.message);
@@ -71,7 +70,9 @@ export class TransactionService {
       }
     }
 
-    console.log(`     ✅ Imported: ${imported}, Skipped (duplicates): ${skipped}`);
+    imported = newTransactions.length;
+    skipped = existingTransactions.length;
+    console.log(`     ✅ New: ${imported}, Existing: ${skipped}`);
     return { imported, skipped, newTransactions, existingTransactions };
   }
 
@@ -98,6 +99,26 @@ export class TransactionService {
     }
 
     return account;
+  }
+
+  /**
+   * Get all existing imported_ids for an account
+   */
+  private buildImportedId(
+    bankName: string, accountNumber: string,
+    txn: BankTransaction, parsed: TransactionRecord
+  ): string {
+    return `${bankName}-${accountNumber}-${txn.identifier || `${parsed.date}-${txn.chargedAmount || txn.originalAmount}`}`;
+  }
+
+  private async getExistingImportedIds(accountId: string): Promise<Set<string>> {
+    const result: any = await this.api.runQuery(
+      this.api.q('transactions')
+        .filter({ account: accountId, imported_id: { $ne: null } })
+        .select(['imported_id'])
+    );
+    const ids = (result?.data ?? []).map((t: any) => t.imported_id);
+    return new Set(ids);
   }
 
   /**

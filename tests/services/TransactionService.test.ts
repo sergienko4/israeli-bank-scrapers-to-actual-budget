@@ -7,9 +7,15 @@ describe('TransactionService', () => {
 
   beforeEach(() => {
     mockApi = {
-      importTransactions: vi.fn(),
+      importTransactions: vi.fn().mockResolvedValue(undefined),
       getAccounts: vi.fn(),
-      createAccount: vi.fn()
+      createAccount: vi.fn(),
+      runQuery: vi.fn().mockResolvedValue({ data: [] }),
+      q: vi.fn(() => ({
+        filter: vi.fn(() => ({
+          select: vi.fn()
+        }))
+      }))
     };
     service = new TransactionService(mockApi);
     vi.spyOn(console, 'log').mockImplementation(() => {});
