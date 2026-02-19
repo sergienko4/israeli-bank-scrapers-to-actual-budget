@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.5.0] - 2026-02-19
+
+### Added
+- **Import audit log** (Task 17)
+  - `AuditLogService` — persists import history to `/app/data/audit-log.json`
+  - Each entry: timestamp, bank results, durations, transaction counts, errors
+  - Auto-rotates: keeps last 90 entries
+  - `/status` command shows last 3 import runs from audit log
+  - 8 unit tests for AuditLogService
+
+---
+
 ## [2.4.0] - 2026-02-19
 
 ### Added

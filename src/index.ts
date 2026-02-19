@@ -14,6 +14,7 @@ import { MetricsService } from './services/MetricsService.js';
 import { TransactionService, ImportResult } from './services/TransactionService.js';
 import { ReconciliationService } from './services/ReconciliationService.js';
 import { NotificationService } from './services/NotificationService.js';
+import { AuditLogService } from './services/AuditLogService.js';
 import { TwoFactorService } from './services/TwoFactorService.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
 import { ImporterConfig, BankConfig, BankTarget, BankTransaction, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
@@ -31,6 +32,7 @@ const errorFormatter = new ErrorFormatter();
 const transactionService = new TransactionService(api);
 const reconciliationService = new ReconciliationService(api);
 const metrics = new MetricsService();
+const auditLog = new AuditLogService();
 
 // Load configuration
 const configLoader = new ConfigLoader();
@@ -265,6 +267,7 @@ async function delayBeforeNextBank(delayMs?: number): Promise<void> {
 
 async function finalizeImport(): Promise<void> {
   metrics.printSummary();
+  auditLog.record(metrics.getSummary());
   await notificationService.sendSummary(metrics.getSummary());
   console.log('\n🎉 Import process completed!\n');
   await api.shutdown();
