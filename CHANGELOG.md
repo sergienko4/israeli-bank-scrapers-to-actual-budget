@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `src/services/NotificationService.ts`: Extracted shared `notifyAll` helper
   - `src/resilience/GracefulShutdown.ts`: Extracted `executeCallbacks`
 
+### Added
+- `errorMessage()` utility in `src/utils/index.ts` — replaces 5 duplicated `error instanceof Error` patterns
+- OCP `credentialSpecs` map in ConfigLoader — add banks by adding entries, no if/else
+- OCP `errorFormats` + `messageCategories` maps in ErrorFormatter
+- OCP `reconciliationMessages` map in index.ts
+- OCP `Record<MessageFormat, ...>` dispatch in TelegramNotifier (replaces switch)
+
+### Removed
+- Dead `ConfigurationError` instanceof check in `loadFromFile` (could never match)
+
 ---
 
 ## [2.1.0] - 2026-02-19

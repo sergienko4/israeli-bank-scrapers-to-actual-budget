@@ -30,31 +30,34 @@ Rules for contributing to this project. All contributors (including AI assistant
 12. **Document risks** - Explain why not (tradeoffs, risks, downsides)
 13. **Clean code** - Follow clean code principles at all times
 14. **SOLID principles** - Follow Open/Closed principle and other SOLID principles
+15. **Max 10 lines per method** - Extract longer methods into single-purpose functions
+16. **No `any` types** - CI enforces zero `: any` in source (ratchet = 0)
+17. **OCP maps over if/else chains** - Use lookup maps for extensible dispatch patterns
 
 ---
 
 ## Verification Before PR
 
-15. **Build locally** - `npm run build` must pass with zero errors
-16. **Run tests** - `npm test` must pass all tests
-17. **Run validate** - `npm run validate` (build + tests combined)
-18. **Build Docker image** - `docker build -t israeli-bank-importer:test .`
-19. **Run Docker locally** - Run the container with `config.json` and verify it works with real bank data
+18. **Build locally** - `npm run build` must pass with zero errors
+19. **Run tests** - `npm test` must pass all tests
+20. **Run validate** - `npm run validate` (build + tests combined)
+21. **Build Docker image** - `docker build -t israeli-bank-importer:test .`
+22. **Run Docker locally** - Run the container with `config.json` and verify it works with real bank data
 
 ---
 
 ## Documentation
 
-20. **Always update documentation** - Every code change must include relevant doc updates
-21. **Update .md files before work** - Plan and document in task files before implementation begins
-22. **Update CHANGELOG.md** - Add entry for every change
-23. **Remove unused files** - Keep the repository clean, no dead or orphaned files
+23. **Always update documentation** - Every code change must include relevant doc updates
+24. **Update .md files before work** - Plan and document in task files before implementation begins
+25. **Update CHANGELOG.md** - Add entry for every change
+26. **Remove unused files** - Keep the repository clean, no dead or orphaned files
 
 ---
 
 ## Development Process
 
-24. **Plan first, then implement** - Create a plan, wait for review and approval before coding
+27. **Plan first, then implement** - Create a plan, wait for review and approval before coding
 
 ---
 
