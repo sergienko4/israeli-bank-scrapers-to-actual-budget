@@ -12,8 +12,8 @@ import { TimeoutWrapper } from './resilience/TimeoutWrapper.js';
 import { GracefulShutdownHandler } from './resilience/GracefulShutdown.js';
 import { ReconciliationService } from './services/ReconciliationService.js';
 import { MetricsService } from './services/MetricsService.js';
+import { TransactionService } from './services/TransactionService.js';
 import { ImporterConfig, BankConfig, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
-import { formatDate, toCents } from './utils/index.js';
 
 // Initialize resilience components
 const shutdownHandler = new GracefulShutdownHandler();
@@ -25,6 +25,7 @@ const retryStrategy = new ExponentialBackoffRetry({
 const timeoutWrapper = new TimeoutWrapper();
 const errorFormatter = new ErrorFormatter();
 const reconciliationService = new ReconciliationService(api);
+const transactionService = new TransactionService(api);
 const metrics = new MetricsService();
 
 // Load configuration
@@ -146,58 +147,15 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
       const actualAccountId = target.actualAccountId;
 
       // Get or create account
-      let actualAccount = await api.getAccounts().then((accounts: any[]) =>
-        accounts.find((a: any) => a.id === actualAccountId)
-      );
-
-      if (!actualAccount) {
-        console.log(`     ➕ Creating new account: ${actualAccountId}`);
-        actualAccount = await api.createAccount({
-          id: actualAccountId,
-          name: `${bankName} - ${account.accountNumber}`,
-          offbudget: false,
-          closed: false
-        } as any);
-      }
-
-      // Track transaction imports for this account
-      let imported = 0;
-      let skipped = 0;
+      await transactionService.getOrCreateAccount(actualAccountId, bankName, account.accountNumber);
 
       // Import transactions
       if (account.txns && account.txns.length > 0) {
-        console.log(`     📥 Importing ${account.txns.length} transactions...`);
-
-        for (const txn of account.txns) {
-          try {
-            const importedId = `${bankName}-${account.accountNumber}-${txn.identifier || `${formatDate(txn.date)}-${txn.chargedAmount || txn.originalAmount}`}`;
-
-            const transaction = {
-              account: actualAccountId,
-              date: formatDate(txn.date),
-              amount: toCents(txn.chargedAmount || txn.originalAmount),
-              payee_name: txn.description || 'Unknown',
-              imported_id: importedId,
-              notes: txn.memo || txn.description || '',
-              cleared: true
-            };
-
-            await api.importTransactions(actualAccountId, [transaction]);
-            imported++;
-          } catch (error: any) {
-            if (error.message && error.message.includes('already exists')) {
-              skipped++;
-            } else {
-              console.error(`     ❌ Error importing transaction:`, error.message);
-            }
-          }
-        }
-
-        console.log(`     ✅ Imported: ${imported}, Skipped (duplicates): ${skipped}`);
-
-        // Add to bank totals
-        totalImported += imported;
-        totalSkipped += skipped;
+        const result = await transactionService.importTransactions(
+          bankName, account.accountNumber, actualAccountId, account.txns
+        );
+        totalImported += result.imported;
+        totalSkipped += result.skipped;
       }
 
       // Handle reconciliation
