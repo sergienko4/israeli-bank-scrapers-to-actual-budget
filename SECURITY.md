@@ -141,7 +141,7 @@ The importer uses these volumes:
 **DO NOT** open public GitHub issues for security vulnerabilities.
 
 Instead:
-1. Email security concerns to: [your-email@example.com]
+1. Open a security issue at: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues
 2. Include:
    - Description of the vulnerability
    - Steps to reproduce
@@ -214,7 +214,7 @@ Security patches will be released as:
 
 ## 🔍 Security Features
 
-### Current Security Measures (v1.4.1)
+### Current Security Measures (v2.6.0)
 
 #### Container Security
 - ✅ Non-root container user (`node`, UID 1000)
@@ -303,5 +303,5 @@ This security policy is part of the Israeli Bank Importer project and is license
 
 ---
 
-**Last Updated**: 2026-02-18
-**Version**: 1.4.1
+**Last Updated**: 2026-02-19
+**Version**: 2.6.0

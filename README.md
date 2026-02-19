@@ -21,13 +21,13 @@ Your Bank → israeli-bank-scrapers → This Tool → Actual Budget
 
 ---
 
-## 🏦 Supported Banks (18)
+## 🏦 Supported Banks (19)
 
 ### Banks (11)
-Bank Hapoalim, Leumi, Discount, Mizrahi Tefahot, Mercantile, Otsar Hahayal, Bank of Jerusalem, International Bank, Massad, Yahav
+Bank Hapoalim, Leumi, Discount, Mizrahi Tefahot, Mercantile, Otsar Hahayal, Union, Beinleumi, Massad, Yahav, OneZero
 
-### Credit Cards (7)
-Cal (Visa Cal), Max, Isracard, Amex Israel, Beyahad Bishvilha, Behatsdaa, Pagi, OneZero
+### Credit Cards (8)
+Cal (Visa Cal), Max, Isracard, Amex Israel, Beyahad Bishvilha, Behatsdaa, Pagi
 
 **See [BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) for credential requirements**
 
@@ -35,35 +35,34 @@ Cal (Visa Cal), Max, Isracard, Amex Israel, Beyahad Bishvilha, Behatsdaa, Pagi, 
 
 ## ✨ Features
 
-### Core Features
-- ✅ Automatic scheduled imports (cron)
-- ✅ 18 Israeli banks and credit cards
-- ✅ Duplicate detection
-- ✅ 2FA support (saves browser session)
-- ✅ Date filtering (import only recent transactions)
-- ✅ Multiple accounts mapping
-- ✅ Optional reconciliation
+### Core
+- ✅ Automatic scheduled imports (cron) with Docker Compose
+- ✅ 19 Israeli banks and credit cards
+- ✅ Duplicate detection via `imported_id`
+- ✅ 2FA via Telegram (OneZero OTP)
+- ✅ Relative date import (`daysBack`) or fixed `startDate`
+- ✅ Multiple accounts mapping per bank
+- ✅ Optional balance reconciliation
+- ✅ Rate limiting between bank imports
 
-### Stability & Resilience (Phase 3)
-- ✅ **TypeScript** - Full type safety and clean architecture
-- ✅ **10-minute timeout** - No more indefinite hangs
-- ✅ **3 retry attempts** - Automatic recovery from transient failures
-- ✅ **Exponential backoff** - Smart retry timing (1s, 2s, 4s)
-- ✅ **Clear error messages** - User-friendly error categorization
-- ✅ **Graceful shutdown** - Clean SIGTERM/SIGINT handling
+### Notifications
+- ✅ **Telegram** — 4 message formats (summary, compact, ledger, emoji)
+- ✅ **Telegram bot** — `/scan`, `/status` (with import history), `/help`
+- ✅ **Webhooks** — Slack, Discord, or plain JSON to any URL
+- ✅ Non-blocking — notification failures never break imports
 
-### Idempotent Reconciliation (Phase 4)
-- ✅ **Duplicate-free reconciliation** - No duplicate reconciliation transactions
-- ✅ **One reconciliation per day** - Idempotent using `imported_id` pattern
-- ✅ **Automatic detection** - Skips if reconciliation already exists
-- ✅ **Proper balancing** - Matches bank balance with Actual Budget
+### Resilience
+- ✅ **TypeScript strict** — zero `any` types, all methods ≤10 lines
+- ✅ **10-minute timeout** — no indefinite hangs
+- ✅ **3 retries with exponential backoff** (1s, 2s, 4s)
+- ✅ **Graceful shutdown** — clean SIGTERM/SIGINT handling
+- ✅ **Config validation at startup** — errors caught before runtime
 
-### Observability & Metrics (Phase 4+)
-- ✅ **Import metrics** - Track success rates, duration, and transaction counts
-- ✅ **Performance tracking** - See which banks are slowest
-- ✅ **Duplicate detection stats** - Know how many duplicates were prevented
-- ✅ **Comprehensive validation** - Config errors caught at startup (not runtime)
-- ✅ **Detailed summary** - See complete import statistics after each run
+### Observability
+- ✅ **Import metrics** — success rates, duration, transaction counts
+- ✅ **Audit log** — persistent JSON history at `/app/data/audit-log.json`
+- ✅ **Performance tracking** — per-bank timing and duplicate stats
+- ✅ **218+ unit tests** — 99%+ coverage
 
 ---
 
@@ -149,10 +148,9 @@ docker run --rm --cap-add SYS_ADMIN \
 ```
 
 **Available tags:**
-- `1.4`, `1` - Latest stable version (recommended)
-- `v1.4.0` - Specific version (pinned)
-- `20260218-214500` - Timestamped builds
-- `main-abc123` - Commit-based builds
+- `latest` - Most recent build from main
+- `v2.6.0` - Specific version (pinned, recommended for production)
+- Timestamped and commit-based tags also available
 
 **Option B: Build from source**
 
@@ -433,7 +431,7 @@ npm run test:watch
 npm run validate
 ```
 
-**Coverage target:** 80%+ lines, functions, statements; 70%+ branches
+**218+ tests** with 80%+ lines, functions, statements; 70%+ branches coverage
 
 ---
 
