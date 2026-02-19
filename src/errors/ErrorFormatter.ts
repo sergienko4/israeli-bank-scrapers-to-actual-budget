@@ -1,74 +1,49 @@
 /**
  * Error formatter for user-friendly error messages
- * Follows Open/Closed Principle: Easy to add new error formats without modifying existing code
+ * Follows Open/Closed Principle: Add new error types to the map without modifying format()
  */
 
 import {
-  TimeoutError,
-  AuthenticationError,
-  NetworkError,
-  TwoFactorAuthError,
-  ShutdownError,
-  BankScrapingError,
-  ConfigurationError
+  TimeoutError, AuthenticationError, NetworkError,
+  TwoFactorAuthError, ShutdownError, BankScrapingError, ConfigurationError
 } from './ErrorTypes.js';
 
 export interface IErrorFormatter {
   format(error: Error, context?: string): string;
 }
 
+// OCP: add new error types by adding entries — no changes to format()
+type ErrorFormatEntry = { icon: string; label: string; suffix?: string };
+
+const errorFormats: Array<{ type: Function; entry: ErrorFormatEntry }> = [
+  { type: TimeoutError,         entry: { icon: '⏱️ ', label: 'Timeout Error', suffix: ". The bank's website may be slow or unresponsive." } },
+  { type: AuthenticationError,  entry: { icon: '🔐', label: 'Authentication Error', suffix: '. Please verify your credentials.' } },
+  { type: NetworkError,         entry: { icon: '🌐', label: 'Network Error', suffix: '. Check your internet connection.' } },
+  { type: TwoFactorAuthError,   entry: { icon: '📱', label: '2FA Error', suffix: '. Check your 2FA device or SMS.' } },
+  { type: ShutdownError,        entry: { icon: '🛑', label: 'Operation Cancelled' } },
+  { type: BankScrapingError,    entry: { icon: '❌', label: 'Bank Scraping Error' } },
+  { type: ConfigurationError,   entry: { icon: '⚙️ ', label: 'Configuration Error' } },
+];
+
+// Keyword-based fallback categorization (OCP map)
+const messageCategories: Array<{ keywords: string[]; icon: string; label: string; suffix?: string }> = [
+  { keywords: ['credentials', 'login', 'authentication'], icon: '🔐', label: 'Authentication Error', suffix: '. Please verify your credentials.' },
+  { keywords: ['network', 'ECONNREFUSED', 'ENOTFOUND'],   icon: '🌐', label: 'Network Error', suffix: '. Cannot reach the server. Check your internet connection.' },
+  { keywords: ['2FA', 'OTP', 'verification'],              icon: '📱', label: '2FA Error', suffix: '. Check your 2FA device or SMS.' },
+];
+
 export class ErrorFormatter implements IErrorFormatter {
   format(error: Error, context: string = ''): string {
-    const contextStr = context ? ` (${context})` : '';
-
-    if (error instanceof TimeoutError) {
-      return `⏱️  Timeout Error${contextStr}: ${error.message}. The bank's website may be slow or unresponsive.`;
-    }
-
-    if (error instanceof AuthenticationError) {
-      return `🔐 Authentication Error${contextStr}: ${error.message}. Please verify your credentials.`;
-    }
-
-    if (error instanceof NetworkError) {
-      return `🌐 Network Error${contextStr}: ${error.message}. Check your internet connection.`;
-    }
-
-    if (error instanceof TwoFactorAuthError) {
-      return `📱 2FA Error${contextStr}: ${error.message}. Check your 2FA device or SMS.`;
-    }
-
-    if (error instanceof ShutdownError) {
-      return `🛑 Operation Cancelled${contextStr}: ${error.message}`;
-    }
-
-    if (error instanceof BankScrapingError) {
-      return `❌ Bank Scraping Error${contextStr}: ${error.message}`;
-    }
-
-    if (error instanceof ConfigurationError) {
-      return `⚙️  Configuration Error${contextStr}: ${error.message}`;
-    }
-
-    // Fallback for unknown errors - try to categorize by message
-    return this.categorizeByMessage(error, contextStr);
+    const ctx = context ? ` (${context})` : '';
+    const match = errorFormats.find(f => error instanceof f.type);
+    if (match) return `${match.entry.icon} ${match.entry.label}${ctx}: ${error.message}${match.entry.suffix || ''}`;
+    return this.categorizeByMessage(error, ctx);
   }
 
-  private categorizeByMessage(error: Error, contextStr: string): string {
+  private categorizeByMessage(error: Error, ctx: string): string {
     const message = error.message || 'Unknown error';
-
-    if (message.includes('credentials') || message.includes('login') || message.includes('authentication')) {
-      return `🔐 Authentication Error${contextStr}: ${message}. Please verify your credentials.`;
-    }
-
-    if (message.includes('network') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND')) {
-      return `🌐 Network Error${contextStr}: Cannot reach the server. Check your internet connection.`;
-    }
-
-    if (message.includes('2FA') || message.includes('OTP') || message.includes('verification')) {
-      return `📱 2FA Error${contextStr}: ${message}. Check your 2FA device or SMS.`;
-    }
-
-    // Default format
-    return `❌ Error${contextStr}: ${message}`;
+    const match = messageCategories.find(c => c.keywords.some(k => message.includes(k)));
+    if (match) return `${match.icon} ${match.label}${ctx}: ${match.suffix ? match.suffix.slice(2) : message}`;
+    return `❌ Error${ctx}: ${message}`;
   }
 }

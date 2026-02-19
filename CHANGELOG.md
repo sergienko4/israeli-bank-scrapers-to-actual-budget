@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0] - 2026-02-19
+
+### Refactored
+- **All methods refactored to max ~10 lines** (Task 13)
+  - `src/index.ts`: Extracted `buildScraperOptions`, `buildOtpRetriever`, `processAccount`, `reconcileIfConfigured`, `initializeApi`, `processAllBanks`, `finalizeImport`, `handleFatalError` — 3 methods (97, 71, 47 lines → all ≤10)
+  - `src/config/ConfigLoader.ts`: OCP credential validation map replaces if/else chain; extracted `validateDateConfig`, `validateStartDate`, `validateDaysBack`, `validateTargets`, `validateTarget`, `validateFieldFormats`, `validateRequiredCredentials`, `validateActualConfig`, `buildTargetFromEnv` — all methods ≤10 lines
+  - `src/services/notifications/TelegramNotifier.ts`: Extracted per-format bank/account section builders + shared `buildHeader`, `bankIcon`, `appendBankFooter`, `truncateMessage`, `pollUpdates`, `findReplyMessage` — 6 methods (24-40 lines → all ≤10)
+  - `src/services/MetricsService.ts`: Extracted `printOverallStats`, `printBankPerformance`, `printReconciliationLine` — `printSummary` 47→6 lines
+  - `src/services/TransactionService.ts`: Extracted `importSingleTransaction` — `importTransactions` 46→10 lines
+  - `src/services/ReconciliationService.ts`: Extracted `getCurrentBalance`, `createReconciliationTransaction` — `reconcile` 49→10 lines
+  - `src/scheduler.ts`: Extracted `logImportResult`, `loadTelegramConfig`, `validateSchedule`, `scheduleLoop` — `main` 48→8 lines
+  - `src/resilience/RetryStrategy.ts`: Extracted `handleRetryBackoff` — `execute` 38→10 lines
+  - `src/errors/ErrorFormatter.ts`: OCP error format map + keyword categorization map — `format` 34→4 lines
+  - `src/services/TelegramPoller.ts`: Extracted `processUpdate` — `poll` 20→10 lines
+  - `src/services/NotificationService.ts`: Extracted shared `notifyAll` helper
+  - `src/resilience/GracefulShutdown.ts`: Extracted `executeCallbacks`
+
+---
+
 ## [2.1.0] - 2026-02-19
 
 ### Refactored

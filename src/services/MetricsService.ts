@@ -160,8 +160,13 @@ export class MetricsService {
   printSummary(): void {
     const summary = this.getSummary();
     const importDuration = Date.now() - this.importStartTime;
-
     console.log('\n' + '='.repeat(60));
+    this.printOverallStats(summary, importDuration);
+    if (summary.banks.length > 0) this.printBankPerformance(summary.banks);
+    console.log('='.repeat(60));
+  }
+
+  private printOverallStats(summary: ImportSummary, importDuration: number): void {
     console.log('📊 Import Summary\n');
     console.log(`  Total banks: ${summary.totalBanks}`);
     console.log(`  Successful: ${summary.successfulBanks} (${summary.successRate.toFixed(1)}%)`);
@@ -169,40 +174,28 @@ export class MetricsService {
     console.log(`  Total transactions: ${summary.totalTransactions}`);
     console.log(`  Duplicates prevented: ${summary.totalDuplicates}`);
     console.log(`  Total duration: ${(importDuration / 1000).toFixed(1)}s`);
-    if (summary.totalBanks > 0) {
-      console.log(`  Average per bank: ${(summary.averageDuration / 1000).toFixed(1)}s`);
+    if (summary.totalBanks > 0) console.log(`  Average per bank: ${(summary.averageDuration / 1000).toFixed(1)}s`);
+  }
+
+  private printBankPerformance(banks: BankMetrics[]): void {
+    console.log('\n🏦 Bank Performance:\n');
+    for (const bank of banks) {
+      const icon = bank.status === 'success' ? '✅' : '❌';
+      const dur = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : 'N/A';
+      console.log(`  ${icon} ${bank.bankName}: ${dur} (${bank.transactionsImported} txns, ${bank.transactionsSkipped} duplicates)`);
+      if (bank.reconciliationStatus) this.printReconciliationLine(bank);
+      if (bank.error) console.log(`     ❌ Error: ${bank.error}`);
     }
+  }
 
-    if (summary.banks.length > 0) {
-      console.log('\n🏦 Bank Performance:\n');
-      for (const bank of summary.banks) {
-        const statusIcon = bank.status === 'success' ? '✅' : '❌';
-        const durationStr = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : 'N/A';
-        const txnInfo = `${bank.transactionsImported} txns, ${bank.transactionsSkipped} duplicates`;
-
-        console.log(`  ${statusIcon} ${bank.bankName}: ${durationStr} (${txnInfo})`);
-
-        if (bank.reconciliationStatus) {
-          const reconIcon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
-          let reconMsg = '';
-          if (bank.reconciliationStatus === 'created' && bank.reconciliationAmount !== undefined) {
-            const sign = bank.reconciliationAmount > 0 ? '+' : '';
-            reconMsg = `${sign}${(bank.reconciliationAmount / 100).toFixed(2)} ILS`;
-          } else if (bank.reconciliationStatus === 'skipped') {
-            reconMsg = 'balanced';
-          } else {
-            reconMsg = 'already reconciled';
-          }
-          console.log(`     ${reconIcon} Reconciliation: ${reconMsg}`);
-        }
-
-        if (bank.error) {
-          console.log(`     ❌ Error: ${bank.error}`);
-        }
-      }
-    }
-
-    console.log('='.repeat(60));
+  private printReconciliationLine(bank: BankMetrics): void {
+    const reconIcon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
+    const reconMessages: Record<string, string> = {
+      created: bank.reconciliationAmount !== undefined ? `${bank.reconciliationAmount > 0 ? '+' : ''}${(bank.reconciliationAmount / 100).toFixed(2)} ILS` : '',
+      skipped: 'balanced',
+      'already-reconciled': 'already reconciled',
+    };
+    console.log(`     ${reconIcon} Reconciliation: ${reconMessages[bank.reconciliationStatus!]}`);
   }
 
   /**
