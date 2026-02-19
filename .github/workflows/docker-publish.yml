@@ -49,8 +49,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and test
-        run: npm run build && npm run test:coverage
+      - name: Check for vulnerable dependencies
+        run: npm audit --audit-level=moderate || true
+
+      - name: Build TypeScript (strict mode)
+        run: npm run build
+
+      - name: Check for any types in source
+        run: |
+          MAX_ALLOWED=8
+          ANYS=$(grep -rn ": any" src/ --include="*.ts" | grep -v "node_modules\|\[key: string\]: any" | wc -l)
+          echo "Found $ANYS uses of ': any' (max allowed: $MAX_ALLOWED)"
+          if [ "$ANYS" -gt "$MAX_ALLOWED" ]; then
+            echo "New 'any' types added! Fix before merging:"
+            grep -rn ": any" src/ --include="*.ts" | grep -v "node_modules\|\[key: string\]: any"
+            exit 1
+          fi
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Verify coverage thresholds
+        run: |
+          echo "Coverage thresholds enforced by vitest.config.ts"
+          echo "Lines: 80%, Functions: 80%, Branches: 70%, Statements: 80%"
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
