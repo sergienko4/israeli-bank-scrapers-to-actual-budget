@@ -416,7 +416,7 @@ After each import run, you'll see a comprehensive summary:
 
 ## 🧪 Testing
 
-![Tests](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/test.yml/badge.svg)
+![CI/CD](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/docker-publish.yml/badge.svg)
 
 ```bash
 # Run all tests
