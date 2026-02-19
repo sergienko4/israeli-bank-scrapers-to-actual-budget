@@ -8,7 +8,7 @@ This folder contains detailed task documentation for future improvements to the 
 
 | # | Task | Priority | Effort | Status |
 |---|------|----------|--------|--------|
-| 01 | [Add Unit Tests + GitHub Actions CI](01-add-unit-tests.md) | 🔴 HIGH | 2-3 days | 📋 TODO |
+| 01 | [Add Unit Tests + GitHub Actions CI](01-add-unit-tests.md) | 🔴 HIGH | 2-3 days | ✅ DONE |
 | 02 | [Extract Transaction Service](02-extract-transaction-service.md) | 🟢 LOW | 2-3 hours | 📋 TODO |
 | 03 | [Add Notifications (Telegram)](03-add-notifications.md) | 🟡 MEDIUM | 4-5 hours | 📋 TODO |
 | 04 | [Centralize Utilities (DRY)](04-centralize-utilities.md) | 🟢 LOW | 30 min | ✅ DONE |
