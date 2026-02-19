@@ -38,11 +38,12 @@ export class TelegramNotifier implements INotifier {
   }
 
   async waitForReply(prompt: string, timeoutMs: number): Promise<string> {
+    // Clear pending messages, then send prompt
+    let offset = await this.getLatestOffset();
     await this.send(prompt);
+    const sentAt = Math.floor(Date.now() / 1000);
 
     const startTime = Date.now();
-    let offset = await this.getLatestOffset();
-
     while (Date.now() - startTime < timeoutMs) {
       const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=${offset}&timeout=5`;
       const response = await fetch(url);
@@ -52,9 +53,10 @@ export class TelegramNotifier implements INotifier {
       for (const update of data.result ?? []) {
         offset = update.update_id + 1;
         const msg = update.message;
-        if (msg?.text && String(msg.chat.id) === this.chatId) {
-          return msg.text;
-        }
+        if (!msg?.text || String(msg.chat.id) !== this.chatId) continue;
+        if (msg.date < sentAt) continue;           // Ignore messages before prompt
+        if (msg.text.startsWith('/')) continue;     // Ignore commands
+        return msg.text;
       }
     }
 

@@ -239,7 +239,7 @@ describe('ConfigLoader', () => {
       expect(() => loader.load()).toThrow('cannot be in the future');
     });
 
-    it('warns on startDate more than 1 year ago', () => {
+    it('throws on startDate more than 1 year ago', () => {
       const oldDate = new Date();
       oldDate.setFullYear(oldDate.getFullYear() - 2);
 
@@ -256,11 +256,7 @@ describe('ConfigLoader', () => {
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
 
       const loader = new ConfigLoader('/test/config.json');
-      loader.load(); // Should not throw
-
-      expect(console.warn).toHaveBeenCalledWith(
-        expect.stringContaining('more than 1 year ago')
-      );
+      expect(() => loader.load()).toThrow('cannot be more than 1 year ago');
     });
 
     it('throws on missing targets', () => {
