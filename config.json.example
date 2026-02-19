@@ -19,6 +19,8 @@
     }
   },
 
+  "delayBetweenBanks": 5000,
+
   "banks": {
 
     "discount": {
@@ -42,6 +44,7 @@
       "phoneNumber": "+972501234567",
       "twoFactorAuth": true,
       "twoFactorTimeout": 300,
+      "otpLongTermToken": "",
       "daysBack": 14,
       "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
     }
@@ -55,18 +58,26 @@
       "messageFormat": "compact",
       "showTransactions": "new",
       "listenForCommands": true
+    },
+    "webhook": {
+      "url": "https://hooks.slack.com/services/T.../B.../...",
+      "format": "slack"
     }
   },
 
   "_reference": {
+    "delayBetweenBanks": "Milliseconds between bank imports. Default: 0 (no delay). Prevents API throttling",
     "daysBack": "1-30. Import last N days. Cannot use with startDate",
     "startDate": "YYYY-MM-DD. Fixed date, max 1 year back. Cannot use with daysBack",
     "reconcile": "false (default). true = auto-adjust balance to match bank",
     "twoFactorAuth": "false (default). true = bot asks for SMS OTP via Telegram",
     "twoFactorTimeout": "Seconds to wait for OTP reply. Default: 300",
+    "otpLongTermToken": "Set after first 2FA login to skip OTP on future runs",
     "messageFormat": "summary | compact | ledger | emoji",
     "showTransactions": "new | all | none",
     "listenForCommands": "true = bot listens for /scan, /status, /help",
+    "webhook.url": "HTTP(S) URL for Slack, Discord, or custom webhook",
+    "webhook.format": "slack | discord | plain (default: plain)",
     "syncId": "Settings → Show Advanced Settings → Sync ID",
     "actualAccountId": "Click account in Actual Budget → ID from URL"
   }
