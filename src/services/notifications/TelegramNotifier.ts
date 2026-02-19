@@ -63,10 +63,20 @@ export class TelegramNotifier implements INotifier {
       for (const bank of summary.banks) {
         const icon = bank.status === 'success' ? '✅' : '❌';
         const dur = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : 'N/A';
-        lines.push(`  ${icon} ${bank.bankName}: ${bank.transactionsImported} txns (${dur})`);
+        const skipped = bank.transactionsSkipped > 0 ? `, ${bank.transactionsSkipped} dup` : '';
+        lines.push(`  ${icon} ${bank.bankName}: ${bank.transactionsImported} txns${skipped} (${dur})`);
+
+        if (bank.reconciliationStatus === 'created' && bank.reconciliationAmount !== undefined) {
+          const sign = bank.reconciliationAmount > 0 ? '+' : '';
+          lines.push(`     🔄 Reconciled: ${sign}${(bank.reconciliationAmount / 100).toFixed(2)} ILS`);
+        } else if (bank.reconciliationStatus === 'skipped') {
+          lines.push(`     ✅ Balance matched`);
+        } else if (bank.reconciliationStatus === 'already-reconciled') {
+          lines.push(`     ✅ Already reconciled`);
+        }
 
         if (bank.error) {
-          lines.push(`     Error: ${this.escapeHtml(bank.error)}`);
+          lines.push(`     ❌ ${this.escapeHtml(bank.error)}`);
         }
       }
     }
