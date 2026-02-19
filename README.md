@@ -416,7 +416,7 @@ After each import run, you'll see a comprehensive summary:
 
 ## 🧪 Testing
 
-![CI/CD](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/docker-publish.yml/badge.svg)
+![PR Validation](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr-validation.yml/badge.svg) ![Release](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg)
 
 ```bash
 # Run all tests
