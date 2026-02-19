@@ -190,9 +190,10 @@ export class TelegramNotifier implements INotifier {
           lines.push('<code>');
           for (const txn of txns) {
             const d = this.fmtDate(txn.date);
-            const desc = txn.description.length > 18
+            const raw = txn.description.length > 18
               ? txn.description.slice(0, 18) + '..'
               : txn.description;
+            const desc = this.escapeHtml(raw);
             const amt = this.fmtAmount(txn.amount).padStart(9);
             lines.push(`${d} ${desc}`);
             lines.push(`${''.padStart(6)}${amt}`);

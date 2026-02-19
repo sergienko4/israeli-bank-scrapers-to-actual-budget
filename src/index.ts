@@ -36,9 +36,7 @@ const notificationService = new NotificationService(config.notifications);
 
 // Initialize 2FA service if Telegram is configured
 const telegram = config.notifications?.telegram;
-const twoFactorService = telegram
-  ? new TwoFactorService(new TelegramNotifier(telegram), telegram.twoFactor?.timeoutSeconds)
-  : null;
+const telegramNotifier = telegram ? new TelegramNotifier(telegram) : null;
 
 console.log('🚀 Starting Israeli Bank Importer for Actual Budget\n');
 
@@ -95,9 +93,10 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
     console.log(`  📅 Date range: using bank default (usually ~1 year)`);
   }
 
-  // Inject 2FA callback for OneZero (or any bank with otpCodeRetriever support)
-  if (bankName.toLowerCase() === 'onezero' && !bankConfig.otpLongTermToken && twoFactorService) {
-    scraperConfig.otpCodeRetriever = twoFactorService.createOtpRetriever(bankName);
+  // Inject 2FA callback if bank has twoFactorAuth enabled and no long-term token
+  if (bankConfig.twoFactorAuth && !bankConfig.otpLongTermToken && telegramNotifier) {
+    const twoFactor = new TwoFactorService(telegramNotifier, bankConfig.twoFactorTimeout);
+    scraperConfig.otpCodeRetriever = twoFactor.createOtpRetriever(bankName);
     console.log(`  🔐 2FA enabled for ${bankName} (via Telegram)`);
   }
 
@@ -108,7 +107,7 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
   return await retryStrategy.execute(
     async () => {
       return await timeoutWrapper.wrap(
-        scraper.scrape(bankConfig as any),
+        scraper.scrape(scraperConfig as any),
         DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs,
         `Scraping ${bankName}`
       );
