@@ -193,9 +193,9 @@ export class ConfigLoader implements IConfigLoader {
 
     // Validate daysBack if present
     if (config.daysBack !== undefined) {
-      if (!Number.isInteger(config.daysBack) || config.daysBack < 1 || config.daysBack > 365) {
+      if (!Number.isInteger(config.daysBack) || config.daysBack < 1 || config.daysBack > 30) {
         throw new ConfigurationError(
-          `${bankName}: "daysBack" must be an integer between 1 and 365. Got: ${config.daysBack}`
+          `${bankName}: "daysBack" must be an integer between 1 and 30. Got: ${config.daysBack}`
         );
       }
     }
@@ -213,11 +213,13 @@ export class ConfigLoader implements IConfigLoader {
           `startDate cannot be in the future for ${bankName}. Got: ${config.startDate}`
         );
       }
-      // Warn if date is more than 1 year ago
+      // Reject if more than 1 year ago
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
       if (date < oneYearAgo) {
-        console.warn(`⚠️  Warning: startDate for ${bankName} is more than 1 year ago (${config.startDate}). This may result in a large number of transactions.`);
+        throw new ConfigurationError(
+          `${bankName}: startDate cannot be more than 1 year ago. Got: ${config.startDate}`
+        );
       }
     }
 
