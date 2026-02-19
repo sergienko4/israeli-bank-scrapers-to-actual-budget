@@ -565,6 +565,22 @@ Balance: 45,230.50 ILS
 🔐 Authentication Error (discount): Invalid credentials. Please verify your password.
 ```
 
+### Bot Commands (Optional)
+
+Control the importer from Telegram. Add to your telegram config:
+
+```json
+"listenForCommands": true
+```
+
+| Command | Action |
+|---------|--------|
+| `/scan` | Run bank import now |
+| `/status` | Show last run info |
+| `/help` | List commands |
+
+The bot listens alongside the cron scheduler. If an import is already running (from cron or a previous `/scan`), it waits instead of starting a duplicate.
+
 ### Disable Notifications
 
 Set `"enabled": false` or remove the `notifications` section entirely.

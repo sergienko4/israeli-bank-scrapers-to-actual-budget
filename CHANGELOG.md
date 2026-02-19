@@ -29,13 +29,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Removed auto-reconciliation** - user validates transactions in Actual Budget
 - **Transaction detection** - uses `imported_id` lookup to detect new vs existing
+- **Shared import lock** - prevents cron + /scan overlap
 - `tasks/` folder removed from git (kept local only)
+
+### CI/CD
+- Upgraded CodeQL Action v3 → v4
+- Added `npm audit` vulnerability check to PR
+- Added `any` type ratchet guard (max 8, fails if new ones added)
+- Removed redundant test run (build once, test once)
 
 ### Refactored
 - Deduplicated types: single `TransactionRecord` in types/index.ts
 - Added `BankTransaction` type (replaces `any[]`)
+- Added Telegram API types (`TelegramUpdate`, `TelegramApiResponse`)
+- Replaced `error: any` with `unknown` + type guards
 - Clean `parseTransaction()` boundary conversion
 - `buildImportedId()` and `getExistingImportedIds()` extracted as methods
+- Command handler uses `INotifier` interface, not concrete class
+- Promise-based import lock instead of boolean flag
+- Record-based command dispatch instead of switch/case
 
 ### Configuration
 ```json
@@ -45,7 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     "botToken": "...",
     "chatId": "...",
     "messageFormat": "compact",
-    "showTransactions": "new"
+    "showTransactions": "new",
+    "listenForCommands": true
   }
 }
 ```
