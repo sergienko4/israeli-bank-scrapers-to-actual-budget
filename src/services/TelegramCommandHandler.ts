@@ -80,8 +80,9 @@ export class TelegramCommandHandler {
   }
 
   private async handleLogs(countArg?: string): Promise<void> {
-    const count = this.parseLogCount(countArg);
-    const entries = getLogBuffer().getRecent(count);
+    const buffer = getLogBuffer();
+    if (!buffer.isEnabled()) { await this.reply('📋 Log buffer disabled. Set logConfig.maxBufferSize > 0 in config.json'); return; }
+    const entries = buffer.getRecent(this.parseLogCount(countArg));
     if (entries.length === 0) { await this.reply('📋 No log entries yet.'); return; }
     const header = `📋 <b>Recent Logs</b> (${entries.length} entries)\n\n`;
     const body = this.truncateForTelegram(entries, header.length);

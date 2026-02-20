@@ -133,4 +133,10 @@ describe('TelegramCommandHandler', () => {
     expect(msg).toContain('<pre>');
     expect(msg).toContain('</pre>');
   });
+
+  it('/logs shows disabled message when buffer off', async () => {
+    createLogger({ maxBufferSize: 0 });
+    await handler.handle('/logs');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Log buffer disabled'));
+  });
 });

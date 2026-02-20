@@ -27,22 +27,24 @@ let activePoller: TelegramPoller | null = null;
 
 // ─── Config helpers ───
 
-function loadLogConfig(): LogConfig | undefined {
+function loadFullConfig(): ImporterConfig | null {
   const configPath = '/app/config.json';
-  if (!existsSync(configPath)) return undefined;
-  try {
-    const config: ImporterConfig = JSON.parse(readFileSync(configPath, 'utf8'));
-    return config.logConfig;
-  } catch { return undefined; }
+  if (!existsSync(configPath)) return null;
+  try { return JSON.parse(readFileSync(configPath, 'utf8')) as ImporterConfig; }
+  catch { return null; }
+}
+
+function loadLogConfig(): LogConfig | undefined {
+  const config = loadFullConfig();
+  if (!config) return undefined;
+  const usesBot = config.notifications?.telegram?.listenForCommands === true;
+  const bufferSize = usesBot ? (config.logConfig?.maxBufferSize ?? 150) : 0;
+  return { ...config.logConfig, maxBufferSize: bufferSize };
 }
 
 function loadTelegramConfig(): ImporterConfig['notifications'] | null {
-  const configPath = '/app/config.json';
-  if (!existsSync(configPath)) return null;
-  try {
-    const config: ImporterConfig = JSON.parse(readFileSync(configPath, 'utf8'));
-    return config.notifications?.enabled ? config.notifications : null;
-  } catch { return null; }
+  const config = loadFullConfig();
+  return config?.notifications?.enabled ? config.notifications : null;
 }
 
 // ─── Import execution ───

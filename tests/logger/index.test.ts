@@ -47,7 +47,13 @@ describe('logger factory', () => {
     createLogger({ maxBufferSize: 10 });
     const buffer = getLogBuffer();
     expect(buffer).toBeDefined();
-    expect(buffer.size()).toBe(0);
+    expect(buffer.isEnabled()).toBe(true);
+  });
+
+  it('buffer disabled by default (zero memory)', () => {
+    createLogger();
+    const buffer = getLogBuffer();
+    expect(buffer.isEnabled()).toBe(false);
   });
 
   it('passes maxBufferSize to buffer', () => {

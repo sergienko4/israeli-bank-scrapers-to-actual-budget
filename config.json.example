@@ -84,7 +84,7 @@
     "webhook.url": "HTTP(S) URL for Slack, Discord, or custom webhook",
     "webhook.format": "slack | discord | plain (default: plain)",
     "logConfig.format": "words | json | table | phone (default: words)",
-    "logConfig.maxBufferSize": "1-500. Ring buffer size for /logs command. Default: 150",
+    "logConfig.maxBufferSize": "1-500. Ring buffer for /logs. Auto-enabled (150) when listenForCommands=true, otherwise 0",
     "syncId": "Settings → Show Advanced Settings → Sync ID",
     "actualAccountId": "Click account in Actual Budget → ID from URL"
   }

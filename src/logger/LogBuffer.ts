@@ -1,9 +1,13 @@
 /**
  * Circular ring buffer for storing recent log entries
  * O(1) add, used by /logs bot command to show recent activity
+ *
+ * maxSize=0 disables buffering (zero memory overhead)
+ * Buffer only enabled when listenForCommands is true
  */
 
-const DEFAULT_MAX_SIZE = 150;
+const DEFAULT_MAX_SIZE = 0;
+const MAX_ALLOWED_SIZE = 500;
 
 export class LogBuffer {
   private entries: string[];
@@ -12,11 +16,12 @@ export class LogBuffer {
   private readonly maxSize: number;
 
   constructor(maxSize?: number) {
-    this.maxSize = Math.max(1, Math.min(maxSize ?? DEFAULT_MAX_SIZE, 500));
-    this.entries = new Array<string>(this.maxSize);
+    this.maxSize = Math.max(0, Math.min(maxSize ?? DEFAULT_MAX_SIZE, MAX_ALLOWED_SIZE));
+    this.entries = this.maxSize > 0 ? new Array<string>(this.maxSize) : [];
   }
 
   add(line: string): void {
+    if (this.maxSize === 0) return;
     this.entries[this.writeIndex] = line;
     this.writeIndex = (this.writeIndex + 1) % this.maxSize;
     if (this.count < this.maxSize) this.count++;
@@ -34,9 +39,14 @@ export class LogBuffer {
   }
 
   clear(): void {
+    if (this.maxSize === 0) return;
     this.entries = new Array<string>(this.maxSize);
     this.writeIndex = 0;
     this.count = 0;
+  }
+
+  isEnabled(): boolean {
+    return this.maxSize > 0;
   }
 
   private readFromIndex(start: number, n: number): string[] {

@@ -42,18 +42,27 @@ describe('LogBuffer', () => {
     expect(buffer.getRecent()).toEqual([]);
   });
 
-  it('uses default max size of 150', () => {
+  it('defaults to disabled (maxSize=0, zero memory)', () => {
     const defaultBuffer = new LogBuffer();
-    for (let i = 0; i < 160; i++) defaultBuffer.add(`line ${i}`);
-    expect(defaultBuffer.size()).toBe(150);
+    expect(defaultBuffer.isEnabled()).toBe(false);
+    defaultBuffer.add('ignored');
+    expect(defaultBuffer.size()).toBe(0);
+    expect(defaultBuffer.getRecent()).toEqual([]);
   });
 
-  it('clamps max size between 1 and 500', () => {
-    const tiny = new LogBuffer(0);
-    tiny.add('a');
-    tiny.add('b');
-    expect(tiny.size()).toBe(1);
+  it('is enabled when maxSize > 0', () => {
+    expect(buffer.isEnabled()).toBe(true);
+  });
 
+  it('maxSize=0 is a no-op (zero memory)', () => {
+    const disabled = new LogBuffer(0);
+    disabled.add('a');
+    disabled.add('b');
+    expect(disabled.size()).toBe(0);
+    expect(disabled.isEnabled()).toBe(false);
+  });
+
+  it('clamps max size to 500', () => {
     const huge = new LogBuffer(999);
     for (let i = 0; i < 510; i++) huge.add(`line ${i}`);
     expect(huge.size()).toBe(500);

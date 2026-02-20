@@ -602,7 +602,7 @@ npm run test:watch    # Watch mode
 npm run validate      # Build + test (validate before committing)
 ```
 
-**278 tests** across 25 test files with 70%+ branch coverage.
+**282 tests** across 25 test files with 70%+ branch coverage.
 
 ---
 
