@@ -80,6 +80,10 @@ Edit `config.json` with your credentials. Here is a full example showing all ava
     }
   },
 
+  "categorization": {
+    "mode": "none"
+  },
+
   "notifications": {
     "enabled": true,
     "telegram": {
@@ -293,6 +297,49 @@ Configure log output format via `logConfig` in config.json:
 | `phone` | `> compact message` (no emojis) | Mobile viewing, minimal output |
 
 `maxBufferSize` controls the ring buffer for the `/logs` bot command (default: 150, max: 500).
+
+### Auto-Categorization
+
+Automatically categorize imported transactions. Three modes are available:
+
+```json
+"categorization": {
+  "mode": "none"
+}
+```
+
+| Mode | Description |
+|------|-------------|
+| `none` | Default. No auto-categorization — Actual Budget's own rules handle everything |
+| `history` | Finds the most recent transaction (by date) across all accounts with the same payee that has a category, and applies it |
+| `translate` | Renames Hebrew payees to English using translation rules, so Actual Budget's English rules can match |
+
+**Mode: history** — learns from your past categorizations:
+
+```json
+"categorization": {
+  "mode": "history"
+}
+```
+
+New transaction arrives with payee "שופרסל דיזנגוף". The tool queries all accounts for the most recent transaction where the payee contains "שופרסל" and has a category. If found (e.g., "Groceries"), it sets the same category. No match leaves the transaction uncategorized.
+
+**Mode: translate** — maps Hebrew payees to English names:
+
+```json
+"categorization": {
+  "mode": "translate",
+  "translations": [
+    { "fromPayee": "סופר",   "toPayee": "Supermarket" },
+    { "fromPayee": "שופרסל", "toPayee": "Shufersal" },
+    { "fromPayee": "דלק",    "toPayee": "Gas Station" }
+  ]
+}
+```
+
+Transaction with payee "סופר כל הטעמים" matches "סופר" and is imported as "Supermarket". The original Hebrew name is preserved in `imported_payee`. Longest match wins — "שופרסל" matches before "סופר".
+
+**Important:** Actual Budget's rules always run after import. Our category is a first-pass suggestion; Actual's rules are the final word. They work together — no conflict.
 
 ### Rate Limiting
 
@@ -602,7 +649,7 @@ npm run test:watch    # Watch mode
 npm run validate      # Build + test (validate before committing)
 ```
 
-**292 tests** across 25 test files with 70%+ branch coverage.
+**317 tests** across 27 test files with 70%+ branch coverage.
 
 ---
 

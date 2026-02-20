@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TransactionService } from '../../src/services/TransactionService.js';
+import { ICategoryResolver } from '../../src/services/ICategoryResolver.js';
 
 describe('TransactionService', () => {
   let service: TransactionService;
@@ -186,6 +187,61 @@ describe('TransactionService', () => {
       const result = await service.getOrCreateAccount('acc-222', 'leumi', '888888');
 
       expect(result).toEqual({ id: 'acc-222', name: 'Account 2' });
+    });
+  });
+
+  describe('with category resolver', () => {
+    let mockResolver: ICategoryResolver;
+
+    beforeEach(() => {
+      mockResolver = {
+        initialize: vi.fn().mockResolvedValue(undefined),
+        resolve: vi.fn()
+      };
+    });
+
+    it('sets category from history resolver', async () => {
+      (mockResolver.resolve as any).mockReturnValue({ categoryId: 'cat-groceries' });
+      const svc = new TransactionService(mockApi, mockResolver);
+      const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Shufersal', identifier: '1' }];
+      await svc.importTransactions('discount', '123456', 'acc-id', txns);
+
+      const txn = mockApi.importTransactions.mock.calls[0][1][0];
+      expect(txn.category).toBe('cat-groceries');
+      expect(txn.payee_name).toBe('Shufersal');
+    });
+
+    it('sets payee_name and imported_payee from translate resolver', async () => {
+      (mockResolver.resolve as any).mockReturnValue({ payeeName: 'Supermarket', importedPayee: 'סופר כל הטעמים' });
+      const svc = new TransactionService(mockApi, mockResolver);
+      const txns = [{ date: '2026-02-14', chargedAmount: -50, description: 'סופר כל הטעמים', identifier: '1' }];
+      await svc.importTransactions('discount', '123456', 'acc-id', txns);
+
+      const txn = mockApi.importTransactions.mock.calls[0][1][0];
+      expect(txn.payee_name).toBe('Supermarket');
+      expect(txn.imported_payee).toBe('סופר כל הטעמים');
+    });
+
+    it('falls back to description when resolver returns undefined', async () => {
+      (mockResolver.resolve as any).mockReturnValue(undefined);
+      const svc = new TransactionService(mockApi, mockResolver);
+      const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Unknown Store', identifier: '1' }];
+      await svc.importTransactions('discount', '123456', 'acc-id', txns);
+
+      const txn = mockApi.importTransactions.mock.calls[0][1][0];
+      expect(txn.payee_name).toBe('Unknown Store');
+      expect(txn.category).toBeUndefined();
+      expect(txn.imported_payee).toBeUndefined();
+    });
+
+    it('works without resolver (undefined)', async () => {
+      const svc = new TransactionService(mockApi);
+      const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Store', identifier: '1' }];
+      await svc.importTransactions('discount', '123456', 'acc-id', txns);
+
+      const txn = mockApi.importTransactions.mock.calls[0][1][0];
+      expect(txn.payee_name).toBe('Store');
+      expect(txn.category).toBeUndefined();
     });
   });
 });
