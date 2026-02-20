@@ -68,6 +68,7 @@
 
   "notifications": {
     "enabled": false,
+    "maxTransactions": 5,
     "telegram": {
       "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
       "chatId": "-1001234567890",
@@ -94,6 +95,7 @@
     "listenForCommands": "true = bot listens for /scan, /status, /logs, /help",
     "webhook.url": "HTTP(S) URL for Slack, Discord, or custom webhook",
     "webhook.format": "slack | discord | plain (default: plain)",
+    "maxTransactions": "1-25. Max transactions per account in notifications. Default: 5",
     "logConfig.format": "words | json | table | phone (default: words)",
     "logConfig.maxBufferSize": "1-500. Ring buffer for /logs. Auto-enabled (150) when listenForCommands=true, otherwise 0",
     "categorization.mode": "none (default) | history | translate. See README for details",

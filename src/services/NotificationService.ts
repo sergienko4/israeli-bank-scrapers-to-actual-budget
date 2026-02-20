@@ -19,7 +19,7 @@ export class NotificationService {
   constructor(config?: NotificationConfig) {
     if (!config?.enabled) return;
     if (config.telegram) {
-      this.notifiers.push(new TelegramNotifier(config.telegram));
+      this.notifiers.push(new TelegramNotifier(config.telegram, config.maxTransactions));
       getLogger().info('📱 Telegram notifications enabled');
     }
     if (config.webhook) {

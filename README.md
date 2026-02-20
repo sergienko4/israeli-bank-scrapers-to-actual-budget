@@ -80,12 +80,18 @@ Edit `config.json` with your credentials. Here is a full example showing all ava
     }
   },
 
+  "logConfig": {
+    "format": "words",
+    "maxBufferSize": 150
+  },
+
   "categorization": {
     "mode": "none"
   },
 
   "notifications": {
     "enabled": true,
+    "maxTransactions": 5,
     "telegram": {
       "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
       "chatId": "-1001234567890",
@@ -388,6 +394,7 @@ Get import summaries and error alerts via Telegram after each run.
 
 | Option | Values | Default | Description |
 |--------|--------|---------|-------------|
+| `maxTransactions` | `1`-`25` | `5` | Max transactions per account (set at `notifications` level) |
 | `messageFormat` | `summary`, `compact`, `ledger`, `emoji` | `summary` | Notification style |
 | `showTransactions` | `new`, `all`, `none` | `new` | Transaction detail level |
 | `listenForCommands` | `true`, `false` | `false` | Enable bot commands |
@@ -649,7 +656,7 @@ npm run test:watch    # Watch mode
 npm run validate      # Build + test (validate before committing)
 ```
 
-**317 tests** across 27 test files with 70%+ branch coverage.
+**326 tests** across 27 test files with 70%+ branch coverage.
 
 ---
 

@@ -15,18 +15,22 @@ import { INotifier } from './INotifier.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const MAX_MESSAGE_LENGTH = 4096;
+const DEFAULT_MAX_TRANSACTIONS = 5;
+const MAX_TRANSACTIONS_LIMIT = 25;
 
 export class TelegramNotifier implements INotifier {
   private botToken: string;
   private chatId: string;
   private format: MessageFormat;
   private showTransactions: ShowTransactions;
+  private maxTransactions: number;
 
-  constructor(config: TelegramConfig) {
+  constructor(config: TelegramConfig, maxTransactions?: number) {
     this.botToken = config.botToken;
     this.chatId = config.chatId;
     this.format = config.messageFormat || 'summary';
     this.showTransactions = config.showTransactions || 'new';
+    this.maxTransactions = Math.min(Math.max(maxTransactions ?? DEFAULT_MAX_TRANSACTIONS, 1), MAX_TRANSACTIONS_LIMIT);
   }
 
   async sendSummary(summary: ImportSummary): Promise<void> {
@@ -89,7 +93,25 @@ export class TelegramNotifier implements INotifier {
   // ─── Send with truncation ───
 
   private truncateMessage(text: string): string {
-    return text.length > MAX_MESSAGE_LENGTH ? text.slice(0, MAX_MESSAGE_LENGTH - 20) + '\n\n... (truncated)' : text;
+    if (text.length <= MAX_MESSAGE_LENGTH) return text;
+    const cut = this.trimPartialTag(text.slice(0, MAX_MESSAGE_LENGTH - 30));
+    return this.closeUnclosedTags(cut + '\n\n... (truncated)');
+  }
+
+  private trimPartialTag(text: string): string {
+    const lastOpen = text.lastIndexOf('<');
+    const lastClose = text.lastIndexOf('>');
+    return lastOpen > lastClose ? text.slice(0, lastOpen) : text;
+  }
+
+  private closeUnclosedTags(text: string): string {
+    const openTags: string[] = [];
+    const tagRegex = /<(\/?)(\w+)[^>]*>/g;
+    let match;
+    while ((match = tagRegex.exec(text)) !== null) {
+      if (match[1] === '/') { if (openTags.length > 0) openTags.pop(); } else { openTags.push(match[2]); }
+    }
+    return text + openTags.reverse().map(t => `</${t}>`).join('');
   }
 
   private async send(text: string): Promise<void> {
@@ -258,8 +280,10 @@ export class TelegramNotifier implements INotifier {
 
   private getTransactions(account: AccountMetrics): TransactionRecord[] {
     if (this.showTransactions === 'none') return [];
-    if (this.showTransactions === 'all') return [...account.newTransactions, ...account.existingTransactions];
-    return account.newTransactions;
+    const txns = this.showTransactions === 'all'
+      ? [...account.newTransactions, ...account.existingTransactions]
+      : account.newTransactions;
+    return txns.slice(0, this.maxTransactions);
   }
 
   private fmtAmount(cents: number): string {

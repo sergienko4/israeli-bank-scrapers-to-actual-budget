@@ -190,4 +190,121 @@ describe('TelegramNotifier', () => {
       });
     }
   });
+
+  describe('maxTransactions', () => {
+    it('defaults to 5 transactions per account', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const txns = Array.from({ length: 10 }, (_, i) => ({
+        date: '2026-02-14', description: `Txn ${i + 1}`, amount: -(i + 1) * 100
+      }));
+      const summary = { ...summaryWithTxns, banks: [{ ...summaryWithTxns.banks[0], accounts: [{ ...summaryWithTxns.banks[0].accounts[0], newTransactions: txns, existingTransactions: [] }] }] };
+      await notifier.sendSummary(summary);
+      const text = getText(fetchMock);
+      expect(text).toContain('Txn 5');
+      expect(text).not.toContain('Txn 6');
+    });
+
+    it('respects custom maxTransactions value', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' }, 3);
+      const txns = Array.from({ length: 10 }, (_, i) => ({
+        date: '2026-02-14', description: `Txn ${i + 1}`, amount: -(i + 1) * 100
+      }));
+      const summary = { ...summaryWithTxns, banks: [{ ...summaryWithTxns.banks[0], accounts: [{ ...summaryWithTxns.banks[0].accounts[0], newTransactions: txns, existingTransactions: [] }] }] };
+      await notifier.sendSummary(summary);
+      const text = getText(fetchMock);
+      expect(text).toContain('Txn 3');
+      expect(text).not.toContain('Txn 4');
+    });
+
+    it('clamps to 25 maximum', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' }, 50);
+      const txns = Array.from({ length: 30 }, (_, i) => ({
+        date: '2026-02-14', description: `Txn ${i + 1}`, amount: -(i + 1) * 100
+      }));
+      const summary = { ...summaryWithTxns, banks: [{ ...summaryWithTxns.banks[0], accounts: [{ ...summaryWithTxns.banks[0].accounts[0], newTransactions: txns, existingTransactions: [] }] }] };
+      await notifier.sendSummary(summary);
+      const text = getText(fetchMock);
+      expect(text).toContain('Txn 25');
+      expect(text).not.toContain('Txn 26');
+    });
+  });
+
+  describe('truncation with HTML tags', () => {
+    function buildLongSummary(accountCount: number): ImportSummary {
+      const txns = Array.from({ length: 25 }, (_, i) => ({
+        date: '2026-02-14', description: `Transaction number ${i + 1} with long details here`, amount: -(i + 1) * 100
+      }));
+      const accounts = Array.from({ length: accountCount }, (_, i) => ({
+        ...summaryWithTxns.banks[0].accounts[0], accountNumber: `account-${i}`, newTransactions: txns, existingTransactions: []
+      }));
+      return {
+        ...summaryWithTxns,
+        banks: [{ ...summaryWithTxns.banks[0], accounts }]
+      };
+    }
+
+    it('short message is not truncated', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' });
+      await notifier.sendSummary(summaryWithTxns);
+      expect(getText(fetchMock)).not.toContain('truncated');
+    });
+
+    it('ledger: closes unclosed <code> tag after truncation', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' }, 25);
+      await notifier.sendSummary(buildLongSummary(5));
+      const text = getText(fetchMock);
+      expect(text).toContain('(truncated)');
+      expect(text.length).toBeLessThanOrEqual(4096);
+      const codeOpens = (text.match(/<code>/g) || []).length;
+      const codeCloses = (text.match(/<\/code>/g) || []).length;
+      expect(codeCloses).toBe(codeOpens);
+    });
+
+    it('compact: closes unclosed <b> tag after truncation', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' }, 25);
+      await notifier.sendSummary(buildLongSummary(5));
+      const text = getText(fetchMock);
+      expect(text).toContain('(truncated)');
+      expect(text.length).toBeLessThanOrEqual(4096);
+      const bOpens = (text.match(/<b>/g) || []).length;
+      const bCloses = (text.match(/<\/b>/g) || []).length;
+      expect(bCloses).toBe(bOpens);
+    });
+
+    it('emoji: closes tags after truncation', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' }, 25);
+      await notifier.sendSummary(buildLongSummary(5));
+      const text = getText(fetchMock);
+      expect(text).toContain('(truncated)');
+      expect(text.length).toBeLessThanOrEqual(4096);
+      const bOpens = (text.match(/<b>/g) || []).length;
+      const bCloses = (text.match(/<\/b>/g) || []).length;
+      expect(bCloses).toBe(bOpens);
+    });
+
+    it('no partial HTML tags at cut point', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' }, 25);
+      await notifier.sendSummary(buildLongSummary(5));
+      const text = getText(fetchMock);
+      // No unclosed < without matching >
+      const lastOpen = text.lastIndexOf('<');
+      const lastClose = text.lastIndexOf('>');
+      expect(lastClose).toBeGreaterThanOrEqual(lastOpen);
+    });
+
+    it('summary format truncates without HTML issues', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'summary' });
+      const longSummary = buildLongSummary(200);
+      longSummary.banks = Array.from({ length: 50 }, (_, i) => ({
+        ...summaryWithTxns.banks[0], bankName: `bank-${i}`
+      }));
+      await notifier.sendSummary(longSummary);
+      const text = getText(fetchMock);
+      if (text.includes('truncated')) {
+        const bOpens = (text.match(/<b>/g) || []).length;
+        const bCloses = (text.match(/<\/b>/g) || []).length;
+        expect(bCloses).toBe(bOpens);
+      }
+    });
+  });
 });
