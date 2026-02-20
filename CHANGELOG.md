@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.10.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.10.0...v1.10.1) (2026-02-20)
+
+
+### CI/CD
+
+* Use PAT for release-please to enable downstream workflow triggers ([#47](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/47)) ([35508fb](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/35508fb975bfef9d77b7835c7132fd6f6730522b))
+
 ## [1.10.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.9.0...v1.10.0) (2026-02-20)
 
 
