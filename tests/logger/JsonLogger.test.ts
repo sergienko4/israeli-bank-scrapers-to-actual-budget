@@ -84,4 +84,12 @@ describe('JsonLogger', () => {
     expect(entry.level).toBe('info');
     expect(entry.timestamp).not.toBe('fake');
   });
+
+  it('handles circular references without crashing', () => {
+    const circular: Record<string, unknown> = { name: 'test' };
+    circular.self = circular;
+    expect(() => logger.info('circular', circular)).not.toThrow();
+    const entry = parseLastLog();
+    expect(entry.message).toBe('circular');
+  });
 });

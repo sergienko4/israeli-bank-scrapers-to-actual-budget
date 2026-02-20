@@ -4,6 +4,7 @@
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
+/** SECURITY: Never pass passwords, tokens, or OTP codes in context — exposed via /logs command */
 export interface LogContext {
   [key: string]: unknown;
 }

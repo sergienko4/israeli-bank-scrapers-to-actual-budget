@@ -33,10 +33,15 @@ export class JsonLogger implements ILogger {
   }
 
   private write(level: LogLevel, message: string, context?: LogContext): void {
-    const line = JSON.stringify(this.buildEntry(level, message, context));
+    const line = this.safeStringify(this.buildEntry(level, message, context));
     const writer = level === 'error' ? console.error : console.log;
     writer(line);
     this.buffer.add(line);
+  }
+
+  private safeStringify(entry: JsonLogEntry): string {
+    try { return JSON.stringify(entry); }
+    catch { return JSON.stringify({ timestamp: entry.timestamp, level: entry.level, message: entry.message }); }
   }
 
   private buildEntry(level: LogLevel, message: string, context?: LogContext): JsonLogEntry {
