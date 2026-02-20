@@ -85,6 +85,14 @@ describe('JsonLogger', () => {
     expect(entry.timestamp).not.toBe('fake');
   });
 
+  it('logs at debug level', () => {
+    logger.debug('debug msg', { component: 'test' });
+    const entry = parseLastLog();
+    expect(entry.level).toBe('debug');
+    expect(entry.message).toBe('debug msg');
+    expect(entry.component).toBe('test');
+  });
+
   it('handles circular references without crashing', () => {
     const circular: Record<string, unknown> = { name: 'test' };
     circular.self = circular;

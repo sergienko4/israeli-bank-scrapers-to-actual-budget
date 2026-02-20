@@ -84,9 +84,10 @@ export class TelegramCommandHandler {
     if (!buffer.isEnabled()) { await this.reply('📋 Log buffer disabled. Set logConfig.maxBufferSize > 0 in config.json'); return; }
     const entries = buffer.getRecent(this.parseLogCount(countArg));
     if (entries.length === 0) { await this.reply('📋 No log entries yet.'); return; }
-    const header = `📋 <b>Recent Logs</b> (${entries.length} entries)\n\n`;
-    const body = this.truncateForTelegram(entries, header.length);
-    await this.reply(header + `<pre>${body}</pre>`);
+    const header = `📋 <b>Recent Logs</b> (${entries.length} entries)\n\n<pre>`;
+    const footer = '</pre>';
+    const body = this.truncateForTelegram(entries, header.length + footer.length);
+    await this.reply(header + body + footer);
   }
 
   private parseLogCount(arg?: string): number {

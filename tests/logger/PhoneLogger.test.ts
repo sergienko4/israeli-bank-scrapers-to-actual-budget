@@ -51,4 +51,16 @@ describe('PhoneLogger', () => {
     logger.info('buffered');
     expect(buffer.getRecent()[0]).toBe('> buffered');
   });
+
+  it('prefixes debug with >', () => {
+    logger.debug('detail');
+    const line = (console.log as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(line).toBe('> detail');
+  });
+
+  it('prefixes warn with >', () => {
+    logger.warn('caution');
+    const line = (console.log as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(line).toBe('> caution');
+  });
 });

@@ -139,4 +139,63 @@ describe('TelegramCommandHandler', () => {
     await handler.handle('/logs');
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Log buffer disabled'));
   });
+
+  it('/logs truncates long output to fit Telegram limit', async () => {
+    const buffer = getLogBuffer();
+    buffer.clear();
+    for (let i = 0; i < 100; i++) buffer.add('x'.repeat(100));
+    await handler.handle('/logs');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg.length).toBeLessThanOrEqual(4096);
+    expect(msg).toContain('...(truncated)');
+  });
+
+  it('/logs does not truncate short output', async () => {
+    const buffer = getLogBuffer();
+    buffer.clear();
+    buffer.add('short');
+    await handler.handle('/logs');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).not.toContain('truncated');
+  });
+
+  // ─── timeSince tests ───
+
+  it('/status shows seconds for recent run', async () => {
+    await handler.handle('/scan');
+    await handler.handle('/status');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toMatch(/\d+s ago/);
+  });
+
+  it('/status shows minutes after 60+ seconds', async () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    vi.setSystemTime(now);
+    mockRunImport.mockResolvedValueOnce(0);
+    await handler.handle('/scan');
+    vi.setSystemTime(now + 120_000);
+    await handler.handle('/status');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('2m ago');
+    vi.useRealTimers();
+  });
+
+  it('/status shows hours after 3600+ seconds', async () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    vi.setSystemTime(now);
+    mockRunImport.mockResolvedValueOnce(0);
+    await handler.handle('/scan');
+    vi.setSystemTime(now + 7200_000);
+    await handler.handle('/status');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('2h ago');
+    vi.useRealTimers();
+  });
+
+  it('reply error does not throw', async () => {
+    mockNotifier.sendMessage.mockRejectedValueOnce(new Error('Network'));
+    await expect(handler.handle('/help')).resolves.not.toThrow();
+  });
 });

@@ -66,4 +66,9 @@ describe('logger factory', () => {
     logger.info('d');
     expect(buffer.size()).toBe(3);
   });
+
+  it('falls back to words for unknown format', () => {
+    const logger = createLogger({ format: 'invalid' as never });
+    expect(logger).toBeInstanceOf(ConsoleLogger);
+  });
 });
