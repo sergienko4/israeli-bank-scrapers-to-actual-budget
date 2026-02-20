@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.5.0] - 2026-02-19
+## [1.8.2] - 2026-02-19
+
+### Fixed
+- Scheduler timeout overflow causing infinite import loop (`safeSleep()` clamp at 24.8 days)
+- Bank categories — 14 banks + 4 credit cards (was inconsistent across docs)
+- Documentation cleanup — bank count, institution table, hardcoded Docker tags
+
+---
+
+## [1.8.0] - 2026-02-19
 
 ### Added
 - **Import audit log** (Task 17)
@@ -19,17 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.4.0] - 2026-02-19
-
-### Added
-- **Rate limiting between bank imports** (Task 18)
-  - `delayBetweenBanks` config option (milliseconds, default: 0 = no delay)
-  - Prevents bank API throttling when scraping multiple banks
-  - Logs delay: "Waiting 5s before next bank..."
-
----
-
-## [2.6.0] - 2026-02-19
+## [1.7.0] - 2026-02-19
 
 ### Added
 - **Webhook notifications — Slack, Discord, plain JSON** (Task 16)
@@ -41,408 +40,162 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.3.0] - 2026-02-19
+## [1.6.0] - 2026-02-19
 
 ### Added
+- **Rate limiting between bank imports** (Task 18)
+  - `delayBetweenBanks` config option (milliseconds, default: 0 = no delay)
+  - Prevents bank API throttling when scraping multiple banks
+  - Logs delay: "Waiting 5s before next bank..."
 - **Docker Compose production setup** (Task 10)
   - `docker-compose.yml` with restart policy, named volumes, health check
   - Named volumes (`importer-data`, `importer-cache`, `importer-chrome`) survive container recreation
   - `unless-stopped` restart policy, 5m health check interval
-  - Removed deprecated `version` field (modern Docker Compose)
-  - README updated with `docker compose up -d` quick start
 
 ---
 
-## [2.2.0] - 2026-02-19
+## [1.5.3] - 2026-02-19
 
 ### Refactored
 - **All methods refactored to max ~10 lines** (Task 13)
-  - `src/index.ts`: Extracted `buildScraperOptions`, `buildOtpRetriever`, `processAccount`, `reconcileIfConfigured`, `initializeApi`, `processAllBanks`, `finalizeImport`, `handleFatalError` — 3 methods (97, 71, 47 lines → all ≤10)
-  - `src/config/ConfigLoader.ts`: OCP credential validation map replaces if/else chain; extracted `validateDateConfig`, `validateStartDate`, `validateDaysBack`, `validateTargets`, `validateTarget`, `validateFieldFormats`, `validateRequiredCredentials`, `validateActualConfig`, `buildTargetFromEnv` — all methods ≤10 lines
-  - `src/services/notifications/TelegramNotifier.ts`: Extracted per-format bank/account section builders + shared `buildHeader`, `bankIcon`, `appendBankFooter`, `truncateMessage`, `pollUpdates`, `findReplyMessage` — 6 methods (24-40 lines → all ≤10)
-  - `src/services/MetricsService.ts`: Extracted `printOverallStats`, `printBankPerformance`, `printReconciliationLine` — `printSummary` 47→6 lines
-  - `src/services/TransactionService.ts`: Extracted `importSingleTransaction` — `importTransactions` 46→10 lines
-  - `src/services/ReconciliationService.ts`: Extracted `getCurrentBalance`, `createReconciliationTransaction` — `reconcile` 49→10 lines
-  - `src/scheduler.ts`: Extracted `logImportResult`, `loadTelegramConfig`, `validateSchedule`, `scheduleLoop` — `main` 48→8 lines
-  - `src/resilience/RetryStrategy.ts`: Extracted `handleRetryBackoff` — `execute` 38→10 lines
-  - `src/errors/ErrorFormatter.ts`: OCP error format map + keyword categorization map — `format` 34→4 lines
-  - `src/services/TelegramPoller.ts`: Extracted `processUpdate` — `poll` 20→10 lines
-  - `src/services/NotificationService.ts`: Extracted shared `notifyAll` helper
-  - `src/resilience/GracefulShutdown.ts`: Extracted `executeCallbacks`
+  - Extracted helpers across all services: `buildScraperOptions`, `buildOtpRetriever`, `processAccount`, `reconcileIfConfigured`, `initializeApi`, `processAllBanks`, `finalizeImport`, `handleFatalError`
+  - OCP credential validation map replaces if/else chain in ConfigLoader
+  - OCP error format map + keyword categorization map in ErrorFormatter
+  - `Record<MessageFormat, ...>` dispatch replaces switch in TelegramNotifier
 
 ### Added
-- `errorMessage()` utility in `src/utils/index.ts` — replaces 5 duplicated `error instanceof Error` patterns
-- OCP `credentialSpecs` map in ConfigLoader — add banks by adding entries, no if/else
-- OCP `errorFormats` + `messageCategories` maps in ErrorFormatter
-- OCP `reconciliationMessages` map in index.ts
-- OCP `Record<MessageFormat, ...>` dispatch in TelegramNotifier (replaces switch)
+- `errorMessage()` utility — replaces 5 duplicated `error instanceof Error` patterns
+- OCP dispatch maps in ConfigLoader, ErrorFormatter, TelegramNotifier
 
 ### Removed
 - Dead `ConfigurationError` instanceof check in `loadFromFile` (could never match)
 
 ---
 
-## [2.1.0] - 2026-02-19
+## [1.5.2] - 2026-02-19
 
 ### Refactored
 - **Full `any` type elimination** (Task 08)
   - Separated `scraperConfig: any` into typed `ScraperOptions` + `ScraperCredentials`
-  - `scrapeBankWithResilience` returns typed `ScraperScrapingResult` instead of `any`
-  - Replaced `error: any` with `unknown` + type guards in TransactionService and ReconciliationService
-  - Typed account lookups with `ActualAccount` interface (matches @actual-app/api shape)
-  - Typed query results with `extractQueryData<T>` utility (replaces `result: any`)
-  - `BankTransaction.identifier` widened to `string | number` to match library's `Transaction` type
-  - Fixed `account.type` and `account.currency` accesses (never existed on `TransactionsAccount`)
-  - CI `any` ratchet lowered from 8 to 0 — zero tolerance for new `any` types
+  - Replaced `error: any` with `unknown` + type guards
+  - Typed account lookups with `ActualAccount` interface
+  - Typed query results with `extractQueryData<T>` utility
+  - CI `any` ratchet lowered from 8 to 0 — zero tolerance
 
 ### Added
 - `ActualAccount` type in `src/types/index.ts`
-- `extractQueryData<T>()` utility in `src/utils/index.ts` with 7 unit tests
+- `extractQueryData<T>()` utility with 7 unit tests
 
 ---
 
-## [2.0.0] - 2026-02-19
+## [1.5.1] - 2026-02-19
 
-### Added
-- **2FA via Telegram** (Task 07)
-  - OneZero bank: bot asks for SMS OTP code via Telegram
-  - Long-term token support: skip OTP after first login
-  - Per-bank config: `twoFactorAuth`, `twoFactorTimeout`
-  - TwoFactorService with code extraction and validation
-- **Relative date import** (`daysBack`)
-  - Use `"daysBack": 14` instead of fixed `startDate`
-  - Auto-calculates start date relative to today
-  - Max 30 days. Mutually exclusive with `startDate`
-- **Telegram Bot Commands** (`listenForCommands: true`)
-  - `/scan` or `/import` - trigger import from Telegram
-  - `/status` - show last run info
-  - `/help` - list commands
-  - Runs alongside cron scheduler
-  - Prevents concurrent imports
-  - Ignores old messages on restart
-- **Telegram Notifications**
-  - 4 message formats: summary, compact, ledger, emoji
-  - `showTransactions`: new (only new) | all | none
-  - Smart detection: checks `imported_id` to distinguish new vs existing
-  - Zero new dependencies (native `fetch()`)
-  - Extensible `INotifier` interface for future channels
-  - Non-blocking: notification failures never break imports
-  - 4096 char truncation for Telegram limit
-
-### Changed
-- **Reconciliation re-enabled** - opt-in per bank with `"reconcile": false` (default)
-- **Transaction detection** - uses `imported_id` lookup to detect new vs existing
-- **Shared import lock** - prevents cron + /scan overlap
-- `tasks/` folder removed from git (kept local only)
-
-### CI/CD
-- Upgraded CodeQL Action v3 → v4
-- Added `npm audit` vulnerability check to PR
-- Added `any` type ratchet guard (max 8, fails if new ones added)
-- Removed redundant test run (build once, test once)
-
-### Refactored
-- Deduplicated types: single `TransactionRecord` in types/index.ts
-- Added `BankTransaction` type (replaces `any[]`)
-- Added Telegram API types (`TelegramUpdate`, `TelegramApiResponse`)
-- Replaced `error: any` with `unknown` + type guards
-- Clean `parseTransaction()` boundary conversion
-- `buildImportedId()` and `getExistingImportedIds()` extracted as methods
-- Command handler uses `INotifier` interface, not concrete class
-- Promise-based import lock instead of boolean flag
-- Record-based command dispatch instead of switch/case
-
-### Configuration
-```json
-"notifications": {
-  "enabled": true,
-  "telegram": {
-    "botToken": "...",
-    "chatId": "...",
-    "messageFormat": "compact",
-    "showTransactions": "new",
-    "listenForCommands": true
-  }
-}
-```
-
----
-
-## [1.6.0] - 2026-02-19
-
-### Refactored
-- **Extract TransactionService** - Task 02
-  - New `src/services/TransactionService.ts` with `importTransactions()` and `getOrCreateAccount()`
-  - Removed ~50 lines of inline transaction logic from `src/index.ts`
-  - `index.ts` now uses service for clean orchestration
-  - 14 new unit tests for TransactionService (153 total tests)
-  - No behavior changes, pure refactoring
+### Fixed
+- Pause Telegram poller during import to prevent OTP conflicts
+- Reconciliation re-enabled as opt-in per target (`"reconcile": true`)
+- `daysBack` relative date import (1-30 days, recalculated each run)
 
 ---
 
 ## [1.5.0] - 2026-02-19
 
 ### Added
-- **Unit test suite with Vitest** - Task 01
-  - 118 tests across 10 test files
-  - Coverage: 92% statements, 79% branches, 95% functions, 93% lines
-  - Tests for all services: ConfigLoader, MetricsService, ReconciliationService
-  - Tests for resilience: RetryStrategy, TimeoutWrapper, GracefulShutdown
-  - Tests for errors: ErrorTypes, ErrorFormatter
-  - Tests for utilities: currency, date
-- **GitHub Actions CI workflow** (`test.yml`)
-  - Runs on every push to main and all PRs
-  - TypeScript build verification
-  - Test execution with coverage reporting
-  - Coverage artifact upload
-- **New npm scripts**: `test`, `test:watch`, `test:coverage`, `validate`
-- **Testing documentation** section in README.md
-- **CI badge** in README.md
-
-### Refactored
-- **Centralized utility functions (DRY)** - Task 04
-  - Created `src/utils/currency.ts` with `toCents()` and `fromCents()`
-  - Created `src/utils/date.ts` with `formatDate()`
-  - Removed duplicate implementations from `src/index.ts` and `src/services/ReconciliationService.ts`
-  - Single source of truth for shared utilities
-
-### Fixed
-- **Documentation links** - Task 06
-  - Fixed broken BANKS.md link in README.md
-  - Fixed DEPLOYMENT-GUIDE.md reference in CHANGELOG.md
-  - Removed broken CODE-ANALYSIS.md link
+- **2FA via Telegram** (Task 07)
+  - OneZero bank: bot asks for SMS OTP code via Telegram
+  - Long-term token support: skip OTP after first login (`otpLongTermToken`)
+  - Per-bank config: `twoFactorAuth`, `twoFactorTimeout`
+  - TwoFactorService with code extraction and validation
+- **Relative date import** (`daysBack`)
+  - Use `"daysBack": 14` instead of fixed `startDate`
+  - Max 30 days. Mutually exclusive with `startDate`
 
 ---
 
-## [1.4.0] - 2026-02-18
-
-### 🎉 Phase 4: Idempotent Reconciliation + Observability
-
-Major release adding idempotent reconciliation, comprehensive metrics collection, and advanced configuration validation.
+## [1.4.0] - 2026-02-19
 
 ### Added
-- **Idempotent Reconciliation System**
-  - New `ReconciliationService` with duplicate prevention using `imported_id` pattern
-  - One reconciliation transaction per account per day
-  - Smart status tracking: `created`, `skipped`, `already-reconciled`
-  - Prevents duplicate reconciliation transactions when running multiple times
+- **Telegram bot commands** (`listenForCommands: true`)
+  - `/scan` — trigger import from Telegram
+  - `/status` — show last run info
+  - `/help` — list commands
+  - Runs alongside cron scheduler
+  - Shared import lock prevents concurrent imports
+  - Ignores old messages on restart
+- **Telegram notifications** (Task 03)
+  - 4 message formats: summary, compact, ledger, emoji
+  - `showTransactions`: new (only new) | all | none
+  - Smart detection via `imported_id` to distinguish new vs existing
+  - Zero new dependencies (native `fetch()`)
+  - Extensible `INotifier` interface
+  - Non-blocking: notification failures never break imports
+  - 4096 char truncation for Telegram limit
 
-- **Metrics Collection & Reporting**
-  - New `MetricsService` for comprehensive performance tracking
-  - Success rate monitoring per import run
-  - Per-bank performance timing and transaction counts
-  - Duplicate prevention statistics
-  - Reconciliation status tracking per bank
-  - Detailed import summary with performance breakdown
-  - Error categorization and reporting
-
-- **Advanced Configuration Validation**
-  - UUID format validation for `syncId` and `actualAccountId`
-  - URL format validation for `serverURL`
-  - Date format and range validation for `startDate`
-  - Email format validation
-  - Phone number format validation
-  - Card6Digits format validation (6 digits required)
-  - Bank-specific required field validation
-  - Array validation for targets
-  - Fail-fast error reporting with clear fix instructions
-
-- **Documentation**
-  - Added `CODE-ANALYSIS.md` with code quality analysis and improvement roadmap
-  - Added `CHANGELOG.md` for tracking all changes
-  - Updated `README.md` with Phase 4 features and metrics examples
-  - Enhanced reconciliation documentation with idempotency details
-
-### Changed
-- **Enhanced Import Process**
-  - Exit code now reflects import status (0=success, 1=failures detected)
-  - Import summary now printed after all imports complete
-  - Metrics tracked throughout entire import lifecycle
-
-- **Configuration Validation**
-  - All configuration errors now caught at startup (not runtime)
-  - Error messages include expected format and examples
-  - Warnings for potentially problematic configurations (e.g., startDate >1 year ago)
-
-- **Reconciliation Behavior**
-  - Now idempotent - safe to run multiple times per day
-  - No duplicate reconciliation transactions created
-  - Uses same `imported_id` pattern as regular transactions
-
-### Improved
-- **Error Messages**
-  - Configuration errors now show expected format with examples
-  - Clear distinction between validation errors and runtime errors
-  - Better context for troubleshooting
-
-- **Observability**
-  - Full visibility into import performance
-  - Success rates tracked and displayed
-  - Duplicate prevention now measurable
-  - Per-bank performance metrics
-
-### Removed
-- Obsolete phase progress documentation files
-- Internal development files (moved to .gitignore)
-
-### Technical Details
-- **New Files:**
-  - `src/services/ReconciliationService.ts` - Idempotent reconciliation logic
-  - `src/services/MetricsService.ts` - Metrics collection and reporting
-  - `CODE-ANALYSIS.md` - Code quality analysis
-  - `CHANGELOG.md` - This file
-
-- **Enhanced Files:**
-  - `src/config/ConfigLoader.ts` - Comprehensive validation
-  - `src/index.ts` - Metrics integration
-  - `src/types/index.ts` - ReconciliationResult interface
-  - `README.md` - Updated documentation
-  - `.gitignore` - Updated exclusions
-
-### Metrics Example
-```
-============================================================
-📊 Import Summary
-
-  Total banks: 3
-  Successful: 3 (100.0%)
-  Failed: 0 (0.0%)
-  Total transactions: 45
-  Duplicates prevented: 12
-  Total duration: 38.2s
-  Average per bank: 12.7s
-
-🏦 Bank Performance:
-
-  ✅ discount: 12.3s (18 txns, 5 duplicates)
-     ✅ Reconciliation: balanced
-  ✅ leumi: 15.1s (22 txns, 7 duplicates)
-     🔄 Reconciliation: +123.45 ILS
-  ✅ hapoalim: 10.8s (5 txns, 0 duplicates)
-     ✅ Reconciliation: already reconciled
-============================================================
-```
-
-### Benefits
-- ✅ **No duplicate reconciliation transactions** - Idempotent design
-- ✅ **95% faster error detection** - Config errors caught at startup (100ms vs 5 min)
-- ✅ **Full observability** - See success rates, performance, duplicates
-- ✅ **Data-driven optimization** - Know which banks are slowest
-- ✅ **93% faster troubleshooting** - Clear metrics and error categorization
+### CI/CD
+- Upgraded CodeQL Action v3 → v4
+- Added `npm audit` vulnerability check to PR
+- Added `any` type ratchet guard (max 8)
+- Split CI: `pr-validation.yml` + `release.yml`
 
 ---
 
-## [1.3.0] - 2026-02-18
-
-### 🎉 Phase 3: TypeScript Migration + Enterprise Reliability
-
-Complete TypeScript migration with resilience features for production deployments.
+## [1.3.0] - 2026-02-19
 
 ### Added
-- **Full TypeScript Migration**
-  - Converted entire codebase from JavaScript to TypeScript
-  - Full type safety with strict mode enabled
+- **Full TypeScript migration** with strict mode
   - Interface-based architecture following SOLID principles
-
-- **Resilience Features**
+- **Resilience features**
   - Exponential backoff retry strategy (3 attempts: 1s, 2s, 4s)
-  - 10-minute timeout protection (no more indefinite hangs)
+  - 10-minute timeout protection
   - Graceful shutdown handling (SIGTERM/SIGINT)
   - Custom error types with categorization
 
-- **Error Handling**
-  - User-friendly error formatting
-  - Error categorization (Auth, Network, Timeout, 2FA, etc.)
-  - Stack traces for debugging
+---
 
-### Changed
-- Build system now uses TypeScript compiler
-- Docker image builds TypeScript at build time
-- Configuration loading with environment variable fallback
+## [1.2.1] - 2026-02-19
+
+### Refactored
+- **Extract TransactionService** (Task 02)
+  - New `src/services/TransactionService.ts` with `importTransactions()` and `getOrCreateAccount()`
+  - 14 new unit tests for TransactionService
 
 ---
 
-## [1.2.0] - 2026-02-17
-
-### 🎉 Phase 2: Multi-Bank Support + Advanced Configuration
+## [1.2.0] - 2026-02-19
 
 ### Added
-- Support for all 18 Israeli banks and credit cards
-- Multiple account mapping per bank
-- Flexible configuration with `targets` array
-- Account filtering (specific accounts or "all")
-- Per-target reconciliation control
-
-### Changed
-- Configuration format to support multiple targets per bank
-- Account matching logic to support flexible mappings
+- **Enhanced GitHub release notes** (Task 05)
+  - Auto-generated release notes with Docker pull commands
 
 ---
 
-## [1.1.0] - 2026-02-16
-
-### 🎉 Phase 1: Basic Reconciliation
+## [1.1.0] - 2026-02-19
 
 ### Added
-- Basic reconciliation support
-- Date filtering with `startDate`
-- Duplicate detection via `imported_id`
-- 2FA browser session persistence
+- **Unit test suite with Vitest** (Task 01)
+  - 118 tests across 10 test files
+  - GitHub Actions CI workflow
+- **Centralized utility functions** (Task 04)
+  - `toCents()`, `fromCents()`, `formatDate()`
 
-### Changed
-- Transaction import uses `importTransactions` API
-- Browser data cached in `/app/chrome-data`
+### Fixed
+- Broken documentation links (Task 06)
 
 ---
 
-## [1.0.0] - 2026-02-15
-
-### 🎉 Initial Release
+## [1.0.0] - 2026-02-18
 
 ### Added
 - Automatic transaction import from Israeli banks
-- Docker containerization
-- Cron scheduling support
-- Support for Bank Discount (initial implementation)
-- Integration with Actual Budget API v26.2.0
-- israeli-bank-scrapers v6.7.1 integration
-
-### Features
-- Automated scheduled imports
-- Duplicate transaction detection
+- Support for 18 Israeli financial institutions
+- Docker containerization with Chromium
+- Cron scheduling support (`SCHEDULE` env var)
+- Duplicate transaction detection via `imported_id`
 - Browser session persistence for 2FA
-- Docker Compose support
-
----
-
-## Future Releases
-
-### Planned for v1.5.0
-- Health check HTTP endpoint for monitoring
-- Structured JSON logging
-- Prometheus metrics export
-- Unit test suite
-
-### Planned for v2.0.0
-- Rate limiting to prevent bank blocking
-- Transaction validation before import
-- Alerting system for failures
-- Performance optimizations
-
----
-
-## Notes
-
-### Breaking Changes
-None yet - all versions are backward compatible.
-
-### Deprecations
-None yet.
-
-### Security
-- Credentials stored in config.json (never in code or git)
-- config.json mounted as read-only in Docker
-- Browser data isolated per container
+- Idempotent reconciliation system
+- Metrics collection and import summary reporting
+- Configuration validation at startup
+- Multiple account mapping per bank with `targets` array
+- Account filtering (specific accounts or `"all"`)
 
 ---
 

@@ -2,25 +2,11 @@
 
 **Compatible with Actual Budget v26.2.0+**
 
-This importer follows the same approach as [tomerh2001/israeli-banks-actual-budget-importer](https://github.com/tomerh2001/israeli-banks-actual-budget-importer) with updated dependencies.
-
 ---
 
-## 📋 Table of Contents
+## Quick Start
 
-1. [Quick Start](#quick-start)
-2. [Docker Compose Setup](#docker-compose-setup)
-3. [Configuration](#configuration)
-4. [Scheduling](#scheduling)
-5. [VM Deployment](#vm-deployment)
-
----
-
-## 🚀 Quick Start
-
-### 1. Create Configuration
-
-Create `config.json`:
+### 1. Create config.json
 
 ```json
 {
@@ -40,14 +26,29 @@ Create `config.json`:
       "id": "your_id",
       "password": "your_password",
       "num": "your_num",
-      "startDate": "2026-01-19",
+      "daysBack": 14,
       "targets": [
         {
-          "actualAccountId": "your_account_id",
+          "actualAccountId": "your_account_uuid",
           "reconcile": true,
           "accounts": "all"
         }
       ]
+    }
+  },
+  "delayBetweenBanks": 5000,
+  "notifications": {
+    "enabled": true,
+    "telegram": {
+      "botToken": "123456789:ABCdef...",
+      "chatId": "-1001234567890",
+      "messageFormat": "compact",
+      "showTransactions": "new",
+      "listenForCommands": true
+    },
+    "webhook": {
+      "url": "https://hooks.slack.com/services/T.../B.../...",
+      "format": "slack"
     }
   }
 }
@@ -56,170 +57,116 @@ Create `config.json`:
 ### 2. Run Once (Test Mode)
 
 ```bash
-docker run --rm \
-  -v $(pwd)/config.json:/app/config.json \
+docker run --rm --cap-add SYS_ADMIN \
+  -v $(pwd)/config.json:/app/config.json:ro \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
   -e TZ=Asia/Jerusalem \
-  israeli-bank-importer:latest
+  sergienko4/israeli-bank-importer
 ```
 
 ### 3. Run Scheduled (Production Mode)
 
 ```bash
 docker run -d \
-  --name israeli_bank_importer \
-  --restart always \
+  --name israeli-bank-importer \
+  --restart unless-stopped \
   --cap-add SYS_ADMIN \
   -e TZ=Asia/Jerusalem \
   -e SCHEDULE="0 */8 * * *" \
-  -v $(pwd)/config.json:/app/config.json \
+  -v $(pwd)/config.json:/app/config.json:ro \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
-  israeli-bank-importer:latest
+  sergienko4/israeli-bank-importer
 ```
 
 ---
 
-## 🐳 Docker Compose Setup
+## Docker Compose Setup (Recommended)
 
-### Local Testing
+A ready-to-use `docker-compose.yml` is included in the repo:
 
-Create `docker-compose.yml`:
+```bash
+# Start
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Update to latest version
+docker compose pull && docker compose up -d
+
+# Stop
+docker compose down
+```
+
+Customize schedule and timezone by editing `docker-compose.yml`:
 
 ```yaml
-version: '3.8'
-
-services:
-  israeli_bank_importer:
-    image: israeli-bank-importer:latest
-    container_name: israeli_bank_importer
-    restart: always
-    cap_add:
-      - SYS_ADMIN
-    environment:
-      - TZ=Asia/Jerusalem
-      - SCHEDULE=0 */8 * * *  # Every 8 hours
-    volumes:
-      - ./config.json:/app/config.json:ro
-      - ./data:/app/data
-      - ./cache:/app/cache
-      - ./chrome-data:/app/chrome-data
+environment:
+  - TZ=Asia/Jerusalem
+  - SCHEDULE=0 */8 * * *    # Every 8 hours
 ```
 
-**Run:**
-```bash
-docker-compose up -d
-```
-
-**View logs:**
-```bash
-docker-compose logs -f israeli_bank_importer
-```
-
-**Stop:**
-```bash
-docker-compose down
-```
+Uses named volumes for data persistence — your data survives container recreation.
 
 ---
 
-## ⚙️ Configuration
+## Configuration Reference
 
-### Required: Actual Budget Connection
+### Actual Budget Connection
 
-```json
-{
-  "actual": {
-    "init": {
-      "serverURL": "https://your-server.com",
-      "password": "server_password",
-      "dataDir": "./data"
-    },
-    "budget": {
-      "syncId": "budget-sync-id",
-      "password": null
-    }
-  }
-}
-```
+| Option | Required | Description |
+|--------|----------|-------------|
+| `actual.init.serverURL` | Yes | Your Actual Budget server URL |
+| `actual.init.password` | Yes | Server password |
+| `actual.init.dataDir` | No | Local data directory (default: `./data`) |
+| `actual.budget.syncId` | Yes | UUID from Settings → Show Advanced Settings → Sync ID |
+| `actual.budget.password` | No | Budget encryption password (if set) |
 
-### Bank Configurations
-
-#### Bank Discount
-
-```json
-{
-  "discount": {
-    "id": "your_id_number",
-    "password": "your_password",
-    "num": "your_identification_code",
-    "startDate": "2026-01-19",
-    "targets": [
-      {
-        "actualAccountId": "your_actual_account_id",
-        "reconcile": true,
-        "accounts": "all"
-      }
-    ]
-  }
-}
-```
-
-#### Bank Leumi
-
-```json
-{
-  "leumi": {
-    "username": "your_username",
-    "password": "your_password",
-    "startDate": "2026-01-19",
-    "targets": [
-      {
-        "actualAccountId": "account-id",
-        "reconcile": true,
-        "accounts": "all"
-      }
-    ]
-  }
-}
-```
-
-#### Bank Hapoalim
-
-```json
-{
-  "hapoalim": {
-    "userCode": "your_user_code",
-    "password": "your_password",
-    "startDate": "2026-01-19",
-    "targets": [
-      {
-        "actualAccountId": "account-id",
-        "reconcile": true,
-        "accounts": "all"
-      }
-    ]
-  }
-}
-```
-
-### Configuration Options
+### Bank Options (per bank)
 
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
-| `startDate` | No | ~1 year | Start date for transactions (YYYY-MM-DD) |
-| `reconcile` | No | `false` | Auto-create reconciliation transaction |
+| `startDate` | No | ~1 year | Fixed start date (`YYYY-MM-DD`), max 1 year back |
+| `daysBack` | No | - | Import last N days (1-30). Cannot use with `startDate` |
+| `targets` | Yes | - | Array of account mappings (see below) |
+| `twoFactorAuth` | No | `false` | Enable 2FA OTP via Telegram (OneZero) |
+| `twoFactorTimeout` | No | `300` | Seconds to wait for OTP reply |
+| `otpLongTermToken` | No | - | Skip OTP after first login |
+
+### Target Options (per target)
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `actualAccountId` | Yes | - | Target account UUID in Actual Budget |
+| `reconcile` | No | `false` | Auto-adjust balance to match bank |
 | `accounts` | No | `"all"` | `"all"` or array like `["1234", "5678"]` |
-| `actualAccountId` | Yes | - | Target account ID in Actual Budget |
+
+### Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `delayBetweenBanks` | `0` | Milliseconds to wait between bank imports |
+
+### Notifications
+
+| Option | Description |
+|--------|-------------|
+| `notifications.enabled` | `true` / `false` — master switch |
+| `notifications.telegram.botToken` | Telegram Bot API token |
+| `notifications.telegram.chatId` | Chat ID for notifications |
+| `notifications.telegram.messageFormat` | `summary` (default), `compact`, `ledger`, `emoji` |
+| `notifications.telegram.showTransactions` | `new` (default), `all`, `none` |
+| `notifications.telegram.listenForCommands` | `true` to enable `/scan`, `/status`, `/help` |
+| `notifications.webhook.url` | Webhook URL (Slack, Discord, or custom) |
+| `notifications.webhook.format` | `slack`, `discord`, `plain` (default) |
 
 ---
 
-## ⏰ Scheduling
-
-### Using SCHEDULE Environment Variable
+## Scheduling
 
 The `SCHEDULE` environment variable uses cron format:
 
@@ -232,10 +179,9 @@ SCHEDULE=0 2 * * *
 
 # Run every 6 hours
 SCHEDULE=0 */6 * * *
-
-# Run every Monday at 9am
-SCHEDULE=0 9 * * 1
 ```
+
+Don't set `SCHEDULE` to run once and exit.
 
 ### Cron Format Reference
 
@@ -249,27 +195,14 @@ SCHEDULE=0 9 * * 1
 * * * * *
 ```
 
-### Run Modes
-
-**Run Once (No Schedule)**
-- Don't set `SCHEDULE` environment variable
-- Container runs import once and exits
-- Useful for testing
-
-**Scheduled Mode**
-- Set `SCHEDULE` environment variable
-- Container keeps running
-- Imports run on schedule
-- Use `restart: always` for persistence
-
 ---
 
-## 🖥️ VM Deployment
+## VM Deployment
 
 ### Prerequisites
 
 - VM with Docker and Docker Compose installed
-- Actual Budget server running on VM
+- Actual Budget server running and accessible
 - SSH access to VM
 
 ### Deployment Steps
@@ -305,7 +238,7 @@ Use internal Docker network URL for serverURL:
       "id": "your_id_number",
       "password": "your_bank_password",
       "num": "your_identification_code",
-      "startDate": "2026-01-19",
+      "daysBack": 14,
       "targets": [
         {
           "actualAccountId": "your_actual_account_id",
@@ -318,22 +251,19 @@ Use internal Docker network URL for serverURL:
 }
 ```
 
-#### 3. Update Actual Budget docker-compose.yml
+#### 3. Add Importer to docker-compose.yml
 
-Edit `/home/ubuntu/actual-data/docker-compose.yml`:
+Edit your Actual Budget `docker-compose.yml`:
 
 ```yaml
 services:
   actual_server:
     # ... existing config ...
 
-  caddy:
-    # ... existing config ...
-
-  israeli_bank_importer:
-    image: YOUR_DOCKERHUB_USERNAME/israeli-bank-importer:latest
-    container_name: israeli_bank_importer
-    restart: always
+  importer:
+    image: sergienko4/israeli-bank-importer:latest
+    container_name: israeli-bank-importer
+    restart: unless-stopped
     cap_add:
       - SYS_ADMIN
     environment:
@@ -354,91 +284,57 @@ networks:
     name: actual_network
 ```
 
-#### 4. Deploy to VM
+#### 4. Deploy
 
 ```bash
-# Pull the image
 cd /home/ubuntu/actual-data
-sudo docker-compose pull israeli_bank_importer
 
-# Start the service
-sudo docker-compose up -d israeli_bank_importer
+# Pull and start
+docker compose pull importer
+docker compose up -d importer
 
 # Check logs
-sudo docker-compose logs -f israeli_bank_importer
+docker compose logs -f importer
 
 # Verify it's running
-sudo docker-compose ps
-```
-
-#### 5. Test Manual Run (Optional)
-
-```bash
-# Run once for testing
-sudo docker-compose run --rm israeli_bank_importer
-
-# Check Actual Budget for imported transactions
-# Visit https://your-actual-server.com
+docker compose ps
 ```
 
 ---
 
-## 📊 Volume Persistence
-
-### Required Volumes
+## Volume Persistence
 
 | Volume | Purpose | Required |
 |--------|---------|----------|
-| `/app/config.json` | Configuration | ✅ Yes |
-| `/app/data` | Actual Budget cache | ✅ Yes |
+| `/app/config.json` | Bank credentials | Yes |
+| `/app/data` | Actual Budget sync data | Yes |
 | `/app/cache` | Scraper cache | Recommended |
-| `/app/chrome-data` | Browser profile (for 2FA) | Recommended |
+| `/app/chrome-data` | Browser session (2FA persistence) | Recommended |
 
-### Why Persist chrome-data?
-
-- Stores browser cookies and sessions
-- Prevents repeated 2FA challenges
-- Some banks require 2FA on first login only
+**Why persist chrome-data?** Stores browser cookies and sessions, preventing repeated 2FA challenges.
 
 ---
 
-## 🔒 Security Notes
-
-### Docker Capabilities
-
-The importer requires `SYS_ADMIN` capability for Chromium:
-
-```yaml
-cap_add:
-  - SYS_ADMIN
-```
-
-This is needed for browser sandboxing. **Only run trusted images** with this capability.
-
-### Config File Security
+## Security Notes
 
 - **Never commit `config.json` to git**
 - Set read-only permission: `chmod 600 config.json`
-- Use `:ro` mount flag in docker-compose for read-only
-
-### Credentials
-
-- Store `config.json` securely
-- Consider using Docker secrets for production
-- Limit file access to necessary users only
+- Use `:ro` mount flag for read-only config
+- `SYS_ADMIN` is required for Chromium sandboxing — only run trusted images with this capability
+- Container runs as non-root user (`node`, UID 1000)
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Check Logs
 
 ```bash
 # Docker run
-docker logs israeli_bank_importer
+docker logs israeli-bank-importer
 
 # Docker Compose
-docker-compose logs -f israeli_bank_importer
+docker compose logs -f importer
 ```
 
 ### Common Issues
@@ -458,28 +354,26 @@ docker-compose logs -f israeli_bank_importer
 **Scheduled runs not working**
 - Verify `SCHEDULE` format is correct
 - Check container logs for scheduler messages
-- Ensure container has `restart: always`
+- Ensure container has `restart: unless-stopped`
 
 ---
 
-## 📚 Additional Resources
-
-- **israeli-bank-scrapers**: https://github.com/eshaham/israeli-bank-scrapers
-- **Actual Budget**: https://actualbudget.org/docs/
-- **Actual Budget API**: https://actualbudget.org/docs/api/
-
----
-
-## ✅ Deployment Checklist
+## Deployment Checklist
 
 - [ ] Created `config.json` with credentials
 - [ ] Tested with run-once mode locally
 - [ ] Verified transactions in Actual Budget
-- [ ] Adjusted `startDate` for desired history
+- [ ] Set `daysBack` or `startDate` for desired history
 - [ ] Set appropriate `SCHEDULE` value
 - [ ] Added `SYS_ADMIN` capability
 - [ ] Mounted all required volumes
-- [ ] Set `restart: always` for scheduled runs
-- [ ] Pushed image to Docker Hub (for VM)
-- [ ] Deployed to VM with docker-compose
+- [ ] Set `restart: unless-stopped` for scheduled runs
 - [ ] Verified scheduled runs are working
+
+---
+
+## Additional Resources
+
+- **israeli-bank-scrapers**: https://github.com/eshaham/israeli-bank-scrapers
+- **Actual Budget**: https://actualbudget.org/docs/
+- **Actual Budget API**: https://actualbudget.org/docs/api/
