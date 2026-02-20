@@ -80,12 +80,31 @@ jobs:
           echo "New version: $NEW_VERSION"
           echo "new_tag=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create and push tag
+      - name: Install git-cliff
+        uses: orhun/git-cliff-action@v4
+        id: generate_changelog
+        with:
+          config: cliff.toml
+          args: --tag ${{ steps.semver.outputs.new_tag }}
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Bump package.json version
         run: |
           NEW_TAG="${{ steps.semver.outputs.new_tag }}"
+          VERSION="${NEW_TAG#v}"
+          npm version "$VERSION" --no-git-tag-version
+          echo "Bumped package.json to $VERSION"
+
+      - name: Commit release changes and push tag
+        run: |
+          NEW_TAG="${{ steps.semver.outputs.new_tag }}"
+          git add CHANGELOG.md package.json package-lock.json
+          git commit -m "chore: release ${NEW_TAG} [skip ci]" || echo "No changes to commit"
+          git push origin main
           git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
           git push origin "$NEW_TAG"
-          echo "Created and pushed tag: $NEW_TAG"
+          echo "Released $NEW_TAG with updated CHANGELOG and package.json"
 
   security-scan:
     runs-on: ubuntu-latest

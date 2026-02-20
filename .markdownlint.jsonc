@@ -1,0 +1,10 @@
+{
+  // Line length — our docs have long lines and tables
+  "MD013": false,
+  // Inline HTML — we use <details>/<summary> tags in README
+  "MD033": false,
+  // First line heading — config.json.example starts with comments
+  "MD041": false,
+  // Duplicate headings — CHANGELOG has repeated ### Added, ### Fixed etc.
+  "MD024": false
+}
