@@ -1,19 +1,14 @@
-name: Release
+name: Docker Build & Publish
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
-      - 'vitest.config.ts'
-      - 'Dockerfile'
-      - '.github/workflows/**'
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and publish (e.g., v1.9.0)'
+        required: true
 
 permissions:
   contents: write
@@ -23,79 +18,11 @@ env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
 
 jobs:
-  auto-version:
-    runs-on: ubuntu-latest
-    outputs:
-      new_tag: ${{ steps.semver.outputs.new_tag }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Get latest tag
-        id: get_latest_tag
-        run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          echo "Latest tag: $LATEST_TAG"
-
-      - name: Analyze commits and determine version bump
-        id: semver
-        run: |
-          LATEST_TAG="${{ steps.get_latest_tag.outputs.latest_tag }}"
-          COMMITS=$(git log ${LATEST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null || git log --pretty=format:"%s")
-          CURRENT_VERSION=${LATEST_TAG#v}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-
-          BUMP_TYPE="none"
-          while IFS= read -r commit; do
-            if echo "$commit" | grep -qiE '^(break|breaking change|major):'; then
-              BUMP_TYPE="major"
-              break
-            elif echo "$commit" | grep -qiE '^feat(\(.*\))?:'; then
-              [ "$BUMP_TYPE" != "major" ] && BUMP_TYPE="minor"
-            elif echo "$commit" | grep -qiE '^fix(\(.*\))?:'; then
-              [ "$BUMP_TYPE" = "none" ] && BUMP_TYPE="patch"
-            fi
-          done <<< "$COMMITS"
-
-          [ "$BUMP_TYPE" = "none" ] && BUMP_TYPE="patch"
-
-          case $BUMP_TYPE in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-          esac
-
-          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
-          echo "Bump type: $BUMP_TYPE"
-          echo "New version: $NEW_VERSION"
-          echo "new_tag=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create and push tag
-        run: |
-          NEW_TAG="${{ steps.semver.outputs.new_tag }}"
-          git tag -a "$NEW_TAG" -m "Release $NEW_TAG"
-          git push origin "$NEW_TAG"
-          echo "Created and pushed tag: $NEW_TAG"
-
   security-scan:
     runs-on: ubuntu-latest
-    needs: auto-version
-    if: needs.auto-version.outputs.new_tag != ''
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.auto-version.outputs.new_tag }}
 
       - name: Run npm audit
         run: |
@@ -104,14 +31,20 @@ jobs:
 
   build-and-push:
     runs-on: ubuntu-latest
-    needs: [auto-version, security-scan]
-    if: needs.auto-version.outputs.new_tag != ''
+    needs: security-scan
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.auto-version.outputs.new_tag }}
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -127,7 +60,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_IMAGE }}
-          tags: ${{ needs.auto-version.outputs.new_tag }}
+          tags: ${{ steps.tag.outputs.version }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -149,21 +82,20 @@ jobs:
           short-description: "Automatically import transactions from 18 Israeli banks into Actual Budget"
           readme-filepath: ./README.md
 
-  create-release:
+  enrich-release:
     runs-on: ubuntu-latest
-    needs: [auto-version, build-and-push]
-    if: needs.auto-version.outputs.new_tag != ''
+    needs: [build-and-push]
+    if: github.event_name == 'push'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.auto-version.outputs.new_tag }}
           fetch-depth: 0
 
-      - name: Build release notes
+      - name: Build enriched release notes
         run: |
-          VERSION="${{ needs.auto-version.outputs.new_tag }}"
+          VERSION="${{ github.ref_name }}"
           PREV_TAG=$(git describe --tags --abbrev=0 ${VERSION}^ 2>/dev/null || echo "")
 
           if [ -n "$PREV_TAG" ]; then
@@ -188,14 +120,6 @@ jobs:
             echo "docker pull sergienko4/israeli-bank-importer:${VERSION}"
             echo '```'
             echo ""
-
-            CHANGELOG=$(awk "/## \[${VERSION#v}\]/{flag=1; next} /## \[/{flag=0} flag" CHANGELOG.md)
-            if [ -n "$CHANGELOG" ]; then
-              echo "## What's Changed"
-              echo ""
-              echo "$CHANGELOG"
-              echo ""
-            fi
 
             echo "## Commits"
             echo ""
@@ -273,17 +197,15 @@ jobs:
             if [ -n "$COMPARE_URL" ]; then
               echo "**Full Changelog:** ${COMPARE_URL}"
             fi
-          } > release_notes.md
+          } > enriched_notes.md
 
-          echo "Release notes built for $VERSION"
+          echo "Enriched release notes built for $VERSION"
 
-      - name: Create GitHub Release
+      - name: Append Docker info to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ needs.auto-version.outputs.new_tag }}
-          name: Israeli Bank Importer ${{ needs.auto-version.outputs.new_tag }}
-          body_path: release_notes.md
-          draft: false
-          prerelease: false
+          tag_name: ${{ github.ref_name }}
+          append_body: true
+          body_path: enriched_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

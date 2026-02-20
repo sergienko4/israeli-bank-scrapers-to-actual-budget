@@ -10,7 +10,7 @@ Powered by [**israeli-bank-scrapers**](https://github.com/eshaham/israeli-bank-s
 
 ## What Does This Do?
 
-```
+```text
 Your Bank → israeli-bank-scrapers → This Tool → Actual Budget
 ```
 
@@ -202,11 +202,13 @@ Use the **Config key** as the bank name in your `config.json`. See [BANKS.md](do
 ```json
 "daysBack": 14
 ```
+
 Import last 14 days. Recalculated on every run. Range: 1-30.
 
 ```json
 "startDate": "2026-02-01"
 ```
+
 Fixed date. Max: 1 year back. Cannot use both on the same bank.
 
 **Targets** — map bank accounts to Actual Budget accounts:
@@ -327,7 +329,7 @@ Get import summaries and error alerts via Telegram after each run.
 
 <details><summary><b>summary</b> (default) - Banks overview only</summary>
 
-```
+```text
 ✅ Import Summary
 
 🏦 Banks: 3/3 (100%)
@@ -339,11 +341,12 @@ Get import summaries and error alerts via Telegram after each run.
 ✅ leumi: 22 txns 15.1s
 ✅ hapoalim: 7 txns 10.8s
 ```
+
 </details>
 
 <details><summary><b>compact</b> - Transaction details with amounts</summary>
 
-```
+```text
 ✅ Import Summary
 3/3 banks | 47 txns | 38.2s
 
@@ -357,11 +360,12 @@ Get import summaries and error alerts via Telegram after each run.
 💰 45,230.50 ILS
 ✅ Balance matched
 ```
+
 </details>
 
 <details><summary><b>ledger</b> - Monospace table layout</summary>
 
-```
+```text
 ✅ Import Summary
 47 transactions · 38.2s
 
@@ -375,11 +379,12 @@ Get import summaries and error alerts via Telegram after each run.
 Balance: 45,230.50 ILS
 ✅ Balance matched
 ```
+
 </details>
 
 <details><summary><b>emoji</b> - Visual deposit/payment indicators</summary>
 
-```
+```text
 ✅ Import Summary
 
 📊 3/3 banks · 47 txns · 38.2s
@@ -391,10 +396,12 @@ Balance: 45,230.50 ILS
   💰 45,230.50 ILS
   ✅ Balance matched
 ```
+
 </details>
 
 **On failure:**
-```
+
+```text
 🚨 Import Failed
 
 🔐 Authentication Error (discount): Invalid credentials. Please verify your password.
@@ -443,19 +450,22 @@ Can be used alongside Telegram — both channels fire independently.
 When `"reconcile": true`, the tool automatically reconciles your Actual Budget balance with the bank balance.
 
 **How it works:**
+
 - **Idempotent** - Creates only ONE reconciliation transaction per day per account
 - **Smart detection** - Skips if already balanced
 - **Duplicate prevention** - Running multiple times won't create duplicates
 - **Automatic adjustment** - Creates adjustment transaction if balances differ
 
 **Status messages:**
-```
+
+```text
 ✅ Already balanced             - No adjustment needed
 ✅ Reconciled: +123.45 ILS      - Created adjustment transaction
 ✅ Already reconciled today     - Duplicate prevented (already exists)
 ```
 
 **When to use:**
+
 - `false` (default) - You review and reconcile manually in Actual Budget
 - `true` - Auto-adjust balance to match bank (for trusted accounts)
 
@@ -467,7 +477,7 @@ When `"reconcile": true`, the tool automatically reconciles your Actual Budget b
 
 After each import run, you'll see a comprehensive summary:
 
-```
+```text
 ============================================================
 📊 Import Summary
 
@@ -497,20 +507,24 @@ Import history is persisted at `/app/data/audit-log.json` (last 90 entries). Vie
 ## Troubleshooting
 
 ### "out-of-sync-migrations"
+
 - **Cause:** Version mismatch
 - **Fix:** Ensure Actual Budget server is v26.2.0+
 
 ### "Failed to launch browser"
+
 - **Cause:** Missing `SYS_ADMIN`
 - **Fix:** Add `--cap-add SYS_ADMIN` to docker run or `cap_add: [SYS_ADMIN]` to docker-compose
 
 ### 2FA Required Every Time
+
 - **Cause:** Browser session not saved
 - **Fix:** Mount chrome-data volume: `-v ./chrome-data:/app/chrome-data`
 
 ### Windows Volume Mount Error
 
 **PowerShell:**
+
 ```powershell
 docker run --rm `
   -v "${PWD}/config.json:/app/config.json" `
@@ -518,6 +532,7 @@ docker run --rm `
 ```
 
 **CMD:**
+
 ```cmd
 docker run --rm ^
   -v "%CD%/config.json:/app/config.json" ^
@@ -525,6 +540,7 @@ docker run --rm ^
 ```
 
 ### Too Many Transactions
+
 - **Fix:** Add `"daysBack": 14` or `"startDate": "2026-01-19"` to limit range
 
 ---
