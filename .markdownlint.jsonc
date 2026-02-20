@@ -10,5 +10,9 @@
   // Ordered list prefix — GUIDELINES.md intentionally numbers rules 1-27 across sections
   "MD029": false,
   // Emphasis as heading — we use **bold** for sub-options in README (Option A, Step 1, etc.)
-  "MD036": false
+  "MD036": false,
+  // Multiple consecutive blank lines — release-please generates double blanks in CHANGELOG
+  "MD012": false,
+  // Unordered list style — release-please uses * but our docs use -. Allow both.
+  "MD004": false
 }
