@@ -1,0 +1,12 @@
+# Example/placeholder URLs that aren't real
+https://hooks.slack.com/
+https://api.telegram.org/
+http://localhost
+http://actual_server
+https://your-
+http://your-
+https://your_
+# Docker Hub user pages (rate limited)
+https://hub.docker.com/
+# GitHub action badges (flaky)
+https://github.com/.*/actions/workflows/.*badge.svg
