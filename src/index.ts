@@ -19,6 +19,7 @@ import { TwoFactorService } from './services/TwoFactorService.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
 import { ImporterConfig, BankConfig, BankTarget, BankTransaction, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
 import { errorMessage } from './utils/index.js';
+import { createLogger, getLogger } from './logger/index.js';
 
 // Initialize resilience components
 const shutdownHandler = new GracefulShutdownHandler();
@@ -34,16 +35,18 @@ const reconciliationService = new ReconciliationService(api);
 const metrics = new MetricsService();
 const auditLog = new AuditLogService();
 
-// Load configuration
+// Load configuration and initialize logger
 const configLoader = new ConfigLoader();
 const config: ImporterConfig = configLoader.load();
+createLogger(config.logConfig);
+const logger = getLogger();
 const notificationService = new NotificationService(config.notifications);
 
 // Initialize 2FA service if Telegram is configured
 const telegram = config.notifications?.telegram;
 const telegramNotifier = telegram ? new TelegramNotifier(telegram) : null;
 
-console.log('🚀 Starting Israeli Bank Importer for Actual Budget\n');
+logger.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
 
 // Company type mapping
 const companyTypeMap: Record<string, typeof CompanyTypes[keyof typeof CompanyTypes]> = {
@@ -103,11 +106,11 @@ function buildCredentials(bankConfig: BankConfig, otpRetriever?: () => Promise<s
 function logDateRange(bankConfig: BankConfig): void {
   if (bankConfig.daysBack) {
     const startDate = computeStartDate(bankConfig);
-    console.log(`  📅 Date range: last ${bankConfig.daysBack} days (from ${startDate.toISOString().split('T')[0]})`);
+    logger.info(`  📅 Date range: last ${bankConfig.daysBack} days (from ${startDate.toISOString().split('T')[0]})`);
   } else if (bankConfig.startDate) {
-    console.log(`  📅 Date range: from ${bankConfig.startDate} to today`);
+    logger.info(`  📅 Date range: from ${bankConfig.startDate} to today`);
   } else {
-    console.log(`  📅 Date range: using bank default (usually ~1 year)`);
+    logger.info(`  📅 Date range: using bank default (usually ~1 year)`);
   }
 }
 
@@ -124,7 +127,7 @@ function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof Compa
 function buildOtpRetriever(bankName: string, bankConfig: BankConfig): (() => Promise<string>) | undefined {
   if (!bankConfig.twoFactorAuth || bankConfig.otpLongTermToken || !telegramNotifier) return undefined;
   const twoFactor = new TwoFactorService(telegramNotifier, bankConfig.twoFactorTimeout);
-  console.log(`  🔐 2FA enabled for ${bankName} (via Telegram)`);
+  logger.info(`  🔐 2FA enabled for ${bankName} (via Telegram)`);
   return twoFactor.createOtpRetriever(bankName);
 }
 
@@ -134,13 +137,13 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
   const companyType = companyTypeMap[bankName.toLowerCase()];
   if (!companyType) throw new Error(`Unknown bank: ${bankName}`);
 
-  console.log(`  🔧 Creating scraper for ${bankName}...`);
+  logger.info(`  🔧 Creating scraper for ${bankName}...`);
   const scraperOptions = buildScraperOptions(companyType, bankConfig);
   logDateRange(bankConfig);
 
   const credentials = buildCredentials(bankConfig, buildOtpRetriever(bankName, bankConfig));
   const scraper = createScraper(scraperOptions);
-  console.log(`  🔍 Scraping transactions from ${bankName}...`);
+  logger.info(`  🔍 Scraping transactions from ${bankName}...`);
 
   return await retryStrategy.execute(
     async () => await timeoutWrapper.wrap(scraper.scrape(credentials), DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs, `Scraping ${bankName}`),
@@ -170,13 +173,13 @@ async function reconcileIfConfigured(
   target: BankTarget, actualAccountId: string, balance: number | undefined, currency: string, bankName: string
 ): Promise<void> {
   if (!target.reconcile || balance === undefined) return;
-  console.log(`     🔄 Reconciling account balance...`);
+  logger.info(`     🔄 Reconciling account balance...`);
   try {
     const result = await reconciliationService.reconcile(actualAccountId, balance, currency);
     metrics.recordReconciliation(bankName, result.status, result.diff);
-    console.log(reconciliationMessages[result.status](result.diff));
+    logger.info(reconciliationMessages[result.status](result.diff));
   } catch (error: unknown) {
-    console.error(`     ❌ Reconciliation error:`, errorMessage(error));
+    logger.error(`     ❌ Reconciliation error: ${errorMessage(error)}`);
   }
 }
 
@@ -185,7 +188,7 @@ async function processAccount(
   account: { accountNumber: string; balance?: number; txns: BankTransaction[] }, currency: string
 ): Promise<{ imported: number; skipped: number }> {
   const target = findTargetForAccount(bankConfig, account.accountNumber);
-  if (!target) { console.log(`     ⚠️  No target configured for this account, skipping`); return { imported: 0, skipped: 0 }; }
+  if (!target) { logger.warn(`     ⚠️  No target configured for this account, skipping`); return { imported: 0, skipped: 0 }; }
 
   await transactionService.getOrCreateAccount(target.actualAccountId, bankName, account.accountNumber);
   const result = await importAndRecordTransactions(bankName, account.accountNumber, target.actualAccountId, account.txns, account.balance, currency);
@@ -196,9 +199,9 @@ async function processAccount(
 // ─── Bank import orchestration ───
 
 function logAccountInfo(accountNumber: string, balance: number | undefined, currency: string, txnCount: number): void {
-  console.log(`\n  💳 Processing account: ${accountNumber}`);
-  console.log(`     Balance: ${balance} ${currency}`);
-  console.log(`     Transactions: ${txnCount}`);
+  logger.info(`\n  💳 Processing account: ${accountNumber}`);
+  logger.info(`     Balance: ${balance} ${currency}`);
+  logger.info(`     Transactions: ${txnCount}`);
 }
 
 async function processAllAccounts(
@@ -206,7 +209,7 @@ async function processAllAccounts(
 ): Promise<{ imported: number; skipped: number }> {
   let totalImported = 0, totalSkipped = 0;
   for (const account of scrapeResult.accounts || []) {
-    if (shutdownHandler.isShuttingDown()) { console.log('  ⚠️  Shutdown requested, stopping import...'); break; }
+    if (shutdownHandler.isShuttingDown()) { logger.warn('  ⚠️  Shutdown requested, stopping import...'); break; }
     const currency = account.txns[0]?.originalCurrency || 'ILS';
     logAccountInfo(account.accountNumber, account.balance, currency, account.txns?.length || 0);
     const counts = await processAccount(bankName, bankConfig, account, currency);
@@ -217,43 +220,43 @@ async function processAllAccounts(
 }
 
 async function importFromBank(bankName: string, bankConfig: BankConfig): Promise<void> {
-  console.log(`\n📊 Processing ${bankName}...`);
+  logger.info(`\n📊 Processing ${bankName}...`);
   metrics.startBank(bankName);
   try {
     const scrapeResult = await scrapeBankWithResilience(bankName, bankConfig);
-    if (!scrapeResult.success) { console.error(`  ❌ Failed to scrape ${bankName}:`, scrapeResult.errorMessage || 'Unknown error'); return; }
-    console.log(`  ✅ Successfully scraped ${bankName}`);
-    console.log(`  📝 Found ${scrapeResult.accounts?.length || 0} accounts`);
+    if (!scrapeResult.success) { logger.error(`  ❌ Failed to scrape ${bankName}: ${scrapeResult.errorMessage || 'Unknown error'}`); return; }
+    logger.info(`  ✅ Successfully scraped ${bankName}`);
+    logger.info(`  📝 Found ${scrapeResult.accounts?.length || 0} accounts`);
     const totals = await processAllAccounts(bankName, bankConfig, scrapeResult);
     metrics.recordBankSuccess(bankName, totals.imported, totals.skipped);
-    console.log(`\n✅ Completed ${bankName}`);
+    logger.info(`\n✅ Completed ${bankName}`);
   } catch (error) {
     metrics.recordBankFailure(bankName, error as Error);
-    console.error(errorFormatter.format(error as Error, bankName));
-    if (error instanceof Error) console.error('Stack trace:', error.stack);
+    logger.error(errorFormatter.format(error as Error, bankName));
+    if (error instanceof Error) logger.error(`Stack trace: ${error.stack}`);
   }
 }
 
 // ─── Main orchestration ───
 
 async function initializeApi(): Promise<void> {
-  console.log('🔌 Connecting to Actual Budget...');
+  logger.info('🔌 Connecting to Actual Budget...');
   await api.init({
     dataDir: config.actual.init.dataDir,
     serverURL: config.actual.init.serverURL,
     password: config.actual.init.password,
   });
-  console.log('✅ Connected to Actual Budget server');
-  console.log(`📂 Loading budget: ${config.actual.budget.syncId}`);
+  logger.info('✅ Connected to Actual Budget server');
+  logger.info(`📂 Loading budget: ${config.actual.budget.syncId}`);
   await api.downloadBudget(config.actual.budget.syncId, { password: config.actual.budget.password || undefined });
-  console.log('✅ Budget loaded successfully\n');
-  console.log('='.repeat(60));
+  logger.info('✅ Budget loaded successfully\n');
+  logger.info('='.repeat(60));
 }
 
 async function processAllBanks(): Promise<void> {
   const banks = Object.entries(config.banks || {});
   for (let i = 0; i < banks.length; i++) {
-    if (shutdownHandler.isShuttingDown()) { console.log('⚠️  Shutdown requested, stopping imports...'); break; }
+    if (shutdownHandler.isShuttingDown()) { logger.warn('⚠️  Shutdown requested, stopping imports...'); break; }
     if (i > 0) await delayBeforeNextBank(config.delayBetweenBanks);
     await importFromBank(banks[i][0], banks[i][1]);
   }
@@ -261,7 +264,7 @@ async function processAllBanks(): Promise<void> {
 
 async function delayBeforeNextBank(delayMs?: number): Promise<void> {
   if (!delayMs || delayMs <= 0) return;
-  console.log(`\n⏳ Waiting ${(delayMs / 1000).toFixed(0)}s before next bank...`);
+  logger.info(`\n⏳ Waiting ${(delayMs / 1000).toFixed(0)}s before next bank...`);
   await new Promise(resolve => setTimeout(resolve, delayMs));
 }
 
@@ -269,15 +272,15 @@ async function finalizeImport(): Promise<void> {
   metrics.printSummary();
   auditLog.record(metrics.getSummary());
   await notificationService.sendSummary(metrics.getSummary());
-  console.log('\n🎉 Import process completed!\n');
+  logger.info('\n🎉 Import process completed!\n');
   await api.shutdown();
   process.exit(metrics.hasFailures() ? 1 : 0);
 }
 
 async function handleFatalError(error: unknown): Promise<never> {
   const formattedError = errorFormatter.format(error as Error);
-  console.error('\n' + formattedError);
-  if (error instanceof Error) console.error('Stack trace:', error.stack);
+  logger.error('\n' + formattedError);
+  if (error instanceof Error) logger.error(`Stack trace: ${error.stack}`);
   await notificationService.sendError(formattedError);
   try { await api.shutdown(); } catch {}
   process.exit(1);
@@ -286,8 +289,8 @@ async function handleFatalError(error: unknown): Promise<never> {
 async function main(): Promise<void> {
   try {
     shutdownHandler.onShutdown(async () => {
-      console.log('🔌 Shutting down Actual Budget API...');
-      try { await api.shutdown(); } catch (e) { console.error('Error during API shutdown:', e); }
+      logger.info('🔌 Shutting down Actual Budget API...');
+      try { await api.shutdown(); } catch (e: unknown) { logger.error(`Error during API shutdown: ${errorMessage(e)}`); }
     });
     await initializeApi();
     metrics.startImport();

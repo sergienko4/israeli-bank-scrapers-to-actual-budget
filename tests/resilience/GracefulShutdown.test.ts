@@ -7,6 +7,7 @@ describe('GracefulShutdownHandler', () => {
   beforeEach(() => {
     exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
     vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -79,7 +80,7 @@ describe('GracefulShutdownHandler', () => {
 
     process.emit('SIGTERM');
     await vi.waitFor(() => expect(succeedingCb).toHaveBeenCalledTimes(1));
-    expect(console.error).toHaveBeenCalledWith('Error during shutdown callback:', expect.any(Error));
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Error during shutdown callback: callback error'));
   });
 
   it('calls process.exit(0) after shutdown completes', async () => {
@@ -108,7 +109,7 @@ describe('GracefulShutdownHandler', () => {
     const handler = new GracefulShutdownHandler();
 
     process.emit('SIGTERM');
-    await vi.waitFor(() => expect(console.log).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('SIGTERM')
     ));
   });

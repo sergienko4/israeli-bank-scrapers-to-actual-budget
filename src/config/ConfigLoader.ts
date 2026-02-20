@@ -6,6 +6,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { ImporterConfig, BankConfig, BankTarget, NotificationConfig } from '../types/index.js';
 import { ConfigurationError } from '../errors/ErrorTypes.js';
+import { getLogger } from '../logger/index.js';
 
 export interface IConfigLoader {
   load(): ImporterConfig;
@@ -36,14 +37,14 @@ export class ConfigLoader implements IConfigLoader {
 
   private loadFromFile(): ImporterConfig | null {
     if (!existsSync(this.configPath)) {
-      console.log('📄 config.json not found, using environment variables');
+      getLogger().info('📄 config.json not found, using environment variables');
       return null;
     }
     try {
-      console.log('📄 Loading configuration from config.json');
+      getLogger().info('📄 Loading configuration from config.json');
       return JSON.parse(readFileSync(this.configPath, 'utf8')) as ImporterConfig;
     } catch {
-      console.warn('⚠️  Failed to parse config.json, falling back to environment variables');
+      getLogger().warn('⚠️  Failed to parse config.json, falling back to environment variables');
       return null;
     }
   }

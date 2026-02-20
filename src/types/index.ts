@@ -89,10 +89,18 @@ export interface NotificationConfig {
   webhook?: WebhookConfig;
 }
 
+export type LogFormat = 'words' | 'json' | 'table' | 'phone';
+
+export interface LogConfig {
+  format?: LogFormat;          // Default: 'words'
+  maxBufferSize?: number;      // Ring buffer max entries for /logs command. Default: 150
+}
+
 export interface ImporterConfig {
   actual: ActualConfig;
   banks: Record<string, BankConfig>;
   notifications?: NotificationConfig;
+  logConfig?: LogConfig;
   delayBetweenBanks?: number;  // Milliseconds to wait between bank imports (default: 0)
 }
 
