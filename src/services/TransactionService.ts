@@ -7,6 +7,7 @@ import type api from '@actual-app/api';
 import { BankTransaction, TransactionRecord, ActualAccount } from '../types/index.js';
 import { formatDate, toCents, extractQueryData } from '../utils/index.js';
 import { getLogger } from '../logger/index.js';
+import { ICategoryResolver } from './ICategoryResolver.js';
 
 export interface ImportResult {
   imported: number;
@@ -17,9 +18,11 @@ export interface ImportResult {
 
 export class TransactionService {
   private api: typeof api;
+  private categoryResolver?: ICategoryResolver;
 
-  constructor(actualApi: typeof api) {
+  constructor(actualApi: typeof api, categoryResolver?: ICategoryResolver) {
     this.api = actualApi;
+    this.categoryResolver = categoryResolver;
   }
 
   /**
@@ -56,9 +59,12 @@ export class TransactionService {
     importedId: string, target: TransactionRecord[], existingTransactions: TransactionRecord[]
   ): Promise<void> {
     try {
+      const resolved = this.categoryResolver?.resolve(parsed.description);
       await this.api.importTransactions(actualAccountId, [{
         account: actualAccountId, date: parsed.date, amount: parsed.amount,
-        payee_name: parsed.description, imported_id: importedId,
+        payee_name: resolved?.payeeName ?? parsed.description,
+        imported_payee: resolved?.importedPayee,
+        imported_id: importedId, category: resolved?.categoryId,
         notes: txn.memo ?? parsed.description, cleared: true
       }]);
       target.push(parsed);

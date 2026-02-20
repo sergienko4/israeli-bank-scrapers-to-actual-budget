@@ -158,6 +158,13 @@ Uses named volumes for data persistence — your data survives container recreat
 | `logConfig.format` | `words` | Log format: `words`, `json`, `table`, `phone` |
 | `logConfig.maxBufferSize` | `150` | Ring buffer size for `/logs` bot command (1-500) |
 
+### Auto-Categorization
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `categorization.mode` | `none` | `none`, `history`, or `translate` |
+| `categorization.translations` | `[]` | Array of `{fromPayee, toPayee}` rules (only for `translate` mode) |
+
 ### Notifications
 
 | Option | Description |
