@@ -50,7 +50,7 @@ Rules for contributing to this project. All contributors (including AI assistant
 
 23. **Always update documentation** - Every code change must include relevant doc updates
 24. **Update .md files before work** - Plan and document in task files before implementation begins
-25. **Update CHANGELOG.md** - Add entry for every change
+25. **CHANGELOG.md is auto-generated** - release-please updates it from conventional commits. Do NOT edit manually.
 26. **Remove unused files** - Keep the repository clean, no dead or orphaned files
 
 ---
@@ -58,6 +58,53 @@ Rules for contributing to this project. All contributors (including AI assistant
 ## Development Process
 
 27. **Plan first, then implement** - Create a plan, wait for review and approval before coding
+
+---
+
+## Releases (release-please)
+
+Releases are managed by [release-please](https://github.com/googleapis/release-please).
+
+### Release pipeline
+
+```text
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Code PR    │────▶│  Release PR  │────▶│  Git Tag +   │────▶│ Docker Build │
+│  (you)      │     │  (automatic) │     │  GitHub      │     │  + Publish   │
+│             │     │              │     │  Release     │     │  (automatic) │
+│ feat: ...   │     │ Bumps        │     │  (automatic) │     │              │
+│ fix: ...    │     │ package.json │     │              │     │ amd64+arm64  │
+│ refactor: . │     │ CHANGELOG.md │     │ v1.9.0 tag   │     │ Docker Hub   │
+└─────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+   Squash &            Accumulates          Created when         Triggered by
+   merge to main       multiple PRs         you merge the        tag push
+                       until you're         Release PR
+                       ready to ship
+```
+
+### Step by step
+
+1. You create a PR with a **conventional commit** title (e.g., `feat: Add health check`)
+2. PR passes CI (build, tests, markdownlint, lychee, CodeQL) → you **squash & merge**
+3. release-please runs automatically and creates/updates a **Release PR**
+   - The Release PR bumps `package.json` version and updates `CHANGELOG.md`
+   - Multiple code PRs accumulate in the same Release PR
+4. When you're ready to ship → **merge the Release PR**
+5. release-please creates a **git tag** (e.g., `v1.9.0`) and a **GitHub Release** with notes
+6. The tag push triggers the **Docker Build & Publish** workflow
+   - Builds multi-platform images (linux/amd64, linux/arm64)
+   - Pushes to Docker Hub
+   - Enriches the GitHub Release with Docker pull commands and stats
+
+### Commit message format
+
+The PR title (used as squash commit message) determines the version bump:
+
+- `feat: ...` → minor version bump (1.8.x → 1.9.0), appears under "Added"
+- `fix: ...` → patch version bump (1.8.2 → 1.8.3), appears under "Fixed"
+- `refactor: ...` → patch bump, appears under "Refactored"
+- `docs: ...` / `ci: ...` / `test: ...` → patch bump, appears under respective section
+- `chore: ...` → patch bump, hidden from CHANGELOG
 
 ---
 
@@ -71,10 +118,10 @@ When working on tasks from the `tasks/` folder:
 4. Implement following the steps documented in the task file
 5. Run `npm run validate` (build + tests)
 6. Build and run Docker image locally with real config
-7. Update `CHANGELOG.md` with the change
-8. Create a Pull Request linking to the task file
-9. After merge, update task status to `DONE` in `tasks/README.md`
+7. Create a Pull Request with a conventional commit title (e.g., `feat: Add health check endpoint`)
+8. After merge, update task status to `DONE` in `tasks/README.md`
+9. release-please will update CHANGELOG.md and version automatically
 
 ---
 
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-02-20
