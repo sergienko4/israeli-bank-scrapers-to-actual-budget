@@ -55,11 +55,13 @@ cap_add:
 ```
 
 **Why is this needed?**
+
 - Chromium requires kernel namespaces for browser sandboxing
 - This is standard for headless browser automation
 - Without it, the browser cannot launch
 
 **Is this safe?**
+
 - ✅ Safe when running **trusted code** (this open-source project)
 - ✅ Container still runs as non-root user (`node`)
 - ✅ No other privileged operations are performed
@@ -115,6 +117,7 @@ The importer uses these volumes:
 | `chrome-data/` | Browser profile (2FA) | 🟡 **MEDIUM** |
 
 **Recommendations**:
+
 - Store volumes on encrypted filesystem
 - Limit access to authorized users only
 - Regular backups of `config.json` (stored securely)
@@ -141,6 +144,7 @@ The importer uses these volumes:
 **DO NOT** open public GitHub issues for security vulnerabilities.
 
 Instead, use **GitHub Security Advisories**:
+
 1. Go to the [Security tab](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/security/advisories) on the repository
 2. Click **"Report a vulnerability"**
 3. Include:
@@ -154,6 +158,7 @@ We will respond within 48 hours and work on a fix.
 ### Security Updates
 
 Security patches will be released as:
+
 - **Critical**: Immediate patch release (e.g., v1.0.1)
 - **High**: Within 1 week
 - **Medium/Low**: Next minor release
@@ -165,6 +170,7 @@ Security patches will be released as:
 ### For End Users
 
 1. **Keep Docker Image Updated**
+
    ```bash
    docker pull sergienko4/israeli-bank-importer:latest
    ```
@@ -174,9 +180,11 @@ Security patches will be released as:
    - Enable 2FA on bank accounts where available
 
 3. **Monitor Logs**
+
    ```bash
    docker-compose logs -f israeli_bank_importer
    ```
+
    - Check for failed login attempts
    - Check for unusual activity
 
@@ -193,6 +201,7 @@ Security patches will be released as:
 ### For Developers
 
 1. **Dependency Scanning**
+
    ```bash
    npm audit
    docker scan israeli-bank-importer:latest
@@ -218,6 +227,7 @@ Security patches will be released as:
 ### Current Security Measures (v1.8.2)
 
 #### Container Security
+
 - ✅ Non-root container user (`node`, UID 1000)
 - ✅ Secure directory permissions (755)
 - ✅ Read-only application files (cannot be tampered)
@@ -226,6 +236,7 @@ Security patches will be released as:
 - ✅ Health checks enabled (auto-restart on failure)
 
 #### Application Security
+
 - ✅ Config file not baked into image
 - ✅ Read-only config mount supported (`:ro`)
 - ✅ Credentials never logged
@@ -233,6 +244,7 @@ Security patches will be released as:
 - ✅ Comprehensive input validation (UUIDs, URLs, dates, emails)
 
 #### Dependency Security
+
 - ✅ npm audit: 0 vulnerabilities (verified 2026-02-18)
 - ✅ Automated security scanning in CI/CD
 - ✅ Latest security patches applied:
@@ -242,6 +254,7 @@ Security patches will be released as:
   - All OS packages updated (`apt-get upgrade`)
 
 #### Build Security
+
 - ✅ Digest-pinned base image (immutable, reproducible)
 - ✅ Multi-stage security in CI/CD
 - ✅ Automated vulnerability scanning
@@ -285,6 +298,7 @@ This security policy is part of the Israeli Bank Importer project and is license
 ## 🔄 Security Update History
 
 ### v1.4.1 (2026-02-18) - Security Hardening
+
 - ✅ Base image pinned to digest for supply chain protection
 - ✅ OS security patches applied (`apt-get upgrade`)
 - ✅ npm updated from 10.x to 11.x (major security update)
@@ -295,10 +309,12 @@ This security policy is part of the Israeli Bank Importer project and is license
 - ✅ npm audit: 0 vulnerabilities
 
 ### v1.4.0 (2026-02-18) - Observability
+
 - ✅ Configuration validation at startup
 - ✅ Metrics collection for monitoring
 
 ### v1.3.0 (2026-02-18) - TypeScript Migration
+
 - ✅ Full type safety
 - ✅ Error handling improvements
 

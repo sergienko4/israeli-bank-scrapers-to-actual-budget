@@ -1,0 +1,14 @@
+{
+  // Line length — our docs have long lines and tables
+  "MD013": false,
+  // Inline HTML — we use <details>/<summary> tags in README
+  "MD033": false,
+  // First line heading — config.json.example starts with comments
+  "MD041": false,
+  // Duplicate headings — CHANGELOG has repeated ### Added, ### Fixed etc.
+  "MD024": false,
+  // Ordered list prefix — GUIDELINES.md intentionally numbers rules 1-27 across sections
+  "MD029": false,
+  // Emphasis as heading — we use **bold** for sub-options in README (Option A, Step 1, etc.)
+  "MD036": false
+}

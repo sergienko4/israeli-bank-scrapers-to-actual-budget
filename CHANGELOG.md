@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.8.2] - 2026-02-19
 
 ### Fixed
+
 - Scheduler timeout overflow causing infinite import loop (`safeSleep()` clamp at 24.8 days)
 - Bank categories — 14 banks + 4 credit cards (was inconsistent across docs)
 - Documentation cleanup — bank count, institution table, hardcoded Docker tags
@@ -19,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.8.0] - 2026-02-19
 
 ### Added
+
 - **Import audit log** (Task 17)
   - `AuditLogService` — persists import history to `/app/data/audit-log.json`
   - Each entry: timestamp, bank results, durations, transaction counts, errors
@@ -31,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.7.0] - 2026-02-19
 
 ### Added
+
 - **Webhook notifications — Slack, Discord, plain JSON** (Task 16)
   - `WebhookNotifier` implementing `INotifier` interface (OCP — no changes to existing code)
   - 3 formats: Slack (`{ text }`), Discord (`{ content }`), plain JSON (`{ event, ... }`)
@@ -43,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.6.0] - 2026-02-19
 
 ### Added
+
 - **Rate limiting between bank imports** (Task 18)
   - `delayBetweenBanks` config option (milliseconds, default: 0 = no delay)
   - Prevents bank API throttling when scraping multiple banks
@@ -57,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.3] - 2026-02-19
 
 ### Refactored
+
 - **All methods refactored to max ~10 lines** (Task 13)
   - Extracted helpers across all services: `buildScraperOptions`, `buildOtpRetriever`, `processAccount`, `reconcileIfConfigured`, `initializeApi`, `processAllBanks`, `finalizeImport`, `handleFatalError`
   - OCP credential validation map replaces if/else chain in ConfigLoader
@@ -64,10 +69,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Record<MessageFormat, ...>` dispatch replaces switch in TelegramNotifier
 
 ### Added
+
 - `errorMessage()` utility — replaces 5 duplicated `error instanceof Error` patterns
 - OCP dispatch maps in ConfigLoader, ErrorFormatter, TelegramNotifier
 
 ### Removed
+
 - Dead `ConfigurationError` instanceof check in `loadFromFile` (could never match)
 
 ---
@@ -75,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.2] - 2026-02-19
 
 ### Refactored
+
 - **Full `any` type elimination** (Task 08)
   - Separated `scraperConfig: any` into typed `ScraperOptions` + `ScraperCredentials`
   - Replaced `error: any` with `unknown` + type guards
@@ -83,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - CI `any` ratchet lowered from 8 to 0 — zero tolerance
 
 ### Added
+
 - `ActualAccount` type in `src/types/index.ts`
 - `extractQueryData<T>()` utility with 7 unit tests
 
@@ -91,6 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.1] - 2026-02-19
 
 ### Fixed
+
 - Pause Telegram poller during import to prevent OTP conflicts
 - Reconciliation re-enabled as opt-in per target (`"reconcile": true`)
 - `daysBack` relative date import (1-30 days, recalculated each run)
@@ -100,6 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.0] - 2026-02-19
 
 ### Added
+
 - **2FA via Telegram** (Task 07)
   - OneZero bank: bot asks for SMS OTP code via Telegram
   - Long-term token support: skip OTP after first login (`otpLongTermToken`)
@@ -114,6 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.0] - 2026-02-19
 
 ### Added
+
 - **Telegram bot commands** (`listenForCommands: true`)
   - `/scan` — trigger import from Telegram
   - `/status` — show last run info
@@ -131,6 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 4096 char truncation for Telegram limit
 
 ### CI/CD
+
 - Upgraded CodeQL Action v3 → v4
 - Added `npm audit` vulnerability check to PR
 - Added `any` type ratchet guard (max 8)
@@ -141,6 +154,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.3.0] - 2026-02-19
 
 ### Added
+
 - **Full TypeScript migration** with strict mode
   - Interface-based architecture following SOLID principles
 - **Resilience features**
@@ -154,6 +168,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.1] - 2026-02-19
 
 ### Refactored
+
 - **Extract TransactionService** (Task 02)
   - New `src/services/TransactionService.ts` with `importTransactions()` and `getOrCreateAccount()`
   - 14 new unit tests for TransactionService
@@ -163,6 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.2.0] - 2026-02-19
 
 ### Added
+
 - **Enhanced GitHub release notes** (Task 05)
   - Auto-generated release notes with Docker pull commands
 
@@ -171,6 +187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0] - 2026-02-19
 
 ### Added
+
 - **Unit test suite with Vitest** (Task 01)
   - 118 tests across 10 test files
   - GitHub Actions CI workflow
@@ -178,6 +195,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `toCents()`, `fromCents()`, `formatDate()`
 
 ### Fixed
+
 - Broken documentation links (Task 06)
 
 ---
@@ -185,6 +203,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-02-18
 
 ### Added
+
 - Automatic transaction import from Israeli banks
 - Support for 18 Israeli financial institutions
 - Docker containerization with Chromium
