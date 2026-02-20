@@ -85,6 +85,7 @@ export interface WebhookConfig {
 
 export interface NotificationConfig {
   enabled: boolean;
+  maxTransactions?: number;  // Default: 5. Max transactions per account in notifications (1-25)
   telegram?: TelegramConfig;
   webhook?: WebhookConfig;
 }
