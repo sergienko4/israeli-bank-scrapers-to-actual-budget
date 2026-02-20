@@ -4,6 +4,7 @@
  */
 
 import { ShutdownError } from '../errors/ErrorTypes.js';
+import { getLogger } from '../logger/index.js';
 
 export interface IRetryStrategy {
   execute<T>(fn: () => Promise<T>, operationName: string): Promise<T>;
@@ -25,7 +26,7 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
     for (let attempt = 1; attempt <= this.options.maxAttempts; attempt++) {
       if (this.options.shouldShutdown?.()) throw new ShutdownError('Operation cancelled due to shutdown');
       try {
-        console.log(`  🔄 Attempt ${attempt}/${this.options.maxAttempts}...`);
+        getLogger().info(`  🔄 Attempt ${attempt}/${this.options.maxAttempts}...`);
         return await fn();
       } catch (error) {
         lastError = error as Error;
@@ -39,8 +40,8 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
 
   private async handleRetryBackoff(attempt: number, operationName: string, error: Error): Promise<void> {
     const backoffMs = this.options.initialBackoffMs * Math.pow(2, attempt - 1);
-    console.warn(`  ⚠️  ${operationName} failed (attempt ${attempt}/${this.options.maxAttempts}): ${error.message}`);
-    console.log(`  ⏳ Retrying in ${backoffMs / 1000}s...`);
+    getLogger().warn(`  ⚠️  ${operationName} failed (attempt ${attempt}/${this.options.maxAttempts}): ${error.message}`);
+    getLogger().info(`  ⏳ Retrying in ${backoffMs / 1000}s...`);
     this.options.onRetry?.(attempt, this.options.maxAttempts, backoffMs, error);
     await this.sleep(backoffMs);
   }

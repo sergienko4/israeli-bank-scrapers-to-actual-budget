@@ -16,6 +16,8 @@ describe('TelegramPoller', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
+  // Call sequence: 1=clearOldMessages, 2=registerCommands, 3+=poll cycles
+
   it('dispatches messages from correct chatId', async () => {
     const onMessage = vi.fn().mockResolvedValue(undefined);
     const poller = new TelegramPoller('123:ABC', '999', onMessage);
@@ -23,10 +25,8 @@ describe('TelegramPoller', () => {
     let callCount = 0;
     fetchMock.mockImplementation(() => {
       callCount++;
-      // Call 1: clearOldMessages
-      if (callCount === 1) return emptyResponse();
-      // Call 2: actual poll with message
-      if (callCount === 2) {
+      if (callCount <= 2) return emptyResponse(); // clearOld + registerCommands
+      if (callCount === 3) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
@@ -50,8 +50,8 @@ describe('TelegramPoller', () => {
     let callCount = 0;
     fetchMock.mockImplementation(() => {
       callCount++;
-      if (callCount === 1) return emptyResponse();
-      if (callCount === 2) {
+      if (callCount <= 2) return emptyResponse();
+      if (callCount === 3) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
@@ -84,15 +84,16 @@ describe('TelegramPoller', () => {
           })
         });
       }
+      if (callCount === 2) return emptyResponse(); // registerCommands
       poller.stop();
       return emptyResponse();
     });
 
     await poller.start();
 
-    // Second call should use offset=101 (cleared past old messages)
-    const secondCallUrl = fetchMock.mock.calls[1]?.[0] ?? '';
-    expect(secondCallUrl).toContain('offset=101');
+    // Third call (first poll) should use offset=101
+    const thirdCallUrl = fetchMock.mock.calls[2]?.[0] ?? '';
+    expect(thirdCallUrl).toContain('offset=101');
   });
 
   it('stops when stop() is called', async () => {
@@ -104,5 +105,21 @@ describe('TelegramPoller', () => {
     });
 
     await poller.start();
+  });
+
+  it('registers bot commands on start', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+
+    fetchMock.mockImplementation(() => {
+      poller.stop();
+      return emptyResponse();
+    });
+
+    await poller.start();
+
+    const registerCall = fetchMock.mock.calls.find(
+      (c: [string, ...unknown[]]) => typeof c[0] === 'string' && c[0].includes('setMyCommands')
+    );
+    expect(registerCall).toBeDefined();
   });
 });

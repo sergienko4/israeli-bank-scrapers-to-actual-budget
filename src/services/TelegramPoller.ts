@@ -5,6 +5,7 @@
 
 import { TelegramApiResponse } from '../types/index.js';
 import { errorMessage } from '../utils/index.js';
+import { getLogger } from '../logger/index.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const POLL_TIMEOUT = 30;
@@ -24,13 +25,14 @@ export class TelegramPoller {
     this.running = true;
     this.startedAt = Math.floor(Date.now() / 1000);
     await this.clearOldMessages();
-    console.log('🤖 Telegram command listener started');
+    await this.registerCommands();
+    getLogger().info('🤖 Telegram command listener started');
 
     while (this.running) {
       try {
         await this.poll();
       } catch (error: unknown) {
-        console.error('⚠️  Telegram poll error:', errorMessage(error));
+        getLogger().error(`⚠️  Telegram poll error: ${errorMessage(error)}`);
         await this.sleep(5000);
       }
     }
@@ -58,6 +60,19 @@ export class TelegramPoller {
     if (String(message.chat.id) !== this.chatId) return;
     if (message.date < this.startedAt) return;
     await this.onMessage(message.text);
+  }
+
+  private async registerCommands(): Promise<void> {
+    const commands = [
+      { command: 'scan', description: 'Run bank import now' },
+      { command: 'status', description: 'Show last run info + history' },
+      { command: 'logs', description: 'Show recent log entries' },
+      { command: 'help', description: 'List available commands' },
+    ];
+    try {
+      const url = `${TELEGRAM_API}/bot${this.botToken}/setMyCommands`;
+      await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ commands }) });
+    } catch { /* Non-critical — commands still work without menu */ }
   }
 
   private async clearOldMessages(): Promise<void> {

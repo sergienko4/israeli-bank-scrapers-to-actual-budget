@@ -4,6 +4,7 @@
  */
 
 import { TelegramNotifier } from './notifications/TelegramNotifier.js';
+import { getLogger } from '../logger/index.js';
 
 export class TwoFactorService {
   private timeoutMs: number;
@@ -17,10 +18,12 @@ export class TwoFactorService {
 
   createOtpRetriever(bankName: string): () => Promise<string> {
     return async () => {
+      getLogger().info(`  🔐 Waiting for OTP code for ${bankName}...`);
       const reply = await this.notifier.waitForReply(
         `🔐 Enter OTP code for <b>${bankName}</b> (check SMS):`,
         this.timeoutMs
       );
+      getLogger().info(`  ✅ OTP received for ${bankName}`);
       return this.extractCode(reply);
     };
   }

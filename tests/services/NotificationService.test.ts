@@ -84,8 +84,7 @@ describe('NotificationService', () => {
     await service.sendError('test');
 
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('Notification failed'),
-      expect.any(String)
+      expect.stringContaining('Notification failed')
     );
   });
 

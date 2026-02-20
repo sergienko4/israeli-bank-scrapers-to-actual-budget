@@ -3,6 +3,7 @@
  */
 
 import { TransactionRecord } from '../types/index.js';
+import { getLogger } from '../logger/index.js';
 
 export { TransactionRecord };
 
@@ -160,31 +161,31 @@ export class MetricsService {
   printSummary(): void {
     const summary = this.getSummary();
     const importDuration = Date.now() - this.importStartTime;
-    console.log('\n' + '='.repeat(60));
+    getLogger().info('\n' + '='.repeat(60));
     this.printOverallStats(summary, importDuration);
     if (summary.banks.length > 0) this.printBankPerformance(summary.banks);
-    console.log('='.repeat(60));
+    getLogger().info('='.repeat(60));
   }
 
   private printOverallStats(summary: ImportSummary, importDuration: number): void {
-    console.log('📊 Import Summary\n');
-    console.log(`  Total banks: ${summary.totalBanks}`);
-    console.log(`  Successful: ${summary.successfulBanks} (${summary.successRate.toFixed(1)}%)`);
-    console.log(`  Failed: ${summary.failedBanks} (${(100 - summary.successRate).toFixed(1)}%)`);
-    console.log(`  Total transactions: ${summary.totalTransactions}`);
-    console.log(`  Duplicates prevented: ${summary.totalDuplicates}`);
-    console.log(`  Total duration: ${(importDuration / 1000).toFixed(1)}s`);
-    if (summary.totalBanks > 0) console.log(`  Average per bank: ${(summary.averageDuration / 1000).toFixed(1)}s`);
+    getLogger().info('📊 Import Summary\n');
+    getLogger().info(`  Total banks: ${summary.totalBanks}`);
+    getLogger().info(`  Successful: ${summary.successfulBanks} (${summary.successRate.toFixed(1)}%)`);
+    getLogger().info(`  Failed: ${summary.failedBanks} (${(100 - summary.successRate).toFixed(1)}%)`);
+    getLogger().info(`  Total transactions: ${summary.totalTransactions}`);
+    getLogger().info(`  Duplicates prevented: ${summary.totalDuplicates}`);
+    getLogger().info(`  Total duration: ${(importDuration / 1000).toFixed(1)}s`);
+    if (summary.totalBanks > 0) getLogger().info(`  Average per bank: ${(summary.averageDuration / 1000).toFixed(1)}s`);
   }
 
   private printBankPerformance(banks: BankMetrics[]): void {
-    console.log('\n🏦 Bank Performance:\n');
+    getLogger().info('\n🏦 Bank Performance:\n');
     for (const bank of banks) {
       const icon = bank.status === 'success' ? '✅' : '❌';
       const dur = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : 'N/A';
-      console.log(`  ${icon} ${bank.bankName}: ${dur} (${bank.transactionsImported} txns, ${bank.transactionsSkipped} duplicates)`);
+      getLogger().info(`  ${icon} ${bank.bankName}: ${dur} (${bank.transactionsImported} txns, ${bank.transactionsSkipped} duplicates)`);
       if (bank.reconciliationStatus) this.printReconciliationLine(bank);
-      if (bank.error) console.log(`     ❌ Error: ${bank.error}`);
+      if (bank.error) getLogger().error(`     ❌ Error: ${bank.error}`);
     }
   }
 
@@ -195,7 +196,7 @@ export class MetricsService {
       skipped: 'balanced',
       'already-reconciled': 'already reconciled',
     };
-    console.log(`     ${reconIcon} Reconciliation: ${reconMessages[bank.reconciliationStatus!]}`);
+    getLogger().info(`     ${reconIcon} Reconciliation: ${reconMessages[bank.reconciliationStatus!]}`);
   }
 
   /**

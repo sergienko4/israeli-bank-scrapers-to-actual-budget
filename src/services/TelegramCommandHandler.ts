@@ -1,11 +1,15 @@
 /**
  * TelegramCommandHandler - Handles bot commands
- * Commands: /scan, /import, /status, /help
+ * Commands: /scan, /import, /status, /logs, /help
  */
 
 import { INotifier } from './notifications/INotifier.js';
 import { IAuditLog, AuditEntry } from './AuditLogService.js';
 import { errorMessage } from '../utils/index.js';
+import { getLogger, getLogBuffer } from '../logger/index.js';
+
+const MAX_TELEGRAM_LENGTH = 4096;
+const DEFAULT_LOG_COUNT = 50;
 
 export class TelegramCommandHandler {
   private importPromise: Promise<void> | null = null;
@@ -19,11 +23,13 @@ export class TelegramCommandHandler {
   ) {}
 
   async handle(text: string): Promise<void> {
-    const command = text.trim().toLowerCase().split(' ')[0];
+    const parts = text.trim().toLowerCase().split(' ');
+    const command = parts[0];
     const handlers: Record<string, () => Promise<void>> = {
       '/scan': () => this.handleScan(),
       '/import': () => this.handleScan(),
       '/status': () => this.handleStatus(),
+      '/logs': () => this.handleLogs(parts[1]),
       '/help': () => this.handleHelp(),
       '/start': () => this.handleHelp(),
     };
@@ -73,11 +79,35 @@ export class TelegramCommandHandler {
     return `${icon} ${date} ${time} — ${entry.totalTransactions} txns, ${entry.successfulBanks}/${entry.totalBanks} banks`;
   }
 
+  private async handleLogs(countArg?: string): Promise<void> {
+    const count = this.parseLogCount(countArg);
+    const entries = getLogBuffer().getRecent(count);
+    if (entries.length === 0) { await this.reply('📋 No log entries yet.'); return; }
+    const header = `📋 <b>Recent Logs</b> (${entries.length} entries)\n\n`;
+    const body = this.truncateForTelegram(entries, header.length);
+    await this.reply(header + `<pre>${body}</pre>`);
+  }
+
+  private parseLogCount(arg?: string): number {
+    if (!arg) return DEFAULT_LOG_COUNT;
+    const n = parseInt(arg, 10);
+    return isNaN(n) ? DEFAULT_LOG_COUNT : Math.min(Math.max(n, 1), 150);
+  }
+
+  private truncateForTelegram(entries: string[], reservedLength: number): string {
+    const maxLength = MAX_TELEGRAM_LENGTH - reservedLength - 20;
+    const text = entries.join('\n');
+    if (text.length <= maxLength) return text;
+    return text.slice(-maxLength) + '\n...(truncated)';
+  }
+
   private async handleHelp(): Promise<void> {
     const lines = [
       '🤖 <b>Available Commands</b>', '',
       '/scan - Run bank import now',
       '/status - Show last run info + history',
+      '/logs - Show recent log entries',
+      '/logs 100 - Show last 100 entries (max 150)',
       '/help - Show this message',
     ];
     await this.reply(lines.join('\n'));
@@ -85,7 +115,7 @@ export class TelegramCommandHandler {
 
   private async reply(text: string): Promise<void> {
     try { await this.notifier.sendMessage(text); }
-    catch (error: unknown) { console.debug('Failed to send reply:', errorMessage(error)); }
+    catch (error: unknown) { getLogger().debug(`Failed to send reply: ${errorMessage(error)}`); }
   }
 
   private timeSince(date: Date): string {

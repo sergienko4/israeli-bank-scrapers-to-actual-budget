@@ -274,6 +274,26 @@ Set via environment variables in `docker-compose.yml` or `docker run -e`:
 
 Set timezone: `TZ=Asia/Jerusalem`
 
+### Logging
+
+Configure log output format via `logConfig` in config.json:
+
+```json
+"logConfig": {
+  "format": "words",
+  "maxBufferSize": 150
+}
+```
+
+| Format | Output | Best for |
+|--------|--------|----------|
+| `words` | Emoji-rich console output (default) | Development, human reading |
+| `json` | Structured JSON, one object per line | Docker log aggregators (Loki, ELK) |
+| `table` | `[HH:MM:SS] LEVEL message` | Timestamped production logs |
+| `phone` | `> compact message` (no emojis) | Mobile viewing, minimal output |
+
+`maxBufferSize` controls the ring buffer for the `/logs` bot command (default: 150, max: 500).
+
 ### Rate Limiting
 
 Prevent bank API throttling by adding a delay between bank imports:
@@ -415,6 +435,8 @@ When `listenForCommands` is `true`, control the importer from Telegram:
 |---------|--------|
 | `/scan` | Run bank import now |
 | `/status` | Show last run info (from audit log) |
+| `/logs` | Show recent log entries (default: 50) |
+| `/logs N` | Show last N entries (max 150) |
 | `/help` | List commands |
 
 The bot listens alongside the cron scheduler. If an import is already running, it waits instead of starting a duplicate.
@@ -580,7 +602,7 @@ npm run test:watch    # Watch mode
 npm run validate      # Build + test (validate before committing)
 ```
 
-**226 tests** across 19 test files with 70%+ branch coverage.
+**270 tests** across 25 test files with 70%+ branch coverage.
 
 ---
 

@@ -3,6 +3,8 @@
  * Follows Single Responsibility Principle: Only handles shutdown signals
  */
 
+import { getLogger } from '../logger/index.js';
+
 export interface IShutdownHandler {
   isShuttingDown(): boolean;
   onShutdown(callback: () => void | Promise<void>): void;
@@ -31,17 +33,17 @@ export class GracefulShutdownHandler implements IShutdownHandler {
 
   private async handleShutdown(signal: string): Promise<void> {
     if (this.shuttingDown) return;
-    console.log(`\n⚠️  Received ${signal} signal, initiating graceful shutdown...`);
+    getLogger().warn(`\n⚠️  Received ${signal} signal, initiating graceful shutdown...`);
     this.shuttingDown = true;
     await this.executeCallbacks();
-    console.log('✅ Graceful shutdown complete');
+    getLogger().info('✅ Graceful shutdown complete');
     process.exit(0);
   }
 
   private async executeCallbacks(): Promise<void> {
     for (const callback of this.callbacks) {
       try { await callback(); }
-      catch (error) { console.error('Error during shutdown callback:', error); }
+      catch (error: unknown) { getLogger().error(`Error during shutdown callback: ${error instanceof Error ? error.message : String(error)}`); }
     }
   }
 }
