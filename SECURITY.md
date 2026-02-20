@@ -224,7 +224,7 @@ Security patches will be released as:
 
 ## 🔍 Security Features
 
-### Current Security Measures (v1.8.2)
+### Current Security Measures (v1.10.1)
 
 #### Container Security
 
@@ -320,5 +320,5 @@ This security policy is part of the Israeli Bank Importer project and is license
 
 ---
 
-**Last Updated**: 2026-02-19
-**Version**: 1.8.2
+**Last Updated**: 2026-02-20
+**Version**: 1.10.1

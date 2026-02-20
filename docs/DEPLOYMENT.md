@@ -37,8 +37,16 @@
     }
   },
   "delayBetweenBanks": 5000,
+  "logConfig": {
+    "format": "words",
+    "maxBufferSize": 150
+  },
+  "categorization": {
+    "mode": "none"
+  },
   "notifications": {
     "enabled": true,
+    "maxTransactions": 5,
     "telegram": {
       "botToken": "123456789:ABCdef...",
       "chatId": "-1001234567890",
@@ -170,6 +178,7 @@ Uses named volumes for data persistence — your data survives container recreat
 | Option | Description |
 |--------|-------------|
 | `notifications.enabled` | `true` / `false` — master switch |
+| `notifications.maxTransactions` | Max transactions per account in notifications (1-25, default: 5) |
 | `notifications.telegram.botToken` | Telegram Bot API token |
 | `notifications.telegram.chatId` | Chat ID for notifications |
 | `notifications.telegram.messageFormat` | `summary` (default), `compact`, `ledger`, `emoji` |
