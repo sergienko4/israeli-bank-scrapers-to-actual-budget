@@ -17,9 +17,18 @@ import { NotificationService } from './services/NotificationService.js';
 import { AuditLogService } from './services/AuditLogService.js';
 import { TwoFactorService } from './services/TwoFactorService.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
-import { ImporterConfig, BankConfig, BankTarget, BankTransaction, DEFAULT_RESILIENCE_CONFIG } from './types/index.js';
+import { ImporterConfig, BankConfig, BankTarget, BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode } from './types/index.js';
 import { errorMessage } from './utils/index.js';
 import { createLogger, getLogger } from './logger/index.js';
+import { ICategoryResolver } from './services/ICategoryResolver.js';
+import { HistoryCategoryResolver } from './services/HistoryCategoryResolver.js';
+import { TranslateCategoryResolver } from './services/TranslateCategoryResolver.js';
+
+// Load configuration and initialize logger
+const configLoader = new ConfigLoader();
+const config: ImporterConfig = configLoader.load();
+createLogger(config.logConfig);
+const logger = getLogger();
 
 // Initialize resilience components
 const shutdownHandler = new GracefulShutdownHandler();
@@ -30,16 +39,26 @@ const retryStrategy = new ExponentialBackoffRetry({
 });
 const timeoutWrapper = new TimeoutWrapper();
 const errorFormatter = new ErrorFormatter();
-const transactionService = new TransactionService(api);
+
+// ─── Category resolver (OCP dispatch) ───
+
+const resolverFactories: Record<CategorizationMode, (cfg: ImporterConfig) => ICategoryResolver | undefined> = {
+  none: () => undefined,
+  history: () => new HistoryCategoryResolver(api),
+  translate: (cfg) => new TranslateCategoryResolver(cfg.categorization?.translations ?? []),
+};
+
+function createCategoryResolver(cfg: ImporterConfig): ICategoryResolver | undefined {
+  const mode = cfg.categorization?.mode ?? 'none';
+  return (resolverFactories[mode] ?? resolverFactories.none)(cfg);
+}
+
+// Initialize services
+const categoryResolver = createCategoryResolver(config);
+const transactionService = new TransactionService(api, categoryResolver);
 const reconciliationService = new ReconciliationService(api);
 const metrics = new MetricsService();
 const auditLog = new AuditLogService();
-
-// Load configuration and initialize logger
-const configLoader = new ConfigLoader();
-const config: ImporterConfig = configLoader.load();
-createLogger(config.logConfig);
-const logger = getLogger();
 const notificationService = new NotificationService(config.notifications);
 
 // Initialize 2FA service if Telegram is configured
@@ -293,6 +312,7 @@ async function main(): Promise<void> {
       try { await api.shutdown(); } catch (e: unknown) { logger.error(`Error during API shutdown: ${errorMessage(e)}`); }
     });
     await initializeApi();
+    await categoryResolver?.initialize();
     metrics.startImport();
     await processAllBanks();
     await finalizeImport();

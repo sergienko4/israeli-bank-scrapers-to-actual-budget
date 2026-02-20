@@ -96,11 +96,31 @@ export interface LogConfig {
   maxBufferSize?: number;      // Ring buffer max entries for /logs command. Default: 150
 }
 
+export type CategorizationMode = 'history' | 'translate' | 'none';
+
+export interface TranslationRule {
+  fromPayee: string;   // Hebrew text to find in bank payee name
+  toPayee: string;     // English name to use in Actual Budget
+}
+
+export interface CategorizationConfig {
+  mode?: CategorizationMode;        // Default: 'none'
+  translations?: TranslationRule[]; // Only used when mode='translate'
+}
+
+/** Result of category resolution — either a category ID or a payee translation */
+export interface ResolvedCategory {
+  categoryId?: string;     // For history mode
+  payeeName?: string;      // For translate mode (translated name)
+  importedPayee?: string;  // Original name (preserved for reference)
+}
+
 export interface ImporterConfig {
   actual: ActualConfig;
   banks: Record<string, BankConfig>;
   notifications?: NotificationConfig;
   logConfig?: LogConfig;
+  categorization?: CategorizationConfig;
   delayBetweenBanks?: number;  // Milliseconds to wait between bank imports (default: 0)
 }
 

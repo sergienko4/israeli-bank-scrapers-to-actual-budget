@@ -55,6 +55,17 @@
     "maxBufferSize": 150
   },
 
+  "categorization": {
+    "mode": "none",
+    "translations": [
+      { "fromPayee": "סופר",       "toPayee": "Supermarket" },
+      { "fromPayee": "שופרסל",     "toPayee": "Shufersal" },
+      { "fromPayee": "רמי לוי",    "toPayee": "Rami Levy" },
+      { "fromPayee": "דלק",        "toPayee": "Gas Station" },
+      { "fromPayee": "חשמל",       "toPayee": "Electric Company" }
+    ]
+  },
+
   "notifications": {
     "enabled": false,
     "telegram": {
@@ -85,6 +96,8 @@
     "webhook.format": "slack | discord | plain (default: plain)",
     "logConfig.format": "words | json | table | phone (default: words)",
     "logConfig.maxBufferSize": "1-500. Ring buffer for /logs. Auto-enabled (150) when listenForCommands=true, otherwise 0",
+    "categorization.mode": "none (default) | history | translate. See README for details",
+    "categorization.translations": "Array of {fromPayee, toPayee} rules. Only used when mode=translate",
     "syncId": "Settings → Show Advanced Settings → Sync ID",
     "actualAccountId": "Click account in Actual Budget → ID from URL"
   }
