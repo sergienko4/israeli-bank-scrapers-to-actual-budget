@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.11.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.10.1...v1.11.0) (2026-02-20)
+
+
+### Added
+
+* Add auto-categorization with history and translate modes ([#51](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/51)) ([03f7462](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/03f746245ea5b111b4c1c9d9ec19415ac2885947))
+* Add structured logging with 4 formats and /logs bot command ([05665f8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/05665f8951445ae424b9e8302f78b3cc85beefa1))
+
+
+### Fixed
+
+* Close unclosed HTML tags in truncated Telegram messages ([#52](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/52)) ([655392d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/655392d1b42169ae256c44edcfbd114c2619d2e3))
+
 ## [1.10.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.10.0...v1.10.1) (2026-02-20)
 
 
