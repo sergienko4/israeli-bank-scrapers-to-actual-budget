@@ -8,13 +8,41 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
     steps:
       - name: Run release-please
+        id: rp
         uses: googleapis/release-please-action@v4
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Trigger Docker Build & Publish after release-please creates a release.
+  # Tags created by GITHUB_TOKEN don't trigger other workflows (GitHub security),
+  # so we use workflow_dispatch to call it explicitly.
+  trigger-docker:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Docker Build & Publish
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'release.yml',
+              ref: 'main',
+              inputs: {
+                tag: '${{ needs.release-please.outputs.tag_name }}'
+              }
+            });
+            console.log('Triggered Docker Build & Publish for ${{ needs.release-please.outputs.tag_name }}');
