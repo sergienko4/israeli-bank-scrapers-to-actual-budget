@@ -11,6 +11,7 @@ import { ImportSummary } from './MetricsService.js';
 import { INotifier } from './notifications/INotifier.js';
 import { TelegramNotifier } from './notifications/TelegramNotifier.js';
 import { WebhookNotifier } from './notifications/WebhookNotifier.js';
+import { getLogger } from '../logger/index.js';
 
 export class NotificationService {
   private notifiers: INotifier[] = [];
@@ -19,11 +20,11 @@ export class NotificationService {
     if (!config?.enabled) return;
     if (config.telegram) {
       this.notifiers.push(new TelegramNotifier(config.telegram));
-      console.log('📱 Telegram notifications enabled');
+      getLogger().info('📱 Telegram notifications enabled');
     }
     if (config.webhook) {
       this.notifiers.push(new WebhookNotifier(config.webhook));
-      console.log(`🔗 Webhook notifications enabled (${config.webhook.format || 'plain'})`);
+      getLogger().info(`🔗 Webhook notifications enabled (${config.webhook.format || 'plain'})`);
     }
   }
 
@@ -41,7 +42,7 @@ export class NotificationService {
     for (const result of results) {
       if (result.status === 'rejected') {
         const msg = result.reason instanceof Error ? result.reason.message : String(result.reason);
-        console.error('⚠️  Notification failed:', msg);
+        getLogger().error(`⚠️  Notification failed: ${msg}`);
       }
     }
   }

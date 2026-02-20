@@ -5,6 +5,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { ImportSummary, BankMetrics } from './MetricsService.js';
+import { getLogger } from '../logger/index.js';
 
 export interface AuditEntry {
   timestamp: string;
@@ -72,6 +73,6 @@ export class AuditLogService implements IAuditLog {
 
   private saveEntries(entries: AuditEntry[]): void {
     try { writeFileSync(this.filePath, JSON.stringify(entries, null, 2)); }
-    catch (error) { console.error('Failed to write audit log:', error); }
+    catch (error: unknown) { getLogger().error(`Failed to write audit log: ${error instanceof Error ? error.message : String(error)}`); }
   }
 }

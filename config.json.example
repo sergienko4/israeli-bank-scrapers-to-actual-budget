@@ -50,6 +50,11 @@
     }
   },
 
+  "logConfig": {
+    "format": "words",
+    "maxBufferSize": 150
+  },
+
   "notifications": {
     "enabled": false,
     "telegram": {
@@ -75,9 +80,11 @@
     "otpLongTermToken": "Set after first 2FA login to skip OTP on future runs",
     "messageFormat": "summary | compact | ledger | emoji",
     "showTransactions": "new | all | none",
-    "listenForCommands": "true = bot listens for /scan, /status, /help",
+    "listenForCommands": "true = bot listens for /scan, /status, /logs, /help",
     "webhook.url": "HTTP(S) URL for Slack, Discord, or custom webhook",
     "webhook.format": "slack | discord | plain (default: plain)",
+    "logConfig.format": "words | json | table | phone (default: words)",
+    "logConfig.maxBufferSize": "1-500. Ring buffer for /logs. Auto-enabled (150) when listenForCommands=true, otherwise 0",
     "syncId": "Settings → Show Advanced Settings → Sync ID",
     "actualAccountId": "Click account in Actual Budget → ID from URL"
   }

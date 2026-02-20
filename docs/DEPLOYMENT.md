@@ -151,6 +151,13 @@ Uses named volumes for data persistence — your data survives container recreat
 |--------|---------|-------------|
 | `delayBetweenBanks` | `0` | Milliseconds to wait between bank imports |
 
+### Logging
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `logConfig.format` | `words` | Log format: `words`, `json`, `table`, `phone` |
+| `logConfig.maxBufferSize` | `150` | Ring buffer size for `/logs` bot command (1-500) |
+
 ### Notifications
 
 | Option | Description |
@@ -160,7 +167,7 @@ Uses named volumes for data persistence — your data survives container recreat
 | `notifications.telegram.chatId` | Chat ID for notifications |
 | `notifications.telegram.messageFormat` | `summary` (default), `compact`, `ledger`, `emoji` |
 | `notifications.telegram.showTransactions` | `new` (default), `all`, `none` |
-| `notifications.telegram.listenForCommands` | `true` to enable `/scan`, `/status`, `/help` |
+| `notifications.telegram.listenForCommands` | `true` to enable `/scan`, `/status`, `/logs`, `/help` |
 | `notifications.webhook.url` | Webhook URL (Slack, Discord, or custom) |
 | `notifications.webhook.format` | `slack`, `discord`, `plain` (default) |
 

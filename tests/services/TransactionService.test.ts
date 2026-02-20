@@ -104,8 +104,7 @@ describe('TransactionService', () => {
       expect(result.imported).toBe(0);
       expect(result.skipped).toBe(0);
       expect(console.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error importing transaction'),
-        'Database error'
+        expect.stringContaining('Error importing transaction: Database error')
       );
     });
 

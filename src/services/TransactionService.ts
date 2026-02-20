@@ -6,6 +6,7 @@
 import type api from '@actual-app/api';
 import { BankTransaction, TransactionRecord, ActualAccount } from '../types/index.js';
 import { formatDate, toCents, extractQueryData } from '../utils/index.js';
+import { getLogger } from '../logger/index.js';
 
 export interface ImportResult {
   imported: number;
@@ -36,7 +37,7 @@ export class TransactionService {
   ): Promise<ImportResult> {
     const newTransactions: TransactionRecord[] = [];
     const existingTransactions: TransactionRecord[] = [];
-    console.log(`     📥 Importing ${transactions.length} transactions...`);
+    getLogger().info(`     📥 Importing ${transactions.length} transactions...`);
 
     const existingIds = await this.getExistingImportedIds(actualAccountId);
     for (const txn of transactions) {
@@ -46,7 +47,7 @@ export class TransactionService {
       await this.importSingleTransaction(actualAccountId, txn, parsed, importedId, target, existingTransactions);
     }
 
-    console.log(`     ✅ New: ${newTransactions.length}, Existing: ${existingTransactions.length}`);
+    getLogger().info(`     ✅ New: ${newTransactions.length}, Existing: ${existingTransactions.length}`);
     return { imported: newTransactions.length, skipped: existingTransactions.length, newTransactions, existingTransactions };
   }
 
@@ -64,7 +65,7 @@ export class TransactionService {
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes('already exists')) { existingTransactions.push(parsed); }
-      else { console.error(`     ❌ Error importing transaction:`, msg); }
+      else { getLogger().error(`     ❌ Error importing transaction: ${msg}`); }
     }
   }
 
@@ -80,7 +81,7 @@ export class TransactionService {
       .then((accounts: ActualAccount[]) => accounts.find((a) => a.id === accountId));
 
     if (!account) {
-      console.log(`     ➕ Creating new account: ${accountId}`);
+      getLogger().info(`     ➕ Creating new account: ${accountId}`);
       // Actual accepts id to set specific UUID, though not in official type
       account = await this.api.createAccount({
         id: accountId,
