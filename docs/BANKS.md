@@ -4,7 +4,32 @@ Complete list of all supported financial institutions and their required credent
 
 ---
 
-## 🏦 Banks (11)
+## Supported Institutions
+
+| Institution | Config key | Login fields |
+|-------------|-----------|-------------|
+| Bank Hapoalim | `hapoalim` | userCode, password |
+| Bank Leumi | `leumi` | username, password |
+| Discount Bank | `discount` | id, password, num |
+| Mizrahi Tefahot | `mizrahi` | username, password |
+| Mercantile | `mercantile` | id, password, num |
+| Otsar Hahayal | `otsarHahayal` | username, password |
+| Union | `union` | username, password |
+| Beinleumi | `beinleumi` | username, password |
+| Massad | `massad` | username, password |
+| Yahav | `yahav` | username, nationalID, password |
+| Beyahad Bishvilha | `beyahadBishvilha` | id, password |
+| Behatsdaa | `behatsdaa` | id, password |
+| Pagi | `pagi` | username, password |
+| One Zero | `oneZero` | email, password, phoneNumber |
+| Visa Cal | `visaCal` | username, password |
+| Max | `max` | username, password |
+| Isracard | `isracard` | id, card6Digits, password |
+| Amex | `amex` | id, card6Digits, password |
+
+---
+
+## Per-Institution Config Examples
 
 ### Bank Hapoalim
 ```json
@@ -43,7 +68,7 @@ Complete list of all supported financial institutions and their required credent
 }
 ```
 
-### Mizrahi Bank
+### Mizrahi Tefahot
 ```json
 {
   "mizrahi": {
@@ -55,7 +80,7 @@ Complete list of all supported financial institutions and their required credent
 }
 ```
 
-### Mercantile Bank
+### Mercantile
 ```json
 {
   "mercantile": {
@@ -68,7 +93,7 @@ Complete list of all supported financial institutions and their required credent
 }
 ```
 
-### Bank Otsar Hahayal
+### Otsar Hahayal
 ```json
 {
   "otsarHahayal": {
@@ -80,7 +105,7 @@ Complete list of all supported financial institutions and their required credent
 }
 ```
 
-### Union Bank
+### Union
 ```json
 {
   "union": {
@@ -116,7 +141,7 @@ Complete list of all supported financial institutions and their required credent
 }
 ```
 
-### Bank Yahav
+### Yahav
 ```json
 {
   "yahav": {
@@ -129,9 +154,55 @@ Complete list of all supported financial institutions and their required credent
 }
 ```
 
----
+### Beyahad Bishvilha
+```json
+{
+  "beyahadBishvilha": {
+    "id": "your_id_number",
+    "password": "your_password",
+    "startDate": "2026-01-19",
+    "targets": [...]
+  }
+}
+```
 
-## 💳 Credit Cards (9)
+### Behatsdaa
+```json
+{
+  "behatsdaa": {
+    "id": "your_id_number",
+    "password": "your_password",
+    "startDate": "2026-01-19",
+    "targets": [...]
+  }
+}
+```
+
+### Pagi
+```json
+{
+  "pagi": {
+    "username": "your_username",
+    "password": "your_password",
+    "startDate": "2026-01-19",
+    "targets": [...]
+  }
+}
+```
+
+### One Zero
+```json
+{
+  "oneZero": {
+    "email": "your_email",
+    "password": "your_password",
+    "phoneNumber": "your_phone_number",
+    "startDate": "2026-01-19",
+    "targets": [...]
+  }
+}
+```
+**Note:** OneZero requires OTP authentication. See [2FA configuration](../README.md#-2fa-onezero) in the README.
 
 ### Visa Cal
 ```json
@@ -170,7 +241,7 @@ Complete list of all supported financial institutions and their required credent
 }
 ```
 
-### American Express (Amex)
+### Amex
 ```json
 {
   "amex": {
@@ -183,94 +254,25 @@ Complete list of all supported financial institutions and their required credent
 }
 ```
 
-### Beyahad Bishvilha (ביחד בשבילך)
-```json
-{
-  "beyahadBishvilha": {
-    "id": "your_id_number",
-    "password": "your_password",
-    "startDate": "2026-01-19",
-    "targets": [...]
-  }
-}
-```
-
-### Behatsdaa (בהצדעה)
-```json
-{
-  "behatsdaa": {
-    "id": "your_id_number",
-    "password": "your_password",
-    "startDate": "2026-01-19",
-    "targets": [...]
-  }
-}
-```
-
-### Pagi
-```json
-{
-  "pagi": {
-    "username": "your_username",
-    "password": "your_password",
-    "startDate": "2026-01-19",
-    "targets": [...]
-  }
-}
-```
-
-### One Zero (Experimental)
-```json
-{
-  "oneZero": {
-    "email": "your_email",
-    "password": "your_password",
-    "phoneNumber": "your_phone_number",
-    "startDate": "2026-01-19",
-    "targets": [...]
-  }
-}
-```
-**Note:** OneZero requires OTP authentication. Advanced configuration may be needed.
-
 ---
 
-## 📋 Credential Requirements Summary
-
-| Institution | Type | Required Fields |
-|-------------|------|-----------------|
-| Hapoalim | Bank | `userCode`, `password` |
-| Leumi | Bank | `username`, `password` |
-| Discount | Bank | `id`, `password`, `num` |
-| Mizrahi | Bank | `username`, `password` |
-| Mercantile | Bank | `id`, `password`, `num` |
-| Otsar Hahayal | Bank | `username`, `password` |
-| Union | Bank | `username`, `password` |
-| Beinleumi | Bank | `username`, `password` |
-| Massad | Bank | `username`, `password` |
-| Yahav | Bank | `username`, `nationalID`, `password` |
-| Visa Cal | Credit | `username`, `password` |
-| Max | Credit | `username`, `password` |
-| Isracard | Credit | `id`, `card6Digits`, `password` |
-| Amex | Credit | `id`, `card6Digits`, `password` |
-| Beyahad Bishvilha | Credit | `id`, `password` |
-| Behatsdaa | Credit | `id`, `password` |
-| Pagi | Credit | `username`, `password` |
-| One Zero | Bank | `email`, `password`, `phoneNumber` |
-
----
-
-## ⚙️ Common Configuration Options
+## Common Configuration Options
 
 All institutions support these additional options:
 
-### startDate (Optional)
-Limit transaction history to a specific date range:
+### startDate or daysBack
 ```json
 {
-  "startDate": "2026-01-19"  // YYYY-MM-DD format
+  "startDate": "2026-01-19"
 }
 ```
+Or use relative days:
+```json
+{
+  "daysBack": 14
+}
+```
+Cannot use both on the same bank. `daysBack` max: 30. `startDate` max: 1 year back.
 
 ### targets (Required)
 Define where transactions should be imported:
@@ -288,8 +290,8 @@ Define where transactions should be imported:
 ```
 
 **Options:**
-- `actualAccountId` (required): Target account ID in Actual Budget
-- `reconcile` (optional): `true`, `false`, or `"consolidate"` - Auto-balance matching
+- `actualAccountId` (required): Target account ID in Actual Budget (UUID format)
+- `reconcile` (optional): `true` or `false` (default: `false`) — auto-balance matching
 - `accounts` (optional): `"all"` or array like `["1234", "5678"]` for specific accounts
 
 ### Multiple Accounts Example
@@ -318,7 +320,7 @@ Define where transactions should be imported:
 
 ---
 
-## 🔐 Security Notes
+## Security Notes
 
 - **Never commit** config.json to version control
 - Use **environment variables** for sensitive CI/CD pipelines
@@ -327,8 +329,7 @@ Define where transactions should be imported:
 
 ---
 
-## 📚 Resources
+## Resources
 
 - **israeli-bank-scrapers**: https://github.com/eshaham/israeli-bank-scrapers
 - **Actual Budget**: https://actualbudget.org
-- **Configuration Schema**: Based on [tomerh2001's schema](https://github.com/tomerh2001/israeli-banks-actual-budget-importer/blob/main/config.schema.json)
