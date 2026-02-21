@@ -90,17 +90,20 @@ function logImportResult(code: number | null, startTime: Date): void {
 
 // ─── Telegram commands ───
 
-function startTelegramCommands(): void {
+async function startTelegramCommands(): Promise<void> {
   const notifications = loadTelegramConfig();
   const telegram = notifications?.telegram;
   if (!telegram?.listenForCommands) return;
 
   try {
     const notifier = new TelegramNotifier(telegram);
-    const extraCommands = loadFullConfig()?.spendingWatch?.length
+    const fullConfig = loadFullConfig();
+    const hasWatch = (fullConfig?.spendingWatch?.length ?? 0) > 0;
+    const extraCommands = hasWatch
       ? [{ command: 'watch', description: 'Check spending watch rules' }]
       : [];
-    notifier.registerCommands(extraCommands).catch(() => {});
+    logger.info(`📋 Registering ${4 + extraCommands.length} bot commands${hasWatch ? ' (including /watch)' : ''}`);
+    await notifier.registerCommands(extraCommands);
     const handler = new TelegramCommandHandler(runImportLocked, notifier, new AuditLogService());
     activePoller = new TelegramPoller(telegram.botToken, telegram.chatId, (text) => handler.handle(text));
     activePoller.start().catch((err: unknown) => {
@@ -149,7 +152,7 @@ async function scheduleLoop(schedule: string): Promise<never> {
 }
 
 async function main(): Promise<void> {
-  startTelegramCommands();
+  await startTelegramCommands();
   const schedule = process.env.SCHEDULE;
   if (!schedule) {
     logger.info('📝 Running once (no SCHEDULE set)');

@@ -101,11 +101,15 @@ export class TelegramNotifier implements INotifier {
       { command: 'help', description: 'List available commands' },
     ];
     const url = `${TELEGRAM_API}/bot${this.botToken}/setMyCommands`;
-    await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ commands })
     });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`setMyCommands failed: ${response.status} ${body}`);
+    }
   }
 
   // ─── Send with truncation ───
