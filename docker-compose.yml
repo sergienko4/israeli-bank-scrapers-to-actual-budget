@@ -33,10 +33,11 @@ services:
       # Cron schedule: run every 8 hours (at midnight, 8am, 4pm)
       # Remove SCHEDULE to run once and exit
       - SCHEDULE=0 */8 * * *
-      # Uncomment to use encrypted config (see README → Encrypted Config)
-      # - CONFIG_PASSWORD=your_encryption_password
+      # Uncomment to decrypt encrypted credentials (see README → Encrypted Config)
+      # - CREDENTIALS_ENCRYPTION_PASSWORD=your_encryption_password
     volumes:
-      - ./config.json:/app/config.json:ro   # Read-only config (credentials)
+      - ./config.json:/app/config.json:ro             # Settings (or all-in-one)
+      # - ./credentials.json:/app/credentials.json:ro  # Secrets (optional, see README)
       - importer-data:/app/data             # Actual Budget sync data
       - importer-cache:/app/cache           # App cache
       - importer-chrome:/app/chrome-data    # Browser session (2FA persistence)

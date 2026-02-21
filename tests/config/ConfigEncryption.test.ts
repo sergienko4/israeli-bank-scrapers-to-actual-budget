@@ -47,7 +47,7 @@ describe('ConfigEncryption', () => {
 
     it('empty password throws on decrypt', () => {
       const encrypted = encryptConfig(SAMPLE_CONFIG, 'pass');
-      expect(() => decryptConfig(encrypted, '')).toThrow('CONFIG_PASSWORD');
+      expect(() => decryptConfig(encrypted, '')).toThrow('CREDENTIALS_ENCRYPTION_PASSWORD');
     });
 
     it('handles large config', () => {

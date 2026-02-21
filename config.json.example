@@ -1,10 +1,9 @@
 {
   "_instructions": [
-    "1. Copy this file to config.json",
-    "2. Fill in your Actual Budget server details",
-    "3. Add your bank credentials",
-    "4. Remove banks you don't use",
-    "5. Never commit config.json to git"
+    "1. Copy this file to config.json (settings only)",
+    "2. Copy credentials.json.example to credentials.json (secrets)",
+    "3. Or: use a single config.json with everything (backward compatible)",
+    "4. Never commit credentials to git"
   ],
 
   "actual": {
@@ -83,6 +82,8 @@
   },
 
   "_reference": {
+    "_split_config": "Optional: split into config.json (settings) + credentials.json (secrets). See credentials.json.example",
+    "CREDENTIALS_ENCRYPTION_PASSWORD": "Env var to decrypt encrypted files. Supports old name CONFIG_PASSWORD too",
     "delayBetweenBanks": "Milliseconds between bank imports. Default: 0 (no delay). Prevents API throttling",
     "daysBack": "1-30. Import last N days. Cannot use with startDate",
     "startDate": "YYYY-MM-DD. Fixed date, max 1 year back. Cannot use with daysBack",
@@ -101,7 +102,6 @@
     "categorization.mode": "none (default) | history | translate. See README for details",
     "categorization.translations": "Array of {fromPayee, toPayee} rules. Only used when mode=translate",
     "syncId": "Settings → Show Advanced Settings → Sync ID",
-    "actualAccountId": "Click account in Actual Budget → ID from URL",
-    "CONFIG_PASSWORD": "Env var to decrypt encrypted config. See README → Encrypted Config"
+    "actualAccountId": "Click account in Actual Budget → ID from URL"
   }
 }

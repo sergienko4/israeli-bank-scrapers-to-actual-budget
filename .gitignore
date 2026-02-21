@@ -3,6 +3,7 @@ node_modules/
 
 # Sensitive configuration
 config.json
+credentials.json
 *.enc
 .env
 

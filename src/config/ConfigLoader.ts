@@ -4,10 +4,11 @@
  */
 
 import { readFileSync, existsSync } from 'fs';
+import { dirname, join } from 'path';
 import { ImporterConfig, BankConfig, BankTarget, NotificationConfig } from '../types/index.js';
 import { ConfigurationError } from '../errors/ErrorTypes.js';
 import { getLogger } from '../logger/index.js';
-import { isEncryptedConfig, decryptConfig } from './ConfigEncryption.js';
+import { isEncryptedConfig, decryptConfig, getEncryptionPassword } from './ConfigEncryption.js';
 
 export interface IConfigLoader {
   load(): ImporterConfig;
@@ -43,23 +44,54 @@ export class ConfigLoader implements IConfigLoader {
     }
     try {
       getLogger().info('📄 Loading configuration from config.json');
-      const raw = readFileSync(this.configPath, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (isEncryptedConfig(parsed)) return this.loadEncrypted(raw);
-      return parsed as ImporterConfig;
+      const config = this.readJsonFile(this.configPath);
+      const credentials = this.loadCredentials();
+      return credentials ? this.deepMerge(config, credentials) : config;
     } catch (error: unknown) {
       if (error instanceof ConfigurationError) throw error;
-      getLogger().warn('⚠️  Failed to parse config.json, falling back to environment variables');
+      getLogger().warn('⚠️  Failed to parse config, falling back to environment variables');
       return null;
     }
   }
 
-  private loadEncrypted(raw: string): ImporterConfig {
-    const password = process.env.CONFIG_PASSWORD;
-    if (!password) throw new ConfigurationError('🔐 Config is encrypted. Set CONFIG_PASSWORD environment variable to decrypt.');
-    getLogger().info('🔐 Decrypting encrypted configuration...');
-    const decrypted = decryptConfig(raw, password);
-    return JSON.parse(decrypted) as ImporterConfig;
+  private loadCredentials(): ImporterConfig | null {
+    const credPath = join(dirname(this.configPath), 'credentials.json');
+    if (!existsSync(credPath)) return null;
+    getLogger().info('🔑 Loading credentials from credentials.json');
+    return this.readJsonFile(credPath);
+  }
+
+  private readJsonFile(filePath: string): ImporterConfig {
+    const raw = readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!isEncryptedConfig(parsed)) return parsed as ImporterConfig;
+    return this.decryptFile(raw, filePath);
+  }
+
+  private decryptFile(raw: string, filePath: string): ImporterConfig {
+    const password = getEncryptionPassword();
+    if (!password) throw new ConfigurationError(`🔐 ${filePath} is encrypted. Set CREDENTIALS_ENCRYPTION_PASSWORD env var.`);
+    getLogger().info(`🔐 Decrypting ${filePath}...`);
+    return JSON.parse(decryptConfig(raw, password)) as ImporterConfig;
+  }
+
+  private deepMerge(target: ImporterConfig, source: Partial<ImporterConfig>): ImporterConfig {
+    const result = { ...target } as Record<string, unknown>;
+    for (const [key, srcVal] of Object.entries(source)) {
+      const tgtVal = result[key];
+      result[key] = this.mergeValue(tgtVal, srcVal);
+    }
+    return result as unknown as ImporterConfig;
+  }
+
+  private mergeValue(target: unknown, source: unknown): unknown {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return source;
+    if (!target || typeof target !== 'object' || Array.isArray(target)) return source;
+    const merged = { ...target as Record<string, unknown> };
+    for (const [k, v] of Object.entries(source as Record<string, unknown>)) {
+      merged[k] = this.mergeValue(merged[k], v);
+    }
+    return merged;
   }
 
   private loadFromEnvironment(): ImporterConfig {

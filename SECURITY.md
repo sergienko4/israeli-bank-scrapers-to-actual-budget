@@ -23,16 +23,15 @@ ls -la config.json
 
 ### Encrypted Config (Recommended)
 
-For stronger protection, encrypt your config.json:
+For stronger protection, split and encrypt your config:
 
-```bash
-CONFIG_PASSWORD=mypassword node scripts/encrypt-config.js
-```
+1. **Split config**: separate `credentials.json` (secrets) from `config.json` (settings)
+2. **Encrypt credentials**: `CREDENTIALS_ENCRYPTION_PASSWORD=pass node scripts/encrypt-config.js credentials.json`
 
 - **AES-256-GCM** encryption (OWASP recommended)
 - **PBKDF2** key derivation (100,000 iterations)
 - Decrypted **only in memory** — never written to disk
-- Same filename, same mount path — just add `CONFIG_PASSWORD` env var
+- Supports `CREDENTIALS_ENCRYPTION_PASSWORD` env var (and old `CONFIG_PASSWORD`)
 - Even if someone steals the file, they can't read your credentials
 
 ### Never Commit Credentials

@@ -657,4 +657,54 @@ describe('ConfigLoader', () => {
       expect(() => new ConfigLoader('/test/config.json').load()).toThrow('Invalid webhook format');
     });
   });
+
+  describe('split config (credentials.json + config.json)', () => {
+    it('merges credentials.json into config.json', () => {
+      const settings = { actual: { init: { serverURL: 'http://localhost:5006', dataDir: './data' } }, banks: { discount: { daysBack: 14, targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }] } } };
+      const credentials = { actual: { init: { password: 'secret' }, budget: { syncId: VALID_UUID, password: null } }, banks: { discount: { id: '123', password: 'pass', num: 'ABC' } } };
+
+      vi.mocked(fs.existsSync).mockImplementation((p) => String(p).includes('config.json') || String(p).includes('credentials.json'));
+      vi.mocked(fs.readFileSync).mockImplementation((p) => String(p).includes('credentials') ? JSON.stringify(credentials) : JSON.stringify(settings));
+
+      const config = new ConfigLoader('/test/config.json').load();
+      expect(config.actual.init.password).toBe('secret');
+      expect(config.actual.init.serverURL).toBe('http://localhost:5006');
+      expect(config.banks.discount.id).toBe('123');
+      expect(config.banks.discount.daysBack).toBe(14);
+    });
+
+    it('works without credentials.json (backward compatible)', () => {
+      const fullConfig = makeValidConfig();
+      vi.mocked(fs.existsSync).mockImplementation((p) => String(p).includes('config.json'));
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fullConfig));
+
+      const config = new ConfigLoader('/test/config.json').load();
+      expect(config.banks.discount.password).toBe('pass');
+    });
+
+    it('deep merges bank settings with bank credentials', () => {
+      const settings = { actual: { init: { serverURL: 'http://localhost:5006', password: 'p', dataDir: './data' }, budget: { syncId: VALID_UUID, password: null } }, banks: { discount: { daysBack: 7, targets: [{ actualAccountId: VALID_UUID, reconcile: false, accounts: 'all' }] } } };
+      const credentials = { banks: { discount: { id: '999', password: 'secret', num: 'XYZ' } } };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((p) => String(p).includes('credentials') ? JSON.stringify(credentials) : JSON.stringify(settings));
+
+      const config = new ConfigLoader('/test/config.json').load();
+      expect(config.banks.discount.id).toBe('999');
+      expect(config.banks.discount.password).toBe('secret');
+      expect(config.banks.discount.daysBack).toBe(7);
+      expect(config.banks.discount.targets).toHaveLength(1);
+    });
+
+    it('credentials override conflicting config values', () => {
+      const settings = makeValidConfig();
+      const credentials = { actual: { init: { password: 'overridden' } } };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((p) => String(p).includes('credentials') ? JSON.stringify(credentials) : JSON.stringify(settings));
+
+      const config = new ConfigLoader('/test/config.json').load();
+      expect(config.actual.init.password).toBe('overridden');
+    });
+  });
 });
