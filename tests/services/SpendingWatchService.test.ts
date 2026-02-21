@@ -181,5 +181,87 @@ describe('SpendingWatchService', () => {
       const result = await service.evaluate();
       expect(result).toContain('Netflix, Gym');
     });
+
+    it('does not trigger when payee matches but amount below threshold', async () => {
+      const rules: SpendingWatchRule[] = [
+        { alertFromAmount: 50000, numOfDayToCount: 14, watchPayees: ['מגדל'] }
+      ];
+      const txns = [
+        { date: today, imported_payee: 'מגדל חברה חיוב', amount: -200000 },
+        { date: today, imported_payee: 'חיוב מ-מגדל חברה לביטו', amount: -200000 }
+      ];
+      const service = new SpendingWatchService(rules, createMockApi(txns));
+      expect(await service.evaluate()).toBeNull();
+    });
+
+    it('triggers when payee matches and amount exceeds threshold', async () => {
+      const rules: SpendingWatchRule[] = [
+        { alertFromAmount: 10, numOfDayToCount: 14, watchPayees: ['מגדל'] }
+      ];
+      const txns = [
+        { date: today, imported_payee: 'מגדל חברה חיוב', amount: -200000 },
+        { date: today, imported_payee: 'חיוב מ-מגדל חברה לביטו', amount: -200000 }
+      ];
+      const service = new SpendingWatchService(rules, createMockApi(txns));
+      const result = await service.evaluate();
+      expect(result).toContain('מגדל');
+      expect(result).toContain('4,000.00');
+    });
+
+    it('does not trigger when payee filter has no matches in data', async () => {
+      const rules: SpendingWatchRule[] = [
+        { alertFromAmount: 1, numOfDayToCount: 30, watchPayees: ['NONEXISTENT'] }
+      ];
+      const txns = [
+        { date: today, imported_payee: 'ישראכרט חיוב', amount: -500000 },
+        { date: today, imported_payee: 'כ.א.ל חיוב', amount: -300000 }
+      ];
+      const service = new SpendingWatchService(rules, createMockApi(txns));
+      expect(await service.evaluate()).toBeNull();
+    });
+
+    it('filters transactions by date window correctly', async () => {
+      const oldDate = '2020-01-01';
+      const rules: SpendingWatchRule[] = [
+        { alertFromAmount: 1, numOfDayToCount: 7 }
+      ];
+      const txns = [
+        { date: today, imported_payee: 'Recent', amount: -1000 },
+        { date: oldDate, imported_payee: 'Old', amount: -9999900 }
+      ];
+      const service = new SpendingWatchService(rules, createMockApi(txns));
+      const result = await service.evaluate();
+      expect(result).toContain('Recent');
+      expect(result).not.toContain('Old');
+    });
+
+    it('shows Unknown for null payee in triggered alert details', async () => {
+      const rules: SpendingWatchRule[] = [
+        { alertFromAmount: 1, numOfDayToCount: 1 }
+      ];
+      const txns = [
+        { date: today, imported_payee: null as unknown as string, amount: -5000 }
+      ];
+      const service = new SpendingWatchService(rules, createMockApi(txns));
+      const result = await service.evaluate();
+      expect(result).toContain('Unknown');
+    });
+
+    it('combines multiple triggered rules in one message', async () => {
+      const rules: SpendingWatchRule[] = [
+        { alertFromAmount: 1, numOfDayToCount: 1 },
+        { alertFromAmount: 1, numOfDayToCount: 7, watchPayees: ['Netflix'] },
+        { alertFromAmount: 999999, numOfDayToCount: 30 }
+      ];
+      const txns = [
+        { date: today, imported_payee: 'Netflix Inc', amount: -5000 },
+        { date: today, imported_payee: 'Store', amount: -3000 }
+      ];
+      const service = new SpendingWatchService(rules, createMockApi(txns));
+      const result = await service.evaluate();
+      expect(result).toContain('All payees');
+      expect(result).toContain('Netflix');
+      expect(result).not.toContain('30 days');
+    });
   });
 });
