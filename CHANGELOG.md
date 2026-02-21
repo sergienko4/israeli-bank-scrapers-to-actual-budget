@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.12.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.12.0...v1.12.1) (2026-02-21)
+
+
+### Fixed
+
+* move blocking Trivy scan to PR validation, bust apt cache on release ([#66](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/66)) ([35edc71](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/35edc711929199c3d090852e55b17396e1114174))
+
 ## [1.12.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.11.1...v1.12.0) (2026-02-21)
 
 
