@@ -90,6 +90,18 @@ jobs:
         uses: aquasecurity/trivy-action@0.34.1
         with:
           image-ref: 'israeli-bank-importer:pr-test'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          skip-dirs: 'root/.npm'
+
+      - name: Upload Trivy SARIF to Security tab
+        if: always()
+        uses: aquasecurity/trivy-action@0.34.1
+        with:
+          image-ref: 'israeli-bank-importer:pr-test'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -97,7 +109,7 @@ jobs:
           vuln-type: 'os,library'
           skip-dirs: 'root/.npm'
 
-      - name: Upload Trivy results to Security tab
+      - name: Upload SARIF results
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:

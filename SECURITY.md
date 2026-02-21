@@ -286,7 +286,7 @@ If a security vulnerability is discovered in a released version:
 #### Supply Chain Security
 
 - ✅ SBOM (Software Bill of Materials) attached to every GitHub Release (SPDX format)
-- ✅ Docker images scanned with Trivy on every PR and release (CRITICAL + HIGH)
+- ✅ Docker images scanned with Trivy on every PR (CRITICAL + HIGH, blocks merge)
 - ✅ Automated dependency updates via Dependabot (npm, GitHub Actions, Docker)
 - ✅ npm audit runs as blocking CI check (no bypass)
 
