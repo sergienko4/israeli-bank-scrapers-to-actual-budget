@@ -5,7 +5,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
-import { ImporterConfig, BankConfig, BankTarget, NotificationConfig } from '../types/index.js';
+import { ImporterConfig, BankConfig, BankTarget, NotificationConfig, SpendingWatchRule } from '../types/index.js';
 import { ConfigurationError } from '../errors/ErrorTypes.js';
 import { getLogger } from '../logger/index.js';
 import { isEncryptedConfig, decryptConfig, getEncryptionPassword } from './ConfigEncryption.js';
@@ -161,6 +161,7 @@ export class ConfigLoader implements IConfigLoader {
       this.validateBank(bankName, bankConfig);
     }
     if (config.notifications?.enabled) this.validateNotifications(config.notifications);
+    if (config.spendingWatch) this.validateSpendingWatch(config.spendingWatch);
   }
 
   private validateActualConfig(config: ImporterConfig): void {
@@ -192,6 +193,23 @@ export class ConfigLoader implements IConfigLoader {
     if (!telegram.chatId) throw new ConfigurationError('Telegram chatId is required when telegram notifications are configured');
     this.validateEnumField(telegram.messageFormat, ['summary', 'compact', 'ledger', 'emoji'], 'messageFormat');
     this.validateEnumField(telegram.showTransactions, ['new', 'all', 'none'], 'showTransactions');
+  }
+
+  private validateSpendingWatch(rules: SpendingWatchRule[]): void {
+    if (!Array.isArray(rules)) throw new ConfigurationError('spendingWatch must be an array of rules');
+    rules.forEach((rule, idx) => this.validateWatchRule(rule, idx));
+  }
+
+  private validateWatchRule(rule: SpendingWatchRule, idx: number): void {
+    if (!rule.alertFromAmount || rule.alertFromAmount <= 0) {
+      throw new ConfigurationError(`spendingWatch[${idx}]: alertFromAmount is required and must be positive`);
+    }
+    if (!rule.numOfDayToCount || !Number.isInteger(rule.numOfDayToCount) || rule.numOfDayToCount < 1 || rule.numOfDayToCount > 365) {
+      throw new ConfigurationError(`spendingWatch[${idx}]: numOfDayToCount must be an integer between 1 and 365`);
+    }
+    if (rule.watchPayees !== undefined && !Array.isArray(rule.watchPayees)) {
+      throw new ConfigurationError(`spendingWatch[${idx}]: watchPayees must be an array of strings`);
+    }
   }
 
   private validateWebhookConfig(webhook: NonNullable<NotificationConfig['webhook']>): void {

@@ -22,7 +22,8 @@ Turn the Telegram bot from a notification pipe into a proactive financial assist
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| **Spending alerts** | Configurable alerts: large transactions (over threshold), daily spending limits, new unknown payees. Separate from import summary notifications. | Planned |
+| **Spending watch** | Configurable spending rules with amount thresholds, time windows, and payee filters. Alerts sent to all channels after each import. | Shipped |
+| **On-demand /watch** | Run spending watch rules on-demand via Telegram without triggering a full import. | Planned |
 | **Spending summary** | `/summary` bot command. Monthly income/expenses/net, top 5 categories, account balances. Also `/summary week` and `/summary last` for different time ranges. | Planned |
 | **Selective bank import** | `/scan discount` to import just one bank. `/scan visaCal,leumi` for multiple. Per-bank control instead of all-or-nothing. | Planned |
 | **Balance alerts** | Per-account balance thresholds. Get notified when checking account drops below 5,000 ILS or credit card exceeds -10,000 ILS. | Planned |
@@ -51,6 +52,9 @@ Better errors, monitoring, and recovery.
 
 | Feature | Version |
 |---------|---------|
+| Spending watch (configurable rules) | v1.13.0 |
+| Auto-register Telegram bot commands | v1.13.0 |
+| Simplified CI/CD pipeline | v1.12.3 |
 | Dynamic test count badge | v1.12.0 |
 | Split config (credentials + settings) | v1.11.0 |
 | Encrypted config (AES-256-GCM) | v1.10.0 |

@@ -17,6 +17,13 @@ const TELEGRAM_API = 'https://api.telegram.org';
 const MAX_MESSAGE_LENGTH = 4096;
 const DEFAULT_MAX_TRANSACTIONS = 5;
 const MAX_TRANSACTIONS_LIMIT = 25;
+const COMMAND_PATTERN = /^[a-z0-9_]{1,32}$/;
+const MAX_DESCRIPTION_LENGTH = 256;
+
+/** Validate command against Telegram Bot API limits (1-32 lowercase+digits+underscores, description 1-256) */
+function isValidBotCommand(command: string, description: string): boolean {
+  return COMMAND_PATTERN.test(command) && description.length >= 1 && description.length <= MAX_DESCRIPTION_LENGTH;
+}
 
 export class TelegramNotifier implements INotifier {
   private botToken: string;
@@ -88,6 +95,32 @@ export class TelegramNotifier implements INotifier {
     if (!response.ok) return 0;
     const data = await response.json() as TelegramApiResponse;
     return data.result?.length ? data.result[data.result.length - 1].update_id + 1 : 0;
+  }
+
+  // ─── Bot command registration ───
+
+  async registerCommands(extras: Array<{ command: string; description: string }> = []): Promise<void> {
+    const commands = [
+      { command: 'scan', description: 'Run bank import now' },
+      { command: 'status', description: 'Show last run info + history' },
+      ...extras.filter(c => isValidBotCommand(c.command, c.description)),
+      { command: 'logs', description: 'Show recent log entries' },
+      { command: 'help', description: 'List available commands' },
+    ];
+    await this.sendBotCommands(commands);
+  }
+
+  private async sendBotCommands(commands: Array<{ command: string; description: string }>): Promise<void> {
+    const url = `${TELEGRAM_API}/bot${this.botToken}/setMyCommands`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commands })
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`setMyCommands failed: ${response.status} ${body}`);
+    }
   }
 
   // ─── Send with truncation ───

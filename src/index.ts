@@ -23,6 +23,7 @@ import { createLogger, getLogger } from './logger/index.js';
 import { ICategoryResolver } from './services/ICategoryResolver.js';
 import { HistoryCategoryResolver } from './services/HistoryCategoryResolver.js';
 import { TranslateCategoryResolver } from './services/TranslateCategoryResolver.js';
+import { SpendingWatchService } from './services/SpendingWatchService.js';
 
 // Load configuration and initialize logger
 const configLoader = new ConfigLoader();
@@ -287,6 +288,15 @@ async function delayBeforeNextBank(delayMs?: number): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, delayMs));
 }
 
+async function evaluateSpendingWatch(): Promise<void> {
+  if (!config.spendingWatch?.length) return;
+  logger.info('\n🔔 Evaluating spending watch rules...');
+  const watchService = new SpendingWatchService(config.spendingWatch, api);
+  const message = await watchService.evaluate();
+  if (message) await notificationService.sendMessage(message);
+  logger.info(message ? '⚠️  Spending watch alerts triggered' : '✅ All spending within limits');
+}
+
 async function finalizeImport(): Promise<void> {
   metrics.printSummary();
   auditLog.record(metrics.getSummary());
@@ -315,6 +325,7 @@ async function main(): Promise<void> {
     await categoryResolver?.initialize();
     metrics.startImport();
     await processAllBanks();
+    await evaluateSpendingWatch();
     await finalizeImport();
   } catch (error) {
     await handleFatalError(error);

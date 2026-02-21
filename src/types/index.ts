@@ -116,12 +116,19 @@ export interface ResolvedCategory {
   importedPayee?: string;  // Original name (preserved for reference)
 }
 
+export interface SpendingWatchRule {
+  alertFromAmount: number;     // Trigger if total spending > this (currency units)
+  numOfDayToCount: number;     // Time window in days (1 = today only)
+  watchPayees?: string[];      // Filter payees (substring match). Missing = all payees
+}
+
 export interface ImporterConfig {
   actual: ActualConfig;
   banks: Record<string, BankConfig>;
   notifications?: NotificationConfig;
   logConfig?: LogConfig;
   categorization?: CategorizationConfig;
+  spendingWatch?: SpendingWatchRule[];  // Spending watch rules (empty/missing = disabled)
   delayBetweenBanks?: number;  // Milliseconds to wait between bank imports (default: 0)
 }
 
