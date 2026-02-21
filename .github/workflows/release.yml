@@ -75,7 +75,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ${{ env.DOCKER_IMAGE }}:${{ steps.tag.outputs.version }}
           format: 'table'
