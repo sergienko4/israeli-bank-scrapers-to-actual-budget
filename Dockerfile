@@ -13,6 +13,8 @@ LABEL security.capabilities="SYS_ADMIN required for Chromium sandboxing"
 
 # Install dependencies for Chromium (required by israeli-bank-scrapers)
 # Update packages and install security patches
+# APT_CACHE_BUST is set by CI to force fresh packages on every release
+ARG APT_CACHE_BUST=1
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     chromium \
     fonts-liberation \
