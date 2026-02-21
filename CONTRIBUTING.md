@@ -48,7 +48,7 @@ All contributors must follow [GUIDELINES.md](GUIDELINES.md). Key rules:
 1. Use a **conventional commit** title (e.g., `feat: Add health check endpoint`)
 2. PRs must pass all CI checks:
    - Build (TypeScript strict mode)
-   - Tests (326+ tests, 70%+ branch coverage)
+   - Tests (80%+ line coverage, 70%+ branch coverage)
    - npm audit (0 vulnerabilities)
    - CodeQL security scan
    - Trivy container image scan (CRITICAL + HIGH)

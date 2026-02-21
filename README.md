@@ -1,6 +1,6 @@
 # Israeli Bank Scrapers to Actual Budget
 
-[![PR Validation](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr-validation.yml) [![Release](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Docker Pulls](https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer)](https://hub.docker.com/r/sergienko4/israeli-bank-importer) [![Node.js](https://img.shields.io/badge/node-22%2B-brightgreen)](https://nodejs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
+[![PR Validation](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr-validation.yml) [![Release](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Docker Pulls](https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer)](https://hub.docker.com/r/sergienko4/israeli-bank-importer) [![Node.js](https://img.shields.io/badge/node-22%2B-brightgreen)](https://nodejs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-test-count.json)](#testing)
 
 **Automatically import transactions from 18 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
 
@@ -689,7 +689,7 @@ npm run test:watch    # Watch mode
 npm run validate      # Build + test (validate before committing)
 ```
 
-**338 tests** across 28 test files with 70%+ branch coverage.
+Comprehensive test suite with 80%+ line coverage and 70%+ branch coverage. Run `npm test` to see current count.
 
 ---
 
