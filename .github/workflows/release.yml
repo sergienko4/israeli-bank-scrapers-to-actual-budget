@@ -85,12 +85,9 @@ jobs:
 
       - name: Attach SBOM to release
         if: github.event_name == 'push'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: sbom.spdx.json
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.tag.outputs.version }}" sbom.spdx.json --clobber
 
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v4
@@ -221,10 +218,12 @@ jobs:
           echo "Enriched release notes built for $VERSION"
 
       - name: Append Docker info to GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          append_body: true
-          body_path: enriched_notes.md
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ github.ref_name }}"
+          EXISTING=$(gh release view "$VERSION" --json body --jq '.body')
+          ENRICHED=$(cat enriched_notes.md)
+          gh release edit "$VERSION" --notes "${EXISTING}
+
+          ${ENRICHED}"
