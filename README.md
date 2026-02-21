@@ -183,7 +183,7 @@ See [Releases](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-bud
 | Isracard | `isracard` | id, card6Digits, password |
 | Amex | `amex` | id, card6Digits, password |
 
-Use the **Config key** as the bank name in your `config.json`. See [BANKS.md](docs/BANKS.md) for per-institution config examples.
+Use the **Config key** as the bank name in your `config.json`. See [BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) for per-institution config examples.
 
 ---
 
@@ -656,14 +656,14 @@ docker run --rm ^
 
 | File | Description |
 |------|-------------|
-| [docs/BANKS.md](docs/BANKS.md) | Per-institution config examples |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | VM deployment, Docker Compose details |
-| [SECURITY.md](SECURITY.md) | Security best practices |
-| [CHANGELOG.md](CHANGELOG.md) | Version history and release notes |
-| [config.json.example](config.json.example) | Full example configuration |
-| [GUIDELINES.md](GUIDELINES.md) | Development guidelines for contributors |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
+| [BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) | Per-institution config examples |
+| [DEPLOYMENT.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/DEPLOYMENT.md) | VM deployment, Docker Compose details |
+| [SECURITY.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/SECURITY.md) | Security best practices |
+| [CHANGELOG.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/CHANGELOG.md) | Version history and release notes |
+| [config.json.example](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/config.json.example) | Full example configuration |
+| [GUIDELINES.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/GUIDELINES.md) | Development guidelines for contributors |
+| [CONTRIBUTING.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md) | How to contribute |
+| [CODE_OF_CONDUCT.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CODE_OF_CONDUCT.md) | Community standards |
 
 ---
 
@@ -702,7 +702,7 @@ Comprehensive test suite with 80%+ line coverage and 70%+ branch coverage. Run `
 
 **Why SYS_ADMIN?** Required for Chromium sandboxing. Safe when running trusted code.
 
-See [SECURITY.md](SECURITY.md) for full security policy.
+See [SECURITY.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/SECURITY.md) for full security policy.
 
 ---
 

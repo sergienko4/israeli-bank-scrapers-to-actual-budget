@@ -3,14 +3,15 @@
   "packages": {
     ".": {
       "release-type": "node",
+      "exclude-paths": ["docs", ".github"],
       "changelog-sections": [
         { "type": "feat", "section": "Added" },
         { "type": "fix", "section": "Fixed" },
         { "type": "refactor", "section": "Refactored" },
         { "type": "perf", "section": "Performance" },
-        { "type": "docs", "section": "Documentation" },
+        { "type": "docs", "section": "Documentation", "hidden": true },
         { "type": "test", "section": "Testing" },
-        { "type": "ci", "section": "CI/CD" },
+        { "type": "ci", "section": "CI/CD", "hidden": true },
         { "type": "chore", "section": "Miscellaneous", "hidden": true }
       ],
       "bump-minor-pre-major": true,
