@@ -15,3 +15,28 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  update-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Run tests with JSON reporter
+        run: npx vitest run --reporter=json --outputFile=test-results.json
+      - name: Extract test count
+        run: |
+          TESTS=$(jq '.numTotalTests' test-results.json)
+          echo "TEST_COUNT=$TESTS" >> $GITHUB_ENV
+      - name: Update test count badge
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: 2860e2ffec3d5919e4b658fed5ce4e5e
+          filename: actual-budget-importer-test-count.json
+          label: tests
+          message: "${{ env.TEST_COUNT }} passed"
+          color: brightgreen
