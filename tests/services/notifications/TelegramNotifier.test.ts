@@ -307,4 +307,45 @@ describe('TelegramNotifier', () => {
       }
     });
   });
+
+  describe('registerCommands', () => {
+    it('registers base commands via setMyCommands API', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      await notifier.registerCommands();
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.telegram.org/bot123:ABC/setMyCommands',
+        expect.objectContaining({ method: 'POST' })
+      );
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.commands).toHaveLength(4);
+      expect(body.commands.map((c: { command: string }) => c.command)).toEqual(['scan', 'status', 'logs', 'help']);
+    });
+
+    it('includes extra commands when provided', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      await notifier.registerCommands([{ command: 'watch', description: 'Check spending' }]);
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.commands).toHaveLength(5);
+      expect(body.commands[2].command).toBe('watch');
+    });
+
+    it('filters out invalid commands (uppercase, too long)', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      await notifier.registerCommands([
+        { command: 'INVALID', description: 'uppercase' },
+        { command: 'a'.repeat(33), description: 'too long command' },
+        { command: 'valid_cmd', description: 'ok' }
+      ]);
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      const names = body.commands.map((c: { command: string }) => c.command);
+      expect(names).toContain('valid_cmd');
+      expect(names).not.toContain('INVALID');
+    });
+
+    it('throws on API error', async () => {
+      fetchMock.mockResolvedValue({ ok: false, status: 400, text: vi.fn().mockResolvedValue('Bad Request') });
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      await expect(notifier.registerCommands()).rejects.toThrow('setMyCommands failed');
+    });
+  });
 });
