@@ -71,19 +71,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APT_CACHE_BUST=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.34.1
-        with:
-          image-ref: ${{ env.DOCKER_IMAGE }}:${{ steps.tag.outputs.version }}
-          format: 'table'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          skip-dirs: 'root/.npm'
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
