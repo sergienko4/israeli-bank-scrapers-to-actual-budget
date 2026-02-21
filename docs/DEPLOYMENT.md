@@ -184,6 +184,15 @@ Optional split: `credentials.json` (secrets) + `config.json` (settings). See `cr
 | `categorization.mode` | `none` | `none`, `history`, or `translate` |
 | `categorization.translations` | `[]` | Array of `{fromPayee, toPayee}` rules (only for `translate` mode) |
 
+### Spending Watch
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `spendingWatch` | _(none)_ | Array of spending rules. No config = no alerts |
+| `spendingWatch[].alertFromAmount` | _(required)_ | Alert if total spending exceeds this (currency units) |
+| `spendingWatch[].numOfDayToCount` | _(required)_ | Time window in days (1-365) |
+| `spendingWatch[].watchPayees` | all payees | Optional array of payee names (substring match) |
+
 ### Notifications
 
 | Option | Description |
@@ -194,7 +203,7 @@ Optional split: `credentials.json` (secrets) + `config.json` (settings). See `cr
 | `notifications.telegram.chatId` | Chat ID for notifications |
 | `notifications.telegram.messageFormat` | `summary` (default), `compact`, `ledger`, `emoji` |
 | `notifications.telegram.showTransactions` | `new` (default), `all`, `none` |
-| `notifications.telegram.listenForCommands` | `true` to enable `/scan`, `/status`, `/logs`, `/help` |
+| `notifications.telegram.listenForCommands` | `true` to enable `/scan`, `/status`, `/watch`, `/logs`, `/help` |
 | `notifications.webhook.url` | Webhook URL (Slack, Discord, or custom) |
 | `notifications.webhook.format` | `slack`, `discord`, `plain` (default) |
 

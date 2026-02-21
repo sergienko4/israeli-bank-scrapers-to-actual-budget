@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import type api from '@actual-app/api';
 import { SpendingWatchService } from '../../src/services/SpendingWatchService.js';
 import { SpendingWatchRule } from '../../src/types/index.js';
 
@@ -12,12 +13,11 @@ function createMockApi(transactions: Array<{ date: string; imported_payee: strin
         })
       })
     }),
-    // Stub remaining api properties to satisfy typeof api
     init: vi.fn(),
     shutdown: vi.fn(),
     downloadBudget: vi.fn(),
     importTransactions: vi.fn(),
-  } as never;
+  } as unknown as typeof api;
 }
 
 const today = new Date().toISOString().split('T')[0];
@@ -130,9 +130,21 @@ describe('SpendingWatchService', () => {
       expect(result).toContain('3 more');
     });
 
+    it('handles null imported_payee gracefully', async () => {
+      const rules: SpendingWatchRule[] = [
+        { alertFromAmount: 1, numOfDayToCount: 1, watchPayees: ['test'] }
+      ];
+      const txns = [
+        { date: today, imported_payee: null as unknown as string, amount: -5000 },
+        { date: today, imported_payee: '', amount: -3000 }
+      ];
+      const service = new SpendingWatchService(rules, createMockApi(txns));
+      expect(await service.evaluate()).toBeNull();
+    });
+
     it('handles API errors gracefully', async () => {
       const mockApi = createMockApi();
-      (mockApi as { runQuery: ReturnType<typeof vi.fn> }).runQuery.mockRejectedValue(new Error('API down'));
+      (mockApi as unknown as { runQuery: ReturnType<typeof vi.fn> }).runQuery.mockRejectedValue(new Error('API down'));
       const rules: SpendingWatchRule[] = [
         { alertFromAmount: 100, numOfDayToCount: 1 }
       ];

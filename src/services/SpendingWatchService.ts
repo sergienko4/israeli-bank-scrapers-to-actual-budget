@@ -1,7 +1,6 @@
 /**
  * SpendingWatchService - Evaluates spending watch rules against transaction history
- * Queries Actual Budget for transactions in the configured time window,
- * filters by payees if configured, and triggers alerts when thresholds are exceeded.
+ * Queries Actual Budget once for the largest time window, then evaluates each rule in-memory.
  */
 
 import type api from '@actual-app/api';
@@ -22,6 +21,8 @@ interface RuleResult {
   matched: TransactionRow[];
 }
 
+const MAX_DISPLAYED_TRANSACTIONS = 5;
+
 export class SpendingWatchService {
   constructor(
     private rules: SpendingWatchRule[],
@@ -31,7 +32,9 @@ export class SpendingWatchService {
   async evaluate(): Promise<string | null> {
     if (this.rules.length === 0) return null;
     try {
-      const results = await Promise.all(this.rules.map(r => this.evaluateRule(r)));
+      const maxDays = Math.max(...this.rules.map(r => r.numOfDayToCount));
+      const allTransactions = await this.queryTransactions(maxDays);
+      const results = this.rules.map(r => this.evaluateRule(r, allTransactions));
       return this.formatMessage(results);
     } catch (error: unknown) {
       getLogger().error(`Spending watch error: ${errorMessage(error)}`);
@@ -39,10 +42,10 @@ export class SpendingWatchService {
     }
   }
 
-  private async evaluateRule(rule: SpendingWatchRule): Promise<RuleResult> {
+  private evaluateRule(rule: SpendingWatchRule, allTransactions: TransactionRow[]): RuleResult {
     const startDate = this.buildStartDate(rule.numOfDayToCount);
-    const transactions = await this.queryTransactions(startDate);
-    const filtered = this.filterByPayees(transactions, rule.watchPayees);
+    const inWindow = allTransactions.filter(t => t.date >= startDate);
+    const filtered = this.filterByPayees(inWindow, rule.watchPayees);
     const totalSpent = this.sumDebits(filtered);
     const threshold = toCents(rule.alertFromAmount);
     return { rule, totalSpent, triggered: totalSpent > threshold, matched: filtered };
@@ -54,7 +57,8 @@ export class SpendingWatchService {
     return formatDate(date);
   }
 
-  private async queryTransactions(startDate: string): Promise<TransactionRow[]> {
+  private async queryTransactions(maxDays: number): Promise<TransactionRow[]> {
+    const startDate = this.buildStartDate(maxDays);
     const result = await this.actualApi.runQuery(
       this.actualApi.q('transactions')
         .filter({ date: { $gte: startDate }, amount: { $lt: 0 } })
@@ -87,16 +91,28 @@ export class SpendingWatchService {
   }
 
   private formatRule(result: RuleResult): string {
-    const { rule, totalSpent, matched } = result;
-    const payeeLabel = rule.watchPayees?.length ? rule.watchPayees.join(', ') : 'All payees';
-    const dayLabel = rule.numOfDayToCount === 1 ? '1 day' : `${rule.numOfDayToCount} days`;
-    const header = `⚠️ ${payeeLabel}: ${this.fmtAmount(totalSpent)} in ${dayLabel} (limit: ${rule.alertFromAmount.toLocaleString()})`;
-    const details = matched.slice(0, 5).map(t => `  ${this.fmtAmount(t.amount)}  ${t.imported_payee}`);
-    const overflow = matched.length > 5 ? `  ... and ${matched.length - 5} more` : '';
-    return [header, ...details, overflow].filter(Boolean).join('\n');
+    const header = this.buildRuleHeader(result);
+    const details = this.buildTransactionDetails(result.matched);
+    return [header, ...details].filter(Boolean).join('\n');
   }
 
-  private fmtAmount(cents: number): string {
+  private buildRuleHeader(result: RuleResult): string {
+    const { rule, totalSpent } = result;
+    const payeeLabel = rule.watchPayees?.length ? rule.watchPayees.join(', ') : 'All payees';
+    const dayLabel = rule.numOfDayToCount === 1 ? '1 day' : `${rule.numOfDayToCount} days`;
+    return `⚠️ ${payeeLabel}: ${this.formatAmount(totalSpent)} in ${dayLabel} (limit: ${rule.alertFromAmount.toLocaleString()})`;
+  }
+
+  private buildTransactionDetails(matched: TransactionRow[]): string[] {
+    const lines = matched.slice(0, MAX_DISPLAYED_TRANSACTIONS)
+      .map(t => `  ${this.formatAmount(t.amount)}  ${t.imported_payee}`);
+    if (matched.length > MAX_DISPLAYED_TRANSACTIONS) {
+      lines.push(`  ... and ${matched.length - MAX_DISPLAYED_TRANSACTIONS} more`);
+    }
+    return lines;
+  }
+
+  private formatAmount(cents: number): string {
     return fromCents(cents).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 }

@@ -544,6 +544,7 @@ When `listenForCommands` is `true`, control the importer from Telegram:
 |---------|--------|
 | `/scan` | Run bank import now |
 | `/status` | Show last run info (from audit log) |
+| `/watch` | Check spending watch rules now |
 | `/logs` | Show recent log entries (default: 50) |
 | `/logs N` | Show last N entries (max 150) |
 | `/help` | List commands |

@@ -1,6 +1,6 @@
 /**
  * TelegramCommandHandler - Handles bot commands
- * Commands: /scan, /import, /status, /logs, /help
+ * Commands: /scan, /import, /status, /watch, /logs, /help
  */
 
 import { INotifier } from './notifications/INotifier.js';
