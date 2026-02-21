@@ -13,6 +13,7 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write
 
 env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
@@ -27,7 +28,7 @@ jobs:
       - name: Run npm audit
         run: |
           npm install --package-lock-only
-          npm audit --audit-level=moderate || true
+          npm audit --audit-level=moderate
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -72,6 +73,33 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ env.DOCKER_IMAGE }}:${{ steps.tag.outputs.version }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          skip-dirs: 'root/.npm'
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.DOCKER_IMAGE }}:${{ steps.tag.outputs.version }}
+          output-file: sbom.spdx.json
+          artifact-name: sbom-${{ steps.tag.outputs.version }}.spdx.json
+
+      - name: Attach SBOM to release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: sbom.spdx.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Docker Hub description
         uses: peter-evans/dockerhub-description@v4

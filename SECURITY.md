@@ -163,6 +163,16 @@ Security patches will be released as:
 - **High**: Within 1 week
 - **Medium/Low**: Next minor release
 
+### Incident Response
+
+If a security vulnerability is discovered in a released version:
+
+1. **Triage** (within 24 hours): Assess severity and impact
+2. **Containment**: If critical, publish a GitHub Security Advisory immediately
+3. **Fix**: Develop and test a patch on a private branch
+4. **Release**: Ship as a patch release with `fix:` conventional commit
+5. **Notify**: Update the GitHub Security Advisory with fix details
+
 ---
 
 ## 🛡️ Best Practices
@@ -224,7 +234,7 @@ Security patches will be released as:
 
 ## 🔍 Security Features
 
-### Current Security Measures (v1.10.1)
+### Current Security Measures
 
 #### Container Security
 
@@ -234,6 +244,9 @@ Security patches will be released as:
 - ✅ Base image pinned to digest (supply chain protection)
 - ✅ Minimal base image (node:22-slim)
 - ✅ Health checks enabled (auto-restart on failure)
+- ✅ `cap_drop: ALL` + only `SYS_ADMIN` (least privilege)
+- ✅ `no-new-privileges` security option
+- ✅ Dedicated `/dev/shm` tmpfs for Chromium shared memory
 
 #### Application Security
 
@@ -245,13 +258,10 @@ Security patches will be released as:
 
 #### Dependency Security
 
-- ✅ npm audit: 0 vulnerabilities (verified 2026-02-18)
-- ✅ Automated security scanning in CI/CD
-- ✅ Latest security patches applied:
-  - Node.js v22.22.0 (latest LTS)
-  - npm 11.10.0 (major security update)
-  - TypeScript 5.9.3
-  - All OS packages updated (`apt-get upgrade`)
+- ✅ npm audit: 0 vulnerabilities — **blocking CI check** (fails on HIGH+)
+- ✅ Automated dependency updates via Dependabot (npm, Actions, Docker)
+- ✅ CodeQL static analysis on every PR
+- ✅ Latest security patches applied (Node.js 22 LTS, TypeScript 5.9)
 
 #### Build Security
 
@@ -259,6 +269,13 @@ Security patches will be released as:
 - ✅ Multi-stage security in CI/CD
 - ✅ Automated vulnerability scanning
 - ✅ OWASP Docker Security compliance: 9/10
+
+#### Supply Chain Security
+
+- ✅ SBOM (Software Bill of Materials) attached to every GitHub Release (SPDX format)
+- ✅ Docker images scanned with Trivy on every PR and release (CRITICAL + HIGH)
+- ✅ Automated dependency updates via Dependabot (npm, GitHub Actions, Docker)
+- ✅ npm audit runs as blocking CI check (no bypass)
 
 ---
 
@@ -320,5 +337,4 @@ This security policy is part of the Israeli Bank Importer project and is license
 
 ---
 
-**Last Updated**: 2026-02-20
-**Version**: 1.10.1
+**Last Updated**: 2026-02-21

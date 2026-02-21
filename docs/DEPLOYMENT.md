@@ -287,8 +287,14 @@ services:
     image: sergienko4/israeli-bank-importer:latest
     container_name: israeli-bank-importer
     restart: unless-stopped
+    cap_drop:
+      - ALL
     cap_add:
       - SYS_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /dev/shm:size=256m
     environment:
       - TZ=Asia/Jerusalem
       - SCHEDULE=0 */8 * * *
