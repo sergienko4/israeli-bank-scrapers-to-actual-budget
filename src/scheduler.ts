@@ -54,10 +54,6 @@ function loadLogConfig(): LogConfig | undefined {
   return { ...config.logConfig, maxBufferSize: bufferSize };
 }
 
-function loadTelegramConfig(): ImporterConfig['notifications'] | null {
-  const config = loadFullConfig();
-  return config?.notifications?.enabled ? config.notifications : null;
-}
 
 // ─── Import execution ───
 
@@ -91,18 +87,14 @@ function logImportResult(code: number | null, startTime: Date): void {
 // ─── Telegram commands ───
 
 async function startTelegramCommands(): Promise<void> {
-  const notifications = loadTelegramConfig();
-  const telegram = notifications?.telegram;
+  const config = loadFullConfig();
+  const telegram = config?.notifications?.enabled ? config.notifications.telegram : null;
   if (!telegram?.listenForCommands) return;
 
   try {
     const notifier = new TelegramNotifier(telegram);
-    const fullConfig = loadFullConfig();
-    const hasWatch = (fullConfig?.spendingWatch?.length ?? 0) > 0;
-    const extraCommands = hasWatch
-      ? [{ command: 'watch', description: 'Check spending watch rules' }]
-      : [];
-    logger.info(`📋 Registering ${4 + extraCommands.length} bot commands${hasWatch ? ' (including /watch)' : ''}`);
+    const extraCommands = buildExtraCommands(config);
+    logger.info(`📋 Registering ${4 + extraCommands.length} bot commands${extraCommands.length ? ' (including /' + extraCommands.map(c => c.command).join(', /') + ')' : ''}`);
     await notifier.registerCommands(extraCommands);
     const handler = new TelegramCommandHandler(runImportLocked, notifier, new AuditLogService());
     activePoller = new TelegramPoller(telegram.botToken, telegram.chatId, (text) => handler.handle(text));
@@ -112,6 +104,14 @@ async function startTelegramCommands(): Promise<void> {
   } catch (error: unknown) {
     logger.error(`⚠️  Failed to start Telegram commands: ${errorMessage(error)}`);
   }
+}
+
+function buildExtraCommands(config: ImporterConfig | null): Array<{ command: string; description: string }> {
+  const extras: Array<{ command: string; description: string }> = [];
+  if ((config?.spendingWatch?.length ?? 0) > 0) {
+    extras.push({ command: 'watch', description: 'Check spending watch rules' });
+  }
+  return extras;
 }
 
 // ─── Scheduling ───

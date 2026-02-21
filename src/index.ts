@@ -293,12 +293,8 @@ async function evaluateSpendingWatch(): Promise<void> {
   logger.info('\n🔔 Evaluating spending watch rules...');
   const watchService = new SpendingWatchService(config.spendingWatch, api);
   const message = await watchService.evaluate();
-  if (message) {
-    logger.info('⚠️  Spending watch alerts triggered');
-    await notificationService.sendMessage(message);
-  } else {
-    logger.info('✅ All spending within limits');
-  }
+  if (message) await notificationService.sendMessage(message);
+  logger.info(message ? '⚠️  Spending watch alerts triggered' : '✅ All spending within limits');
 }
 
 async function finalizeImport(): Promise<void> {
