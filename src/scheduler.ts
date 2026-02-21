@@ -13,7 +13,7 @@ import { ImporterConfig, LogConfig } from './types/index.js';
 import { AuditLogService } from './services/AuditLogService.js';
 import { errorMessage } from './utils/index.js';
 import { createLogger, getLogger } from './logger/index.js';
-import { isEncryptedConfig, decryptConfig } from './config/ConfigEncryption.js';
+import { isEncryptedConfig, decryptConfig, getEncryptionPassword } from './config/ConfigEncryption.js';
 
 // Load log config early so all messages use the configured format
 const logConfig = loadLogConfig();
@@ -28,16 +28,21 @@ let activePoller: TelegramPoller | null = null;
 
 // ─── Config helpers ───
 
+function readJsonOrEncrypted(filePath: string): Record<string, unknown> | null {
+  if (!existsSync(filePath)) return null;
+  const raw = readFileSync(filePath, 'utf8');
+  const parsed = JSON.parse(raw);
+  if (!isEncryptedConfig(parsed)) return parsed;
+  const password = getEncryptionPassword();
+  return password ? JSON.parse(decryptConfig(raw, password)) : null;
+}
+
 function loadFullConfig(): ImporterConfig | null {
-  const configPath = '/app/config.json';
-  if (!existsSync(configPath)) return null;
   try {
-    const raw = readFileSync(configPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (!isEncryptedConfig(parsed)) return parsed as ImporterConfig;
-    const password = process.env.CONFIG_PASSWORD;
-    if (!password) return null;
-    return JSON.parse(decryptConfig(raw, password)) as ImporterConfig;
+    const config = readJsonOrEncrypted('/app/config.json');
+    if (!config) return null;
+    const creds = readJsonOrEncrypted('/app/credentials.json');
+    return (creds ? { ...config, ...creds } : config) as unknown as ImporterConfig;
   } catch { return null; }
 }
 
