@@ -87,7 +87,7 @@ jobs:
         run: docker build -t israeli-bank-importer:pr-test .
 
       - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.34.1
         with:
           image-ref: 'israeli-bank-importer:pr-test'
           format: 'sarif'
