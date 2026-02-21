@@ -90,6 +90,24 @@ export class TelegramNotifier implements INotifier {
     return data.result?.length ? data.result[data.result.length - 1].update_id + 1 : 0;
   }
 
+  // ─── Bot command registration ───
+
+  async registerCommands(): Promise<void> {
+    const commands = [
+      { command: 'scan', description: 'Run bank import now' },
+      { command: 'status', description: 'Show last run info + history' },
+      { command: 'watch', description: 'Check spending watch rules' },
+      { command: 'logs', description: 'Show recent log entries' },
+      { command: 'help', description: 'List available commands' },
+    ];
+    const url = `${TELEGRAM_API}/bot${this.botToken}/setMyCommands`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commands })
+    });
+  }
+
   // ─── Send with truncation ───
 
   private truncateMessage(text: string): string {

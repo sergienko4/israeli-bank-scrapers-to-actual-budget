@@ -97,6 +97,7 @@ function startTelegramCommands(): void {
 
   try {
     const notifier = new TelegramNotifier(telegram);
+    notifier.registerCommands().catch(() => {});
     const handler = new TelegramCommandHandler(runImportLocked, notifier, new AuditLogService());
     activePoller = new TelegramPoller(telegram.botToken, telegram.chatId, (text) => handler.handle(text));
     activePoller.start().catch((err: unknown) => {
