@@ -85,7 +85,7 @@ Releases are managed by [release-please](https://github.com/googleapis/release-p
 ### Step by step
 
 1. You create a PR with a **conventional commit** title (e.g., `feat: Add health check`)
-2. PR passes CI (build, tests, markdownlint, lychee, CodeQL) → you **squash & merge**
+2. PR passes CI (build, tests, Trivy container scan, markdownlint, lychee, CodeQL) → you **squash & merge**
 3. release-please runs automatically and creates/updates a **Release PR**
    - The Release PR bumps `package.json` version and updates `CHANGELOG.md`
    - Multiple code PRs accumulate in the same Release PR
@@ -94,6 +94,7 @@ Releases are managed by [release-please](https://github.com/googleapis/release-p
 6. The tag push triggers the **Docker Build & Publish** workflow
    - Builds multi-platform images (linux/amd64, linux/arm64)
    - Pushes to Docker Hub
+   - Generates SBOM (Software Bill of Materials)
    - Enriches the GitHub Release with Docker pull commands and stats
 
 ### Commit message format
