@@ -92,11 +92,11 @@ export class TelegramNotifier implements INotifier {
 
   // ─── Bot command registration ───
 
-  async registerCommands(): Promise<void> {
+  async registerCommands(extras: Array<{ command: string; description: string }> = []): Promise<void> {
     const commands = [
       { command: 'scan', description: 'Run bank import now' },
       { command: 'status', description: 'Show last run info + history' },
-      { command: 'watch', description: 'Check spending watch rules' },
+      ...extras,
       { command: 'logs', description: 'Show recent log entries' },
       { command: 'help', description: 'List available commands' },
     ];

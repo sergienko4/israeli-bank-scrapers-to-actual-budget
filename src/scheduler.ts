@@ -97,7 +97,10 @@ function startTelegramCommands(): void {
 
   try {
     const notifier = new TelegramNotifier(telegram);
-    notifier.registerCommands().catch(() => {});
+    const extraCommands = loadFullConfig()?.spendingWatch?.length
+      ? [{ command: 'watch', description: 'Check spending watch rules' }]
+      : [];
+    notifier.registerCommands(extraCommands).catch(() => {});
     const handler = new TelegramCommandHandler(runImportLocked, notifier, new AuditLogService());
     activePoller = new TelegramPoller(telegram.botToken, telegram.chatId, (text) => handler.handle(text));
     activePoller.start().catch((err: unknown) => {
