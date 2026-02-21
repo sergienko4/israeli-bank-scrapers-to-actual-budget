@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.12.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.11.1...v1.12.0) (2026-02-21)
+
+
+### Added
+
+* Add encrypted config file support (AES-256-GCM) ([#62](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/62)) ([296369d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/296369d35572a1b9c76ca7bf4859a70c2cc2c90a))
+* Split config into credentials and settings files ([#64](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/64)) ([ba71e33](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ba71e3356326fdc151d36e794af10999be366d6a))
+
+
+### CI/CD
+
+* add dynamic test count badge via Gist + shields.io ([#65](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/65)) ([c4ece3a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c4ece3aed51956855b215d4f1821982a6bacb757))
+
 ## [1.11.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.11.0...v1.11.1) (2026-02-21)
 
 
