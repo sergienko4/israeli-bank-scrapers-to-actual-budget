@@ -10,3 +10,7 @@ https://your_
 https://hub.docker.com/
 # GitHub action badges (flaky)
 https://github.com/.*/actions/workflows/.*badge.svg
+# Contributor Covenant (stable external reference)
+https://www.contributor-covenant.org/
+# Shields.io badges (dynamic, may timeout)
+https://img.shields.io/

@@ -31,7 +31,7 @@ jobs:
         run: npm ci
 
       - name: Check for vulnerable dependencies
-        run: npm audit --audit-level=moderate || true
+        run: npm audit --audit-level=moderate
 
       - name: Build TypeScript (strict mode)
         run: npm run build
@@ -51,7 +51,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: coverage-report
@@ -74,6 +74,34 @@ jobs:
         with:
           args: '**/*.md'
           fail: true
+
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t israeli-bank-importer:pr-test .
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@0.34.1
+        with:
+          image-ref: 'israeli-bank-importer:pr-test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          skip-dirs: 'root/.npm'
+
+      - name: Upload Trivy results to Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
 
   security-scan:
     name: CodeQL Security Scan

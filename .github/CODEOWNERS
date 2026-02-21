@@ -1,0 +1,10 @@
+# Default owner for all files
+* @sergienko4
+
+# CI/CD and Docker
+.github/ @sergienko4
+Dockerfile @sergienko4
+docker-compose.yml @sergienko4
+
+# Security
+SECURITY.md @sergienko4

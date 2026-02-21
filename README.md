@@ -1,6 +1,6 @@
 # Israeli Bank Scrapers to Actual Budget
 
-[![PR Validation](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr-validation.yml) [![Release](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PR Validation](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr-validation.yml) [![Release](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Docker Pulls](https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer)](https://hub.docker.com/r/sergienko4/israeli-bank-importer) [![Node.js](https://img.shields.io/badge/node-22%2B-brightgreen)](https://nodejs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
 
 **Automatically import transactions from 18 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
 
@@ -631,6 +631,8 @@ docker run --rm ^
 | [CHANGELOG.md](CHANGELOG.md) | Version history and release notes |
 | [config.json.example](config.json.example) | Full example configuration |
 | [GUIDELINES.md](GUIDELINES.md) | Development guidelines for contributors |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
 
 ---
 

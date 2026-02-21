@@ -15,8 +15,19 @@ services:
     image: sergienko4/israeli-bank-importer:latest
     container_name: israeli-bank-importer
     restart: unless-stopped
+    cap_drop:
+      - ALL                # Drop all capabilities first
     cap_add:
-      - SYS_ADMIN    # Required for Chromium sandboxing
+      - SYS_ADMIN          # Required for Chromium sandboxing
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /dev/shm:size=256m       # Chromium shared memory
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '1.5'
     environment:
       - TZ=Asia/Jerusalem
       # Cron schedule: run every 8 hours (at midnight, 8am, 4pm)
