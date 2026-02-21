@@ -65,6 +65,12 @@
     ]
   },
 
+  "spendingWatch": [
+    { "alertFromAmount": 1000, "numOfDayToCount": 1, "watchPayees": ["Netflix", "Gym"] },
+    { "alertFromAmount": 5000, "numOfDayToCount": 7 },
+    { "alertFromAmount": 15000, "numOfDayToCount": 30, "watchPayees": ["rent", "שכירות"] }
+  ],
+
   "notifications": {
     "enabled": false,
     "maxTransactions": 5,
@@ -101,6 +107,10 @@
     "logConfig.maxBufferSize": "1-500. Ring buffer for /logs. Auto-enabled (150) when listenForCommands=true, otherwise 0",
     "categorization.mode": "none (default) | history | translate. See README for details",
     "categorization.translations": "Array of {fromPayee, toPayee} rules. Only used when mode=translate",
+    "spendingWatch": "Array of rules. Each rule: {alertFromAmount, numOfDayToCount, watchPayees?}",
+    "spendingWatch[].alertFromAmount": "Trigger alert if total spending exceeds this amount (currency units)",
+    "spendingWatch[].numOfDayToCount": "Time window in days to sum transactions (1 = today only, max 365)",
+    "spendingWatch[].watchPayees": "Optional. Only count these payees (substring match). Missing = all payees",
     "syncId": "Settings → Show Advanced Settings → Sync ID",
     "actualAccountId": "Click account in Actual Budget → ID from URL"
   }

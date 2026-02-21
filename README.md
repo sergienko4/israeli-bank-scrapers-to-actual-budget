@@ -347,6 +347,30 @@ Transaction with payee "סופר כל הטעמים" matches "סופר" and is im
 
 **Important:** Actual Budget's rules always run after import. Our category is a first-pass suggestion; Actual's rules are the final word. They work together — no conflict.
 
+### Spending Watch
+
+Monitor spending patterns and get alerts when thresholds are exceeded. Configure an array of rules — each with an amount threshold, time window, and optional payee filter.
+
+```json
+"spendingWatch": [
+  { "alertFromAmount": 1000, "numOfDayToCount": 1, "watchPayees": ["Netflix", "Gym"] },
+  { "alertFromAmount": 5000, "numOfDayToCount": 7 },
+  { "alertFromAmount": 15000, "numOfDayToCount": 30, "watchPayees": ["rent", "שכירות"] }
+]
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `alertFromAmount` | Yes | Alert if total spending exceeds this (currency units) |
+| `numOfDayToCount` | Yes | Time window in days (1 = today, 7 = week, 30 = month) |
+| `watchPayees` | No | Only count these payees (substring match). Missing = all payees |
+
+**How it works:** After each import, the tool queries Actual Budget for debit transactions in the time window, filters by payees if configured, sums the amounts, and alerts if the threshold is exceeded. Alerts are sent to all configured notification channels (Telegram, webhook).
+
+**No `spendingWatch` config = no alerts** (backward compatible).
+
+Use `/watch` in Telegram to check rules on demand.
+
 ### Split Config (Optional)
 
 Separate secrets from settings using two files:

@@ -36,6 +36,10 @@ export class NotificationService {
     await this.notifyAll(n => n.sendError(error));
   }
 
+  async sendMessage(text: string): Promise<void> {
+    await this.notifyAll(n => n.sendMessage(text));
+  }
+
   private async notifyAll(action: (n: INotifier) => Promise<void>): Promise<void> {
     if (this.notifiers.length === 0) return;
     const results = await Promise.allSettled(this.notifiers.map(action));

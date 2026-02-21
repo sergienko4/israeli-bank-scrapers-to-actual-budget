@@ -19,7 +19,8 @@ export class TelegramCommandHandler {
   constructor(
     private runImport: () => Promise<number>,
     private notifier: INotifier,
-    private auditLog?: IAuditLog
+    private auditLog?: IAuditLog,
+    private runWatch?: () => Promise<string | null>
   ) {}
 
   async handle(text: string): Promise<void> {
@@ -30,6 +31,7 @@ export class TelegramCommandHandler {
       '/import': () => this.handleScan(),
       '/status': () => this.handleStatus(),
       '/logs': () => this.handleLogs(parts[1]),
+      '/watch': () => this.handleWatch(),
       '/help': () => this.handleHelp(),
       '/start': () => this.handleHelp(),
     };
@@ -103,11 +105,23 @@ export class TelegramCommandHandler {
     return text.slice(-maxLength) + '\n...(truncated)';
   }
 
+  private async handleWatch(): Promise<void> {
+    if (!this.runWatch) { await this.reply('⚠️ Spending watch not configured. Add spendingWatch to config.json'); return; }
+    await this.reply('🔍 Checking spending rules...');
+    try {
+      const message = await this.runWatch();
+      await this.reply(message ?? '✅ All spending within limits.');
+    } catch (error: unknown) {
+      await this.reply(`❌ Watch error: ${errorMessage(error)}`);
+    }
+  }
+
   private async handleHelp(): Promise<void> {
     const lines = [
       '🤖 <b>Available Commands</b>', '',
       '/scan - Run bank import now',
       '/status - Show last run info + history',
+      '/watch - Check spending watch rules now',
       '/logs - Show recent log entries',
       '/logs 100 - Show last 100 entries (max 150)',
       '/help - Show this message',
