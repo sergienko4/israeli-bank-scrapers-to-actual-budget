@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.12.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.12.2...v1.12.3) (2026-02-21)
+
+
+### Refactored
+
+* move docs to docs/, simplify CI/CD, fix Docker Hub links ([5099a97](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5099a977ff19f3893eaf0c1dc1b883ee26eb3e75))
+
 ## [1.12.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.12.1...v1.12.2) (2026-02-21)
 
 
