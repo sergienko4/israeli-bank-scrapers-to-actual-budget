@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.11.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.11.0...v1.11.1) (2026-02-21)
+
+
+### CI/CD
+
+* **deps:** bump actions/upload-artifact from 4 to 6 ([#57](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/57)) ([1c3598d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1c3598d64f4e85ac73182f34dec60c8966f98169))
+* **deps:** bump aquasecurity/trivy-action from 0.33.1 to 0.34.1 ([#60](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/60)) ([378d89b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/378d89bbfb02eb315c34410e90efd6a4fb7a246b))
+* **deps:** bump docker/build-push-action from 5 to 6 ([#58](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/58)) ([5f45f81](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5f45f81f68488d5705c89c76cc8e6abd7af74627))
+* Harden security and add open source community files ([#53](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/53)) ([667240e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/667240e647ce672e9426c39215060c1f835947b4))
+
 ## [1.11.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.10.1...v1.11.0) (2026-02-20)
 
 
