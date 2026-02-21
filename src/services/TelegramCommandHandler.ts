@@ -106,7 +106,10 @@ export class TelegramCommandHandler {
   }
 
   private async handleWatch(): Promise<void> {
-    if (!this.runWatch) { await this.reply('⚠️ Spending watch not configured. Add spendingWatch to config.json'); return; }
+    if (!this.runWatch) {
+      await this.reply('🔔 Spending watch runs automatically after each import.\nOn-demand /watch is coming soon.\n\nUse /scan to trigger an import with spending watch.');
+      return;
+    }
     await this.reply('🔍 Checking spending rules...');
     try {
       const message = await this.runWatch();
@@ -121,7 +124,7 @@ export class TelegramCommandHandler {
       '🤖 <b>Available Commands</b>', '',
       '/scan - Run bank import now',
       '/status - Show last run info + history',
-      '/watch - Check spending watch rules now',
+      '/watch - Spending watch info (runs after each import)',
       '/logs - Show recent log entries',
       '/logs 100 - Show last 100 entries (max 150)',
       '/help - Show this message',
