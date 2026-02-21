@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.12.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.12.1...v1.12.2) (2026-02-21)
+
+
+### Documentation
+
+* update GUIDELINES with Trivy scan and SBOM in pipeline description ([#68](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/68)) ([ebcb789](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ebcb789d45f36cdb10f625714f8026cccebcb002))
+
 ## [1.12.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.12.0...v1.12.1) (2026-02-21)
 
 
