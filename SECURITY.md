@@ -21,6 +21,20 @@ ls -la config.json
 # Should show: -rw------- (600)
 ```
 
+### Encrypted Config (Recommended)
+
+For stronger protection, encrypt your config.json:
+
+```bash
+CONFIG_PASSWORD=mypassword node scripts/encrypt-config.js
+```
+
+- **AES-256-GCM** encryption (OWASP recommended)
+- **PBKDF2** key derivation (100,000 iterations)
+- Decrypted **only in memory** — never written to disk
+- Same filename, same mount path — just add `CONFIG_PASSWORD` env var
+- Even if someone steals the file, they can't read your credentials
+
 ### Never Commit Credentials
 
 - ✅ `config.json` is in `.gitignore` by default
