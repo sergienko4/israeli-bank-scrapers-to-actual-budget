@@ -25,6 +25,10 @@ export function isEncryptedConfig(data: unknown): data is EncryptedConfig {
   return typeof data === 'object' && data !== null && (data as Record<string, unknown>).encrypted === true;
 }
 
+export function getEncryptionPassword(): string | undefined {
+  return process.env.CREDENTIALS_ENCRYPTION_PASSWORD ?? process.env.CONFIG_PASSWORD;
+}
+
 function deriveKey(password: string, salt: Buffer): Buffer {
   return pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, KEY_LENGTH, PBKDF2_DIGEST);
 }
@@ -52,7 +56,7 @@ function buildEncryptedPayload(salt: Buffer, iv: Buffer, tag: Buffer, ciphertext
 }
 
 export function decryptConfig(encryptedJson: string, password: string): string {
-  if (!password) throw new Error('CONFIG_PASSWORD is required to decrypt config');
+  if (!password) throw new Error('CREDENTIALS_ENCRYPTION_PASSWORD is required to decrypt config');
   const data = JSON.parse(encryptedJson) as EncryptedConfig;
   if (!isEncryptedConfig(data)) throw new Error('Config file is not encrypted');
   return decryptBuffer(data, deriveKey(password, Buffer.from(data.salt, 'base64')));

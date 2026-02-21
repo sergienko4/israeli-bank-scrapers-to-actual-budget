@@ -347,30 +347,36 @@ Transaction with payee "סופר כל הטעמים" matches "סופר" and is im
 
 **Important:** Actual Budget's rules always run after import. Our category is a first-pass suggestion; Actual's rules are the final word. They work together — no conflict.
 
+### Split Config (Optional)
+
+Separate secrets from settings using two files:
+
+- **`credentials.json`** — passwords, tokens, bank IDs (encrypt this)
+- **`config.json`** — settings like daysBack, targets, formats (safe to share)
+
+See `credentials.json.example` for the template. If `credentials.json` exists, it deep-merges with `config.json`.
+
+Single `config.json` with everything still works (backward compatible).
+
 ### Encrypted Config
 
-Protect your credentials by encrypting `config.json`:
-
-**Step 1: Encrypt (one-time)**
+Protect credentials by encrypting any config file:
 
 ```bash
 npm run build
-CONFIG_PASSWORD=mypassword node scripts/encrypt-config.js
+CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/encrypt-config.js
+# Or encrypt just credentials: CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/encrypt-config.js credentials.json
 ```
-
-Your `config.json` is now encrypted in-place. The same file, same name — just encrypted content.
-
-**Step 2: Run with encryption**
 
 ```yaml
-# docker-compose.yml — add CONFIG_PASSWORD
+# docker-compose.yml
 environment:
-  - CONFIG_PASSWORD=mypassword
+  - CREDENTIALS_ENCRYPTION_PASSWORD=mypassword
 ```
 
-That's it. Same file mount, same path. The app auto-detects encrypted config and decrypts in memory.
+The app auto-detects encrypted files and decrypts in memory. Supports old `CONFIG_PASSWORD` env var too.
 
-To edit config later: `CONFIG_PASSWORD=mypassword node scripts/decrypt-config.js`, edit, then re-encrypt.
+To edit: `CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/decrypt-config.js`, edit, re-encrypt.
 
 ### Rate Limiting
 

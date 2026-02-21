@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
  * Encrypt config.json in-place using AES-256-GCM
- * Usage: CONFIG_PASSWORD=mypassword node scripts/encrypt-config.js [input]
+ * Usage: CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/encrypt-config.js [input]
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { encryptConfig, isEncryptedConfig } from '../dist/config/ConfigEncryption.js';
 
 const inputPath = process.argv[2] || 'config.json';
-const password = process.env.CONFIG_PASSWORD;
+const password = process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
 
 if (!password) {
-  console.error('❌ Set CONFIG_PASSWORD environment variable');
-  console.error('   Example: CONFIG_PASSWORD=mypassword node scripts/encrypt-config.js');
+  console.error('❌ Set CREDENTIALS_ENCRYPTION_PASSWORD environment variable');
+  console.error('   Example: CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/encrypt-config.js');
   process.exit(1);
 }
 
@@ -24,7 +24,7 @@ try {
   }
   writeFileSync(inputPath, encryptConfig(raw, password));
   console.log(`✅ ${inputPath} encrypted successfully`);
-  console.log('🔐 Keep CONFIG_PASSWORD safe — you need it to run the importer');
+  console.log('🔐 Keep CREDENTIALS_ENCRYPTION_PASSWORD safe — you need it to run the importer');
 } catch (error) {
   console.error(`❌ Encryption failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
