@@ -347,6 +347,31 @@ Transaction with payee "סופר כל הטעמים" matches "סופר" and is im
 
 **Important:** Actual Budget's rules always run after import. Our category is a first-pass suggestion; Actual's rules are the final word. They work together — no conflict.
 
+### Encrypted Config
+
+Protect your credentials by encrypting `config.json`:
+
+**Step 1: Encrypt (one-time)**
+
+```bash
+npm run build
+CONFIG_PASSWORD=mypassword node scripts/encrypt-config.js
+```
+
+Your `config.json` is now encrypted in-place. The same file, same name — just encrypted content.
+
+**Step 2: Run with encryption**
+
+```yaml
+# docker-compose.yml — add CONFIG_PASSWORD
+environment:
+  - CONFIG_PASSWORD=mypassword
+```
+
+That's it. Same file mount, same path. The app auto-detects encrypted config and decrypts in memory.
+
+To edit config later: `CONFIG_PASSWORD=mypassword node scripts/decrypt-config.js`, edit, then re-encrypt.
+
 ### Rate Limiting
 
 Prevent bank API throttling by adding a delay between bank imports:
@@ -658,7 +683,7 @@ npm run test:watch    # Watch mode
 npm run validate      # Build + test (validate before committing)
 ```
 
-**326 tests** across 27 test files with 70%+ branch coverage.
+**338 tests** across 28 test files with 70%+ branch coverage.
 
 ---
 

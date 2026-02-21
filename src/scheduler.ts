@@ -13,6 +13,7 @@ import { ImporterConfig, LogConfig } from './types/index.js';
 import { AuditLogService } from './services/AuditLogService.js';
 import { errorMessage } from './utils/index.js';
 import { createLogger, getLogger } from './logger/index.js';
+import { isEncryptedConfig, decryptConfig } from './config/ConfigEncryption.js';
 
 // Load log config early so all messages use the configured format
 const logConfig = loadLogConfig();
@@ -30,8 +31,14 @@ let activePoller: TelegramPoller | null = null;
 function loadFullConfig(): ImporterConfig | null {
   const configPath = '/app/config.json';
   if (!existsSync(configPath)) return null;
-  try { return JSON.parse(readFileSync(configPath, 'utf8')) as ImporterConfig; }
-  catch { return null; }
+  try {
+    const raw = readFileSync(configPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!isEncryptedConfig(parsed)) return parsed as ImporterConfig;
+    const password = process.env.CONFIG_PASSWORD;
+    if (!password) return null;
+    return JSON.parse(decryptConfig(raw, password)) as ImporterConfig;
+  } catch { return null; }
 }
 
 function loadLogConfig(): LogConfig | undefined {

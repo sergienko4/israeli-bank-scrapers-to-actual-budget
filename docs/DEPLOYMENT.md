@@ -159,6 +159,15 @@ Uses named volumes for data persistence — your data survives container recreat
 |--------|---------|-------------|
 | `delayBetweenBanks` | `0` | Milliseconds to wait between bank imports |
 
+### Encrypted Config
+
+| Env Variable | Default | Description |
+|-------------|---------|-------------|
+| `CONFIG_PASSWORD` | _(none)_ | Password to decrypt encrypted config.json. If not set, plain config is used |
+
+Encrypt: `CONFIG_PASSWORD=pass node scripts/encrypt-config.js`
+Decrypt: `CONFIG_PASSWORD=pass node scripts/decrypt-config.js`
+
 ### Logging
 
 | Option | Default | Description |
