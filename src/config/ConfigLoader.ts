@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from 'fs';
 import { ImporterConfig, BankConfig, BankTarget, NotificationConfig } from '../types/index.js';
 import { ConfigurationError } from '../errors/ErrorTypes.js';
 import { getLogger } from '../logger/index.js';
+import { isEncryptedConfig, decryptConfig } from './ConfigEncryption.js';
 
 export interface IConfigLoader {
   load(): ImporterConfig;
@@ -42,11 +43,23 @@ export class ConfigLoader implements IConfigLoader {
     }
     try {
       getLogger().info('📄 Loading configuration from config.json');
-      return JSON.parse(readFileSync(this.configPath, 'utf8')) as ImporterConfig;
-    } catch {
+      const raw = readFileSync(this.configPath, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (isEncryptedConfig(parsed)) return this.loadEncrypted(raw);
+      return parsed as ImporterConfig;
+    } catch (error: unknown) {
+      if (error instanceof ConfigurationError) throw error;
       getLogger().warn('⚠️  Failed to parse config.json, falling back to environment variables');
       return null;
     }
+  }
+
+  private loadEncrypted(raw: string): ImporterConfig {
+    const password = process.env.CONFIG_PASSWORD;
+    if (!password) throw new ConfigurationError('🔐 Config is encrypted. Set CONFIG_PASSWORD environment variable to decrypt.');
+    getLogger().info('🔐 Decrypting encrypted configuration...');
+    const decrypted = decryptConfig(raw, password);
+    return JSON.parse(decrypted) as ImporterConfig;
   }
 
   private loadFromEnvironment(): ImporterConfig {

@@ -101,6 +101,7 @@
     "categorization.mode": "none (default) | history | translate. See README for details",
     "categorization.translations": "Array of {fromPayee, toPayee} rules. Only used when mode=translate",
     "syncId": "Settings → Show Advanced Settings → Sync ID",
-    "actualAccountId": "Click account in Actual Budget → ID from URL"
+    "actualAccountId": "Click account in Actual Budget → ID from URL",
+    "CONFIG_PASSWORD": "Env var to decrypt encrypted config. See README → Encrypted Config"
   }
 }

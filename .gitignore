@@ -3,6 +3,7 @@ node_modules/
 
 # Sensitive configuration
 config.json
+*.enc
 .env
 
 # Runtime data (contains sensitive budget data)
