@@ -290,9 +290,15 @@ async function delayBeforeNextBank(delayMs?: number): Promise<void> {
 
 async function evaluateSpendingWatch(): Promise<void> {
   if (!config.spendingWatch?.length) return;
+  logger.info('\n🔔 Evaluating spending watch rules...');
   const watchService = new SpendingWatchService(config.spendingWatch, api);
   const message = await watchService.evaluate();
-  if (message) await notificationService.sendMessage(message);
+  if (message) {
+    logger.info('⚠️  Spending watch alerts triggered');
+    await notificationService.sendMessage(message);
+  } else {
+    logger.info('✅ All spending within limits');
+  }
 }
 
 async function finalizeImport(): Promise<void> {

@@ -105,7 +105,7 @@ export class SpendingWatchService {
 
   private buildTransactionDetails(matched: TransactionRow[]): string[] {
     const lines = matched.slice(0, MAX_DISPLAYED_TRANSACTIONS)
-      .map(t => `  ${this.formatAmount(t.amount)}  ${t.imported_payee}`);
+      .map(t => `  ${this.formatAmount(t.amount)}  ${t.imported_payee || 'Unknown'}`);
     if (matched.length > MAX_DISPLAYED_TRANSACTIONS) {
       lines.push(`  ... and ${matched.length - MAX_DISPLAYED_TRANSACTIONS} more`);
     }
