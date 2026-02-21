@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.12.3...v1.13.0) (2026-02-21)
+
+
+### Added
+
+* add spending watch with configurable rules ([#72](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/72)) ([0e912af](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/0e912af99cd50b2ca1668a18b9a15590cc20f57e))
+* add spending watch with configurable rules and auto Telegram command registration ([0e912af](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/0e912af99cd50b2ca1668a18b9a15590cc20f57e))
+
 ## [1.12.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.12.2...v1.12.3) (2026-02-21)
 
 
