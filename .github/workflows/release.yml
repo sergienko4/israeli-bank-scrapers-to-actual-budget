@@ -19,24 +19,14 @@ env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
 
 jobs:
-  security-scan:
+  release:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run npm audit
-        run: |
-          npm install --package-lock-only
-          npm audit --audit-level=moderate
-
-  build-and-push:
-    runs-on: ubuntu-latest
-    needs: security-scan
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Determine tag
         id: tag
@@ -83,38 +73,9 @@ jobs:
           output-file: sbom.spdx.json
           artifact-name: sbom-${{ steps.tag.outputs.version }}.spdx.json
 
-      - name: Attach SBOM to release
-        if: github.event_name == 'push'
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: sbom.spdx.json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update Docker Hub description
-        uses: peter-evans/dockerhub-description@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ env.DOCKER_IMAGE }}
-          short-description: "Automatically import transactions from 18 Israeli banks into Actual Budget"
-          readme-filepath: ./README.md
-
-  enrich-release:
-    runs-on: ubuntu-latest
-    needs: [build-and-push]
-    if: github.event_name == 'push'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Build enriched release notes
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ steps.tag.outputs.version }}"
           PREV_TAG=$(git describe --tags --abbrev=0 ${VERSION}^ 2>/dev/null || echo "")
 
           if [ -n "$PREV_TAG" ]; then
@@ -202,7 +163,6 @@ jobs:
             echo "## Upgrading"
             echo ""
             echo '```bash'
-            echo "# Update image and restart"
             echo "docker compose pull && docker compose up -d"
             echo '```'
             echo ""
@@ -218,13 +178,21 @@ jobs:
             fi
           } > enriched_notes.md
 
-          echo "Enriched release notes built for $VERSION"
-
-      - name: Append Docker info to GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Attach SBOM and enrich release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           append_body: true
           body_path: enriched_notes.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: sbom.spdx.json
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Update Docker Hub description
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKER_IMAGE }}
+          short-description: "Automatically import transactions from 18 Israeli banks into Actual Budget"
+          readme-filepath: ./README.md
