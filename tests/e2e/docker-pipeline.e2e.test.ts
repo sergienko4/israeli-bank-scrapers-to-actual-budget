@@ -10,18 +10,11 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import api from '@actual-app/api';
-import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { extractQueryData } from '../../src/utils/index.js';
+import { findBudgetId, getFixturesDir } from './helpers/dockerRunner.js';
 
-const DATA_DIR = join(import.meta.dirname, 'fixtures', 'e2e-data');
-
-function findBudgetId(): string | null {
-  if (!existsSync(DATA_DIR)) return null;
-  const entries = readdirSync(DATA_DIR);
-  return entries.find(e => e.startsWith('e2e-test-budget-')) ?? null;
-}
-
+const DATA_DIR = join(getFixturesDir(), 'e2e-data');
 const BUDGET_ID = findBudgetId();
 const HAS_BUDGET = !!BUDGET_ID;
 
