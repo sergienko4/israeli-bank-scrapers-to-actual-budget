@@ -46,3 +46,21 @@ export function createTestSummary(overrides?: Partial<ImportSummary>): ImportSum
     ...overrides,
   };
 }
+
+/** Base Docker E2E config. Override specific fields for each test scenario. */
+export function createBaseConfig(overrides?: Record<string, unknown>) {
+  return {
+    actual: {
+      init: { serverURL: 'http://localhost:5006', password: 'test', dataDir: '/app/data' },
+      budget: { syncId: '00000000-0000-0000-0000-000000000000', password: null },
+    },
+    banks: {
+      e2eTestBank: {
+        id: 'test', password: 'test', num: '123', daysBack: 7,
+        targets: [{ actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' }],
+      },
+    },
+    notifications: { enabled: false },
+    ...overrides,
+  };
+}
