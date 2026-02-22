@@ -78,6 +78,13 @@ export function getFixturesDir(): string {
   return FIXTURES_DIR;
 }
 
+export function hasDockerImage(): boolean {
+  try {
+    execFileSync('docker', ['image', 'inspect', DOCKER_IMAGE], { stdio: 'pipe' });
+    return true;
+  } catch { return false; }
+}
+
 export function findBudgetId(): string | null {
   const dataDir = join(FIXTURES_DIR, 'e2e-data');
   if (!existsSync(dataDir)) return null;
