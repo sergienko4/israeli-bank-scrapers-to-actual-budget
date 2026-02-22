@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "accounts": [
+    {
+      "accountNumber": "E2E-002",
+      "balance": 2500.00,
+      "txns": [
+        {
+          "date": "2026-02-20T00:00:00.000Z",
+          "description": "Bank2 Transfer",
+          "chargedAmount": 1500.00,
+          "originalAmount": 1500.00,
+          "originalCurrency": "ILS",
+          "identifier": "txn-b2-001"
+        },
+        {
+          "date": "2026-02-19T00:00:00.000Z",
+          "description": "Bank2 Electric Bill",
+          "chargedAmount": -450.75,
+          "originalAmount": -450.75,
+          "originalCurrency": "ILS",
+          "identifier": "txn-b2-002"
+        }
+      ]
+    }
+  ]
+}

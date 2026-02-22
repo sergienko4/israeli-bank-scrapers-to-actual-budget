@@ -1,0 +1,100 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/e2e/**'
+      - 'Dockerfile'
+      - 'package.json'
+      - 'vitest.config.e2e.ts'
+      - 'docker-compose.e2e.yml'
+  schedule:
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: e2e-tests
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Create test budget
+        run: npm run test:e2e:setup
+
+      - name: Extract budget ID
+        id: budget
+        run: |
+          BUDGET_ID=$(ls tests/e2e/fixtures/e2e-data/ | grep "e2e-test-budget-" | head -1)
+          echo "id=$BUDGET_ID" >> "$GITHUB_OUTPUT"
+          echo "Budget ID: $BUDGET_ID"
+
+      - name: Prepare per-bank mock data
+        run: |
+          mkdir -p tests/e2e/fixtures/mock-scraper-dir
+          cp tests/e2e/fixtures/mock-scraper-result.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank.json
+          cp tests/e2e/fixtures/mock-scraper-result-bank2.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank2.json
+          chmod -R 777 tests/e2e/fixtures/e2e-data
+
+      - name: Build Docker image from current branch
+        run: docker build -t israeli-bank-importer:e2e .
+
+      - name: "Run #1: First import (creates transactions)"
+        run: |
+          set +e
+          docker run --rm \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/config.generated.json:/app/config.json:ro \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/e2e-data:/app/data \
+            -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
+            -e E2E_LOCAL_BUDGET_ID=${{ steps.budget.outputs.id }} \
+            israeli-bank-importer:e2e \
+            node dist/index.js
+          EXIT_CODE=$?
+          echo "Run #1 exit code: $EXIT_CODE"
+          if [ $EXIT_CODE -gt 1 ]; then
+            echo "::error::Importer crashed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+      - name: "Run #2: Dedup verification (same data, no new transactions)"
+        run: |
+          set +e
+          docker run --rm \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/config.generated.json:/app/config.json:ro \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/e2e-data:/app/data \
+            -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
+            -e E2E_LOCAL_BUDGET_ID=${{ steps.budget.outputs.id }} \
+            israeli-bank-importer:e2e \
+            node dist/index.js
+          EXIT_CODE=$?
+          echo "Run #2 exit code: $EXIT_CODE"
+          if [ $EXIT_CODE -gt 1 ]; then
+            echo "::error::Importer crashed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+      - name: Verify pipeline results
+        run: npm run test:e2e
+        env:
+          E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
+          E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
