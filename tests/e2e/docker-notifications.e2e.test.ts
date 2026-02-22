@@ -10,7 +10,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
 import { createWebhookCapture, WebhookCapture } from './helpers/webhookCapture.js';
-import { runImporterDockerAsync, getFixturesDir, findBudgetId, createTempFileTracker } from './helpers/dockerRunner.js';
+import { runImporterDockerAsync, getFixturesDir, findBudgetId, createTempFileTracker, hasDockerImage } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
 
 const FIXTURES = getFixturesDir();
@@ -50,7 +50,7 @@ afterAll(async () => {
   temp.cleanup();
 });
 
-describe.runIf(HAS_BUDGET)('Docker Notifications E2E', () => {
+describe.runIf(HAS_BUDGET && hasDockerImage())('Docker Notifications E2E', () => {
   describe('happy path', () => {
     it('webhook receives import_complete with bank metrics', async () => {
       const configPath = writeWebhookConfig(`http://${DOCKER_HOST}:${capture.port}/webhook`);

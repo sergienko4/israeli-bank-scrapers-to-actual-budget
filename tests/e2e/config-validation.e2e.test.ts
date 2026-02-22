@@ -6,7 +6,7 @@
 
 import { describe, it, expect, afterAll } from 'vitest';
 import { join } from 'path';
-import { runImporterDocker, getFixturesDir, writeTempConfig, createTempFileTracker } from './helpers/dockerRunner.js';
+import { runImporterDocker, getFixturesDir, writeTempConfig, createTempFileTracker, hasDockerImage } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
 
 const FIXTURES = getFixturesDir();
@@ -14,7 +14,7 @@ const temp = createTempFileTracker();
 
 afterAll(() => { temp.cleanup(); });
 
-describe('Config Validation E2E', () => {
+describe.runIf(hasDockerImage())('Config Validation E2E', () => {
   describe('happy path', () => {
     it('valid config loads without ConfigurationError', () => {
       const configPath = writeTempConfig('valid', createBaseConfig());
