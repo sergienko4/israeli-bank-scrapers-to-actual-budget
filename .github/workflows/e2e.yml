@@ -52,6 +52,7 @@ jobs:
           mkdir -p tests/e2e/fixtures/mock-scraper-dir
           cp tests/e2e/fixtures/mock-scraper-result.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank.json
           cp tests/e2e/fixtures/mock-scraper-result-bank2.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank2.json
+          chmod -R 777 tests/e2e/fixtures/e2e-data
 
       - name: Build Docker image from current branch
         run: docker build -t israeli-bank-importer:e2e .
