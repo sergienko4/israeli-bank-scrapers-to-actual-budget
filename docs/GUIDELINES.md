@@ -42,22 +42,23 @@ Rules for contributing to this project. All contributors (including AI assistant
 19. **Run tests** - `npm test` must pass all tests
 20. **Run validate** - `npm run validate` (build + tests combined)
 21. **Build Docker image** - `docker build -t israeli-bank-importer:test .`
-22. **Run Docker locally** - Run the container with `config.json` and verify it works with real bank data
+22. **Run E2E tests first** - `npm run test:e2e` with E2E config (mock data, no real bank credentials)
+23. **Then run with real config** - Docker run with `config.json` to verify with real bank data (optional, after E2E passes)
 
 ---
 
 ## Documentation
 
-23. **Always update documentation** - Every code change must include relevant doc updates
-24. **Update .md files before work** - Plan and document in task files before implementation begins
-25. **CHANGELOG.md is auto-generated** - release-please updates it from conventional commits. Do NOT edit manually.
-26. **Remove unused files** - Keep the repository clean, no dead or orphaned files
+24. **Always update documentation** - Every code change must include relevant doc updates
+25. **Update .md files before work** - Plan and document in task files before implementation begins
+26. **CHANGELOG.md is auto-generated** - release-please updates it from conventional commits. Do NOT edit manually.
+27. **Remove unused files** - Keep the repository clean, no dead or orphaned files
 
 ---
 
 ## Development Process
 
-27. **Plan first, then implement** - Create a plan, wait for review and approval before coding
+28. **Plan first, then implement** - Create a plan, wait for review and approval before coding
 
 ---
 
@@ -118,7 +119,7 @@ When working on tasks from the `tasks/` folder:
 3. Create a fresh branch: `git checkout -b task-XX-description`
 4. Implement following the steps documented in the task file
 5. Run `npm run validate` (build + tests)
-6. Build and run Docker image locally with real config
+6. Build Docker image and run E2E tests first, then optionally with real config
 7. Create a Pull Request with a conventional commit title (e.g., `feat: Add health check endpoint`)
 8. After merge, update task status to `DONE` in `tasks/README.md`
 9. release-please will update CHANGELOG.md and version automatically
