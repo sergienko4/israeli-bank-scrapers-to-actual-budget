@@ -11,6 +11,11 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    groups:
+      critical-deps:
+        patterns:
+          - "@actual-app/*"
+          - "israeli-bank-scrapers"
 
   - package-ecosystem: "github-actions"
     directory: "/"
