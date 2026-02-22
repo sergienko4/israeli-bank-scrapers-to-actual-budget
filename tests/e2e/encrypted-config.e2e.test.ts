@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { join } from 'path';
 import { encryptConfig } from '../../src/config/ConfigEncryption.js';
-import { runImporterDocker, getFixturesDir, findBudgetId, createTempFileTracker } from './helpers/dockerRunner.js';
+import { runImporterDocker, getFixturesDir, findBudgetId, createTempFileTracker, hasDockerImage } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
 import { writeFileSync } from 'fs';
 
@@ -27,7 +27,7 @@ beforeAll(() => {
 
 afterAll(() => { temp.cleanup(); });
 
-describe.runIf(HAS_BUDGET)('Encrypted Config E2E', () => {
+describe.runIf(HAS_BUDGET && hasDockerImage())('Encrypted Config E2E', () => {
   const budgetId = findBudgetId()!;
 
   describe('happy path', () => {
