@@ -5,8 +5,8 @@ import { AuditLogService } from '../../src/services/AuditLogService.js';
 import { createLogger } from '../../src/logger/index.js';
 import { createTestSummary } from './helpers/testData.js';
 import {
-  HAS_TELEGRAM, getTelegramConfig, deleteMessage,
-  rateLimitDelay, createMessageCollector,
+  HAS_TELEGRAM, getTelegramConfig,
+  createMessageCollector, cleanupMessages,
 } from './helpers/telegramHelpers.js';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -20,14 +20,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
   let handler: TelegramCommandHandler;
   let auditLog: AuditLogService;
 
-  afterEach(async () => {
-    collector.stopCapturing();
-    for (const id of collector.messageIds) {
-      await deleteMessage(config.botToken, config.chatId, id);
-    }
-    collector.messageIds.length = 0;
-    await rateLimitDelay();
-  });
+  afterEach(async () => { await cleanupMessages(collector, config); });
 
   it('delivers /help response to real Telegram', async () => {
     collector.startCapturing();

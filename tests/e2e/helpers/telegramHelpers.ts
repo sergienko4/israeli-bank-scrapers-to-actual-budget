@@ -16,13 +16,6 @@ export function getTelegramConfig() {
   };
 }
 
-export async function verifyBotToken(token: string): Promise<boolean> {
-  const url = `${TELEGRAM_API}/bot${token}/getMe`;
-  const res = await fetch(url);
-  const data = await res.json() as { ok: boolean };
-  return data.ok;
-}
-
 export async function deleteMessage(
   token: string, chatId: string, messageId: number
 ): Promise<void> {
@@ -81,4 +74,21 @@ export function createMessageCollector() {
   }
 
   return { messageIds, startCapturing, stopCapturing };
+}
+
+interface TelegramCleanupConfig {
+  botToken: string;
+  chatId: string;
+}
+
+export async function cleanupMessages(
+  collector: ReturnType<typeof createMessageCollector>,
+  config: TelegramCleanupConfig
+): Promise<void> {
+  collector.stopCapturing();
+  for (const id of collector.messageIds) {
+    await deleteMessage(config.botToken, config.chatId, id);
+  }
+  collector.messageIds.length = 0;
+  await rateLimitDelay();
 }

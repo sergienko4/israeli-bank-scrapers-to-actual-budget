@@ -2,8 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { TelegramNotifier } from '../../src/services/notifications/TelegramNotifier.js';
 import { createTestSummary } from './helpers/testData.js';
 import {
-  HAS_TELEGRAM, getTelegramConfig, deleteMessage,
-  getMyCommands, rateLimitDelay, createMessageCollector,
+  HAS_TELEGRAM, getTelegramConfig,
+  getMyCommands, rateLimitDelay, createMessageCollector, cleanupMessages,
 } from './helpers/telegramHelpers.js';
 
 const collector = createMessageCollector();
@@ -11,14 +11,7 @@ const collector = createMessageCollector();
 describe.runIf(HAS_TELEGRAM)('Telegram Notifications E2E', () => {
   const config = HAS_TELEGRAM ? getTelegramConfig() : { botToken: '', chatId: '' };
 
-  afterEach(async () => {
-    collector.stopCapturing();
-    for (const id of collector.messageIds) {
-      await deleteMessage(config.botToken, config.chatId, id);
-    }
-    collector.messageIds.length = 0;
-    await rateLimitDelay();
-  });
+  afterEach(async () => { await cleanupMessages(collector, config); });
 
   it('delivers compact format summary to real Telegram', async () => {
     collector.startCapturing();

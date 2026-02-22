@@ -32,6 +32,7 @@ interface TransactionRow {
 
 describe.runIf(HAS_BUDGET)('Docker Pipeline E2E', () => {
   let transactions: TransactionRow[] = [];
+  let amountById: Map<string, number> = new Map();
 
   beforeAll(async () => {
     await api.init({ dataDir: DATA_DIR });
@@ -43,6 +44,7 @@ describe.runIf(HAS_BUDGET)('Docker Pipeline E2E', () => {
         .select(['imported_id', 'amount'])
     );
     transactions = extractQueryData<TransactionRow[]>(result, []);
+    amountById = new Map(transactions.map(r => [r.imported_id, r.amount]));
   });
 
   afterAll(async () => {
@@ -61,32 +63,26 @@ describe.runIf(HAS_BUDGET)('Docker Pipeline E2E', () => {
     });
 
     it('stored correct amounts in cents for bank 1', () => {
-      const byId = new Map(transactions.map(r => [r.imported_id, r.amount]));
-
-      expect(byId.get('e2eTestBank-E2E-001-txn-e2e-001')).toBe(-15050);
-      expect(byId.get('e2eTestBank-E2E-001-txn-e2e-002')).toBe(500000);
-      expect(byId.get('e2eTestBank-E2E-001-txn-e2e-003')).toBe(-4990);
+      expect(amountById.get('e2eTestBank-E2E-001-txn-e2e-001')).toBe(-15050);
+      expect(amountById.get('e2eTestBank-E2E-001-txn-e2e-002')).toBe(500000);
+      expect(amountById.get('e2eTestBank-E2E-001-txn-e2e-003')).toBe(-4990);
     });
 
     it('stored Hebrew description transaction correctly', () => {
-      const byId = new Map(transactions.map(r => [r.imported_id, r.amount]));
-      expect(byId.get('e2eTestBank-E2E-001-txn-e2e-004')).toBe(-32000);
+      expect(amountById.get('e2eTestBank-E2E-001-txn-e2e-004')).toBe(-32000);
     });
 
     it('stored 1-cent edge case correctly', () => {
-      const byId = new Map(transactions.map(r => [r.imported_id, r.amount]));
-      expect(byId.get('e2eTestBank-E2E-001-txn-e2e-005')).toBe(-1);
+      expect(amountById.get('e2eTestBank-E2E-001-txn-e2e-005')).toBe(-1);
     });
 
     it('stored large purchase correctly', () => {
-      const byId = new Map(transactions.map(r => [r.imported_id, r.amount]));
-      expect(byId.get('e2eTestBank-E2E-001-txn-e2e-006')).toBe(-999999);
+      expect(amountById.get('e2eTestBank-E2E-001-txn-e2e-006')).toBe(-999999);
     });
 
     it('stored bank 2 amounts correctly', () => {
-      const byId = new Map(transactions.map(r => [r.imported_id, r.amount]));
-      expect(byId.get('e2eTestBank2-E2E-002-txn-b2-001')).toBe(150000);
-      expect(byId.get('e2eTestBank2-E2E-002-txn-b2-002')).toBe(-45075);
+      expect(amountById.get('e2eTestBank2-E2E-002-txn-b2-001')).toBe(150000);
+      expect(amountById.get('e2eTestBank2-E2E-002-txn-b2-002')).toBe(-45075);
     });
   });
 

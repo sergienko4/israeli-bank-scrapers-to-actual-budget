@@ -163,19 +163,20 @@ function parseMockFile(filePath: string): ScraperScrapingResult {
   return data as ScraperScrapingResult;
 }
 
-function loadMockScraperResult(bankName: string): ScraperScrapingResult | null {
+function resolveMockFile(bankName: string): string | null {
   const mockDir = process.env.E2E_MOCK_SCRAPER_DIR;
   if (mockDir) {
     const bankFile = `${mockDir}/${bankName}.json`;
-    const fallback = `${mockDir}/default.json`;
-    const file = existsSync(bankFile) ? bankFile : fallback;
-    logger.info(`  🧪 Using mock scraper data from ${file}`);
-    return parseMockFile(file);
+    return existsSync(bankFile) ? bankFile : `${mockDir}/default.json`;
   }
-  const mockFile = process.env.E2E_MOCK_SCRAPER_FILE;
-  if (!mockFile) return null;
-  logger.info(`  🧪 Using mock scraper data from ${mockFile}`);
-  return parseMockFile(mockFile);
+  return process.env.E2E_MOCK_SCRAPER_FILE ?? null;
+}
+
+function loadMockScraperResult(bankName: string): ScraperScrapingResult | null {
+  const file = resolveMockFile(bankName);
+  if (!file) return null;
+  logger.info(`  🧪 Using mock scraper data from ${file}`);
+  return parseMockFile(file);
 }
 
 // ─── Scraper orchestration ───
