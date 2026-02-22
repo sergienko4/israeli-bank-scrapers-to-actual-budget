@@ -747,6 +747,41 @@ npm run validate      # Build + test (validate before committing)
 
 Comprehensive test suite with 80%+ line coverage and 70%+ branch coverage. Run `npm test` to see current count.
 
+### E2E Tests
+
+End-to-end tests build the Docker image and run the full import pipeline with mock bank data.
+
+**One-time setup (Telegram bot):**
+```bash
+cp .env.e2e.example .env.e2e
+# Edit .env.e2e with your test bot token and chat ID
+# (Create via Telegram @BotFather → /newbot)
+```
+
+**Run E2E tests:**
+```bash
+# 1. Create test budget + prepare mock data
+npm run test:e2e:setup
+mkdir -p tests/e2e/fixtures/mock-scraper-dir
+cp tests/e2e/fixtures/mock-scraper-result.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank.json
+cp tests/e2e/fixtures/mock-scraper-result-bank2.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank2.json
+
+# 2. Build Docker image and run import (get BUDGET_ID from setup output)
+docker build -t israeli-bank-importer:e2e .
+docker run --rm \
+  -v ./tests/e2e/fixtures/config.generated.json:/app/config.json:ro \
+  -v ./tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro \
+  -v ./tests/e2e/fixtures/e2e-data:/app/data \
+  -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
+  -e E2E_LOCAL_BUDGET_ID=<budget-id> \
+  israeli-bank-importer:e2e node dist/index.js
+
+# 3. Verify results (loads .env.e2e automatically)
+npm run test:e2e
+```
+
+E2E tests run automatically on PRs that change `src/` or `Dockerfile` (see `.github/workflows/e2e.yml`). Telegram tests require `E2E_TELEGRAM_BOT_TOKEN` and `E2E_TELEGRAM_CHAT_ID` secrets in the repo.
+
 ---
 
 ## Security

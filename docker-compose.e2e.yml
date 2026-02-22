@@ -1,0 +1,21 @@
+# E2E Test Infrastructure
+#
+# Builds the importer from the current branch and runs it with a local test budget.
+#
+# Usage:
+#   1. npm run test:e2e:setup              (create local budget + generate config)
+#   2. docker compose -f docker-compose.e2e.yml up --build importer
+#                                           (build image, run import with mock scraper)
+#   3. npm run test:e2e                    (verify results)
+#   4. docker compose -f docker-compose.e2e.yml down
+
+services:
+  importer:
+    build: .
+    volumes:
+      - ./tests/e2e/fixtures/config.generated.json:/app/config.json:ro
+      - ./tests/e2e/fixtures/mock-scraper-result.json:/app/mock-scraper-result.json:ro
+      - ./tests/e2e/fixtures/e2e-data:/app/data
+    environment:
+      - E2E_MOCK_SCRAPER_FILE=/app/mock-scraper-result.json
+      - E2E_LOCAL_BUDGET_ID=${E2E_LOCAL_BUDGET_ID}

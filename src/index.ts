@@ -5,6 +5,7 @@
 
 import api from '@actual-app/api';
 import { createScraper, CompanyTypes, ScraperOptions, ScraperCredentials, ScraperScrapingResult } from 'israeli-bank-scrapers';
+import { readFileSync, existsSync } from 'fs';
 import { ConfigLoader } from './config/ConfigLoader.js';
 import { ErrorFormatter } from './errors/ErrorFormatter.js';
 import { ExponentialBackoffRetry } from './resilience/RetryStrategy.js';
@@ -151,9 +152,38 @@ function buildOtpRetriever(bankName: string, bankConfig: BankConfig): (() => Pro
   return twoFactor.createOtpRetriever(bankName);
 }
 
+// ─── Mock scraper for E2E testing ───
+
+function parseMockFile(filePath: string): ScraperScrapingResult {
+  const parsed: unknown = JSON.parse(readFileSync(filePath, 'utf8'));
+  const data = parsed as { success?: boolean; accounts?: unknown[] };
+  if (typeof data.success !== 'boolean' || !Array.isArray(data.accounts)) {
+    throw new Error(`Invalid mock scraper file: missing success or accounts`);
+  }
+  return data as ScraperScrapingResult;
+}
+
+function loadMockScraperResult(bankName: string): ScraperScrapingResult | null {
+  const mockDir = process.env.E2E_MOCK_SCRAPER_DIR;
+  if (mockDir) {
+    const bankFile = `${mockDir}/${bankName}.json`;
+    const fallback = `${mockDir}/default.json`;
+    const file = existsSync(bankFile) ? bankFile : fallback;
+    logger.info(`  🧪 Using mock scraper data from ${file}`);
+    return parseMockFile(file);
+  }
+  const mockFile = process.env.E2E_MOCK_SCRAPER_FILE;
+  if (!mockFile) return null;
+  logger.info(`  🧪 Using mock scraper data from ${mockFile}`);
+  return parseMockFile(mockFile);
+}
+
 // ─── Scraper orchestration ───
 
 async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig): Promise<ScraperScrapingResult> {
+  const mockResult = loadMockScraperResult(bankName);
+  if (mockResult) return mockResult;
+
   const companyType = companyTypeMap[bankName.toLowerCase()];
   if (!companyType) throw new Error(`Unknown bank: ${bankName}`);
 
@@ -259,16 +289,26 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
 
 // ─── Main orchestration ───
 
-async function initializeApi(): Promise<void> {
+async function initializeLocalBudget(): Promise<void> {
+  const budgetId = process.env.E2E_LOCAL_BUDGET_ID!;
+  logger.info('🔌 Initializing Actual Budget (local mode)...');
+  await api.init({ dataDir: config.actual.init.dataDir });
+  logger.info(`📂 Loading local budget: ${budgetId}`);
+  await api.loadBudget(budgetId);
+}
+
+async function initializeServerBudget(): Promise<void> {
   logger.info('🔌 Connecting to Actual Budget...');
-  await api.init({
-    dataDir: config.actual.init.dataDir,
-    serverURL: config.actual.init.serverURL,
-    password: config.actual.init.password,
-  });
+  const { dataDir, serverURL, password } = config.actual.init;
+  await api.init({ dataDir, serverURL, password });
   logger.info('✅ Connected to Actual Budget server');
   logger.info(`📂 Loading budget: ${config.actual.budget.syncId}`);
   await api.downloadBudget(config.actual.budget.syncId, { password: config.actual.budget.password || undefined });
+}
+
+async function initializeApi(): Promise<void> {
+  if (process.env.E2E_LOCAL_BUDGET_ID) { await initializeLocalBudget(); }
+  else { await initializeServerBudget(); }
   logger.info('✅ Budget loaded successfully\n');
   logger.info('='.repeat(60));
 }

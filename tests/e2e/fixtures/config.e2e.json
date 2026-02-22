@@ -1,0 +1,53 @@
+{
+  "actual": {
+    "init": {
+      "serverURL": "http://actual-server:5006",
+      "password": "test-password-e2e",
+      "dataDir": "/app/data"
+    },
+    "budget": {
+      "syncId": "00000000-0000-0000-0000-000000000000",
+      "password": null
+    }
+  },
+  "banks": {
+    "e2eTestBank": {
+      "id": "test",
+      "password": "test",
+      "daysBack": 30,
+      "targets": [
+        {
+          "actualAccountId": "e2e00000-0000-0000-0000-000000000001",
+          "reconcile": true,
+          "accounts": "all"
+        }
+      ]
+    },
+    "e2eTestBank2": {
+      "id": "test2",
+      "password": "test2",
+      "daysBack": 30,
+      "targets": [
+        {
+          "actualAccountId": "e2e00000-0000-0000-0000-000000000002",
+          "reconcile": true,
+          "accounts": "all"
+        }
+      ]
+    }
+  },
+  "notifications": {
+    "enabled": true
+  },
+  "spendingWatch": [
+    {
+      "alertFromAmount": 500,
+      "numOfDayToCount": 30
+    },
+    {
+      "alertFromAmount": 30,
+      "numOfDayToCount": 30,
+      "watchPayees": ["Netflix"]
+    }
+  ]
+}

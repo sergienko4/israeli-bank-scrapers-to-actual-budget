@@ -1,0 +1,59 @@
+{
+  "success": true,
+  "accounts": [
+    {
+      "accountNumber": "E2E-001",
+      "balance": 10050.50,
+      "txns": [
+        {
+          "date": "2026-02-20T00:00:00.000Z",
+          "description": "Test Supermarket",
+          "chargedAmount": -150.50,
+          "originalAmount": -150.50,
+          "originalCurrency": "ILS",
+          "identifier": "txn-e2e-001"
+        },
+        {
+          "date": "2026-02-20T00:00:00.000Z",
+          "description": "Test Salary",
+          "chargedAmount": 5000.00,
+          "originalAmount": 5000.00,
+          "originalCurrency": "ILS",
+          "identifier": "txn-e2e-002"
+        },
+        {
+          "date": "2026-02-19T00:00:00.000Z",
+          "description": "Test Netflix",
+          "chargedAmount": -49.90,
+          "originalAmount": -49.90,
+          "originalCurrency": "ILS",
+          "identifier": "txn-e2e-003"
+        },
+        {
+          "date": "2026-02-18T00:00:00.000Z",
+          "description": "\u05e1\u05d5\u05e4\u05e8 \u05e4\u05d0\u05e8\u05dd",
+          "chargedAmount": -320.00,
+          "originalAmount": -320.00,
+          "originalCurrency": "ILS",
+          "identifier": "txn-e2e-004"
+        },
+        {
+          "date": "2026-02-17T00:00:00.000Z",
+          "description": "Precision Edge Case",
+          "chargedAmount": -0.01,
+          "originalAmount": -0.01,
+          "originalCurrency": "ILS",
+          "identifier": "txn-e2e-005"
+        },
+        {
+          "date": "2026-02-16T00:00:00.000Z",
+          "description": "Large Purchase",
+          "chargedAmount": -9999.99,
+          "originalAmount": -9999.99,
+          "originalCurrency": "ILS",
+          "identifier": "txn-e2e-006"
+        }
+      ]
+    }
+  ]
+}
