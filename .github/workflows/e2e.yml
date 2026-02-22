@@ -3,13 +3,6 @@ name: E2E Tests
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'src/**'
-      - 'tests/e2e/**'
-      - 'Dockerfile'
-      - 'package.json'
-      - 'vitest.config.e2e.ts'
-      - 'docker-compose.e2e.yml'
   schedule:
     - cron: '0 6 * * 1'
 
