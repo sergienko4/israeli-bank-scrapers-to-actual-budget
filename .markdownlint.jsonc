@@ -14,5 +14,7 @@
   // Multiple consecutive blank lines — release-please generates double blanks in CHANGELOG
   "MD012": false,
   // Unordered list style — release-please uses * but our docs use -. Allow both.
-  "MD004": false
+  "MD004": false,
+  // Table column style — release-please and README tables use compact pipe spacing
+  "MD060": false
 }
