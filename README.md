@@ -752,6 +752,7 @@ Comprehensive test suite with 80%+ line coverage and 70%+ branch coverage. Run `
 End-to-end tests build the Docker image and run the full import pipeline with mock bank data.
 
 **One-time setup (Telegram bot):**
+
 ```bash
 cp .env.e2e.example .env.e2e
 # Edit .env.e2e with your test bot token and chat ID
@@ -759,6 +760,7 @@ cp .env.e2e.example .env.e2e
 ```
 
 **Run E2E tests:**
+
 ```bash
 # 1. Create test budget + prepare mock data
 npm run test:e2e:setup
