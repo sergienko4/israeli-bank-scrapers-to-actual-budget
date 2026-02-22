@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "vitest run --config vitest.config.e2e.ts",
+    "test:e2e:setup": "npx tsx tests/e2e/e2e-setup.ts",
     "validate": "npm run build && npm test",
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix",

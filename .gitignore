@@ -6,6 +6,7 @@ config.json
 credentials.json
 *.enc
 .env
+.env.e2e
 
 # Runtime data (contains sensitive budget data)
 data/
@@ -36,6 +37,9 @@ build/
 # Testing
 coverage/
 .nyc_output/
+tests/e2e/fixtures/e2e-data/
+tests/e2e/fixtures/config.generated.json
+tests/e2e/fixtures/mock-scraper-dir/
 
 # Temporary files
 tmp/
