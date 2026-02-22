@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.14.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.13.0...v1.14.0) (2026-02-22)
+
+
+### Added
+
+* add E2E testing environment with Docker pipeline ([#74](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/74)) ([f55a4c9](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f55a4c95a196e91f58f2840920bf9017226c42b2))
+
+
+### Fixed
+
+* add hasDockerImage() guard to Docker-dependent E2E tests ([#78](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/78)) ([1ebaf00](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1ebaf000ae9ba11c7aa47fc1937297ec178c2b0a))
+
+
+### Testing
+
+* close HIGH priority E2E coverage gaps ([#77](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/77)) ([fa37195](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fa3719539ba5b7e028a0067f560af6536e5ed255))
+
 ## [1.13.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.12.3...v1.13.0) (2026-02-21)
 
 
