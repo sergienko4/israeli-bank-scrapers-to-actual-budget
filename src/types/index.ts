@@ -122,6 +122,10 @@ export interface SpendingWatchRule {
   watchPayees?: string[];      // Filter payees (substring match). Missing = all payees
 }
 
+export interface ProxyConfig {
+  server: string;  // socks5://host:port or http://host:port
+}
+
 export interface ImporterConfig {
   actual: ActualConfig;
   banks: Record<string, BankConfig>;
@@ -130,6 +134,8 @@ export interface ImporterConfig {
   categorization?: CategorizationConfig;
   spendingWatch?: SpendingWatchRule[];  // Spending watch rules (empty/missing = disabled)
   delayBetweenBanks?: number;  // Milliseconds to wait between bank imports (default: 0)
+  proxy?: ProxyConfig;   // Optional proxy for Chromium (socks5/http)
+  stealth?: boolean;     // Anti-detection mode for WAF-protected banks (default: false)
 }
 
 export interface ResilienceConfig {
