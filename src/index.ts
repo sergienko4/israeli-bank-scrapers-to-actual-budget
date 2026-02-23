@@ -19,6 +19,7 @@ import { AuditLogService } from './services/AuditLogService.js';
 import { TwoFactorService } from './services/TwoFactorService.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
 import { ImporterConfig, BankConfig, BankTarget, BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode } from './types/index.js';
+import { buildChromeArgs, applyStealthOverrides } from './scraper/ScraperOptionsBuilder.js';
 import { errorMessage } from './utils/index.js';
 import { createLogger, getLogger } from './logger/index.js';
 import { ICategoryResolver } from './services/ICategoryResolver.js';
@@ -68,6 +69,8 @@ const telegram = config.notifications?.telegram;
 const telegramNotifier = telegram ? new TelegramNotifier(telegram) : null;
 
 logger.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
+if (config.proxy?.server) logger.info(`🌐 Using proxy: ${config.proxy.server}`);
+if (config.stealth) logger.info('🕵️ Stealth mode enabled (anti-detection)');
 
 // Company type mapping
 const companyTypeMap: Record<string, typeof CompanyTypes[keyof typeof CompanyTypes]> = {
@@ -136,12 +139,12 @@ function logDateRange(bankConfig: BankConfig): void {
 }
 
 function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof CompanyTypes], bankConfig: BankConfig): ScraperOptions {
-  const chromeDataDir = process.env.CHROME_DATA_DIR || '/app/chrome-data';
   return {
     companyId: companyType,
     startDate: computeStartDate(bankConfig),
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', `--user-data-dir=${chromeDataDir}`]
+    args: buildChromeArgs(config.proxy, config.stealth),
+    ...(config.stealth ? { preparePage: applyStealthOverrides } : {}),
   };
 }
 

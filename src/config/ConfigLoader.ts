@@ -5,7 +5,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
-import { ImporterConfig, BankConfig, BankTarget, NotificationConfig, SpendingWatchRule } from '../types/index.js';
+import { ImporterConfig, BankConfig, BankTarget, NotificationConfig, SpendingWatchRule, ProxyConfig } from '../types/index.js';
 import { ConfigurationError } from '../errors/ErrorTypes.js';
 import { getLogger } from '../logger/index.js';
 import { isEncryptedConfig, decryptConfig, getEncryptionPassword } from './ConfigEncryption.js';
@@ -33,8 +33,14 @@ export class ConfigLoader implements IConfigLoader {
 
   load(): ImporterConfig {
     const config = this.loadFromFile() ?? this.loadFromEnvironment();
+    this.applyEnvOverrides(config);
     this.validate(config);
     return config;
+  }
+
+  private applyEnvOverrides(config: ImporterConfig): void {
+    if (process.env.PROXY_SERVER) config.proxy = { server: process.env.PROXY_SERVER };
+    if (process.env.STEALTH === 'true') config.stealth = true;
   }
 
   private loadFromFile(): ImporterConfig | null {
@@ -162,6 +168,7 @@ export class ConfigLoader implements IConfigLoader {
     }
     if (config.notifications?.enabled) this.validateNotifications(config.notifications);
     if (config.spendingWatch) this.validateSpendingWatch(config.spendingWatch);
+    if (config.proxy) this.validateProxy(config.proxy);
   }
 
   private validateActualConfig(config: ImporterConfig): void {
@@ -218,6 +225,14 @@ export class ConfigLoader implements IConfigLoader {
       throw new ConfigurationError(`Invalid webhook url format. Must start with http:// or https://, got: ${webhook.url}`);
     }
     this.validateEnumField(webhook.format, ['slack', 'discord', 'plain'], 'webhook format');
+  }
+
+  private validateProxy(proxy: ProxyConfig): void {
+    if (!proxy.server) throw new ConfigurationError('proxy.server is required when proxy is configured');
+    const validPrefixes = ['socks5://', 'socks4://', 'http://', 'https://'];
+    if (!validPrefixes.some(p => proxy.server.startsWith(p))) {
+      throw new ConfigurationError(`Invalid proxy.server format "${proxy.server}". Must start with socks5://, socks4://, http://, or https://`);
+    }
   }
 
   private validateEnumField(value: string | undefined, allowed: string[], fieldName: string): void {
