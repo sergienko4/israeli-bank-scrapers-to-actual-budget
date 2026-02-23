@@ -284,6 +284,41 @@ Set via environment variables in `docker-compose.yml` or `docker run -e`:
 
 Set timezone: `TZ=Asia/Jerusalem`
 
+### Proxy Support
+
+Route browser traffic through a proxy to bypass network restrictions:
+
+```json
+"proxy": {
+  "server": "socks5://localhost:1080"
+}
+```
+
+Or via environment: `PROXY_SERVER=socks5://localhost:1080`
+
+Supported protocols: `socks5://`, `socks4://`, `http://`, `https://`. Only affects Chromium browser traffic (bank scraping), not Actual Budget API calls.
+
+### Stealth Mode (Anti-Detection)
+
+Some banks use WAF that detects headless Chrome. Enable stealth mode:
+
+```json
+"stealth": true
+```
+
+Or via environment: `STEALTH=true`
+
+When enabled: hides `navigator.webdriver`, sets realistic browser fingerprint (Hebrew locale, plugins, chrome.runtime), adds `--disable-blink-features=AutomationControlled`.
+
+**Default: `false`** — only enable if your bank blocks with 403 errors.
+
+### Known Issues
+
+| Bank | Issue | Status | Workaround |
+|------|-------|--------|-----------|
+| Amex | WAF blocks headless Chrome (403 on login page) | [Upstream #1057](https://github.com/eshaham/israeli-bank-scrapers/issues/1057) | Try `stealth: true` + proxy |
+| Isracard | Same WAF as Amex (shared platform) | Same upstream issue | Same workaround |
+
 ### Logging
 
 Configure log output format via `logConfig` in config.json:
