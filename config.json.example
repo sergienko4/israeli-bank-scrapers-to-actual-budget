@@ -20,6 +20,12 @@
 
   "delayBetweenBanks": 5000,
 
+  "proxy": {
+    "server": "socks5://localhost:1080"
+  },
+
+  "stealth": false,
+
   "banks": {
 
     "discount": {
@@ -91,6 +97,8 @@
     "_split_config": "Optional: split into config.json (settings) + credentials.json (secrets). See credentials.json.example",
     "CREDENTIALS_ENCRYPTION_PASSWORD": "Env var to decrypt encrypted files. Supports old name CONFIG_PASSWORD too",
     "delayBetweenBanks": "Milliseconds between bank imports. Default: 0 (no delay). Prevents API throttling",
+    "proxy.server": "SOCKS5/HTTP proxy for Chromium. Also: PROXY_SERVER env var. Format: socks5://host:port",
+    "stealth": "false (default). true = anti-detection for WAF-protected banks (e.g., Amex). Also: STEALTH=true env var",
     "daysBack": "1-30. Import last N days. Cannot use with startDate",
     "startDate": "YYYY-MM-DD. Fixed date, max 1 year back. Cannot use with daysBack",
     "reconcile": "false (default). true = auto-adjust balance to match bank",

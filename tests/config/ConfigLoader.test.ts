@@ -707,4 +707,58 @@ describe('ConfigLoader', () => {
       expect(config.actual.init.password).toBe('overridden');
     });
   });
+
+  describe('proxy validation', () => {
+    it('accepts valid socks5 proxy', () => {
+      const config = makeValidConfig();
+      config.proxy = { server: 'socks5://localhost:1080' };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      expect(() => new ConfigLoader('/test/config.json').load()).not.toThrow();
+    });
+
+    it('accepts valid http proxy', () => {
+      const config = makeValidConfig();
+      config.proxy = { server: 'http://proxy.example.com:8080' };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      expect(() => new ConfigLoader('/test/config.json').load()).not.toThrow();
+    });
+
+    it('throws on invalid proxy format', () => {
+      const config = makeValidConfig();
+      config.proxy = { server: 'invalid://bad' };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('Invalid proxy.server format');
+    });
+
+    it('throws on empty proxy server', () => {
+      const config = makeValidConfig();
+      config.proxy = { server: '' };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('proxy.server is required');
+    });
+
+    it('applies PROXY_SERVER env var override', () => {
+      const config = makeValidConfig();
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      process.env.PROXY_SERVER = 'socks5://env-proxy:1080';
+      const loaded = new ConfigLoader('/test/config.json').load();
+      expect(loaded.proxy?.server).toBe('socks5://env-proxy:1080');
+      delete process.env.PROXY_SERVER;
+    });
+
+    it('applies STEALTH env var override', () => {
+      const config = makeValidConfig();
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      process.env.STEALTH = 'true';
+      const loaded = new ConfigLoader('/test/config.json').load();
+      expect(loaded.stealth).toBe(true);
+      delete process.env.STEALTH;
+    });
+  });
 });
