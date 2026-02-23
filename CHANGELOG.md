@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.15.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.14.1...v1.15.0) (2026-02-23)
+
+
+### Added
+
+* Add proxy support and stealth anti-detection mode ([#86](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/86)) ([7037fff](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7037ffffa14d5c53b6b40c55c503f332321858fe))
+
+
+### Fixed
+
+* Improve stealth + add proxy/stealth/known issues to README ([#88](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/88)) ([d31e3d3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d31e3d3af323792fcd29d3c97621f59172afec0d))
+
 ## [1.14.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.14.0...v1.14.1) (2026-02-22)
 
 
