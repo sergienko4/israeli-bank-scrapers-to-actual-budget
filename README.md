@@ -4,7 +4,7 @@
 
 **Automatically import transactions from 18 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
 
-Powered by [**israeli-bank-scrapers**](https://github.com/eshaham/israeli-bank-scrapers) by eshaham.
+Powered by [**@sergienko4/israeli-bank-scrapers**](https://github.com/sergienko4/israeli-bank-scrapers) (fork of [eshaham/israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers) with Amex/Isracard WAF fix).
 
 ---
 
@@ -314,10 +314,10 @@ When enabled: hides `navigator.webdriver`, sets realistic browser fingerprint (H
 
 ### Known Issues
 
-| Bank | Issue | Status | Workaround |
-|------|-------|--------|-----------|
-| Amex | WAF blocks headless Chrome (403 on login page) | [Upstream #1057](https://github.com/eshaham/israeli-bank-scrapers/issues/1057) | Try `stealth: true` + proxy |
-| Isracard | Same WAF as Amex (shared platform) | Same upstream issue | Same workaround |
+| Bank | Issue | Status |
+|------|-------|--------|
+| Amex | WAF blocked headless Chrome (403) | **FIXED** — our fork adds anti-detection headers |
+| Isracard | Same WAF as Amex (shared platform) | **FIXED** — same fork fix |
 
 ### Logging
 

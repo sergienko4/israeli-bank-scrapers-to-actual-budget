@@ -1,6 +1,6 @@
 {
   "name": "israeli-bank-actual-importer",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "Import transactions from Israeli banks into Actual Budget",
   "main": "dist/index.js",
   "type": "module",
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@actual-app/api": "^26.2.0",
-    "@sergienko4/israeli-bank-scrapers": "^6.7.4",
+    "@sergienko4/israeli-bank-scrapers": "^6.7.5",
     "cron-parser": "^4.9.0"
   },
   "devDependencies": {
