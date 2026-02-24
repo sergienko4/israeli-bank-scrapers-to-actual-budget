@@ -312,6 +312,19 @@ When enabled: hides `navigator.webdriver`, sets realistic browser fingerprint (H
 
 **Default: `false`** — only enable if your bank blocks with 403 errors.
 
+### Clear Session (Per-Bank)
+
+Clear browser data before scraping a specific bank. Prevents stale WAF cookies from causing 403 errors.
+
+```json
+"amex": {
+  "clearSession": true,
+  ...
+}
+```
+
+**Default: `false`**. Each bank gets its own isolated `chrome-data/{bankName}/` directory. Setting `clearSession: true` only clears that bank's data — other banks' sessions are untouched.
+
 ### Known Issues
 
 | Bank | Issue | Status |
