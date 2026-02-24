@@ -1,0 +1,76 @@
+name: Daily Dependency Check
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Every day at 6 AM UTC
+  workflow_dispatch:      # Manual trigger
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: dependency-check
+  cancel-in-progress: true
+
+jobs:
+  check-updates:
+    name: Check Critical Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check for updates
+        id: check
+        run: |
+          set +e
+          OUTDATED=$(npm outdated @sergienko4/israeli-bank-scrapers @actual-app/api --json 2>/dev/null)
+          EXIT_CODE=$?
+          set -e
+
+          # npm outdated exits 1 when packages are outdated, 0 when all current
+          if [ "$EXIT_CODE" -eq 0 ]; then
+            echo "All critical dependencies are up to date"
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+          else
+            SUMMARY=$(echo "$OUTDATED" | jq -r 'to_entries[] | "\(.key): \(.value.current) → \(.value.latest)"')
+            echo "Updates available:"
+            echo "$SUMMARY"
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+
+            # Save for PR body
+            EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
+            echo "summary<<$EOF_MARKER" >> "$GITHUB_OUTPUT"
+            echo "$SUMMARY" >> "$GITHUB_OUTPUT"
+            echo "$EOF_MARKER" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update dependencies
+        if: steps.check.outputs.has_updates == 'true'
+        run: npm update @sergienko4/israeli-bank-scrapers @actual-app/api
+
+      - name: Create Pull Request
+        if: steps.check.outputs.has_updates == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(deps): update critical dependencies"
+          title: "chore(deps): update critical dependencies (daily check)"
+          body: |
+            Automated daily dependency check found updates:
+
+            ```
+            ${{ steps.check.outputs.summary }}
+            ```
+
+            **CI will run full validation**: build, unit tests, E2E tests, container scan, CodeQL.
+          branch: deps/daily-update
+          labels: dependencies
+          delete-branch: true
