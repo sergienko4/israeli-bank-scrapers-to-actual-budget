@@ -5,7 +5,7 @@
 
 import api from '@actual-app/api';
 import { createScraper, CompanyTypes, ScraperOptions, ScraperCredentials, ScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, rmSync } from 'fs';
 import { ConfigLoader } from './config/ConfigLoader.js';
 import { ErrorFormatter } from './errors/ErrorFormatter.js';
 import { ExponentialBackoffRetry } from './resilience/RetryStrategy.js';
@@ -148,6 +148,14 @@ function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof Compa
   };
 }
 
+function clearBankSession(bankName: string): void {
+  const chromeDataDir = process.env.CHROME_DATA_DIR || '/app/chrome-data';
+  if (!existsSync(chromeDataDir)) return;
+  logger.info(`  🧹 Clearing browser session for ${bankName}`);
+  try { rmSync(chromeDataDir, { recursive: true, force: true }); }
+  catch { logger.warn(`  ⚠️  Failed to clear session for ${bankName}`); }
+}
+
 function buildOtpRetriever(bankName: string, bankConfig: BankConfig): (() => Promise<string>) | undefined {
   if (!bankConfig.twoFactorAuth || bankConfig.otpLongTermToken || !telegramNotifier) return undefined;
   const twoFactor = new TwoFactorService(telegramNotifier, bankConfig.twoFactorTimeout);
@@ -191,6 +199,7 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
   const companyType = companyTypeMap[bankName.toLowerCase()];
   if (!companyType) throw new Error(`Unknown bank: ${bankName}`);
 
+  if (bankConfig.clearSession) clearBankSession(bankName);
   logger.info(`  🔧 Creating scraper for ${bankName}...`);
   const scraperOptions = buildScraperOptions(companyType, bankConfig);
   logDateRange(bankConfig);
