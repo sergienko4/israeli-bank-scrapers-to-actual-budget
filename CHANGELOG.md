@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.17.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.16.0...v1.17.0) (2026-02-24)
+
+
+### Added
+
+* add per-bank clearSession option ([#95](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/95)) ([f0a43c1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f0a43c11d742bb1093c2697a1150c3af097949b5))
+* daily dependency check + update scraper to 6.7.8 ([#94](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/94)) ([988f11f](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/988f11f44f680f2219f4e3e8ade06b98eaf198b8))
+
 ## [1.16.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.15.0...v1.16.0) (2026-02-24)
 
 
