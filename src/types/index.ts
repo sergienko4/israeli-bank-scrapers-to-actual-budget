@@ -53,6 +53,9 @@ export interface BankConfig {
   twoFactorAuth?: boolean;          // Default: false. Set true for banks requiring OTP
   twoFactorTimeout?: number;        // Seconds to wait for OTP reply. Default: 300
 
+  // Session management
+  clearSession?: boolean;            // Default: false. Set true to clear chrome-data before scraping
+
   [key: string]: any; // Allow other bank-specific fields
 }
 
