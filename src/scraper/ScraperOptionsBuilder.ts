@@ -13,9 +13,13 @@ const STEALTH_CHROME_ARGS = [
   '--window-size=1920,1080',
 ];
 
-export function buildChromeArgs(proxy?: ProxyConfig, stealth?: boolean): string[] {
-  const chromeDataDir = process.env.CHROME_DATA_DIR || '/app/chrome-data';
-  const args = [...BASE_CHROME_ARGS, `--user-data-dir=${chromeDataDir}`];
+export function getChromeDataDir(bankName?: string): string {
+  const baseDir = process.env.CHROME_DATA_DIR || '/app/chrome-data';
+  return bankName ? `${baseDir}/${bankName}` : baseDir;
+}
+
+export function buildChromeArgs(proxy?: ProxyConfig, stealth?: boolean, bankName?: string): string[] {
+  const args = [...BASE_CHROME_ARGS, `--user-data-dir=${getChromeDataDir(bankName)}`];
   if (stealth) args.push(...STEALTH_CHROME_ARGS);
   if (proxy?.server) args.push(`--proxy-server=${proxy.server}`);
   return args;
