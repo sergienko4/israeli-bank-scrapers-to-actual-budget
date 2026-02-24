@@ -11,11 +11,10 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
-    groups:
-      critical-deps:
-        patterns:
-          - "@actual-app/*"
-          - "@sergienko4/israeli-bank-scrapers"
+    ignore:
+      # Critical deps handled by daily-dependency-check.yml (faster than weekly)
+      - dependency-name: "@actual-app/*"
+      - dependency-name: "@sergienko4/israeli-bank-scrapers"
 
   - package-ecosystem: "github-actions"
     directory: "/"
