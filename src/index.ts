@@ -4,7 +4,7 @@
  */
 
 import api from '@actual-app/api';
-import { createScraper, CompanyTypes, ScraperOptions, ScraperCredentials, ScraperScrapingResult } from 'israeli-bank-scrapers';
+import { createScraper, CompanyTypes, ScraperOptions, ScraperCredentials, ScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import { readFileSync, existsSync } from 'fs';
 import { ConfigLoader } from './config/ConfigLoader.js';
 import { ErrorFormatter } from './errors/ErrorFormatter.js';
