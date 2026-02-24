@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.17.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.17.0...v1.17.1) (2026-02-24)
+
+
+### Fixed
+
+* per-bank chrome-data directories for clearSession isolation ([#99](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/99)) ([f528f4f](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f528f4fb52588327c786f05f2884914796f9420e))
+
 ## [1.17.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.16.0...v1.17.0) (2026-02-24)
 
 
