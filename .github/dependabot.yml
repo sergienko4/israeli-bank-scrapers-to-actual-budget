@@ -15,7 +15,7 @@ updates:
       critical-deps:
         patterns:
           - "@actual-app/*"
-          - "israeli-bank-scrapers"
+          - "@sergienko4/israeli-bank-scrapers"
 
   - package-ecosystem: "github-actions"
     directory: "/"
