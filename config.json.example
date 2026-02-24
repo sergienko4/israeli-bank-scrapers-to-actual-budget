@@ -101,6 +101,7 @@
     "stealth": "false (default). true = anti-detection for WAF-protected banks (e.g., Amex). Also: STEALTH=true env var",
     "daysBack": "1-30. Import last N days. Cannot use with startDate",
     "startDate": "YYYY-MM-DD. Fixed date, max 1 year back. Cannot use with daysBack",
+    "clearSession": "false (default). true = clear chrome-data before scraping this bank (prevents stale WAF cookies)",
     "reconcile": "false (default). true = auto-adjust balance to match bank",
     "twoFactorAuth": "false (default). true = bot asks for SMS OTP via Telegram",
     "twoFactorTimeout": "Seconds to wait for OTP reply. Default: 300",
