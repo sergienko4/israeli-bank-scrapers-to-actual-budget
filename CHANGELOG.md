@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.16.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.15.0...v1.16.0) (2026-02-24)
+
+
+### Added
+
+* switch to @sergienko4/israeli-bank-scrapers npm package ([#91](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/91)) ([cca429a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/cca429ab51758ad45f3c7b6a0c8b606dde531228))
+* use forked scraper with Amex/Isracard WAF fix ([#89](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/89)) ([d0fc0cd](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d0fc0cd096f2bb910203e10b806a09787fa19286))
+
 ## [1.15.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.14.1...v1.15.0) (2026-02-23)
 
 
