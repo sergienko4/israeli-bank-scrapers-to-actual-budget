@@ -5,7 +5,7 @@
 
 import { spawn, ChildProcess } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
-import parser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 import { TelegramPoller } from './services/TelegramPoller.js';
 import { TelegramCommandHandler } from './services/TelegramCommandHandler.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
@@ -118,7 +118,7 @@ function buildExtraCommands(config: ImporterConfig | null): Array<{ command: str
 
 function validateSchedule(schedule: string): void {
   try {
-    const interval = parser.parseExpression(schedule, { tz: process.env.TZ || 'UTC' });
+    const interval = CronExpressionParser.parse(schedule, { tz: process.env.TZ || 'UTC' });
     logger.info(`📅 Next scheduled run: ${interval.next().toString()}`);
   } catch (err: unknown) {
     logger.error(`❌ Invalid SCHEDULE format: ${errorMessage(err)}`);
@@ -137,7 +137,7 @@ function safeSleep(ms: number): Promise<void> {
 async function scheduleLoop(schedule: string): Promise<never> {
   while (true) {
     try {
-      const interval = parser.parseExpression(schedule, { tz: process.env.TZ || 'UTC' });
+      const interval = CronExpressionParser.parse(schedule, { tz: process.env.TZ || 'UTC' });
       const nextRun = interval.next().toDate();
       const msUntilNext = nextRun.getTime() - Date.now();
       logger.info(`⏳ Waiting until ${nextRun.toISOString()} (${Math.round(msUntilNext / 1000 / 60)} minutes)`);
