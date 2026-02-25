@@ -52,6 +52,15 @@
       "otpLongTermToken": "",
       "daysBack": 14,
       "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
+    },
+
+    "amex": {
+      "id": "123456789",
+      "card6Digits": "123456",
+      "password": "your_password",
+      "clearSession": true,
+      "daysBack": 30,
+      "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
     }
   },
 

@@ -19,7 +19,7 @@ import { AuditLogService } from './services/AuditLogService.js';
 import { TwoFactorService } from './services/TwoFactorService.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
 import { ImporterConfig, BankConfig, BankTarget, BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode } from './types/index.js';
-import { buildChromeArgs, applyStealthOverrides } from './scraper/ScraperOptionsBuilder.js';
+import { buildChromeArgs, applyStealthOverrides, getChromeDataDir } from './scraper/ScraperOptionsBuilder.js';
 import { errorMessage } from './utils/index.js';
 import { createLogger, getLogger } from './logger/index.js';
 import { ICategoryResolver } from './services/ICategoryResolver.js';
@@ -138,21 +138,21 @@ function logDateRange(bankConfig: BankConfig): void {
   }
 }
 
-function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof CompanyTypes], bankConfig: BankConfig): ScraperOptions {
+function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof CompanyTypes], bankConfig: BankConfig, bankName: string): ScraperOptions {
   return {
     companyId: companyType,
     startDate: computeStartDate(bankConfig),
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-    args: buildChromeArgs(config.proxy, config.stealth),
+    args: buildChromeArgs(config.proxy, config.stealth, bankName),
     ...(config.stealth ? { preparePage: applyStealthOverrides } : {}),
   };
 }
 
 function clearBankSession(bankName: string): void {
-  const chromeDataDir = process.env.CHROME_DATA_DIR || '/app/chrome-data';
-  if (!existsSync(chromeDataDir)) return;
+  const bankDir = getChromeDataDir(bankName);
+  if (!existsSync(bankDir)) return;
   logger.info(`  🧹 Clearing browser session for ${bankName}`);
-  try { rmSync(chromeDataDir, { recursive: true, force: true }); }
+  try { rmSync(bankDir, { recursive: true, force: true }); }
   catch { logger.warn(`  ⚠️  Failed to clear session for ${bankName}`); }
 }
 
@@ -201,7 +201,7 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
 
   if (bankConfig.clearSession) clearBankSession(bankName);
   logger.info(`  🔧 Creating scraper for ${bankName}...`);
-  const scraperOptions = buildScraperOptions(companyType, bankConfig);
+  const scraperOptions = buildScraperOptions(companyType, bankConfig, bankName);
   logDateRange(bankConfig);
 
   const credentials = buildCredentials(bankConfig, buildOtpRetriever(bankName, bankConfig));
