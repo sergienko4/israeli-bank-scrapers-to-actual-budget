@@ -73,4 +73,5 @@ jobs:
             **CI will run full validation**: build, unit tests, E2E tests, container scan, CodeQL.
           branch: deps/daily-update
           labels: dependencies
+          draft: true
           delete-branch: true
