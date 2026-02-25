@@ -60,7 +60,7 @@ jobs:
         if: steps.check.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_TOKEN }}
           commit-message: "chore(deps): update critical dependencies"
           title: "chore(deps): update critical dependencies (daily check)"
           body: |
