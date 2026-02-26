@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.17.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.17.2...v1.17.3) (2026-02-26)
+
+
+### Refactored
+
+* remove redundant stealth code, upgrade scraper to v6.9.1 ([#108](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/108)) ([52d7dcd](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/52d7dcd41bf1ecd66a4397fb3f254ead79c53e3d))
+
 ## [1.17.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.17.1...v1.17.2) (2026-02-25)
 
 
