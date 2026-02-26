@@ -1,6 +1,6 @@
 /**
  * ScraperOptionsBuilder — builds Chrome args for the bank scraper
- * Anti-detection is now handled internally by the scraper (v6.8.0+)
+ * Anti-detection is now handled internally by the scraper (v7.0.0+, Playwright)
  */
 
 import type { ProxyConfig } from '../types/index.js';
@@ -12,8 +12,8 @@ export function getChromeDataDir(bankName?: string): string {
   return bankName ? `${baseDir}/${bankName}` : baseDir;
 }
 
-export function buildChromeArgs(proxy?: ProxyConfig, bankName?: string): string[] {
-  const args = [...BASE_CHROME_ARGS, `--user-data-dir=${getChromeDataDir(bankName)}`];
+export function buildChromeArgs(proxy?: ProxyConfig): string[] {
+  const args = [...BASE_CHROME_ARGS];
   if (proxy?.server) args.push(`--proxy-server=${proxy.server}`);
   return args;
 }

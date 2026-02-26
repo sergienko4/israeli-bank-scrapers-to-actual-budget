@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@actual-app/api": "^26.2.0",
-    "@sergienko4/israeli-bank-scrapers": "^6.9.1",
+    "@sergienko4/israeli-bank-scrapers": "^7.0.0",
     "cron-parser": "^5.5.0"
   },
   "devDependencies": {
