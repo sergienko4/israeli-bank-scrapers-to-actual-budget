@@ -252,6 +252,21 @@ Fixed date. Max: 1 year back. Cannot use both on the same bank.
 }
 ```
 
+### Scraper Tuning (per bank)
+
+For banks that timeout on slow connections (e.g., Oracle Cloud):
+
+```json
+"amex": {
+  "timeout": 60000,
+  "navigationRetryCount": 2,
+  ...
+}
+```
+
+- `timeout` — Navigation timeout in ms. Default: `30000`. Increase to `60000` for slow networks
+- `navigationRetryCount` — Retries on page load failure. Default: `0`. Set `1`-`3` for flaky connections
+
 ### 2FA (OneZero)
 
 OneZero requires SMS verification. The Telegram bot asks for the OTP code:
