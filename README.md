@@ -300,22 +300,11 @@ Supported protocols: `socks5://`, `socks4://`, `http://`, `https://`. Only affec
 
 ### Anti-Detection (Built-in)
 
-Anti-detection is handled automatically by the scraper library (v6.9.1+). No configuration needed. Features include:
+Anti-detection is handled automatically by the scraper library (v7.0.0+). No configuration needed. Features include:
 
 - Realistic User-Agent and HTTP headers (Hebrew locale, client hints)
-- Stealth overrides (hides `navigator.webdriver`, fakes plugins/languages)
-- Cloudflare challenge detection with automatic retry (30s/60s/120s backoff)
-- Human-like timing delays before API calls
-- Timezone emulation (`Asia/Jerusalem`)
-
-If a bank's WAF still blocks after 3 retries, the error message will include actionable suggestions (e.g., wait 1-2 hours, use a residential IP).
-
-### Known Issues
-
-| Bank | Issue | Status |
-|------|-------|--------|
-| Amex | Cloudflare WAF blocks headless Chrome (403) | **FIXED** — scraper v6.9.1 adds anti-detection + auto-retry |
-| Isracard | Same WAF as Amex (shared platform) | **FIXED** — same scraper fix |
+- Playwright browser context with Israeli locale and timezone
+- Native Cloudflare WAF bypass (no retry backoff needed)
 
 ### Logging
 

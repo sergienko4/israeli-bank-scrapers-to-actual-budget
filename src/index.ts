@@ -150,12 +150,12 @@ function logDateRange(bankConfig: BankConfig): void {
   }
 }
 
-function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof CompanyTypes], bankConfig: BankConfig, bankName: string): ScraperOptions {
+function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof CompanyTypes], bankConfig: BankConfig): ScraperOptions {
   return {
     companyId: companyType,
     startDate: computeStartDate(bankConfig),
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-    args: buildChromeArgs(config.proxy, bankName),
+    executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
+    args: buildChromeArgs(config.proxy),
   };
 }
 
@@ -212,7 +212,7 @@ async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig
 
   if (bankConfig.clearSession) clearBankSession(bankName);
   logger.info(`  🔧 Creating scraper for ${bankName}...`);
-  const scraperOptions = buildScraperOptions(companyType, bankConfig, bankName);
+  const scraperOptions = buildScraperOptions(companyType, bankConfig);
   logDateRange(bankConfig);
 
   const credentials = buildCredentials(bankConfig, buildOtpRetriever(bankName, bankConfig));

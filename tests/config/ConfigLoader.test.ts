@@ -752,29 +752,4 @@ describe('ConfigLoader', () => {
     });
   });
 
-  describe('deprecation warnings', () => {
-    it('warns when stealth key is present in config', () => {
-      const config = { ...makeValidConfig(), stealth: true };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      new ConfigLoader('/test/config.json').load();
-      const warned = warnSpy.mock.calls.some(c => String(c[0]).includes('"stealth" config is deprecated'));
-      expect(warned).toBe(true);
-      warnSpy.mockRestore();
-    });
-
-    it('warns when STEALTH env var is set', () => {
-      const config = makeValidConfig();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-      process.env.STEALTH = 'true';
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      new ConfigLoader('/test/config.json').load();
-      const warned = warnSpy.mock.calls.some(c => String(c[0]).includes('STEALTH env var is deprecated'));
-      expect(warned).toBe(true);
-      warnSpy.mockRestore();
-      delete process.env.STEALTH;
-    });
-  });
 });
