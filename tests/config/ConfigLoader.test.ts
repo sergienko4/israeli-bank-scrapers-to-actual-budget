@@ -750,14 +750,30 @@ describe('ConfigLoader', () => {
       expect(loaded.proxy?.server).toBe('socks5://env-proxy:1080');
       delete process.env.PROXY_SERVER;
     });
+  });
 
-    it('applies STEALTH env var override', () => {
+  describe('deprecation warnings', () => {
+    it('warns when stealth key is present in config', () => {
+      const config = { ...makeValidConfig(), stealth: true };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      new ConfigLoader('/test/config.json').load();
+      const warned = warnSpy.mock.calls.some(c => String(c[0]).includes('"stealth" config is deprecated'));
+      expect(warned).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it('warns when STEALTH env var is set', () => {
       const config = makeValidConfig();
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
       process.env.STEALTH = 'true';
-      const loaded = new ConfigLoader('/test/config.json').load();
-      expect(loaded.stealth).toBe(true);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      new ConfigLoader('/test/config.json').load();
+      const warned = warnSpy.mock.calls.some(c => String(c[0]).includes('STEALTH env var is deprecated'));
+      expect(warned).toBe(true);
+      warnSpy.mockRestore();
       delete process.env.STEALTH;
     });
   });

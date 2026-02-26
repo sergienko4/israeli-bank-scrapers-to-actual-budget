@@ -15,6 +15,7 @@ export interface RetryOptions {
   initialBackoffMs: number;
   onRetry?: (attempt: number, maxAttempts: number, backoffMs: number, error: Error) => void;
   shouldShutdown?: () => boolean;
+  shouldRetry?: (error: Error) => boolean;
 }
 
 export class ExponentialBackoffRetry implements IRetryStrategy {
@@ -22,20 +23,23 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
 
   async execute<T>(fn: () => Promise<T>, operationName: string): Promise<T> {
     let lastError: Error;
+    let actualAttempts = 0;
 
     for (let attempt = 1; attempt <= this.options.maxAttempts; attempt++) {
       if (this.options.shouldShutdown?.()) throw new ShutdownError('Operation cancelled due to shutdown');
       try {
         getLogger().info(`  🔄 Attempt ${attempt}/${this.options.maxAttempts}...`);
+        actualAttempts = attempt;
         return await fn();
       } catch (error) {
         lastError = error as Error;
         if (attempt >= this.options.maxAttempts) break;
+        if (this.options.shouldRetry && !this.options.shouldRetry(lastError)) throw lastError;
         await this.handleRetryBackoff(attempt, operationName, lastError);
       }
     }
 
-    throw new Error(`${operationName} failed after ${this.options.maxAttempts} attempts. Last error: ${lastError!.message}`);
+    throw new Error(`${operationName} failed after ${actualAttempts} attempts. Last error: ${lastError!.message}`);
   }
 
   private async handleRetryBackoff(attempt: number, operationName: string, error: Error): Promise<void> {

@@ -19,7 +19,7 @@ import { AuditLogService } from './services/AuditLogService.js';
 import { TwoFactorService } from './services/TwoFactorService.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
 import { ImporterConfig, BankConfig, BankTarget, BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode } from './types/index.js';
-import { buildChromeArgs, applyStealthOverrides, getChromeDataDir } from './scraper/ScraperOptionsBuilder.js';
+import { buildChromeArgs, getChromeDataDir } from './scraper/ScraperOptionsBuilder.js';
 import { errorMessage } from './utils/index.js';
 import { createLogger, getLogger } from './logger/index.js';
 import { ICategoryResolver } from './services/ICategoryResolver.js';
@@ -38,7 +38,8 @@ const shutdownHandler = new GracefulShutdownHandler();
 const retryStrategy = new ExponentialBackoffRetry({
   maxAttempts: DEFAULT_RESILIENCE_CONFIG.maxRetryAttempts,
   initialBackoffMs: DEFAULT_RESILIENCE_CONFIG.initialBackoffMs,
-  shouldShutdown: () => shutdownHandler.isShuttingDown()
+  shouldShutdown: () => shutdownHandler.isShuttingDown(),
+  shouldRetry: (error) => error.name !== 'WafBlockError',
 });
 const timeoutWrapper = new TimeoutWrapper();
 const errorFormatter = new ErrorFormatter();
@@ -70,7 +71,6 @@ const telegramNotifier = telegram ? new TelegramNotifier(telegram) : null;
 
 logger.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
 if (config.proxy?.server) logger.info(`🌐 Using proxy: ${config.proxy.server}`);
-if (config.stealth) logger.info('🕵️ Stealth mode enabled (anti-detection)');
 
 // Company type mapping
 const companyTypeMap: Record<string, typeof CompanyTypes[keyof typeof CompanyTypes]> = {
@@ -104,6 +104,18 @@ const reconciliationMessages: Record<string, (diff: number) => string> = {
   skipped: () => `     ✅ Already balanced`,
   'already-reconciled': () => `     ✅ Already reconciled today`,
 };
+
+// OCP: scraper error type → user-friendly suffix (add new entries without changing logic)
+const scrapeErrorHints: Record<string, string> = {
+  WAF_BLOCKED: '. WAF blocked the request — wait 1-2 hours before retrying',
+  CHANGE_PASSWORD: '. The bank requires a password change — log in via browser first',
+  ACCOUNT_BLOCKED: '. Your account is blocked — contact your bank',
+};
+
+function logScrapeFailure(bankName: string, result: ScraperScrapingResult): void {
+  const hint = scrapeErrorHints[result.errorType ?? ''] ?? '';
+  logger.error(`  ❌ Failed to scrape ${bankName}: ${result.errorMessage || 'Unknown error'}${hint}`);
+}
 
 // ─── Scraper helpers ───
 
@@ -143,8 +155,7 @@ function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof Compa
     companyId: companyType,
     startDate: computeStartDate(bankConfig),
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
-    args: buildChromeArgs(config.proxy, config.stealth, bankName),
-    ...(config.stealth ? { preparePage: applyStealthOverrides } : {}),
+    args: buildChromeArgs(config.proxy, bankName),
   };
 }
 
@@ -287,7 +298,11 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
   metrics.startBank(bankName);
   try {
     const scrapeResult = await scrapeBankWithResilience(bankName, bankConfig);
-    if (!scrapeResult.success) { logger.error(`  ❌ Failed to scrape ${bankName}: ${scrapeResult.errorMessage || 'Unknown error'}`); return; }
+    if (!scrapeResult.success) {
+      logScrapeFailure(bankName, scrapeResult);
+      metrics.recordBankFailure(bankName, new Error(scrapeResult.errorMessage || 'Unknown error'));
+      return;
+    }
     logger.info(`  ✅ Successfully scraped ${bankName}`);
     logger.info(`  📝 Found ${scrapeResult.accounts?.length || 0} accounts`);
     const totals = await processAllAccounts(bankName, bankConfig, scrapeResult);

@@ -104,6 +104,46 @@ describe('ExponentialBackoffRetry', () => {
     expect(onRetry).toHaveBeenCalledWith(1, 3, 1000, expect.any(Error));
   });
 
+  it('re-throws original error when shouldRetry returns false', async () => {
+    const wafError = new Error('WAF blocked by cloudflare');
+    wafError.name = 'WafBlockError';
+
+    const retry = new ExponentialBackoffRetry({
+      maxAttempts: 3,
+      initialBackoffMs: 1000,
+      shouldRetry: (error) => error.name !== 'WafBlockError',
+    });
+
+    const fn = vi.fn().mockRejectedValue(wafError);
+    const resultPromise = retry.execute(fn, 'test-op').catch((e: Error) => e);
+    const error = await resultPromise;
+
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect((error as Error).name).toBe('WafBlockError');
+    expect((error as Error).message).toBe('WAF blocked by cloudflare');
+  });
+
+  it('retries when shouldRetry returns true', async () => {
+    vi.useFakeTimers();
+
+    const retry = new ExponentialBackoffRetry({
+      maxAttempts: 3,
+      initialBackoffMs: 100,
+      shouldRetry: () => true,
+    });
+
+    const fn = vi.fn()
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValue('ok');
+
+    const promise = retry.execute(fn, 'test');
+    await vi.advanceTimersByTimeAsync(101);
+    const result = await promise;
+
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
   it('uses exponential backoff timing', async () => {
     vi.useFakeTimers();
 

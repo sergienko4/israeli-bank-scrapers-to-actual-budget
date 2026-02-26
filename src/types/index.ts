@@ -138,7 +138,6 @@ export interface ImporterConfig {
   spendingWatch?: SpendingWatchRule[];  // Spending watch rules (empty/missing = disabled)
   delayBetweenBanks?: number;  // Milliseconds to wait between bank imports (default: 0)
   proxy?: ProxyConfig;   // Optional proxy for Chromium (socks5/http)
-  stealth?: boolean;     // Anti-detection mode for WAF-protected banks (default: false)
 }
 
 export interface ResilienceConfig {

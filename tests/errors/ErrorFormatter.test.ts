@@ -112,6 +112,22 @@ describe('ErrorFormatter', () => {
       expect(result).toContain('2FA Error');
     });
 
+    it('detects WAF/cloudflare in message', () => {
+      const error = new Error('WAF blocked by cloudflare (HTTP 403)');
+      const result = formatter.format(error);
+      expect(result).toContain('WAF Blocked');
+      expect(result).toContain('Wait 1-2 hours');
+    });
+
+    it('formats WafBlockError by name', () => {
+      const error = new Error('WAF blocked by cloudflare (HTTP 403, "Just a moment")');
+      error.name = 'WafBlockError';
+      const result = formatter.format(error, 'amex');
+      expect(result).toContain('WAF Blocked');
+      expect(result).toContain('(amex)');
+      expect(result).toContain('Wait 1-2 hours');
+    });
+
     it('returns default format for unknown errors', () => {
       const error = new Error('Something unexpected');
       const result = formatter.format(error);

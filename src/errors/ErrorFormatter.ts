@@ -30,11 +30,13 @@ const messageCategories: Array<{ keywords: string[]; icon: string; label: string
   { keywords: ['credentials', 'login', 'authentication'], icon: '🔐', label: 'Authentication Error', suffix: '. Please verify your credentials.' },
   { keywords: ['network', 'ECONNREFUSED', 'ENOTFOUND'],   icon: '🌐', label: 'Network Error', suffix: '. Cannot reach the server. Check your internet connection.' },
   { keywords: ['2FA', 'OTP', 'verification'],              icon: '📱', label: '2FA Error', suffix: '. Check your 2FA device or SMS.' },
+  { keywords: ['WAF', 'WafBlock', 'cloudflare'],           icon: '🛡️', label: 'WAF Blocked', suffix: '. Bank WAF blocked the request. Wait 1-2 hours and retry.' },
 ];
 
 export class ErrorFormatter implements IErrorFormatter {
   format(error: Error, context: string = ''): string {
     const ctx = context ? ` (${context})` : '';
+    if (error.name === 'WafBlockError') return `🛡️ WAF Blocked${ctx}: ${error.message}. Wait 1-2 hours and retry.`;
     const match = errorFormats.find(f => error instanceof f.type);
     if (match) return `${match.entry.icon} ${match.entry.label}${ctx}: ${error.message}${match.entry.suffix || ''}`;
     return this.categorizeByMessage(error, ctx);
