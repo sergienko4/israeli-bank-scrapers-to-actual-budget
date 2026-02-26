@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.21.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.21.0...v1.21.1) (2026-02-26)
+
+
+### Fixed
+
+* **test:** use formatDate() in SpendingWatch test to match service timezone ([#125](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/125)) ([8b8ef62](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/8b8ef6230f2b36b9181d8c85062aafc79dbd336b))
+* use defaultTimeout instead of timeout for page navigation ([#123](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/123)) ([150725e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/150725e2a0561bae5b7d5e263e52ba652422beca))
+
 ## [1.21.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.20.1...v1.21.0) (2026-02-26)
 
 
