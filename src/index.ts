@@ -155,7 +155,7 @@ function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof Compa
     companyId: companyType,
     startDate: computeStartDate(bankConfig),
     args: buildChromeArgs(config.proxy),
-    timeout: bankConfig.timeout ?? 60_000,
+    defaultTimeout: bankConfig.timeout ?? 60_000,
     ...(bankConfig.navigationRetryCount ? { navigationRetryCount: bankConfig.navigationRetryCount } : {}),
   };
 }
