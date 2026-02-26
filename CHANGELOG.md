@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.18.0...v1.19.0) (2026-02-26)
+
+
+### Added
+
+* 2FA OTP via Telegram for OneZero (Task 07) ([#25](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/25)) ([824c2ba](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/824c2bad7d2bc667c8269663586e77b5197c2513))
+* Add auto-categorization with history and translate modes ([#51](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/51)) ([03f7462](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/03f746245ea5b111b4c1c9d9ec19415ac2885947))
+* add E2E testing environment with Docker pipeline ([#74](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/74)) ([f55a4c9](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f55a4c95a196e91f58f2840920bf9017226c42b2))
+* Add encrypted config file support (AES-256-GCM) ([#62](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/62)) ([296369d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/296369d35572a1b9c76ca7bf4859a70c2cc2c90a))
+* add per-bank clearSession option ([#95](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/95)) ([f0a43c1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f0a43c11d742bb1093c2697a1150c3af097949b5))
+* Add proxy support and stealth anti-detection mode ([#86](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/86)) ([7037fff](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7037ffffa14d5c53b6b40c55c503f332321858fe))
+* add spending watch with configurable rules ([#72](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/72)) ([0e912af](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/0e912af99cd50b2ca1668a18b9a15590cc20f57e))
+* add spending watch with configurable rules and auto Telegram command registration ([0e912af](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/0e912af99cd50b2ca1668a18b9a15590cc20f57e))
+* Add structured logging with 4 formats and /logs bot command ([05665f8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/05665f8951445ae424b9e8302f78b3cc85beefa1))
+* Add Telegram notifications (Task 03) ([#22](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/22)) ([696947c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/696947c87846aa0678713379f236531a9832b6d3))
+* Add unit tests + GitHub Actions CI (Task 01) ([30b18a6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/30b18a6e25190d76490ffe318d9b8d96eca488d4))
+* Add unit tests and GitHub Actions CI (Task 01) ([dcabe0c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/dcabe0ce2e352227636b5d2e3fbf1257a6fe3338))
+* daily dependency check + update scraper to 6.7.8 ([#94](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/94)) ([988f11f](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/988f11f44f680f2219f4e3e8ade06b98eaf198b8))
+* Docker Compose production setup (Task 10) ([#30](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/30)) ([a796c33](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/a796c33142c5e86c24a327a3b9588129d1810e2f))
+* Enhanced GitHub release notes (Task 05) ([#20](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/20)) ([cc80863](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/cc80863c9dcadc66c9f8858aded67765909206e9))
+* Import audit log with /status history (Task 17) ([#32](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/32)) ([46c75d5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/46c75d59033056ad62f3e030add2538280805428))
+* Rate limiting between bank imports (Task 18) ([#31](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/31)) ([c70003e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c70003eabb72c857a06f91c37c241fa5048ab611))
+* Split config into credentials and settings files ([#64](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/64)) ([ba71e33](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ba71e3356326fdc151d36e794af10999be366d6a))
+* switch to @sergienko4/israeli-bank-scrapers npm package ([#91](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/91)) ([cca429a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/cca429ab51758ad45f3c7b6a0c8b606dde531228))
+* Telegram bot commands - /scan, /status, /help ([#23](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/23)) ([55456c4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/55456c47a4854b166284624f0c4968121f3e035e))
+* update scraper to v7 — Puppeteer → Playwright migration ([#110](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/110)) ([c9e155d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c9e155d4a7d4b1d892469a6602534fd15e74334a))
+* use forked scraper with Amex/Isracard WAF fix ([#89](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/89)) ([d0fc0cd](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d0fc0cd096f2bb910203e10b806a09787fa19286))
+* Webhook notifications — Slack, Discord, plain JSON (Task 16) ([#33](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/33)) ([25c5c7c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/25c5c7cee769bcd9b945bdc2f967e7cec4efae3d))
+
+
+### Fixed
+
+* add hasDockerImage() guard to Docker-dependent E2E tests ([#78](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/78)) ([1ebaf00](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1ebaf000ae9ba11c7aa47fc1937297ec178c2b0a))
+* Close unclosed HTML tags in truncated Telegram messages ([#52](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/52)) ([655392d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/655392d1b42169ae256c44edcfbd114c2619d2e3))
+* Correct bank categories — 14 banks + 4 credit cards ([#36](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/36)) ([4a7e9db](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/4a7e9db7f831e07dc514b7cf30c7fbd8f5f95e3c))
+* **deps:** upgrade cron-parser v4 → v5 ([#106](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/106)) ([96ddca1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/96ddca1a3fdd704c03211857b91da649ccca4abc))
+* Improve stealth + add proxy/stealth/known issues to README ([#88](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/88)) ([d31e3d3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d31e3d3af323792fcd29d3c97621f59172afec0d))
+* move blocking Trivy scan to PR validation, bust apt cache on release ([#66](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/66)) ([35edc71](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/35edc711929199c3d090852e55b17396e1114174))
+* Pause poller during import + reconciliation + daysBack + docs ([#26](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/26)) ([af73f1e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/af73f1e14ed6e0e1431a644cace2b109851c5dc6))
+* per-bank chrome-data directories for clearSession isolation ([#99](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/99)) ([f528f4f](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f528f4fb52588327c786f05f2884914796f9420e))
+* Prevent scheduler timeout overflow causing infinite import loop ([#37](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/37)) ([48c985c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/48c985c9dd3ef6dfe2e5643ca69c2ad80468b53e))
+* Remove hardcoded Docker tags, link to Releases ([#38](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/38)) ([347e852](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/347e8529557188b3fa0bb76e161788cf06fdc31d))
+* update @actual-app/api to 26.2.1 ([#79](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/79)) ([d038918](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d0389185a26e558510c0976731eca036aab9ff44))
+* Use simple tag format (v1.9.0) instead of component prefix ([#44](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/44)) ([533db06](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/533db0608e3e75cf553f65fa786b1a0accecd5cd))
+
+
+### Refactored
+
+* Centralize utility functions - DRY (Task 04) ([567f12b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/567f12b61b1c268227f7955ace33afebabb90d30))
+* Centralize utility functions - DRY principle (Task 04) ([b1e8514](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b1e8514f2506f9ad43d461693d058c85254213c4))
+* Eliminate all any types, CI ratchet → 0 (Task 08) ([#27](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/27)) ([ba870d2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ba870d2b68e3515ee1397bf3b091454288971d89))
+* Extract all long methods to max ~10 lines (Task 13) ([#28](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/28)) ([7337ae7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7337ae75f11274bf3c5bc34f32564dd88317e50b))
+* Extract TransactionService from index.ts (Task 02) ([#21](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/21)) ([ba21f2a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ba21f2ad610bea5d94459aeeedb882460017cb23))
+* move docs to docs/, simplify CI/CD, fix Docker Hub links ([5099a97](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5099a977ff19f3893eaf0c1dc1b883ee26eb3e75))
+* remove redundant stealth code, upgrade scraper to v6.9.1 ([#108](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/108)) ([52d7dcd](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/52d7dcd41bf1ecd66a4397fb3f254ead79c53e3d))
+
+
+### Testing
+
+* close HIGH priority E2E coverage gaps ([#77](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/77)) ([fa37195](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fa3719539ba5b7e028a0067f560af6536e5ed255))
+* Improve coverage from 92% to 99%+ and add PRD template ([f82e872](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f82e872be40ba7dd1f24e99b7e006ab453b896cd))
+
 ## [1.18.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.17.3...v1.18.0) (2026-02-26)
 
 
