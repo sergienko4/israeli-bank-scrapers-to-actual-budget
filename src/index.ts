@@ -156,6 +156,8 @@ function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof Compa
     startDate: computeStartDate(bankConfig),
     executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
     args: buildChromeArgs(config.proxy),
+    ...(bankConfig.timeout ? { timeout: bankConfig.timeout } : {}),
+    ...(bankConfig.navigationRetryCount ? { navigationRetryCount: bankConfig.navigationRetryCount } : {}),
   };
 }
 

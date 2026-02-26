@@ -58,6 +58,8 @@
       "password": "your_password",
       "clearSession": true,
       "daysBack": 30,
+      "timeout": 60000,
+      "navigationRetryCount": 2,
       "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
     }
   },
@@ -108,6 +110,8 @@
     "daysBack": "1-30. Import last N days. Cannot use with startDate",
     "startDate": "YYYY-MM-DD. Fixed date, max 1 year back. Cannot use with daysBack",
     "clearSession": "false (default). true = clear chrome-data before scraping this bank (prevents stale WAF cookies)",
+    "timeout": "Navigation timeout in ms. Default: 30000. Increase for slow connections (e.g., 60000)",
+    "navigationRetryCount": "Retries on page load failure. Default: 0. Set 1-3 for flaky networks",
     "reconcile": "false (default). true = auto-adjust balance to match bank",
     "twoFactorAuth": "false (default). true = bot asks for SMS OTP via Telegram",
     "twoFactorTimeout": "Seconds to wait for OTP reply. Default: 300",

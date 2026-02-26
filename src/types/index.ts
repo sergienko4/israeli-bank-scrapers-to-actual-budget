@@ -56,6 +56,10 @@ export interface BankConfig {
   // Session management
   clearSession?: boolean;            // Default: false. Set true to clear chrome-data before scraping
 
+  // Scraper tuning (per bank)
+  timeout?: number;                  // Navigation timeout in ms. Default: 30000
+  navigationRetryCount?: number;     // Retries on page.goto failure. Default: 0
+
   [key: string]: any; // Allow other bank-specific fields
 }
 
