@@ -298,26 +298,24 @@ Or via environment: `PROXY_SERVER=socks5://localhost:1080`
 
 Supported protocols: `socks5://`, `socks4://`, `http://`, `https://`. Only affects Chromium browser traffic (bank scraping), not Actual Budget API calls.
 
-### Stealth Mode (Anti-Detection)
+### Anti-Detection (Built-in)
 
-Some banks use WAF that detects headless Chrome. Enable stealth mode:
+Anti-detection is handled automatically by the scraper library (v6.9.1+). No configuration needed. Features include:
 
-```json
-"stealth": true
-```
+- Realistic User-Agent and HTTP headers (Hebrew locale, client hints)
+- Stealth overrides (hides `navigator.webdriver`, fakes plugins/languages)
+- Cloudflare challenge detection with automatic retry (30s/60s/120s backoff)
+- Human-like timing delays before API calls
+- Timezone emulation (`Asia/Jerusalem`)
 
-Or via environment: `STEALTH=true`
-
-When enabled: hides `navigator.webdriver`, sets realistic browser fingerprint (Hebrew locale, plugins, chrome.runtime), adds `--disable-blink-features=AutomationControlled`.
-
-**Default: `false`** — only enable if your bank blocks with 403 errors.
+If a bank's WAF still blocks after 3 retries, the error message will include actionable suggestions (e.g., wait 1-2 hours, use a residential IP).
 
 ### Known Issues
 
 | Bank | Issue | Status |
 |------|-------|--------|
-| Amex | WAF blocked headless Chrome (403) | **FIXED** — our fork adds anti-detection headers |
-| Isracard | Same WAF as Amex (shared platform) | **FIXED** — same fork fix |
+| Amex | Cloudflare WAF blocks headless Chrome (403) | **FIXED** — scraper v6.9.1 adds anti-detection + auto-retry |
+| Isracard | Same WAF as Amex (shared platform) | **FIXED** — same scraper fix |
 
 ### Logging
 

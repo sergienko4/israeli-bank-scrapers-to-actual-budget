@@ -3,7 +3,11 @@ node_modules/
 
 # Sensitive configuration
 config.json
+config.*.json
+!config.json.example
 credentials.json
+credentials.*.json
+!credentials.json.example
 *.enc
 .env
 .env.e2e

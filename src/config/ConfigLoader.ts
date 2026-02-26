@@ -34,13 +34,22 @@ export class ConfigLoader implements IConfigLoader {
   load(): ImporterConfig {
     const config = this.loadFromFile() ?? this.loadFromEnvironment();
     this.applyEnvOverrides(config);
+    this.warnDeprecated(config);
     this.validate(config);
     return config;
   }
 
   private applyEnvOverrides(config: ImporterConfig): void {
     if (process.env.PROXY_SERVER) config.proxy = { server: process.env.PROXY_SERVER };
-    if (process.env.STEALTH === 'true') config.stealth = true;
+  }
+
+  private warnDeprecated(config: ImporterConfig): void {
+    if ('stealth' in config) {
+      getLogger().warn('⚠️  "stealth" config is deprecated and ignored — anti-detection is now built into the scraper');
+    }
+    if (process.env.STEALTH) {
+      getLogger().warn('⚠️  STEALTH env var is deprecated and ignored — anti-detection is now built into the scraper');
+    }
   }
 
   private loadFromFile(): ImporterConfig | null {
