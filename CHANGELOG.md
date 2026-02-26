@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.18.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.17.3...v1.18.0) (2026-02-26)
+
+
+### Added
+
+* update scraper to v7 — Puppeteer → Playwright migration ([#110](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/110)) ([c9e155d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c9e155d4a7d4b1d892469a6602534fd15e74334a))
+
 ## [1.17.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.17.2...v1.17.3) (2026-02-26)
 
 
