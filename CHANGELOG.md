@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.20.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.20.0...v1.20.1) (2026-02-26)
+
+
+### Fixed
+
+* use Playwright bundled Chromium instead of system APT chromium ([#117](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/117)) ([4a39f6a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/4a39f6ab8f4bbbf53c1391651d1a98f5eff58add))
+
 ## [1.20.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.19.0...v1.20.0) (2026-02-26)
 
 
