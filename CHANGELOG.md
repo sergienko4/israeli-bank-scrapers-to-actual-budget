@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.20.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.19.0...v1.20.0) (2026-02-26)
+
+
+### Added
+
+* add per-bank timeout and navigationRetryCount options ([#113](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/113)) ([7b37de5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7b37de5d134a35f85de1b8450f2ab421c3d65935))
+
 ## [1.19.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.18.0...v1.19.0) (2026-02-26)
 
 
