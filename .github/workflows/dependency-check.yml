@@ -61,8 +61,8 @@ jobs:
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.RELEASE_TOKEN }}
-          commit-message: "chore(deps): update critical dependencies"
-          title: "chore(deps): update critical dependencies (daily check)"
+          commit-message: "fix(deps): update critical dependencies"
+          title: "fix(deps): update critical dependencies (daily check)"
           body: |
             Automated daily dependency check found updates:
 
