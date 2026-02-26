@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type api from '@actual-app/api';
 import { SpendingWatchService } from '../../src/services/SpendingWatchService.js';
 import { SpendingWatchRule } from '../../src/types/index.js';
+import { formatDate } from '../../src/utils/date.js';
 
 function createMockApi(transactions: Array<{ date: string; imported_payee: string; amount: number }> = []) {
   return {
@@ -20,7 +21,7 @@ function createMockApi(transactions: Array<{ date: string; imported_payee: strin
   } as unknown as typeof api;
 }
 
-const today = new Date().toISOString().split('T')[0];
+const today = formatDate(new Date());
 
 describe('SpendingWatchService', () => {
   describe('evaluate', () => {
