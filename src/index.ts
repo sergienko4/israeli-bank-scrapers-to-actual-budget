@@ -137,6 +137,19 @@ const scrapeErrorHints: Record<string, string> = {
   ACCOUNT_BLOCKED: '. Your account is blocked — contact your bank',
 };
 
+// Bank responses that mean "0 transactions in range" — not a real failure
+// Scrapers return success:false for these instead of an empty accounts array
+const NO_RECORDS_PATTERNS = [
+  'לא מצאנו תנועות',       // Discount: "we didn't find transactions matching criteria"
+  'no transactions found',
+  'no results found',
+];
+
+function isEmptyResultError(result: ScraperScrapingResult): boolean {
+  const msg = (result.errorMessage ?? '').toLowerCase();
+  return NO_RECORDS_PATTERNS.some(p => msg.includes(p.toLowerCase()));
+}
+
 function logScrapeFailure(bankName: string, result: ScraperScrapingResult): void {
   const hint = scrapeErrorHints[result.errorType ?? ''] ?? '';
   logger.error(
@@ -439,14 +452,23 @@ function logBankScrapedInfo(bankName: string, accountCount: number): void {
   logger.info(`  📝 Found ${accountCount} accounts`);
 }
 
+function handleFailedScrape(bankName: string, result: ScraperScrapingResult): void {
+  if (isEmptyResultError(result)) {
+    logger.info(`  ✅ ${bankName}: no transactions in selected period`);
+    metrics.recordBankSuccess(bankName, 0, 0);
+    return;
+  }
+  logScrapeFailure(bankName, result);
+  metrics.recordBankFailure(bankName, new Error(result.errorMessage || 'Unknown error'));
+}
+
 async function importFromBank(bankName: string, bankConfig: BankConfig): Promise<void> {
   logger.info(`\n📊 Processing ${bankName}...`);
   metrics.startBank(bankName);
   try {
     const scrapeResult = await scrapeBankWithResilience(bankName, bankConfig);
     if (!scrapeResult.success) {
-      logScrapeFailure(bankName, scrapeResult);
-      metrics.recordBankFailure(bankName, new Error(scrapeResult.errorMessage || 'Unknown error'));
+      handleFailedScrape(bankName, scrapeResult);
       return;
     }
     logBankScrapedInfo(bankName, scrapeResult.accounts?.length || 0);
