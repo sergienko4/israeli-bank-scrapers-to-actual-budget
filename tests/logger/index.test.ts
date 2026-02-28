@@ -71,4 +71,12 @@ describe('logger factory', () => {
     const logger = createLogger({ format: 'invalid' as never });
     expect(logger).toBeInstanceOf(ConsoleLogger);
   });
+
+  it('getLogBuffer returns same buffer that was created by createLogger', () => {
+    createLogger({ maxBufferSize: 15 });
+    const buf1 = getLogBuffer();
+    const buf2 = getLogBuffer();
+    expect(buf1).toBe(buf2);
+    expect(buf1.isEnabled()).toBe(true);
+  });
 });

@@ -2,6 +2,7 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import unusedImports from 'eslint-plugin-unused-imports';
+import filenames from 'eslint-plugin-filenames';
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -13,13 +14,23 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
-    plugins: { 'unused-imports': unusedImports },
+    // 2. Added filenames to the plugins object
+    plugins: { 
+      'unused-imports': unusedImports,
+      'filenames': filenames 
+    },
     rules: {
+      // === THE "ONE PER FILE" RULE ===
+      "max-classes-per-file": ["error", 1],
+      
+      // Forces file name to match the exported class/interface (e.g., UserService.ts)
+      // This effectively prevents hiding multiple major entities in one file.
+      "filenames/match-exported": ["error", "kebab"], 
+
       // === CLEAN CODE LIMITS ===
       'max-lines-per-function': ['error', { max: 20, skipBlankLines: true, skipComments: true }],
       'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
       '@typescript-eslint/max-params': ['error', { max: 3 }],
-      'max-classes-per-file': ['error', 1],
       'complexity': ['error', 10],
 
       // === STRICT TYPE SAFETY (NO ANY) ===
@@ -42,7 +53,7 @@ export default tseslint.config(
       'no-unused-expressions': 'error',
       '@typescript-eslint/no-unused-private-class-members': 'error',
 
-      // === FORMATTING (warn=error policy) ===
+      // === FORMATTING ===
       'max-len': ['error', { code: 100, ignoreUrls: true }],
     },
   },
@@ -53,7 +64,7 @@ export default tseslint.config(
       'max-lines': 'off',
       'max-lines-per-function': 'off',
       'max-len': 'off',
-      // Tests use vi.fn() which is any-typed — unsafe rules don't apply
+      'filenames/match-exported': 'off', // Tests often don't match export names
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',

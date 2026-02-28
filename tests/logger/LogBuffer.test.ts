@@ -67,4 +67,11 @@ describe('LogBuffer', () => {
     for (let i = 0; i < 510; i++) huge.add(`line ${i}`);
     expect(huge.size()).toBe(500);
   });
+
+  it('clear() on disabled buffer (maxSize=0) is a no-op', () => {
+    const disabled = new LogBuffer(0);
+    disabled.clear();
+    expect(disabled.size()).toBe(0);
+    expect(disabled.isEnabled()).toBe(false);
+  });
 });

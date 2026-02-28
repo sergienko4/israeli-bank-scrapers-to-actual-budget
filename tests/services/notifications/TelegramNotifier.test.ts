@@ -104,11 +104,33 @@ describe('TelegramNotifier', () => {
       expect(text).not.toContain('0152228812'); // No account details in summary
     });
 
+    it('bank with duration 0 shows no duration suffix', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const noDurSummary = { ...summaryWithTxns, banks: [{ ...summaryWithTxns.banks[0], duration: 0 }] };
+      await notifier.sendSummary(noDurSummary);
+      expect(getText(fetchMock)).toContain('discount');
+    });
+
     it('shows warning icon on failures', async () => {
       const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
       await notifier.sendSummary(failedSummary);
       expect(getText(fetchMock)).toContain('⚠️');
       expect(getText(fetchMock)).toContain('AuthenticationError');
+    });
+
+    it('handles summary with no banks (empty banks array)', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const emptySummary = { ...summaryWithTxns, banks: [] };
+      await notifier.sendSummary(emptySummary);
+      const text = getText(fetchMock);
+      expect(text).toContain('Import Summary');
+      expect(text).not.toContain('discount');
+    });
+
+    it('falls back to summary format for unknown messageFormat', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'bogus' as never });
+      await notifier.sendSummary(summaryWithTxns);
+      expect(getText(fetchMock)).toContain('Import Summary');
     });
   });
 
@@ -371,6 +393,289 @@ describe('TelegramNotifier', () => {
       expect(text).not.toContain('<Main>');
       expect(text).toContain('&amp;');
       expect(text).toContain('&lt;Main&gt;');
+    });
+  });
+
+  describe('sendMessage', () => {
+    it('delivers text directly', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      await notifier.sendMessage('Hello World');
+      expect(getText(fetchMock)).toBe('Hello World');
+    });
+  });
+
+  describe('showTransactions modes', () => {
+    it("none: hides all transactions", async () => {
+      const notifier = new TelegramNotifier(
+        { botToken: '123:ABC', chatId: '-100', messageFormat: 'compact', showTransactions: 'none' }
+      );
+      await notifier.sendSummary(summaryWithTxns);
+      const text = getText(fetchMock);
+      expect(text).not.toContain('Transfer from account');
+      expect(text).not.toContain('Amex charge');
+    });
+
+    it("all: includes existing transactions alongside new ones", async () => {
+      const notifier = new TelegramNotifier(
+        { botToken: '123:ABC', chatId: '-100', messageFormat: 'compact', showTransactions: 'all' }
+      );
+      const summary = {
+        ...summaryWithTxns,
+        banks: [{
+          ...summaryWithTxns.banks[0],
+          accounts: [{
+            ...summaryWithTxns.banks[0].accounts[0],
+            existingTransactions: [{ date: '2026-01-01', description: 'Old charge', amount: 500 }]
+          }]
+        }]
+      };
+      await notifier.sendSummary(summary);
+      expect(getText(fetchMock)).toContain('Old charge');
+    });
+  });
+
+  describe('reconciliationStatus', () => {
+    it("created: shows + prefix for positive reconciliation amount", async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const summary = {
+        ...summaryWithTxns,
+        banks: [{ ...summaryWithTxns.banks[0], reconciliationStatus: 'created' as const, reconciliationAmount: 5000 }]
+      };
+      await notifier.sendSummary(summary);
+      expect(getText(fetchMock)).toContain('Reconciled: +50.00 ILS');
+    });
+
+    it("created: shows no prefix for negative reconciliation amount", async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const summary = {
+        ...summaryWithTxns,
+        banks: [{ ...summaryWithTxns.banks[0], reconciliationStatus: 'created' as const, reconciliationAmount: -3000 }]
+      };
+      await notifier.sendSummary(summary);
+      expect(getText(fetchMock)).toContain('Reconciled: -30.00 ILS');
+    });
+
+    it("already-reconciled: shows 'Already reconciled'", async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const summary = {
+        ...summaryWithTxns,
+        banks: [{ ...summaryWithTxns.banks[0], reconciliationStatus: 'already-reconciled' as const }]
+      };
+      await notifier.sendSummary(summary);
+      expect(getText(fetchMock)).toContain('Already reconciled');
+    });
+  });
+
+  describe('account without balance', () => {
+    const noBalanceSummary = {
+      ...summaryWithTxns,
+      banks: [{
+        ...summaryWithTxns.banks[0],
+        accounts: [{ ...summaryWithTxns.banks[0].accounts[0], balance: undefined, currency: undefined }]
+      }]
+    };
+
+    it('compact: omits balance line when balance is undefined', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      await notifier.sendSummary(noBalanceSummary);
+      expect(getText(fetchMock)).not.toContain('💰');
+    });
+
+    it('ledger: omits balance line when balance is undefined', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' });
+      await notifier.sendSummary(noBalanceSummary);
+      expect(getText(fetchMock)).not.toContain('💰');
+    });
+
+    it('emoji: omits balance line when balance is undefined', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
+      await notifier.sendSummary(noBalanceSummary);
+      expect(getText(fetchMock)).not.toContain('💰');
+    });
+  });
+
+  describe('bank with undefined accounts', () => {
+    it('ledger: handles bank where accounts is undefined', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' });
+      const summary = {
+        ...summaryWithTxns,
+        banks: [{ ...summaryWithTxns.banks[0], accounts: undefined as never }]
+      };
+      await notifier.sendSummary(summary);
+      expect(getText(fetchMock)).toContain('Import Summary');
+    });
+
+    it('emoji: handles bank where accounts is undefined', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
+      const summary = {
+        ...summaryWithTxns,
+        banks: [{ ...summaryWithTxns.banks[0], accounts: undefined as never }]
+      };
+      await notifier.sendSummary(summary);
+      expect(getText(fetchMock)).toContain('Import Summary');
+    });
+
+    it('compact: handles bank where accounts is undefined', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const summary = {
+        ...summaryWithTxns,
+        banks: [{ ...summaryWithTxns.banks[0], accounts: undefined as never }]
+      };
+      await notifier.sendSummary(summary);
+      expect(getText(fetchMock)).toContain('Import Summary');
+    });
+
+    it('ledger: showTransactions none produces no code block', async () => {
+      const notifier = new TelegramNotifier(
+        { botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger', showTransactions: 'none' }
+      );
+      await notifier.sendSummary(summaryWithTxns);
+      expect(getText(fetchMock)).not.toContain('<code>');
+    });
+  });
+
+  describe('emoji format with duplicates and missing currency', () => {
+    it('shows dup count when totalDuplicates > 0', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
+      const dupSummary = { ...summaryWithTxns, totalDuplicates: 3 };
+      await notifier.sendSummary(dupSummary);
+      expect(getText(fetchMock)).toContain('3 dup');
+    });
+
+    it('shows ILS when account currency is undefined', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
+      const noCurrencySummary = {
+        ...summaryWithTxns,
+        banks: [{
+          ...summaryWithTxns.banks[0],
+          accounts: [{ ...summaryWithTxns.banks[0].accounts[0], currency: undefined }]
+        }]
+      };
+      await notifier.sendSummary(noCurrencySummary);
+      expect(getText(fetchMock)).toContain('ILS');
+    });
+
+    it('compact: shows ILS when account currency is undefined', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const noCurrencySummary = {
+        ...summaryWithTxns,
+        banks: [{
+          ...summaryWithTxns.banks[0],
+          accounts: [{ ...summaryWithTxns.banks[0].accounts[0], currency: undefined }]
+        }]
+      };
+      await notifier.sendSummary(noCurrencySummary);
+      expect(getText(fetchMock)).toContain('ILS');
+    });
+  });
+
+  describe('waitForReply', () => {
+    it('returns matching reply message from poll', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -100 }, text: '654321', date: futureTime } }] })
+        });
+      });
+      const result = await notifier.waitForReply('Enter OTP:', 5000);
+      expect(result).toBe('654321');
+    });
+
+    it('throws timeout when no reply received within timeout', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+      });
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
+    });
+
+    it('ignores reply with date before prompt was sent', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -100 }, text: '111111', date: 0 } }] })
+        });
+      });
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
+    });
+
+    it('ignores command messages starting with /', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -100 }, text: '/scan', date: futureTime } }] })
+        });
+      });
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
+    });
+
+    it('ignores messages from wrong chatId', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -999 }, text: '123456', date: futureTime } }] })
+        });
+      });
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
+    });
+
+    it('uses latest offset from getLatestOffset when prior updates exist', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 50 }] })
+        });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 51, message: { chat: { id: -100 }, text: '999888', date: futureTime } }] })
+        });
+      });
+      const result = await notifier.waitForReply('Enter OTP:', 5000);
+      expect(result).toBe('999888');
+    });
+
+    it('continues polling when pollUpdates response is not ok', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        return Promise.resolve({ ok: false });
+      });
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
     });
   });
 

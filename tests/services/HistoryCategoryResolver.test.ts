@@ -55,6 +55,18 @@ describe('HistoryCategoryResolver', () => {
       expect(resolver.resolve('Store')).toEqual({ categoryId: 'cat-new' });
     });
 
+    it('logs non-Error object when initialize throws non-Error', async () => {
+      mockApi = {
+        ...buildMockApi([]),
+        runQuery: vi.fn().mockRejectedValue('network down')
+      };
+      resolver = new HistoryCategoryResolver(mockApi);
+      await resolver.initialize(); // should not throw
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('network down')
+      );
+    });
+
     it('skips rows with null imported_payee', async () => {
       mockApi = buildMockApi([
         { imported_payee: '', category: 'cat-1', date: '2026-02-18' },

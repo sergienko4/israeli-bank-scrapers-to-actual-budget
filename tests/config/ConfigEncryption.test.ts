@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { encryptConfig, decryptConfig, isEncryptedConfig } from '../../src/config/ConfigEncryption.js';
+import { describe, it, expect, afterEach } from 'vitest';
+import { encryptConfig, decryptConfig, isEncryptedConfig, getEncryptionPassword } from '../../src/config/ConfigEncryption.js';
 
 const SAMPLE_CONFIG = JSON.stringify({
   actual: { init: { serverURL: 'http://localhost:5006', password: 'secret', dataDir: './data' }, budget: { syncId: 'uuid', password: null } },
@@ -62,6 +62,30 @@ describe('ConfigEncryption', () => {
       const encrypted = encryptConfig(hebrew, 'pass');
       const decrypted = decryptConfig(encrypted, 'pass');
       expect(JSON.parse(decrypted)).toEqual(JSON.parse(hebrew));
+    });
+  });
+
+  describe('getEncryptionPassword', () => {
+    afterEach(() => {
+      delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
+      delete process.env.CONFIG_PASSWORD;
+    });
+
+    it('returns CREDENTIALS_ENCRYPTION_PASSWORD when set', () => {
+      process.env.CREDENTIALS_ENCRYPTION_PASSWORD = 'primary-pass';
+      expect(getEncryptionPassword()).toBe('primary-pass');
+    });
+
+    it('falls back to CONFIG_PASSWORD when CREDENTIALS_ENCRYPTION_PASSWORD is not set', () => {
+      delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
+      process.env.CONFIG_PASSWORD = 'fallback-pass';
+      expect(getEncryptionPassword()).toBe('fallback-pass');
+    });
+
+    it('returns undefined when neither env var is set', () => {
+      delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
+      delete process.env.CONFIG_PASSWORD;
+      expect(getEncryptionPassword()).toBeUndefined();
     });
   });
 

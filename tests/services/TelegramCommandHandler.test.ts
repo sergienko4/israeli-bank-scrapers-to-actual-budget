@@ -78,6 +78,13 @@ describe('TelegramCommandHandler', () => {
     expect(mockRunImport).not.toHaveBeenCalled();
   });
 
+  it('/watch without runWatch shows hint message', async () => {
+    await handler.handle('/watch');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Spending watch')
+    );
+  });
+
   // ─── /logs command tests ───
 
   it('/logs shows empty message when no entries', async () => {
@@ -257,5 +264,98 @@ describe('TelegramCommandHandler', () => {
     });
     await handlerWithAudit.handle('/status');
     expect(mockAuditLog.getRecent).toHaveBeenCalledWith(5);
+  });
+
+  it('/status shows ⏳ importing while import is in progress', async () => {
+    let resolveImport!: (v: number) => void;
+    mockRunImport.mockImplementation(() => new Promise(resolve => { resolveImport = resolve; }));
+
+    const scanPromise = handler.handle('/scan');
+    await new Promise(r => setTimeout(r, 10));
+    await handler.handle('/status');
+
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    expect(calls.some(m => m.includes('importing'))).toBe(true);
+
+    resolveImport(0);
+    await scanPromise;
+  });
+
+  it('/status formats timestamp without T separator using empty time', async () => {
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([{
+        timestamp: '2026-02-28 14:30:00',
+        totalBanks: 1, successfulBanks: 1, failedBanks: 0,
+        totalTransactions: 2, totalDuplicates: 0,
+        totalDuration: 10000, successRate: 100, banks: []
+      }])
+    };
+    const handlerWithAudit = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, auditLog: mockAuditLog
+    });
+    await handlerWithAudit.handle('/status');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('2026-02-28');
+  });
+
+  it('/status shows ⚠️ for failed audit entry', async () => {
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([{
+        timestamp: '2026-02-28T14:30:00.000Z',
+        totalBanks: 2, successfulBanks: 1, failedBanks: 1,
+        totalTransactions: 2, totalDuplicates: 0,
+        totalDuration: 30000, successRate: 50, banks: []
+      }])
+    };
+    const handlerWithAudit = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, auditLog: mockAuditLog
+    });
+    await handlerWithAudit.handle('/status');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('⚠️');
+  });
+
+  it('/logs truncates single long entry (no-newline path shows truncation indicator)', async () => {
+    const buffer = getLogBuffer();
+    buffer.clear();
+    buffer.add('x'.repeat(5000));
+    await handler.handle('/logs');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('...(earlier entries omitted)');
+  });
+
+  // ─── /watch with runWatch provided ───
+
+  it('/watch with runWatch: calls it and shows result', async () => {
+    const mockRunWatch = vi.fn().mockResolvedValue('⚠️ Fast food: 120% of limit');
+    const watchHandler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, runWatch: mockRunWatch
+    });
+    await watchHandler.handle('/watch');
+    expect(mockRunWatch).toHaveBeenCalled();
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Fast food'));
+  });
+
+  it('/watch with runWatch returning null shows default message', async () => {
+    const mockRunWatch = vi.fn().mockResolvedValue(null);
+    const watchHandler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, runWatch: mockRunWatch
+    });
+    await watchHandler.handle('/watch');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('All spending within limits')
+    );
+  });
+
+  it('/watch with runWatch throwing shows error message', async () => {
+    const mockRunWatch = vi.fn().mockRejectedValue(new Error('Timeout'));
+    const watchHandler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, runWatch: mockRunWatch
+    });
+    await watchHandler.handle('/watch');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Watch error'));
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Timeout'));
   });
 });

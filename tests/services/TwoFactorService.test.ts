@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TwoFactorService } from '../../src/services/TwoFactorService.js';
+import { TelegramNotifier } from '../../src/services/notifications/TelegramNotifier.js';
 
 describe('TwoFactorService', () => {
-  let mockNotifier: any;
+  let mockNotifier: Pick<TelegramNotifier, 'waitForReply' | 'sendMessage' | 'sendSummary' | 'sendError'>;
   let service: TwoFactorService;
 
   beforeEach(() => {
@@ -12,7 +13,7 @@ describe('TwoFactorService', () => {
       sendSummary: vi.fn(),
       sendError: vi.fn()
     };
-    service = new TwoFactorService(mockNotifier, 60);
+    service = new TwoFactorService(mockNotifier as TelegramNotifier, 60);
   });
 
   describe('createOtpRetriever', () => {
@@ -28,7 +29,7 @@ describe('TwoFactorService', () => {
         60000
       );
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('oneZero')
+        expect.stringContaining('authenticating')
       );
     });
 
@@ -40,7 +41,7 @@ describe('TwoFactorService', () => {
 
       expect(code).toBe('789012');
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('oneZero')
+        expect.stringContaining('authenticating')
       );
     });
 
@@ -52,7 +53,7 @@ describe('TwoFactorService', () => {
 
       expect(code).toBe('123456');
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('oneZero')
+        expect.stringContaining('authenticating')
       );
     });
 
@@ -62,6 +63,7 @@ describe('TwoFactorService', () => {
       const retriever = service.createOtpRetriever('oneZero');
 
       await expect(retriever()).rejects.toThrow('Invalid OTP code');
+      expect(mockNotifier.sendMessage).not.toHaveBeenCalled();
     });
 
     it('throws on too long code', async () => {
@@ -70,6 +72,7 @@ describe('TwoFactorService', () => {
       const retriever = service.createOtpRetriever('oneZero');
 
       await expect(retriever()).rejects.toThrow('Invalid OTP code');
+      expect(mockNotifier.sendMessage).not.toHaveBeenCalled();
     });
 
     it('throws on no digits', async () => {
@@ -78,6 +81,7 @@ describe('TwoFactorService', () => {
       const retriever = service.createOtpRetriever('oneZero');
 
       await expect(retriever()).rejects.toThrow('Invalid OTP code');
+      expect(mockNotifier.sendMessage).not.toHaveBeenCalled();
     });
 
     it('propagates timeout error from notifier', async () => {
@@ -103,7 +107,7 @@ describe('TwoFactorService', () => {
         120000
       );
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('oneZero')
+        expect.stringContaining('authenticating')
       );
     });
 
@@ -119,7 +123,7 @@ describe('TwoFactorService', () => {
         300000
       );
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('oneZero')
+        expect.stringContaining('authenticating')
       );
     });
   });

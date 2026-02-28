@@ -121,4 +121,112 @@ describe('TelegramPoller', () => {
     );
     expect(registerCall).toBeUndefined();
   });
+
+  it('logs error and retries when poll throws', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+      fetchMock.mockImplementation(async () => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) throw new Error('Network failure');
+        poller.stop();
+        return emptyResponse();
+      });
+      const startPromise = poller.start();
+      await vi.advanceTimersByTimeAsync(5001);
+      await startPromise;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Network failure'));
+  });
+
+  it('skips update when poll response.ok is false', async () => {
+    const onMessage = vi.fn();
+    const poller = new TelegramPoller('123:ABC', '999', onMessage);
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      if (callCount === 2) return Promise.resolve({ ok: false });
+      poller.stop();
+      return emptyResponse();
+    });
+    await poller.start();
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  it('handles clearOldMessages fetch exception gracefully', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.reject(new Error('DNS fail'));
+      poller.stop();
+      return emptyResponse();
+    });
+    await poller.start();
+  });
+
+  it('handles clearOldMessages non-ok response gracefully', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return Promise.resolve({ ok: false });
+      poller.stop();
+      return emptyResponse();
+    });
+    await poller.start();
+    const secondCallUrl = fetchMock.mock.calls[1]?.[0] ?? '';
+    expect(secondCallUrl).toContain('offset=0');
+  });
+
+  it('ignores message with undefined text field', async () => {
+    const onMessage = vi.fn();
+    const poller = new TelegramPoller('123:ABC', '999', onMessage);
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      if (callCount === 2) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{ update_id: 1, message: { chat: { id: 999 }, date: Math.floor(Date.now() / 1000) } }]
+          })
+        });
+      }
+      poller.stop();
+      return emptyResponse();
+    });
+    await poller.start();
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  it('ignores message with date before poller started', async () => {
+    const onMessage = vi.fn();
+    const poller = new TelegramPoller('123:ABC', '999', onMessage);
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      if (callCount === 2) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{ update_id: 1, message: { chat: { id: 999 }, text: '/scan', date: 0 } }]
+          })
+        });
+      }
+      poller.stop();
+      return emptyResponse();
+    });
+    await poller.start();
+    expect(onMessage).not.toHaveBeenCalled();
+  });
 });

@@ -139,6 +139,32 @@ describe('TransactionService', () => {
       expect(transaction.cleared).toBe(true);
     });
 
+    it('uses 0 amount when both chargedAmount and originalAmount are undefined', async () => {
+      const txns = [{ date: '2026-02-14', description: 'Cash', identifier: '1' }];
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
+      const txn = mockApi.importTransactions.mock.calls[0][1][0];
+      expect(txn.amount).toBe(0);
+    });
+
+    it('handles non-Error thrown during import and logs it', async () => {
+      mockApi.importTransactions.mockRejectedValue('network failure');
+      const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: '1' }];
+      const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
+      expect(result.imported).toBe(0);
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('network failure')
+      );
+    });
+
+    it('routes to existingTransactions when importedId already present in Actual', async () => {
+      mockApi.runQuery.mockResolvedValue({ data: [{ imported_id: 'discount-123456-preexist' }] });
+      mockApi.importTransactions.mockResolvedValue(undefined);
+      const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Update', identifier: 'preexist' }];
+      const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
+      expect(result.imported).toBe(0);
+      expect(result.skipped).toBe(1);
+    });
+
     it('handles empty transactions array', async () => {
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: [] });
 
