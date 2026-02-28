@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.23.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.23.1...v1.23.2) (2026-02-28)
+
+
+### Fixed
+
+* add gitignore exception for release-please config file ([#137](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/137)) ([d707947](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d707947cb54b9efba929d1742431b612e192a4dc))
+
+
+### Refactored
+
+* consolidate config files into config/ directory ([#136](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/136)) ([d1846ea](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d1846eafadf6b036d789b423e52b050befa86681))
+
 ## [1.23.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.23.0...v1.23.1) (2026-02-28)
 
 
