@@ -17,6 +17,7 @@ if (existsSync('.env.e2e')) {
 
 export default defineConfig({
   test: {
+    root: process.cwd(),
     globals: true,
     environment: 'node',
     include: ['tests/e2e/**/*.e2e.test.ts'],

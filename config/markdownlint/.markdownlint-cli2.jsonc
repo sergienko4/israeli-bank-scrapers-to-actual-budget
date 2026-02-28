@@ -1,0 +1,6 @@
+{
+  // Point to the markdownlint rules file (relative to this file)
+  "config": "config/markdownlint/.markdownlint.jsonc",
+  // Ignore local task files (gitignored) and dependencies
+  "ignores": ["tasks/**/*.md", "node_modules/**/*.md"]
+}
