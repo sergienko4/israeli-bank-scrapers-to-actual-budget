@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { TimeoutWrapper } from '../../src/resilience/TimeoutWrapper.js';
-import { TimeoutError } from '../../src/errors/ErrorTypes.js';
+import { TimeoutWrapper } from '../../src/Resilience/TimeoutWrapper.js';
+import { TimeoutError } from '../../src/Errors/ErrorTypes.js';
 
 describe('TimeoutWrapper', () => {
   const wrapper = new TimeoutWrapper();

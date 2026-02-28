@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ReconciliationService } from '../../src/services/ReconciliationService.js';
+import { ReconciliationService } from '../../src/Services/ReconciliationService.js';
 
 describe('ReconciliationService', () => {
   let service: ReconciliationService;

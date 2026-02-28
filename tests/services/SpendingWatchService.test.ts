@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import type api from '@actual-app/api';
-import { SpendingWatchService } from '../../src/services/SpendingWatchService.js';
-import { SpendingWatchRule } from '../../src/types/index.js';
-import { formatDate } from '../../src/utils/date.js';
+import { SpendingWatchService } from '../../src/Services/SpendingWatchService.js';
+import { SpendingWatchRule } from '../../src/Types/index.js';
+import { formatDate } from '../../src/Utils/date.js';
 
 function createMockApi(transactions: Array<{ date: string; imported_payee: string; amount: number }> = []) {
   return {

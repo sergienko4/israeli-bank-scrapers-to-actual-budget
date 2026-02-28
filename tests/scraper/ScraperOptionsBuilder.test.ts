@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { buildChromeArgs, getChromeDataDir } from '../../src/scraper/ScraperOptionsBuilder.js';
+import { buildChromeArgs, getChromeDataDir } from '../../src/Scraper/ScraperOptionsBuilder.js';
 
 describe('buildChromeArgs', () => {
   it('includes base args without proxy', () => {

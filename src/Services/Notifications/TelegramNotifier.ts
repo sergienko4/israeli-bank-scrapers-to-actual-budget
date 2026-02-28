@@ -12,7 +12,7 @@
 
 import {
   TelegramConfig, MessageFormat, ShowTransactions, TelegramApiResponse
-} from '../../types/index.js';
+} from '../../Types/index.js';
 import {
   ImportSummary, BankMetrics, AccountMetrics, TransactionRecord
 } from '../MetricsService.js';

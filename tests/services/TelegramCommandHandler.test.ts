@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TelegramCommandHandler } from '../../src/services/TelegramCommandHandler.js';
-import { createLogger, getLogBuffer } from '../../src/logger/index.js';
+import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
+import { createLogger, getLogBuffer } from '../../src/Logger/index.js';
 
 describe('TelegramCommandHandler', () => {
   let handler: TelegramCommandHandler;

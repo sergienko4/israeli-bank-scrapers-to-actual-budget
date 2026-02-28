@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { join } from 'path';
-import { encryptConfig } from '../../src/config/ConfigEncryption.js';
+import { encryptConfig } from '../../src/Config/ConfigEncryption.js';
 import { runImporterDocker, getFixturesDir, findBudgetId, createTempFileTracker, hasDockerImage } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
 import { writeFileSync } from 'fs';

@@ -9,7 +9,7 @@ import { ConsoleLogger } from './ConsoleLogger.js';
 import { JsonLogger } from './JsonLogger.js';
 import { TableLogger } from './TableLogger.js';
 import { PhoneLogger } from './PhoneLogger.js';
-import { LogConfig, LogFormat } from '../types/index.js';
+import { LogConfig, LogFormat } from '../Types/index.js';
 
 const loggerFactories: Record<LogFormat, (buf: LogBuffer) => ILogger> = {
   words: (buf) => new ConsoleLogger(buf),

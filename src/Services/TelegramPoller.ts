@@ -3,9 +3,9 @@
  * Filters by chatId for security, dispatches commands to handler
  */
 
-import { TelegramApiResponse } from '../types/index.js';
-import { errorMessage } from '../utils/index.js';
-import { getLogger } from '../logger/index.js';
+import { TelegramApiResponse } from '../Types/index.js';
+import { errorMessage } from '../Utils/index.js';
+import { getLogger } from '../Logger/index.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const POLL_TIMEOUT = 30;

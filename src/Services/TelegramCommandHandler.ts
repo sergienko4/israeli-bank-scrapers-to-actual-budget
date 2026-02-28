@@ -3,10 +3,10 @@
  * Commands: /scan, /import, /status, /watch, /logs, /help
  */
 
-import { INotifier } from './notifications/INotifier.js';
+import { INotifier } from './Notifications/INotifier.js';
 import { IAuditLog, AuditEntry } from './AuditLogService.js';
-import { errorMessage } from '../utils/index.js';
-import { getLogger, getLogBuffer } from '../logger/index.js';
+import { errorMessage } from '../Utils/index.js';
+import { getLogger, getLogBuffer } from '../Logger/index.js';
 
 const MAX_TELEGRAM_LENGTH = 4096;
 const DEFAULT_LOG_COUNT = 50;

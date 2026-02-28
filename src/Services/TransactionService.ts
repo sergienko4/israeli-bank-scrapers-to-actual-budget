@@ -4,9 +4,9 @@
  */
 
 import type api from '@actual-app/api';
-import { BankTransaction, TransactionRecord, ActualAccount } from '../types/index.js';
-import { formatDate, toCents, extractQueryData } from '../utils/index.js';
-import { getLogger } from '../logger/index.js';
+import { BankTransaction, TransactionRecord, ActualAccount } from '../Types/index.js';
+import { formatDate, toCents, extractQueryData } from '../Utils/index.js';
+import { getLogger } from '../Logger/index.js';
 import { ICategoryResolver } from './ICategoryResolver.js';
 
 export interface ImportResult {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { AuditLogService } from '../../src/services/AuditLogService.js';
-import { ImportSummary } from '../../src/services/MetricsService.js';
+import { AuditLogService } from '../../src/Services/AuditLogService.js';
+import { ImportSummary } from '../../src/Services/MetricsService.js';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 
 const TEST_FILE = '/tmp/test-audit-log.json';

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { WebhookNotifier } from '../../src/services/notifications/WebhookNotifier.js';
+import { WebhookNotifier } from '../../src/Services/Notifications/WebhookNotifier.js';
 import { createTestSummary } from './helpers/testData.js';
 import { createWebhookCapture, WebhookCapture } from './helpers/webhookCapture.js';
 

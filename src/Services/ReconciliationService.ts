@@ -6,7 +6,7 @@
  */
 
 import type api from '@actual-app/api';
-import { formatDate, toCents, extractQueryData } from '../utils/index.js';
+import { formatDate, toCents, extractQueryData } from '../Utils/index.js';
 
 export interface ReconciliationResult {
   status: 'created' | 'skipped' | 'already-reconciled';

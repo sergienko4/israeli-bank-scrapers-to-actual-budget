@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { TelegramNotifier } from '../../src/services/notifications/TelegramNotifier.js';
-import { TelegramCommandHandler } from '../../src/services/TelegramCommandHandler.js';
-import { AuditLogService } from '../../src/services/AuditLogService.js';
-import { createLogger } from '../../src/logger/index.js';
+import { TelegramNotifier } from '../../src/Services/Notifications/TelegramNotifier.js';
+import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
+import { AuditLogService } from '../../src/Services/AuditLogService.js';
+import { createLogger } from '../../src/Logger/index.js';
 import { createTestSummary } from './helpers/testData.js';
 import {
   HAS_TELEGRAM, getTelegramConfig,

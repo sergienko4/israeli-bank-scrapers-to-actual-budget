@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { ExponentialBackoffRetry } from '../../src/resilience/RetryStrategy.js';
-import { ShutdownError } from '../../src/errors/ErrorTypes.js';
+import { ExponentialBackoffRetry } from '../../src/Resilience/RetryStrategy.js';
+import { ShutdownError } from '../../src/Errors/ErrorTypes.js';
 
 describe('ExponentialBackoffRetry', () => {
   afterEach(() => {

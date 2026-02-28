@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TelegramNotifier } from '../../../src/services/notifications/TelegramNotifier.js';
-import { ImportSummary } from '../../../src/services/MetricsService.js';
+import { TelegramNotifier } from '../../../src/Services/Notifications/TelegramNotifier.js';
+import { ImportSummary } from '../../../src/Services/MetricsService.js';
 
 const summaryWithTxns: ImportSummary = {
   totalBanks: 1,

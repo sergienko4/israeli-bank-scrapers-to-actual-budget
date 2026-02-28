@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createLogger, getLogger, getLogBuffer } from '../../src/logger/index.js';
-import { ConsoleLogger } from '../../src/logger/ConsoleLogger.js';
-import { JsonLogger } from '../../src/logger/JsonLogger.js';
-import { TableLogger } from '../../src/logger/TableLogger.js';
-import { PhoneLogger } from '../../src/logger/PhoneLogger.js';
+import { createLogger, getLogger, getLogBuffer } from '../../src/Logger/index.js';
+import { ConsoleLogger } from '../../src/Logger/ConsoleLogger.js';
+import { JsonLogger } from '../../src/Logger/JsonLogger.js';
+import { TableLogger } from '../../src/Logger/TableLogger.js';
+import { PhoneLogger } from '../../src/Logger/PhoneLogger.js';
 
 describe('logger factory', () => {
   beforeEach(() => {

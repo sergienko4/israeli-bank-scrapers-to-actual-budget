@@ -13,31 +13,31 @@ import {
   ScraperCredentials, ScraperScrapingResult
 } from '@sergienko4/israeli-bank-scrapers';
 import { readFileSync, existsSync, rmSync } from 'fs';
-import { ConfigLoader } from './config/ConfigLoader.js';
-import { ErrorFormatter } from './errors/ErrorFormatter.js';
-import { ExponentialBackoffRetry } from './resilience/RetryStrategy.js';
-import { TimeoutWrapper } from './resilience/TimeoutWrapper.js';
-import { GracefulShutdownHandler } from './resilience/GracefulShutdown.js';
-import { MetricsService } from './services/MetricsService.js';
+import { ConfigLoader } from './Config/ConfigLoader.js';
+import { ErrorFormatter } from './Errors/ErrorFormatter.js';
+import { ExponentialBackoffRetry } from './Resilience/RetryStrategy.js';
+import { TimeoutWrapper } from './Resilience/TimeoutWrapper.js';
+import { GracefulShutdownHandler } from './Resilience/GracefulShutdown.js';
+import { MetricsService } from './Services/MetricsService.js';
 import {
   TransactionService, ImportResult, ImportTransactionsOpts
-} from './services/TransactionService.js';
-import { ReconciliationService } from './services/ReconciliationService.js';
-import { NotificationService } from './services/NotificationService.js';
-import { AuditLogService } from './services/AuditLogService.js';
-import { TwoFactorService } from './services/TwoFactorService.js';
-import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
+} from './Services/TransactionService.js';
+import { ReconciliationService } from './Services/ReconciliationService.js';
+import { NotificationService } from './Services/NotificationService.js';
+import { AuditLogService } from './Services/AuditLogService.js';
+import { TwoFactorService } from './Services/TwoFactorService.js';
+import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
 import {
   ImporterConfig, BankConfig, BankTarget,
   BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode
-} from './types/index.js';
-import { buildChromeArgs, getChromeDataDir } from './scraper/ScraperOptionsBuilder.js';
-import { errorMessage } from './utils/index.js';
-import { createLogger, getLogger } from './logger/index.js';
-import { ICategoryResolver } from './services/ICategoryResolver.js';
-import { HistoryCategoryResolver } from './services/HistoryCategoryResolver.js';
-import { TranslateCategoryResolver } from './services/TranslateCategoryResolver.js';
-import { SpendingWatchService } from './services/SpendingWatchService.js';
+} from './Types/index.js';
+import { buildChromeArgs, getChromeDataDir } from './Scraper/ScraperOptionsBuilder.js';
+import { errorMessage } from './Utils/index.js';
+import { createLogger, getLogger } from './Logger/index.js';
+import { ICategoryResolver } from './Services/ICategoryResolver.js';
+import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
+import { TranslateCategoryResolver } from './Services/TranslateCategoryResolver.js';
+import { SpendingWatchService } from './Services/SpendingWatchService.js';
 
 // Load configuration and initialize logger
 const configLoader = new ConfigLoader();

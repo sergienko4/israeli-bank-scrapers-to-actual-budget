@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { PhoneLogger } from '../../src/logger/PhoneLogger.js';
-import { LogBuffer } from '../../src/logger/LogBuffer.js';
+import { PhoneLogger } from '../../src/Logger/PhoneLogger.js';
+import { LogBuffer } from '../../src/Logger/LogBuffer.js';
 
 describe('PhoneLogger', () => {
   let logger: PhoneLogger;

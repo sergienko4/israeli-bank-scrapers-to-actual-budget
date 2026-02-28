@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ErrorFormatter } from '../../src/errors/ErrorFormatter.js';
+import { ErrorFormatter } from '../../src/Errors/ErrorFormatter.js';
 import {
   TimeoutError,
   AuthenticationError,
@@ -8,7 +8,7 @@ import {
   ShutdownError,
   BankScrapingError,
   ConfigurationError
-} from '../../src/errors/ErrorTypes.js';
+} from '../../src/Errors/ErrorTypes.js';
 
 describe('ErrorFormatter', () => {
   const formatter = new ErrorFormatter();

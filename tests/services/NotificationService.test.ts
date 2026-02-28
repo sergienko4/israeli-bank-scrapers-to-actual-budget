@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NotificationService } from '../../src/services/NotificationService.js';
-import { ImportSummary } from '../../src/services/MetricsService.js';
+import { NotificationService } from '../../src/Services/NotificationService.js';
+import { ImportSummary } from '../../src/Services/MetricsService.js';
 
 const mockSendSummary = vi.fn().mockResolvedValue(undefined);
 const mockSendError = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('../../src/services/notifications/TelegramNotifier.js', () => ({
+vi.mock('../../src/Services/Notifications/TelegramNotifier.js', () => ({
   TelegramNotifier: vi.fn().mockImplementation(function (this: any) {
     this.sendSummary = mockSendSummary;
     this.sendError = mockSendError;

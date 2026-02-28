@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toCents, fromCents } from '../../src/utils/currency.js';
+import { toCents, fromCents } from '../../src/Utils/currency.js';
 
 describe('currency utils', () => {
   describe('toCents', () => {
