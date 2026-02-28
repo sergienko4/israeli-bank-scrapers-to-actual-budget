@@ -21,8 +21,12 @@ export interface EncryptedConfig {
   ciphertext: string;
 }
 
+interface EncryptedBuffers { salt: Buffer; iv: Buffer; tag: Buffer; ciphertext: Buffer }
+
 export function isEncryptedConfig(data: unknown): data is EncryptedConfig {
-  return typeof data === 'object' && data !== null && (data as Record<string, unknown>).encrypted === true;
+  return typeof data === 'object'
+    && data !== null
+    && (data as Record<string, unknown>).encrypted === true;
 }
 
 export function getEncryptionPassword(): string | undefined {
@@ -38,16 +42,19 @@ export function encryptConfig(plainJson: string, password: string): string {
   const salt = randomBytes(SALT_LENGTH);
   const iv = randomBytes(IV_LENGTH);
   const { ciphertext, tag } = encryptBuffer(plainJson, deriveKey(password, salt), iv);
-  return JSON.stringify(buildEncryptedPayload(salt, iv, tag, ciphertext), null, 2);
+  return JSON.stringify(buildEncryptedPayload({ salt, iv, tag, ciphertext }), null, 2);
 }
 
-function encryptBuffer(plaintext: string, key: Buffer, iv: Buffer): { ciphertext: Buffer; tag: Buffer } {
+function encryptBuffer(
+  plaintext: string, key: Buffer, iv: Buffer
+): { ciphertext: Buffer; tag: Buffer } {
   const cipher = createCipheriv(ALGORITHM, key, iv);
   const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   return { ciphertext, tag: cipher.getAuthTag() };
 }
 
-function buildEncryptedPayload(salt: Buffer, iv: Buffer, tag: Buffer, ciphertext: Buffer): EncryptedConfig {
+function buildEncryptedPayload(buffers: EncryptedBuffers): EncryptedConfig {
+  const { salt, iv, tag, ciphertext } = buffers;
   return {
     encrypted: true, version: 1,
     salt: salt.toString('base64'), iv: iv.toString('base64'),
@@ -66,7 +73,10 @@ function decryptBuffer(data: EncryptedConfig, key: Buffer): string {
   const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(data.iv, 'base64'));
   decipher.setAuthTag(Buffer.from(data.tag, 'base64'));
   try {
-    return Buffer.concat([decipher.update(Buffer.from(data.ciphertext, 'base64')), decipher.final()]).toString('utf8');
+    return Buffer.concat([
+      decipher.update(Buffer.from(data.ciphertext, 'base64')),
+      decipher.final()
+    ]).toString('utf8');
   } catch {
     throw new Error('Decryption failed: invalid password or corrupted data');
   }

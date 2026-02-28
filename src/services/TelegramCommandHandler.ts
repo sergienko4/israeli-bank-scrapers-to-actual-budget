@@ -11,17 +11,28 @@ import { getLogger, getLogBuffer } from '../logger/index.js';
 const MAX_TELEGRAM_LENGTH = 4096;
 const DEFAULT_LOG_COUNT = 50;
 
+export interface CommandHandlerOptions {
+  runImport: () => Promise<number>;
+  notifier: INotifier;
+  auditLog?: IAuditLog;
+  runWatch?: () => Promise<string | null>;
+}
+
 export class TelegramCommandHandler {
+  private runImport: () => Promise<number>;
+  private notifier: INotifier;
+  private auditLog?: IAuditLog;
+  private runWatch?: () => Promise<string | null>;
   private importPromise: Promise<void> | null = null;
   private lastRunTime: Date | null = null;
   private lastRunResult: string | null = null;
 
-  constructor(
-    private runImport: () => Promise<number>,
-    private notifier: INotifier,
-    private auditLog?: IAuditLog,
-    private runWatch?: () => Promise<string | null>
-  ) {}
+  constructor(opts: CommandHandlerOptions) {
+    this.runImport = opts.runImport;
+    this.notifier = opts.notifier;
+    this.auditLog = opts.auditLog;
+    this.runWatch = opts.runWatch;
+  }
 
   async handle(text: string): Promise<void> {
     const parts = text.trim().toLowerCase().split(' ');
@@ -53,7 +64,9 @@ export class TelegramCommandHandler {
       const dur = ((Date.now() - start) / 1000).toFixed(0);
       this.lastRunTime = new Date();
       this.lastRunResult = exitCode === 0 ? 'success' : 'failed';
-      if (exitCode !== 0) await this.reply(`❌ Import finished with errors (${dur}s). Check logs for details.`);
+      if (exitCode !== 0) {
+        await this.reply(`❌ Import finished with errors (${dur}s). Check logs for details.`);
+      }
     } finally {
       this.importPromise = null;
     }
@@ -82,12 +95,18 @@ export class TelegramCommandHandler {
     const time = entry.timestamp.split('T')[1]?.slice(0, 5) || '';
     const dur = `${(entry.totalDuration / 1000).toFixed(0)}s`;
     const icon = entry.failedBanks === 0 ? '✅' : '⚠️';
-    return `${icon} ${date} ${time} — ${entry.totalTransactions} txns, ${entry.successfulBanks}/${entry.totalBanks} banks, ${dur}`;
+    return (
+      `${icon} ${date} ${time} — ` +
+      `${entry.totalTransactions} txns, ${entry.successfulBanks}/${entry.totalBanks} banks, ${dur}`
+    );
   }
 
   private async handleLogs(countArg?: string): Promise<void> {
     const buffer = getLogBuffer();
-    if (!buffer.isEnabled()) { await this.reply('📋 Log buffer disabled. Set logConfig.maxBufferSize > 0 in config.json'); return; }
+    if (!buffer.isEnabled()) {
+      await this.reply('📋 Log buffer disabled. Set logConfig.maxBufferSize > 0 in config.json');
+      return;
+    }
     const entries = buffer.getRecent(this.parseLogCount(countArg));
     if (entries.length === 0) { await this.reply('📋 No log entries yet.'); return; }
     const header = `📋 <b>Recent Logs</b> (${entries.length} entries)\n\n<pre>`;
@@ -114,7 +133,11 @@ export class TelegramCommandHandler {
 
   private async handleWatch(): Promise<void> {
     if (!this.runWatch) {
-      await this.reply('🔔 Spending watch runs automatically after each import.\nOn-demand /watch is coming soon.\n\nUse /scan to trigger an import with spending watch.');
+      await this.reply(
+        '🔔 Spending watch runs automatically after each import.\n' +
+        'On-demand /watch is coming soon.\n\n' +
+        'Use /scan to trigger an import with spending watch.'
+      );
       return;
     }
     await this.reply('🔍 Checking spending rules...');
@@ -141,7 +164,9 @@ export class TelegramCommandHandler {
 
   private async reply(text: string): Promise<void> {
     try { await this.notifier.sendMessage(text); }
-    catch (error: unknown) { getLogger().debug(`Failed to send reply: ${errorMessage(error)}`); }
+    catch (error: unknown) {
+      getLogger().debug(`Failed to send reply: ${errorMessage(error)}`);
+    }
   }
 
   private timeSince(date: Date): string {

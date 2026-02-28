@@ -32,7 +32,7 @@ describe('TransactionService', () => {
         { date: '2026-02-15', chargedAmount: -50.00, description: 'Store B', identifier: '1002' }
       ];
 
-      const result = await service.importTransactions('discount', '123456', 'acc-id', txns);
+      const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       expect(result.imported).toBe(2);
       expect(result.skipped).toBe(0);
@@ -43,7 +43,7 @@ describe('TransactionService', () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: '9999' }];
-      await service.importTransactions('discount', '123456', 'acc-id', txns);
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const callArgs = mockApi.importTransactions.mock.calls[0];
       const transaction = callArgs[1][0];
@@ -54,7 +54,7 @@ describe('TransactionService', () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
       const txns = [{ date: '2026-02-14', chargedAmount: -100.50, description: 'Test' }];
-      await service.importTransactions('discount', '123456', 'acc-id', txns);
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.imported_id).toBe('discount-123456-2026-02-14--100.5');
@@ -64,7 +64,7 @@ describe('TransactionService', () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
       const txns = [{ date: '2026-02-14', chargedAmount: -100, originalAmount: -200, description: 'Test', identifier: '1' }];
-      await service.importTransactions('discount', '123456', 'acc-id', txns);
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.amount).toBe(-10000);
@@ -74,7 +74,7 @@ describe('TransactionService', () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
       const txns = [{ date: '2026-02-14', originalAmount: -75.50, description: 'Test', identifier: '1' }];
-      await service.importTransactions('discount', '123456', 'acc-id', txns);
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.amount).toBe(-7550);
@@ -90,7 +90,7 @@ describe('TransactionService', () => {
         { date: '2026-02-14', chargedAmount: -200, description: 'Dup', identifier: '2' }
       ];
 
-      const result = await service.importTransactions('discount', '123456', 'acc-id', txns);
+      const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       expect(result.imported).toBe(1);
       expect(result.skipped).toBe(1);
@@ -100,7 +100,7 @@ describe('TransactionService', () => {
       mockApi.importTransactions.mockRejectedValue(new Error('Database error'));
 
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: '1' }];
-      const result = await service.importTransactions('discount', '123456', 'acc-id', txns);
+      const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       expect(result.imported).toBe(0);
       expect(result.skipped).toBe(0);
@@ -113,7 +113,7 @@ describe('TransactionService', () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
       const txns = [{ date: '2026-02-14', chargedAmount: -100, identifier: '1' }];
-      await service.importTransactions('discount', '123456', 'acc-id', txns);
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.payee_name).toBe('Unknown');
@@ -123,7 +123,7 @@ describe('TransactionService', () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Store', memo: 'Reference: 123', identifier: '1' }];
-      await service.importTransactions('discount', '123456', 'acc-id', txns);
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.notes).toBe('Reference: 123');
@@ -133,14 +133,14 @@ describe('TransactionService', () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: '1' }];
-      await service.importTransactions('discount', '123456', 'acc-id', txns);
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.cleared).toBe(true);
     });
 
     it('handles empty transactions array', async () => {
-      const result = await service.importTransactions('discount', '123456', 'acc-id', []);
+      const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: [] });
 
       expect(result.imported).toBe(0);
       expect(result.skipped).toBe(0);
@@ -204,7 +204,7 @@ describe('TransactionService', () => {
       (mockResolver.resolve as any).mockReturnValue({ categoryId: 'cat-groceries' });
       const svc = new TransactionService(mockApi, mockResolver);
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Shufersal', identifier: '1' }];
-      await svc.importTransactions('discount', '123456', 'acc-id', txns);
+      await svc.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const txn = mockApi.importTransactions.mock.calls[0][1][0];
       expect(txn.category).toBe('cat-groceries');
@@ -215,7 +215,7 @@ describe('TransactionService', () => {
       (mockResolver.resolve as any).mockReturnValue({ payeeName: 'Supermarket', importedPayee: 'סופר כל הטעמים' });
       const svc = new TransactionService(mockApi, mockResolver);
       const txns = [{ date: '2026-02-14', chargedAmount: -50, description: 'סופר כל הטעמים', identifier: '1' }];
-      await svc.importTransactions('discount', '123456', 'acc-id', txns);
+      await svc.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const txn = mockApi.importTransactions.mock.calls[0][1][0];
       expect(txn.payee_name).toBe('Supermarket');
@@ -226,7 +226,7 @@ describe('TransactionService', () => {
       (mockResolver.resolve as any).mockReturnValue(undefined);
       const svc = new TransactionService(mockApi, mockResolver);
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Unknown Store', identifier: '1' }];
-      await svc.importTransactions('discount', '123456', 'acc-id', txns);
+      await svc.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const txn = mockApi.importTransactions.mock.calls[0][1][0];
       expect(txn.payee_name).toBe('Unknown Store');
@@ -237,7 +237,7 @@ describe('TransactionService', () => {
     it('works without resolver (undefined)', async () => {
       const svc = new TransactionService(mockApi);
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Store', identifier: '1' }];
-      await svc.importTransactions('discount', '123456', 'acc-id', txns);
+      await svc.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const txn = mockApi.importTransactions.mock.calls[0][1][0];
       expect(txn.payee_name).toBe('Store');

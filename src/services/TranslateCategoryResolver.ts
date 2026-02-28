@@ -20,8 +20,9 @@ export class TranslateCategoryResolver implements ICategoryResolver {
     this.rules = this.compileRules(translations);
   }
 
-  async initialize(): Promise<void> {
+  initialize(): Promise<void> {
     getLogger().info(`  📂 Payee translations loaded: ${this.rules.length} rules`);
+    return Promise.resolve();
   }
 
   resolve(description: string): ResolvedCategory | undefined {

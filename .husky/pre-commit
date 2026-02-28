@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+
+echo "🛑 MANDATORY QUALITY GATE INITIATED 🛑"
+echo "---------------------------------------"
+
+echo "🔍 [1/5] Checking Types & 'any' usage..."
+npm run type-check || exit 1
+
+echo "🧪 [2/5] Running Unit Tests & Coverage..."
+npm run test:unit || exit 1
+
+echo "🌐 [3/5] Running Real E2E Tests..."
+npm run test:e2e || exit 1
+
+echo "🎭 [4/5] Running Mocked E2E Tests..."
+npm run test:e2e:mock || exit 1
+
+echo "🧹 [5/5] Checking Code Length & Complexity..."
+npx lint-staged
+
+echo "✅ ALL GATES PASSED. COMMITTING..."

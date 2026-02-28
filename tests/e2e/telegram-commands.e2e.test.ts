@@ -25,10 +25,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
   it('delivers /help response to real Telegram', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    handler = new TelegramCommandHandler(
-      async () => 0,
-      notifier,
-    );
+    handler = new TelegramCommandHandler({ runImport: async () => 0, notifier });
 
     await handler.handle('/help');
     expect(collector.messageIds.length).toBeGreaterThan(0);
@@ -40,11 +37,9 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
     auditLog = new AuditLogService(auditFile, 10);
     auditLog.record(createTestSummary());
 
-    handler = new TelegramCommandHandler(
-      async () => 0,
-      notifier,
-      auditLog,
-    );
+    handler = new TelegramCommandHandler({
+      runImport: async () => 0, notifier, auditLog,
+    });
 
     await handler.handle('/status');
     expect(collector.messageIds.length).toBeGreaterThan(0);
@@ -57,10 +52,9 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
     const notifier = new TelegramNotifier(config);
     let importCalled = false;
 
-    handler = new TelegramCommandHandler(
-      async () => { importCalled = true; return 0; },
-      notifier,
-    );
+    handler = new TelegramCommandHandler({
+      runImport: async () => { importCalled = true; return 0; }, notifier,
+    });
 
     await handler.handle('/scan');
     expect(importCalled).toBe(true);
@@ -71,7 +65,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
     createLogger({ format: 'words', maxBufferSize: 50 });
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    handler = new TelegramCommandHandler(async () => 0, notifier);
+    handler = new TelegramCommandHandler({ runImport: async () => 0, notifier });
 
     await handler.handle('/logs');
     expect(collector.messageIds.length).toBeGreaterThan(0);
@@ -80,10 +74,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
   it('delivers /watch response to real Telegram', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    handler = new TelegramCommandHandler(
-      async () => 0,
-      notifier,
-    );
+    handler = new TelegramCommandHandler({ runImport: async () => 0, notifier });
 
     await handler.handle('/watch');
     expect(collector.messageIds.length).toBeGreaterThan(0);

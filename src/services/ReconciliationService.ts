@@ -13,6 +13,13 @@ export interface ReconciliationResult {
   diff: number;  // Amount in cents
 }
 
+interface ReconciliationTxn {
+  accountId: string;
+  diff: number;
+  expectedBalance: number;
+  currency: string;
+}
+
 export class ReconciliationService {
   private api: typeof api;
 
@@ -20,12 +27,14 @@ export class ReconciliationService {
     this.api = actualApi;
   }
 
-  async reconcile(accountId: string, expectedBalance: number, currency: string = 'ILS'): Promise<ReconciliationResult> {
+  async reconcile(
+    accountId: string, expectedBalance: number, currency: string = 'ILS'
+  ): Promise<ReconciliationResult> {
     try {
       const actualBalance = await this.getCurrentBalance(accountId);
       const diff = toCents(expectedBalance) - actualBalance;
       if (diff === 0) return { status: 'skipped', diff: 0 };
-      await this.createReconciliationTransaction(accountId, diff, expectedBalance, currency);
+      await this.createReconciliationTransaction({ accountId, diff, expectedBalance, currency });
       return { status: 'created', diff };
     } catch (error: unknown) {
       if (error instanceof Error && error.message.includes('already exists')) {
@@ -38,21 +47,21 @@ export class ReconciliationService {
   private async getCurrentBalance(accountId: string): Promise<number> {
     return extractQueryData<number>(
       await this.api.runQuery(
-        this.api.q('transactions').filter({ account: accountId }).calculate({ $sum: '$amount' })
+        this.api.q('transactions')
+          .filter({ account: accountId })
+          .calculate({ $sum: '$amount' })
       ),
       0
     );
   }
 
-  private async createReconciliationTransaction(
-    accountId: string, diff: number, expectedBalance: number, currency: string
-  ): Promise<void> {
+  private async createReconciliationTransaction(txn: ReconciliationTxn): Promise<void> {
     const today = formatDate(new Date());
-    await this.api.importTransactions(accountId, [{
-      account: accountId, date: today, amount: diff,
+    await this.api.importTransactions(txn.accountId, [{
+      account: txn.accountId, date: today, amount: txn.diff,
       payee_name: 'Reconciliation',
-      imported_id: `reconciliation-${accountId}-${today}`,
-      notes: `Balance adjustment: Expected ${expectedBalance} ${currency}`,
+      imported_id: `reconciliation-${txn.accountId}-${today}`,
+      notes: `Balance adjustment: Expected ${txn.expectedBalance} ${txn.currency}`,
       cleared: true
     }]);
   }
