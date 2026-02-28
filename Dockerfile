@@ -19,6 +19,9 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     fonts-liberation \
     ca-certificates \
     curl \
+    python3 \
+    make \
+    g++ \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
