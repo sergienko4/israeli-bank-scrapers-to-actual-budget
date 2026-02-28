@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.24.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.23.2...v1.24.0) (2026-02-28)
+
+
+### Added
+
+* add --validate CLI flag and /check_config bot command ([#140](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/140)) ([5324da9](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5324da96248f0d11b08ebaaaaf79cb9c9194a52d))
+
 ## [1.23.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.23.1...v1.23.2) (2026-02-28)
 
 
