@@ -96,6 +96,16 @@ describe('ConfigValidator', () => {
       const results = validator.validateOffline(cfg);
       expect(fail(results).some(r => r.check === 'actual.serverURL')).toBe(true);
     });
+
+    it('fails and does not crash when serverURL is undefined (shallow-merge bug regression)', () => {
+      // Simulates loadFullConfig() shallow spread stripping actual.init.serverURL
+      // when credentials.json has an 'actual' section
+      const cfg = makeConfig();
+      (cfg.actual.init as Record<string, unknown>).serverURL = undefined;
+      expect(() => validator.validateOffline(cfg)).not.toThrow();
+      const results = validator.validateOffline(cfg);
+      expect(fail(results).some(r => r.check === 'actual.serverURL')).toBe(true);
+    });
   });
 
   // ─── Bank names ───
@@ -289,6 +299,18 @@ describe('ConfigValidator', () => {
           webhook: { url: 'ftp://bad.com' },
         },
       });
+      const results = validator.validateOffline(cfg);
+      expect(fail(results).some(r => r.check === 'webhook.url')).toBe(true);
+    });
+
+    it('fails and does not crash when webhook url is undefined (missing field regression)', () => {
+      const cfg = makeConfig({
+        notifications: {
+          enabled: true,
+          webhook: { url: undefined as unknown as string },
+        },
+      });
+      expect(() => validator.validateOffline(cfg)).not.toThrow();
       const results = validator.validateOffline(cfg);
       expect(fail(results).some(r => r.check === 'webhook.url')).toBe(true);
     });

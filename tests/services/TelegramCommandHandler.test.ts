@@ -222,7 +222,7 @@ describe('TelegramCommandHandler', () => {
     mockRunImport.mockResolvedValueOnce(1);
     await handler.handle('/scan');
     const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
-    const errorMsg = calls.find((m: string) => m.includes('Import finished with errors'));
+    const errorMsg = calls.find((m: string) => m.includes('Import failed'));
     expect(errorMsg).toBeDefined();
   });
 
@@ -230,7 +230,7 @@ describe('TelegramCommandHandler', () => {
     mockRunImport.mockResolvedValueOnce(0);
     await handler.handle('/scan');
     const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
-    const errorMsg = calls.find((m: string) => m.includes('Import finished with errors'));
+    const errorMsg = calls.find((m: string) => m.includes('Import failed'));
     expect(errorMsg).toBeUndefined();
   });
 
