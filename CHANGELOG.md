@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.23.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.22.0...v1.23.0) (2026-02-28)
+
+
+### Added
+
+* add optional accountName label to targets ([#131](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/131)) ([bb9abe2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/bb9abe2da832407dfd1b0782eb00d19ab24627f8))
+
+
+### Fixed
+
+* OTP acknowledgment UX + enforce 90% branch coverage ([#133](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/133)) ([30160f6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/30160f6e63a0cbf01274220f8a59a923d23ace9a))
+
 ## [1.22.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.21.2...v1.22.0) (2026-02-28)
 
 
