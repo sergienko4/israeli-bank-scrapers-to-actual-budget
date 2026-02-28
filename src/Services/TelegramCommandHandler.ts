@@ -86,7 +86,9 @@ export class TelegramCommandHandler {
       return `❌ Import failed (${dur}s). Use /logs for details.`;
     }
     const failed = entry.banks.filter(b => b.status === 'failed');
-    const lines = [`❌ Import failed (${dur}s) — ${entry.failedBanks}/${entry.totalBanks} banks had errors:`];
+    const header = `❌ Import failed (${dur}s) — ` +
+      `${entry.failedBanks}/${entry.totalBanks} banks had errors:`;
+    const lines = [header];
     for (const b of failed) {
       lines.push(`• ${b.name}${b.error ? `: ${b.error.slice(0, 80)}` : ''}`);
     }

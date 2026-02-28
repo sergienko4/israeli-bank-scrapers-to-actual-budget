@@ -149,7 +149,7 @@ function logScrapeFailure(bankName: string, result: ScraperScrapingResult): void
 function computeStartDate(bankConfig: BankConfig): Date {
   if (bankConfig.daysBack) {
     const date = new Date();
-    date.setDate(date.getDate() - bankConfig.daysBack);
+    date.setDate(date.getDate() - (bankConfig.daysBack - 1));
     return date;
   }
   return bankConfig.startDate ? new Date(bankConfig.startDate) : new Date();
