@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { encryptConfig, decryptConfig, isEncryptedConfig, getEncryptionPassword } from '../../src/config/ConfigEncryption.js';
+import { encryptConfig, decryptConfig, isEncryptedConfig, getEncryptionPassword } from '../../src/Config/ConfigEncryption.js';
 
 const SAMPLE_CONFIG = JSON.stringify({
   actual: { init: { serverURL: 'http://localhost:5006', password: 'secret', dataDir: './data' }, budget: { syncId: 'uuid', password: null } },

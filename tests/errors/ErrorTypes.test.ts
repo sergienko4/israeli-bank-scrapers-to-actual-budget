@@ -7,7 +7,7 @@ import {
   ShutdownError,
   BankScrapingError,
   ConfigurationError
-} from '../../src/errors/ErrorTypes.js';
+} from '../../src/Errors/ErrorTypes.js';
 
 describe('ErrorTypes', () => {
   describe('TimeoutError', () => {

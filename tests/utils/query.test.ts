@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractQueryData, errorMessage } from '../../src/utils/index.js';
+import { extractQueryData, errorMessage } from '../../src/Utils/index.js';
 
 describe('extractQueryData', () => {
   it('extracts numeric data from valid result', () => {

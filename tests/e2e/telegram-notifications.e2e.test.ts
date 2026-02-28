@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { TelegramNotifier } from '../../src/services/notifications/TelegramNotifier.js';
+import { TelegramNotifier } from '../../src/Services/Notifications/TelegramNotifier.js';
 import { createTestSummary } from './helpers/testData.js';
 import {
   HAS_TELEGRAM, getTelegramConfig,

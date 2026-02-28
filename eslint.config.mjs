@@ -2,6 +2,8 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import unusedImports from 'eslint-plugin-unused-imports';
+import checkFile from 'eslint-plugin-check-file';
+
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -12,10 +14,22 @@ export default tseslint.config(
         tsconfigRootDir: import.meta.dirname,
       },
     },
-    plugins: { 'unused-imports': unusedImports },
+    plugins: {
+      'unused-imports': unusedImports,
+      'check-file': checkFile,
+    },
     rules: {
-      // === THE "ONE PER FILE" RULE ===
+      // === THE "ONE PER FILE" & PASCAL_CASE NAMING ===
       "max-classes-per-file": ["error", 1],
+      'check-file/filename-naming-convention': [
+        'error',
+        { 'src/**/*.{ts,tsx}': 'PASCAL_CASE' },
+        { ignoreMiddleExtensions: true },
+      ],
+      'check-file/folder-naming-convention': [
+        'error',
+        { 'src/**/': 'PASCAL_CASE' },
+      ],
 
       // === CLEAN CODE LIMITS ===
       'max-lines-per-function': ['error', { max: 20, skipBlankLines: true, skipComments: true }],
@@ -54,7 +68,8 @@ export default tseslint.config(
       'max-lines': 'off',
       'max-lines-per-function': 'off',
       'max-len': 'off',
-
+      'check-file/filename-naming-convention': 'off',
+      'check-file/folder-naming-convention': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
@@ -63,5 +78,16 @@ export default tseslint.config(
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
     },
-  }
+  },
+  // === EXEMPTIONS: lowercase entry-point & utility filenames ===
+  {
+    files: [
+      'src/index.ts',
+      'src/scheduler.ts',
+      'src/**/index.ts',
+      'src/Utils/currency.ts',
+      'src/Utils/date.ts',
+    ],
+    rules: { 'check-file/filename-naming-convention': 'off' },
+  },
 );

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { TranslateCategoryResolver } from '../../src/services/TranslateCategoryResolver.js';
-import { TranslationRule } from '../../src/types/index.js';
+import { TranslateCategoryResolver } from '../../src/Services/TranslateCategoryResolver.js';
+import { TranslationRule } from '../../src/Types/index.js';
 
 describe('TranslateCategoryResolver', () => {
   let resolver: TranslateCategoryResolver;

@@ -4,7 +4,7 @@
  * OCP: add new formats by adding entries to the formatters map
  */
 
-import { WebhookConfig, WebhookFormat } from '../../types/index.js';
+import { WebhookConfig, WebhookFormat } from '../../Types/index.js';
 import { ImportSummary, BankMetrics } from '../MetricsService.js';
 import { INotifier } from './INotifier.js';
 

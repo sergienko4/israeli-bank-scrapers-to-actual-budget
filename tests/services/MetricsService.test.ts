@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { MetricsService } from '../../src/services/MetricsService.js';
+import { MetricsService } from '../../src/Services/MetricsService.js';
 
 describe('MetricsService', () => {
   let metrics: MetricsService;

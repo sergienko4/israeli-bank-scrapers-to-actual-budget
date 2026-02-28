@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TelegramPoller } from '../../src/services/TelegramPoller.js';
+import { TelegramPoller } from '../../src/Services/TelegramPoller.js';
 
 const emptyResponse = () => Promise.resolve({
   ok: true,

@@ -9,9 +9,9 @@ import { dirname, join } from 'path';
 import {
   ImporterConfig, BankConfig, BankTarget,
   NotificationConfig, SpendingWatchRule, ProxyConfig
-} from '../types/index.js';
-import { ConfigurationError } from '../errors/ErrorTypes.js';
-import { getLogger } from '../logger/index.js';
+} from '../Types/index.js';
+import { ConfigurationError } from '../Errors/ErrorTypes.js';
+import { getLogger } from '../Logger/index.js';
 import {
   isEncryptedConfig, decryptConfig, getEncryptionPassword
 } from './ConfigEncryption.js';

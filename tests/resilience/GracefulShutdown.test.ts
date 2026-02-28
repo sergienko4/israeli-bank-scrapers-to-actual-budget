@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GracefulShutdownHandler } from '../../src/resilience/GracefulShutdown.js';
+import { GracefulShutdownHandler } from '../../src/Resilience/GracefulShutdown.js';
 
 describe('GracefulShutdownHandler', () => {
   let exitSpy: any;

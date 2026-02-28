@@ -3,7 +3,7 @@
  * All values are deterministic for predictable assertions.
  */
 
-import { ImportSummary, BankMetrics, AccountMetrics } from '../../../src/services/MetricsService.js';
+import { ImportSummary, BankMetrics, AccountMetrics } from '../../../src/Services/MetricsService.js';
 
 const TEST_BANK_NAME = 'e2eTestBank';
 const TEST_ACCOUNT_NUMBER = 'E2E-001';

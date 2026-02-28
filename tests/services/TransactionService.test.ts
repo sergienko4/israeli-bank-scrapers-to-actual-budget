@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { TransactionService } from '../../src/services/TransactionService.js';
-import { ICategoryResolver } from '../../src/services/ICategoryResolver.js';
+import { TransactionService } from '../../src/Services/TransactionService.js';
+import { ICategoryResolver } from '../../src/Services/ICategoryResolver.js';
 
 describe('TransactionService', () => {
   let service: TransactionService;

@@ -6,16 +6,16 @@
 import { spawn, ChildProcess } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { CronExpressionParser } from 'cron-parser';
-import { TelegramPoller } from './services/TelegramPoller.js';
-import { TelegramCommandHandler } from './services/TelegramCommandHandler.js';
-import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
-import { ImporterConfig, LogConfig, TelegramConfig } from './types/index.js';
-import { AuditLogService } from './services/AuditLogService.js';
-import { errorMessage } from './utils/index.js';
-import { createLogger, getLogger } from './logger/index.js';
+import { TelegramPoller } from './Services/TelegramPoller.js';
+import { TelegramCommandHandler } from './Services/TelegramCommandHandler.js';
+import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
+import { ImporterConfig, LogConfig, TelegramConfig } from './Types/index.js';
+import { AuditLogService } from './Services/AuditLogService.js';
+import { errorMessage } from './Utils/index.js';
+import { createLogger, getLogger } from './Logger/index.js';
 import {
   isEncryptedConfig, decryptConfig, getEncryptionPassword
-} from './config/ConfigEncryption.js';
+} from './Config/ConfigEncryption.js';
 
 // Load log config early so all messages use the configured format
 const logConfig = loadLogConfig();

@@ -3,8 +3,8 @@
  * Follows Single Responsibility Principle: Only handles retry logic
  */
 
-import { ShutdownError } from '../errors/ErrorTypes.js';
-import { getLogger } from '../logger/index.js';
+import { ShutdownError } from '../Errors/ErrorTypes.js';
+import { getLogger } from '../Logger/index.js';
 
 export interface IRetryStrategy {
   execute<T>(fn: () => Promise<T>, operationName: string): Promise<T>;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ConfigLoader } from '../../src/config/ConfigLoader.js';
-import { ConfigurationError } from '../../src/errors/ErrorTypes.js';
+import { ConfigLoader } from '../../src/Config/ConfigLoader.js';
+import { ConfigurationError } from '../../src/Errors/ErrorTypes.js';
 import * as fs from 'fs';
 
 vi.mock('fs');

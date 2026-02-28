@@ -2,8 +2,8 @@
  * Metrics collection service for tracking import performance and success rates
  */
 
-import { TransactionRecord } from '../types/index.js';
-import { getLogger } from '../logger/index.js';
+import { TransactionRecord } from '../Types/index.js';
+import { getLogger } from '../Logger/index.js';
 
 export { TransactionRecord };
 

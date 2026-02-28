@@ -3,7 +3,7 @@
  * or translated payee. Implementations: HistoryCategoryResolver, TranslateCategoryResolver
  */
 
-import { ResolvedCategory } from '../types/index.js';
+import { ResolvedCategory } from '../Types/index.js';
 
 export interface ICategoryResolver {
   initialize(): Promise<void>;

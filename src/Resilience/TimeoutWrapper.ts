@@ -3,7 +3,7 @@
  * Follows Single Responsibility Principle: Only handles timeout logic
  */
 
-import { TimeoutError } from '../errors/ErrorTypes.js';
+import { TimeoutError } from '../Errors/ErrorTypes.js';
 
 export interface ITimeoutWrapper {
   wrap<T>(promise: Promise<T>, timeoutMs: number, operationName: string): Promise<T>;

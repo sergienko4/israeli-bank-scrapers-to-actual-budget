@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { HistoryCategoryResolver } from '../../src/services/HistoryCategoryResolver.js';
+import { HistoryCategoryResolver } from '../../src/Services/HistoryCategoryResolver.js';
 
 describe('HistoryCategoryResolver', () => {
   let resolver: HistoryCategoryResolver;
