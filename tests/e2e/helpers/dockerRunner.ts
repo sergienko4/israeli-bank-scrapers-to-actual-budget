@@ -23,10 +23,13 @@ export interface DockerRunOptions {
   env?: Record<string, string>;
   volumes?: string[];
   networkHost?: boolean;
+  /** Extra args appended after dist/index.js (e.g. ['--validate']) */
+  nodeArgs?: string[];
 }
 
 export function runImporterDocker(options: DockerRunOptions): DockerRunResult {
-  const args = ['run', '--rm', ...buildArgs(options), DOCKER_IMAGE, 'node', 'dist/index.js'];
+  const nodeArgs = options.nodeArgs ?? [];
+  const args = ['run', '--rm', ...buildArgs(options), DOCKER_IMAGE, 'node', 'dist/index.js', ...nodeArgs];
 
   try {
     const output = execFileSync('docker', args, { encoding: 'utf8', timeout: 60_000, stdio: 'pipe' });

@@ -51,6 +51,13 @@ export class ConfigLoader implements IConfigLoader {
     return config;
   }
 
+  /** Load and merge config without running validation — used by --validate mode */
+  loadRaw(): ImporterConfig {
+    const config = this.loadFromFile() ?? this.loadFromEnvironment();
+    this.applyEnvOverrides(config);
+    return config;
+  }
+
   private applyEnvOverrides(config: ImporterConfig): void {
     if (process.env.PROXY_SERVER) config.proxy = { server: process.env.PROXY_SERVER };
   }

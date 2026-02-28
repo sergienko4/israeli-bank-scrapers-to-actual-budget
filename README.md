@@ -616,6 +616,7 @@ When `listenForCommands` is `true`, control the importer from Telegram:
 |---------|--------|
 | `/scan` | Run bank import now |
 | `/status` | Show last 5 imports with transaction counts and duration |
+| `/check_config` | Check config (offline + online) — see [Config Validation](#config-validation) |
 | `/watch` | Check spending watch rules now |
 | `/logs` | Show recent log entries with timestamps (default: 50) |
 | `/logs N` | Show last N entries (max 150) |
@@ -705,6 +706,46 @@ After each import run, you'll see a comprehensive summary:
 ```
 
 Import history is persisted at `/app/data/audit-log.json` (last 90 entries, includes reconciliation data per bank). View with `/status` bot command — shows the 5 most recent runs with transaction counts, bank success rates, and import duration.
+
+---
+
+## Config Validation
+
+Run `--validate` to check your config before the first import — catches all issues at once
+instead of failing mid-run:
+
+```bash
+docker run --rm --cap-add SYS_ADMIN \
+  -v $(pwd)/config.json:/app/config.json:ro \
+  sergienko4/israeli-bank-importer node dist/index.js --validate
+```
+
+Sample output:
+
+```text
+Config Validation Report
+========================================
+[PASS] Actual password is set
+[PASS] syncId UUID format valid
+[PASS] Server URL format valid: http://actual_server:5006
+[PASS] Bank "discount" — known institution
+[PASS] discount: date config valid
+[PASS] discount target[0]: valid
+[FAIL] Bank "disount" — unknown institution. Did you mean "discount"?
+[WARN] leumi: no daysBack/startDate set — will fetch ~1 year of history
+[PASS] Actual server reachable: http://actual_server:5006 (200)
+[PASS] Telegram bot valid (@MyImporterBot)
+========================================
+Result: 1 error, 1 warning
+```
+
+**Offline checks** (no network required): bank names with typo suggestions, UUID format,
+date config, Telegram token format.
+
+**Online checks** (skipped if offline fails): Actual server reachability, Telegram bot token,
+webhook URL.
+
+The `/check_config` Telegram bot command runs the same checks on demand.
 
 ---
 

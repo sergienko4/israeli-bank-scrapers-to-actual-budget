@@ -16,6 +16,7 @@ export interface CommandHandlerOptions {
   notifier: INotifier;
   auditLog?: IAuditLog;
   runWatch?: () => Promise<string | null>;
+  runValidate?: () => Promise<string>;
 }
 
 export class TelegramCommandHandler {
@@ -23,6 +24,7 @@ export class TelegramCommandHandler {
   private notifier: INotifier;
   private auditLog?: IAuditLog;
   private runWatch?: () => Promise<string | null>;
+  private runValidate?: () => Promise<string>;
   private importPromise: Promise<void> | null = null;
   private lastRunTime: Date | null = null;
   private lastRunResult: string | null = null;
@@ -32,6 +34,7 @@ export class TelegramCommandHandler {
     this.notifier = opts.notifier;
     this.auditLog = opts.auditLog;
     this.runWatch = opts.runWatch;
+    this.runValidate = opts.runValidate;
   }
 
   async handle(text: string): Promise<void> {
@@ -43,6 +46,7 @@ export class TelegramCommandHandler {
       '/status': () => this.handleStatus(),
       '/logs': () => this.handleLogs(parts[1]),
       '/watch': () => this.handleWatch(),
+      '/check_config': () => this.handleCheckConfig(),
       '/help': () => this.handleHelp(),
       '/start': () => this.handleHelp(),
     };
@@ -149,11 +153,26 @@ export class TelegramCommandHandler {
     }
   }
 
+  private async handleCheckConfig(): Promise<void> {
+    if (!this.runValidate) {
+      await this.reply('⚙️ Config validation unavailable.');
+      return;
+    }
+    await this.reply('🔍 Validating configuration...');
+    try {
+      const report = await this.runValidate();
+      await this.reply(`<pre>${report}</pre>`);
+    } catch (error: unknown) {
+      await this.reply(`❌ Validation error: ${errorMessage(error)}`);
+    }
+  }
+
   private async handleHelp(): Promise<void> {
     const lines = [
       '🤖 <b>Available Commands</b>', '',
       '/scan - Run bank import now',
       '/status - Show last run info + history',
+      '/check_config - Check configuration (offline + online)',
       '/watch - Spending watch info (runs after each import)',
       '/logs - Show recent log entries',
       '/logs 100 - Show last 100 entries (max 150)',
