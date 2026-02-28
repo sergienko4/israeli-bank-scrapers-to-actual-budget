@@ -47,10 +47,13 @@ export class TelegramCommandHandler {
 
   private async executeImport(): Promise<void> {
     await this.reply('⏳ Starting import...');
+    const start = Date.now();
     try {
       const exitCode = await this.runImport();
+      const dur = ((Date.now() - start) / 1000).toFixed(0);
       this.lastRunTime = new Date();
       this.lastRunResult = exitCode === 0 ? 'success' : 'failed';
+      if (exitCode !== 0) await this.reply(`❌ Import finished with errors (${dur}s). Check logs for details.`);
     } finally {
       this.importPromise = null;
     }
@@ -68,7 +71,7 @@ export class TelegramCommandHandler {
 
   private appendRecentHistory(lines: string[]): void {
     if (!this.auditLog) return;
-    const recent = this.auditLog.getRecent(3);
+    const recent = this.auditLog.getRecent(5);
     if (recent.length === 0) return;
     lines.push('', '<b>Recent imports:</b>');
     recent.reverse().forEach(e => lines.push(this.formatAuditEntry(e)));
@@ -77,8 +80,9 @@ export class TelegramCommandHandler {
   private formatAuditEntry(entry: AuditEntry): string {
     const date = entry.timestamp.split('T')[0];
     const time = entry.timestamp.split('T')[1]?.slice(0, 5) || '';
+    const dur = `${(entry.totalDuration / 1000).toFixed(0)}s`;
     const icon = entry.failedBanks === 0 ? '✅' : '⚠️';
-    return `${icon} ${date} ${time} — ${entry.totalTransactions} txns, ${entry.successfulBanks}/${entry.totalBanks} banks`;
+    return `${icon} ${date} ${time} — ${entry.totalTransactions} txns, ${entry.successfulBanks}/${entry.totalBanks} banks, ${dur}`;
   }
 
   private async handleLogs(countArg?: string): Promise<void> {
@@ -102,7 +106,10 @@ export class TelegramCommandHandler {
     const maxLength = MAX_TELEGRAM_LENGTH - reservedLength - 20;
     const text = entries.join('\n');
     if (text.length <= maxLength) return text;
-    return text.slice(-maxLength) + '\n...(truncated)';
+    const trimmed = text.slice(-maxLength);
+    const firstNewline = trimmed.indexOf('\n');
+    const clean = firstNewline > 0 ? trimmed.slice(firstNewline + 1) : trimmed;
+    return '...(earlier entries omitted)\n' + clean;
   }
 
   private async handleWatch(): Promise<void> {

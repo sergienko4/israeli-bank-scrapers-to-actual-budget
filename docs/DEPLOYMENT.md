@@ -178,7 +178,7 @@ Optional split: `credentials.json` (secrets) + `config.json` (settings). See `cr
 | Option | Default | Description |
 |--------|---------|-------------|
 | `logConfig.format` | `words` | Log format: `words`, `json`, `table`, `phone` |
-| `logConfig.maxBufferSize` | `150` | Ring buffer size for `/logs` bot command (1-500) |
+| `logConfig.maxBufferSize` | `150` | Ring buffer size for `/logs` bot command (1-500). Entries include `[HH:MM:SS]` timestamps in `words` format. |
 
 ### Auto-Categorization
 
@@ -206,7 +206,7 @@ Optional split: `credentials.json` (secrets) + `config.json` (settings). See `cr
 | `notifications.telegram.chatId` | Chat ID for notifications |
 | `notifications.telegram.messageFormat` | `summary` (default), `compact`, `ledger`, `emoji` |
 | `notifications.telegram.showTransactions` | `new` (default), `all`, `none` |
-| `notifications.telegram.listenForCommands` | `true` to enable `/scan`, `/status`, `/watch`, `/logs`, `/help` |
+| `notifications.telegram.listenForCommands` | `true` to enable `/scan`, `/status` (last 5 runs with duration), `/watch`, `/logs` (timestamped), `/help` |
 | `notifications.webhook.url` | Webhook URL (Slack, Discord, or custom) |
 | `notifications.webhook.format` | `slack`, `discord`, `plain` (default) |
 

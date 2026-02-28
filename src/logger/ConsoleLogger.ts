@@ -34,6 +34,6 @@ export class ConsoleLogger implements ILogger {
 
   private write(level: LogLevel, message: string): void {
     console[writerKeys[level]](message);
-    this.buffer.add(message);
+    this.buffer.add(`[${new Date().toTimeString().slice(0, 8)}] ${message}`);
   }
 }

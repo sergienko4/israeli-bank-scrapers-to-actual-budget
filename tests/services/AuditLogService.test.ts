@@ -86,4 +86,31 @@ describe('AuditLogService', () => {
     const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries[0].banks[0]).toEqual({ name: 'discount', status: 'success', txns: 5 });
   });
+
+  it('includes reconciliation fields when present', () => {
+    const summary = makeSummary({
+      banks: [{
+        bankName: 'discount', startTime: 0, status: 'success',
+        transactionsImported: 3, transactionsSkipped: 0, accounts: [],
+        reconciliationStatus: 'created', reconciliationAmount: 1500,
+      }]
+    });
+    service.record(summary);
+    const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+    expect(entries[0].banks[0].reconciliationStatus).toBe('created');
+    expect(entries[0].banks[0].reconciliationAmount).toBe(1500);
+  });
+
+  it('omits reconciliation fields when not present', () => {
+    const summary = makeSummary({
+      banks: [{
+        bankName: 'leumi', startTime: 0, status: 'success',
+        transactionsImported: 2, transactionsSkipped: 0, accounts: [],
+      }]
+    });
+    service.record(summary);
+    const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+    expect(entries[0].banks[0]).not.toHaveProperty('reconciliationStatus');
+    expect(entries[0].banks[0]).not.toHaveProperty('reconciliationAmount');
+  });
 });
