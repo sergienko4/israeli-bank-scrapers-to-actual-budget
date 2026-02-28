@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.22.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.21.2...v1.22.0) (2026-02-28)
+
+
+### Added
+
+* enrich logs and Telegram notifications ([#128](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/128)) ([7ba550b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7ba550b771c463c637829f35473e476dc85a7a1f))
+
 ## [1.21.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.21.1...v1.21.2) (2026-02-27)
 
 
