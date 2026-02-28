@@ -29,6 +29,18 @@ npm install
 5. Test with real config (if applicable)
 6. Commit with conventional message
 
+### API Documentation
+
+Generate browseable HTML API docs locally with:
+
+```bash
+npm run docs
+# → docs/api/index.html
+```
+
+After each release, the docs are automatically published to GitHub Pages:
+[https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/)
+
 ---
 
 ## Development Rules
