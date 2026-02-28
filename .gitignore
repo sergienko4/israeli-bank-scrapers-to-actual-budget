@@ -1,10 +1,12 @@
 # Dependencies
 node_modules/
 
-# Sensitive configuration
+# Sensitive configuration (user config files with credentials)
 config.json
 config.*.json
 !config.json.example
+# Tool config files in config/ are not credentials — allow them
+!config/release-please/config.json
 credentials.json
 credentials.*.json
 !credentials.json.example
