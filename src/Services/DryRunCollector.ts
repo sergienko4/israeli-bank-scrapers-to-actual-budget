@@ -4,6 +4,7 @@
  */
 
 import { BankTransaction } from '../Types/index.js';
+import { formatDate } from '../Utils/index.js';
 
 /** Preview data for a single scraped account in dry-run mode. */
 export interface AccountPreview {
@@ -120,7 +121,7 @@ export class DryRunCollector {
   private static computeDateRange(txns: BankTransaction[]): { from: string; to: string } {
     const dates = txns.map(t => new Date(t.date).getTime()).filter(d => !isNaN(d));
     if (dates.length === 0) return { from: 'N/A', to: 'N/A' };
-    const toDate = (ts: number): string => new Date(ts).toISOString().split('T')[0];
+    const toDate = (ts: number): string => formatDate(new Date(ts));
     const [min, max] = dates.reduce(
       ([lo, hi], d) => [Math.min(lo, d), Math.max(hi, d)], [dates[0], dates[0]]
     );
@@ -130,7 +131,7 @@ export class DryRunCollector {
   private static parseSample(
     tx: BankTransaction
   ): { date: string; description: string; amount: number } {
-    const date = new Date(tx.date).toISOString().split('T')[0];
+    const date = formatDate(tx.date);
     return { date, description: tx.description ?? tx.memo ?? '', amount: tx.chargedAmount ?? 0 };
   }
 }

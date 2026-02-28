@@ -111,11 +111,19 @@ function logCommandCount(extras: Array<{ command: string; description: string }>
 }
 
 async function runConfigValidation(): Promise<string> {
-  const raw = loadFullConfig();
-  if (!raw) return '[FAIL] Cannot load config file';
+  // Use ConfigLoader.loadRaw() for correct deep-merge of config.json + credentials.json.
+  // loadFullConfig() uses a shallow spread which loses nested fields like actual.init.serverURL.
+  const { ConfigLoader } = await import('./Config/ConfigLoader.js');
   const { ConfigValidator } = await import('./Config/ConfigValidator.js');
+  const loader = new ConfigLoader();
+  let config;
+  try {
+    config = loader.loadRaw();
+  } catch (e) {
+    return `[FAIL] Cannot load config: ${errorMessage(e)}`;
+  }
   const validator = new ConfigValidator();
-  const results = await validator.validateAll(raw);
+  const results = await validator.validateAll(config);
   return validator.formatReport(results);
 }
 

@@ -105,6 +105,7 @@ export class ConfigValidator {
 
   private checkActualServerUrl(config: ImporterConfig): ValidationResult {
     const { serverURL } = config.actual.init;
+    if (!serverURL) return this.fail("actual.serverURL", "serverURL is missing");
     return serverURL.startsWith('http')
       ? this.pass('actual.serverURL', `Server URL format valid: ${serverURL}`)
       : this.fail('actual.serverURL',
@@ -195,6 +196,7 @@ export class ConfigValidator {
   private checkWebhookOffline(
     wh: NonNullable<NotificationConfig['webhook']>
   ): ValidationResult {
+    if (!wh.url) return this.fail("webhook.url", "Webhook URL is missing");
     return wh.url.startsWith('http')
       ? this.pass('webhook.url', `Webhook URL format valid: ${wh.url}`)
       : this.fail('webhook.url',

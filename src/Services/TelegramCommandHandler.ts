@@ -73,11 +73,27 @@ export class TelegramCommandHandler {
       this.lastRunTime = new Date();
       this.lastRunResult = exitCode === 0 ? 'success' : 'failed';
       if (exitCode !== 0) {
-        await this.reply(`❌ Import finished with errors (${dur}s). Check logs for details.`);
+        await this.reply(this.buildErrorReply(dur));
       }
     } finally {
       this.importPromise = null;
     }
+  }
+
+  private buildErrorReply(dur: string): string {
+    const entry = this.auditLog?.getRecent(1)[0];
+    if (!entry || entry.failedBanks === 0) {
+      return `❌ Import failed (${dur}s). Use /logs for details.`;
+    }
+    const failed = entry.banks.filter(b => b.status === 'failed');
+    const header = `❌ Import failed (${dur}s) — ` +
+      `${entry.failedBanks}/${entry.totalBanks} banks had errors:`;
+    const lines = [header];
+    for (const b of failed) {
+      lines.push(`• ${b.name}${b.error ? `: ${b.error.slice(0, 80)}` : ''}`);
+    }
+    lines.push('', 'Use /logs for details or /status for history.');
+    return lines.join('\n');
   }
 
   private async handleStatus(): Promise<void> {
