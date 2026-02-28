@@ -27,6 +27,9 @@ describe('TwoFactorService', () => {
         expect.stringContaining('oneZero'),
         60000
       );
+      expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+        expect.stringContaining('oneZero')
+      );
     });
 
     it('extracts digits from reply', async () => {
@@ -36,6 +39,9 @@ describe('TwoFactorService', () => {
       const code = await retriever();
 
       expect(code).toBe('789012');
+      expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+        expect.stringContaining('oneZero')
+      );
     });
 
     it('handles reply with spaces', async () => {
@@ -45,6 +51,9 @@ describe('TwoFactorService', () => {
       const code = await retriever();
 
       expect(code).toBe('123456');
+      expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+        expect.stringContaining('oneZero')
+      );
     });
 
     it('throws on too short code', async () => {
@@ -77,6 +86,7 @@ describe('TwoFactorService', () => {
       const retriever = service.createOtpRetriever('oneZero');
 
       await expect(retriever()).rejects.toThrow('2FA timeout');
+      expect(mockNotifier.sendMessage).not.toHaveBeenCalled();
     });
   });
 
@@ -92,6 +102,9 @@ describe('TwoFactorService', () => {
         expect.any(String),
         120000
       );
+      expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+        expect.stringContaining('oneZero')
+      );
     });
 
     it('defaults to 300 seconds when not specified', async () => {
@@ -104,6 +117,9 @@ describe('TwoFactorService', () => {
       expect(mockNotifier.waitForReply).toHaveBeenCalledWith(
         expect.any(String),
         300000
+      );
+      expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+        expect.stringContaining('oneZero')
       );
     });
   });

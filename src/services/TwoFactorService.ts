@@ -24,6 +24,9 @@ export class TwoFactorService {
         this.timeoutMs
       );
       getLogger().info(`  ✅ OTP received for ${bankName}`);
+      await this.notifier.sendMessage(
+        `✅ Code received — authenticating with <b>${bankName}</b>...`
+      );
       return this.extractCode(reply);
     };
   }
