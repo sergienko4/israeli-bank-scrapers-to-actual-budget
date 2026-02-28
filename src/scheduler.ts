@@ -61,23 +61,27 @@ function loadLogConfig(): LogConfig | undefined {
 
 // ─── Import execution ───
 
-function runImportLocked(): Promise<number> {
+function runLocked(importFn: () => Promise<number>): Promise<number> {
   if (activeImport) { logger.warn('⚠️  Import already running, skipping'); return activeImport; }
   activePoller?.stop();
-  activeImport = runImport().finally(() => {
+  activeImport = importFn().finally(() => {
     activeImport = null;
     activePoller?.start().catch(() => {});
   });
   return activeImport;
 }
 
-function runImport(): Promise<number> {
+function runImportLocked(): Promise<number> { return runLocked(runImport); }
+function runPreviewLocked(): Promise<number> {
+  return runLocked(() => runImport({ DRY_RUN: 'true' }));
+}
+
+function runImport(extraEnv: Record<string, string> = {}): Promise<number> {
   return new Promise((resolve) => {
     const startTime = new Date();
     logger.info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
-    const child: ChildProcess = spawn(
-      'node', ['/app/dist/index.js'], { stdio: 'inherit', env: process.env }
-    );
+    const env = Object.keys(extraEnv).length > 0 ? { ...process.env, ...extraEnv } : process.env;
+    const child: ChildProcess = spawn('node', ['/app/dist/index.js'], { stdio: 'inherit', env });
     child.on('exit', (code) => { logImportResult(code, startTime); resolve(code || 0); });
     child.on('error', (err) => {
       logger.error(`❌ Failed to start import: ${err.message}`);
@@ -125,6 +129,7 @@ async function createHandlerAndPoller(
   const handler = new TelegramCommandHandler({
     runImport: runImportLocked, notifier, auditLog: new AuditLogService(),
     runValidate: runConfigValidation,
+    runPreview: runPreviewLocked,
   });
   activePoller = new TelegramPoller(
     telegram.botToken, telegram.chatId, (text) => handler.handle(text)
@@ -150,6 +155,7 @@ function buildExtraCommands(
 ): Array<{ command: string; description: string }> {
   const extras: Array<{ command: string; description: string }> = [
     { command: 'check_config', description: 'Check configuration (offline + online)' },
+    { command: 'preview', description: 'Dry run: scrape banks without importing' },
   ];
   if ((config?.spendingWatch?.length ?? 0) > 0) {
     extras.push({ command: 'watch', description: 'Check spending watch rules' });

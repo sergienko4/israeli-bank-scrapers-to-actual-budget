@@ -359,16 +359,16 @@ describe('TelegramCommandHandler', () => {
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Timeout'));
   });
 
-  // ─── /validate ───
+  // ─── /check_config ───
 
-  it('/validate without runValidate shows unavailable message', async () => {
+  it('/check_config without runValidate shows unavailable message', async () => {
     await handler.handle('/check_config');
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
       expect.stringContaining('unavailable')
     );
   });
 
-  it('/validate with runValidate calls it and sends report in <pre> block', async () => {
+  it('/check_config with runValidate calls it and sends report in <pre> block', async () => {
     const mockRunValidate = vi.fn().mockResolvedValue('All checks passed ✓');
     const validateHandler = new TelegramCommandHandler({
       runImport: mockRunImport, notifier: mockNotifier, runValidate: mockRunValidate,
@@ -380,7 +380,7 @@ describe('TelegramCommandHandler', () => {
     );
   });
 
-  it('/validate with runValidate throwing shows error message', async () => {
+  it('/check_config with runValidate throwing shows error message', async () => {
     const mockRunValidate = vi.fn().mockRejectedValue(new Error('load failed'));
     const validateHandler = new TelegramCommandHandler({
       runImport: mockRunImport, notifier: mockNotifier, runValidate: mockRunValidate,
@@ -391,6 +391,52 @@ describe('TelegramCommandHandler', () => {
     );
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
       expect.stringContaining('load failed')
+    );
+  });
+
+  // ─── /preview ───
+
+  it('/preview without runPreview shows unavailable message', async () => {
+    await handler.handle('/preview');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('unavailable')
+    );
+  });
+
+  it('/preview starts dry run and sends completion', async () => {
+    const mockRunPreview = vi.fn().mockResolvedValue(0);
+    const previewHandler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, runPreview: mockRunPreview,
+    });
+    await previewHandler.handle('/preview');
+    expect(mockRunPreview).toHaveBeenCalled();
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('completed')
+    );
+  });
+
+  it('/preview blocks when import already running', async () => {
+    const mockRunPreview = vi.fn().mockResolvedValue(0);
+    const previewHandler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, runPreview: mockRunPreview,
+    });
+    (previewHandler as unknown as { importPromise: Promise<void> }).importPromise =
+      new Promise(() => {});
+    await previewHandler.handle('/preview');
+    expect(mockRunPreview).not.toHaveBeenCalled();
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('already running')
+    );
+  });
+
+  it('/preview sends error message when preview throws', async () => {
+    const mockRunPreview = vi.fn().mockRejectedValue(new Error('scrape failed'));
+    const previewHandler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, runPreview: mockRunPreview,
+    });
+    await previewHandler.handle('/preview');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Preview error')
     );
   });
 });

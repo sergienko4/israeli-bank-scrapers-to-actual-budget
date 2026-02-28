@@ -35,6 +35,8 @@ services:
       - SCHEDULE=0 */8 * * *
       # Uncomment to decrypt encrypted credentials (see README → Encrypted Config)
       # - CREDENTIALS_ENCRYPTION_PASSWORD=your_encryption_password
+      # Dry run: scrape banks and preview transactions without importing (see README → Config Validation)
+      # - DRY_RUN=true
     volumes:
       - ./config.json:/app/config.json:ro             # Settings (or all-in-one)
       # - ./credentials.json:/app/credentials.json:ro  # Secrets (optional, see README)

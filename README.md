@@ -615,6 +615,7 @@ When `listenForCommands` is `true`, control the importer from Telegram:
 | Command | Action |
 |---------|--------|
 | `/scan` | Run bank import now |
+| `/preview` | Dry run: scrape banks and show what would be imported — see [Dry Run / Preview Mode](#dry-run--preview-mode) |
 | `/status` | Show last 5 imports with transaction counts and duration |
 | `/check_config` | Check config (offline + online) — see [Config Validation](#config-validation) |
 | `/watch` | Check spending watch rules now |
@@ -746,6 +747,47 @@ date config, Telegram token format.
 webhook URL.
 
 The `/check_config` Telegram bot command runs the same checks on demand.
+
+---
+
+## Dry Run / Preview Mode
+
+Test your bank credentials and preview what would be imported **without writing anything** to
+Actual Budget.
+
+**Via CLI (`DRY_RUN=true`):**
+
+```bash
+docker run --rm --cap-add SYS_ADMIN \
+  -v $(pwd)/config.json:/app/config.json:ro \
+  -v $(pwd)/data:/app/data \
+  -e DRY_RUN=true \
+  sergienko4/israeli-bank-importer
+```
+
+**Via Telegram:** Send `/preview` to your bot.
+
+**Sample output:**
+
+```text
+🔍 DRY RUN — no changes made to Actual Budget
+══════════════════════════════════════════════════
+
+📊 discount  💳 123456789
+  Balance: 5000.00 ILS
+  Transactions: 12  (2026-02-01 → 2026-02-28)
+  Recent:
+    2026-02-28  Supersal                    -120.50 ILS
+    2026-02-27  Salary                      +15000.00 ILS
+    2026-02-26  Amazon                      -89.99 USD
+
+══════════════════════════════════════════════════
+Total: 1 account, 12 transactions (0 imported — dry run)
+
+✅ No changes made to Actual Budget (dry run)
+```
+
+No transactions are created, no accounts are modified, and the audit log is not updated.
 
 ---
 
