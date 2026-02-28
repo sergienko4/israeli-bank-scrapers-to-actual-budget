@@ -64,7 +64,9 @@ export class TelegramCommandHandler {
       const dur = ((Date.now() - start) / 1000).toFixed(0);
       this.lastRunTime = new Date();
       this.lastRunResult = exitCode === 0 ? 'success' : 'failed';
-      if (exitCode !== 0) await this.reply(`❌ Import finished with errors (${dur}s). Check logs for details.`);
+      if (exitCode !== 0) {
+        await this.reply(`❌ Import finished with errors (${dur}s). Check logs for details.`);
+      }
     } finally {
       this.importPromise = null;
     }

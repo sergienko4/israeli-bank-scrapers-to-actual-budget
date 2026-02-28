@@ -377,7 +377,8 @@ async function processAccount(
 
 function logAccountInfo(info: AccountInfo): void {
   logger.info(`\n  💳 Processing account: ${info.accountNumber}`);
-  logger.info(`     Balance: ${info.balance !== undefined ? `${info.balance} ${info.currency}` : 'N/A'}`);
+  const bal = info.balance !== undefined ? `${info.balance} ${info.currency}` : 'N/A';
+  logger.info(`     Balance: ${bal}`);
   logger.info(`     Transactions: ${info.txnCount}`);
 }
 

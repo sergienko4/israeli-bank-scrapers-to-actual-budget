@@ -232,7 +232,8 @@ export class TelegramNotifier implements INotifier {
 
   private appendDefaultBank(lines: string[], bank: BankMetrics): void {
     const d = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : '';
-    lines.push(`${this.bankIcon(bank)} ${this.escapeHtml(bank.bankName)}: ${bank.transactionsImported} txns ${d}`);
+    const name = this.escapeHtml(bank.bankName);
+    lines.push(`${this.bankIcon(bank)} ${name}: ${bank.transactionsImported} txns ${d}`);
     this.appendReconciliation(lines, bank);
     if (bank.error) lines.push(`   ❌ ${this.escapeHtml(bank.error)}`);
   }
@@ -257,7 +258,9 @@ export class TelegramNotifier implements INotifier {
     lines: string[], bank: BankMetrics, account: AccountMetrics
   ): void {
     lines.push('');
-    lines.push(`${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b> · ${account.accountNumber}`);
+    lines.push(
+      `${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b> · ${account.accountNumber}`
+    );
     for (const txn of this.getTransactions(account)) {
       lines.push(`${this.fmtDate(txn.date)}  ${this.escapeHtml(txn.description)}`);
       lines.push(`       <b>${this.fmtAmount(txn.amount)}</b>`);
@@ -284,7 +287,9 @@ export class TelegramNotifier implements INotifier {
     lines: string[], bank: BankMetrics, account: AccountMetrics
   ): void {
     lines.push('');
-    lines.push(`${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b> · ${account.accountNumber}`);
+    lines.push(
+      `${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b> · ${account.accountNumber}`
+    );
     const txns = this.getTransactions(account);
     if (txns.length > 0) this.appendLedgerTransactions(lines, txns);
     this.appendBalance(lines, account, bank);

@@ -239,7 +239,9 @@ describe('TelegramCommandHandler', () => {
         totalDuration: 45000, successRate: 100, banks: []
       }])
     };
-    const handlerWithAudit = new TelegramCommandHandler(mockRunImport, mockNotifier, mockAuditLog);
+    const handlerWithAudit = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, auditLog: mockAuditLog,
+    });
     await handlerWithAudit.handle('/status');
     const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
     expect(msg).toContain('45s');
@@ -250,7 +252,9 @@ describe('TelegramCommandHandler', () => {
       record: vi.fn(),
       getRecent: vi.fn().mockReturnValue([])
     };
-    const handlerWithAudit = new TelegramCommandHandler(mockRunImport, mockNotifier, mockAuditLog);
+    const handlerWithAudit = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, auditLog: mockAuditLog,
+    });
     await handlerWithAudit.handle('/status');
     expect(mockAuditLog.getRecent).toHaveBeenCalledWith(5);
   });
