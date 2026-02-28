@@ -78,7 +78,7 @@ export class DryRunCollector {
       `  Transactions: ${a.transactionCount}  (${a.dateRange.from} → ${a.dateRange.to})`,
     ];
     if (a.samples.length === 0) return header;
-    return [...header, '  Recent:', ...this.sampleTextLines(a.samples, a.currency)];
+    return [...header, '  Recent:', ...this.formatSampleLines(a.samples, a.currency)];
   }
 
   private accountTelegramLines(a: AccountPreview): string[] {
@@ -87,12 +87,12 @@ export class DryRunCollector {
     return [
       `💳 <b>${a.bankName}</b> · ${a.accountNumber}`,
       `Balance: ${bal} · ${a.transactionCount} txns (${range})`,
-      ...this.sampleTextLines(a.samples, a.currency),
+      ...this.formatSampleLines(a.samples, a.currency),
       '',
     ];
   }
 
-  private sampleTextLines(
+  private formatSampleLines(
     samples: AccountPreview['samples'], currency: string
   ): string[] {
     return samples.map(s => {
@@ -113,8 +113,10 @@ export class DryRunCollector {
     const dates = txns.map(t => new Date(t.date).getTime()).filter(d => !isNaN(d));
     if (dates.length === 0) return { from: 'N/A', to: 'N/A' };
     const toDate = (ts: number): string => new Date(ts).toISOString().split('T')[0];
-    return { from: toDate(dates.reduce((a, b) => Math.min(a, b))),
-      to: toDate(dates.reduce((a, b) => Math.max(a, b))) };
+    const [min, max] = dates.reduce(
+      ([lo, hi], d) => [Math.min(lo, d), Math.max(hi, d)], [dates[0], dates[0]]
+    );
+    return { from: toDate(min), to: toDate(max) };
   }
 
   private static parseSample(

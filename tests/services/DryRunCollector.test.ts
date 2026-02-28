@@ -184,34 +184,40 @@ describe('DryRunCollector', () => {
       expect(c.formatText()).toContain('+15000.00');
     });
   });
-});
 
-describe('formatText with no samples', () => {
-  it('omits Recent section when account has no samples', () => {
-    const c = new DryRunCollector();
-    c.recordAccount(makePreview({ samples: [] }));
-    const text = c.formatText();
-    expect(text).not.toContain('Recent:');
-    expect(text).toContain('discount');
-  });
-});
-
-describe('parseSample fallbacks', () => {
-  it('uses memo when description is missing', () => {
-    const txns: BankTransaction[] = [{ date: '2026-02-01', memo: 'Memo payee' }];
-    const preview = DryRunCollector.buildPreview({ bankName: 'leumi', accountNumber: '1', balance: 0, currency: 'ILS', txns: txns });
-    expect(preview.samples[0].description).toBe('Memo payee');
+  describe('formatText with no samples', () => {
+    it('omits Recent section when account has no samples', () => {
+      const c = new DryRunCollector();
+      c.recordAccount(makePreview({ samples: [] }));
+      const text = c.formatText();
+      expect(text).not.toContain('Recent:');
+      expect(text).toContain('discount');
+    });
   });
 
-  it('uses empty string when neither description nor memo', () => {
-    const txns: BankTransaction[] = [{ date: '2026-02-01' }];
-    const preview = DryRunCollector.buildPreview({ bankName: 'leumi', accountNumber: '1', balance: 0, currency: 'ILS', txns: txns });
-    expect(preview.samples[0].description).toBe('');
-  });
+  describe('parseSample fallbacks', () => {
+    it('uses memo when description is missing', () => {
+      const txns: BankTransaction[] = [{ date: '2026-02-01', memo: 'Memo payee' }];
+      const p = DryRunCollector.buildPreview(
+        { bankName: 'leumi', accountNumber: '1', balance: 0, currency: 'ILS', txns }
+      );
+      expect(p.samples[0].description).toBe('Memo payee');
+    });
 
-  it('uses 0 when chargedAmount is missing', () => {
-    const txns: BankTransaction[] = [{ date: '2026-02-01', description: 'Fee' }];
-    const preview = DryRunCollector.buildPreview({ bankName: 'leumi', accountNumber: '1', balance: 0, currency: 'ILS', txns: txns });
-    expect(preview.samples[0].amount).toBe(0);
+    it('uses empty string when neither description nor memo', () => {
+      const txns: BankTransaction[] = [{ date: '2026-02-01' }];
+      const p = DryRunCollector.buildPreview(
+        { bankName: 'leumi', accountNumber: '1', balance: 0, currency: 'ILS', txns }
+      );
+      expect(p.samples[0].description).toBe('');
+    });
+
+    it('uses 0 when chargedAmount is missing', () => {
+      const txns: BankTransaction[] = [{ date: '2026-02-01', description: 'Fee' }];
+      const p = DryRunCollector.buildPreview(
+        { bankName: 'leumi', accountNumber: '1', balance: 0, currency: 'ILS', txns }
+      );
+      expect(p.samples[0].amount).toBe(0);
+    });
   });
 });

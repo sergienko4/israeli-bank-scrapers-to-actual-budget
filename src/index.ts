@@ -380,7 +380,7 @@ async function processAccount(
     logger.warn(`     ⚠️  No target configured for this account, skipping`);
     return { imported: 0, skipped: 0 };
   }
-  if (isDryRun) return recordDryRunAccount(bankName, account, currency);
+  if (isDryRun) return collectDryRunAccount(bankName, account, currency);
   await transactionService.getOrCreateAccount(
     target.actualAccountId, bankName, account.accountNumber
   );
@@ -388,7 +388,7 @@ async function processAccount(
   return { imported: result?.imported ?? 0, skipped: result?.skipped ?? 0 };
 }
 
-function recordDryRunAccount(
+function collectDryRunAccount(
   bankName: string,
   account: { accountNumber: string; balance?: number; txns: BankTransaction[] },
   currency: string
