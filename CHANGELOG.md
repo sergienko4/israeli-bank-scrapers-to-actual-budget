@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.23.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.23.0...v1.23.1) (2026-02-28)
+
+
+### Refactored
+
+* rename src folders to PascalCase for check-file enforcement ([#134](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/134)) ([2280d3f](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/2280d3f5f0bba9b575a709db115f39883a49d5cd))
+
 ## [1.23.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.22.0...v1.23.0) (2026-02-28)
 
 
