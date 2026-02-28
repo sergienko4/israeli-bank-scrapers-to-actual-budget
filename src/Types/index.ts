@@ -2,18 +2,25 @@
  * Type definitions for the Israeli Bank Importer
  */
 
+/** Connection and budget settings for the Actual Budget server. */
 export interface ActualConfig {
   init: {
+    /** Local directory for cached budget data. */
     dataDir: string;
+    /** URL of the Actual Budget server (e.g. `http://actual_server:5006`). */
     serverURL: string;
+    /** Actual Budget server password. */
     password: string;
   };
   budget: {
+    /** UUID of the budget to sync (found in Actual Budget → Settings). */
     syncId: string;
+    /** Optional password for an encrypted budget. */
     password: string | null;
   };
 }
 
+/** Maps a scraped bank account to an Actual Budget account. */
 export interface BankTarget {
   actualAccountId: string;
   accountName?: string;      // optional friendly label shown in logs and notifications
@@ -124,16 +131,19 @@ export interface ResolvedCategory {
   importedPayee?: string;  // Original name (preserved for reference)
 }
 
+/** Rule that triggers a Telegram alert when spending exceeds a threshold. */
 export interface SpendingWatchRule {
   alertFromAmount: number;     // Trigger if total spending > this (currency units)
   numOfDayToCount: number;     // Time window in days (1 = today only)
   watchPayees?: string[];      // Filter payees (substring match). Missing = all payees
 }
 
+/** Optional SOCKS5/HTTP proxy for Chromium scraping (useful in restricted networks). */
 export interface ProxyConfig {
   server: string;  // socks5://host:port or http://host:port
 }
 
+/** Root configuration object — represents the full contents of `config.json`. */
 export interface ImporterConfig {
   actual: ActualConfig;
   banks: Record<string, BankConfig>;

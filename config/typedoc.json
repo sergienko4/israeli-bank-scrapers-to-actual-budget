@@ -1,0 +1,21 @@
+{
+  "entryPoints": ["../src"],
+  "entryPointStrategy": "expand",
+  "out": "../docs/api",
+  "tsconfig": "../tsconfig.json",
+  "name": "Israeli Bank Importer",
+  "includeVersion": true,
+  "excludePrivate": true,
+  "excludeExternals": true,
+  "exclude": [
+    "src/index.ts",
+    "src/scheduler.ts",
+    "**/*.test.ts"
+  ],
+  "readme": "none",
+  "sort": ["source-order"],
+  "groupOrder": ["Services", "Config", "Types", "Utils", "*"],
+  "navigationLinks": {
+    "GitHub": "https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget"
+  }
+}
