@@ -24,7 +24,7 @@ npm install
 
 1. Create a branch: `git checkout -b feat/your-feature`
 2. Make changes
-3. Validate: `npm run validate` (build + tests)
+3. Validate: `npm run validate:all` (6 gates: type-check + unit tests + E2E + lint + markdown + config-structure)
 4. Build Docker: `docker build -t israeli-bank-importer:test .`
 5. Test with real config (if applicable)
 6. Commit with conventional message
