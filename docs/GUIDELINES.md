@@ -43,9 +43,15 @@ Rules for contributing to this project. All contributors (including AI assistant
 19. **Build locally** - `npm run build` must pass with zero errors
 20. **Run lint** - `npm run lint` must pass with zero errors
 21. **Run tests** - `npm test` must pass all tests
-22. **Run validate** - `npm run validate` (build + tests combined)
+22. **Run validate:all** - `npm run validate:all` — 6 gates must all pass:
+    - type-check (TypeScript, zero errors)
+    - test:unit (459 tests, 90%+ branch coverage)
+    - E2E:mock (44 tests via mock scraper)
+    - lint (ESLint: PascalCase, no-any, line limits)
+    - lint:docs (markdownlint on README + GitHub templates)
+    - lint:config-structure (no stray config files at root)
 23. **Build Docker image** - `docker build -t israeli-bank-importer:test .`
-24. **Run E2E tests first** - `npm run test:e2e` with E2E config (mock data, no real bank credentials)
+24. **Run E2E tests first** - `npm run test:e2e` with mock scraper, preceded by Docker ×2 run to populate budget data
 25. **Then run with real config** - Docker run with `config.json` to verify with real bank data (optional, after E2E passes)
 
 ---
