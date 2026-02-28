@@ -227,6 +227,7 @@ Fixed date. Max: 1 year back. Cannot use both on the same bank.
 "targets": [
   {
     "actualAccountId": "uuid-from-actual",
+    "accountName": "Savings Account",
     "reconcile": true,
     "accounts": "all"
   }
@@ -234,6 +235,7 @@ Fixed date. Max: 1 year back. Cannot use both on the same bank.
 ```
 
 - `actualAccountId` — UUID from Actual Budget (click account → copy ID from URL)
+- `accountName` — optional friendly label shown in logs and Telegram instead of the bank account number (e.g. `"Savings"`, `"Business Card"`)
 - `reconcile` — `true` or `false` (default). Auto-adjust balance to match bank
 - `accounts` — `"all"` or array of specific account numbers: `["8538", "7697"]`
 

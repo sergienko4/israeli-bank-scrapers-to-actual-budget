@@ -330,6 +330,50 @@ describe('TelegramNotifier', () => {
     }
   });
 
+  describe('accountName display', () => {
+    const namedAccountSummary: ImportSummary = {
+      ...summaryWithTxns,
+      banks: [{
+        ...summaryWithTxns.banks[0],
+        accounts: [{ ...summaryWithTxns.banks[0].accounts[0], accountName: 'Savings Account' }]
+      }]
+    };
+
+    for (const fmt of ['compact', 'ledger', 'emoji'] as const) {
+      it(`${fmt}: shows accountName instead of accountNumber`, async () => {
+        const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: fmt });
+        await notifier.sendSummary(namedAccountSummary);
+        const text = getText(fetchMock);
+        expect(text).toContain('Savings Account');
+        expect(text).not.toContain('0152228812');
+      });
+
+      it(`${fmt}: falls back to accountNumber when accountName is absent`, async () => {
+        const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: fmt });
+        await notifier.sendSummary(summaryWithTxns);
+        expect(getText(fetchMock)).toContain('0152228812');
+      });
+    }
+
+    it('accountName is HTML-escaped', async () => {
+      const notifier = new TelegramNotifier({
+        botToken: '123:ABC', chatId: '-100', messageFormat: 'compact'
+      });
+      const specialSummary = {
+        ...summaryWithTxns,
+        banks: [{
+          ...summaryWithTxns.banks[0],
+          accounts: [{ ...summaryWithTxns.banks[0].accounts[0], accountName: 'Savings & <Main>' }]
+        }]
+      };
+      await notifier.sendSummary(specialSummary);
+      const text = getText(fetchMock);
+      expect(text).not.toContain('<Main>');
+      expect(text).toContain('&amp;');
+      expect(text).toContain('&lt;Main&gt;');
+    });
+  });
+
   describe('registerCommands', () => {
     it('registers base commands via setMyCommands API', async () => {
       const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });

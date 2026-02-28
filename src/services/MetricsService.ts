@@ -9,6 +9,7 @@ export { TransactionRecord };
 
 export interface AccountMetrics {
   accountNumber: string;
+  accountName?: string;
   balance?: number;
   currency?: string;
   newTransactions: TransactionRecord[];
@@ -17,6 +18,7 @@ export interface AccountMetrics {
 
 export interface AccountTransactionsRecord {
   accountNumber: string;
+  accountName?: string;
   balance: number | undefined;
   currency: string | undefined;
   newTransactions: TransactionRecord[];
