@@ -2,7 +2,6 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import unusedImports from 'eslint-plugin-unused-imports';
-
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -15,11 +14,13 @@ export default tseslint.config(
     },
     plugins: { 'unused-imports': unusedImports },
     rules: {
+      // === THE "ONE PER FILE" RULE ===
+      "max-classes-per-file": ["error", 1],
+
       // === CLEAN CODE LIMITS ===
       'max-lines-per-function': ['error', { max: 20, skipBlankLines: true, skipComments: true }],
       'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
       '@typescript-eslint/max-params': ['error', { max: 3 }],
-      'max-classes-per-file': ['error', 1],
       'complexity': ['error', 10],
 
       // === STRICT TYPE SAFETY (NO ANY) ===
@@ -42,7 +43,7 @@ export default tseslint.config(
       'no-unused-expressions': 'error',
       '@typescript-eslint/no-unused-private-class-members': 'error',
 
-      // === FORMATTING (warn=error policy) ===
+      // === FORMATTING ===
       'max-len': ['error', { code: 100, ignoreUrls: true }],
     },
   },
@@ -53,7 +54,7 @@ export default tseslint.config(
       'max-lines': 'off',
       'max-lines-per-function': 'off',
       'max-len': 'off',
-      // Tests use vi.fn() which is any-typed — unsafe rules don't apply
+
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',

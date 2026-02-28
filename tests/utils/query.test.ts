@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractQueryData } from '../../src/utils/index.js';
+import { extractQueryData, errorMessage } from '../../src/utils/index.js';
 
 describe('extractQueryData', () => {
   it('extracts numeric data from valid result', () => {
@@ -29,5 +29,16 @@ describe('extractQueryData', () => {
 
   it('returns zero when data is zero (not fallback)', () => {
     expect(extractQueryData({ data: 0 }, 999)).toBe(0);
+  });
+});
+
+describe('errorMessage', () => {
+  it('returns error.message for Error objects', () => {
+    expect(errorMessage(new Error('boom'))).toBe('boom');
+  });
+
+  it('returns String() for non-Error values', () => {
+    expect(errorMessage('plain string')).toBe('plain string');
+    expect(errorMessage(42)).toBe('42');
   });
 });

@@ -284,7 +284,7 @@ OneZero requires SMS verification. The Telegram bot asks for the OTP code:
 }
 ```
 
-Flow: login → SMS sent → bot asks "Enter OTP code" → you reply → import completes.
+Flow: login → SMS sent → bot asks "Enter OTP code" → you reply → bot confirms receipt → import completes.
 
 After first login, add `"otpLongTermToken": "..."` to skip OTP on future runs.
 

@@ -162,5 +162,12 @@ describe('ReconciliationService', () => {
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
+
+    it('re-throws non-Error objects from importTransactions', async () => {
+      mockApi.runQuery.mockResolvedValue({ data: 10000 });
+      mockApi.importTransactions.mockRejectedValue('string error');
+
+      await expect(service.reconcile('account-123', 150.00, 'ILS')).rejects.toBe('string error');
+    });
   });
 });

@@ -96,6 +96,38 @@ describe('WebhookNotifier', () => {
     });
   });
 
+  describe('slackBankLine edge cases', () => {
+    it('slack: shows ⚠️ and ❌ bank + duration + error for failed banks', async () => {
+      const notifier = new WebhookNotifier({ url: 'https://hooks.slack.com/test', format: 'slack' });
+      const failSummary = makeSummary({
+        failedBanks: 1, successfulBanks: 1,
+        banks: [
+          { bankName: 'discount', startTime: 0, endTime: 5000, duration: 5000, status: 'success', transactionsImported: 3, transactionsSkipped: 0, accounts: [] },
+          { bankName: 'leumi', startTime: 0, endTime: 3000, duration: 3000, status: 'failure', error: 'Auth failed', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }
+        ]
+      });
+      await notifier.sendSummary(failSummary);
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.text).toContain('⚠️');
+      expect(body.text).toContain('❌ leumi');
+      expect(body.text).toContain('Auth failed');
+      expect(body.text).toContain('5.0s');
+    });
+
+    it('discord: shows ⚠️ and ❌ bank for failed banks', async () => {
+      const notifier = new WebhookNotifier({ url: 'https://discord.com/api/webhooks/test', format: 'discord' });
+      const failSummary = makeSummary({
+        failedBanks: 1,
+        banks: [{ bankName: 'leumi', startTime: 0, endTime: 3000, duration: 3000, status: 'failure', error: 'Timeout', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }]
+      });
+      await notifier.sendSummary(failSummary);
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.content).toContain('⚠️');
+      expect(body.content).toContain('❌ leumi');
+      expect(body.content).toContain('Timeout');
+    });
+  });
+
   describe('error handling', () => {
     it('throws on non-ok response', async () => {
       fetchMock.mockResolvedValue({ ok: false, status: 500, text: () => Promise.resolve('Server error') });

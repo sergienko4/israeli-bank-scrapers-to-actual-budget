@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { buildChromeArgs } from '../../src/scraper/ScraperOptionsBuilder.js';
+import { describe, it, expect, afterEach } from 'vitest';
+import { buildChromeArgs, getChromeDataDir } from '../../src/scraper/ScraperOptionsBuilder.js';
 
 describe('buildChromeArgs', () => {
   it('includes base args without proxy', () => {
@@ -22,5 +22,30 @@ describe('buildChromeArgs', () => {
   it('supports socks4 proxy', () => {
     const args = buildChromeArgs({ server: 'socks4://proxy:1080' });
     expect(args).toContain('--proxy-server=socks4://proxy:1080');
+  });
+});
+
+describe('getChromeDataDir', () => {
+  afterEach(() => {
+    delete process.env.CHROME_DATA_DIR;
+  });
+
+  it('returns default base dir when CHROME_DATA_DIR is not set', () => {
+    delete process.env.CHROME_DATA_DIR;
+    expect(getChromeDataDir()).toBe('/app/chrome-data');
+  });
+
+  it('appends bankName when provided', () => {
+    expect(getChromeDataDir('leumi')).toBe('/app/chrome-data/leumi');
+  });
+
+  it('uses CHROME_DATA_DIR env var when set', () => {
+    process.env.CHROME_DATA_DIR = '/custom/chrome';
+    expect(getChromeDataDir()).toBe('/custom/chrome');
+  });
+
+  it('appends bankName to custom CHROME_DATA_DIR', () => {
+    process.env.CHROME_DATA_DIR = '/custom/chrome';
+    expect(getChromeDataDir('discount')).toBe('/custom/chrome/discount');
   });
 });

@@ -113,4 +113,14 @@ describe('GracefulShutdownHandler', () => {
       expect.stringContaining('SIGTERM')
     ));
   });
+
+  it('logs non-Error thrown objects from callbacks', async () => {
+    const handler = new GracefulShutdownHandler();
+    handler.onShutdown(() => { throw 'string error'; });
+
+    process.emit('SIGTERM');
+    await vi.waitFor(() => expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('string error')
+    ));
+  });
 });
