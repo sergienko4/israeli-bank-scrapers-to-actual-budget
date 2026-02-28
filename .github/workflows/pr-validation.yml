@@ -63,11 +63,13 @@ jobs:
 
       - name: Lint markdown
         uses: DavidAnson/markdownlint-cli2-action@v22
+        with:
+          config: 'config/markdownlint/.markdownlint.jsonc'
 
       - name: Check links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: '**/*.md'
+          args: '--exclude-path config/lychee/ignore **/*.md'
           fail: true
 
   container-scan:
