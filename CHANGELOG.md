@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.25.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.24.0...v1.25.0) (2026-02-28)
+
+
+### Added
+
+* add DRY_RUN mode and /preview Telegram command ([#142](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/142)) ([17a21da](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/17a21daf037429b9e88a818b78cc98967ad81981))
+
 ## [1.24.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.23.2...v1.24.0) (2026-02-28)
 
 
