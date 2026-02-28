@@ -17,6 +17,7 @@ export interface CommandHandlerOptions {
   auditLog?: IAuditLog;
   runWatch?: () => Promise<string | null>;
   runValidate?: () => Promise<string>;
+  runPreview?: () => Promise<number>;
 }
 
 export class TelegramCommandHandler {
@@ -25,6 +26,7 @@ export class TelegramCommandHandler {
   private auditLog?: IAuditLog;
   private runWatch?: () => Promise<string | null>;
   private runValidate?: () => Promise<string>;
+  private runPreview?: () => Promise<number>;
   private importPromise: Promise<void> | null = null;
   private lastRunTime: Date | null = null;
   private lastRunResult: string | null = null;
@@ -35,6 +37,7 @@ export class TelegramCommandHandler {
     this.auditLog = opts.auditLog;
     this.runWatch = opts.runWatch;
     this.runValidate = opts.runValidate;
+    this.runPreview = opts.runPreview;
   }
 
   async handle(text: string): Promise<void> {
@@ -47,6 +50,7 @@ export class TelegramCommandHandler {
       '/logs': () => this.handleLogs(parts[1]),
       '/watch': () => this.handleWatch(),
       '/check_config': () => this.handleCheckConfig(),
+      '/preview': () => this.handlePreview(),
       '/help': () => this.handleHelp(),
       '/start': () => this.handleHelp(),
     };
@@ -167,10 +171,35 @@ export class TelegramCommandHandler {
     }
   }
 
+  private async handlePreview(): Promise<void> {
+    if (!this.runPreview) {
+      await this.reply('🔍 Preview mode unavailable.');
+      return;
+    }
+    if (this.importPromise) { await this.reply('⏳ Import already running. Please wait.'); return; }
+    await this.reply('🔍 Starting dry run — no changes will be made...');
+    this.importPromise = this.executePreview(this.runPreview);
+    await this.importPromise;
+  }
+
+  private async executePreview(run: () => Promise<number>): Promise<void> {
+    const start = Date.now();
+    try {
+      await run();
+      const dur = ((Date.now() - start) / 1000).toFixed(0);
+      await this.reply(`✅ Dry run completed (${dur}s). See preview report above.`);
+    } catch (error: unknown) {
+      await this.reply(`❌ Preview error: ${errorMessage(error)}`);
+    } finally {
+      this.importPromise = null;
+    }
+  }
+
   private async handleHelp(): Promise<void> {
     const lines = [
       '🤖 <b>Available Commands</b>', '',
       '/scan - Run bank import now',
+      '/preview - Dry run: scrape without importing',
       '/status - Show last run info + history',
       '/check_config - Check configuration (offline + online)',
       '/watch - Spending watch info (runs after each import)',

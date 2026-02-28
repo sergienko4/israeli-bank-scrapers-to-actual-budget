@@ -38,6 +38,7 @@ import { ICategoryResolver } from './Services/ICategoryResolver.js';
 import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
 import { TranslateCategoryResolver } from './Services/TranslateCategoryResolver.js';
 import { SpendingWatchService } from './Services/SpendingWatchService.js';
+import { DryRunCollector } from './Services/DryRunCollector.js';
 
 // --validate mode: validate config and exit before full initialization
 if (process.argv.includes('--validate')) {
@@ -78,6 +79,8 @@ function createCategoryResolver(cfg: ImporterConfig): ICategoryResolver | undefi
 }
 
 // Initialize services
+const isDryRun = process.env.DRY_RUN === 'true';
+const dryRunCollector = new DryRunCollector();
 const categoryResolver = createCategoryResolver(config);
 const transactionService = new TransactionService(api, categoryResolver);
 const reconciliationService = new ReconciliationService(api);
@@ -90,6 +93,7 @@ const telegram = config.notifications?.telegram;
 const telegramNotifier = telegram ? new TelegramNotifier(telegram) : null;
 
 logger.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
+if (isDryRun) logger.info('🔍 DRY RUN MODE — no changes will be made to Actual Budget\n');
 if (config.proxy?.server) logger.info(`🌐 Using proxy: ${config.proxy.server}`);
 
 // Company type mapping
@@ -376,11 +380,25 @@ async function processAccount(
     logger.warn(`     ⚠️  No target configured for this account, skipping`);
     return { imported: 0, skipped: 0 };
   }
+  if (isDryRun) return collectDryRunAccount(bankName, account, currency);
   await transactionService.getOrCreateAccount(
     target.actualAccountId, bankName, account.accountNumber
   );
   const result = await importAndReconcile(target, account, { bankName, currency });
   return { imported: result?.imported ?? 0, skipped: result?.skipped ?? 0 };
+}
+
+function collectDryRunAccount(
+  bankName: string,
+  account: { accountNumber: string; balance?: number; txns: BankTransaction[] },
+  currency: string
+): { imported: number; skipped: number } {
+  const preview = DryRunCollector.buildPreview({
+    bankName, accountNumber: account.accountNumber,
+    balance: account.balance, currency, txns: account.txns,
+  });
+  dryRunCollector.recordAccount(preview);
+  return { imported: 0, skipped: 0 };
 }
 
 // ─── Bank import orchestration ───
@@ -497,11 +515,23 @@ async function evaluateSpendingWatch(): Promise<void> {
   logger.info(message ? '⚠️  Spending watch alerts triggered' : '✅ All spending within limits');
 }
 
-async function finalizeImport(): Promise<void> {
-  metrics.printSummary();
+async function finalizeNormalImport(): Promise<void> {
   auditLog.record(metrics.getSummary());
   await notificationService.sendSummary(metrics.getSummary());
   logger.info('\n🎉 Import process completed!\n');
+}
+
+async function finalizeDryRun(): Promise<void> {
+  logger.info(dryRunCollector.formatText());
+  logger.info('\n✅ No changes made to Actual Budget (dry run)\n');
+  if (dryRunCollector.hasAccounts()) {
+    await notificationService.sendMessage(dryRunCollector.formatTelegram());
+  }
+}
+
+async function finalizeImport(): Promise<void> {
+  metrics.printSummary();
+  await (isDryRun ? finalizeDryRun() : finalizeNormalImport());
   await api.shutdown();
   process.exit(metrics.hasFailures() ? 1 : 0);
 }
@@ -523,10 +553,10 @@ async function main(): Promise<void> {
       catch (e: unknown) { logger.error(`Error during API shutdown: ${errorMessage(e)}`); }
     });
     await initializeApi();
-    await categoryResolver?.initialize();
+    if (!isDryRun) await categoryResolver?.initialize();
     metrics.startImport();
     await processAllBanks();
-    await evaluateSpendingWatch();
+    if (!isDryRun) await evaluateSpendingWatch();
     await finalizeImport();
   } catch (error) {
     await handleFatalError(error);
