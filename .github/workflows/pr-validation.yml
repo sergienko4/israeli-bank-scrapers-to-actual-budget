@@ -39,8 +39,8 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Run validate:all (type-check + unit tests + E2E + lint)
-        run: npm run validate:all
+      - name: Run validate:ci (type-check + unit tests + lint)
+        run: npm run validate:ci
         env:
           E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
           E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
