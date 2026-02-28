@@ -1,7 +1,7 @@
 # Use Node.js 22 LTS (required by israeli-bank-scrapers)
 # Using slim variant for smaller image size
 # Pin to digest for reproducibility and security
-FROM node:22-slim@sha256:5373f1906319b3a1f291da5d102f4ce5c77ccbe29eb637f072b6c7b70443fc36
+FROM node:22-slim@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94
 
 # Security labels and metadata
 LABEL maintainer="Israeli Bank Importer Contributors"
@@ -31,7 +31,13 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # Update npm to latest version for security patches
-RUN npm install -g npm@latest
+# Patch minimatch in npm's bundled packages: CVE-2026-27903/CVE-2026-27904 (DoS, HIGH)
+# npm bundles minimatch@10.2.2; fix is 10.2.3 — install globally and replace npm's copy
+RUN npm install -g npm@latest \
+    && npm install -g minimatch@10.2.3 \
+    && rm -rf /usr/local/lib/node_modules/npm/node_modules/minimatch \
+    && cp -r /usr/local/lib/node_modules/minimatch \
+             /usr/local/lib/node_modules/npm/node_modules/minimatch
 
 # Install ALL dependencies (including devDependencies for build)
 RUN npm install

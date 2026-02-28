@@ -44,9 +44,19 @@ describe('ConsoleLogger', () => {
     expect(console.log).toHaveBeenCalledWith('🚀 Starting import');
   });
 
-  it('adds entries to ring buffer', () => {
+  it('adds entries to ring buffer with timestamp prefix', () => {
     logger.info('line 1');
     logger.error('line 2');
-    expect(buffer.getRecent()).toEqual(['line 1', 'line 2']);
+    const entries = buffer.getRecent();
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatch(/^\[\d{2}:\d{2}:\d{2}\] line 1$/);
+    expect(entries[1]).toMatch(/^\[\d{2}:\d{2}:\d{2}\] line 2$/);
+  });
+
+  it('buffer entries have timestamp but console output does not', () => {
+    logger.info('hello');
+    expect(console.log).toHaveBeenCalledWith('hello');
+    const [entry] = buffer.getRecent();
+    expect(entry).toMatch(/^\[\d{2}:\d{2}:\d{2}\] hello$/);
   });
 });

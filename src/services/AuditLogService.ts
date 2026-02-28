@@ -16,7 +16,7 @@ export interface AuditEntry {
   totalDuplicates: number;
   totalDuration: number;
   successRate: number;
-  banks: Array<{ name: string; status: string; duration?: number; txns: number; error?: string }>;
+  banks: Array<{ name: string; status: string; duration?: number; txns: number; error?: string; reconciliationStatus?: string; reconciliationAmount?: number }>;
 }
 
 export interface IAuditLog {
@@ -62,6 +62,8 @@ export class AuditLogService implements IAuditLog {
       name: b.bankName, status: b.status,
       duration: b.duration, txns: b.transactionsImported,
       ...(b.error ? { error: b.error } : {}),
+      ...(b.reconciliationStatus ? { reconciliationStatus: b.reconciliationStatus } : {}),
+      ...(b.reconciliationAmount !== undefined ? { reconciliationAmount: b.reconciliationAmount } : {}),
     };
   }
 

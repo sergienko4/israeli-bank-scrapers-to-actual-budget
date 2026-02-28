@@ -308,6 +308,28 @@ describe('TelegramNotifier', () => {
     });
   });
 
+  describe('bank name HTML escaping', () => {
+    const specialCharSummary: ImportSummary = {
+      ...summaryWithTxns,
+      banks: [{
+        ...summaryWithTxns.banks[0],
+        bankName: 'Bank <Test> & "Co"',
+      }]
+    };
+
+    for (const fmt of ['summary', 'compact', 'ledger', 'emoji'] as const) {
+      it(`${fmt}: escapes special chars in bank name`, async () => {
+        const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: fmt });
+        await notifier.sendSummary(specialCharSummary);
+        const text = getText(fetchMock);
+        expect(text).not.toContain('<Test>');
+        expect(text).not.toContain('& "');
+        expect(text).toContain('&lt;Test&gt;');
+        expect(text).toContain('&amp;');
+      });
+    }
+  });
+
   describe('registerCommands', () => {
     it('registers base commands via setMyCommands API', async () => {
       const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });

@@ -147,7 +147,17 @@ describe('TelegramCommandHandler', () => {
     await handler.handle('/logs');
     const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
     expect(msg.length).toBeLessThanOrEqual(4096);
-    expect(msg).toContain('...(truncated)');
+    expect(msg).toContain('...(earlier entries omitted)');
+  });
+
+  it('/logs truncation indicator appears at the start (older entries cut)', async () => {
+    const buffer = getLogBuffer();
+    buffer.clear();
+    for (let i = 0; i < 100; i++) buffer.add(`line${i}: ` + 'a'.repeat(100));
+    await handler.handle('/logs');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    const preContent = msg.slice(msg.indexOf('<pre>') + 5);
+    expect(preContent.startsWith('...(earlier entries omitted)')).toBe(true);
   });
 
   it('/logs does not truncate short output', async () => {
@@ -197,5 +207,51 @@ describe('TelegramCommandHandler', () => {
   it('reply error does not throw', async () => {
     mockNotifier.sendMessage.mockRejectedValueOnce(new Error('Network'));
     await expect(handler.handle('/help')).resolves.not.toThrow();
+  });
+
+  // ─── /scan failure acknowledgment ───
+
+  it('/scan sends error message when import fails', async () => {
+    mockRunImport.mockResolvedValueOnce(1);
+    await handler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    const errorMsg = calls.find((m: string) => m.includes('Import finished with errors'));
+    expect(errorMsg).toBeDefined();
+  });
+
+  it('/scan does not send error message when import succeeds', async () => {
+    mockRunImport.mockResolvedValueOnce(0);
+    await handler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    const errorMsg = calls.find((m: string) => m.includes('Import finished with errors'));
+    expect(errorMsg).toBeUndefined();
+  });
+
+  // ─── /status with audit history ───
+
+  it('/status shows duration in audit entries', async () => {
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([{
+        timestamp: '2026-02-28T14:30:00.000Z',
+        totalBanks: 2, successfulBanks: 2, failedBanks: 0,
+        totalTransactions: 5, totalDuplicates: 0,
+        totalDuration: 45000, successRate: 100, banks: []
+      }])
+    };
+    const handlerWithAudit = new TelegramCommandHandler(mockRunImport, mockNotifier, mockAuditLog);
+    await handlerWithAudit.handle('/status');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('45s');
+  });
+
+  it('/status requests up to 5 recent audit entries', async () => {
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([])
+    };
+    const handlerWithAudit = new TelegramCommandHandler(mockRunImport, mockNotifier, mockAuditLog);
+    await handlerWithAudit.handle('/status');
+    expect(mockAuditLog.getRecent).toHaveBeenCalledWith(5);
   });
 });

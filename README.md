@@ -341,6 +341,8 @@ Configure log output format via `logConfig` in config.json:
 
 `maxBufferSize` controls the ring buffer for the `/logs` bot command (default: 150, max: 500).
 
+> **Note:** When using `words` format, log entries shown via `/logs` include a `[HH:MM:SS]` timestamp prefix so you can trace when each step happened.
+
 ### Auto-Categorization
 
 Automatically categorize imported transactions. Three modes are available:
@@ -611,13 +613,13 @@ When `listenForCommands` is `true`, control the importer from Telegram:
 | Command | Action |
 |---------|--------|
 | `/scan` | Run bank import now |
-| `/status` | Show last run info (from audit log) |
+| `/status` | Show last 5 imports with transaction counts and duration |
 | `/watch` | Check spending watch rules now |
-| `/logs` | Show recent log entries (default: 50) |
+| `/logs` | Show recent log entries with timestamps (default: 50) |
 | `/logs N` | Show last N entries (max 150) |
 | `/help` | List commands |
 
-The bot listens alongside the cron scheduler. If an import is already running, it waits instead of starting a duplicate.
+The bot listens alongside the cron scheduler. If an import is already running, it waits instead of starting a duplicate. If an import triggered via `/scan` fails, the bot sends an error acknowledgment with the elapsed time.
 
 ### Webhooks (Slack, Discord, Generic)
 
@@ -700,7 +702,7 @@ After each import run, you'll see a comprehensive summary:
 ============================================================
 ```
 
-Import history is persisted at `/app/data/audit-log.json` (last 90 entries). View with `/status` bot command.
+Import history is persisted at `/app/data/audit-log.json` (last 90 entries, includes reconciliation data per bank). View with `/status` bot command — shows the 5 most recent runs with transaction counts, bank success rates, and import duration.
 
 ---
 

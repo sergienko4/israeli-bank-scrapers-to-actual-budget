@@ -263,7 +263,7 @@ async function processAccount(
   account: { accountNumber: string; balance?: number; txns: BankTransaction[] }, currency: string
 ): Promise<{ imported: number; skipped: number }> {
   const target = findTargetForAccount(bankConfig, account.accountNumber);
-  if (!target) { logger.warn(`     ⚠️  No target configured for this account, skipping`); return { imported: 0, skipped: 0 }; }
+  if (!target) { logger.warn(`     ⚠️  No target configured for account ${account.accountNumber}, skipping`); return { imported: 0, skipped: 0 }; }
 
   await transactionService.getOrCreateAccount(target.actualAccountId, bankName, account.accountNumber);
   const result = await importAndRecordTransactions(bankName, account.accountNumber, target.actualAccountId, account.txns, account.balance, currency);
@@ -275,7 +275,7 @@ async function processAccount(
 
 function logAccountInfo(accountNumber: string, balance: number | undefined, currency: string, txnCount: number): void {
   logger.info(`\n  💳 Processing account: ${accountNumber}`);
-  logger.info(`     Balance: ${balance} ${currency}`);
+  logger.info(`     Balance: ${balance !== undefined ? `${balance} ${currency}` : 'N/A'}`);
   logger.info(`     Transactions: ${txnCount}`);
 }
 
