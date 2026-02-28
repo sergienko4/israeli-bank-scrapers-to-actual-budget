@@ -8,15 +8,25 @@ import { ConfigLoader } from './ConfigLoader.js';
 import { errorMessage } from '../Utils/index.js';
 import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 
+/** A single check result from config validation. */
 export interface ValidationResult {
+  /** Whether the check passed, failed, or produced a warning. */
   status: 'pass' | 'fail' | 'warn';
+  /** Dotted path identifying the config field checked (e.g. `bank.discount.target[0]`). */
   check: string;
+  /** Human-readable description of the result. */
   message: string;
 }
 
 // Derived from the scraper's CompanyTypes — stays in sync when banks are added
 const KNOWN_BANKS = new Set(Object.keys(CompanyTypes).map(k => k.toLowerCase()));
 
+/**
+ * Validates importer configuration without throwing — collects all issues at once.
+ *
+ * Offline checks: bank names (with typo suggestions), UUIDs, date config, enum values.
+ * Online checks: Actual server reachability, Telegram token, webhook URL.
+ */
 export class ConfigValidator {
 
   // ─── Result builders ───

@@ -5,6 +5,7 @@
 
 import { BankTransaction } from '../Types/index.js';
 
+/** Preview data for a single scraped account in dry-run mode. */
 export interface AccountPreview {
   bankName: string;
   accountNumber: string;
@@ -15,6 +16,7 @@ export interface AccountPreview {
   samples: Array<{ date: string; description: string; amount: number }>;
 }
 
+/** Input to {@link DryRunCollector.buildPreview} — raw data from a scraped account. */
 export interface PreviewInput {
   bankName: string;
   accountNumber: string;
@@ -23,6 +25,12 @@ export interface PreviewInput {
   txns: BankTransaction[];
 }
 
+/**
+ * Collects and formats account preview data when `DRY_RUN=true`.
+ *
+ * No data is written to Actual Budget — this service only reads scraped results
+ * and formats them for CLI and Telegram output.
+ */
 export class DryRunCollector {
   private accounts: AccountPreview[] = [];
 

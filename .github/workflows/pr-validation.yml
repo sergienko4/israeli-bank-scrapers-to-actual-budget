@@ -72,6 +72,18 @@ jobs:
           args: '--exclude-path config/lychee/ignore **/*.md'
           fail: true
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate API docs generation
+        run: npm run docs
+
   container-scan:
     name: Container Security Scan
     runs-on: ubuntu-latest

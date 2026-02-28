@@ -14,3 +14,5 @@ https://github.com/.*/actions/workflows/.*badge.svg
 https://www.contributor-covenant.org/
 # Shields.io badges (dynamic, may timeout)
 https://img.shields.io/
+# GitHub security advisories (HTTP/2 errors from CI bots)
+https://github.com/.*/security/advisories
