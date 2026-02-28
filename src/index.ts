@@ -32,7 +32,7 @@ import {
   BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode
 } from './Types/index.js';
 import { buildChromeArgs, getChromeDataDir } from './Scraper/ScraperOptionsBuilder.js';
-import { errorMessage } from './Utils/index.js';
+import { errorMessage, formatDate } from './Utils/index.js';
 import { createLogger, getLogger } from './Logger/index.js';
 import { ICategoryResolver } from './Services/ICategoryResolver.js';
 import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
@@ -180,7 +180,7 @@ function logDateRange(bankConfig: BankConfig): void {
     const startDate = computeStartDate(bankConfig);
     logger.info(
       `  📅 Date range: last ${bankConfig.daysBack} days ` +
-      `(from ${startDate.toISOString().split('T')[0]})`
+      `(from ${formatDate(startDate)})`
     );
   } else if (bankConfig.startDate) {
     logger.info(`  📅 Date range: from ${bankConfig.startDate} to today`);

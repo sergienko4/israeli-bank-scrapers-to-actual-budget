@@ -27,9 +27,16 @@ describe('date utils', () => {
       expect(formatDate('2026-02-19')).toMatch(/^2026-02-19$/);
     });
 
-    it('accepts an ISO date string', () => {
-      const result = formatDate('2026-06-15T12:00:00Z');
-      expect(result).toMatch(/^2026-06-1[45]$/); // Timezone may shift day
+    it('accepts an ISO date string and uses Jerusalem timezone', () => {
+      // 12:00 UTC = 14:00 Jerusalem — always June 15 in Jerusalem
+      expect(formatDate('2026-06-15T12:00:00Z')).toBe('2026-06-15');
+    });
+
+    it('scraper midnight regression: UTC "prev day" maps to correct Jerusalem date', () => {
+      // Scrapers store Jerusalem midnight as UTC prev-day
+      // Feb 15 midnight Israel = 2026-02-14T22:00:00.000Z
+      // Must return 2026-02-15, not 2026-02-14
+      expect(formatDate('2026-02-14T22:00:00.000Z')).toBe('2026-02-15');
     });
   });
 });
