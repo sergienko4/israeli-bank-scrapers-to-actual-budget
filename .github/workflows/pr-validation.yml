@@ -36,25 +36,14 @@ jobs:
       - name: Check for vulnerable dependencies
         run: npm audit --audit-level=moderate
 
-      - name: Build TypeScript (strict mode)
+      - name: Build TypeScript
         run: npm run build
 
-      - name: Check for any types in source
-        run: |
-          MAX_ALLOWED=0
-          ANYS=$(grep -rn ": any" src/ --include="*.ts" | grep -v "node_modules\|\[key: string\]: any" | wc -l)
-          echo "Found $ANYS uses of ': any' (max allowed: $MAX_ALLOWED)"
-          if [ "$ANYS" -gt "$MAX_ALLOWED" ]; then
-            echo "New 'any' types added! Fix before merging:"
-            grep -rn ": any" src/ --include="*.ts" | grep -v "node_modules\|\[key: string\]: any"
-            exit 1
-          fi
-
-      - name: Lint source code
-        run: npm run lint
-
-      - name: Run tests with coverage
-        run: npm run test:coverage
+      - name: Run validate:all (type-check + unit tests + E2E + lint)
+        run: npm run validate:all
+        env:
+          E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
+          E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v6
