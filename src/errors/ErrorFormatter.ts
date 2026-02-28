@@ -15,37 +15,64 @@ export interface IErrorFormatter {
 // OCP: add new error types by adding entries — no changes to format()
 type ErrorFormatEntry = { icon: string; label: string; suffix?: string };
 
-const errorFormats: Array<{ type: Function; entry: ErrorFormatEntry }> = [
-  { type: TimeoutError,         entry: { icon: '⏱️ ', label: 'Timeout Error', suffix: ". The bank's website may be slow or unresponsive." } },
-  { type: AuthenticationError,  entry: { icon: '🔐', label: 'Authentication Error', suffix: '. Please verify your credentials.' } },
-  { type: NetworkError,         entry: { icon: '🌐', label: 'Network Error', suffix: '. Check your internet connection.' } },
-  { type: TwoFactorAuthError,   entry: { icon: '📱', label: '2FA Error', suffix: '. Check your 2FA device or SMS.' } },
-  { type: ShutdownError,        entry: { icon: '🛑', label: 'Operation Cancelled' } },
-  { type: BankScrapingError,    entry: { icon: '❌', label: 'Bank Scraping Error' } },
-  { type: ConfigurationError,   entry: { icon: '⚙️ ', label: 'Configuration Error' } },
+// Constructor type for instanceof checks — requires function-type for polymorphic dispatch
+// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
+type ErrorClass = Function;
+
+const errorFormats: Array<{ type: ErrorClass; entry: ErrorFormatEntry }> = [
+  { type: TimeoutError,
+    entry: { icon: '⏱️ ', label: 'Timeout Error',
+      suffix: ". The bank's website may be slow or unresponsive." } },
+  { type: AuthenticationError,
+    entry: { icon: '🔐', label: 'Authentication Error',
+      suffix: '. Please verify your credentials.' } },
+  { type: NetworkError,
+    entry: { icon: '🌐', label: 'Network Error',
+      suffix: '. Check your internet connection.' } },
+  { type: TwoFactorAuthError,
+    entry: { icon: '📱', label: '2FA Error', suffix: '. Check your 2FA device or SMS.' } },
+  { type: ShutdownError,  entry: { icon: '🛑', label: 'Operation Cancelled' } },
+  { type: BankScrapingError, entry: { icon: '❌', label: 'Bank Scraping Error' } },
+  { type: ConfigurationError, entry: { icon: '⚙️ ', label: 'Configuration Error' } },
 ];
 
 // Keyword-based fallback categorization (OCP map)
-const messageCategories: Array<{ keywords: string[]; icon: string; label: string; suffix?: string }> = [
-  { keywords: ['credentials', 'login', 'authentication'], icon: '🔐', label: 'Authentication Error', suffix: '. Please verify your credentials.' },
-  { keywords: ['network', 'ECONNREFUSED', 'ENOTFOUND'],   icon: '🌐', label: 'Network Error', suffix: '. Cannot reach the server. Check your internet connection.' },
-  { keywords: ['2FA', 'OTP', 'verification'],              icon: '📱', label: '2FA Error', suffix: '. Check your 2FA device or SMS.' },
-  { keywords: ['WAF', 'WafBlock', 'cloudflare'],           icon: '🛡️', label: 'WAF Blocked', suffix: '. Bank WAF blocked the request. Wait 1-2 hours and retry.' },
+type MessageCategory = { keywords: string[]; icon: string; label: string; suffix?: string };
+const messageCategories: MessageCategory[] = [
+  { keywords: ['credentials', 'login', 'authentication'],
+    icon: '🔐', label: 'Authentication Error',
+    suffix: '. Please verify your credentials.' },
+  { keywords: ['network', 'ECONNREFUSED', 'ENOTFOUND'],
+    icon: '🌐', label: 'Network Error',
+    suffix: '. Cannot reach the server. Check your internet connection.' },
+  { keywords: ['2FA', 'OTP', 'verification'],
+    icon: '📱', label: '2FA Error', suffix: '. Check your 2FA device or SMS.' },
+  { keywords: ['WAF', 'WafBlock', 'cloudflare'],
+    icon: '🛡️', label: 'WAF Blocked',
+    suffix: '. Bank WAF blocked the request. Wait 1-2 hours and retry.' },
 ];
 
 export class ErrorFormatter implements IErrorFormatter {
   format(error: Error, context: string = ''): string {
     const ctx = context ? ` (${context})` : '';
-    if (error.name === 'WafBlockError') return `🛡️ WAF Blocked${ctx}: ${error.message}. Wait 1-2 hours and retry.`;
+    if (error.name === 'WafBlockError') {
+      return `🛡️ WAF Blocked${ctx}: ${error.message}. Wait 1-2 hours and retry.`;
+    }
     const match = errorFormats.find(f => error instanceof f.type);
-    if (match) return `${match.entry.icon} ${match.entry.label}${ctx}: ${error.message}${match.entry.suffix || ''}`;
+    if (match) {
+      const suffix = match.entry.suffix || '';
+      return `${match.entry.icon} ${match.entry.label}${ctx}: ${error.message}${suffix}`;
+    }
     return this.categorizeByMessage(error, ctx);
   }
 
   private categorizeByMessage(error: Error, ctx: string): string {
     const message = error.message || 'Unknown error';
     const match = messageCategories.find(c => c.keywords.some(k => message.includes(k)));
-    if (match) return `${match.icon} ${match.label}${ctx}: ${match.suffix ? match.suffix.slice(2) : message}`;
+    if (match) {
+      const detail = match.suffix ? match.suffix.slice(2) : message;
+      return `${match.icon} ${match.label}${ctx}: ${detail}`;
+    }
     return `❌ Error${ctx}: ${message}`;
   }
 }

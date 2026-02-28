@@ -67,14 +67,18 @@ export class WebhookNotifier implements INotifier {
     const icon = summary.failedBanks === 0 ? '✅' : '⚠️';
     const dur = (summary.totalDuration / 1000).toFixed(1);
     const banks = summary.banks.map(b => this.slackBankLine(b)).join('\n');
-    const text = `${icon} *Import Summary*\n${summary.successfulBanks}/${summary.totalBanks} banks | ${summary.totalTransactions} txns | ${dur}s\n${banks}`;
+    const header = `${icon} *Import Summary*\n` +
+      `${summary.successfulBanks}/${summary.totalBanks} banks | ` +
+      `${summary.totalTransactions} txns | ${dur}s`;
+    const text = `${header}\n${banks}`;
     return JSON.stringify({ text });
   }
 
   private slackBankLine(b: BankMetrics): string {
     const icon = b.status === 'success' ? '✅' : '❌';
     const dur = b.duration ? `${(b.duration / 1000).toFixed(1)}s` : '';
-    return `${icon} ${b.bankName}: ${b.transactionsImported} txns ${dur}${b.error ? ` — ${b.error}` : ''}`;
+    const errSuffix = b.error ? ` — ${b.error}` : '';
+    return `${icon} ${b.bankName}: ${b.transactionsImported} txns ${dur}${errSuffix}`;
   }
 
   // ─── Discord format ───
@@ -83,7 +87,10 @@ export class WebhookNotifier implements INotifier {
     const icon = summary.failedBanks === 0 ? '✅' : '⚠️';
     const dur = (summary.totalDuration / 1000).toFixed(1);
     const banks = summary.banks.map(b => this.slackBankLine(b)).join('\n');
-    const content = `${icon} **Import Summary**\n${summary.successfulBanks}/${summary.totalBanks} banks | ${summary.totalTransactions} txns | ${dur}s\n${banks}`;
+    const header = `${icon} **Import Summary**\n` +
+      `${summary.successfulBanks}/${summary.totalBanks} banks | ` +
+      `${summary.totalTransactions} txns | ${dur}s`;
+    const content = `${header}\n${banks}`;
     return JSON.stringify({ content });
   }
 

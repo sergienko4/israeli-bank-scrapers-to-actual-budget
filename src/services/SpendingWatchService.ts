@@ -100,7 +100,10 @@ export class SpendingWatchService {
     const { rule, totalSpent } = result;
     const payeeLabel = rule.watchPayees?.length ? rule.watchPayees.join(', ') : 'All payees';
     const dayLabel = rule.numOfDayToCount === 1 ? '1 day' : `${rule.numOfDayToCount} days`;
-    return `⚠️ ${payeeLabel}: ${this.formatAmount(totalSpent)} in ${dayLabel} (limit: ${rule.alertFromAmount.toLocaleString()})`;
+    return (
+      `⚠️ ${payeeLabel}: ${this.formatAmount(totalSpent)} in ${dayLabel} ` +
+      `(limit: ${rule.alertFromAmount.toLocaleString()})`
+    );
   }
 
   private buildTransactionDetails(matched: TransactionRow[]): string[] {
@@ -113,6 +116,7 @@ export class SpendingWatchService {
   }
 
   private formatAmount(cents: number): string {
-    return fromCents(cents).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return fromCents(cents).toLocaleString('en-US',
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 }

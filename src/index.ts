@@ -1,10 +1,17 @@
 /**
  * Israeli Bank Importer for Actual Budget
  * Main entry point with integrated resilience features
+ *
+ * This file is the top-level orchestration module that coordinates all
+ * services — a legitimate exception to the max-lines-per-file rule.
  */
+/* eslint-disable max-lines */
 
 import api from '@actual-app/api';
-import { createScraper, CompanyTypes, ScraperOptions, ScraperCredentials, ScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
+import {
+  createScraper, CompanyTypes, ScraperOptions,
+  ScraperCredentials, ScraperScrapingResult
+} from '@sergienko4/israeli-bank-scrapers';
 import { readFileSync, existsSync, rmSync } from 'fs';
 import { ConfigLoader } from './config/ConfigLoader.js';
 import { ErrorFormatter } from './errors/ErrorFormatter.js';
@@ -12,13 +19,18 @@ import { ExponentialBackoffRetry } from './resilience/RetryStrategy.js';
 import { TimeoutWrapper } from './resilience/TimeoutWrapper.js';
 import { GracefulShutdownHandler } from './resilience/GracefulShutdown.js';
 import { MetricsService } from './services/MetricsService.js';
-import { TransactionService, ImportResult } from './services/TransactionService.js';
+import {
+  TransactionService, ImportResult, ImportTransactionsOpts
+} from './services/TransactionService.js';
 import { ReconciliationService } from './services/ReconciliationService.js';
 import { NotificationService } from './services/NotificationService.js';
 import { AuditLogService } from './services/AuditLogService.js';
 import { TwoFactorService } from './services/TwoFactorService.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
-import { ImporterConfig, BankConfig, BankTarget, BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode } from './types/index.js';
+import {
+  ImporterConfig, BankConfig, BankTarget,
+  BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode
+} from './types/index.js';
 import { buildChromeArgs, getChromeDataDir } from './scraper/ScraperOptionsBuilder.js';
 import { errorMessage } from './utils/index.js';
 import { createLogger, getLogger } from './logger/index.js';
@@ -46,7 +58,9 @@ const errorFormatter = new ErrorFormatter();
 
 // ─── Category resolver (OCP dispatch) ───
 
-const resolverFactories: Record<CategorizationMode, (cfg: ImporterConfig) => ICategoryResolver | undefined> = {
+const resolverFactories: Record<
+  CategorizationMode, (cfg: ImporterConfig) => ICategoryResolver | undefined
+> = {
   none: () => undefined,
   history: () => new HistoryCategoryResolver(api),
   translate: (cfg) => new TranslateCategoryResolver(cfg.categorization?.translations ?? []),
@@ -100,12 +114,13 @@ const companyTypeMap: Record<string, typeof CompanyTypes[keyof typeof CompanyTyp
 
 // Reconciliation status messages (OCP — add new statuses without changing logic)
 const reconciliationMessages: Record<string, (diff: number) => string> = {
-  created: (diff) => `     ✅ Reconciled: ${diff > 0 ? '+' : ''}${(diff / 100).toFixed(2)} ILS`,
+  created: (diff) =>
+    `     ✅ Reconciled: ${diff > 0 ? '+' : ''}${(diff / 100).toFixed(2)} ILS`,
   skipped: () => `     ✅ Already balanced`,
   'already-reconciled': () => `     ✅ Already reconciled today`,
 };
 
-// OCP: scraper error type → user-friendly suffix (add new entries without changing logic)
+// OCP: scraper error type → user-friendly suffix
 const scrapeErrorHints: Record<string, string> = {
   WAF_BLOCKED: '. WAF blocked the request — wait 1-2 hours before retrying',
   CHANGE_PASSWORD: '. The bank requires a password change — log in via browser first',
@@ -114,7 +129,9 @@ const scrapeErrorHints: Record<string, string> = {
 
 function logScrapeFailure(bankName: string, result: ScraperScrapingResult): void {
   const hint = scrapeErrorHints[result.errorType ?? ''] ?? '';
-  logger.error(`  ❌ Failed to scrape ${bankName}: ${result.errorMessage || 'Unknown error'}${hint}`);
+  logger.error(
+    `  ❌ Failed to scrape ${bankName}: ${result.errorMessage || 'Unknown error'}${hint}`
+  );
 }
 
 // ─── Scraper helpers ───
@@ -128,21 +145,33 @@ function computeStartDate(bankConfig: BankConfig): Date {
   return bankConfig.startDate ? new Date(bankConfig.startDate) : new Date();
 }
 
-function buildCredentials(bankConfig: BankConfig, otpRetriever?: () => Promise<string>): ScraperCredentials {
-  const { id, password, num, username, userCode, nationalID, card6Digits, email, phoneNumber, otpLongTermToken } = bankConfig;
+function buildCredentials(
+  bankConfig: BankConfig, otpRetriever?: () => Promise<string>
+): ScraperCredentials {
+  const { id, password, num, username, userCode, nationalID,
+    card6Digits, email, phoneNumber, otpLongTermToken } = bankConfig;
   if (otpRetriever) {
-    return { email: email!, password: password!, otpCodeRetriever: otpRetriever, phoneNumber: phoneNumber! } as ScraperCredentials;
+    return {
+      email: email!, password: password!,
+      otpCodeRetriever: otpRetriever, phoneNumber: phoneNumber!
+    } as ScraperCredentials;
   }
   if (otpLongTermToken) {
     return { email: email!, password: password!, otpLongTermToken } as ScraperCredentials;
   }
-  return { id, password, num, username, userCode, nationalID, card6Digits, email, phoneNumber } as ScraperCredentials;
+  return {
+    id, password, num, username, userCode, nationalID,
+    card6Digits, email, phoneNumber
+  } as ScraperCredentials;
 }
 
 function logDateRange(bankConfig: BankConfig): void {
   if (bankConfig.daysBack) {
     const startDate = computeStartDate(bankConfig);
-    logger.info(`  📅 Date range: last ${bankConfig.daysBack} days (from ${startDate.toISOString().split('T')[0]})`);
+    logger.info(
+      `  📅 Date range: last ${bankConfig.daysBack} days ` +
+      `(from ${startDate.toISOString().split('T')[0]})`
+    );
   } else if (bankConfig.startDate) {
     logger.info(`  📅 Date range: from ${bankConfig.startDate} to today`);
   } else {
@@ -150,13 +179,18 @@ function logDateRange(bankConfig: BankConfig): void {
   }
 }
 
-function buildScraperOptions(companyType: typeof CompanyTypes[keyof typeof CompanyTypes], bankConfig: BankConfig): ScraperOptions {
+function buildScraperOptions(
+  companyType: typeof CompanyTypes[keyof typeof CompanyTypes],
+  bankConfig: BankConfig
+): ScraperOptions {
   return {
     companyId: companyType,
     startDate: computeStartDate(bankConfig),
     args: buildChromeArgs(config.proxy),
     defaultTimeout: bankConfig.timeout ?? 60_000,
-    ...(bankConfig.navigationRetryCount ? { navigationRetryCount: bankConfig.navigationRetryCount } : {}),
+    ...(bankConfig.navigationRetryCount
+      ? { navigationRetryCount: bankConfig.navigationRetryCount }
+      : {}),
   };
 }
 
@@ -168,8 +202,12 @@ function clearBankSession(bankName: string): void {
   catch { logger.warn(`  ⚠️  Failed to clear session for ${bankName}`); }
 }
 
-function buildOtpRetriever(bankName: string, bankConfig: BankConfig): (() => Promise<string>) | undefined {
-  if (!bankConfig.twoFactorAuth || bankConfig.otpLongTermToken || !telegramNotifier) return undefined;
+function buildOtpRetriever(
+  bankName: string, bankConfig: BankConfig
+): (() => Promise<string>) | undefined {
+  if (!bankConfig.twoFactorAuth || bankConfig.otpLongTermToken || !telegramNotifier) {
+    return undefined;
+  }
   const twoFactor = new TwoFactorService(telegramNotifier, bankConfig.twoFactorTimeout);
   logger.info(`  🔐 2FA enabled for ${bankName} (via Telegram)`);
   return twoFactor.createOtpRetriever(bankName);
@@ -204,79 +242,144 @@ function loadMockScraperResult(bankName: string): ScraperScrapingResult | null {
 
 // ─── Scraper orchestration ───
 
-async function scrapeBankWithResilience(bankName: string, bankConfig: BankConfig): Promise<ScraperScrapingResult> {
+function prepareScraper(
+  companyType: typeof CompanyTypes[keyof typeof CompanyTypes],
+  bankConfig: BankConfig, bankName: string
+): ReturnType<typeof createScraper> {
+  if (bankConfig.clearSession) clearBankSession(bankName);
+  logger.info(`  🔧 Creating scraper for ${bankName}...`);
+  logDateRange(bankConfig);
+  return createScraper(buildScraperOptions(companyType, bankConfig));
+}
+
+async function scrapeBankWithResilience(
+  bankName: string, bankConfig: BankConfig
+): Promise<ScraperScrapingResult> {
   const mockResult = loadMockScraperResult(bankName);
   if (mockResult) return mockResult;
 
   const companyType = companyTypeMap[bankName.toLowerCase()];
   if (!companyType) throw new Error(`Unknown bank: ${bankName}`);
 
-  if (bankConfig.clearSession) clearBankSession(bankName);
-  logger.info(`  🔧 Creating scraper for ${bankName}...`);
-  const scraperOptions = buildScraperOptions(companyType, bankConfig);
-  logDateRange(bankConfig);
-
+  const scraper = prepareScraper(companyType, bankConfig, bankName);
   const credentials = buildCredentials(bankConfig, buildOtpRetriever(bankName, bankConfig));
-  const scraper = createScraper(scraperOptions);
   logger.info(`  🔍 Scraping transactions from ${bankName}...`);
 
   return await retryStrategy.execute(
-    async () => await timeoutWrapper.wrap(scraper.scrape(credentials), DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs, `Scraping ${bankName}`),
+    async () => await timeoutWrapper.wrap(
+      scraper.scrape(credentials),
+      DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs,
+      `Scraping ${bankName}`
+    ),
     `Scraping ${bankName}`
   );
 }
 
+// ─── Account processing context types ───
+
+interface ImportTxnCtx {
+  bankName: string;
+  accountNumber: string;
+  actualAccountId: string;
+  balance: number | undefined;
+  currency: string;
+}
+
+interface ReconcileCtx {
+  actualAccountId: string;
+  balance: number | undefined;
+  currency: string;
+  bankName: string;
+}
+
+interface AccountInfo {
+  accountNumber: string;
+  balance: number | undefined;
+  currency: string;
+  txnCount: number;
+}
+
 // ─── Account processing helpers ───
 
-function findTargetForAccount(bankConfig: BankConfig, accountNumber: string): BankTarget | undefined {
+function findTargetForAccount(
+  bankConfig: BankConfig, accountNumber: string
+): BankTarget | undefined {
   return bankConfig.targets?.find(t =>
     t.accounts === 'all' || (Array.isArray(t.accounts) && t.accounts.includes(accountNumber))
   );
 }
 
 async function importAndRecordTransactions(
-  bankName: string, accountNumber: string, actualAccountId: string,
-  txns: BankTransaction[], balance: number | undefined, currency: string
+  ctx: ImportTxnCtx, txns: BankTransaction[]
 ): Promise<ImportResult | null> {
   if (!txns || txns.length === 0) return null;
-  const result = await transactionService.importTransactions(bankName, accountNumber, actualAccountId, txns);
-  metrics.recordAccountTransactions(bankName, accountNumber, balance, currency, result.newTransactions, result.existingTransactions);
+  const opts: ImportTransactionsOpts = {
+    bankName: ctx.bankName, accountNumber: ctx.accountNumber,
+    actualAccountId: ctx.actualAccountId, transactions: txns,
+  };
+  const result = await transactionService.importTransactions(opts);
+  metrics.recordAccountTransactions(ctx.bankName, {
+    accountNumber: ctx.accountNumber, balance: ctx.balance, currency: ctx.currency,
+    newTransactions: result.newTransactions, existingTransactions: result.existingTransactions,
+  });
   return result;
 }
 
-async function reconcileIfConfigured(
-  target: BankTarget, actualAccountId: string, balance: number | undefined, currency: string, bankName: string
-): Promise<void> {
-  if (!target.reconcile || balance === undefined) return;
+async function reconcileIfConfigured(target: BankTarget, ctx: ReconcileCtx): Promise<void> {
+  if (!target.reconcile || ctx.balance === undefined) return;
   logger.info(`     🔄 Reconciling account balance...`);
   try {
-    const result = await reconciliationService.reconcile(actualAccountId, balance, currency);
-    metrics.recordReconciliation(bankName, result.status, result.diff);
+    const result = await reconciliationService.reconcile(
+      ctx.actualAccountId, ctx.balance, ctx.currency
+    );
+    metrics.recordReconciliation(ctx.bankName, result.status, result.diff);
     logger.info(reconciliationMessages[result.status](result.diff));
   } catch (error: unknown) {
     logger.error(`     ❌ Reconciliation error: ${errorMessage(error)}`);
   }
 }
 
-async function processAccount(
-  bankName: string, bankConfig: BankConfig,
-  account: { accountNumber: string; balance?: number; txns: BankTransaction[] }, currency: string
-): Promise<{ imported: number; skipped: number }> {
-  const target = findTargetForAccount(bankConfig, account.accountNumber);
-  if (!target) { logger.warn(`     ⚠️  No target configured for account ${account.accountNumber}, skipping`); return { imported: 0, skipped: 0 }; }
+async function importAndReconcile(
+  target: BankTarget,
+  account: { accountNumber: string; balance?: number; txns: BankTransaction[] },
+  bankCtx: { bankName: string; currency: string }
+): Promise<ImportResult | null> {
+  const ctx: ImportTxnCtx = {
+    bankName: bankCtx.bankName, accountNumber: account.accountNumber,
+    actualAccountId: target.actualAccountId, balance: account.balance, currency: bankCtx.currency,
+  };
+  const result = await importAndRecordTransactions(ctx, account.txns);
+  await reconcileIfConfigured(target, {
+    actualAccountId: target.actualAccountId,
+    balance: account.balance, currency: bankCtx.currency, bankName: bankCtx.bankName,
+  });
+  return result;
+}
 
-  await transactionService.getOrCreateAccount(target.actualAccountId, bankName, account.accountNumber);
-  const result = await importAndRecordTransactions(bankName, account.accountNumber, target.actualAccountId, account.txns, account.balance, currency);
-  await reconcileIfConfigured(target, target.actualAccountId, account.balance, currency, bankName);
+async function processAccount(
+  bankCtx: { bankName: string; bankConfig: BankConfig; currency: string },
+  account: { accountNumber: string; balance?: number; txns: BankTransaction[] }
+): Promise<{ imported: number; skipped: number }> {
+  const { bankName, bankConfig, currency } = bankCtx;
+  const target = findTargetForAccount(bankConfig, account.accountNumber);
+  if (!target) {
+    logger.warn(`     ⚠️  No target configured for this account, skipping`);
+    return { imported: 0, skipped: 0 };
+  }
+  await transactionService.getOrCreateAccount(
+    target.actualAccountId, bankName, account.accountNumber
+  );
+  const result = await importAndReconcile(target, account, { bankName, currency });
   return { imported: result?.imported ?? 0, skipped: result?.skipped ?? 0 };
 }
 
 // ─── Bank import orchestration ───
 
-function logAccountInfo(accountNumber: string, balance: number | undefined, currency: string, txnCount: number): void {
-  logger.info(`\n  💳 Processing account: ${accountNumber}`);
-  logger.info(`     Balance: ${balance !== undefined ? `${balance} ${currency}` : 'N/A'}`);
-  logger.info(`     Transactions: ${txnCount}`);
+function logAccountInfo(info: AccountInfo): void {
+  logger.info(`\n  💳 Processing account: ${info.accountNumber}`);
+  const bal = info.balance !== undefined ? `${info.balance} ${info.currency}` : 'N/A';
+  logger.info(`     Balance: ${bal}`);
+  logger.info(`     Transactions: ${info.txnCount}`);
 }
 
 async function processAllAccounts(
@@ -284,14 +387,24 @@ async function processAllAccounts(
 ): Promise<{ imported: number; skipped: number }> {
   let totalImported = 0, totalSkipped = 0;
   for (const account of scrapeResult.accounts || []) {
-    if (shutdownHandler.isShuttingDown()) { logger.warn('  ⚠️  Shutdown requested, stopping import...'); break; }
+    if (shutdownHandler.isShuttingDown()) {
+      logger.warn('  ⚠️  Shutdown requested, stopping import...'); break;
+    }
     const currency = account.txns[0]?.originalCurrency || 'ILS';
-    logAccountInfo(account.accountNumber, account.balance, currency, account.txns?.length || 0);
-    const counts = await processAccount(bankName, bankConfig, account, currency);
+    logAccountInfo({
+      accountNumber: account.accountNumber, balance: account.balance,
+      currency, txnCount: account.txns?.length || 0,
+    });
+    const counts = await processAccount({ bankName, bankConfig, currency }, account);
     totalImported += counts.imported;
     totalSkipped += counts.skipped;
   }
   return { imported: totalImported, skipped: totalSkipped };
+}
+
+function logBankScrapedInfo(bankName: string, accountCount: number): void {
+  logger.info(`  ✅ Successfully scraped ${bankName}`);
+  logger.info(`  📝 Found ${accountCount} accounts`);
 }
 
 async function importFromBank(bankName: string, bankConfig: BankConfig): Promise<void> {
@@ -304,8 +417,7 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
       metrics.recordBankFailure(bankName, new Error(scrapeResult.errorMessage || 'Unknown error'));
       return;
     }
-    logger.info(`  ✅ Successfully scraped ${bankName}`);
-    logger.info(`  📝 Found ${scrapeResult.accounts?.length || 0} accounts`);
+    logBankScrapedInfo(bankName, scrapeResult.accounts?.length || 0);
     const totals = await processAllAccounts(bankName, bankConfig, scrapeResult);
     metrics.recordBankSuccess(bankName, totals.imported, totals.skipped);
     logger.info(`\n✅ Completed ${bankName}`);
@@ -332,7 +444,10 @@ async function initializeServerBudget(): Promise<void> {
   await api.init({ dataDir, serverURL, password });
   logger.info('✅ Connected to Actual Budget server');
   logger.info(`📂 Loading budget: ${config.actual.budget.syncId}`);
-  await api.downloadBudget(config.actual.budget.syncId, { password: config.actual.budget.password || undefined });
+  await api.downloadBudget(
+    config.actual.budget.syncId,
+    { password: config.actual.budget.password || undefined }
+  );
 }
 
 async function initializeApi(): Promise<void> {
@@ -345,7 +460,9 @@ async function initializeApi(): Promise<void> {
 async function processAllBanks(): Promise<void> {
   const banks = Object.entries(config.banks || {});
   for (let i = 0; i < banks.length; i++) {
-    if (shutdownHandler.isShuttingDown()) { logger.warn('⚠️  Shutdown requested, stopping imports...'); break; }
+    if (shutdownHandler.isShuttingDown()) {
+      logger.warn('⚠️  Shutdown requested, stopping imports...'); break;
+    }
     if (i > 0) await delayBeforeNextBank(config.delayBetweenBanks);
     await importFromBank(banks[i][0], banks[i][1]);
   }
@@ -380,7 +497,7 @@ async function handleFatalError(error: unknown): Promise<never> {
   logger.error('\n' + formattedError);
   if (error instanceof Error) logger.error(`Stack trace: ${error.stack}`);
   await notificationService.sendError(formattedError);
-  try { await api.shutdown(); } catch {}
+  try { await api.shutdown(); } catch { /* ignore shutdown error */ }
   process.exit(1);
 }
 
@@ -388,7 +505,8 @@ async function main(): Promise<void> {
   try {
     shutdownHandler.onShutdown(async () => {
       logger.info('🔌 Shutting down Actual Budget API...');
-      try { await api.shutdown(); } catch (e: unknown) { logger.error(`Error during API shutdown: ${errorMessage(e)}`); }
+      try { await api.shutdown(); }
+      catch (e: unknown) { logger.error(`Error during API shutdown: ${errorMessage(e)}`); }
     });
     await initializeApi();
     await categoryResolver?.initialize();
@@ -403,5 +521,5 @@ async function main(): Promise<void> {
 
 // Run if executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  void main();
 }

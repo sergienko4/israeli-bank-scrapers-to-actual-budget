@@ -31,7 +31,8 @@ export class TwoFactorService {
   private extractCode(message: string): string {
     const digits = message.replace(/\D/g, '');
     if (digits.length < 4 || digits.length > 8) {
-      throw new Error(`Invalid OTP code: expected 4-8 digits, got "${digits.length > 0 ? digits : message}"`);
+      const got = digits.length > 0 ? digits : message;
+      throw new Error(`Invalid OTP code: expected 4-8 digits, got "${got}"`);
     }
     return digits;
   }

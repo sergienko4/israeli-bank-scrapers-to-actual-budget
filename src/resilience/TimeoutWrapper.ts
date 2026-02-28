@@ -17,7 +17,7 @@ export class TimeoutWrapper implements ITimeoutWrapper {
       }, timeoutMs);
 
       // Clean up timer if the original promise resolves
-      promise.finally(() => clearTimeout(timer));
+      void promise.finally(() => clearTimeout(timer));
     });
 
     return Promise.race([promise, timeoutPromise]);

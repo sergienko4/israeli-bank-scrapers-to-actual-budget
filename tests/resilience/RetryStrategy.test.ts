@@ -101,7 +101,7 @@ describe('ExponentialBackoffRetry', () => {
     await promise;
 
     expect(onRetry).toHaveBeenCalledTimes(1);
-    expect(onRetry).toHaveBeenCalledWith(1, 3, 1000, expect.any(Error));
+    expect(onRetry).toHaveBeenCalledWith({ attempt: 1, maxAttempts: 3, backoffMs: 1000, error: expect.any(Error) });
   });
 
   it('re-throws original error when shouldRetry returns false', async () => {
@@ -171,8 +171,8 @@ describe('ExponentialBackoffRetry', () => {
 
     await promise;
 
-    expect(onRetry).toHaveBeenCalledWith(1, 4, 1000, expect.any(Error));
-    expect(onRetry).toHaveBeenCalledWith(2, 4, 2000, expect.any(Error));
-    expect(onRetry).toHaveBeenCalledWith(3, 4, 4000, expect.any(Error));
+    expect(onRetry).toHaveBeenCalledWith({ attempt: 1, maxAttempts: 4, backoffMs: 1000, error: expect.any(Error) });
+    expect(onRetry).toHaveBeenCalledWith({ attempt: 2, maxAttempts: 4, backoffMs: 2000, error: expect.any(Error) });
+    expect(onRetry).toHaveBeenCalledWith({ attempt: 3, maxAttempts: 4, backoffMs: 4000, error: expect.any(Error) });
   });
 });

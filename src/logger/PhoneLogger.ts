@@ -6,7 +6,9 @@
 import { ILogger, LogLevel, LogContext } from './ILogger.js';
 import { LogBuffer } from './LogBuffer.js';
 
-const EMOJI_PATTERN = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}]+/gu;
+// Variation selectors (FE0x) and ZWJ are combining chars — kept outside character class
+const EMOJI_PATTERN =
+  /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|\u{FE00}|\u{FE0F}|\u{200D}/gu;
 
 function stripEmojis(text: string): string {
   return text.replace(EMOJI_PATTERN, '').replace(/\s{2,}/g, ' ').trim();
