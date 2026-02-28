@@ -1,6 +1,9 @@
 /**
  * Custom error types for better error handling and categorization
+ * Single module for all domain error classes — error type collections are
+ * a legitimate exception to the one-class-per-file rule.
  */
+/* eslint-disable max-classes-per-file */
 
 export class TimeoutError extends Error {
   constructor(operation: string, timeoutMs: number) {

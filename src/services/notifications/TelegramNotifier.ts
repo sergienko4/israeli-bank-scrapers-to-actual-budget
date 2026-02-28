@@ -1,3 +1,4 @@
+/* eslint-disable max-lines */
 /**
  * Telegram notification channel using native fetch() (Node.js 22+)
  * Zero external dependencies - uses Telegram Bot API directly
@@ -9,8 +10,12 @@
  *   "emoji"    (C) - Emoji indicators for deposits/payments
  */
 
-import { TelegramConfig, MessageFormat, ShowTransactions, TelegramApiResponse } from '../../types/index.js';
-import { ImportSummary, BankMetrics, AccountMetrics, TransactionRecord } from '../MetricsService.js';
+import {
+  TelegramConfig, MessageFormat, ShowTransactions, TelegramApiResponse
+} from '../../types/index.js';
+import {
+  ImportSummary, BankMetrics, AccountMetrics, TransactionRecord
+} from '../MetricsService.js';
 import { INotifier } from './INotifier.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
@@ -20,9 +25,11 @@ const MAX_TRANSACTIONS_LIMIT = 25;
 const COMMAND_PATTERN = /^[a-z0-9_]{1,32}$/;
 const MAX_DESCRIPTION_LENGTH = 256;
 
-/** Validate command against Telegram Bot API limits (1-32 lowercase+digits+underscores, description 1-256) */
+/** Validate command against Telegram Bot API limits */
 function isValidBotCommand(command: string, description: string): boolean {
-  return COMMAND_PATTERN.test(command) && description.length >= 1 && description.length <= MAX_DESCRIPTION_LENGTH;
+  return COMMAND_PATTERN.test(command)
+    && description.length >= 1
+    && description.length <= MAX_DESCRIPTION_LENGTH;
 }
 
 export class TelegramNotifier implements INotifier {
@@ -37,7 +44,10 @@ export class TelegramNotifier implements INotifier {
     this.chatId = config.chatId;
     this.format = config.messageFormat || 'summary';
     this.showTransactions = config.showTransactions || 'new';
-    this.maxTransactions = Math.min(Math.max(maxTransactions ?? DEFAULT_MAX_TRANSACTIONS, 1), MAX_TRANSACTIONS_LIMIT);
+    this.maxTransactions = Math.min(
+      Math.max(maxTransactions ?? DEFAULT_MAX_TRANSACTIONS, 1),
+      MAX_TRANSACTIONS_LIMIT
+    );
   }
 
   async sendSummary(summary: ImportSummary): Promise<void> {
@@ -70,12 +80,16 @@ export class TelegramNotifier implements INotifier {
     throw new Error('2FA timeout: no reply received');
   }
 
-  private async pollUpdates(offset: number): Promise<{ updates: TelegramApiResponse; nextOffset: number } | null> {
+  private async pollUpdates(
+    offset: number
+  ): Promise<{ updates: TelegramApiResponse; nextOffset: number } | null> {
     const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=${offset}&timeout=5`;
     const response = await fetch(url);
     if (!response.ok) return null;
     const data = await response.json() as TelegramApiResponse;
-    const lastId = data.result?.length ? data.result[data.result.length - 1].update_id : offset - 1;
+    const lastId = data.result?.length
+      ? data.result[data.result.length - 1].update_id
+      : offset - 1;
     return { updates: data, nextOffset: lastId + 1 };
   }
 
@@ -99,7 +113,9 @@ export class TelegramNotifier implements INotifier {
 
   // ─── Bot command registration ───
 
-  async registerCommands(extras: Array<{ command: string; description: string }> = []): Promise<void> {
+  async registerCommands(
+    extras: Array<{ command: string; description: string }> = []
+  ): Promise<void> {
     const commands = [
       { command: 'scan', description: 'Run bank import now' },
       { command: 'status', description: 'Show last run info + history' },
@@ -110,7 +126,9 @@ export class TelegramNotifier implements INotifier {
     await this.sendBotCommands(commands);
   }
 
-  private async sendBotCommands(commands: Array<{ command: string; description: string }>): Promise<void> {
+  private async sendBotCommands(
+    commands: Array<{ command: string; description: string }>
+  ): Promise<void> {
     const url = `${TELEGRAM_API}/bot${this.botToken}/setMyCommands`;
     const response = await fetch(url, {
       method: 'POST',
@@ -142,7 +160,8 @@ export class TelegramNotifier implements INotifier {
     const tagRegex = /<(\/?)(\w+)[^>]*>/g;
     let match;
     while ((match = tagRegex.exec(text)) !== null) {
-      if (match[1] === '/') { if (openTags.length > 0) openTags.pop(); } else { openTags.push(match[2]); }
+      if (match[1] === '/') { if (openTags.length > 0) openTags.pop(); }
+      else { openTags.push(match[2]); }
     }
     return text + openTags.reverse().map(t => `</${t}>`).join('');
   }
@@ -152,7 +171,9 @@ export class TelegramNotifier implements INotifier {
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: this.chatId, text: this.truncateMessage(text), parse_mode: 'HTML' })
+      body: JSON.stringify({
+        chat_id: this.chatId, text: this.truncateMessage(text), parse_mode: 'HTML'
+      })
     });
     if (!response.ok) {
       const body = await response.text();
@@ -183,7 +204,10 @@ export class TelegramNotifier implements INotifier {
   }
 
   private appendBankFooter(lines: string[], bank: BankMetrics): void {
-    if (!bank.accounts?.length) { lines.push(''); lines.push(`${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b>`); }
+    if (!bank.accounts?.length) {
+      lines.push('');
+      lines.push(`${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b>`);
+    }
     if (bank.error) lines.push(`❌ ${this.escapeHtml(bank.error)}`);
   }
 
@@ -193,12 +217,16 @@ export class TelegramNotifier implements INotifier {
     const dur = (summary.totalDuration / 1000).toFixed(1);
     const lines: string[] = [
       this.buildHeader(summary), '',
-      `🏦 Banks: ${summary.successfulBanks}/${summary.totalBanks} (${summary.successRate.toFixed(0)}%)`,
+      `🏦 Banks: ${summary.successfulBanks}/${summary.totalBanks} ` +
+        `(${summary.successRate.toFixed(0)}%)`,
       `📥 Transactions: ${summary.totalTransactions} imported`,
       `🔄 Duplicates: ${summary.totalDuplicates} skipped`,
       `⏱ Duration: ${dur}s`,
     ];
-    if (summary.banks.length > 0) { lines.push(''); summary.banks.forEach(b => this.appendDefaultBank(lines, b)); }
+    if (summary.banks.length > 0) {
+      lines.push('');
+      summary.banks.forEach(b => this.appendDefaultBank(lines, b));
+    }
     return lines.join('\n');
   }
 
@@ -215,7 +243,8 @@ export class TelegramNotifier implements INotifier {
     const dur = (summary.totalDuration / 1000).toFixed(1);
     const lines: string[] = [
       this.buildHeader(summary),
-      `${summary.successfulBanks}/${summary.totalBanks} banks | ${summary.totalTransactions} txns | ${dur}s`,
+      `${summary.successfulBanks}/${summary.totalBanks} banks | ` +
+        `${summary.totalTransactions} txns | ${dur}s`,
     ];
     for (const bank of summary.banks) {
       for (const account of bank.accounts || []) this.appendCompactAccount(lines, bank, account);
@@ -224,7 +253,9 @@ export class TelegramNotifier implements INotifier {
     return lines.join('\n');
   }
 
-  private appendCompactAccount(lines: string[], bank: BankMetrics, account: AccountMetrics): void {
+  private appendCompactAccount(
+    lines: string[], bank: BankMetrics, account: AccountMetrics
+  ): void {
     lines.push('');
     lines.push(`${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b> · ${account.accountNumber}`);
     for (const txn of this.getTransactions(account)) {
@@ -249,7 +280,9 @@ export class TelegramNotifier implements INotifier {
     return lines.join('\n');
   }
 
-  private appendLedgerAccount(lines: string[], bank: BankMetrics, account: AccountMetrics): void {
+  private appendLedgerAccount(
+    lines: string[], bank: BankMetrics, account: AccountMetrics
+  ): void {
     lines.push('');
     lines.push(`${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b> · ${account.accountNumber}`);
     const txns = this.getTransactions(account);
@@ -260,7 +293,9 @@ export class TelegramNotifier implements INotifier {
   private appendLedgerTransactions(lines: string[], txns: TransactionRecord[]): void {
     lines.push('<code>');
     for (const txn of txns) {
-      const desc = this.escapeHtml(txn.description.length > 18 ? txn.description.slice(0, 18) + '..' : txn.description);
+      const raw = txn.description.length > 18
+        ? txn.description.slice(0, 18) + '..' : txn.description;
+      const desc = this.escapeHtml(raw);
       lines.push(`${this.fmtDate(txn.date)} ${desc}`);
       lines.push(`${''.padStart(6)}${this.fmtAmount(txn.amount).padStart(9)}`);
     }
@@ -274,7 +309,8 @@ export class TelegramNotifier implements INotifier {
     const dup = summary.totalDuplicates > 0 ? ` · ${summary.totalDuplicates} dup` : '';
     const lines: string[] = [
       this.buildHeader(summary), '',
-      `📊 ${summary.successfulBanks}/${summary.totalBanks} banks · ${summary.totalTransactions} txns${dup} · ${dur}s`,
+      `📊 ${summary.successfulBanks}/${summary.totalBanks} banks · ` +
+        `${summary.totalTransactions} txns${dup} · ${dur}s`,
     ];
     for (const bank of summary.banks) {
       for (const account of bank.accounts || []) this.appendEmojiAccount(lines, bank, account);
@@ -283,20 +319,29 @@ export class TelegramNotifier implements INotifier {
     return lines.join('\n');
   }
 
-  private appendEmojiAccount(lines: string[], bank: BankMetrics, account: AccountMetrics): void {
+  private appendEmojiAccount(
+    lines: string[], bank: BankMetrics, account: AccountMetrics
+  ): void {
     lines.push('');
     lines.push(`💳 <b>${this.escapeHtml(bank.bankName)}</b>`);
     for (const txn of this.getTransactions(account)) {
-      lines.push(`${txn.amount >= 0 ? '📥' : '📤'} <b>${this.fmtAmount(txn.amount)}</b>  ${this.escapeHtml(txn.description)}`);
+      const dir = txn.amount >= 0 ? '📥' : '📤';
+      lines.push(
+        `${dir} <b>${this.fmtAmount(txn.amount)}</b>  ${this.escapeHtml(txn.description)}`
+      );
     }
-    if (account.balance !== undefined) lines.push(`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`);
+    if (account.balance !== undefined) {
+      lines.push(`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`);
+    }
     this.appendReconciliation(lines, bank);
   }
 
   // ─── Shared helpers ───
 
   private appendBalance(lines: string[], account: AccountMetrics, bank: BankMetrics): void {
-    if (account.balance !== undefined) lines.push(`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`);
+    if (account.balance !== undefined) {
+      lines.push(`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`);
+    }
     this.appendReconciliation(lines, bank);
   }
 

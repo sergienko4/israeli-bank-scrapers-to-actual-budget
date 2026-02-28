@@ -69,12 +69,15 @@ export class AuditLogService implements IAuditLog {
 
   private loadEntries(): AuditEntry[] {
     if (!existsSync(this.filePath)) return [];
-    try { return JSON.parse(readFileSync(this.filePath, 'utf8')); }
+    try { return JSON.parse(readFileSync(this.filePath, 'utf8')) as AuditEntry[]; }
     catch { return []; }
   }
 
   private saveEntries(entries: AuditEntry[]): void {
     try { writeFileSync(this.filePath, JSON.stringify(entries, null, 2)); }
-    catch (error: unknown) { getLogger().error(`Failed to write audit log: ${error instanceof Error ? error.message : String(error)}`); }
+    catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      getLogger().error(`Failed to write audit log: ${msg}`);
+    }
   }
 }

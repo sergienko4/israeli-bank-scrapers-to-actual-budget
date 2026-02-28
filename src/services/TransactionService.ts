@@ -16,6 +16,22 @@ export interface ImportResult {
   existingTransactions: TransactionRecord[];
 }
 
+export interface ImportTransactionsOpts {
+  bankName: string;
+  accountNumber: string;
+  actualAccountId: string;
+  transactions: BankTransaction[];
+}
+
+interface SingleTxnContext {
+  actualAccountId: string;
+  txn: BankTransaction;
+  parsed: TransactionRecord;
+  importedId: string;
+  target: TransactionRecord[];
+  existingTransactions: TransactionRecord[];
+}
+
 export class TransactionService {
   private api: typeof api;
   private categoryResolver?: ICategoryResolver;
@@ -27,37 +43,39 @@ export class TransactionService {
 
   /**
    * Import transactions for an account into Actual Budget
-   *
-   * @param bankName - Bank identifier for imported_id generation
-   * @param accountNumber - Bank account number
-   * @param actualAccountId - Actual Budget account ID
-   * @param transactions - Array of bank transactions to import
-   * @returns ImportResult with imported and skipped counts
    */
-  async importTransactions(
-    bankName: string, accountNumber: string,
-    actualAccountId: string, transactions: BankTransaction[]
-  ): Promise<ImportResult> {
+  async importTransactions(opts: ImportTransactionsOpts): Promise<ImportResult> {
+    getLogger().info(`     📥 Importing ${opts.transactions.length} transactions...`);
+    const { newTransactions, existingTransactions } = await this.processTransactionBatch(opts);
+    getLogger().info(
+      `     ✅ New: ${newTransactions.length}, Existing: ${existingTransactions.length}`
+    );
+    return {
+      imported: newTransactions.length, skipped: existingTransactions.length,
+      newTransactions, existingTransactions
+    };
+  }
+
+  private async processTransactionBatch(
+    opts: ImportTransactionsOpts
+  ): Promise<{ newTransactions: TransactionRecord[]; existingTransactions: TransactionRecord[] }> {
+    const { bankName, accountNumber, actualAccountId, transactions } = opts;
     const newTransactions: TransactionRecord[] = [];
     const existingTransactions: TransactionRecord[] = [];
-    getLogger().info(`     📥 Importing ${transactions.length} transactions...`);
-
     const existingIds = await this.getExistingImportedIds(actualAccountId);
     for (const txn of transactions) {
       const parsed = this.parseTransaction(txn);
-      const importedId = this.buildImportedId(bankName, accountNumber, txn, parsed);
+      const importedId = this.buildImportedId(`${bankName}-${accountNumber}`, txn, parsed);
       const target = existingIds.has(importedId) ? existingTransactions : newTransactions;
-      await this.importSingleTransaction(actualAccountId, txn, parsed, importedId, target, existingTransactions);
+      await this.importSingleTransaction(
+        { actualAccountId, txn, parsed, importedId, target, existingTransactions }
+      );
     }
-
-    getLogger().info(`     ✅ New: ${newTransactions.length}, Existing: ${existingTransactions.length}`);
-    return { imported: newTransactions.length, skipped: existingTransactions.length, newTransactions, existingTransactions };
+    return { newTransactions, existingTransactions };
   }
 
-  private async importSingleTransaction(
-    actualAccountId: string, txn: BankTransaction, parsed: TransactionRecord,
-    importedId: string, target: TransactionRecord[], existingTransactions: TransactionRecord[]
-  ): Promise<void> {
+  private async importSingleTransaction(ctx: SingleTxnContext): Promise<void> {
+    const { actualAccountId, txn, parsed, importedId, target, existingTransactions } = ctx;
     try {
       const resolved = this.categoryResolver?.resolve(parsed.description);
       await this.api.importTransactions(actualAccountId, [{
@@ -79,9 +97,7 @@ export class TransactionService {
    * Get an existing account or create a new one in Actual Budget
    */
   async getOrCreateAccount(
-    accountId: string,
-    bankName: string,
-    accountNumber: string
+    accountId: string, bankName: string, accountNumber: string
   ): Promise<ActualAccount | string> {
     let account: ActualAccount | string | undefined = await this.api.getAccounts()
       .then((accounts: ActualAccount[]) => accounts.find((a) => a.id === accountId));
@@ -100,14 +116,10 @@ export class TransactionService {
     return account;
   }
 
-  /**
-   * Get all existing imported_ids for an account
-   */
-  private buildImportedId(
-    bankName: string, accountNumber: string,
-    txn: BankTransaction, parsed: TransactionRecord
-  ): string {
-    return `${bankName}-${accountNumber}-${txn.identifier || `${parsed.date}-${txn.chargedAmount || txn.originalAmount}`}`;
+  private buildImportedId(accountKey: string, txn: BankTransaction, parsed: TransactionRecord)
+    : string {
+    const fallback = `${parsed.date}-${txn.chargedAmount || txn.originalAmount}`;
+    return `${accountKey}-${txn.identifier || fallback}`;
   }
 
   private async getExistingImportedIds(accountId: string): Promise<Set<string>> {
@@ -120,9 +132,6 @@ export class TransactionService {
     return new Set(rows.map((t) => t.imported_id));
   }
 
-  /**
-   * Convert external bank transaction to typed internal format
-   */
   private parseTransaction(txn: BankTransaction): TransactionRecord {
     return {
       date: formatDate(txn.date),

@@ -42,7 +42,8 @@ export class TelegramPoller {
   }
 
   private async poll(): Promise<void> {
-    const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=${this.offset}&timeout=${POLL_TIMEOUT}`;
+    const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates` +
+      `?offset=${this.offset}&timeout=${POLL_TIMEOUT}`;
     const response = await fetch(url);
     if (!response.ok) return;
 
@@ -54,7 +55,9 @@ export class TelegramPoller {
     }
   }
 
-  private async processUpdate(message: { text?: string; chat: { id: number }; date: number } | undefined): Promise<void> {
+  private async processUpdate(
+    message: { text?: string; chat: { id: number }; date: number } | undefined
+  ): Promise<void> {
     if (!message?.text) return;
     if (String(message.chat.id) !== this.chatId) return;
     if (message.date < this.startedAt) return;

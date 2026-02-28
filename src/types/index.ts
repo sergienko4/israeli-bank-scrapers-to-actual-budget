@@ -54,13 +54,13 @@ export interface BankConfig {
   twoFactorTimeout?: number;        // Seconds to wait for OTP reply. Default: 300
 
   // Session management
-  clearSession?: boolean;            // Default: false. Set true to clear chrome-data before scraping
+  clearSession?: boolean;  // Default: false. Set true to clear chrome-data before scraping
 
   // Scraper tuning (per bank)
   timeout?: number;                  // Navigation timeout in ms. Default: 30000
   navigationRetryCount?: number;     // Retries on page.goto failure. Default: 0
 
-  [key: string]: any; // Allow other bank-specific fields
+  [key: string]: unknown; // Allow other bank-specific fields
 }
 
 export interface BankTransaction {

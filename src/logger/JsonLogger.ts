@@ -41,7 +41,11 @@ export class JsonLogger implements ILogger {
 
   private safeStringify(entry: JsonLogEntry): string {
     try { return JSON.stringify(entry); }
-    catch { return JSON.stringify({ timestamp: entry.timestamp, level: entry.level, message: entry.message }); }
+    catch {
+      return JSON.stringify({
+        timestamp: entry.timestamp, level: entry.level, message: entry.message
+      });
+    }
   }
 
   private buildEntry(level: LogLevel, message: string, context?: LogContext): JsonLogEntry {

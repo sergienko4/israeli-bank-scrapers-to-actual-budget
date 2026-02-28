@@ -9,14 +9,19 @@
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "test": "vitest run",
+    "test:unit": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
     "test:e2e": "vitest run --config vitest.config.e2e.ts",
     "test:e2e:setup": "npx tsx tests/e2e/e2e-setup.ts",
-    "validate": "npm run build && npm test",
+    "test:e2e:mock": "npm run test:e2e:setup && npm run test:e2e",
+    "type-check": "tsc --noEmit",
+    "validate": "npm run type-check && npm run build && npm test",
+    "validate:all": "npm run type-check && npm run test:unit && npm run test:e2e:mock && npm run lint",
+    "lint": "eslint src/",
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix",
-    "outdated": "npm outdated"
+    "outdated": "npm outdated",
+    "prepare": "husky"
   },
   "dependencies": {
     "@actual-app/api": "^26.2.0",
@@ -24,9 +29,15 @@
     "cron-parser": "^5.5.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.3.0",
     "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^10.0.2",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
     "vitest": "^4.0.18"
   },
   "engines": {
@@ -38,6 +49,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget.git"
+  },
+  "lint-staged": {
+    "src/**/*.ts": "eslint"
   },
   "keywords": [
     "actual-budget",

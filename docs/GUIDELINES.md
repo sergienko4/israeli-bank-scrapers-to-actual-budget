@@ -33,17 +33,19 @@ Rules for contributing to this project. All contributors (including AI assistant
 15. **Max 10 lines per method** - Extract longer methods into single-purpose functions
 16. **No `any` types** - CI enforces zero `: any` in source (ratchet = 0)
 17. **OCP maps over if/else chains** - Use lookup maps for extensible dispatch patterns
+18. **ESLint enforced** - `npm run lint` must pass: max-lines (300), max-lines-per-function (20), max-params (3), max-len (100), no-unused, no-unsafe-function-type. Tests exempt from line limits. No warnings allowed (warn=error policy).
 
 ---
 
 ## Verification Before PR
 
-18. **Build locally** - `npm run build` must pass with zero errors
-19. **Run tests** - `npm test` must pass all tests
-20. **Run validate** - `npm run validate` (build + tests combined)
-21. **Build Docker image** - `docker build -t israeli-bank-importer:test .`
-22. **Run E2E tests first** - `npm run test:e2e` with E2E config (mock data, no real bank credentials)
-23. **Then run with real config** - Docker run with `config.json` to verify with real bank data (optional, after E2E passes)
+19. **Build locally** - `npm run build` must pass with zero errors
+20. **Run lint** - `npm run lint` must pass with zero errors
+21. **Run tests** - `npm test` must pass all tests
+22. **Run validate** - `npm run validate` (build + tests combined)
+23. **Build Docker image** - `docker build -t israeli-bank-importer:test .`
+24. **Run E2E tests first** - `npm run test:e2e` with E2E config (mock data, no real bank credentials)
+25. **Then run with real config** - Docker run with `config.json` to verify with real bank data (optional, after E2E passes)
 
 ---
 

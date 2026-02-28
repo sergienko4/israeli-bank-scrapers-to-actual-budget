@@ -27,8 +27,8 @@ export class GracefulShutdownHandler implements IShutdownHandler {
   }
 
   private setupSignalHandlers(): void {
-    process.on('SIGTERM', () => this.handleShutdown('SIGTERM'));
-    process.on('SIGINT', () => this.handleShutdown('SIGINT'));
+    process.on('SIGTERM', () => { void this.handleShutdown('SIGTERM'); });
+    process.on('SIGINT', () => { void this.handleShutdown('SIGINT'); });
   }
 
   private async handleShutdown(signal: string): Promise<void> {
@@ -43,7 +43,10 @@ export class GracefulShutdownHandler implements IShutdownHandler {
   private async executeCallbacks(): Promise<void> {
     for (const callback of this.callbacks) {
       try { await callback(); }
-      catch (error: unknown) { getLogger().error(`Error during shutdown callback: ${error instanceof Error ? error.message : String(error)}`); }
+      catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : String(error);
+        getLogger().error(`Error during shutdown callback: ${msg}`);
+      }
     }
   }
 }

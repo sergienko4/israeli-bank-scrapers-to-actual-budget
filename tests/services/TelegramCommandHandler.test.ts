@@ -14,7 +14,7 @@ describe('TelegramCommandHandler', () => {
       sendSummary: vi.fn(),
       sendError: vi.fn()
     };
-    handler = new TelegramCommandHandler(mockRunImport, mockNotifier);
+    handler = new TelegramCommandHandler({ runImport: mockRunImport, notifier: mockNotifier });
     createLogger({ maxBufferSize: 50 });
   });
 

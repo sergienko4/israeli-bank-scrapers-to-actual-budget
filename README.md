@@ -781,6 +781,7 @@ docker run --rm ^
 npm test              # Run all tests
 npm run test:coverage # With coverage report
 npm run test:watch    # Watch mode
+npm run lint          # ESLint (max-lines, max-params, max-len, no-unused)
 npm run validate      # Build + test (validate before committing)
 ```
 

@@ -15,6 +15,14 @@ export interface AccountMetrics {
   existingTransactions: TransactionRecord[];
 }
 
+export interface AccountTransactionsRecord {
+  accountNumber: string;
+  balance: number | undefined;
+  currency: string | undefined;
+  newTransactions: TransactionRecord[];
+  existingTransactions: TransactionRecord[];
+}
+
 export interface BankMetrics {
   bankName: string;
   startTime: number;
@@ -70,17 +78,10 @@ export class MetricsService {
   /**
    * Record account transactions for a bank
    */
-  recordAccountTransactions(
-    bankName: string,
-    accountNumber: string,
-    balance: number | undefined,
-    currency: string | undefined,
-    newTransactions: TransactionRecord[],
-    existingTransactions: TransactionRecord[]
-  ): void {
+  recordAccountTransactions(bankName: string, record: AccountTransactionsRecord): void {
     const metrics = this.banks.get(bankName);
     if (metrics) {
-      metrics.accounts.push({ accountNumber, balance, currency, newTransactions, existingTransactions });
+      metrics.accounts.push({ ...record });
     }
   }
 
@@ -170,12 +171,18 @@ export class MetricsService {
   private printOverallStats(summary: ImportSummary, importDuration: number): void {
     getLogger().info('📊 Import Summary\n');
     getLogger().info(`  Total banks: ${summary.totalBanks}`);
-    getLogger().info(`  Successful: ${summary.successfulBanks} (${summary.successRate.toFixed(1)}%)`);
-    getLogger().info(`  Failed: ${summary.failedBanks} (${(100 - summary.successRate).toFixed(1)}%)`);
+    getLogger().info(
+      `  Successful: ${summary.successfulBanks} (${summary.successRate.toFixed(1)}%)`
+    );
+    getLogger().info(
+      `  Failed: ${summary.failedBanks} (${(100 - summary.successRate).toFixed(1)}%)`
+    );
     getLogger().info(`  Total transactions: ${summary.totalTransactions}`);
     getLogger().info(`  Duplicates prevented: ${summary.totalDuplicates}`);
     getLogger().info(`  Total duration: ${(importDuration / 1000).toFixed(1)}s`);
-    if (summary.totalBanks > 0) getLogger().info(`  Average per bank: ${(summary.averageDuration / 1000).toFixed(1)}s`);
+    if (summary.totalBanks > 0) {
+      getLogger().info(`  Average per bank: ${(summary.averageDuration / 1000).toFixed(1)}s`);
+    }
   }
 
   private printBankPerformance(banks: BankMetrics[]): void {
@@ -183,7 +190,10 @@ export class MetricsService {
     for (const bank of banks) {
       const icon = bank.status === 'success' ? '✅' : '❌';
       const dur = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : 'N/A';
-      getLogger().info(`  ${icon} ${bank.bankName}: ${dur} (${bank.transactionsImported} txns, ${bank.transactionsSkipped} duplicates)`);
+      getLogger().info(
+        `  ${icon} ${bank.bankName}: ${dur} ` +
+        `(${bank.transactionsImported} txns, ${bank.transactionsSkipped} duplicates)`
+      );
       if (bank.reconciliationStatus) this.printReconciliationLine(bank);
       if (bank.error) getLogger().error(`     ❌ Error: ${bank.error}`);
     }
@@ -192,11 +202,16 @@ export class MetricsService {
   private printReconciliationLine(bank: BankMetrics): void {
     const reconIcon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
     const reconMessages: Record<string, string> = {
-      created: bank.reconciliationAmount !== undefined ? `${bank.reconciliationAmount > 0 ? '+' : ''}${(bank.reconciliationAmount / 100).toFixed(2)} ILS` : '',
+      created: bank.reconciliationAmount !== undefined
+        ? `${bank.reconciliationAmount > 0 ? '+' : ''}` +
+          `${(bank.reconciliationAmount / 100).toFixed(2)} ILS`
+        : '',
       skipped: 'balanced',
       'already-reconciled': 'already reconciled',
     };
-    getLogger().info(`     ${reconIcon} Reconciliation: ${reconMessages[bank.reconciliationStatus!]}`);
+    getLogger().info(
+      `     ${reconIcon} Reconciliation: ${reconMessages[bank.reconciliationStatus!]}`
+    );
   }
 
   /**

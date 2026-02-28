@@ -9,11 +9,13 @@ import { CronExpressionParser } from 'cron-parser';
 import { TelegramPoller } from './services/TelegramPoller.js';
 import { TelegramCommandHandler } from './services/TelegramCommandHandler.js';
 import { TelegramNotifier } from './services/notifications/TelegramNotifier.js';
-import { ImporterConfig, LogConfig } from './types/index.js';
+import { ImporterConfig, LogConfig, TelegramConfig } from './types/index.js';
 import { AuditLogService } from './services/AuditLogService.js';
 import { errorMessage } from './utils/index.js';
 import { createLogger, getLogger } from './logger/index.js';
-import { isEncryptedConfig, decryptConfig, getEncryptionPassword } from './config/ConfigEncryption.js';
+import {
+  isEncryptedConfig, decryptConfig, getEncryptionPassword
+} from './config/ConfigEncryption.js';
 
 // Load log config early so all messages use the configured format
 const logConfig = loadLogConfig();
@@ -31,10 +33,12 @@ let activePoller: TelegramPoller | null = null;
 function readJsonOrEncrypted(filePath: string): Record<string, unknown> | null {
   if (!existsSync(filePath)) return null;
   const raw = readFileSync(filePath, 'utf8');
-  const parsed = JSON.parse(raw);
-  if (!isEncryptedConfig(parsed)) return parsed;
+  const parsed: unknown = JSON.parse(raw);
+  if (!isEncryptedConfig(parsed)) return parsed as Record<string, unknown>;
   const password = getEncryptionPassword();
-  return password ? JSON.parse(decryptConfig(raw, password)) : null;
+  return password
+    ? JSON.parse(decryptConfig(raw, password)) as Record<string, unknown>
+    : null;
 }
 
 function loadFullConfig(): ImporterConfig | null {
@@ -71,42 +75,69 @@ function runImport(): Promise<number> {
   return new Promise((resolve) => {
     const startTime = new Date();
     logger.info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
-    const child: ChildProcess = spawn('node', ['/app/dist/index.js'], { stdio: 'inherit', env: process.env });
+    const child: ChildProcess = spawn(
+      'node', ['/app/dist/index.js'], { stdio: 'inherit', env: process.env }
+    );
     child.on('exit', (code) => { logImportResult(code, startTime); resolve(code || 0); });
-    child.on('error', (err) => { logger.error(`❌ Failed to start import: ${err.message}`); resolve(1); });
+    child.on('error', (err) => {
+      logger.error(`❌ Failed to start import: ${err.message}`);
+      resolve(1);
+    });
   });
 }
 
 function logImportResult(code: number | null, startTime: Date): void {
   const duration = Math.round((Date.now() - startTime.getTime()) / 1000);
   const time = new Date().toISOString();
-  if (code === 0) logger.info(`✅ ${time}: Import completed successfully (took ${duration}s)`);
-  else logger.error(`❌ ${time}: Import failed with exit code ${code} (took ${duration}s)`);
+  if (code === 0) {
+    logger.info(`✅ ${time}: Import completed successfully (took ${duration}s)`);
+  } else {
+    logger.error(`❌ ${time}: Import failed with exit code ${code} (took ${duration}s)`);
+  }
 }
 
 // ─── Telegram commands ───
+
+function logCommandCount(extras: Array<{ command: string; description: string }>): void {
+  const cmdNames = extras.map(c => c.command).join(', /');
+  logger.info(
+    `📋 Registering ${4 + extras.length} bot commands` +
+    (extras.length ? ` (including /${cmdNames})` : '')
+  );
+}
+
+async function createHandlerAndPoller(
+  telegram: TelegramConfig, config: ImporterConfig | null
+): Promise<void> {
+  const notifier = new TelegramNotifier(telegram);
+  const extras = buildExtraCommands(config);
+  logCommandCount(extras);
+  await notifier.registerCommands(extras);
+  const handler = new TelegramCommandHandler({
+    runImport: runImportLocked, notifier, auditLog: new AuditLogService(),
+  });
+  activePoller = new TelegramPoller(
+    telegram.botToken, telegram.chatId, (text) => handler.handle(text)
+  );
+  activePoller.start().catch((err: unknown) => {
+    logger.error(`Telegram command listener crashed: ${errorMessage(err)}`);
+  });
+}
 
 async function startTelegramCommands(): Promise<void> {
   const config = loadFullConfig();
   const telegram = config?.notifications?.enabled ? config.notifications.telegram : null;
   if (!telegram?.listenForCommands) return;
-
   try {
-    const notifier = new TelegramNotifier(telegram);
-    const extraCommands = buildExtraCommands(config);
-    logger.info(`📋 Registering ${4 + extraCommands.length} bot commands${extraCommands.length ? ' (including /' + extraCommands.map(c => c.command).join(', /') + ')' : ''}`);
-    await notifier.registerCommands(extraCommands);
-    const handler = new TelegramCommandHandler(runImportLocked, notifier, new AuditLogService());
-    activePoller = new TelegramPoller(telegram.botToken, telegram.chatId, (text) => handler.handle(text));
-    activePoller.start().catch((err: unknown) => {
-      logger.error(`Telegram command listener crashed: ${errorMessage(err)}`);
-    });
+    await createHandlerAndPoller(telegram, config);
   } catch (error: unknown) {
     logger.error(`⚠️  Failed to start Telegram commands: ${errorMessage(error)}`);
   }
 }
 
-function buildExtraCommands(config: ImporterConfig | null): Array<{ command: string; description: string }> {
+function buildExtraCommands(
+  config: ImporterConfig | null
+): Array<{ command: string; description: string }> {
   const extras: Array<{ command: string; description: string }> = [];
   if ((config?.spendingWatch?.length ?? 0) > 0) {
     extras.push({ command: 'watch', description: 'Check spending watch rules' });
@@ -140,9 +171,10 @@ async function scheduleLoop(schedule: string): Promise<never> {
       const interval = CronExpressionParser.parse(schedule, { tz: process.env.TZ || 'UTC' });
       const nextRun = interval.next().toDate();
       const msUntilNext = nextRun.getTime() - Date.now();
-      logger.info(`⏳ Waiting until ${nextRun.toISOString()} (${Math.round(msUntilNext / 1000 / 60)} minutes)`);
+      const minutesUntil = Math.round(msUntilNext / 1000 / 60);
+      logger.info(`⏳ Waiting until ${nextRun.toISOString()} (${minutesUntil} minutes)`);
       await safeSleep(msUntilNext);
-      if (Date.now() < nextRun.getTime()) continue; // Woke early from clamped timeout, re-check
+      if (Date.now() < nextRun.getTime()) continue; // Woke early, re-check
       await runImportLocked();
     } catch (err: unknown) {
       logger.error(`❌ Scheduler error: ${errorMessage(err)}`);
