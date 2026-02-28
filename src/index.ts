@@ -280,6 +280,7 @@ async function scrapeBankWithResilience(
 interface ImportTxnCtx {
   bankName: string;
   accountNumber: string;
+  accountName?: string;
   actualAccountId: string;
   balance: number | undefined;
   currency: string;
@@ -294,6 +295,7 @@ interface ReconcileCtx {
 
 interface AccountInfo {
   accountNumber: string;
+  accountName?: string;
   balance: number | undefined;
   currency: string;
   txnCount: number;
@@ -319,7 +321,8 @@ async function importAndRecordTransactions(
   };
   const result = await transactionService.importTransactions(opts);
   metrics.recordAccountTransactions(ctx.bankName, {
-    accountNumber: ctx.accountNumber, balance: ctx.balance, currency: ctx.currency,
+    accountNumber: ctx.accountNumber, accountName: ctx.accountName,
+    balance: ctx.balance, currency: ctx.currency,
     newTransactions: result.newTransactions, existingTransactions: result.existingTransactions,
   });
   return result;
@@ -346,7 +349,8 @@ async function importAndReconcile(
 ): Promise<ImportResult | null> {
   const ctx: ImportTxnCtx = {
     bankName: bankCtx.bankName, accountNumber: account.accountNumber,
-    actualAccountId: target.actualAccountId, balance: account.balance, currency: bankCtx.currency,
+    accountName: target.accountName, actualAccountId: target.actualAccountId,
+    balance: account.balance, currency: bankCtx.currency,
   };
   const result = await importAndRecordTransactions(ctx, account.txns);
   await reconcileIfConfigured(target, {
@@ -376,7 +380,10 @@ async function processAccount(
 // ─── Bank import orchestration ───
 
 function logAccountInfo(info: AccountInfo): void {
-  logger.info(`\n  💳 Processing account: ${info.accountNumber}`);
+  const label = info.accountName
+    ? `${info.accountName} (${info.accountNumber})`
+    : info.accountNumber;
+  logger.info(`\n  💳 Processing account: ${label}`);
   const bal = info.balance !== undefined ? `${info.balance} ${info.currency}` : 'N/A';
   logger.info(`     Balance: ${bal}`);
   logger.info(`     Transactions: ${info.txnCount}`);
@@ -391,9 +398,10 @@ async function processAllAccounts(
       logger.warn('  ⚠️  Shutdown requested, stopping import...'); break;
     }
     const currency = account.txns[0]?.originalCurrency || 'ILS';
+    const target = findTargetForAccount(bankConfig, account.accountNumber);
     logAccountInfo({
-      accountNumber: account.accountNumber, balance: account.balance,
-      currency, txnCount: account.txns?.length || 0,
+      accountNumber: account.accountNumber, accountName: target?.accountName,
+      balance: account.balance, currency, txnCount: account.txns?.length || 0,
     });
     const counts = await processAccount({ bankName, bankConfig, currency }, account);
     totalImported += counts.imported;

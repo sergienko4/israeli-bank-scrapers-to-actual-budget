@@ -283,4 +283,26 @@ describe('MetricsService', () => {
       consoleSpy.mockRestore();
     });
   });
+
+  describe('recordAccountTransactions', () => {
+    it('stores accountName in AccountMetrics when provided', () => {
+      metrics.startBank('discount');
+      metrics.recordAccountTransactions('discount', {
+        accountNumber: '1234567', accountName: 'Savings Account',
+        balance: 10000, currency: 'ILS', newTransactions: [], existingTransactions: []
+      });
+      const bankMetrics = metrics.getBankMetrics('discount');
+      expect(bankMetrics?.accounts[0].accountName).toBe('Savings Account');
+    });
+
+    it('stores undefined accountName when not provided', () => {
+      metrics.startBank('discount');
+      metrics.recordAccountTransactions('discount', {
+        accountNumber: '1234567', balance: 10000, currency: 'ILS',
+        newTransactions: [], existingTransactions: []
+      });
+      const bankMetrics = metrics.getBankMetrics('discount');
+      expect(bankMetrics?.accounts[0].accountName).toBeUndefined();
+    });
+  });
 });

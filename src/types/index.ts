@@ -16,6 +16,7 @@ export interface ActualConfig {
 
 export interface BankTarget {
   actualAccountId: string;
+  accountName?: string;      // optional friendly label shown in logs and notifications
   reconcile: boolean;
   accounts: string[] | 'all';
 }

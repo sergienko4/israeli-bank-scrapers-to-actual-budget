@@ -31,7 +31,7 @@
       "password": "your_password",
       "num": "ABC123",
       "daysBack": 7,
-      "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
+      "targets": [{ "actualAccountId": "uuid", "accountName": "Main Checking", "reconcile": false, "accounts": "all" }]
     },
 
     "leumi": {
@@ -112,6 +112,7 @@
     "clearSession": "false (default). true = clear chrome-data before scraping this bank (prevents stale WAF cookies)",
     "timeout": "Navigation timeout in ms. Default: 30000. Increase for slow connections (e.g., 60000)",
     "navigationRetryCount": "Retries on page load failure. Default: 0. Set 1-3 for flaky networks",
+    "accountName": "Optional. Friendly label shown in logs and Telegram instead of the bank account number",
     "reconcile": "false (default). true = auto-adjust balance to match bank",
     "twoFactorAuth": "false (default). true = bot asks for SMS OTP via Telegram",
     "twoFactorTimeout": "Seconds to wait for OTP reply. Default: 300",

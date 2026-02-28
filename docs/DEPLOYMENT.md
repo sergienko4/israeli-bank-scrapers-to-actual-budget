@@ -153,6 +153,7 @@ Uses named volumes for data persistence — your data survives container recreat
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
 | `actualAccountId` | Yes | - | Target account UUID in Actual Budget |
+| `accountName` | No | — | Friendly label shown in logs and Telegram instead of the bank account number |
 | `reconcile` | No | `false` | Auto-adjust balance to match bank |
 | `accounts` | No | `"all"` | `"all"` or array like `["1234", "5678"]` |
 
