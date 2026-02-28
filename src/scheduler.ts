@@ -106,6 +106,15 @@ function logCommandCount(extras: Array<{ command: string; description: string }>
   );
 }
 
+async function runConfigValidation(): Promise<string> {
+  const raw = loadFullConfig();
+  if (!raw) return '[FAIL] Cannot load config file';
+  const { ConfigValidator } = await import('./Config/ConfigValidator.js');
+  const validator = new ConfigValidator();
+  const results = await validator.validateAll(raw);
+  return validator.formatReport(results);
+}
+
 async function createHandlerAndPoller(
   telegram: TelegramConfig, config: ImporterConfig | null
 ): Promise<void> {
@@ -115,6 +124,7 @@ async function createHandlerAndPoller(
   await notifier.registerCommands(extras);
   const handler = new TelegramCommandHandler({
     runImport: runImportLocked, notifier, auditLog: new AuditLogService(),
+    runValidate: runConfigValidation,
   });
   activePoller = new TelegramPoller(
     telegram.botToken, telegram.chatId, (text) => handler.handle(text)
@@ -138,7 +148,9 @@ async function startTelegramCommands(): Promise<void> {
 function buildExtraCommands(
   config: ImporterConfig | null
 ): Array<{ command: string; description: string }> {
-  const extras: Array<{ command: string; description: string }> = [];
+  const extras: Array<{ command: string; description: string }> = [
+    { command: 'check_config', description: 'Check configuration (offline + online)' },
+  ];
   if ((config?.spendingWatch?.length ?? 0) > 0) {
     extras.push({ command: 'watch', description: 'Check spending watch rules' });
   }

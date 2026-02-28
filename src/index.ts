@@ -39,6 +39,12 @@ import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
 import { TranslateCategoryResolver } from './Services/TranslateCategoryResolver.js';
 import { SpendingWatchService } from './Services/SpendingWatchService.js';
 
+// --validate mode: validate config and exit before full initialization
+if (process.argv.includes('--validate')) {
+  const { runValidateMode } = await import('./Config/ConfigValidator.js');
+  process.exit(await runValidateMode());
+}
+
 // Load configuration and initialize logger
 const configLoader = new ConfigLoader();
 const config: ImporterConfig = configLoader.load();

@@ -358,4 +358,39 @@ describe('TelegramCommandHandler', () => {
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Watch error'));
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Timeout'));
   });
+
+  // ─── /validate ───
+
+  it('/validate without runValidate shows unavailable message', async () => {
+    await handler.handle('/check_config');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('unavailable')
+    );
+  });
+
+  it('/validate with runValidate calls it and sends report in <pre> block', async () => {
+    const mockRunValidate = vi.fn().mockResolvedValue('All checks passed ✓');
+    const validateHandler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, runValidate: mockRunValidate,
+    });
+    await validateHandler.handle('/check_config');
+    expect(mockRunValidate).toHaveBeenCalled();
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('All checks passed')
+    );
+  });
+
+  it('/validate with runValidate throwing shows error message', async () => {
+    const mockRunValidate = vi.fn().mockRejectedValue(new Error('load failed'));
+    const validateHandler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, runValidate: mockRunValidate,
+    });
+    await validateHandler.handle('/check_config');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Validation error')
+    );
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('load failed')
+    );
+  });
 });
