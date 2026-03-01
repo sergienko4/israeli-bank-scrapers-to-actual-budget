@@ -109,7 +109,8 @@ export type LogFormat = 'words' | 'json' | 'table' | 'phone';
 
 export interface LogConfig {
   format?: LogFormat;          // Default: 'words'
-  maxBufferSize?: number;      // Ring buffer max entries for /logs command. Default: 150
+  maxBufferSize?: number;      // Deprecated: kept for backward compat, no longer functional
+  logDir?: string;             // Log file directory. Default: './logs'
 }
 
 export type CategorizationMode = 'history' | 'translate' | 'none';

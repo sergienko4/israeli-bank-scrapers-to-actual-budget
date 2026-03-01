@@ -34,7 +34,7 @@ import {
 import { buildChromeArgs, getChromeDataDir } from './Scraper/ScraperOptionsBuilder.js';
 import { buildCredentials } from './Scraper/CredentialsBuilder.js';
 import { errorMessage, formatDate } from './Utils/index.js';
-import { createLogger, getLogger } from './Logger/index.js';
+import { createLogger, getLogger, deriveLogFormat } from './Logger/index.js';
 import { ICategoryResolver } from './Services/ICategoryResolver.js';
 import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
 import { TranslateCategoryResolver } from './Services/TranslateCategoryResolver.js';
@@ -50,7 +50,13 @@ if (process.argv.includes('--validate')) {
 // Load configuration and initialize logger
 const configLoader = new ConfigLoader();
 const config: ImporterConfig = configLoader.load();
-createLogger(config.logConfig);
+const tg = config.notifications?.telegram;
+const derivedFormat = deriveLogFormat(tg?.messageFormat, tg?.listenForCommands);
+createLogger({
+  ...config.logConfig,
+  format: config.logConfig?.format ?? derivedFormat,
+  logDir: config.logConfig?.logDir ?? './logs',
+});
 const logger = getLogger();
 
 // Initialize resilience components

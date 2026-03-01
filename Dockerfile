@@ -60,9 +60,10 @@ RUN npm prune --production
 # This prevents credentials from being baked into the Docker image
 
 # Create directories for data persistence with proper ownership
-RUN mkdir -p /app/data /app/cache && \
-    chown -R node:node /app/data /app/cache /app/browsers && \
-    chmod -R 755 /app/data /app/cache /app/browsers
+# /app/logs is created here so the node user can write log files without a volume mount
+RUN mkdir -p /app/data /app/cache /app/logs && \
+    chown -R node:node /app/data /app/cache /app/logs /app/browsers && \
+    chmod -R 755 /app/data /app/cache /app/logs /app/browsers
 
 # Run as non-root user for security
 USER node

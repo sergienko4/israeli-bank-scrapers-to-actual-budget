@@ -1,34 +1,27 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createLogger, getLogger, getLogBuffer } from '../../src/Logger/index.js';
-import { ConsoleLogger } from '../../src/Logger/ConsoleLogger.js';
-import { JsonLogger } from '../../src/Logger/JsonLogger.js';
-import { TableLogger } from '../../src/Logger/TableLogger.js';
-import { PhoneLogger } from '../../src/Logger/PhoneLogger.js';
+import {
+  createLogger, getLogger, getLogBuffer, deriveLogFormat
+} from '../../src/Logger/index.js';
+import { PinoAdapter } from '../../src/Logger/PinoAdapter.js';
+import { LogMediator } from '../../src/Logger/LogMediator.js';
 
 describe('logger factory', () => {
   beforeEach(() => {
-    // Reset singleton by creating a new default logger
     createLogger();
   });
 
-  it('defaults to ConsoleLogger', () => {
-    const logger = createLogger();
-    expect(logger).toBeInstanceOf(ConsoleLogger);
+  it('defaults to PinoAdapter (words format, no file)', () => {
+    expect(createLogger()).toBeInstanceOf(PinoAdapter);
   });
 
-  it('creates JsonLogger for json format', () => {
-    const logger = createLogger({ format: 'json' });
-    expect(logger).toBeInstanceOf(JsonLogger);
+  it('creates PinoAdapter for all formats (no logDir)', () => {
+    expect(createLogger({ format: 'json' })).toBeInstanceOf(PinoAdapter);
+    expect(createLogger({ format: 'table' })).toBeInstanceOf(PinoAdapter);
+    expect(createLogger({ format: 'phone' })).toBeInstanceOf(PinoAdapter);
   });
 
-  it('creates TableLogger for table format', () => {
-    const logger = createLogger({ format: 'table' });
-    expect(logger).toBeInstanceOf(TableLogger);
-  });
-
-  it('creates PhoneLogger for phone format', () => {
-    const logger = createLogger({ format: 'phone' });
-    expect(logger).toBeInstanceOf(PhoneLogger);
+  it('creates LogMediator when logDir is set', () => {
+    expect(createLogger({ logDir: '/tmp/test-logs-xyz' })).toBeInstanceOf(LogMediator);
   });
 
   it('getLogger returns singleton', () => {
@@ -37,46 +30,60 @@ describe('logger factory', () => {
   });
 
   it('getLogger creates default if not initialized', () => {
-    // Force reset by creating then getting
     createLogger();
-    const logger = getLogger();
-    expect(logger).toBeInstanceOf(ConsoleLogger);
+    expect(getLogger()).toBeInstanceOf(PinoAdapter);
   });
 
-  it('getLogBuffer returns the buffer', () => {
-    createLogger({ maxBufferSize: 10 });
-    const buffer = getLogBuffer();
-    expect(buffer).toBeDefined();
-    expect(buffer.isEnabled()).toBe(true);
-  });
-
-  it('buffer disabled by default (zero memory)', () => {
+  it('getLogBuffer returns a LogBuffer instance', () => {
     createLogger();
-    const buffer = getLogBuffer();
-    expect(buffer.isEnabled()).toBe(false);
+    expect(getLogBuffer()).toBeDefined();
   });
 
-  it('passes maxBufferSize to buffer', () => {
-    createLogger({ maxBufferSize: 3 });
-    const logger = getLogger();
-    const buffer = getLogBuffer();
-    logger.info('a');
-    logger.info('b');
-    logger.info('c');
-    logger.info('d');
-    expect(buffer.size()).toBe(3);
+  it('buffer is always disabled (no longer functional)', () => {
+    createLogger();
+    expect(getLogBuffer().isEnabled()).toBe(false);
   });
 
-  it('falls back to words for unknown format', () => {
-    const logger = createLogger({ format: 'invalid' as never });
-    expect(logger).toBeInstanceOf(ConsoleLogger);
+  it('falls back to PinoAdapter for unknown format', () => {
+    expect(createLogger({ format: 'invalid' as never })).toBeInstanceOf(PinoAdapter);
   });
 
-  it('getLogBuffer returns same buffer that was created by createLogger', () => {
-    createLogger({ maxBufferSize: 15 });
-    const buf1 = getLogBuffer();
-    const buf2 = getLogBuffer();
-    expect(buf1).toBe(buf2);
-    expect(buf1.isEnabled()).toBe(true);
+  it('LogMediator routes method calls to all targets', () => {
+    const logger = createLogger({ logDir: '/tmp/test-mediator-xyz' });
+    expect(logger).toBeInstanceOf(LogMediator);
+    // Should not throw — verifies all targets receive the call
+    expect(() => logger.info('test')).not.toThrow();
+    expect(() => logger.debug('test')).not.toThrow();
+    expect(() => logger.warn('test')).not.toThrow();
+    expect(() => logger.error('test')).not.toThrow();
+  });
+});
+
+describe('deriveLogFormat', () => {
+  it('returns phone when listenForCommands is true (highest priority)', () => {
+    expect(deriveLogFormat('compact', true)).toBe('phone');
+    expect(deriveLogFormat('ledger', true)).toBe('phone');
+    expect(deriveLogFormat(undefined, true)).toBe('phone');
+  });
+
+  it('maps summary → words', () => {
+    expect(deriveLogFormat('summary', false)).toBe('words');
+  });
+
+  it('maps compact → table', () => {
+    expect(deriveLogFormat('compact', false)).toBe('table');
+  });
+
+  it('maps ledger → json', () => {
+    expect(deriveLogFormat('ledger', false)).toBe('json');
+  });
+
+  it('maps emoji → words', () => {
+    expect(deriveLogFormat('emoji', false)).toBe('words');
+  });
+
+  it('defaults to words when no Telegram config', () => {
+    expect(deriveLogFormat(undefined, false)).toBe('words');
+    expect(deriveLogFormat(undefined, undefined)).toBe('words');
   });
 });

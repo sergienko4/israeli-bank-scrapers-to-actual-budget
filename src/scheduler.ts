@@ -12,7 +12,7 @@ import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
 import { ImporterConfig, LogConfig, TelegramConfig } from './Types/index.js';
 import { AuditLogService } from './Services/AuditLogService.js';
 import { errorMessage } from './Utils/index.js';
-import { createLogger, getLogger } from './Logger/index.js';
+import { createLogger, getLogger, deriveLogFormat } from './Logger/index.js';
 import {
   isEncryptedConfig, decryptConfig, getEncryptionPassword
 } from './Config/ConfigEncryption.js';
@@ -50,12 +50,16 @@ function loadFullConfig(): ImporterConfig | null {
   } catch { return null; }
 }
 
+const DEFAULT_LOG_DIR = './logs';
+
 function loadLogConfig(): LogConfig | undefined {
   const config = loadFullConfig();
   if (!config) return undefined;
-  const usesBot = config.notifications?.telegram?.listenForCommands === true;
-  const bufferSize = usesBot ? (config.logConfig?.maxBufferSize ?? 150) : 0;
-  return { ...config.logConfig, maxBufferSize: bufferSize };
+  const tg = config.notifications?.telegram;
+  const usesBot = tg?.listenForCommands === true;
+  const format = config.logConfig?.format ?? deriveLogFormat(tg?.messageFormat, usesBot);
+  const logDir = config.logConfig?.logDir ?? DEFAULT_LOG_DIR;
+  return { ...config.logConfig, format, maxBufferSize: 0, logDir };
 }
 
 
@@ -138,6 +142,7 @@ async function createHandlerAndPoller(
     runImport: runImportLocked, notifier, auditLog: new AuditLogService(),
     runValidate: runConfigValidation,
     runPreview: runPreviewLocked,
+    logDir: logConfig?.logDir,
   });
   activePoller = new TelegramPoller(
     telegram.botToken, telegram.chatId, (text) => handler.handle(text)
