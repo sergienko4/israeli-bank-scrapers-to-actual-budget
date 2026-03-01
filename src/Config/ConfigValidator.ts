@@ -163,7 +163,14 @@ export class ConfigValidator {
       return this.fail(`bank.${name}.target[${idx}]`,
         `${name} target[${idx}]: invalid actualAccountId "${id || '(empty)'}" — expected UUID`);
     }
-    return this.pass(`bank.${name}.target[${idx}]`, `${name} target[${idx}]: valid`);
+    const label = target.accountName ?? `...${id.split('-').at(-1)}`;
+    const formatted = this.formatAccounts(target.accounts);
+    return this.pass(`bank.${name}.target[${idx}]`,
+      `${name} target[${idx}] "${label}": accounts=${formatted}, reconcile=${target.reconcile}`);
+  }
+
+  private formatAccounts(accounts: BankTarget['accounts']): string {
+    return Array.isArray(accounts) ? `[${accounts.join(', ')}]` : accounts;
   }
 
   // ─── Offline — notifications ───
