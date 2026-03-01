@@ -10,11 +10,11 @@ https://your_
 https://hub.docker.com/
 # GitHub action badges (flaky)
 https://github.com/.*/actions/workflows/.*badge.svg
-# Contributor Covenant (stable external reference)
-https://www.contributor-covenant.org/
+# Contributor Covenant (stable external reference; may have transient network errors from CI)
+https://www.contributor-covenant.org
 # Shields.io badges (dynamic, may timeout)
 https://img.shields.io/
 # GitHub security advisories (HTTP/2 errors from CI bots)
 https://github.com/.*/security/advisories
 # GitHub Pages URL (404 until Pages is enabled in repo Settings → Pages → Source: GitHub Actions)
-https://sergienko4.github.io/.*
+sergienko4.github.io
