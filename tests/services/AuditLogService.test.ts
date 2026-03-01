@@ -1,18 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
-import { ImportSummary } from '../../src/Services/MetricsService.js';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { fakeImportSummary } from '../helpers/factories.js';
 
 const TEST_FILE = '/tmp/test-audit-log.json';
-
-function makeSummary(overrides: Partial<ImportSummary> = {}): ImportSummary {
-  return {
-    totalBanks: 2, successfulBanks: 2, failedBanks: 0,
-    totalTransactions: 5, totalDuplicates: 3, totalDuration: 10000,
-    averageDuration: 5000, successRate: 100, banks: [],
-    ...overrides,
-  };
-}
 
 describe('AuditLogService', () => {
   let service: AuditLogService;
@@ -27,12 +18,12 @@ describe('AuditLogService', () => {
   });
 
   it('creates file on first record', () => {
-    service.record(makeSummary());
+    service.record(fakeImportSummary());
     expect(existsSync(TEST_FILE)).toBe(true);
   });
 
   it('records entry with correct fields', () => {
-    service.record(makeSummary({ totalTransactions: 10, successRate: 75 }));
+    service.record(fakeImportSummary({ totalTransactions: 10, successRate: 75 }));
     const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries).toHaveLength(1);
     expect(entries[0].totalTransactions).toBe(10);
@@ -41,15 +32,15 @@ describe('AuditLogService', () => {
   });
 
   it('appends multiple entries', () => {
-    service.record(makeSummary());
-    service.record(makeSummary());
-    service.record(makeSummary());
+    service.record(fakeImportSummary());
+    service.record(fakeImportSummary());
+    service.record(fakeImportSummary());
     const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries).toHaveLength(3);
   });
 
   it('rotates entries when exceeding maxEntries', () => {
-    for (let i = 0; i < 7; i++) service.record(makeSummary({ totalTransactions: i }));
+    for (let i = 0; i < 7; i++) service.record(fakeImportSummary({ totalTransactions: i }));
     const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries).toHaveLength(5);
     expect(entries[0].totalTransactions).toBe(2); // oldest kept
@@ -57,7 +48,7 @@ describe('AuditLogService', () => {
   });
 
   it('getRecent returns last N entries', () => {
-    for (let i = 0; i < 5; i++) service.record(makeSummary({ totalTransactions: i }));
+    for (let i = 0; i < 5; i++) service.record(fakeImportSummary({ totalTransactions: i }));
     const recent = service.getRecent(2);
     expect(recent).toHaveLength(2);
     expect(recent[0].totalTransactions).toBe(3);
@@ -70,13 +61,13 @@ describe('AuditLogService', () => {
 
   it('handles corrupted file gracefully', () => {
     writeFileSync(TEST_FILE, 'not json');
-    service.record(makeSummary());
+    service.record(fakeImportSummary());
     const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries).toHaveLength(1);
   });
 
   it('maps bank metrics to audit entry', () => {
-    const summary = makeSummary({
+    const summary = fakeImportSummary({
       banks: [{
         bankName: 'discount', startTime: 0, status: 'success',
         transactionsImported: 5, transactionsSkipped: 2, accounts: [],
@@ -88,7 +79,7 @@ describe('AuditLogService', () => {
   });
 
   it('includes reconciliation fields when present', () => {
-    const summary = makeSummary({
+    const summary = fakeImportSummary({
       banks: [{
         bankName: 'discount', startTime: 0, status: 'success',
         transactionsImported: 3, transactionsSkipped: 0, accounts: [],
@@ -102,7 +93,7 @@ describe('AuditLogService', () => {
   });
 
   it('omits reconciliation fields when not present', () => {
-    const summary = makeSummary({
+    const summary = fakeImportSummary({
       banks: [{
         bankName: 'leumi', startTime: 0, status: 'success',
         transactionsImported: 2, transactionsSkipped: 0, accounts: [],

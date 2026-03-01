@@ -3,6 +3,7 @@ import type api from '@actual-app/api';
 import { SpendingWatchService } from '../../src/Services/SpendingWatchService.js';
 import { SpendingWatchRule } from '../../src/Types/index.js';
 import { formatDate } from '../../src/Utils/date.js';
+import { fakeActualTransaction } from '../helpers/factories.js';
 
 function createMockApi(transactions: Array<{ date: string; imported_payee: string; amount: number }> = []) {
   return {
@@ -34,9 +35,7 @@ describe('SpendingWatchService', () => {
       const rules: SpendingWatchRule[] = [
         { alertFromAmount: 1000, numOfDayToCount: 1 }
       ];
-      const txns = [
-        { date: today, imported_payee: 'Coffee Shop', amount: -500 }
-      ];
+      const txns = [fakeActualTransaction({ date: today, amount: -500 })];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       expect(await service.evaluate()).toBeNull();
     });
@@ -110,10 +109,10 @@ describe('SpendingWatchService', () => {
     });
 
     it('returns null when no transactions exist', async () => {
-      const rules: SpendingWatchRule[] = [
-        { alertFromAmount: 100, numOfDayToCount: 7 }
-      ];
-      const service = new SpendingWatchService(rules, createMockApi([]));
+      const service = new SpendingWatchService(
+        [{ alertFromAmount: 100, numOfDayToCount: 7 }],
+        createMockApi([]),
+      );
       expect(await service.evaluate()).toBeNull();
     });
 
@@ -154,23 +153,21 @@ describe('SpendingWatchService', () => {
     });
 
     it('formats day label correctly for 1 day', async () => {
-      const rules: SpendingWatchRule[] = [
-        { alertFromAmount: 1, numOfDayToCount: 1 }
-      ];
-      const txns = [{ date: today, imported_payee: 'Test', amount: -1000 }];
-      const service = new SpendingWatchService(rules, createMockApi(txns));
-      const result = await service.evaluate();
-      expect(result).toContain('1 day');
+      const txns = [fakeActualTransaction({ date: today, amount: -1000 })];
+      const service = new SpendingWatchService(
+        [{ alertFromAmount: 1, numOfDayToCount: 1 }],
+        createMockApi(txns),
+      );
+      expect(await service.evaluate()).toContain('1 day');
     });
 
     it('formats day label correctly for multiple days', async () => {
-      const rules: SpendingWatchRule[] = [
-        { alertFromAmount: 1, numOfDayToCount: 7 }
-      ];
-      const txns = [{ date: today, imported_payee: 'Test', amount: -1000 }];
-      const service = new SpendingWatchService(rules, createMockApi(txns));
-      const result = await service.evaluate();
-      expect(result).toContain('7 days');
+      const txns = [fakeActualTransaction({ date: today, amount: -1000 })];
+      const service = new SpendingWatchService(
+        [{ alertFromAmount: 1, numOfDayToCount: 7 }],
+        createMockApi(txns),
+      );
+      expect(await service.evaluate()).toContain('7 days');
     });
 
     it('shows watchPayees names in alert header', async () => {

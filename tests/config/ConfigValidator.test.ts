@@ -2,21 +2,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConfigValidator, ValidationResult, runValidateMode } from '../../src/Config/ConfigValidator.js';
 import { ImporterConfig } from '../../src/Types/index.js';
 import * as fs from 'fs';
+import { fakeUuid } from '../helpers/factories.js';
 
 vi.mock('fs');
 
+// Used only in runValidateMode inline objects (where exact UUID is needed by readFileSync mock)
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 
 function makeConfig(overrides: Record<string, unknown> = {}): ImporterConfig {
   return {
     actual: {
       init: { dataDir: './data', password: 'pass', serverURL: 'http://localhost:5006' },
-      budget: { syncId: VALID_UUID, password: null },
+      budget: { syncId: fakeUuid(), password: null },
     },
     banks: {
       discount: {
         id: '123', password: 'p', num: 'ABC', daysBack: 7,
-        targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }],
+        targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
       },
     },
     ...overrides,
@@ -121,7 +123,7 @@ describe('ConfigValidator', () => {
         banks: {
           oneZero: {
             email: 'a@b.com', password: 'p', phoneNumber: '+1234567890',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }],
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
       });
@@ -134,7 +136,7 @@ describe('ConfigValidator', () => {
         banks: {
           unknownxyz: {
             password: 'p',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }],
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
       });
@@ -147,7 +149,7 @@ describe('ConfigValidator', () => {
         banks: {
           disount: {
             id: '1', password: 'p', num: 'A',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }],
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
       });
@@ -161,7 +163,7 @@ describe('ConfigValidator', () => {
         banks: {
           leumu: {
             username: 'u', password: 'p',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }],
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
       });
@@ -175,7 +177,7 @@ describe('ConfigValidator', () => {
         banks: {
           zzznotabank: {
             password: 'p',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }],
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
       });
@@ -193,7 +195,7 @@ describe('ConfigValidator', () => {
         banks: {
           leumi: {
             username: 'u', password: 'p',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }],
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
       });
@@ -206,7 +208,7 @@ describe('ConfigValidator', () => {
         banks: {
           leumi: {
             username: 'u', password: 'p', daysBack: 7, startDate: '2026-01-01',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }],
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
       });
