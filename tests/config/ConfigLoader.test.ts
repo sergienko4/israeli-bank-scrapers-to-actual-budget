@@ -2,38 +2,42 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConfigLoader } from '../../src/Config/ConfigLoader.js';
 import { ConfigurationError } from '../../src/Errors/ErrorTypes.js';
 import * as fs from 'fs';
+import { faker } from '@faker-js/faker';
 
 vi.mock('fs');
 
+// UUID is asserted in tests like "expect(config.actual.budget.syncId).toBe(VALID_UUID)"
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 
-function makeValidConfig(overrides: any = {}) {
+function makeValidConfig(overrides: Record<string, unknown> = {}) {
+  const init = (overrides.init as Record<string, unknown> | undefined) ?? {};
+  const budget = (overrides.budget as Record<string, unknown> | undefined) ?? {};
   return {
     actual: {
       init: {
         dataDir: './data',
-        password: 'test123',
+        password: faker.internet.password({ length: 12 }),
         serverURL: 'http://localhost:5006',
-        ...overrides.init
+        ...init,
       },
       budget: {
         syncId: VALID_UUID,
         password: null,
-        ...overrides.budget
-      }
+        ...budget,
+      },
     },
-    banks: overrides.banks ?? {
+    banks: (overrides.banks as Record<string, unknown> | undefined) ?? {
       discount: {
-        id: '123456789',
-        password: 'pass',
-        num: 'ABC123',
+        id: faker.string.numeric(9),
+        password: faker.internet.password({ length: 12 }),
+        num: faker.string.alphanumeric(6).toUpperCase(),
         targets: [{
           actualAccountId: VALID_UUID,
           reconcile: true,
-          accounts: 'all'
-        }]
-      }
-    }
+          accounts: 'all',
+        }],
+      },
+    },
   };
 }
 
@@ -679,7 +683,7 @@ describe('ConfigLoader', () => {
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fullConfig));
 
       const config = new ConfigLoader('/test/config.json').load();
-      expect(config.banks.discount.password).toBe('pass');
+      expect(config.banks.discount.password).toBe(fullConfig.banks.discount.password);
     });
 
     it('deep merges bank settings with bank credentials', () => {

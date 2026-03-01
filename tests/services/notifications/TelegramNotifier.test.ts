@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramNotifier } from '../../../src/Services/Notifications/TelegramNotifier.js';
 import { ImportSummary } from '../../../src/Services/MetricsService.js';
+import { fakeImportSummary } from '../../helpers/factories.js';
 
 const summaryWithTxns: ImportSummary = {
   totalBanks: 1,
@@ -62,7 +63,7 @@ describe('TelegramNotifier', () => {
   describe('API integration', () => {
     it('calls Telegram API with correct URL and headers', async () => {
       const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
-      await notifier.sendSummary(summaryWithTxns);
+      await notifier.sendSummary(fakeImportSummary());
 
       const [url, options] = fetchMock.mock.calls[0];
       expect(url).toBe('https://api.telegram.org/bot123:ABC/sendMessage');
@@ -74,7 +75,7 @@ describe('TelegramNotifier', () => {
     it('throws on API error', async () => {
       fetchMock.mockResolvedValue({ ok: false, status: 401, text: vi.fn().mockResolvedValue('Unauthorized') });
       const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
-      await expect(notifier.sendSummary(summaryWithTxns)).rejects.toThrow('Telegram API error 401');
+      await expect(notifier.sendSummary(fakeImportSummary())).rejects.toThrow('Telegram API error 401');
     });
   });
 

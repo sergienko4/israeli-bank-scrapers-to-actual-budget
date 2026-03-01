@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TransactionService } from '../../src/Services/TransactionService.js';
 import { ICategoryResolver } from '../../src/Services/ICategoryResolver.js';
+import { fakeBankTransactions, fakeBankTransaction } from '../helpers/factories.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -34,11 +35,7 @@ describe('TransactionService', () => {
     it('imports transactions and returns counts', async () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
-      const txns = [
-        { date: '2026-02-14', chargedAmount: -100.50, description: 'Store A', identifier: '1001' },
-        { date: '2026-02-15', chargedAmount: -50.00, description: 'Store B', identifier: '1002' }
-      ];
-
+      const txns = fakeBankTransactions(2);
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       expect(result.imported).toBe(2);
@@ -70,7 +67,7 @@ describe('TransactionService', () => {
     it('uses chargedAmount over originalAmount', async () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
-      const txns = [{ date: '2026-02-14', chargedAmount: -100, originalAmount: -200, description: 'Test', identifier: '1' }];
+      const txns = [fakeBankTransaction({ chargedAmount: -100, originalAmount: -200 })];
       await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
@@ -92,11 +89,7 @@ describe('TransactionService', () => {
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('Transaction already exists'));
 
-      const txns = [
-        { date: '2026-02-14', chargedAmount: -100, description: 'New', identifier: '1' },
-        { date: '2026-02-14', chargedAmount: -200, description: 'Dup', identifier: '2' }
-      ];
-
+      const txns = fakeBankTransactions(2);
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       expect(result.imported).toBe(1);
@@ -106,7 +99,7 @@ describe('TransactionService', () => {
     it('logs non-duplicate errors without counting as skipped', async () => {
       mockApi.importTransactions.mockRejectedValue(new Error('Database error'));
 
-      const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: '1' }];
+      const txns = [fakeBankTransaction()];
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       expect(result.imported).toBe(0);
@@ -129,7 +122,7 @@ describe('TransactionService', () => {
     it('uses memo for notes when available', async () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
-      const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Store', memo: 'Reference: 123', identifier: '1' }];
+      const txns = [fakeBankTransaction({ memo: 'Reference: 123' })];
       await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
@@ -139,7 +132,7 @@ describe('TransactionService', () => {
     it('sets cleared to true on all transactions', async () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
-      const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: '1' }];
+      const txns = [fakeBankTransaction()];
       await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
@@ -155,7 +148,7 @@ describe('TransactionService', () => {
 
     it('handles non-Error thrown during import and logs it', async () => {
       mockApi.importTransactions.mockRejectedValue('network failure');
-      const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: '1' }];
+      const txns = [fakeBankTransaction()];
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
       expect(result.imported).toBe(0);
       expect(mockLogger.error).toHaveBeenCalledWith(

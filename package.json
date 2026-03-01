@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@faker-js/faker": "^10.3.0",
     "@types/node": "^25.3.0",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.2",
