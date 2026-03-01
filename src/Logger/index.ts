@@ -39,7 +39,13 @@ export function createLogger(config?: LogConfig): ILogger {
   const stdout = new PinoAdapter(createPinoInstance(format), format);
   if (config?.logDir) {
     cleanOldLogs(config.logDir);
-    instance = new LogMediator([stdout, new FileLogger(config.logDir)]);
+    try {
+      instance = new LogMediator([stdout, new FileLogger(config.logDir)]);
+    } catch {
+      // Log dir not writable (e.g. Docker node user, read-only fs) — stdout only
+      stdout.warn(`Log files unavailable (${config.logDir}), using stdout only`);
+      instance = stdout;
+    }
   } else {
     instance = stdout;
   }
