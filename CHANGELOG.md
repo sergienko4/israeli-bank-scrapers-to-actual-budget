@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.28.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.4...v1.28.0) (2026-03-01)
+
+
+### Added
+
+* selective bank import via /scan with inline keyboard menu ([#172](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/172)) ([de924fd](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/de924fde5c618188a02aaf4a87e43d3b6a2e4260))
+
 ## [1.27.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.3...v1.27.4) (2026-03-01)
 
 
