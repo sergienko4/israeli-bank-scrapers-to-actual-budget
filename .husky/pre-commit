@@ -1,21 +1,98 @@
 #!/usr/bin/env sh
 
-echo "🛑 MANDATORY QUALITY GATE INITIATED 🛑"
-echo "---------------------------------------"
+# Prevent MSYS from converting Unix paths to Windows paths for Docker volume mounts
+export MSYS_NO_PATHCONV=1
 
-echo "🔍 [1/5] Checking Types & 'any' usage..."
+echo ""
+echo "🛑 MANDATORY QUALITY GATE INITIATED 🛑"
+echo "==========================================="
+
+# ── 1. Type Safety ──────────────────────────────────────────────
+echo ""
+echo "🔍 [1/13] Type-checking TypeScript..."
 npm run type-check || exit 1
 
-echo "🧪 [2/5] Running Unit Tests & Coverage..."
+# ── 2. Dependency Audit ─────────────────────────────────────────
+echo ""
+echo "🔒 [2/13] Auditing dependencies..."
+npm audit --audit-level=moderate || exit 1
+
+# ── 3. TypeScript Build ──────────────────────────────────────────
+echo ""
+echo "🏗️  [3/13] Compiling TypeScript..."
+npm run build || exit 1
+
+# ── 4. TypeDoc API Docs ──────────────────────────────────────────
+echo ""
+echo "📚 [4/13] Generating TypeDoc API docs..."
+npm run docs || exit 1
+
+# ── 5. Unit Tests + Coverage ────────────────────────────────────
+echo ""
+echo "🧪 [5/13] Running unit tests + coverage..."
 npm run test:unit || exit 1
 
-echo "🌐 [3/5] Running Real E2E Tests..."
-npm run test:e2e || exit 1
+# ── 6. ESLint (full src) ────────────────────────────────────────
+echo ""
+echo "🧹 [6/13] Running ESLint..."
+npm run lint || exit 1
 
-echo "🎭 [4/5] Running Mocked E2E Tests..."
+# ── 7. Markdown Lint ────────────────────────────────────────────
+echo ""
+echo "📝 [7/13] Linting markdown docs..."
+npm run lint:docs || exit 1
+
+# ── 8. Config Structure ─────────────────────────────────────────
+echo ""
+echo "⚙️  [8/13] Checking config structure..."
+npm run lint:config-structure || exit 1
+
+# ── 9. Docker Build ─────────────────────────────────────────────
+echo ""
+echo "🐳 [9/13] Building Docker image..."
+LOCAL_IMAGE="israeli-bank-importer:pre-commit"
+docker build -t "$LOCAL_IMAGE" . || exit 1
+
+# ── 10. Lychee Link Check (via Docker) ──────────────────────────
+echo ""
+echo "🔗 [10/13] Checking markdown links (lychee)..."
+docker run --rm \
+  -v "$(pwd):/data" \
+  --workdir /data \
+  -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
+  lycheeverse/lychee \
+  --exclude-path config/lychee/ignore \
+  --exclude-path CHANGELOG.md \
+  --no-progress \
+  '*.md' 'docs/**/*.md' '.github/**/*.md' || exit 1
+
+# ── 11. Trivy Container Scan ────────────────────────────────────
+echo ""
+echo "🛡️  [11/13] Scanning Docker image for vulnerabilities (Trivy)..."
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  aquasec/trivy:latest \
+  image \
+  --exit-code 1 \
+  --severity CRITICAL,HIGH \
+  --ignore-unfixed \
+  --vuln-type os,library \
+  --skip-dirs 'root/.npm' \
+  "$LOCAL_IMAGE" || exit 1
+
+# ── 12. Mocked E2E Tests ────────────────────────────────────────
+echo ""
+echo "🎭 [12/13] Running mocked E2E tests..."
 npm run test:e2e:mock || exit 1
 
-echo "🧹 [5/5] Checking Code Length & Complexity..."
-npx lint-staged
+# ── 13. Real E2E Tests (Telegram) ───────────────────────────────
+echo ""
+echo "🌐 [13/13] Running real E2E tests (Telegram)..."
+npm run test:e2e || exit 1
 
-echo "✅ ALL GATES PASSED. COMMITTING..."
+# ────────────────────────────────────────────────────────────────
+echo ""
+echo "==========================================="
+echo "✅ ALL 13 GATES PASSED. COMMITTING."
+echo "   (CodeQL — GitHub CI only, no local equivalent)"
+echo "==========================================="
