@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.26.0...v1.27.0) (2026-03-01)
+
+
+### Added
+
+* enrich config validation report with target account details ([#160](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/160)) ([5106b0d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5106b0dd43e7323ce5b030bd9dd057560a2e525f))
+
 ## [1.26.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.25.3...v1.26.0) (2026-03-01)
 
 
