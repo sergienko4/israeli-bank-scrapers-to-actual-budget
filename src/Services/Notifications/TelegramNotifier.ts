@@ -62,6 +62,25 @@ export class TelegramNotifier implements INotifier {
     await this.send(['🚨 <b>Import Failed</b>', '', this.escapeHtml(error)].join('\n'));
   }
 
+  async sendScanMenu(banks: string[]): Promise<void> {
+    const allRow = [{ text: '🏦 All banks', callback_data: 'scan_all' }];
+    const bankRows: Array<Array<{ text: string; callback_data: string }>> = [];
+    for (let i = 0; i < banks.length; i += 2) {
+      bankRows.push(banks.slice(i, i + 2).map(b => ({ text: b, callback_data: `scan:${b}` })));
+    }
+    const url = `${TELEGRAM_API}/bot${this.botToken}/sendMessage`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: this.chatId,
+        text: '🏦 <b>Select bank to import:</b>',
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [allRow, ...bankRows] },
+      }),
+    });
+  }
+
   // ─── 2FA reply polling ───
 
   async waitForReply(prompt: string, timeoutMs: number): Promise<string> {

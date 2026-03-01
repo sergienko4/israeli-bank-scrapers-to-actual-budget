@@ -32,12 +32,63 @@ describe('TelegramCommandHandler', () => {
     await handler.handle('/scan');
 
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Starting import'));
-    expect(mockRunImport).toHaveBeenCalled();
+    expect(mockRunImport).toHaveBeenCalledWith(undefined);
   });
 
   it('runs import on /import', async () => {
     await handler.handle('/import');
-    expect(mockRunImport).toHaveBeenCalled();
+    expect(mockRunImport).toHaveBeenCalledWith(undefined);
+  });
+
+  it('/scan with single bank passes bank array to runImport', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal', 'oneZero']);
+    handler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+    });
+
+    await handler.handle('/scan discount');
+
+    expect(mockRunImport).toHaveBeenCalledWith(['discount']);
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('discount'));
+  });
+
+  it('/scan with multiple banks comma-separated', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal', 'oneZero']);
+    handler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+    });
+
+    await handler.handle('/scan visaCal,oneZero');
+
+    expect(mockRunImport).toHaveBeenCalledWith(['visaCal', 'oneZero']);
+  });
+
+  it('/scan with unknown bank replies error and lists available', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
+    handler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+    });
+
+    await handler.handle('/scan unknownBank');
+
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Unknown bank')
+    );
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('discount')
+    );
+    expect(mockRunImport).not.toHaveBeenCalled();
+  });
+
+  it('/scan bank name is case-insensitive', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue(['beinleumi', 'oneZero']);
+    handler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+    });
+
+    await handler.handle('/scan BEINLEUMI');  // uppercase, config has lowercase
+
+    expect(mockRunImport).toHaveBeenCalledWith(['beinleumi']);
   });
 
   it('prevents concurrent imports', async () => {
