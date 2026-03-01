@@ -8,8 +8,8 @@
   "excludePrivate": true,
   "excludeExternals": true,
   "exclude": [
-    "src/index.ts",
-    "src/scheduler.ts",
+    "../src/index.ts",
+    "../src/scheduler.ts",
     "**/*.test.ts"
   ],
   "readme": "none",
