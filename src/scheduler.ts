@@ -75,7 +75,10 @@ function runLocked(importFn: () => Promise<number>): Promise<number> {
   return activeImport;
 }
 
-function runImportLocked(): Promise<number> { return runLocked(runImport); }
+function runImportLocked(banks?: string[]): Promise<number> {
+  const extraEnv: Record<string, string> = banks?.length ? { IMPORT_BANKS: banks.join(',') } : {};
+  return runLocked(() => runImport(extraEnv));
+}
 function runPreviewLocked(): Promise<number> {
   return runLocked(() => runImport({ DRY_RUN: 'true' }));
 }
@@ -131,6 +134,16 @@ async function runConfigValidation(): Promise<string> {
   return validator.formatReport(results);
 }
 
+function buildCommandHandler(notifier: TelegramNotifier): TelegramCommandHandler {
+  return new TelegramCommandHandler({
+    runImport: runImportLocked, notifier, auditLog: new AuditLogService(),
+    runValidate: runConfigValidation,
+    runPreview: runPreviewLocked,
+    getBankNames: () => Object.keys(loadFullConfig()?.banks ?? {}),
+    logDir: logConfig?.logDir,
+  });
+}
+
 async function createHandlerAndPoller(
   telegram: TelegramConfig, config: ImporterConfig | null
 ): Promise<void> {
@@ -138,12 +151,7 @@ async function createHandlerAndPoller(
   const extras = buildExtraCommands(config);
   logCommandCount(extras);
   await notifier.registerCommands(extras);
-  const handler = new TelegramCommandHandler({
-    runImport: runImportLocked, notifier, auditLog: new AuditLogService(),
-    runValidate: runConfigValidation,
-    runPreview: runPreviewLocked,
-    logDir: logConfig?.logDir,
-  });
+  const handler = buildCommandHandler(notifier);
   activePoller = new TelegramPoller(
     telegram.botToken, telegram.chatId, (text) => handler.handle(text)
   );
