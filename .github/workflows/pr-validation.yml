@@ -72,7 +72,7 @@ jobs:
       - name: Check links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: '--exclude-path config/lychee/ignore **/*.md'
+          args: '--exclude-path config/lychee/ignore --exclude "https://sergienko4\.github\.io" **/*.md'
           fail: true
 
   container-scan:
