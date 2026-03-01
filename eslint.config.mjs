@@ -56,6 +56,9 @@ export default tseslint.config(
       'no-unreachable': 'error',
       'no-unused-expressions': 'error',
       '@typescript-eslint/no-unused-private-class-members': 'error',
+      '@typescript-eslint/member-ordering': ['error', {
+        default: ['public-method', 'protected-method', 'private-method'],
+      }],
 
       // === FORMATTING ===
       'max-len': ['error', { code: 100, ignoreUrls: true }],
@@ -115,6 +118,7 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/member-ordering': 'off',
       'no-restricted-syntax': 'off',
       'no-console': 'off',
     },
