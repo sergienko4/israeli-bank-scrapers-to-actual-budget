@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.2...v1.27.3) (2026-03-01)
+
+
+### Fixed
+
+* show masked OTP code in logs and Telegram confirmation ([#168](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/168)) ([c812fa7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c812fa7ed39d9b61c347984ffbfdf28f8303719b))
+
 ## [1.27.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.1...v1.27.2) (2026-03-01)
 
 
