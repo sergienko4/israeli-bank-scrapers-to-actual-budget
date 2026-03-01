@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.0...v1.27.1) (2026-03-01)
+
+
+### Fixed
+
+* treat Discount Hebrew no-records as success and prevent OTP retry ([#164](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/164)) ([1abc309](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1abc3095d5c0decded031c166a4d53894e97d9f2))
+
 ## [1.27.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.26.0...v1.27.0) (2026-03-01)
 
 
