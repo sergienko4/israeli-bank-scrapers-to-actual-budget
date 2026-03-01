@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.26.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.25.3...v1.26.0) (2026-03-01)
+
+
+### Added
+
+* pino file logging with LogMediator, @Loggable decorator, and ESLint enforcement ([#157](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/157)) ([6a87cd4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/6a87cd442bd276f2a890e13a7ee40e1bbadafb90))
+
 ## [1.25.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.25.2...v1.25.3) (2026-03-01)
 
 
