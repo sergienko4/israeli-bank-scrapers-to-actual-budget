@@ -6,7 +6,7 @@
 import { INotifier } from './Notifications/INotifier.js';
 import { IAuditLog, AuditEntry } from './AuditLogService.js';
 import { errorMessage } from '../Utils/index.js';
-import { getLogger, getLogBuffer } from '../Logger/index.js';
+import { getLogger, LogFileReader } from '../Logger/index.js';
 
 const MAX_TELEGRAM_LENGTH = 4096;
 const DEFAULT_LOG_COUNT = 50;
@@ -18,6 +18,7 @@ export interface CommandHandlerOptions {
   runWatch?: () => Promise<string | null>;
   runValidate?: () => Promise<string>;
   runPreview?: () => Promise<number>;
+  logDir?: string;
 }
 
 export class TelegramCommandHandler {
@@ -27,6 +28,7 @@ export class TelegramCommandHandler {
   private runWatch?: () => Promise<string | null>;
   private runValidate?: () => Promise<string>;
   private runPreview?: () => Promise<number>;
+  private logDir?: string;
   private importPromise: Promise<void> | null = null;
   private lastRunTime: Date | null = null;
   private lastRunResult: string | null = null;
@@ -38,6 +40,7 @@ export class TelegramCommandHandler {
     this.runWatch = opts.runWatch;
     this.runValidate = opts.runValidate;
     this.runPreview = opts.runPreview;
+    this.logDir = opts.logDir;
   }
 
   async handle(text: string): Promise<void> {
@@ -126,12 +129,12 @@ export class TelegramCommandHandler {
   }
 
   private async handleLogs(countArg?: string): Promise<void> {
-    const buffer = getLogBuffer();
-    if (!buffer.isEnabled()) {
-      await this.reply('📋 Log buffer disabled. Set logConfig.maxBufferSize > 0 in config.json');
+    if (!this.logDir) {
+      await this.reply('📋 Set logConfig.logDir in config.json to enable log history.');
       return;
     }
-    const entries = buffer.getRecent(this.parseLogCount(countArg));
+    const reader = new LogFileReader(this.logDir);
+    const entries = reader.getRecent(this.parseLogCount(countArg));
     if (entries.length === 0) { await this.reply('📋 No log entries yet.'); return; }
     const header = `📋 <b>Recent Logs</b> (${entries.length} entries)\n\n<pre>`;
     const footer = '</pre>';

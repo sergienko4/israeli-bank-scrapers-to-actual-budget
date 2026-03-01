@@ -1,31 +1,48 @@
 /**
- * Logger singleton factory with format dispatch
- * Entry points call createLogger(), all modules call getLogger()
+ * Logger singleton factory with format dispatch and optional file output.
+ * Entry points call createLogger(), all modules call getLogger().
+ * When logDir is set: LogMediator fans out to PinoAdapter (stdout) + FileLogger (file).
  */
 
 import { ILogger } from './ILogger.js';
 import { LogBuffer } from './LogBuffer.js';
-import { ConsoleLogger } from './ConsoleLogger.js';
-import { JsonLogger } from './JsonLogger.js';
-import { TableLogger } from './TableLogger.js';
-import { PhoneLogger } from './PhoneLogger.js';
-import { LogConfig, LogFormat } from '../Types/index.js';
+import { PinoAdapter } from './PinoAdapter.js';
+import { createPinoInstance } from './PinoTransports.js';
+import { FileLogger } from './FileLogger.js';
+import { LogMediator } from './LogMediator.js';
+import { cleanOldLogs } from './LogCleanup.js';
+import { LogConfig, LogFormat, MessageFormat } from '../Types/index.js';
 
-const loggerFactories: Record<LogFormat, (buf: LogBuffer) => ILogger> = {
-  words: (buf) => new ConsoleLogger(buf),
-  json: (buf) => new JsonLogger(buf),
-  table: (buf) => new TableLogger(buf),
-  phone: (buf) => new PhoneLogger(buf),
+const FORMAT_MAP: Record<MessageFormat, LogFormat> = {
+  summary: 'words',
+  compact: 'table',
+  ledger:  'json',
+  emoji:   'words',
 };
 
+export function deriveLogFormat(
+  messageFormat?: MessageFormat,
+  listenForCommands?: boolean
+): LogFormat {
+  if (listenForCommands) return 'phone';
+  // FORMAT_MAP fully covers all MessageFormat values — no fallback needed
+  return messageFormat ? FORMAT_MAP[messageFormat] : 'words';
+}
+
 let instance: ILogger | null = null;
-let bufferInstance: LogBuffer | null = null;
+// Initialised eagerly so getLogBuffer() never needs a conditional
+let bufferInstance: LogBuffer = new LogBuffer(0);
 
 export function createLogger(config?: LogConfig): ILogger {
   const format: LogFormat = config?.format ?? 'words';
-  bufferInstance = new LogBuffer(config?.maxBufferSize);
-  const factory = loggerFactories[format] ?? loggerFactories.words;
-  instance = factory(bufferInstance);
+  bufferInstance = new LogBuffer(0); // buffer deprecated; kept for backward compat
+  const stdout = new PinoAdapter(createPinoInstance(format), format);
+  if (config?.logDir) {
+    cleanOldLogs(config.logDir);
+    instance = new LogMediator([stdout, new FileLogger(config.logDir)]);
+  } else {
+    instance = stdout;
+  }
   return instance;
 }
 
@@ -35,13 +52,12 @@ export function getLogger(): ILogger {
 }
 
 export function getLogBuffer(): LogBuffer {
-  if (!bufferInstance) bufferInstance = new LogBuffer();
   return bufferInstance;
 }
 
 export { ILogger, LogContext, LogLevel } from './ILogger.js';
 export { LogBuffer } from './LogBuffer.js';
-export { ConsoleLogger } from './ConsoleLogger.js';
-export { JsonLogger } from './JsonLogger.js';
-export { TableLogger } from './TableLogger.js';
-export { PhoneLogger } from './PhoneLogger.js';
+export { PinoAdapter } from './PinoAdapter.js';
+export { LogMediator } from './LogMediator.js';
+export { FileLogger } from './FileLogger.js';
+export { LogFileReader } from './LogFileReader.js';

@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HistoryCategoryResolver } from '../../src/Services/HistoryCategoryResolver.js';
+import * as LoggerModule from '../../src/Logger/index.js';
+
+const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 describe('HistoryCategoryResolver', () => {
   let resolver: HistoryCategoryResolver;
@@ -19,8 +22,8 @@ describe('HistoryCategoryResolver', () => {
   }
 
   beforeEach(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.clearAllMocks();
+    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as any);
   });
 
   describe('initialize', () => {
@@ -62,7 +65,7 @@ describe('HistoryCategoryResolver', () => {
       };
       resolver = new HistoryCategoryResolver(mockApi);
       await resolver.initialize(); // should not throw
-      expect(console.error).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('network down')
       );
     });

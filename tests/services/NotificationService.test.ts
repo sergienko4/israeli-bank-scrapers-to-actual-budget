@@ -1,14 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotificationService } from '../../src/Services/NotificationService.js';
 import { ImportSummary } from '../../src/Services/MetricsService.js';
+import * as LoggerModule from '../../src/Logger/index.js';
 
 const mockSendSummary = vi.fn().mockResolvedValue(undefined);
 const mockSendError = vi.fn().mockResolvedValue(undefined);
+const mockSendMessage = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../src/Services/Notifications/TelegramNotifier.js', () => ({
   TelegramNotifier: vi.fn().mockImplementation(function (this: any) {
     this.sendSummary = mockSendSummary;
     this.sendError = mockSendError;
+    this.sendMessage = mockSendMessage;
   })
 }));
 
@@ -24,11 +27,12 @@ const mockSummary: ImportSummary = {
   banks: []
 };
 
+const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
 describe('NotificationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as any);
   });
 
   it('does nothing when config is undefined', async () => {
@@ -83,7 +87,7 @@ describe('NotificationService', () => {
     await service.sendSummary(mockSummary);
     await service.sendError('test');
 
-    expect(console.error).toHaveBeenCalledWith(
+    expect(mockLogger.error).toHaveBeenCalledWith(
       expect.stringContaining('Notification failed')
     );
   });
@@ -94,6 +98,37 @@ describe('NotificationService', () => {
       telegram: { botToken: '123:ABC', chatId: '-100' }
     });
 
-    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Telegram notifications enabled'));
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Telegram notifications enabled')
+    );
+  });
+
+  it('logs when webhook is enabled with explicit format', () => {
+    new NotificationService({
+      enabled: true,
+      webhook: { url: 'https://hooks.example.com/test', format: 'slack' }
+    });
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Webhook notifications enabled (slack)')
+    );
+  });
+
+  it('logs webhook enabled with plain fallback when format is omitted', () => {
+    new NotificationService({
+      enabled: true,
+      webhook: { url: 'https://hooks.example.com/test' }
+    });
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Webhook notifications enabled (plain)')
+    );
+  });
+
+  it('sendMessage delegates to telegram notifier', async () => {
+    const service = new NotificationService({
+      enabled: true,
+      telegram: { botToken: '123:ABC', chatId: '-100' }
+    });
+    await service.sendMessage('hello world');
+    expect(mockSendMessage).toHaveBeenCalledWith('hello world');
   });
 });

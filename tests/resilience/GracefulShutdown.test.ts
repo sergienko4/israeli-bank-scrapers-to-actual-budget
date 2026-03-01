@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GracefulShutdownHandler } from '../../src/Resilience/GracefulShutdown.js';
+import * as LoggerModule from '../../src/Logger/index.js';
+
+const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 describe('GracefulShutdownHandler', () => {
   let exitSpy: any;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as any);
   });
 
   afterEach(() => {
@@ -80,7 +82,9 @@ describe('GracefulShutdownHandler', () => {
 
     process.emit('SIGTERM');
     await vi.waitFor(() => expect(succeedingCb).toHaveBeenCalledTimes(1));
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Error during shutdown callback: callback error'));
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Error during shutdown callback: callback error')
+    );
   });
 
   it('calls process.exit(0) after shutdown completes', async () => {
@@ -109,7 +113,7 @@ describe('GracefulShutdownHandler', () => {
     const handler = new GracefulShutdownHandler();
 
     process.emit('SIGTERM');
-    await vi.waitFor(() => expect(console.warn).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.stringContaining('SIGTERM')
     ));
   });
@@ -119,7 +123,7 @@ describe('GracefulShutdownHandler', () => {
     handler.onShutdown(() => { throw 'string error'; });
 
     process.emit('SIGTERM');
-    await vi.waitFor(() => expect(console.error).toHaveBeenCalledWith(
+    await vi.waitFor(() => expect(mockLogger.error).toHaveBeenCalledWith(
       expect.stringContaining('string error')
     ));
   });
