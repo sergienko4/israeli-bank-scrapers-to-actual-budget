@@ -138,9 +138,8 @@ const scrapeErrorHints: Record<string, string> = {
 };
 
 // Bank responses that mean "0 transactions in range" — not a real failure
-// Scrapers return success:false for these instead of an empty accounts array
+// Some scrapers return success:false with these messages instead of an empty accounts array
 const NO_RECORDS_PATTERNS = [
-  'לא מצאנו תנועות',       // Discount: "we didn't find transactions matching criteria"
   'no transactions found',
   'no results found',
 ];
