@@ -1,4 +1,3 @@
-# Example/placeholder URLs that aren't real
 https://hooks.slack.com/
 https://api.telegram.org/
 http://localhost
@@ -6,15 +5,9 @@ http://actual_server
 https://your-
 http://your-
 https://your_
-# Docker Hub user pages (rate limited)
 https://hub.docker.com/
-# GitHub action badges (flaky)
 https://github.com/.*/actions/workflows/.*badge.svg
-# Contributor Covenant (blocks CI bots with connection reset or rate limiting)
 https://www.contributor-covenant.org/
-# Shields.io badges (dynamic, may timeout)
 https://img.shields.io/
-# GitHub security advisories (HTTP/2 errors from CI bots)
 https://github.com/.*/security/advisories
-# GitHub Pages URL (404 until Pages is enabled in repo Settings → Pages → Source: GitHub Actions)
 https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/
