@@ -69,7 +69,6 @@
 
   "logConfig": {
     "format": "words",
-    "maxBufferSize": 150,
     "logDir": "./logs"
   },
 
