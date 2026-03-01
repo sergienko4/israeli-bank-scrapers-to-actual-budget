@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TranslateCategoryResolver } from '../../src/Services/TranslateCategoryResolver.js';
 import { TranslationRule } from '../../src/Types/index.js';
+import * as LoggerModule from '../../src/Logger/index.js';
+
+const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 describe('TranslateCategoryResolver', () => {
   let resolver: TranslateCategoryResolver;
@@ -14,14 +17,15 @@ describe('TranslateCategoryResolver', () => {
   ];
 
   beforeEach(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.clearAllMocks();
+    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as any);
     resolver = new TranslateCategoryResolver(sampleRules);
   });
 
   describe('initialize', () => {
     it('logs the number of loaded rules', async () => {
       await resolver.initialize();
-      expect(console.log).toHaveBeenCalledWith(
+      expect(mockLogger.info).toHaveBeenCalledWith(
         expect.stringContaining('5 rules')
       );
     });

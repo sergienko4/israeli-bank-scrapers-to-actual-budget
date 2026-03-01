@@ -2,6 +2,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TransactionService } from '../../src/Services/TransactionService.js';
 import { ICategoryResolver } from '../../src/Services/ICategoryResolver.js';
 
+const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+vi.mock('../../src/Logger/index.js', () => ({
+  getLogger: () => mockLogger,
+  getLogBuffer: vi.fn(),
+  createLogger: vi.fn(),
+}));
+
 describe('TransactionService', () => {
   let service: TransactionService;
   let mockApi: any;
@@ -18,9 +26,8 @@ describe('TransactionService', () => {
         }))
       }))
     };
+    vi.clearAllMocks();
     service = new TransactionService(mockApi);
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   describe('importTransactions', () => {
@@ -104,7 +111,7 @@ describe('TransactionService', () => {
 
       expect(result.imported).toBe(0);
       expect(result.skipped).toBe(0);
-      expect(console.error).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error importing transaction: Database error')
       );
     });
@@ -151,7 +158,7 @@ describe('TransactionService', () => {
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: '1' }];
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
       expect(result.imported).toBe(0);
-      expect(console.error).toHaveBeenCalledWith(
+      expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('network failure')
       );
     });

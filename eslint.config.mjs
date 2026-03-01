@@ -59,6 +59,44 @@ export default tseslint.config(
 
       // === FORMATTING ===
       'max-len': ['error', { code: 100, ignoreUrls: true }],
+
+      // === LOGGING & SECURITY ===
+      'no-console': 'error',
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.object.name='logger'] " +
+            "Property[key.name=/^(password|token|secret|auth|creditCard|cvv)$/i]",
+          message: 'SECURITY: Do not log sensitive data. Add to pino redact paths instead.',
+        },
+      ],
+    },
+  },
+  // === EXEMPTION: Logger implementations may call console (they ARE the logging layer) ===
+  {
+    files: ['src/Logger/**/*.ts'],
+    rules: { 'no-console': 'off' },
+  },
+  // === UTILS: mandatory logger call + security (overrides base no-restricted-syntax) ===
+  {
+    files: ['src/Utils/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.object.name='logger'] " +
+            "Property[key.name=/^(password|token|secret|auth|creditCard|cvv)$/i]",
+          message: 'SECURITY: Do not log sensitive data.',
+        },
+        {
+          selector: [
+            "FunctionDeclaration:not(:has(CallExpression[callee.object.name='logger']))",
+            "VariableDeclarator > ArrowFunctionExpression" +
+              ":not(:has(CallExpression[callee.object.name='logger']))",
+          ].join(', '),
+          message: "Utility functions must include a 'logger' call for traceability.",
+        },
+      ],
     },
   },
   // === EXEMPTIONS: tests/configs ===
@@ -77,6 +115,8 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
+      'no-restricted-syntax': 'off',
+      'no-console': 'off',
     },
   },
   // === EXEMPTIONS: lowercase entry-point & utility filenames ===

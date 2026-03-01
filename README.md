@@ -82,7 +82,7 @@ Edit `config.json` with your credentials. Here is a full example showing all ava
 
   "logConfig": {
     "format": "words",
-    "maxBufferSize": 150
+    "logDir": "./logs"
   },
 
   "categorization": {
@@ -138,6 +138,7 @@ docker run --rm --cap-add SYS_ADMIN \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
+  -v $(pwd)/logs:/app/logs \
   sergienko4/israeli-bank-importer
 ```
 
@@ -151,6 +152,7 @@ docker run --rm --cap-add SYS_ADMIN \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
+  -v $(pwd)/logs:/app/logs \
   israeli-bank-importer:latest
 ```
 
@@ -335,25 +337,48 @@ Anti-detection is handled automatically by the scraper library (v7.0.0+). No con
 
 ### Logging
 
-Configure log output format via `logConfig` in config.json:
+Configure log output and file retention via `logConfig` in config.json:
 
 ```json
 "logConfig": {
   "format": "words",
-  "maxBufferSize": 150
+  "logDir": "./logs"
 }
 ```
 
-| Format | Output | Best for |
-|--------|--------|----------|
-| `words` | Emoji-rich console output (default) | Development, human reading |
-| `json` | Structured JSON, one object per line | Docker log aggregators (Loki, ELK) |
+| Option | Default | Description |
+|--------|---------|-------------|
+| `format` | auto | Log format (see table below). Auto-derived from `telegram.messageFormat` when not set. |
+| `logDir` | `./logs` | Directory for rotating log files. Set to an absolute path in Docker (e.g. `/app/logs`). |
+
+**Log formats:**
+
+| Format | Output style | Best for |
+|--------|-------------|----------|
+| `words` | Emoji-rich, colorized (pino-pretty) | Development, human reading |
+| `json` | Structured NDJSON, one object per line | Docker log aggregators (Loki, ELK, CloudWatch) |
 | `table` | `[HH:MM:SS] LEVEL message` | Timestamped production logs |
 | `phone` | `> compact message` (no emojis) | Mobile viewing, minimal output |
 
-`maxBufferSize` controls the ring buffer for the `/logs` bot command (default: 150, max: 500).
+**Auto-derived format** (when `format` is not set):
 
-> **Note:** When using `words` format, log entries shown via `/logs` include a `[HH:MM:SS]` timestamp prefix so you can trace when each step happened.
+| `telegram.messageFormat` | Auto-selected `format` |
+|--------------------------|------------------------|
+| `summary` (default) | `words` |
+| `compact` | `table` |
+| `ledger` | `json` |
+| `emoji` | `words` |
+| `listenForCommands: true` | `phone` |
+
+**Log files** are written to `logDir` as NDJSON (raw pino format), rotated at 10 MB per file, and automatically cleaned up after 3 days. The `/logs` Telegram command reads from these files.
+
+Logs work out of the box with the `./logs` default — no config change required. In Docker, mount the directory as a volume to persist logs across container restarts:
+
+```sh
+-v /host/logs:/app/logs
+```
+
+> **Note:** `maxBufferSize` is deprecated and ignored — the `/logs` command now reads from log files.
 
 ### Auto-Categorization
 
@@ -629,7 +654,7 @@ When `listenForCommands` is `true`, control the importer from Telegram:
 | `/status` | Show last 5 imports with transaction counts and duration |
 | `/check_config` | Check config (offline + online) — see [Config Validation](#config-validation) |
 | `/watch` | Check spending watch rules now |
-| `/logs` | Show recent log entries with timestamps (default: 50) |
+| `/logs` | Show recent log entries from log files (default: 50, requires `logConfig.logDir`) |
 | `/logs N` | Show last N entries (max 150) |
 | `/help` | List commands |
 

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramPoller } from '../../src/Services/TelegramPoller.js';
+import * as LoggerModule from '../../src/Logger/index.js';
+
+const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 const emptyResponse = () => Promise.resolve({
   ok: true,
@@ -10,10 +13,10 @@ describe('TelegramPoller', () => {
   let fetchMock: any;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as any);
   });
 
   // Call sequence: 1=clearOldMessages, 2+=poll cycles
@@ -140,7 +143,9 @@ describe('TelegramPoller', () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Network failure'));
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Network failure')
+    );
   });
 
   it('skips update when poll response.ok is false', async () => {
@@ -196,7 +201,9 @@ describe('TelegramPoller', () => {
           ok: true,
           json: () => Promise.resolve({
             ok: true,
-            result: [{ update_id: 1, message: { chat: { id: 999 }, date: Math.floor(Date.now() / 1000) } }]
+            result: [{ update_id: 1, message: {
+              chat: { id: 999 }, date: Math.floor(Date.now() / 1000)
+            } }]
           })
         });
       }

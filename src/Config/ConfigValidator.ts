@@ -290,11 +290,13 @@ export async function runValidateMode(): Promise<number> {
   try {
     config = loader.loadRaw();
   } catch (e) {
+    // eslint-disable-next-line no-console -- validation CLI reports to stdout, not logger
     console.log(`[FAIL] Cannot load config: ${errorMessage(e)}`);
     return 1;
   }
   const validator = new ConfigValidator();
   const results = await validator.validateAll(config);
+  // eslint-disable-next-line no-console -- validation CLI reports to stdout, not logger
   console.log(validator.formatReport(results));
   return results.some(r => r.status === 'fail') ? 1 : 0;
 }

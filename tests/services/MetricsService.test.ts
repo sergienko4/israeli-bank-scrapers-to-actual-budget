@@ -1,10 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MetricsService } from '../../src/Services/MetricsService.js';
 
+const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+vi.mock('../../src/Logger/index.js', () => ({
+  getLogger: () => mockLogger,
+  getLogBuffer: vi.fn(),
+  createLogger: vi.fn(),
+}));
+
 describe('MetricsService', () => {
   let metrics: MetricsService;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     metrics = new MetricsService();
     metrics.startImport();
   });
@@ -210,7 +219,7 @@ describe('MetricsService', () => {
 
   describe('printSummary', () => {
     it('prints without errors', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.clearAllMocks();
 
       metrics.startBank('discount');
       metrics.recordBankSuccess('discount', 10, 3);
@@ -218,24 +227,22 @@ describe('MetricsService', () => {
 
       metrics.printSummary();
 
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(mockLogger.info).toHaveBeenCalled();
     });
 
     it('prints failed banks correctly', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.clearAllMocks();
 
       metrics.startBank('leumi');
       metrics.recordBankFailure('leumi', new Error('Auth failed'));
 
       metrics.printSummary();
 
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(mockLogger.info).toHaveBeenCalled();
     });
 
     it('prints already-reconciled status', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.clearAllMocks();
 
       metrics.startBank('discount');
       metrics.recordBankSuccess('discount', 5, 0);
@@ -243,13 +250,12 @@ describe('MetricsService', () => {
 
       metrics.printSummary();
 
-      const calls = consoleSpy.mock.calls.map(c => c[0]);
+      const calls = mockLogger.info.mock.calls.map(c => c[0]);
       expect(calls.some((c: string) => typeof c === 'string' && c.includes('already reconciled'))).toBe(true);
-      consoleSpy.mockRestore();
     });
 
     it('prints skipped/balanced reconciliation status', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.clearAllMocks();
 
       metrics.startBank('discount');
       metrics.recordBankSuccess('discount', 5, 0);
@@ -257,13 +263,12 @@ describe('MetricsService', () => {
 
       metrics.printSummary();
 
-      const calls = consoleSpy.mock.calls.map(c => c[0]);
+      const calls = mockLogger.info.mock.calls.map(c => c[0]);
       expect(calls.some((c: string) => typeof c === 'string' && c.includes('balanced'))).toBe(true);
-      consoleSpy.mockRestore();
     });
 
     it('prints negative reconciliation amount', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.clearAllMocks();
 
       metrics.startBank('discount');
       metrics.recordBankSuccess('discount', 5, 0);
@@ -271,16 +276,14 @@ describe('MetricsService', () => {
 
       metrics.printSummary();
 
-      const calls = consoleSpy.mock.calls.map(c => c[0]);
+      const calls = mockLogger.info.mock.calls.map(c => c[0]);
       expect(calls.some((c: string) => typeof c === 'string' && c.includes('-50.00'))).toBe(true);
-      consoleSpy.mockRestore();
     });
 
     it('prints with no banks', () => {
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      vi.clearAllMocks();
       metrics.printSummary();
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(mockLogger.info).toHaveBeenCalled();
     });
   });
 

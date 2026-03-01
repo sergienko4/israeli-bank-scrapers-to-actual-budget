@@ -8,6 +8,7 @@
 const IL_TIMEZONE = 'Asia/Jerusalem';
 
 /** Format a Date or ISO date string as YYYY-MM-DD in Jerusalem (Israel) local time */
+// eslint-disable-next-line no-restricted-syntax -- pure date formatter, no logging needed
 export function formatDate(date: Date | string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: IL_TIMEZONE }).format(new Date(date));
 }
