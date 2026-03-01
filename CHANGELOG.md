@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.25.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.25.0...v1.25.1) (2026-03-01)
+
+
+### Fixed
+
+* /check_config crash on split config (Cannot read properties of undefined) ([#147](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/147)) ([d8b3c06](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d8b3c06fbc0fee5f4771b7479e42d3034c046b22))
+
+
+### Refactored
+
+* **ci:** move TypeDoc to validate job, fix exclude paths, document npm run docs ([#146](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/146)) ([a35d231](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/a35d2312353ddca873758e3de663ae4a5c27d9ba))
+
 ## [1.25.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.24.0...v1.25.0) (2026-02-28)
 
 
