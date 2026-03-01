@@ -286,24 +286,43 @@ function initBankScrape(
   };
 }
 
-async function scrapeBankWithResilience(
+async function executeScrapeAttempt(
   bankName: string, bankConfig: BankConfig
 ): Promise<ScraperScrapingResult> {
-  const mockResult = loadMockScraperResult(bankName);
-  if (mockResult) return mockResult;
-
   const { scraper, credentials } = initBankScrape(bankName, bankConfig);
-  logger.info(`  🔍 Scraping transactions from ${bankName}...`);
   const strategy = bankConfig.twoFactorAuth ? noRetryStrategy : retryStrategy;
-
-  return await strategy.execute(
-    async () => await timeoutWrapper.wrap(
+  return strategy.execute(
+    () => timeoutWrapper.wrap(
       scraper.scrape(credentials),
       DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs,
       `Scraping ${bankName}`
     ),
     `Scraping ${bankName}`
   );
+}
+
+async function retryOtpScrape(
+  bankName: string, bankConfig: BankConfig
+): Promise<ScraperScrapingResult> {
+  logger.warn(`  ⚠️  OTP rejected — requesting a new code for ${bankName}`);
+  await notificationService.sendMessage(
+    `⚠️ OTP for <b>${bankName}</b> was rejected. ` +
+    `A new code will be requested — please check your SMS.`
+  );
+  return executeScrapeAttempt(bankName, bankConfig);
+}
+
+async function scrapeBankWithResilience(
+  bankName: string, bankConfig: BankConfig
+): Promise<ScraperScrapingResult> {
+  const mockResult = loadMockScraperResult(bankName);
+  if (mockResult) return mockResult;
+  logger.info(`  🔍 Scraping transactions from ${bankName}...`);
+  const result = await executeScrapeAttempt(bankName, bankConfig);
+  if (!result.success && String(result.errorType) === 'INVALID_OTP') {
+    return retryOtpScrape(bankName, bankConfig);
+  }
+  return result;
 }
 
 // ─── Account processing context types ───
