@@ -56,8 +56,8 @@ function loadLogConfig(): LogConfig | undefined {
   const config = loadFullConfig();
   if (!config) return undefined;
   const tg = config.notifications?.telegram;
-  const usesBot = tg?.listenForCommands === true;
-  const format = config.logConfig?.format ?? deriveLogFormat(tg?.messageFormat, usesBot);
+  const hasBot = tg?.listenForCommands === true;
+  const format = config.logConfig?.format ?? deriveLogFormat(tg?.messageFormat, hasBot);
   const logDir = config.logConfig?.logDir ?? DEFAULT_LOG_DIR;
   return { ...config.logConfig, format, maxBufferSize: 0, logDir };
 }
