@@ -170,6 +170,33 @@ export class MetricsService {
     getLogger().info('='.repeat(60));
   }
 
+  /**
+   * Get metrics for a specific bank
+   */
+  getBankMetrics(bankName: string): BankMetrics | undefined {
+    return this.banks.get(bankName);
+  }
+
+  /**
+   * Check if any banks failed
+   */
+  hasFailures(): boolean {
+    return Array.from(this.banks.values()).some(b => b.status === 'failure');
+  }
+
+  /**
+   * Get error breakdown by type
+   */
+  getErrorBreakdown(): Record<string, number> {
+    const breakdown: Record<string, number> = {};
+    for (const bank of this.banks.values()) {
+      if (bank.status === 'failure' && bank.error) {
+        breakdown[bank.error] = (breakdown[bank.error] || 0) + 1;
+      }
+    }
+    return breakdown;
+  }
+
   private printOverallStats(summary: ImportSummary, importDuration: number): void {
     getLogger().info('📊 Import Summary\n');
     getLogger().info(`  Total banks: ${summary.totalBanks}`);
@@ -216,30 +243,4 @@ export class MetricsService {
     );
   }
 
-  /**
-   * Get metrics for a specific bank
-   */
-  getBankMetrics(bankName: string): BankMetrics | undefined {
-    return this.banks.get(bankName);
-  }
-
-  /**
-   * Check if any banks failed
-   */
-  hasFailures(): boolean {
-    return Array.from(this.banks.values()).some(b => b.status === 'failure');
-  }
-
-  /**
-   * Get error breakdown by type
-   */
-  getErrorBreakdown(): Record<string, number> {
-    const breakdown: Record<string, number> = {};
-    for (const bank of this.banks.values()) {
-      if (bank.status === 'failure' && bank.error) {
-        breakdown[bank.error] = (breakdown[bank.error] || 0) + 1;
-      }
-    }
-    return breakdown;
-  }
 }

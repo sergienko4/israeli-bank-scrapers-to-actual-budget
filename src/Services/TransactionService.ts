@@ -56,6 +56,29 @@ export class TransactionService {
     };
   }
 
+  /**
+   * Get an existing account or create a new one in Actual Budget
+   */
+  async getOrCreateAccount(
+    accountId: string, bankName: string, accountNumber: string
+  ): Promise<ActualAccount | string> {
+    let account: ActualAccount | string | undefined = await this.api.getAccounts()
+      .then((accounts: ActualAccount[]) => accounts.find((a) => a.id === accountId));
+
+    if (!account) {
+      getLogger().info(`     ➕ Creating new account: ${accountId}`);
+      // Actual accepts id to set specific UUID, though not in official type
+      account = await this.api.createAccount({
+        id: accountId,
+        name: `${bankName} - ${accountNumber}`,
+        offbudget: false,
+        closed: false
+      } as Omit<ActualAccount, 'id'>);
+    }
+
+    return account;
+  }
+
   private async processTransactionBatch(
     opts: ImportTransactionsOpts
   ): Promise<{ newTransactions: TransactionRecord[]; existingTransactions: TransactionRecord[] }> {
@@ -91,29 +114,6 @@ export class TransactionService {
       if (msg.includes('already exists')) { existingTransactions.push(parsed); }
       else { getLogger().error(`     ❌ Error importing transaction: ${msg}`); }
     }
-  }
-
-  /**
-   * Get an existing account or create a new one in Actual Budget
-   */
-  async getOrCreateAccount(
-    accountId: string, bankName: string, accountNumber: string
-  ): Promise<ActualAccount | string> {
-    let account: ActualAccount | string | undefined = await this.api.getAccounts()
-      .then((accounts: ActualAccount[]) => accounts.find((a) => a.id === accountId));
-
-    if (!account) {
-      getLogger().info(`     ➕ Creating new account: ${accountId}`);
-      // Actual accepts id to set specific UUID, though not in official type
-      account = await this.api.createAccount({
-        id: accountId,
-        name: `${bankName} - ${accountNumber}`,
-        offbudget: false,
-        closed: false
-      } as Omit<ActualAccount, 'id'>);
-    }
-
-    return account;
   }
 
   private buildImportedId(accountKey: string, txn: BankTransaction, parsed: TransactionRecord)

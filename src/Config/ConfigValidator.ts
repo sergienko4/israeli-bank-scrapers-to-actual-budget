@@ -29,20 +29,6 @@ const KNOWN_BANKS = new Set(Object.keys(CompanyTypes).map(k => k.toLowerCase()))
  */
 export class ConfigValidator {
 
-  // ─── Result builders ───
-
-  private pass(check: string, message: string): ValidationResult {
-    return { status: 'pass', check, message };
-  }
-
-  private fail(check: string, message: string): ValidationResult {
-    return { status: 'fail', check, message };
-  }
-
-  private warn(check: string, message: string): ValidationResult {
-    return { status: 'warn', check, message };
-  }
-
   // ─── Public API ───
 
   validateOffline(config: ImporterConfig): ValidationResult[] {
@@ -64,8 +50,8 @@ export class ConfigValidator {
 
   async validateAll(config: ImporterConfig): Promise<ValidationResult[]> {
     const offline = this.validateOffline(config);
-    const hasFails = offline.some(r => r.status === 'fail');
-    const online = hasFails ? [] : await this.validateOnline(config);
+    const hasFailures = offline.some(r => r.status === 'fail');
+    const online = hasFailures ? [] : await this.validateOnline(config);
     return [...offline, ...online];
   }
 
@@ -78,6 +64,20 @@ export class ConfigValidator {
     }
     lines.push(sep, this.summarizeCounts(results));
     return lines.join('\n');
+  }
+
+  // ─── Result builders ───
+
+  private pass(check: string, message: string): ValidationResult {
+    return { status: 'pass', check, message };
+  }
+
+  private fail(check: string, message: string): ValidationResult {
+    return { status: 'fail', check, message };
+  }
+
+  private warn(check: string, message: string): ValidationResult {
+    return { status: 'warn', check, message };
   }
 
   // ─── Offline — actual ───
@@ -188,9 +188,9 @@ export class ConfigValidator {
   private checkTelegramOffline(
     tg: NonNullable<NotificationConfig['telegram']>
   ): ValidationResult[] {
-    const tokenOk = /^\d+:.+$/.test(tg.botToken ?? '');
+    const isTokenValid = /^\d+:.+$/.test(tg.botToken ?? '');
     return [
-      tokenOk
+      isTokenValid
         ? this.pass('telegram.botToken', 'Telegram botToken format valid')
         : this.fail('telegram.botToken',
           'Invalid botToken format — expected "123456:ABCdef..."'),

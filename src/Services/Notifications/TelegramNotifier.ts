@@ -80,6 +80,21 @@ export class TelegramNotifier implements INotifier {
     throw new Error('2FA timeout: no reply received');
   }
 
+  // ─── Bot command registration ───
+
+  async registerCommands(
+    extras: Array<{ command: string; description: string }> = []
+  ): Promise<void> {
+    const commands = [
+      { command: 'scan', description: 'Run bank import now' },
+      { command: 'status', description: 'Show last run info + history' },
+      ...extras.filter(c => isValidBotCommand(c.command, c.description)),
+      { command: 'logs', description: 'Show recent log entries' },
+      { command: 'help', description: 'List available commands' },
+    ];
+    await this.sendBotCommands(commands);
+  }
+
   private async pollUpdates(
     offset: number
   ): Promise<{ updates: TelegramApiResponse; nextOffset: number } | null> {
@@ -109,21 +124,6 @@ export class TelegramNotifier implements INotifier {
     if (!response.ok) return 0;
     const data = await response.json() as TelegramApiResponse;
     return data.result?.length ? data.result[data.result.length - 1].update_id + 1 : 0;
-  }
-
-  // ─── Bot command registration ───
-
-  async registerCommands(
-    extras: Array<{ command: string; description: string }> = []
-  ): Promise<void> {
-    const commands = [
-      { command: 'scan', description: 'Run bank import now' },
-      { command: 'status', description: 'Show last run info + history' },
-      ...extras.filter(c => isValidBotCommand(c.command, c.description)),
-      { command: 'logs', description: 'Show recent log entries' },
-      { command: 'help', description: 'List available commands' },
-    ];
-    await this.sendBotCommands(commands);
   }
 
   private async sendBotCommands(
