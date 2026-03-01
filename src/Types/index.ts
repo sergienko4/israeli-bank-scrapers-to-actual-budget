@@ -188,9 +188,16 @@ export interface TelegramMessageData {
   date: number;
 }
 
+export interface TelegramCallbackQuery {
+  id: string;
+  data?: string;
+  message?: { chat: { id: number }; date: number };
+}
+
 export interface TelegramUpdate {
   update_id: number;
   message?: TelegramMessageData;
+  callback_query?: TelegramCallbackQuery;
 }
 
 export interface TelegramApiResponse {

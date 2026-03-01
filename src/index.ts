@@ -538,8 +538,16 @@ async function initializeApi(): Promise<void> {
   logger.info('='.repeat(60));
 }
 
+function applyBankFilter(all: [string, BankConfig][]): [string, BankConfig][] {
+  const filter = process.env.IMPORT_BANKS?.split(',').map(b => b.trim()).filter(Boolean);
+  if (!filter?.length) return all;
+  const filtered = all.filter(([n]) => filter.some(f => f.toLowerCase() === n.toLowerCase()));
+  logger.info(`  🔍 Bank filter: ${filtered.map(([n]) => n).join(', ')}`);
+  return filtered;
+}
+
 async function processAllBanks(): Promise<void> {
-  const banks = Object.entries(config.banks || {});
+  const banks = applyBankFilter(Object.entries(config.banks || {}));
   for (let i = 0; i < banks.length; i++) {
     if (shutdownHandler.isShuttingDown()) {
       logger.warn('⚠️  Shutdown requested, stopping imports...'); break;

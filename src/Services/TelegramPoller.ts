@@ -3,7 +3,7 @@
  * Filters by chatId for security, dispatches commands to handler
  */
 
-import { TelegramApiResponse } from '../Types/index.js';
+import { TelegramApiResponse, TelegramCallbackQuery } from '../Types/index.js';
 import { errorMessage } from '../Utils/index.js';
 import { getLogger } from '../Logger/index.js';
 
@@ -52,6 +52,7 @@ export class TelegramPoller {
     for (const update of data.result) {
       this.offset = update.update_id + 1;
       await this.processUpdate(update.message);
+      await this.processCallbackQuery(update.callback_query);
     }
   }
 
@@ -62,6 +63,22 @@ export class TelegramPoller {
     if (String(message.chat.id) !== this.chatId) return;
     if (message.date < this.startedAt) return;
     await this.onMessage(message.text);
+  }
+
+  private async processCallbackQuery(query: TelegramCallbackQuery | undefined): Promise<void> {
+    if (!query?.data) return;
+    if (String(query.message?.chat.id) !== this.chatId) return;
+    await this.answerCallbackQuery(query.id);
+    await this.onMessage(query.data);
+  }
+
+  private async answerCallbackQuery(queryId: string): Promise<void> {
+    const url = `${TELEGRAM_API}/bot${this.botToken}/answerCallbackQuery`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ callback_query_id: queryId }),
+    }).catch(() => { /* non-critical */ });
   }
 
   private async clearOldMessages(): Promise<void> {

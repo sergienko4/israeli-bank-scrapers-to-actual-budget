@@ -12,22 +12,26 @@ const MAX_TELEGRAM_LENGTH = 4096;
 const DEFAULT_LOG_COUNT = 50;
 
 export interface CommandHandlerOptions {
-  runImport: () => Promise<number>;
+  runImport: (banks?: string[]) => Promise<number>;
   notifier: INotifier;
   auditLog?: IAuditLog;
   runWatch?: () => Promise<string | null>;
   runValidate?: () => Promise<string>;
   runPreview?: () => Promise<number>;
+  getBankNames?: () => string[];
+  sendScanMenu?: (banks: string[]) => Promise<void>;
   logDir?: string;
 }
 
 export class TelegramCommandHandler {
-  private runImport: () => Promise<number>;
+  private runImport: (banks?: string[]) => Promise<number>;
   private notifier: INotifier;
   private auditLog?: IAuditLog;
   private runWatch?: () => Promise<string | null>;
   private runValidate?: () => Promise<string>;
   private runPreview?: () => Promise<number>;
+  private getBankNames?: () => string[];
+  private sendScanMenu?: (banks: string[]) => Promise<void>;
   private logDir: string;
   private importPromise: Promise<void> | null = null;
   private lastRunTime: Date | null = null;
@@ -40,17 +44,23 @@ export class TelegramCommandHandler {
     this.runWatch = opts.runWatch;
     this.runValidate = opts.runValidate;
     this.runPreview = opts.runPreview;
+    this.getBankNames = opts.getBankNames;
+    this.sendScanMenu = opts.sendScanMenu;
     this.logDir = opts.logDir ?? './logs';
   }
 
   async handle(text: string): Promise<void> {
-    const parts = text.trim().toLowerCase().split(' ');
-    const command = parts[0];
+    const raw = text.trim().split(/\s+/);
+    const command = raw[0].toLowerCase();
+    const arg = raw.slice(1).join(' ').trim() || undefined;
+    // Callback query data: "scan:bankName" or "scan_all"
+    if (command === 'scan_all') { await this.handleScan(); return; }
+    if (command.startsWith('scan:')) { await this.handleScan(command.slice(5)); return; }
     const handlers: Record<string, () => Promise<void>> = {
-      '/scan': () => this.handleScan(),
-      '/import': () => this.handleScan(),
+      '/scan': () => this.handleScan(arg),
+      '/import': () => this.handleScan(arg),
       '/status': () => this.handleStatus(),
-      '/logs': () => this.handleLogs(parts[1]),
+      '/logs': () => this.handleLogs(arg),
       '/watch': () => this.handleWatch(),
       '/check_config': () => this.handleCheckConfig(),
       '/preview': () => this.handlePreview(),
@@ -61,17 +71,38 @@ export class TelegramCommandHandler {
     if (handler) await handler();
   }
 
-  private async handleScan(): Promise<void> {
+  private async handleScan(bankArg?: string): Promise<void> {
     if (this.importPromise) { await this.reply('⏳ Import already running. Please wait.'); return; }
-    this.importPromise = this.executeImport();
+    if (!bankArg && this.sendScanMenu && this.getBankNames) {
+      const banks = this.getBankNames();
+      if (banks.length > 0) { await this.sendScanMenu(banks); return; }
+    }
+    const banks = bankArg ? this.resolveBanks(bankArg) : undefined;
+    if (typeof banks === 'string') { await this.reply(banks); return; }
+    this.importPromise = this.executeImport(banks);
     await this.importPromise;
   }
 
-  private async executeImport(): Promise<void> {
-    await this.reply('⏳ Starting import...');
+  private resolveBanks(bankArg: string): string[] | string {
+    const requested = bankArg.split(',').map(b => b.trim()).filter(Boolean);
+    const available = this.getBankNames?.() ?? [];
+    if (!available.length) return requested; // no validation if getBankNames not provided
+    const match = (r: string): string =>
+      available.find(a => a.toLowerCase() === r.toLowerCase()) ?? r;
+    const resolved = requested.map(match);
+    const unknown = resolved.filter(r => !available.includes(r));
+    if (unknown.length) {
+      return `❌ Unknown bank: "${unknown[0]}". Available: ${available.join(', ')}`;
+    }
+    return resolved;
+  }
+
+  private async executeImport(banks?: string[]): Promise<void> {
+    const label = banks ? ` (${banks.join(', ')})` : '';
+    await this.reply(`⏳ Starting import...${label}`);
     const start = Date.now();
     try {
-      const exitCode = await this.runImport();
+      const exitCode = await this.runImport(banks);
       const dur = ((Date.now() - start) / 1000).toFixed(0);
       this.lastRunTime = new Date();
       this.lastRunResult = exitCode === 0 ? 'success' : 'failed';
