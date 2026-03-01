@@ -13,6 +13,7 @@
 import {
   TelegramConfig, MessageFormat, ShowTransactions, TelegramApiResponse
 } from '../../Types/index.js';
+import { OtpThreadManager } from '../OtpThreadManager.js';
 import {
   ImportSummary, BankMetrics, AccountMetrics, TransactionRecord
 } from '../MetricsService.js';
@@ -38,6 +39,8 @@ export class TelegramNotifier implements INotifier {
   private format: MessageFormat;
   private showTransactions: ShowTransactions;
   private maxTransactions: number;
+  private otpThreadManager?: OtpThreadManager;
+  private otpThreadId?: number;
 
   constructor(config: TelegramConfig, maxTransactions?: number) {
     this.botToken = config.botToken;
@@ -81,18 +84,28 @@ export class TelegramNotifier implements INotifier {
     });
   }
 
+  setOtpThreadManager(manager: OtpThreadManager): void {
+    this.otpThreadManager = manager;
+  }
+
+  async sendOtpMessage(text: string): Promise<void> {
+    const threadId = await this.resolveOtpThreadId();
+    await this.send(text, threadId);
+  }
+
   // ─── 2FA reply polling ───
 
   async waitForReply(prompt: string, timeoutMs: number): Promise<string> {
+    const threadId = await this.resolveOtpThreadId();
     let offset = await this.getLatestOffset();
-    await this.send(prompt);
+    await this.send(prompt, threadId);
     const sentAt = Math.floor(Date.now() / 1000);
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeoutMs) {
       const result = await this.pollUpdates(offset);
       if (!result) continue;
-      const reply = this.findReplyMessage(result.updates, sentAt);
+      const reply = this.findReplyMessage(result.updates, sentAt, threadId);
       offset = result.nextOffset;
       if (reply) return reply;
     }
@@ -127,14 +140,25 @@ export class TelegramNotifier implements INotifier {
     return { updates: data, nextOffset: lastId + 1 };
   }
 
-  private findReplyMessage(data: TelegramApiResponse, sentAt: number): string | null {
+  private findReplyMessage(
+    data: TelegramApiResponse, sentAt: number, threadId?: number
+  ): string | null {
     for (const update of data.result ?? []) {
       const msg = update.message;
       if (!msg?.text || String(msg.chat.id) !== this.chatId) continue;
       if (msg.date < sentAt || msg.text.startsWith('/')) continue;
+      if (threadId !== undefined && msg.message_thread_id !== threadId) continue;
       return msg.text;
     }
     return null;
+  }
+
+  private async resolveOtpThreadId(): Promise<number | undefined> {
+    if (this.otpThreadId !== undefined) return this.otpThreadId;
+    if (!this.otpThreadManager) return undefined;
+    const id = await this.otpThreadManager.getOrCreateThreadId();
+    if (id !== null) this.otpThreadId = id;
+    return this.otpThreadId;
   }
 
   private async getLatestOffset(): Promise<number> {
@@ -185,18 +209,20 @@ export class TelegramNotifier implements INotifier {
     return text + openTags.reverse().map(t => `</${t}>`).join('');
   }
 
-  private async send(text: string): Promise<void> {
+  private async send(text: string, threadId?: number): Promise<void> {
     const url = `${TELEGRAM_API}/bot${this.botToken}/sendMessage`;
+    const payload: Record<string, unknown> = {
+      chat_id: this.chatId, text: this.truncateMessage(text), parse_mode: 'HTML',
+      ...(threadId !== undefined ? { message_thread_id: threadId } : {}),
+    };
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: this.chatId, text: this.truncateMessage(text), parse_mode: 'HTML'
-      })
+      body: JSON.stringify(payload)
     });
     if (!response.ok) {
-      const body = await response.text();
-      throw new Error(`Telegram API error ${response.status}: ${body}`);
+      const errBody = await response.text();
+      throw new Error(`Telegram API error ${response.status}: ${errBody}`);
     }
   }
 

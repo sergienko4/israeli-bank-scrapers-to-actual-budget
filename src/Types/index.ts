@@ -89,6 +89,7 @@ export interface TelegramConfig {
   messageFormat?: MessageFormat;       // Default: 'summary'
   showTransactions?: ShowTransactions;  // Default: 'new'
   listenForCommands?: boolean;         // Default: false
+  otpThread?: boolean;                 // Default: true — dedicated topic thread for OTP codes
 }
 
 export type WebhookFormat = 'slack' | 'discord' | 'plain';
@@ -186,6 +187,7 @@ export interface TelegramMessageData {
   chat: { id: number };
   text?: string;
   date: number;
+  message_thread_id?: number;
 }
 
 export interface TelegramCallbackQuery {

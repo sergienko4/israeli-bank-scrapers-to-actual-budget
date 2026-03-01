@@ -9,6 +9,7 @@ import { CronExpressionParser } from 'cron-parser';
 import { TelegramPoller } from './Services/TelegramPoller.js';
 import { TelegramCommandHandler } from './Services/TelegramCommandHandler.js';
 import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
+import { OtpThreadManager } from './Services/OtpThreadManager.js';
 import { ImporterConfig, LogConfig, TelegramConfig } from './Types/index.js';
 import { AuditLogService } from './Services/AuditLogService.js';
 import { errorMessage } from './Utils/index.js';
@@ -145,10 +146,17 @@ function buildCommandHandler(notifier: TelegramNotifier): TelegramCommandHandler
   });
 }
 
+function maybeInitOtpThread(notifier: TelegramNotifier, telegram: TelegramConfig): void {
+  if (telegram.otpThread === false) return;
+  const cacheDir = (logConfig?.logDir ?? DEFAULT_LOG_DIR).replace(/\/logs$|\\logs$/, '/cache');
+  notifier.setOtpThreadManager(new OtpThreadManager(telegram.botToken, telegram.chatId, cacheDir));
+}
+
 async function createHandlerAndPoller(
   telegram: TelegramConfig, config: ImporterConfig | null
 ): Promise<void> {
   const notifier = new TelegramNotifier(telegram);
+  maybeInitOtpThread(notifier, telegram);
   const extras = buildExtraCommands(config);
   logCommandCount(extras);
   await notifier.registerCommands(extras);

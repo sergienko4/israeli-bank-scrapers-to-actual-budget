@@ -26,7 +26,7 @@ export class TwoFactorService {
       getLogger().info(`  ✅ OTP received for ${bankName}`);
       const code = this.extractCode(reply);
       getLogger().info(`  🔐 Code for ${bankName}: ${this.maskCode(code)} (${code.length} digits)`);
-      await this.notifier.sendMessage(
+      await this.notifier.sendOtpMessage(
         `✅ Code received (<code>${this.maskCode(code)}</code>) — ` +
         `authenticating with <b>${bankName}</b>...`
       );

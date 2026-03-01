@@ -720,4 +720,76 @@ describe('TelegramNotifier', () => {
       await expect(notifier.registerCommands()).rejects.toThrow('setMyCommands failed');
     });
   });
+
+  describe('OTP thread support', () => {
+    it('sendOtpMessage sends to main chat when no thread manager set', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      await notifier.sendOtpMessage('🔐 Enter OTP');
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.text).toContain('Enter OTP');
+      expect(body.message_thread_id).toBeUndefined();
+    });
+
+    it('sendOtpMessage sends to OTP thread when manager resolves a thread ID', async () => {
+      const mockManager = { getOrCreateThreadId: vi.fn().mockResolvedValue(42) };
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      notifier.setOtpThreadManager(mockManager as never);
+
+      await notifier.sendOtpMessage('🔐 Enter OTP');
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.message_thread_id).toBe(42);
+    });
+
+    it('sendOtpMessage falls back to main chat when manager returns null', async () => {
+      const mockManager = { getOrCreateThreadId: vi.fn().mockResolvedValue(null) };
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      notifier.setOtpThreadManager(mockManager as never);
+
+      await notifier.sendOtpMessage('🔐 Enter OTP');
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.message_thread_id).toBeUndefined();
+    });
+
+    it('waitForReply filters replies by thread ID when OTP thread is set', async () => {
+      const mockManager = { getOrCreateThreadId: vi.fn().mockResolvedValue(99) };
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      notifier.setOtpThreadManager(mockManager as never);
+
+      const sentAt = Math.floor(Date.now() / 1000) - 1;
+      fetchMock
+        .mockResolvedValueOnce({  // getLatestOffset
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 10 }] }),
+        })
+        .mockResolvedValueOnce({ ok: true, text: vi.fn() })  // send prompt
+        .mockResolvedValueOnce({  // pollUpdates — msg in wrong thread (ignored)
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{
+              update_id: 11,
+              message: { text: 'wrong thread', chat: { id: -100 },
+                date: sentAt + 1, message_thread_id: 50 },
+            }],
+          }),
+        })
+        .mockResolvedValueOnce({  // pollUpdates — msg in correct thread
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{
+              update_id: 12,
+              message: { text: '123456', chat: { id: -100 },
+                date: sentAt + 2, message_thread_id: 99 },
+            }],
+          }),
+        });
+
+      const reply = await notifier.waitForReply('🔐 Prompt', 30000);
+      expect(reply).toBe('123456');
+    });
+  });
 });
