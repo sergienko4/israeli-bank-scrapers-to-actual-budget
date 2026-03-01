@@ -250,6 +250,26 @@ describe('ConfigValidator', () => {
       const results = validator.validateOffline(makeConfig());
       expect(pass(results).some(r => r.check === 'bank.discount.target[0]')).toBe(true);
     });
+
+    it('uses accountName as label in pass message when set', () => {
+      const cfg = makeConfig({
+        banks: {
+          discount: {
+            id: '1', password: 'p', num: 'A', daysBack: 7,
+            targets: [{ actualAccountId: fakeUuid(), accountName: 'Main Checking', reconcile: false, accounts: 'all' }],
+          },
+        },
+      });
+      const results = validator.validateOffline(cfg);
+      const msg = pass(results).find(r => r.check === 'bank.discount.target[0]')?.message ?? '';
+      expect(msg).toContain('"Main Checking"');
+    });
+
+    it('falls back to last UUID segment as label when accountName is absent', () => {
+      const results = validator.validateOffline(makeConfig());
+      const msg = pass(results).find(r => r.check === 'bank.discount.target[0]')?.message ?? '';
+      expect(msg).toMatch(/"\.\.\.[0-9a-f]+"/);
+    });
   });
 
   // ─── Notifications offline ───
