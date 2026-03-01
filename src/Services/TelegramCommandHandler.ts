@@ -19,6 +19,7 @@ export interface CommandHandlerOptions {
   runValidate?: () => Promise<string>;
   runPreview?: () => Promise<number>;
   getBankNames?: () => string[];
+  sendScanMenu?: (banks: string[]) => Promise<void>;
   logDir?: string;
 }
 
@@ -30,6 +31,7 @@ export class TelegramCommandHandler {
   private runValidate?: () => Promise<string>;
   private runPreview?: () => Promise<number>;
   private getBankNames?: () => string[];
+  private sendScanMenu?: (banks: string[]) => Promise<void>;
   private logDir: string;
   private importPromise: Promise<void> | null = null;
   private lastRunTime: Date | null = null;
@@ -43,6 +45,7 @@ export class TelegramCommandHandler {
     this.runValidate = opts.runValidate;
     this.runPreview = opts.runPreview;
     this.getBankNames = opts.getBankNames;
+    this.sendScanMenu = opts.sendScanMenu;
     this.logDir = opts.logDir ?? './logs';
   }
 
@@ -50,6 +53,9 @@ export class TelegramCommandHandler {
     const raw = text.trim().split(/\s+/);
     const command = raw[0].toLowerCase();
     const arg = raw.slice(1).join(' ').trim() || undefined;
+    // Callback query data: "scan:bankName" or "scan_all"
+    if (command === 'scan_all') { await this.handleScan(); return; }
+    if (command.startsWith('scan:')) { await this.handleScan(command.slice(5)); return; }
     const handlers: Record<string, () => Promise<void>> = {
       '/scan': () => this.handleScan(arg),
       '/import': () => this.handleScan(arg),
@@ -67,6 +73,10 @@ export class TelegramCommandHandler {
 
   private async handleScan(bankArg?: string): Promise<void> {
     if (this.importPromise) { await this.reply('⏳ Import already running. Please wait.'); return; }
+    if (!bankArg && this.sendScanMenu && this.getBankNames) {
+      const banks = this.getBankNames();
+      if (banks.length > 0) { await this.sendScanMenu(banks); return; }
+    }
     const banks = bankArg ? this.resolveBanks(bankArg) : undefined;
     if (typeof banks === 'string') { await this.reply(banks); return; }
     this.importPromise = this.executeImport(banks);

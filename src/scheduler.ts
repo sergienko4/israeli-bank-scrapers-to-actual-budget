@@ -140,6 +140,7 @@ function buildCommandHandler(notifier: TelegramNotifier): TelegramCommandHandler
     runValidate: runConfigValidation,
     runPreview: runPreviewLocked,
     getBankNames: () => Object.keys(loadFullConfig()?.banks ?? {}),
+    sendScanMenu: (banks) => notifier.sendScanMenu(banks),
     logDir: logConfig?.logDir,
   });
 }
