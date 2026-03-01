@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.1...v1.27.2) (2026-03-01)
+
+
+### Fixed
+
+* retry OTP scraping once when bank rejects the code ([#166](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/166)) ([9ef9d8b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/9ef9d8b0de58193bc89ff9cd153834a23e6445e5))
+
 ## [1.27.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.0...v1.27.1) (2026-03-01)
 
 
