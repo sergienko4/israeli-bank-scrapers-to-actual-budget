@@ -30,6 +30,7 @@
       "id": "123456789",
       "password": "your_password",
       "num": "ABC123",
+      "twoFactorAuth": false,
       "daysBack": 7,
       "targets": [{ "actualAccountId": "uuid", "accountName": "Main Checking", "reconcile": false, "accounts": "all" }]
     },
@@ -37,6 +38,7 @@
     "leumi": {
       "username": "your_username",
       "password": "your_password",
+      "twoFactorAuth": false,
       "startDate": "2026-01-25",
       "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
     },
@@ -56,6 +58,7 @@
       "id": "123456789",
       "card6Digits": "123456",
       "password": "your_password",
+      "twoFactorAuth": false,
       "clearSession": true,
       "daysBack": 30,
       "timeout": 60000,

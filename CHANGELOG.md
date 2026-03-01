@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.25.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.25.2...v1.25.3) (2026-03-01)
+
+
+### Fixed
+
+* route OTP via ScraperOptions for all banks, not just oneZero ([#153](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/153)) ([8a3cc72](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/8a3cc72d04d4d8ee1ba0e1f3c7974fb835c95580))
+* route OTP via ScraperOptions for all banks, not just oneZero ([#155](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/155)) ([3e41789](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/3e41789d08d8f581bdbb900c4ce2cd6017082167))
+* route OTP via ScraperOptions for all banks, not just oneZero ([#156](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/156)) ([f32fb2e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f32fb2e9ca6894bf5bed6cc0b68a46671b67085d))
+
 ## [1.25.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.25.1...v1.25.2) (2026-03-01)
 
 

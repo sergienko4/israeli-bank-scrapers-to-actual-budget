@@ -32,6 +32,7 @@ import {
   BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode
 } from './Types/index.js';
 import { buildChromeArgs, getChromeDataDir } from './Scraper/ScraperOptionsBuilder.js';
+import { buildCredentials } from './Scraper/CredentialsBuilder.js';
 import { errorMessage, formatDate } from './Utils/index.js';
 import { createLogger, getLogger } from './Logger/index.js';
 import { ICategoryResolver } from './Services/ICategoryResolver.js';
@@ -167,25 +168,6 @@ function computeStartDate(bankConfig: BankConfig): Date {
   return bankConfig.startDate ? new Date(bankConfig.startDate) : new Date();
 }
 
-function buildCredentials(
-  bankConfig: BankConfig, otpRetriever?: () => Promise<string>
-): ScraperCredentials {
-  const { id, password, num, username, userCode, nationalID,
-    card6Digits, email, phoneNumber, otpLongTermToken } = bankConfig;
-  if (otpRetriever) {
-    return {
-      email: email!, password: password!,
-      otpCodeRetriever: otpRetriever, phoneNumber: phoneNumber!
-    } as ScraperCredentials;
-  }
-  if (otpLongTermToken) {
-    return { email: email!, password: password!, otpLongTermToken } as ScraperCredentials;
-  }
-  return {
-    id, password, num, username, userCode, nationalID,
-    card6Digits, email, phoneNumber
-  } as ScraperCredentials;
-}
 
 function logDateRange(bankConfig: BankConfig): void {
   if (bankConfig.daysBack) {
@@ -203,7 +185,8 @@ function logDateRange(bankConfig: BankConfig): void {
 
 function buildScraperOptions(
   companyType: typeof CompanyTypes[keyof typeof CompanyTypes],
-  bankConfig: BankConfig
+  bankConfig: BankConfig,
+  otpRetriever?: () => Promise<string>
 ): ScraperOptions {
   return {
     companyId: companyType,
@@ -212,6 +195,9 @@ function buildScraperOptions(
     defaultTimeout: bankConfig.timeout ?? 60_000,
     ...(bankConfig.navigationRetryCount
       ? { navigationRetryCount: bankConfig.navigationRetryCount }
+      : {}),
+    ...(otpRetriever
+      ? { otpCodeRetriever: (_phoneHint: string) => otpRetriever() }
       : {}),
   };
 }
@@ -265,13 +251,25 @@ function loadMockScraperResult(bankName: string): ScraperScrapingResult | null {
 // ─── Scraper orchestration ───
 
 function prepareScraper(
-  companyType: typeof CompanyTypes[keyof typeof CompanyTypes],
-  bankConfig: BankConfig, bankName: string
+  bankConfig: BankConfig, bankName: string, options: ScraperOptions
 ): ReturnType<typeof createScraper> {
   if (bankConfig.clearSession) clearBankSession(bankName);
   logger.info(`  🔧 Creating scraper for ${bankName}...`);
   logDateRange(bankConfig);
-  return createScraper(buildScraperOptions(companyType, bankConfig));
+  return createScraper(options);
+}
+
+function initBankScrape(
+  bankName: string, bankConfig: BankConfig
+): { scraper: ReturnType<typeof createScraper>; credentials: ScraperCredentials } {
+  const companyType = companyTypeMap[bankName.toLowerCase()];
+  if (!companyType) throw new Error(`Unknown bank: ${bankName}`);
+  const otpRetriever = buildOtpRetriever(bankName, bankConfig);
+  return {
+    scraper: prepareScraper(bankConfig, bankName,
+      buildScraperOptions(companyType, bankConfig, otpRetriever)),
+    credentials: buildCredentials(bankConfig, otpRetriever),
+  };
 }
 
 async function scrapeBankWithResilience(
@@ -280,11 +278,7 @@ async function scrapeBankWithResilience(
   const mockResult = loadMockScraperResult(bankName);
   if (mockResult) return mockResult;
 
-  const companyType = companyTypeMap[bankName.toLowerCase()];
-  if (!companyType) throw new Error(`Unknown bank: ${bankName}`);
-
-  const scraper = prepareScraper(companyType, bankConfig, bankName);
-  const credentials = buildCredentials(bankConfig, buildOtpRetriever(bankName, bankConfig));
+  const { scraper, credentials } = initBankScrape(bankName, bankConfig);
   logger.info(`  🔍 Scraping transactions from ${bankName}...`);
 
   return await retryStrategy.execute(
