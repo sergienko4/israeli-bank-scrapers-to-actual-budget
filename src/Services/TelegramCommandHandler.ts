@@ -28,7 +28,7 @@ export class TelegramCommandHandler {
   private runWatch?: () => Promise<string | null>;
   private runValidate?: () => Promise<string>;
   private runPreview?: () => Promise<number>;
-  private logDir?: string;
+  private logDir: string;
   private importPromise: Promise<void> | null = null;
   private lastRunTime: Date | null = null;
   private lastRunResult: string | null = null;
@@ -40,7 +40,7 @@ export class TelegramCommandHandler {
     this.runWatch = opts.runWatch;
     this.runValidate = opts.runValidate;
     this.runPreview = opts.runPreview;
-    this.logDir = opts.logDir;
+    this.logDir = opts.logDir ?? './logs';
   }
 
   async handle(text: string): Promise<void> {
@@ -129,10 +129,6 @@ export class TelegramCommandHandler {
   }
 
   private async handleLogs(countArg?: string): Promise<void> {
-    if (!this.logDir) {
-      await this.reply('📋 Set logConfig.logDir in config.json to enable log history.');
-      return;
-    }
     const reader = new LogFileReader(this.logDir);
     const entries = reader.getRecent(this.parseLogCount(countArg));
     if (entries.length === 0) { await this.reply('📋 No log entries yet.'); return; }

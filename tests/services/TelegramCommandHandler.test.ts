@@ -23,7 +23,7 @@ describe('TelegramCommandHandler', () => {
       sendSummary: vi.fn(),
       sendError: vi.fn()
     };
-    handler = new TelegramCommandHandler({ runImport: mockRunImport, notifier: mockNotifier, logDir: '/tmp/test-logs' });
+    handler = new TelegramCommandHandler({ runImport: mockRunImport, notifier: mockNotifier });
     vi.clearAllMocks();
     mockGetRecent.mockReturnValue([]);
   });
@@ -96,14 +96,6 @@ describe('TelegramCommandHandler', () => {
   });
 
   // ─── /logs command tests ───
-
-  it('/logs shows no-logDir message when logDir not set', async () => {
-    const handlerNoDir = new TelegramCommandHandler({ runImport: mockRunImport, notifier: mockNotifier });
-    await handlerNoDir.handle('/logs');
-    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-      expect.stringContaining('logConfig.logDir')
-    );
-  });
 
   it('/logs shows empty message when no entries', async () => {
     mockGetRecent.mockReturnValue([]);
