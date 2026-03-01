@@ -138,6 +138,7 @@ docker run --rm --cap-add SYS_ADMIN \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
+  -v $(pwd)/logs:/app/logs \
   sergienko4/israeli-bank-importer
 ```
 
@@ -151,6 +152,7 @@ docker run --rm --cap-add SYS_ADMIN \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
+  -v $(pwd)/logs:/app/logs \
   israeli-bank-importer:latest
 ```
 

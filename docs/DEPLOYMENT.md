@@ -70,6 +70,7 @@ docker run --rm --cap-add SYS_ADMIN \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
+  -v $(pwd)/logs:/app/logs \
   -e TZ=Asia/Jerusalem \
   sergienko4/israeli-bank-importer
 ```
@@ -87,6 +88,7 @@ docker run -d \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
+  -v $(pwd)/logs:/app/logs \
   sergienko4/israeli-bank-importer
 ```
 
@@ -328,6 +330,7 @@ services:
       - /home/ubuntu/actual-importer/data:/app/data
       - /home/ubuntu/actual-importer/cache:/app/cache
       - /home/ubuntu/actual-importer/chrome-data:/app/chrome-data
+      - /home/ubuntu/actual-importer/logs:/app/logs
     depends_on:
       - actual_server
     networks:
