@@ -67,6 +67,12 @@ const retryStrategy = new ExponentialBackoffRetry({
   shouldShutdown: () => shutdownHandler.isShuttingDown(),
   shouldRetry: (error) => error.name !== 'WafBlockError',
 });
+// OTP banks must not retry — the OTP code is consumed on first use
+const noRetryStrategy = new ExponentialBackoffRetry({
+  maxAttempts: 1,
+  initialBackoffMs: 0,
+  shouldShutdown: () => shutdownHandler.isShuttingDown(),
+});
 const timeoutWrapper = new TimeoutWrapper();
 const errorFormatter = new ErrorFormatter();
 
@@ -142,6 +148,7 @@ const scrapeErrorHints: Record<string, string> = {
   WAF_BLOCKED: '. WAF blocked the request — wait 1-2 hours before retrying',
   CHANGE_PASSWORD: '. The bank requires a password change — log in via browser first',
   ACCOUNT_BLOCKED: '. Your account is blocked — contact your bank',
+  INVALID_OTP: '. OTP rejected — the code may have expired. Enter it quickly next time',
 };
 
 // Bank responses that mean "0 transactions in range" — not a real failure
@@ -149,6 +156,7 @@ const scrapeErrorHints: Record<string, string> = {
 const NO_RECORDS_PATTERNS = [
   'no transactions found',
   'no results found',
+  'לא מצאנו תנועות', // Discount: "no transactions found" in Hebrew
 ];
 
 function isEmptyResultError(result: ScraperScrapingResult): boolean {
@@ -286,8 +294,9 @@ async function scrapeBankWithResilience(
 
   const { scraper, credentials } = initBankScrape(bankName, bankConfig);
   logger.info(`  🔍 Scraping transactions from ${bankName}...`);
+  const strategy = bankConfig.twoFactorAuth ? noRetryStrategy : retryStrategy;
 
-  return await retryStrategy.execute(
+  return await strategy.execute(
     async () => await timeoutWrapper.wrap(
       scraper.scrape(credentials),
       DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs,
