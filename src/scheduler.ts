@@ -17,6 +17,8 @@ import {
   isEncryptedConfig, decryptConfig, getEncryptionPassword
 } from './Config/ConfigEncryption.js';
 
+const DEFAULT_LOG_DIR = './logs';
+
 // Load log config early so all messages use the configured format
 const logConfig = loadLogConfig();
 createLogger(logConfig);
@@ -49,8 +51,6 @@ function loadFullConfig(): ImporterConfig | null {
     return (creds ? { ...config, ...creds } : config) as unknown as ImporterConfig;
   } catch { return null; }
 }
-
-const DEFAULT_LOG_DIR = './logs';
 
 function loadLogConfig(): LogConfig | undefined {
   const config = loadFullConfig();

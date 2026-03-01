@@ -25,11 +25,17 @@ export class TwoFactorService {
       );
       getLogger().info(`  ✅ OTP received for ${bankName}`);
       const code = this.extractCode(reply);
+      getLogger().info(`  🔐 Code for ${bankName}: ${this.maskCode(code)} (${code.length} digits)`);
       await this.notifier.sendMessage(
-        `✅ Code received — authenticating with <b>${bankName}</b>...`
+        `✅ Code received (<code>${this.maskCode(code)}</code>) — ` +
+        `authenticating with <b>${bankName}</b>...`
       );
       return code;
     };
+  }
+
+  private maskCode(code: string): string {
+    return code[0] + '*'.repeat(code.length - 2) + code[code.length - 1];
   }
 
   private extractCode(message: string): string {
