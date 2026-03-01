@@ -32,6 +32,7 @@ import {
   BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode
 } from './Types/index.js';
 import { buildChromeArgs, getChromeDataDir } from './Scraper/ScraperOptionsBuilder.js';
+import { buildCredentials } from './Scraper/CredentialsBuilder.js';
 import { errorMessage, formatDate } from './Utils/index.js';
 import { createLogger, getLogger } from './Logger/index.js';
 import { ICategoryResolver } from './Services/ICategoryResolver.js';
@@ -167,25 +168,6 @@ function computeStartDate(bankConfig: BankConfig): Date {
   return bankConfig.startDate ? new Date(bankConfig.startDate) : new Date();
 }
 
-function buildCredentials(
-  bankName: string, bankConfig: BankConfig, otpRetriever?: () => Promise<string>
-): ScraperCredentials {
-  const { id, password, num, username, userCode, nationalID,
-    card6Digits, email, phoneNumber, otpLongTermToken } = bankConfig;
-  if (otpRetriever && bankName.toLowerCase() === 'onezero') {
-    return {
-      email: email!, password: password!,
-      otpCodeRetriever: otpRetriever, phoneNumber: phoneNumber!
-    } as ScraperCredentials;
-  }
-  if (otpLongTermToken) {
-    return { email: email!, password: password!, otpLongTermToken } as ScraperCredentials;
-  }
-  return {
-    id, password, num, username, userCode, nationalID,
-    card6Digits, email, phoneNumber
-  } as ScraperCredentials;
-}
 
 function logDateRange(bankConfig: BankConfig): void {
   if (bankConfig.daysBack) {
@@ -286,7 +268,7 @@ function initBankScrape(
   return {
     scraper: prepareScraper(bankConfig, bankName,
       buildScraperOptions(companyType, bankConfig, otpRetriever)),
-    credentials: buildCredentials(bankName, bankConfig, otpRetriever),
+    credentials: buildCredentials(bankConfig, otpRetriever),
   };
 }
 

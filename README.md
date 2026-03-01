@@ -269,9 +269,19 @@ For banks that timeout on slow connections (e.g., Oracle Cloud):
 - `timeout` — Navigation timeout in ms. Default: `30000`. Increase to `60000` for slow networks
 - `navigationRetryCount` — Retries on page load failure. Default: `0`. Set `1`-`3` for flaky connections
 
-### 2FA (OneZero)
+### 2FA / OTP
 
-OneZero requires SMS verification. The Telegram bot asks for the OTP code:
+Any bank that shows an SMS verification screen supports `twoFactorAuth`. The Telegram bot asks for the OTP code:
+
+```json
+"beinleumi": {
+  "username": "...",
+  "password": "...",
+  "twoFactorAuth": true,
+  "twoFactorTimeout": 300,
+  "targets": [...]
+}
+```
 
 ```json
 "oneZero": {
@@ -286,7 +296,7 @@ OneZero requires SMS verification. The Telegram bot asks for the OTP code:
 
 Flow: login → SMS sent → bot asks "Enter OTP code" → you reply → bot confirms receipt → import completes.
 
-After first login, add `"otpLongTermToken": "..."` to skip OTP on future runs.
+For oneZero only: after first login, add `"otpLongTermToken": "..."` to skip OTP on future runs.
 
 ### Scheduling
 

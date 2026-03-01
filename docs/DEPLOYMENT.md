@@ -144,7 +144,7 @@ Uses named volumes for data persistence — your data survives container recreat
 | `clearSession` | No | `false` | Clear browser session before scraping |
 | `timeout` | No | `30000` | Navigation timeout in ms. Increase for slow connections |
 | `navigationRetryCount` | No | `0` | Retries on page load failure (1-3 for flaky networks) |
-| `twoFactorAuth` | No | `false` | Enable 2FA OTP via Telegram (OneZero) |
+| `twoFactorAuth` | No | `false` | Enable 2FA OTP via Telegram (any bank with SMS screen) |
 | `twoFactorTimeout` | No | `300` | Seconds to wait for OTP reply |
 | `otpLongTermToken` | No | - | Skip OTP after first login |
 
