@@ -39,7 +39,7 @@
   "delayBetweenBanks": 5000,
   "logConfig": {
     "format": "words",
-    "maxBufferSize": 150
+    "logDir": "./logs"
   },
   "categorization": {
     "mode": "none"
@@ -178,8 +178,9 @@ Optional split: `credentials.json` (secrets) + `config.json` (settings). See `cr
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `logConfig.format` | `words` | Log format: `words`, `json`, `table`, `phone` |
-| `logConfig.maxBufferSize` | `150` | Ring buffer size for `/logs` bot command (1-500). Entries include `[HH:MM:SS]` timestamps in `words` format. |
+| `logConfig.format` | auto | Log format: `words` (default), `json`, `table`, `phone`. Auto-derived from `telegram.messageFormat` when not set (see README). |
+| `logConfig.logDir` | `./logs` | Directory for rotating log files (10 MB max, 3-day retention). Required for `/logs` Telegram command. |
+| `logConfig.maxBufferSize` | — | **Deprecated.** No longer functional. The `/logs` command now reads from log files. |
 
 ### Auto-Categorization
 
