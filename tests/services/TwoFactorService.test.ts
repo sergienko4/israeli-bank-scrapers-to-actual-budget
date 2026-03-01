@@ -33,6 +33,48 @@ describe('TwoFactorService', () => {
       );
     });
 
+    it('includes masked OTP code in Telegram confirmation message', async () => {
+      mockNotifier.waitForReply.mockResolvedValue('123456');
+
+      const retriever = service.createOtpRetriever('beinleumi');
+      await retriever();
+
+      expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+        expect.stringContaining('1****6')
+      );
+    });
+
+    it('masks 4-digit OTP correctly', async () => {
+      mockNotifier.waitForReply.mockResolvedValue('1234');
+
+      const retriever = service.createOtpRetriever('beinleumi');
+      await retriever();
+
+      expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+        expect.stringContaining('1**4')
+      );
+    });
+
+    it('two retrievers for different banks produce independent masked codes', async () => {
+      const notifier2 = {
+        waitForReply: vi.fn().mockResolvedValue('789012'),
+        sendMessage: vi.fn(),
+        sendSummary: vi.fn(),
+        sendError: vi.fn(),
+      };
+      mockNotifier.waitForReply.mockResolvedValue('123456');
+
+      const service2 = new TwoFactorService(notifier2 as TelegramNotifier, 60);
+      const retrieverB = service.createOtpRetriever('beinleumi');
+      const retrieverO = service2.createOtpRetriever('oneZero');
+
+      await retrieverB();
+      await retrieverO();
+
+      expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('1****6'));
+      expect(notifier2.sendMessage).toHaveBeenCalledWith(expect.stringContaining('7****2'));
+    });
+
     it('extracts digits from reply', async () => {
       mockNotifier.waitForReply.mockResolvedValue('Code: 789012');
 
