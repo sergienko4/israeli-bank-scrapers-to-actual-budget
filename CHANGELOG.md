@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.3...v1.27.4) (2026-03-01)
+
+
+### Testing
+
+* add unit tests for masked OTP code in TwoFactorService ([#170](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/170)) ([fb542a9](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fb542a9f74b822e112fd5b5399fdbe37d214bb4b))
+
 ## [1.27.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.2...v1.27.3) (2026-03-01)
 
 
