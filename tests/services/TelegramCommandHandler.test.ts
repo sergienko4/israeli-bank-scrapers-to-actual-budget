@@ -80,6 +80,30 @@ describe('TelegramCommandHandler', () => {
     expect(mockRunImport).not.toHaveBeenCalled();
   });
 
+  it('scan_all callback imports all banks (bypasses menu)', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
+    handler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
+      sendScanMenu: vi.fn(),
+    });
+
+    await handler.handle('scan_all');
+
+    expect(mockRunImport).toHaveBeenCalledWith(undefined);
+  });
+
+  it('scan:bankName callback imports that bank directly', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
+    handler = new TelegramCommandHandler({
+      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+    });
+
+    await handler.handle('scan:discount');
+
+    expect(mockRunImport).toHaveBeenCalledWith(['discount']);
+  });
+
   it('/scan bank name is case-insensitive', async () => {
     const mockGetBankNames = vi.fn().mockReturnValue(['beinleumi', 'oneZero']);
     handler = new TelegramCommandHandler({
