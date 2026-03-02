@@ -236,4 +236,42 @@ describe('TelegramPoller', () => {
     await poller.start();
     expect(onMessage).not.toHaveBeenCalled();
   });
+
+  it('dispatches callback_query data and answers the callback', async () => {
+    const onMessage = vi.fn().mockResolvedValue(undefined);
+    const poller = new TelegramPoller('123:ABC', '999', onMessage);
+
+    let callCount = 0;
+    fetchMock.mockImplementation((...args: unknown[]) => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      if (callCount === 2) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{
+              update_id: 5,
+              callback_query: {
+                id: 'cb-123',
+                data: 'scan:discount',
+                message: { chat: { id: 999 } },
+              },
+            }],
+          }),
+        });
+      }
+      // call 3 = answerCallbackQuery POST
+      if (callCount === 3) {
+        return Promise.resolve({ ok: true });
+      }
+      poller.stop();
+      return emptyResponse();
+    });
+
+    await poller.start();
+    expect(onMessage).toHaveBeenCalledWith('scan:discount');
+    const answerUrl = fetchMock.mock.calls[2]?.[0] ?? '';
+    expect(answerUrl).toContain('answerCallbackQuery');
+  });
 });
