@@ -61,6 +61,7 @@ docker run --rm \
   --workdir /data \
   -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
   lycheeverse/lychee \
+  --config config/lychee/lychee.toml \
   --exclude-path config/lychee/ignore \
   --exclude-path CHANGELOG.md \
   --no-progress \

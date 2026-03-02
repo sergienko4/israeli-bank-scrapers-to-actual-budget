@@ -1,0 +1,8 @@
+## Lychee link checker configuration
+## Docs: https://lychee.cli.rs/usage/config/
+
+max_retries = 3
+retry_wait_time = 5
+timeout = 30
+max_concurrency = 4
+accept = [200, 204, 301, 302, 403, 429]
