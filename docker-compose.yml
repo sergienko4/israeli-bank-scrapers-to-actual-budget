@@ -1,20 +1,34 @@
-# Israeli Bank Importer - Docker Compose Production Setup
+# Israeli Bank Importer + Actual Budget — All-in-one Compose
 #
 # Usage:
-#   docker compose up -d                              Start in background
+#   docker compose up -d                              Start both services
 #   docker compose logs -f                             Follow logs
 #   docker compose down                                Stop
 #   docker compose pull && docker compose up -d        Update to latest
 #
-# Prerequisites:
-#   - config.json in the same directory (see config.json.example)
-#   - Actual Budget server running and accessible
+# First-time setup:
+#   1. docker compose up -d actual-server
+#   2. Open http://localhost:5006, create account + budget
+#   3. Copy the budget's Group ID from Settings → Advanced into config.json syncId
+#   4. Set serverURL in config.json to: http://actual-server:5006
+#   5. docker compose up -d importer
 
 services:
+  actual-server:
+    image: actualbudget/actual-server:latest
+    container_name: actual-budget-server
+    restart: unless-stopped
+    ports:
+      - "5006:5006"
+    volumes:
+      - actual-data:/data
+
   importer:
     image: sergienko4/israeli-bank-importer:latest
     container_name: israeli-bank-importer
     restart: unless-stopped
+    depends_on:
+      - actual-server
     cap_drop:
       - ALL                # Drop all capabilities first
     cap_add:
@@ -38,7 +52,7 @@ services:
       # Dry run: scrape banks and preview transactions without importing (see README → Config Validation)
       # - DRY_RUN=true
     volumes:
-      - ./config.json:/app/config.json:ro             # Settings (or all-in-one)
+      - ./config.json:/app/config.json:ro             # Settings (serverURL: http://actual-server:5006)
       # - ./credentials.json:/app/credentials.json:ro  # Secrets (optional, see README)
       - importer-data:/app/data             # Actual Budget sync data
       - importer-cache:/app/cache           # App cache
@@ -52,6 +66,7 @@ services:
 
 # Named volumes for data persistence (survive container recreation)
 volumes:
+  actual-data:
   importer-data:
   importer-cache:
   importer-chrome:

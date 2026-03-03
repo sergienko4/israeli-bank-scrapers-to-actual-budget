@@ -1,21 +1,37 @@
 # E2E Test Infrastructure
 #
 # Builds the importer from the current branch and runs it with a local test budget.
+# The actual-server provides a real Actual Budget instance on localhost:5006.
 #
 # Usage:
-#   1. npm run test:e2e:setup              (create local budget + generate config)
-#   2. docker compose -f docker-compose.e2e.yml up --build importer
+#   1. docker compose -f docker-compose.e2e.yml up -d actual-server
+#                                           (start Actual Budget, visit http://localhost:5006 to set up)
+#   2. npm run test:e2e:setup              (create local budget + generate config)
+#   3. docker compose -f docker-compose.e2e.yml up --build importer
 #                                           (build image, run import with mock scraper)
-#   3. npm run test:e2e                    (verify results)
-#   4. docker compose -f docker-compose.e2e.yml down
+#   4. npm run test:e2e                    (verify results)
+#   5. docker compose -f docker-compose.e2e.yml down
 
 services:
+  actual-server:
+    image: actualbudget/actual-server:latest
+    ports:
+      - "5006:5006"
+    volumes:
+      - actual-e2e-data:/data
+    restart: unless-stopped
+
   importer:
     build: .
+    depends_on:
+      - actual-server
     volumes:
       - ./tests/e2e/fixtures/config.generated.json:/app/config.json:ro
-      - ./tests/e2e/fixtures/mock-scraper-result.json:/app/mock-scraper-result.json:ro
+      - ./tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro
       - ./tests/e2e/fixtures/e2e-data:/app/data
     environment:
-      - E2E_MOCK_SCRAPER_FILE=/app/mock-scraper-result.json
+      - E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir
       - E2E_LOCAL_BUDGET_ID=${E2E_LOCAL_BUDGET_ID}
+
+volumes:
+  actual-e2e-data:
