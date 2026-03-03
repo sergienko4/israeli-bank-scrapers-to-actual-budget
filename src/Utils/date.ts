@@ -20,7 +20,7 @@ export function formatDate(date: Date | string): string {
  */
 // eslint-disable-next-line no-restricted-syntax -- pure date filter, no logging needed
 export function filterByDateCutoff<T extends { date: Date | string }>(
-  txns: T[], cutoff: string
+  transactions: T[], cutoff: string
 ): T[] {
-  return txns.filter(txn => formatDate(txn.date) >= cutoff);
+  return transactions.filter(txn => formatDate(txn.date) >= cutoff);
 }

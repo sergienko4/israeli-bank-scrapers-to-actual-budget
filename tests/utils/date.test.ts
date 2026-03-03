@@ -73,6 +73,11 @@ describe('date utils', () => {
       expect(filterByDateCutoff([], '2026-02-17')).toEqual([]);
     });
 
+    it('keeps all transactions when cutoff is in the distant past', () => {
+      const txns = [{ date: '2020-01-01' }, { date: '2026-03-03' }];
+      expect(filterByDateCutoff(txns, '2000-01-01')).toHaveLength(2);
+    });
+
     it('preserves all extra fields on transaction objects', () => {
       const txns = [{ date: '2026-02-20', description: 'salary', amount: 10000 }];
       const result = filterByDateCutoff(txns, '2026-02-17');

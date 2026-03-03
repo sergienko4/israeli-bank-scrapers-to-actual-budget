@@ -464,7 +464,7 @@ async function processOneAccount(
   account: { accountNumber: string; balance?: number; txns: BankTransaction[] }
 ): Promise<{ imported: number; skipped: number }> {
   const target = findTargetForAccount(bankCtx.bankConfig, account.accountNumber);
-  const txns = filterTransactionsByDate(account.txns || [], bankCtx.bankConfig);
+  const txns = filterTransactionsByDate(account.txns ?? [], bankCtx.bankConfig);
   logAccountInfo({
     accountNumber: account.accountNumber, accountName: target?.accountName,
     balance: account.balance, currency: bankCtx.currency, txnCount: txns.length,
