@@ -182,6 +182,14 @@ function computeStartDate(bankConfig: BankConfig): Date {
 }
 
 
+function filterTransactionsByDate(
+  txns: BankTransaction[], bankConfig: BankConfig
+): BankTransaction[] {
+  if (!bankConfig.daysBack && !bankConfig.startDate) return txns;
+  const cutoff = formatDate(computeStartDate(bankConfig));
+  return txns.filter(txn => formatDate(txn.date) >= cutoff);
+}
+
 function logDateRange(bankConfig: BankConfig): void {
   if (bankConfig.daysBack) {
     const startDate = computeStartDate(bankConfig);
@@ -452,6 +460,19 @@ function logAccountInfo(info: AccountInfo): void {
   logger.info(`     Transactions: ${info.txnCount}`);
 }
 
+async function processOneAccount(
+  bankCtx: { bankName: string; bankConfig: BankConfig; currency: string },
+  account: { accountNumber: string; balance?: number; txns: BankTransaction[] }
+): Promise<{ imported: number; skipped: number }> {
+  const target = findTargetForAccount(bankCtx.bankConfig, account.accountNumber);
+  const txns = filterTransactionsByDate(account.txns || [], bankCtx.bankConfig);
+  logAccountInfo({
+    accountNumber: account.accountNumber, accountName: target?.accountName,
+    balance: account.balance, currency: bankCtx.currency, txnCount: txns.length,
+  });
+  return processAccount(bankCtx, { ...account, txns });
+}
+
 async function processAllAccounts(
   bankName: string, bankConfig: BankConfig, scrapeResult: ScraperScrapingResult
 ): Promise<{ imported: number; skipped: number }> {
@@ -461,12 +482,7 @@ async function processAllAccounts(
       logger.warn('  ⚠️  Shutdown requested, stopping import...'); break;
     }
     const currency = account.txns[0]?.originalCurrency || 'ILS';
-    const target = findTargetForAccount(bankConfig, account.accountNumber);
-    logAccountInfo({
-      accountNumber: account.accountNumber, accountName: target?.accountName,
-      balance: account.balance, currency, txnCount: account.txns?.length || 0,
-    });
-    const counts = await processAccount({ bankName, bankConfig, currency }, account);
+    const counts = await processOneAccount({ bankName, bankConfig, currency }, account);
     totalImported += counts.imported;
     totalSkipped += counts.skipped;
   }
