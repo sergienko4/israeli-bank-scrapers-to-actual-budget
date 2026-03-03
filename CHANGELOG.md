@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.28.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.4...v1.28.5) (2026-03-03)
+
+
+### Fixed
+
+* enforce daysBack/startDate filter on scraped transactions ([#190](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/190)) ([f7bc2b2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f7bc2b2e95377432e1ecb57241e7913a6c5f096a))
+
 ## [1.28.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.3...v1.28.4) (2026-03-03)
 
 
