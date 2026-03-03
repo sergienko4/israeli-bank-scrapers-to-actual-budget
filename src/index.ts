@@ -33,7 +33,7 @@ import {
 } from './Types/index.js';
 import { buildChromeArgs, getChromeDataDir } from './Scraper/ScraperOptionsBuilder.js';
 import { buildCredentials } from './Scraper/CredentialsBuilder.js';
-import { errorMessage, formatDate } from './Utils/index.js';
+import { errorMessage, filterByDateCutoff, formatDate } from './Utils/index.js';
 import { createLogger, getLogger, deriveLogFormat } from './Logger/index.js';
 import { ICategoryResolver } from './Services/ICategoryResolver.js';
 import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
@@ -186,8 +186,7 @@ function filterTransactionsByDate(
   txns: BankTransaction[], bankConfig: BankConfig
 ): BankTransaction[] {
   if (!bankConfig.daysBack && !bankConfig.startDate) return txns;
-  const cutoff = formatDate(computeStartDate(bankConfig));
-  return txns.filter(txn => formatDate(txn.date) >= cutoff);
+  return filterByDateCutoff(txns, formatDate(computeStartDate(bankConfig)));
 }
 
 function logDateRange(bankConfig: BankConfig): void {
