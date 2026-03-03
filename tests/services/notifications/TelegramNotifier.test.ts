@@ -667,6 +667,47 @@ describe('TelegramNotifier', () => {
       expect(result).toBe('999888');
     });
 
+    it('ignores non-OTP text and sends a hint, then accepts the valid code', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() }); // send prompt
+        if (callCount === 3) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -100 }, text: 'wait a moment', date: futureTime } }] })
+        });
+        if (callCount === 4) return Promise.resolve({ ok: true, text: vi.fn() }); // send hint
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 2, message: { chat: { id: -100 }, text: '187226', date: futureTime } }] })
+        });
+      });
+      const result = await notifier.waitForReply('Enter OTP:', 5000);
+      expect(result).toBe('187226');
+      const hintBody = JSON.parse(fetchMock.mock.calls[3][1].body).text;
+      expect(hintBody).toContain('numeric OTP');
+    });
+
+    it('accepts OTP code containing spaces or surrounding text', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -100 }, text: 'Code: 654321', date: futureTime } }] })
+        });
+      });
+      const result = await notifier.waitForReply('Enter OTP:', 5000);
+      expect(result).toBe('Code: 654321');
+    });
+
     it('continues polling when pollUpdates response is not ok', async () => {
       const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
       let callCount = 0;
