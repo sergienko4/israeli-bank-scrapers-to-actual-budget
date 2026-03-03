@@ -121,11 +121,15 @@ Edit `config.json` with your credentials. Here is a full example showing all ava
 
 **Option A: Docker Compose (recommended)**
 
+Starts **both** Actual Budget and the importer as a single stack.
+Set `"serverURL": "http://actual-server:5006"` in your `config.json`.
+
 ```bash
-docker compose up -d          # Start in background
-docker compose logs -f        # View logs
+docker compose up -d actual-server   # First-time: start Actual Budget, open http://localhost:5006
+docker compose up -d                 # Start everything
+docker compose logs -f               # View logs
 docker compose pull && docker compose up -d   # Update
-docker compose down           # Stop
+docker compose down                  # Stop
 ```
 
 **Option B: Pre-built image**

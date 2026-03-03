@@ -96,21 +96,34 @@ docker run -d \
 
 ## Docker Compose Setup (Recommended)
 
-A ready-to-use `docker-compose.yml` is included in the repo:
+The included `docker-compose.yml` starts **both** Actual Budget and the importer as a single stack:
 
 ```bash
-# Start
-docker compose up -d
+# First-time setup:
+# 1. Start Actual Budget only
+docker compose up -d actual-server
 
-# View logs
-docker compose logs -f
+# 2. Open http://localhost:5006 — create your account and budget
+# 3. Get the budget's Group ID from Settings → Show Advanced Settings
+# 4. Set in config.json:
+#      "serverURL": "http://actual-server:5006"   ← internal service name
+#      "syncId": "<your Group ID>"
 
-# Update to latest version
-docker compose pull && docker compose up -d
-
-# Stop
-docker compose down
+# 5. Start the importer
+docker compose up -d importer
 ```
+
+Daily operations:
+
+```bash
+docker compose up -d          # Start everything
+docker compose logs -f        # View logs
+docker compose pull && docker compose up -d   # Update both services
+docker compose down           # Stop everything
+```
+
+> **`serverURL` inside docker-compose:** use `http://actual-server:5006` (the internal Docker network name).
+> For external access from a browser or standalone `docker run`, use `http://localhost:5006`.
 
 Customize schedule and timezone by editing `docker-compose.yml`:
 
@@ -252,8 +265,9 @@ Don't set `SCHEDULE` to run once and exit.
 ### Prerequisites
 
 - VM with Docker and Docker Compose installed
-- Actual Budget server running and accessible
 - SSH access to VM
+
+> **Local development** requires Node.js 22+ (`.nvmrc` is included — run `nvm use` to switch automatically).
 
 ### Deployment Steps
 
@@ -268,7 +282,7 @@ cd /home/ubuntu/actual-importer
 
 #### 2. Create config.json on VM
 
-Use internal Docker network URL for serverURL:
+Use the internal Docker network service name for `serverURL` (not `localhost`):
 
 ```json
 {
@@ -344,7 +358,7 @@ networks:
 #### 4. Deploy
 
 ```bash
-cd /home/ubuntu/actual-data
+cd /home/ubuntu/actual-importer
 
 # Pull and start
 docker compose pull importer
