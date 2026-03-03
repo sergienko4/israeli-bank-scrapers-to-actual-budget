@@ -163,6 +163,9 @@ Uses named volumes for data persistence — your data survives container recreat
 | `twoFactorTimeout` | No | `300` | Seconds to wait for OTP reply |
 | `otpLongTermToken` | No | - | Skip OTP after first login |
 
+> **Automatic OTP forwarding:** set up your phone to forward bank SMS codes directly to the Telegram bot so no manual input is needed.
+> See [docs/OTP-AUTOFORWARD.md](OTP-AUTOFORWARD.md) for Android (MacroDroid) and iPhone (iOS Shortcuts) guides.
+
 ### Target Options (per target)
 
 | Option | Required | Default | Description |

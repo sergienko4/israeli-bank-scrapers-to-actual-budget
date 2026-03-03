@@ -304,6 +304,9 @@ Flow: login → SMS sent → bot asks "Enter OTP code" → you reply → bot con
 
 For oneZero only: after first login, add `"otpLongTermToken": "..."` to skip OTP on future runs.
 
+**Automatic OTP forwarding** — set up your phone to reply automatically when a bank SMS arrives.
+See [docs/OTP-AUTOFORWARD.md](docs/OTP-AUTOFORWARD.md) for Android (MacroDroid) and iPhone (iOS Shortcuts) guides.
+
 ### Scheduling
 
 Set via environment variables in `docker-compose.yml` or `docker run -e`:
