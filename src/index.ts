@@ -486,7 +486,9 @@ function handleFailedScrape(bankName: string, result: ScraperScrapingResult): vo
     return;
   }
   logScrapeFailure(bankName, result);
-  metrics.recordBankFailure(bankName, new Error(result.errorMessage || 'Unknown error'));
+  const rawMsg = result.errorMessage?.trim();
+  const safeMsg = rawMsg && rawMsg !== 'undefined' ? rawMsg : 'Unknown error';
+  metrics.recordBankFailure(bankName, new Error(safeMsg));
 }
 
 async function importFromBank(bankName: string, bankConfig: BankConfig): Promise<void> {

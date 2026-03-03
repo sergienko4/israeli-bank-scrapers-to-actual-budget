@@ -14,6 +14,7 @@ export class TelegramPoller {
   private offset = 0;
   private running = false;
   private startedAt = 0;
+  private abortController: AbortController | null = null;
 
   constructor(
     private botToken: string,
@@ -39,15 +40,26 @@ export class TelegramPoller {
 
   stop(): void {
     this.running = false;
+    this.abortController?.abort();
   }
 
   private async poll(): Promise<void> {
+    this.abortController = new AbortController();
     const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates` +
       `?offset=${this.offset}&timeout=${POLL_TIMEOUT}`;
-    const response = await fetch(url);
-    if (!response.ok) return;
+    try {
+      const response = await fetch(url, { signal: this.abortController.signal });
+      if (!response.ok) return;
+      await this.applyUpdates(await response.json() as TelegramApiResponse);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      throw err;
+    } finally {
+      this.abortController = null;
+    }
+  }
 
-    const data = await response.json() as TelegramApiResponse;
+  private async applyUpdates(data: TelegramApiResponse): Promise<void> {
     if (!data.ok || !data.result?.length) return;
     for (const update of data.result) {
       this.offset = update.update_id + 1;

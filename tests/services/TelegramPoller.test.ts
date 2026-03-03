@@ -237,6 +237,30 @@ describe('TelegramPoller', () => {
     expect(onMessage).not.toHaveBeenCalled();
   });
 
+  it('stop() aborts in-flight poll immediately', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+    let abortSignal: AbortSignal | undefined;
+
+    let callCount = 0;
+    fetchMock.mockImplementation((_url: string, opts?: RequestInit) => {
+      callCount++;
+      if (callCount === 1) return emptyResponse(); // clearOldMessages
+      abortSignal = opts?.signal as AbortSignal | undefined;
+      // Simulate a long-running fetch that never resolves on its own
+      return new Promise((_resolve, reject) => {
+        opts?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      });
+    });
+
+    const startPromise = poller.start();
+    // Wait for the long-poll to begin
+    await new Promise(r => setTimeout(r, 10));
+    poller.stop();
+    await startPromise;
+
+    expect(abortSignal?.aborted).toBe(true);
+  });
+
   it('dispatches callback_query data and answers the callback', async () => {
     const onMessage = vi.fn().mockResolvedValue(undefined);
     const poller = new TelegramPoller('123:ABC', '999', onMessage);
