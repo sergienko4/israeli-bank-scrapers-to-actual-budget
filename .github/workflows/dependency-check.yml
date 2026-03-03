@@ -17,6 +17,8 @@ jobs:
   check-updates:
     name: Check Critical Dependencies
     runs-on: ubuntu-latest
+    env:
+      HUSKY: '0'
     steps:
       - uses: actions/checkout@v6
 
