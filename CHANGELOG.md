@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.28.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.5...v1.28.6) (2026-03-03)
+
+
+### Fixed
+
+* **docs:** fix wrong VM deploy path, document all-in-one docker-compose, add Node 22 note ([#193](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/193)) ([0b3d346](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/0b3d346dfe66089c5b935388f4b3736aaf67f49f))
+
 ## [1.28.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.4...v1.28.5) (2026-03-03)
 
 
