@@ -14,7 +14,6 @@ Complete list of all supported financial institutions and their required credent
 | Mizrahi Tefahot | `mizrahi` | username, password |
 | Mercantile | `mercantile` | id, password, num |
 | Otsar Hahayal | `otsarHahayal` | username, password |
-| Union | `union` | username, password |
 | Beinleumi | `beinleumi` | username, password |
 | Massad | `massad` | username, password |
 | Yahav | `yahav` | username, nationalID, password |
@@ -97,18 +96,6 @@ Complete list of all supported financial institutions and their required credent
 ```json
 {
   "otsarHahayal": {
-    "username": "your_username",
-    "password": "your_password",
-    "startDate": "2026-01-19",
-    "targets": [...]
-  }
-}
-```
-
-### Union
-```json
-{
-  "union": {
     "username": "your_username",
     "password": "your_password",
     "startDate": "2026-01-19",

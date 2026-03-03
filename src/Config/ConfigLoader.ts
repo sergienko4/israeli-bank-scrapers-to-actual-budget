@@ -27,8 +27,6 @@ const credentialSpecs: Record<string, CredentialSpec> = {
     label: 'id, password, num' },
   leumi:     { displayName: 'leumi',         required: ['username', 'password'],
     label: 'username, password' },
-  union:     { displayName: 'union',         required: ['username', 'password'],
-    label: 'username, password' },
   hapoalim:  { displayName: 'Hapoalim',      required: ['userCode', 'password'],
     label: 'userCode, password' },
   yahav:     { displayName: 'Yahav',         required: ['nationalID', 'password'],
