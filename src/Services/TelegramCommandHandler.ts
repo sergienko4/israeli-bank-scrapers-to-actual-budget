@@ -54,7 +54,7 @@ export class TelegramCommandHandler {
     const command = raw[0].toLowerCase();
     const arg = raw.slice(1).join(' ').trim() || undefined;
     // Callback query data: "scan:bankName" or "scan_all"
-    if (command === 'scan_all') { await this.handleScan(); return; }
+    if (command === 'scan_all') { await this.handleScanAll(); return; }
     if (command.startsWith('scan:')) { await this.handleScan(command.slice(5)); return; }
     const handlers: Record<string, () => Promise<void>> = {
       '/scan': () => this.handleScan(arg),
@@ -69,6 +69,12 @@ export class TelegramCommandHandler {
     };
     const handler = handlers[command];
     if (handler) await handler();
+  }
+
+  private async handleScanAll(): Promise<void> {
+    if (this.importPromise) { await this.reply('⏳ Import already running. Please wait.'); return; }
+    this.importPromise = this.executeImport(undefined);
+    await this.importPromise;
   }
 
   private async handleScan(bankArg?: string): Promise<void> {

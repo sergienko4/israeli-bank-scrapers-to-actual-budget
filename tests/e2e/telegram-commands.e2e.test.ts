@@ -79,4 +79,58 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
     await handler.handle('/watch');
     expect(collector.messageIds.length).toBeGreaterThan(0);
   });
+
+  // ─── Callback-based scan commands (inline keyboard buttons) ───
+
+  it('scan_all callback runs import (bypasses menu)', async () => {
+    collector.startCapturing();
+    const notifier = new TelegramNotifier(config);
+    let importCalled = false;
+    const banks = ['discount', 'visaCal', 'oneZero'];
+
+    handler = new TelegramCommandHandler({
+      runImport: async () => { importCalled = true; return 0; },
+      notifier,
+      getBankNames: () => banks,
+      sendScanMenu: (b) => notifier.sendScanMenu(b),
+    });
+
+    await handler.handle('scan_all');
+    expect(importCalled).toBe(true);
+    expect(collector.messageIds.length).toBeGreaterThan(0);
+  });
+
+  it('scan:bankName callback runs import for that bank', async () => {
+    collector.startCapturing();
+    const notifier = new TelegramNotifier(config);
+    const calledWith: string[][] = [];
+
+    handler = new TelegramCommandHandler({
+      runImport: async (banks) => { if (banks) calledWith.push(banks); return 0; },
+      notifier,
+      getBankNames: () => ['discount', 'visaCal'],
+    });
+
+    await handler.handle('scan:discount');
+    expect(calledWith).toEqual([['discount']]);
+    expect(collector.messageIds.length).toBeGreaterThan(0);
+  });
+
+  it('/scan with menu shows inline keyboard (no import)', async () => {
+    collector.startCapturing();
+    const notifier = new TelegramNotifier(config);
+    let importCalled = false;
+    const banks = ['discount', 'visaCal', 'amex'];
+
+    handler = new TelegramCommandHandler({
+      runImport: async () => { importCalled = true; return 0; },
+      notifier,
+      getBankNames: () => banks,
+      sendScanMenu: (b) => notifier.sendScanMenu(b),
+    });
+
+    await handler.handle('/scan');
+    expect(importCalled).toBe(false);
+    expect(collector.messageIds.length).toBeGreaterThan(0);
+  });
 });

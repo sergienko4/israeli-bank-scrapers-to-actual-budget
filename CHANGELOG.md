@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.28.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.0...v1.28.1) (2026-03-02)
+
+
+### Fixed
+
+* bump scrapers to v7.6.0, upgrade module resolution, fix scan_all callback ([#180](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/180)) ([dd25be9](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/dd25be98490bd2cc49d8af08dee0ca5ba584af72))
+
 ## [1.28.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.27.4...v1.28.0) (2026-03-01)
 
 
