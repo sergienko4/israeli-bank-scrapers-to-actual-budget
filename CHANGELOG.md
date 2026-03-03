@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.28.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.2...v1.28.3) (2026-03-03)
+
+
+### Fixed
+
+* abort TelegramPoller on stop(), filter non-OTP replies, sanitize undefined errors ([#185](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/185)) ([37cee90](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/37cee907f16546733ed46ad011c867a1c8dc8e16))
+
 ## [1.28.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.1...v1.28.2) (2026-03-03)
 
 
