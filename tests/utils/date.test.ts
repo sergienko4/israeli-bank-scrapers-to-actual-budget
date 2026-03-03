@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDate } from '../../src/Utils/date.js';
+import { filterByDateCutoff, formatDate } from '../../src/Utils/date.js';
 
 describe('date utils', () => {
   describe('formatDate', () => {
@@ -37,6 +37,51 @@ describe('date utils', () => {
       // Feb 15 midnight Israel = 2026-02-14T22:00:00.000Z
       // Must return 2026-02-15, not 2026-02-14
       expect(formatDate('2026-02-14T22:00:00.000Z')).toBe('2026-02-15');
+    });
+  });
+
+  describe('filterByDateCutoff', () => {
+    it('keeps transactions on or after the cutoff date', () => {
+      const txns = [
+        { date: '2026-02-16', amount: -100 },
+        { date: '2026-02-17', amount: -200 },
+        { date: '2026-03-01', amount: -300 },
+      ];
+      const result = filterByDateCutoff(txns, '2026-02-17');
+      expect(result).toHaveLength(2);
+      expect(result.map(t => t.date)).toEqual(['2026-02-17', '2026-03-01']);
+    });
+
+    it('drops all transactions before the cutoff', () => {
+      const txns = [
+        { date: '2026-01-05' },
+        { date: '2026-01-11' },
+        { date: '2026-02-10' },
+      ];
+      expect(filterByDateCutoff(txns, '2026-02-17')).toHaveLength(0);
+    });
+
+    it('handles Date objects with Jerusalem timezone (UTC midnight regression)', () => {
+      // Scraper returns Feb 18 Israel midnight as 2026-02-17T22:00:00.000Z
+      // filterByDateCutoff must see this as 2026-02-18, not 2026-02-17
+      const txns = [{ date: new Date('2026-02-17T22:00:00.000Z') }];
+      expect(filterByDateCutoff(txns, '2026-02-18')).toHaveLength(1);
+      expect(filterByDateCutoff(txns, '2026-02-19')).toHaveLength(0);
+    });
+
+    it('returns all transactions unchanged when list is empty', () => {
+      expect(filterByDateCutoff([], '2026-02-17')).toEqual([]);
+    });
+
+    it('keeps all transactions when cutoff is in the distant past', () => {
+      const txns = [{ date: '2020-01-01' }, { date: '2026-03-03' }];
+      expect(filterByDateCutoff(txns, '2000-01-01')).toHaveLength(2);
+    });
+
+    it('preserves all extra fields on transaction objects', () => {
+      const txns = [{ date: '2026-02-20', description: 'salary', amount: 10000 }];
+      const result = filterByDateCutoff(txns, '2026-02-17');
+      expect(result[0]).toEqual({ date: '2026-02-20', description: 'salary', amount: 10000 });
     });
   });
 });
