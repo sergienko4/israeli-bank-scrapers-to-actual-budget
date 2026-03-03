@@ -217,15 +217,18 @@ export class MetricsService {
   private printBankPerformance(banks: BankMetrics[]): void {
     getLogger().info('\n🏦 Bank Performance:\n');
     for (const bank of banks) {
-      const icon = bank.status === 'success' ? '✅' : '❌';
-      const dur = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : 'N/A';
-      getLogger().info(
-        `  ${icon} ${bank.bankName}: ${dur} ` +
-        `(${bank.transactionsImported} txns, ${bank.transactionsSkipped} duplicates)`
-      );
+      this.printBankLine(bank);
       if (bank.reconciliationStatus) this.printReconciliationLine(bank);
-      if (bank.error) getLogger().error(`     ❌ Error: ${bank.error}`);
     }
+  }
+
+  private printBankLine(bank: BankMetrics): void {
+    const icon = bank.status === 'success' ? '✅' : '❌';
+    const dur = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : 'N/A';
+    const detail = bank.error
+      ? ` — ${bank.error}`
+      : ` (${bank.transactionsImported} txns, ${bank.transactionsSkipped} duplicates)`;
+    getLogger().info(`  ${icon} ${bank.bankName}: ${dur}${detail}`);
   }
 
   private printReconciliationLine(bank: BankMetrics): void {
