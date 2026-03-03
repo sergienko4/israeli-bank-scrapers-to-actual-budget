@@ -33,7 +33,7 @@ import {
 } from './Types/index.js';
 import { buildChromeArgs, getChromeDataDir } from './Scraper/ScraperOptionsBuilder.js';
 import { buildCredentials } from './Scraper/CredentialsBuilder.js';
-import { errorMessage, formatDate } from './Utils/index.js';
+import { errorMessage, filterByDateCutoff, formatDate } from './Utils/index.js';
 import { createLogger, getLogger, deriveLogFormat } from './Logger/index.js';
 import { ICategoryResolver } from './Services/ICategoryResolver.js';
 import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
@@ -181,6 +181,13 @@ function computeStartDate(bankConfig: BankConfig): Date {
   return bankConfig.startDate ? new Date(bankConfig.startDate) : new Date();
 }
 
+
+function filterTransactionsByDate(
+  txns: BankTransaction[], bankConfig: BankConfig
+): BankTransaction[] {
+  if (!bankConfig.daysBack && !bankConfig.startDate) return txns;
+  return filterByDateCutoff(txns, formatDate(computeStartDate(bankConfig)));
+}
 
 function logDateRange(bankConfig: BankConfig): void {
   if (bankConfig.daysBack) {
@@ -452,6 +459,19 @@ function logAccountInfo(info: AccountInfo): void {
   logger.info(`     Transactions: ${info.txnCount}`);
 }
 
+async function processOneAccount(
+  bankCtx: { bankName: string; bankConfig: BankConfig; currency: string },
+  account: { accountNumber: string; balance?: number; txns: BankTransaction[] }
+): Promise<{ imported: number; skipped: number }> {
+  const target = findTargetForAccount(bankCtx.bankConfig, account.accountNumber);
+  const txns = filterTransactionsByDate(account.txns ?? [], bankCtx.bankConfig);
+  logAccountInfo({
+    accountNumber: account.accountNumber, accountName: target?.accountName,
+    balance: account.balance, currency: bankCtx.currency, txnCount: txns.length,
+  });
+  return processAccount(bankCtx, { ...account, txns });
+}
+
 async function processAllAccounts(
   bankName: string, bankConfig: BankConfig, scrapeResult: ScraperScrapingResult
 ): Promise<{ imported: number; skipped: number }> {
@@ -461,12 +481,7 @@ async function processAllAccounts(
       logger.warn('  ⚠️  Shutdown requested, stopping import...'); break;
     }
     const currency = account.txns[0]?.originalCurrency || 'ILS';
-    const target = findTargetForAccount(bankConfig, account.accountNumber);
-    logAccountInfo({
-      accountNumber: account.accountNumber, accountName: target?.accountName,
-      balance: account.balance, currency, txnCount: account.txns?.length || 0,
-    });
-    const counts = await processAccount({ bankName, bankConfig, currency }, account);
+    const counts = await processOneAccount({ bankName, bankConfig, currency }, account);
     totalImported += counts.imported;
     totalSkipped += counts.skipped;
   }
