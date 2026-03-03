@@ -77,6 +77,17 @@ describe('MetricsService', () => {
       const bankMetrics = metrics.getBankMetrics('leumi');
       expect(bankMetrics?.error).toBe('AuthenticationError: Something broke');
     });
+
+    it('does not expose "undefined" when scraper error message is sanitized to Unknown error', () => {
+      // handleFailedScrape in index.ts sanitizes result.errorMessage === "undefined" → "Unknown error"
+      // before calling recordBankFailure; this test verifies the downstream storage is clean
+      metrics.startBank('visaCal');
+      metrics.recordBankFailure('visaCal', new Error('Unknown error'));
+
+      const bankMetrics = metrics.getBankMetrics('visaCal');
+      expect(bankMetrics?.error).toBe('Error: Unknown error');
+      expect(bankMetrics?.error).not.toContain('undefined');
+    });
   });
 
   describe('recordReconciliation', () => {

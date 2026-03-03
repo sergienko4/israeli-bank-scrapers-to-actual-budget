@@ -94,7 +94,12 @@ export class TelegramNotifier implements INotifier {
       if (!result) continue;
       const reply = this.findReplyMessage(result.updates, sentAt);
       offset = result.nextOffset;
-      if (reply) return reply;
+      if (!reply) continue;
+      if (!this.looksLikeOtp(reply)) {
+        await this.sendMessage('⚠️ Please send the numeric OTP code from your SMS (4–8 digits).');
+        continue;
+      }
+      return reply;
     }
     throw new Error('2FA timeout: no reply received');
   }
@@ -143,6 +148,11 @@ export class TelegramNotifier implements INotifier {
     if (!response.ok) return 0;
     const data = await response.json() as TelegramApiResponse;
     return data.result?.length ? data.result[data.result.length - 1].update_id + 1 : 0;
+  }
+
+  private looksLikeOtp(text: string): boolean {
+    const digits = text.replace(/\D/g, '');
+    return digits.length >= 4 && digits.length <= 8;
   }
 
   private async sendBotCommands(
