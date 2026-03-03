@@ -118,7 +118,6 @@ const companyTypeMap: Record<string, typeof CompanyTypes[keyof typeof CompanyTyp
   'mercantile': CompanyTypes.Mercantile,
   'otsarHahayal': CompanyTypes.OtsarHahayal,
   'otsarhahayal': CompanyTypes.OtsarHahayal,
-  'union': CompanyTypes.Union,
   'beinleumi': CompanyTypes.Beinleumi,
   'massad': CompanyTypes.Massad,
   'yahav': CompanyTypes.Yahav,
