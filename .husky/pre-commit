@@ -80,10 +80,63 @@ docker run --rm \
   --skip-dirs 'root/.npm' \
   "$LOCAL_IMAGE" || exit 1
 
-# ── 12. Mocked E2E Tests ────────────────────────────────────────
+# ── 12. Mocked E2E Tests (full Docker pipeline — mirrors CI) ────
 echo ""
-echo "🎭 [12/13] Running mocked E2E tests..."
-npm run test:e2e:mock || exit 1
+echo "🎭 [12/13] Running mocked E2E tests (Docker pipeline)..."
+
+# Prepare per-bank mock data (mirrors CI step)
+mkdir -p tests/e2e/fixtures/mock-scraper-dir
+cp tests/e2e/fixtures/mock-scraper-result.json \
+  tests/e2e/fixtures/mock-scraper-dir/e2eTestBank.json
+cp tests/e2e/fixtures/mock-scraper-result-bank2.json \
+  tests/e2e/fixtures/mock-scraper-dir/e2eTestBank2.json
+
+# Create fresh budget
+npm run test:e2e:setup || exit 1
+
+# Extract budget ID (mirrors CI step)
+BUDGET_ID=$(ls tests/e2e/fixtures/e2e-data/ | grep "e2e-test-budget-" | head -1)
+if [ -z "$BUDGET_ID" ]; then
+  echo "ERROR: No budget ID found after test:e2e:setup"
+  exit 1
+fi
+echo "Budget ID: $BUDGET_ID"
+
+# Fix node UID ≠ container UID (mirrors CI chmod step)
+chmod -R 777 tests/e2e/fixtures/e2e-data
+
+# Run #1: First import (creates transactions)
+docker run --rm \
+  -v "$(pwd)/tests/e2e/fixtures/config.generated.json:/app/config.json:ro" \
+  -v "$(pwd)/tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro" \
+  -v "$(pwd)/tests/e2e/fixtures/e2e-data:/app/data" \
+  -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
+  -e E2E_LOCAL_BUDGET_ID="$BUDGET_ID" \
+  "$LOCAL_IMAGE" node dist/Index.js
+DOCKER_EXIT=$?
+echo "Run #1 exit code: $DOCKER_EXIT"
+if [ $DOCKER_EXIT -gt 1 ]; then
+  echo "ERROR: Importer crashed (exit $DOCKER_EXIT)"
+  exit 1
+fi
+
+# Run #2: Dedup verification (same data → 0 new transactions)
+docker run --rm \
+  -v "$(pwd)/tests/e2e/fixtures/config.generated.json:/app/config.json:ro" \
+  -v "$(pwd)/tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro" \
+  -v "$(pwd)/tests/e2e/fixtures/e2e-data:/app/data" \
+  -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
+  -e E2E_LOCAL_BUDGET_ID="$BUDGET_ID" \
+  "$LOCAL_IMAGE" node dist/Index.js
+DOCKER_EXIT=$?
+echo "Run #2 exit code: $DOCKER_EXIT"
+if [ $DOCKER_EXIT -gt 1 ]; then
+  echo "ERROR: Importer crashed (exit $DOCKER_EXIT)"
+  exit 1
+fi
+
+# Verify pipeline results
+npm run test:e2e || exit 1
 
 # ── 13. Real E2E Tests (Telegram) ───────────────────────────────
 echo ""
