@@ -3,7 +3,7 @@
  * Follows Open/Closed Principle: Add new channels without modifying existing code
  */
 
-import { ImportSummary } from '../MetricsService.js';
+import type { ImportSummary } from '../MetricsService.js';
 
 export interface INotifier {
   sendSummary(summary: ImportSummary): Promise<void>;

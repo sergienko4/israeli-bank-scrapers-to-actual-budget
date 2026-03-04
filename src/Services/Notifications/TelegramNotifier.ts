@@ -10,13 +10,13 @@
  *   "emoji"    (C) - Emoji indicators for deposits/payments
  */
 
-import {
+import type {
   TelegramConfig, MessageFormat, ShowTransactions, TelegramApiResponse
 } from '../../Types/Index.js';
-import {
+import type {
   ImportSummary, BankMetrics, AccountMetrics, TransactionRecord
 } from '../MetricsService.js';
-import { INotifier } from './INotifier.js';
+import type { INotifier } from './INotifier.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const MAX_MESSAGE_LENGTH = 4096;

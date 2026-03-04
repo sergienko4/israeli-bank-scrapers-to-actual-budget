@@ -3,7 +3,7 @@
  * Returns ValidationResult[] instead of throwing, so all issues surface at once.
  */
 
-import { ImporterConfig, NotificationConfig, BankConfig, BankTarget } from '../Types/Index.js';
+import type { ImporterConfig, NotificationConfig, BankConfig, BankTarget } from '../Types/Index.js';
 import { ConfigLoader } from './ConfigLoader.js';
 import { errorMessage } from '../Utils/Index.js';
 import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';

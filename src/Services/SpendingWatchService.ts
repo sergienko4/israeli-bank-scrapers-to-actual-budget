@@ -4,7 +4,7 @@
  */
 
 import type api from '@actual-app/api';
-import { SpendingWatchRule } from '../Types/Index.js';
+import type { SpendingWatchRule } from '../Types/Index.js';
 import { toCents, fromCents, formatDate, extractQueryData, errorMessage } from '../Utils/Index.js';
 import { getLogger } from '../Logger/Index.js';
 

@@ -1,6 +1,6 @@
 {
   "name": "israeli-bank-actual-importer",
-  "version": "1.29.0",
+  "version": "1.30.0",
   "description": "Import transactions from Israeli banks into Actual Budget",
   "main": "dist/Index.js",
   "type": "module",
@@ -41,6 +41,7 @@
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.2",
     "eslint-plugin-check-file": "^3.3.1",
+    "eslint-plugin-n": "^17.24.0",
     "eslint-plugin-unused-imports": "^4.4.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.3.1",

@@ -4,14 +4,14 @@
  * When logDir is set: LogMediator fans out to PinoAdapter (stdout) + FileLogger (file).
  */
 
-import { ILogger } from './ILogger.js';
+import type { ILogger } from './ILogger.js';
 import { LogBuffer } from './LogBuffer.js';
 import { PinoAdapter } from './PinoAdapter.js';
 import { createPinoInstance } from './PinoTransports.js';
 import { FileLogger } from './FileLogger.js';
 import { LogMediator } from './LogMediator.js';
 import { cleanOldLogs } from './LogCleanup.js';
-import { LogConfig, LogFormat, MessageFormat } from '../Types/Index.js';
+import type { LogConfig, LogFormat, MessageFormat } from '../Types/Index.js';
 
 const FORMAT_MAP: Record<MessageFormat, LogFormat> = {
   summary: 'words',
