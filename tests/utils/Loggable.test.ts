@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as LoggerModule from '../../src/Logger/index.js';
+import * as LoggerModule from '../../src/Logger/Index.js';
 import { Loggable } from '../../src/Utils/Loggable.js';
 
 const mockLogger = {

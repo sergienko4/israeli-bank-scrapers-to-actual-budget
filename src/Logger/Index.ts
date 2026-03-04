@@ -11,7 +11,7 @@ import { createPinoInstance } from './PinoTransports.js';
 import { FileLogger } from './FileLogger.js';
 import { LogMediator } from './LogMediator.js';
 import { cleanOldLogs } from './LogCleanup.js';
-import { LogConfig, LogFormat, MessageFormat } from '../Types/index.js';
+import { LogConfig, LogFormat, MessageFormat } from '../Types/Index.js';
 
 const FORMAT_MAP: Record<MessageFormat, LogFormat> = {
   summary: 'words',

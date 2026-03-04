@@ -6,12 +6,12 @@
  * Notification failures never break imports (all errors caught and logged).
  */
 
-import { NotificationConfig } from '../Types/index.js';
+import { NotificationConfig } from '../Types/Index.js';
 import { ImportSummary } from './MetricsService.js';
 import { INotifier } from './Notifications/INotifier.js';
 import { TelegramNotifier } from './Notifications/TelegramNotifier.js';
 import { WebhookNotifier } from './Notifications/WebhookNotifier.js';
-import { getLogger } from '../Logger/index.js';
+import { getLogger } from '../Logger/Index.js';
 
 export class NotificationService {
   private notifiers: INotifier[] = [];

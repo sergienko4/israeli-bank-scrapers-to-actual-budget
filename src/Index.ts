@@ -30,11 +30,11 @@ import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
 import {
   ImporterConfig, BankConfig, BankTarget,
   BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode
-} from './Types/index.js';
+} from './Types/Index.js';
 import { buildChromeArgs, getChromeDataDir } from './Scraper/ScraperOptionsBuilder.js';
 import { buildCredentials } from './Scraper/CredentialsBuilder.js';
-import { errorMessage, filterByDateCutoff, formatDate } from './Utils/index.js';
-import { createLogger, getLogger, deriveLogFormat } from './Logger/index.js';
+import { errorMessage, filterByDateCutoff, formatDate } from './Utils/Index.js';
+import { createLogger, getLogger, deriveLogFormat } from './Logger/Index.js';
 import { ICategoryResolver } from './Services/ICategoryResolver.js';
 import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
 import { TranslateCategoryResolver } from './Services/TranslateCategoryResolver.js';

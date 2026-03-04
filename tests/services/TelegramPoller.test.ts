@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramPoller } from '../../src/Services/TelegramPoller.js';
-import * as LoggerModule from '../../src/Logger/index.js';
+import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 

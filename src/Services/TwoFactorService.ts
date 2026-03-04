@@ -4,7 +4,7 @@
  */
 
 import { TelegramNotifier } from './Notifications/TelegramNotifier.js';
-import { getLogger } from '../Logger/index.js';
+import { getLogger } from '../Logger/Index.js';
 
 export class TwoFactorService {
   private timeoutMs: number;

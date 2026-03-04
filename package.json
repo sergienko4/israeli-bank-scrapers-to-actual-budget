@@ -1,13 +1,13 @@
 {
   "name": "israeli-bank-actual-importer",
-  "version": "1.28.7",
+  "version": "1.29.0",
   "description": "Import transactions from Israeli banks into Actual Budget",
-  "main": "dist/index.js",
+  "main": "dist/Index.js",
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js",
+    "start": "node dist/Index.js",
+    "dev": "tsc && node dist/Index.js",
     "test": "vitest run --config config/vitest.config.ts",
     "test:unit": "vitest run --coverage --config config/vitest.config.ts",
     "test:watch": "vitest --config config/vitest.config.ts",

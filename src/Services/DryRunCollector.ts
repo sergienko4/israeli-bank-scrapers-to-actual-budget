@@ -3,8 +3,8 @@
  * No writes to Actual Budget; shows what WOULD be imported.
  */
 
-import { BankTransaction } from '../Types/index.js';
-import { formatDate } from '../Utils/index.js';
+import { BankTransaction } from '../Types/Index.js';
+import { formatDate } from '../Utils/Index.js';
 
 /** Preview data for a single scraped account in dry-run mode. */
 export interface AccountPreview {

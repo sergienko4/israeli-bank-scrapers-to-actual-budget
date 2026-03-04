@@ -15,7 +15,7 @@ import type {
   ActualAccount,
   TransactionRecord,
   SpendingWatchRule,
-} from '../../src/Types/index.js';
+} from '../../src/Types/Index.js';
 import type {
   ImportSummary,
   BankMetrics,

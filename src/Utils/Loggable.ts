@@ -3,7 +3,7 @@
  * Logs the method name at INFO level on every invocation.
  * Note: args are intentionally NOT logged to avoid exposing bank credentials or OTP tokens.
  */
-import { getLogger } from '../Logger/index.js';
+import { getLogger } from '../Logger/Index.js';
 
 type BoundMethod<This, Args extends unknown[], Return> =
   (this: This, ...args: Args) => Return;

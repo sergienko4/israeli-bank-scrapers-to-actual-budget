@@ -4,7 +4,7 @@
  */
 import pino from 'pino';
 import pinoPretty from 'pino-pretty';
-import { LogFormat } from '../Types/index.js';
+import { LogFormat } from '../Types/Index.js';
 import { baseOptions } from './LoggerOptions.js';
 
 const transportFactories: Record<LogFormat, () => pino.Logger> = {

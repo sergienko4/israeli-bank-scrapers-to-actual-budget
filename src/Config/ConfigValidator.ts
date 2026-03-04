@@ -3,9 +3,9 @@
  * Returns ValidationResult[] instead of throwing, so all issues surface at once.
  */
 
-import { ImporterConfig, NotificationConfig, BankConfig, BankTarget } from '../Types/index.js';
+import { ImporterConfig, NotificationConfig, BankConfig, BankTarget } from '../Types/Index.js';
 import { ConfigLoader } from './ConfigLoader.js';
-import { errorMessage } from '../Utils/index.js';
+import { errorMessage } from '../Utils/Index.js';
 import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 
 /** A single check result from config validation. */

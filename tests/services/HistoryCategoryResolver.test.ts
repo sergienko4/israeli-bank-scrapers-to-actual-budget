@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HistoryCategoryResolver } from '../../src/Services/HistoryCategoryResolver.js';
-import * as LoggerModule from '../../src/Logger/index.js';
+import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
