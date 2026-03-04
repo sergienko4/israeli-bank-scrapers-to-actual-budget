@@ -16,6 +16,7 @@ credentials.*.json
 
 # Runtime data (contains sensitive budget data)
 data/
+data-local-test/
 cache/
 chrome-data/
 
