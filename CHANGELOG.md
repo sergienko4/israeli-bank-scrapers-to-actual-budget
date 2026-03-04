@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.30.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.29.0...v1.30.0) (2026-03-04)
+
+
+### Added
+
+* **lint:** add 8 new ESLint rules — node protocol, type imports, null safety, modern APIs ([#200](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/200)) ([f5cbddd](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f5cbddd171c435c715540703fccae70b1f649441))
+
 ## [1.29.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.7...v1.29.0) (2026-03-04)
 
 
