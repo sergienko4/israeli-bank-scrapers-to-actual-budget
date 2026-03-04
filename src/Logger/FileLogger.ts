@@ -3,7 +3,7 @@
  * Uses its own pino instance (no pino-pretty) so files are always parseable.
  */
 import pino from 'pino';
-import { ILogger, LogContext } from './ILogger.js';
+import type { ILogger, LogContext } from './ILogger.js';
 import { LogRotatingStream } from './LogRotatingStream.js';
 import { baseOptions } from './LoggerOptions.js';
 

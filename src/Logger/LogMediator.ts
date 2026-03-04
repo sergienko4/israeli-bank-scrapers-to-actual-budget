@@ -2,7 +2,7 @@
  * Fan-out mediator that routes each log call to all registered ILogger targets.
  * Mirrors the NotificationService pattern (multiple INotifier targets).
  */
-import { ILogger, LogContext } from './ILogger.js';
+import type { ILogger, LogContext } from './ILogger.js';
 
 export class LogMediator implements ILogger {
   constructor(private readonly targets: ILogger[]) {}

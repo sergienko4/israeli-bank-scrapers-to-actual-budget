@@ -3,6 +3,7 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import unusedImports from 'eslint-plugin-unused-imports';
 import checkFile from 'eslint-plugin-check-file';
+import pluginN from 'eslint-plugin-n';
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -17,6 +18,7 @@ export default tseslint.config(
     plugins: {
       'unused-imports': unusedImports,
       'check-file': checkFile,
+      'n': pluginN,
     },
     rules: {
       // === THE "ONE PER FILE" & PASCAL_CASE NAMING ===
@@ -62,6 +64,31 @@ export default tseslint.config(
 
       // === FORMATTING ===
       'max-len': ['error', { code: 100, ignoreUrls: true }],
+
+      // === NODE.JS CONVENTIONS ===
+      'n/prefer-node-protocol': 'error',
+
+      // === TYPE IMPORTS ===
+      '@typescript-eslint/consistent-type-imports': ['error', {
+        prefer: 'type-imports',
+        fixStyle: 'separate-type-imports',
+      }],
+
+      // === NULL SAFETY ===
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': ['error', {
+        ignorePrimitives: { string: true },
+        ignoreMixedLogicalExpressions: true,
+      }],
+
+      // === PREFER MODERN APIS ===
+      '@typescript-eslint/prefer-string-starts-ends-with': 'error',
+      '@typescript-eslint/no-unnecessary-boolean-literal-compare': 'error',
+      '@typescript-eslint/prefer-includes': 'error',
+      '@typescript-eslint/explicit-module-boundary-types': ['error', {
+        allowTypedFunctionExpressions: true,
+        allowHigherOrderFunctions: true,
+      }],
 
       // === LOGGING & SECURITY ===
       'no-console': 'error',
@@ -122,16 +149,5 @@ export default tseslint.config(
       'no-restricted-syntax': 'error',
       'no-console': 'off',
     },
-  },
-  // === EXEMPTIONS: lowercase entry-point & utility filenames ===
-  {
-    files: [
-      'src/index.ts',
-      'src/scheduler.ts',
-      'src/**/index.ts',
-      'src/Utils/currency.ts',
-      'src/Utils/date.ts',
-    ],
-    rules: { 'check-file/filename-naming-convention': 'error' },
   },
 );

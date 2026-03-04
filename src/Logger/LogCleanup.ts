@@ -2,8 +2,8 @@
  * Removes log files older than 3 days from the log directory.
  * Called at app startup and by LogRotatingStream on day rollover.
  */
-import { existsSync, readdirSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readdirSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 

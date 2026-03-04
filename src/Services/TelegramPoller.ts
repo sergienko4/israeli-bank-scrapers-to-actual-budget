@@ -3,7 +3,7 @@
  * Filters by chatId for security, dispatches commands to handler
  */
 
-import { TelegramApiResponse, TelegramCallbackQuery } from '../Types/Index.js';
+import type { TelegramApiResponse, TelegramCallbackQuery } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import { getLogger } from '../Logger/Index.js';
 

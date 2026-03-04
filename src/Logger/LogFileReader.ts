@@ -3,8 +3,8 @@
  * Files are NDJSON (one JSON object per line); each line is formatted as
  * [HH:MM:SS] LEVEL  message for Telegram display.
  */
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 interface PinoEntry {
   time: number;

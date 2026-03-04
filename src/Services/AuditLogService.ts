@@ -3,8 +3,8 @@
  * Enables debugging, trend analysis, and /status command history
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { ImportSummary, BankMetrics } from './MetricsService.js';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import type { ImportSummary, BankMetrics } from './MetricsService.js';
 import { getLogger } from '../Logger/Index.js';
 
 export interface AuditEntry {

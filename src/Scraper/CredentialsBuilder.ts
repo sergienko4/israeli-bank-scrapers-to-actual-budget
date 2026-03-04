@@ -13,7 +13,7 @@ export function buildCredentials(
   const { id, password, num, username, userCode, nationalID,
     card6Digits, email, phoneNumber, otpLongTermToken } = bankConfig;
   if (otpLongTermToken) {
-    return { email: email!, password: password!, otpLongTermToken } as ScraperCredentials;
+    return { email: email ?? '', password: password ?? '', otpLongTermToken } as ScraperCredentials;
   }
   return {
     id, password, num, username, userCode, nationalID,

@@ -8,34 +8,40 @@
 /* eslint-disable max-lines */
 
 import api from '@actual-app/api';
-import {
-  createScraper, CompanyTypes, ScraperOptions,
+import type { ScraperOptions,
   ScraperCredentials, ScraperScrapingResult
 } from '@sergienko4/israeli-bank-scrapers';
-import { readFileSync, existsSync, rmSync } from 'fs';
+import {
+  createScraper, CompanyTypes
+} from '@sergienko4/israeli-bank-scrapers';
+import { readFileSync, existsSync, rmSync } from 'node:fs';
 import { ConfigLoader } from './Config/ConfigLoader.js';
 import { ErrorFormatter } from './Errors/ErrorFormatter.js';
 import { ExponentialBackoffRetry } from './Resilience/RetryStrategy.js';
 import { TimeoutWrapper } from './Resilience/TimeoutWrapper.js';
 import { GracefulShutdownHandler } from './Resilience/GracefulShutdown.js';
 import { MetricsService } from './Services/MetricsService.js';
+import type { ImportResult, ImportTransactionsOpts
+} from './Services/TransactionService.js';
 import {
-  TransactionService, ImportResult, ImportTransactionsOpts
+  TransactionService
 } from './Services/TransactionService.js';
 import { ReconciliationService } from './Services/ReconciliationService.js';
 import { NotificationService } from './Services/NotificationService.js';
 import { AuditLogService } from './Services/AuditLogService.js';
 import { TwoFactorService } from './Services/TwoFactorService.js';
 import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
-import {
+import type {
   ImporterConfig, BankConfig, BankTarget,
-  BankTransaction, DEFAULT_RESILIENCE_CONFIG, CategorizationMode
+  BankTransaction, CategorizationMode
+} from './Types/Index.js';
+import { DEFAULT_RESILIENCE_CONFIG
 } from './Types/Index.js';
 import { buildChromeArgs, getChromeDataDir } from './Scraper/ScraperOptionsBuilder.js';
 import { buildCredentials } from './Scraper/CredentialsBuilder.js';
 import { errorMessage, filterByDateCutoff, formatDate } from './Utils/Index.js';
 import { createLogger, getLogger, deriveLogFormat } from './Logger/Index.js';
-import { ICategoryResolver } from './Services/ICategoryResolver.js';
+import type { ICategoryResolver } from './Services/ICategoryResolver.js';
 import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
 import { TranslateCategoryResolver } from './Services/TranslateCategoryResolver.js';
 import { SpendingWatchService } from './Services/SpendingWatchService.js';
@@ -476,7 +482,7 @@ async function processAllAccounts(
   bankName: string, bankConfig: BankConfig, scrapeResult: ScraperScrapingResult
 ): Promise<{ imported: number; skipped: number }> {
   let totalImported = 0, totalSkipped = 0;
-  for (const account of scrapeResult.accounts || []) {
+  for (const account of scrapeResult.accounts ?? []) {
     if (shutdownHandler.isShuttingDown()) {
       logger.warn('  ⚠️  Shutdown requested, stopping import...'); break;
     }
@@ -514,7 +520,7 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
       handleFailedScrape(bankName, scrapeResult);
       return;
     }
-    logBankScrapedInfo(bankName, scrapeResult.accounts?.length || 0);
+    logBankScrapedInfo(bankName, scrapeResult.accounts?.length ?? 0);
     const totals = await processAllAccounts(bankName, bankConfig, scrapeResult);
     metrics.recordBankSuccess(bankName, totals.imported, totals.skipped);
     logger.info(`\n✅ Completed ${bankName}`);
@@ -528,7 +534,7 @@ async function importFromBank(bankName: string, bankConfig: BankConfig): Promise
 // ─── Main orchestration ───
 
 async function initializeLocalBudget(): Promise<void> {
-  const budgetId = process.env.E2E_LOCAL_BUDGET_ID!;
+  const budgetId = process.env.E2E_LOCAL_BUDGET_ID ?? '';
   logger.info('🔌 Initializing Actual Budget (local mode)...');
   await api.init({ dataDir: config.actual.init.dataDir });
   logger.info(`📂 Loading local budget: ${budgetId}`);

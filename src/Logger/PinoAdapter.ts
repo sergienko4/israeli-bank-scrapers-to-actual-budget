@@ -2,9 +2,9 @@
  * pino-backed ILogger implementation for stdout output.
  * Phone format strips emojis before passing to pino so stdout stays compact.
  */
-import pino from 'pino';
-import { ILogger, LogContext } from './ILogger.js';
-import { LogFormat } from '../Types/Index.js';
+import type pino from 'pino';
+import type { ILogger, LogContext } from './ILogger.js';
+import type { LogFormat } from '../Types/Index.js';
 
 const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|\u{FE00}|\u{FE0F}|\u{200D}/gu;
 const EMPTY: LogContext = {};
