@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.29.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.7...v1.29.0) (2026-03-04)
+
+
+### Added
+
+* **lint:** enforce PascalCase on all src/ files, tighten no-unused-vars for TypeScript ([#198](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/198)) ([92e5a32](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/92e5a32af71615b9e53fe4a03b40933b6d7d5259))
+
 ## [1.28.7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.28.6...v1.28.7) (2026-03-04)
 
 
