@@ -6,7 +6,7 @@ import { Writable, type TransformCallback } from 'stream';
 import { createWriteStream, mkdirSync, type WriteStream } from 'fs';
 import { join } from 'path';
 import { cleanOldLogs } from './LogCleanup.js';
-import { formatDate } from '../Utils/index.js';
+import { formatDate } from '../Utils/Index.js';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 

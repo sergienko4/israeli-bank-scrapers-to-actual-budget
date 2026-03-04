@@ -3,7 +3,7 @@
  * Anti-detection is now handled internally by the scraper (v7.0.0+, Playwright)
  */
 
-import type { ProxyConfig } from '../Types/index.js';
+import type { ProxyConfig } from '../Types/Index.js';
 
 const BASE_CHROME_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'];
 

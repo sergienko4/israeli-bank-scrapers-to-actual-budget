@@ -4,7 +4,7 @@
  */
 
 import { ShutdownError } from '../Errors/ErrorTypes.js';
-import { getLogger } from '../Logger/index.js';
+import { getLogger } from '../Logger/Index.js';
 
 export interface IRetryStrategy {
   execute<T>(fn: () => Promise<T>, operationName: string): Promise<T>;

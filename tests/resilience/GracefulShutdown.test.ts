@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GracefulShutdownHandler } from '../../src/Resilience/GracefulShutdown.js';
-import * as LoggerModule from '../../src/Logger/index.js';
+import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 

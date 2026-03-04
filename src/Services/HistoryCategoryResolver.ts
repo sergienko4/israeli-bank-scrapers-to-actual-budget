@@ -5,10 +5,10 @@
  */
 
 import type api from '@actual-app/api';
-import { ResolvedCategory } from '../Types/index.js';
+import { ResolvedCategory } from '../Types/Index.js';
 import { ICategoryResolver } from './ICategoryResolver.js';
-import { extractQueryData } from '../Utils/index.js';
-import { getLogger } from '../Logger/index.js';
+import { extractQueryData } from '../Utils/Index.js';
+import { getLogger } from '../Logger/Index.js';
 
 interface PayeeCategory {
   imported_payee: string;

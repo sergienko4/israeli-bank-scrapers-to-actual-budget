@@ -4,7 +4,7 @@
  */
 import pino from 'pino';
 import { ILogger, LogContext } from './ILogger.js';
-import { LogFormat } from '../Types/index.js';
+import { LogFormat } from '../Types/Index.js';
 
 const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|\u{FE00}|\u{FE0F}|\u{200D}/gu;
 const EMPTY: LogContext = {};

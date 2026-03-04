@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DryRunCollector, AccountPreview } from '../../src/Services/DryRunCollector.js';
-import { BankTransaction } from '../../src/Types/index.js';
+import { BankTransaction } from '../../src/Types/Index.js';
 
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 

@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import api from '@actual-app/api';
 import { join } from 'path';
-import { extractQueryData } from '../../src/Utils/index.js';
+import { extractQueryData } from '../../src/Utils/Index.js';
 import { findBudgetId, getFixturesDir } from './helpers/dockerRunner.js';
 
 const DATA_DIR = join(getFixturesDir(), 'e2e-data');

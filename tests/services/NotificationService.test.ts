@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotificationService } from '../../src/Services/NotificationService.js';
 import { ImportSummary } from '../../src/Services/MetricsService.js';
-import * as LoggerModule from '../../src/Logger/index.js';
+import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockSendSummary = vi.fn().mockResolvedValue(undefined);
 const mockSendError = vi.fn().mockResolvedValue(undefined);

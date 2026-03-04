@@ -9,10 +9,10 @@ import { CronExpressionParser } from 'cron-parser';
 import { TelegramPoller } from './Services/TelegramPoller.js';
 import { TelegramCommandHandler } from './Services/TelegramCommandHandler.js';
 import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
-import { ImporterConfig, LogConfig, TelegramConfig } from './Types/index.js';
+import { ImporterConfig, LogConfig, TelegramConfig } from './Types/Index.js';
 import { AuditLogService } from './Services/AuditLogService.js';
-import { errorMessage } from './Utils/index.js';
-import { createLogger, getLogger, deriveLogFormat } from './Logger/index.js';
+import { errorMessage } from './Utils/Index.js';
+import { createLogger, getLogger, deriveLogFormat } from './Logger/Index.js';
 import {
   isEncryptedConfig, decryptConfig, getEncryptionPassword
 } from './Config/ConfigEncryption.js';
@@ -88,7 +88,7 @@ function runImport(extraEnv: Record<string, string> = {}): Promise<number> {
     const startTime = new Date();
     logger.info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
     const env = Object.keys(extraEnv).length > 0 ? { ...process.env, ...extraEnv } : process.env;
-    const child: ChildProcess = spawn('node', ['/app/dist/index.js'], { stdio: 'inherit', env });
+    const child: ChildProcess = spawn('node', ['/app/dist/Index.js'], { stdio: 'inherit', env });
     child.on('exit', (code) => { logImportResult(code, startTime); resolve(code || 0); });
     child.on('error', (err) => {
       logger.error(`❌ Failed to start import: ${err.message}`);

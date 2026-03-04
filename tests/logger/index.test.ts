@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   createLogger, getLogger, getLogBuffer, deriveLogFormat
-} from '../../src/Logger/index.js';
+} from '../../src/Logger/Index.js';
 import { PinoAdapter } from '../../src/Logger/PinoAdapter.js';
 import { LogMediator } from '../../src/Logger/LogMediator.js';
 

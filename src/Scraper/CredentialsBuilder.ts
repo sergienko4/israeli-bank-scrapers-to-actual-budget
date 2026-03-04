@@ -1,5 +1,5 @@
 import type { ScraperCredentials } from '@sergienko4/israeli-bank-scrapers';
-import type { BankConfig } from '../Types/index.js';
+import type { BankConfig } from '../Types/Index.js';
 
 /**
  * Builds scraper credentials for a bank.

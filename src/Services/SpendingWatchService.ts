@@ -4,9 +4,9 @@
  */
 
 import type api from '@actual-app/api';
-import { SpendingWatchRule } from '../Types/index.js';
-import { toCents, fromCents, formatDate, extractQueryData, errorMessage } from '../Utils/index.js';
-import { getLogger } from '../Logger/index.js';
+import { SpendingWatchRule } from '../Types/Index.js';
+import { toCents, fromCents, formatDate, extractQueryData, errorMessage } from '../Utils/Index.js';
+import { getLogger } from '../Logger/Index.js';
 
 interface TransactionRow {
   date: string;

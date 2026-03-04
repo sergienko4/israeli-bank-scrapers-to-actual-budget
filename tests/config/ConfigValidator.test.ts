@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConfigValidator, ValidationResult, runValidateMode } from '../../src/Config/ConfigValidator.js';
-import { ImporterConfig } from '../../src/Types/index.js';
+import { ImporterConfig } from '../../src/Types/Index.js';
 import * as fs from 'fs';
 import { fakeUuid } from '../helpers/factories.js';
 

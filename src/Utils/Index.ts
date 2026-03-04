@@ -1,5 +1,5 @@
-export { toCents, fromCents } from './currency.js';
-export { formatDate, filterByDateCutoff } from './date.js';
+export { toCents, fromCents } from './Currency.js';
+export { formatDate, filterByDateCutoff } from './Date.js';
 
 /** Safely extract .data from Actual Budget runQuery() result (returns unknown) */
 // eslint-disable-next-line no-restricted-syntax -- pure extraction helper, called per-transaction

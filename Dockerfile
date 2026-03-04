@@ -73,10 +73,10 @@ RUN chmod -R a-w /app/dist /app/node_modules 2>/dev/null || true
 
 # Health check (basic process check)
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD ps aux | grep -q "[n]ode dist/scheduler.js" || exit 1
+  CMD ps aux | grep -q "[n]ode dist/Scheduler.js" || exit 1
 
 # Expose no ports (all communication via volumes and external APIs)
 # This reduces attack surface
 
-# Start the scheduler (which will run dist/index.js based on SCHEDULE env var)
-CMD ["node", "dist/scheduler.js"]
+# Start the scheduler (which will run dist/Index.js based on SCHEDULE env var)
+CMD ["node", "dist/Scheduler.js"]
