@@ -5,7 +5,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { ImportSummary, BankMetrics } from './MetricsService.js';
-import { getLogger } from '../Logger/index.js';
+import { getLogger } from '../Logger/Index.js';
 
 export interface AuditEntry {
   timestamp: string;

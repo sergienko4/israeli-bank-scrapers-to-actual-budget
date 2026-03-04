@@ -3,7 +3,7 @@
  * Follows Single Responsibility Principle: Only handles shutdown signals
  */
 
-import { getLogger } from '../Logger/index.js';
+import { getLogger } from '../Logger/Index.js';
 
 export interface IShutdownHandler {
   isShuttingDown(): boolean;

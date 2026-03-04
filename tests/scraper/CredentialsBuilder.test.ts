@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildCredentials } from '../../src/Scraper/CredentialsBuilder.js';
-import type { BankConfig } from '../../src/Types/index.js';
+import type { BankConfig } from '../../src/Types/Index.js';
 
 const idBank = { id: 'user123', password: 'pass' } as BankConfig;
 const emailBank = {

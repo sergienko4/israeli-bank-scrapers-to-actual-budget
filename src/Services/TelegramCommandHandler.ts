@@ -5,8 +5,8 @@
 
 import { INotifier } from './Notifications/INotifier.js';
 import { IAuditLog, AuditEntry } from './AuditLogService.js';
-import { errorMessage } from '../Utils/index.js';
-import { getLogger, LogFileReader } from '../Logger/index.js';
+import { errorMessage } from '../Utils/Index.js';
+import { getLogger, LogFileReader } from '../Logger/Index.js';
 
 const MAX_TELEGRAM_LENGTH = 4096;
 const DEFAULT_LOG_COUNT = 50;

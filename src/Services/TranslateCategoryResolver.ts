@@ -4,9 +4,9 @@
  * Longest match wins — "שופרסל" matches before "סופר".
  */
 
-import { TranslationRule, ResolvedCategory } from '../Types/index.js';
+import { TranslationRule, ResolvedCategory } from '../Types/Index.js';
 import { ICategoryResolver } from './ICategoryResolver.js';
-import { getLogger } from '../Logger/index.js';
+import { getLogger } from '../Logger/Index.js';
 
 interface CompiledRule {
   fromLower: string;

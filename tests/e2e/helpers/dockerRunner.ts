@@ -23,13 +23,13 @@ export interface DockerRunOptions {
   env?: Record<string, string>;
   volumes?: string[];
   networkHost?: boolean;
-  /** Extra args appended after dist/index.js (e.g. ['--validate']) */
+  /** Extra args appended after dist/Index.js (e.g. ['--validate']) */
   nodeArgs?: string[];
 }
 
 export function runImporterDocker(options: DockerRunOptions): DockerRunResult {
   const nodeArgs = options.nodeArgs ?? [];
-  const args = ['run', '--rm', ...buildArgs(options), DOCKER_IMAGE, 'node', 'dist/index.js', ...nodeArgs];
+  const args = ['run', '--rm', ...buildArgs(options), DOCKER_IMAGE, 'node', 'dist/Index.js', ...nodeArgs];
 
   try {
     const output = execFileSync('docker', args, { encoding: 'utf8', timeout: 60_000, stdio: 'pipe' });
@@ -45,7 +45,7 @@ export function runImporterDocker(options: DockerRunOptions): DockerRunResult {
 
 /** Async version — doesn't block event loop (needed for webhook tests). */
 export function runImporterDockerAsync(options: DockerRunOptions): Promise<DockerRunResult> {
-  const args = ['run', '--rm', ...buildArgs(options), DOCKER_IMAGE, 'node', 'dist/index.js'];
+  const args = ['run', '--rm', ...buildArgs(options), DOCKER_IMAGE, 'node', 'dist/Index.js'];
   return new Promise((resolve) => {
     execFile('docker', args, { encoding: 'utf8', timeout: 60_000 }, (error, stdout, stderr) => {
       if (error) {

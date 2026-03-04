@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterByDateCutoff, formatDate } from '../../src/Utils/date.js';
+import { filterByDateCutoff, formatDate } from '../../src/Utils/Date.js';
 
 describe('date utils', () => {
   describe('formatDate', () => {

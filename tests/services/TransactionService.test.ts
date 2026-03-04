@@ -5,7 +5,7 @@ import { fakeBankTransactions, fakeBankTransaction } from '../helpers/factories.
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
-vi.mock('../../src/Logger/index.js', () => ({
+vi.mock('../../src/Logger/Index.js', () => ({
   getLogger: () => mockLogger,
   getLogBuffer: vi.fn(),
   createLogger: vi.fn(),

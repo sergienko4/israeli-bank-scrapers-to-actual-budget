@@ -12,8 +12,8 @@ export default defineConfig({
       reporter: ['text', 'json', 'html', 'lcov'],
       include: ['src/**/*.ts'],
       exclude: [
-        'src/index.ts',
-        'src/scheduler.ts',
+        'src/Index.ts',
+        'src/Scheduler.ts',
       ],
       thresholds: {
         lines: 90,

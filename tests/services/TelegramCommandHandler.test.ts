@@ -3,7 +3,7 @@ import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandle
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
 
-vi.mock('../../src/Logger/index.js', () => ({
+vi.mock('../../src/Logger/Index.js', () => ({
   getLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
   createLogger: vi.fn(),
   getLogBuffer: vi.fn().mockReturnValue({ isEnabled: () => false }),
