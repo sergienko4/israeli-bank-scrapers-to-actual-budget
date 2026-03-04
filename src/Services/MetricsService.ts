@@ -143,7 +143,7 @@ export class MetricsService {
 
     const totalTransactions = banksArray.reduce((sum, b) => sum + b.transactionsImported, 0);
     const totalDuplicates = banksArray.reduce((sum, b) => sum + b.transactionsSkipped, 0);
-    const totalDuration = banksArray.reduce((sum, b) => sum + (b.duration || 0), 0);
+    const totalDuration = banksArray.reduce((sum, b) => sum + (b.duration ?? 0), 0);
 
     return {
       totalBanks: banksArray.length,
@@ -242,7 +242,7 @@ export class MetricsService {
       'already-reconciled': 'already reconciled',
     };
     getLogger().info(
-      `     ${reconIcon} Reconciliation: ${reconMessages[bank.reconciliationStatus!]}`
+      `     ${reconIcon} Reconciliation: ${reconMessages[bank.reconciliationStatus ?? '']}`
     );
   }
 

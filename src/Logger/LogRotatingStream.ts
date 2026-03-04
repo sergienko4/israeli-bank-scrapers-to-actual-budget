@@ -2,9 +2,9 @@
  * Writable stream that rotates log files at 10 MB and on day boundaries.
  * pino writes raw JSON chunks; this stream handles file management transparently.
  */
-import { Writable, type TransformCallback } from 'stream';
-import { createWriteStream, mkdirSync, type WriteStream } from 'fs';
-import { join } from 'path';
+import { Writable, type TransformCallback } from 'node:stream';
+import { createWriteStream, mkdirSync, type WriteStream } from 'node:fs';
+import { join } from 'node:path';
 import { cleanOldLogs } from './LogCleanup.js';
 import { formatDate } from '../Utils/Index.js';
 

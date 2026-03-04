@@ -3,8 +3,8 @@
  * Commands: /scan, /import, /status, /watch, /logs, /help
  */
 
-import { INotifier } from './Notifications/INotifier.js';
-import { IAuditLog, AuditEntry } from './AuditLogService.js';
+import type { INotifier } from './Notifications/INotifier.js';
+import type { IAuditLog, AuditEntry } from './AuditLogService.js';
 import { errorMessage } from '../Utils/Index.js';
 import { getLogger, LogFileReader } from '../Logger/Index.js';
 

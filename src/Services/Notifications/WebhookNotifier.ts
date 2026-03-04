@@ -4,9 +4,9 @@
  * OCP: add new formats by adding entries to the formatters map
  */
 
-import { WebhookConfig, WebhookFormat } from '../../Types/Index.js';
-import { ImportSummary, BankMetrics } from '../MetricsService.js';
-import { INotifier } from './INotifier.js';
+import type { WebhookConfig, WebhookFormat } from '../../Types/Index.js';
+import type { ImportSummary, BankMetrics } from '../MetricsService.js';
+import type { INotifier } from './INotifier.js';
 
 export class WebhookNotifier implements INotifier {
   private url: string;
