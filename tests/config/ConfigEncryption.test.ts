@@ -37,7 +37,9 @@ describe('ConfigEncryption', () => {
 
     it('tampered ciphertext throws error', () => {
       const data = JSON.parse(encryptConfig(SAMPLE_CONFIG, 'pass'));
-      data.ciphertext = data.ciphertext.replace(/A/g, 'B');
+      const buf = Buffer.from(data.ciphertext, 'base64');
+      buf[0] ^= 0xff;
+      data.ciphertext = buf.toString('base64');
       expect(() => decryptConfig(JSON.stringify(data), 'pass')).toThrow('Decryption failed');
     });
 
