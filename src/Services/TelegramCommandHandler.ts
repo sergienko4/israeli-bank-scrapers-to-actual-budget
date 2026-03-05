@@ -23,6 +23,7 @@ export interface CommandHandlerOptions {
   logDir?: string;
 }
 
+/** Handles bot commands dispatched from TelegramPoller (scan, status, logs, help, etc.). */
 export class TelegramCommandHandler {
   private runImport: (banks?: string[]) => Promise<number>;
   private notifier: INotifier;
@@ -37,6 +38,10 @@ export class TelegramCommandHandler {
   private lastRunTime: Date | null = null;
   private lastRunResult: string | null = null;
 
+  /**
+   * Creates a TelegramCommandHandler with the provided command callbacks and configuration.
+   * @param opts - Options including import runner, notifier, audit log, and optional features.
+   */
   constructor(opts: CommandHandlerOptions) {
     this.runImport = opts.runImport;
     this.notifier = opts.notifier;
@@ -49,6 +54,10 @@ export class TelegramCommandHandler {
     this.logDir = opts.logDir ?? './logs';
   }
 
+  /**
+   * Routes an incoming message or callback query text to the correct command handler.
+   * @param text - The raw message text or callback_data string to dispatch.
+   */
   async handle(text: string): Promise<void> {
     const raw = text.trim().split(/\s+/);
     const command = raw[0].toLowerCase();
@@ -57,26 +66,67 @@ export class TelegramCommandHandler {
     if (command === 'scan_all') { await this.handleScanAll(); return; }
     if (command.startsWith('scan:')) { await this.handleScan(command.slice(5)); return; }
     const handlers: Record<string, () => Promise<void>> = {
+      /**
+       * Handles /scan command.
+       * @returns Promise resolving when the command is processed.
+       */
       '/scan': () => this.handleScan(arg),
+      /**
+       * Handles /import alias for /scan.
+       * @returns Promise resolving when the command is processed.
+       */
       '/import': () => this.handleScan(arg),
+      /**
+       * Handles /status command.
+       * @returns Promise resolving when the command is processed.
+       */
       '/status': () => this.handleStatus(),
+      /**
+       * Handles /logs command.
+       * @returns Promise resolving when the command is processed.
+       */
       '/logs': () => this.handleLogs(arg),
+      /**
+       * Handles /watch command.
+       * @returns Promise resolving when the command is processed.
+       */
       '/watch': () => this.handleWatch(),
+      /**
+       * Handles /check_config command.
+       * @returns Promise resolving when the command is processed.
+       */
       '/check_config': () => this.handleCheckConfig(),
+      /**
+       * Handles /preview command.
+       * @returns Promise resolving when the command is processed.
+       */
       '/preview': () => this.handlePreview(),
+      /**
+       * Handles /help command.
+       * @returns Promise resolving when the command is processed.
+       */
       '/help': () => this.handleHelp(),
+      /**
+       * Handles /start command (alias for /help).
+       * @returns Promise resolving when the command is processed.
+       */
       '/start': () => this.handleHelp(),
     };
     const handler = handlers[command];
     if (handler) await handler();
   }
 
+  /** Handles the scan_all callback — imports all configured banks. */
   private async handleScanAll(): Promise<void> {
     if (this.importPromise) { await this.reply('⏳ Import already running. Please wait.'); return; }
     this.importPromise = this.executeImport(undefined);
     await this.importPromise;
   }
 
+  /**
+   * Handles the /scan command — shows bank menu or starts a targeted import.
+   * @param bankArg - Optional bank name or comma-separated list to limit the import scope.
+   */
   private async handleScan(bankArg?: string): Promise<void> {
     if (this.importPromise) { await this.reply('⏳ Import already running. Please wait.'); return; }
     if (!bankArg && this.sendScanMenu && this.getBankNames) {
@@ -89,10 +139,20 @@ export class TelegramCommandHandler {
     await this.importPromise;
   }
 
+  /**
+   * Resolves a comma-separated bank argument to matched available bank names.
+   * @param bankArg - Comma-separated bank name string from the user's command.
+   * @returns Array of resolved bank names, or an error string if any are unknown.
+   */
   private resolveBanks(bankArg: string): string[] | string {
     const requested = bankArg.split(',').map(b => b.trim()).filter(Boolean);
     const available = this.getBankNames?.() ?? [];
     if (!available.length) return requested; // no validation if getBankNames not provided
+    /**
+     * Case-insensitively matches a requested bank name against the available list.
+     * @param r - The requested bank name to match.
+     * @returns The matched available bank name, or the original if unmatched.
+     */
     const match = (r: string): string =>
       available.find(a => a.toLowerCase() === r.toLowerCase()) ?? r;
     const resolved = requested.map(match);
@@ -103,6 +163,10 @@ export class TelegramCommandHandler {
     return resolved;
   }
 
+  /**
+   * Runs the import pipeline and reports success/failure back to Telegram.
+   * @param banks - Optional list of banks to import; undefined imports all.
+   */
   private async executeImport(banks?: string[]): Promise<void> {
     const label = banks ? ` (${banks.join(', ')})` : '';
     await this.reply(`⏳ Starting import...${label}`);
@@ -120,6 +184,11 @@ export class TelegramCommandHandler {
     }
   }
 
+  /**
+   * Builds a detailed error reply message using the most recent audit log entry.
+   * @param dur - Human-readable duration string for the failed import.
+   * @returns Multi-line error reply text with failed bank details.
+   */
   private buildErrorReply(dur: string): string {
     const entry = this.auditLog?.getRecent(1)[0];
     if (!entry || entry.failedBanks === 0) {
@@ -136,6 +205,7 @@ export class TelegramCommandHandler {
     return lines.join('\n');
   }
 
+  /** Sends the current import status and recent audit history to Telegram. */
   private async handleStatus(): Promise<void> {
     const lines: string[] = ['📊 <b>Status</b>', ''];
     lines.push(this.lastRunTime
@@ -146,6 +216,10 @@ export class TelegramCommandHandler {
     await this.reply(lines.join('\n'));
   }
 
+  /**
+   * Appends the 5 most recent audit entries to the status message lines.
+   * @param lines - Mutable array of message lines to append audit history to.
+   */
   private appendRecentHistory(lines: string[]): void {
     if (!this.auditLog) return;
     const recent = this.auditLog.getRecent(5);
@@ -154,6 +228,11 @@ export class TelegramCommandHandler {
     recent.reverse().forEach(e => lines.push(this.formatAuditEntry(e)));
   }
 
+  /**
+   * Formats a single audit log entry as a one-line status summary.
+   * @param entry - The AuditEntry to format.
+   * @returns Formatted string with date, transaction count, and bank success rate.
+   */
   private formatAuditEntry(entry: AuditEntry): string {
     const date = entry.timestamp.split('T')[0];
     const time = entry.timestamp.split('T')[1]?.slice(0, 5) || '';
@@ -165,6 +244,10 @@ export class TelegramCommandHandler {
     );
   }
 
+  /**
+   * Reads recent log entries from files and sends them to Telegram.
+   * @param countArg - Optional string number of entries to retrieve (default 50, max 150).
+   */
   private async handleLogs(countArg?: string): Promise<void> {
     const reader = new LogFileReader(this.logDir);
     const entries = reader.getRecent(this.parseLogCount(countArg));
@@ -175,12 +258,23 @@ export class TelegramCommandHandler {
     await this.reply(header + body + footer);
   }
 
+  /**
+   * Parses an optional count argument string to a bounded integer.
+   * @param arg - Optional string argument from the user (e.g. "100").
+   * @returns Integer count between 1 and 150, defaulting to 50.
+   */
   private parseLogCount(arg?: string): number {
     if (!arg) return DEFAULT_LOG_COUNT;
     const n = parseInt(arg, 10);
     return isNaN(n) ? DEFAULT_LOG_COUNT : Math.min(Math.max(n, 1), 150);
   }
 
+  /**
+   * Truncates a list of log entries to fit within Telegram's message size limit.
+   * @param entries - Array of log line strings to truncate.
+   * @param reservedLength - Number of characters already used by header/footer wrappers.
+   * @returns Truncated log string with an omission notice if needed.
+   */
   private truncateForTelegram(entries: string[], reservedLength: number): string {
     const maxLength = MAX_TELEGRAM_LENGTH - reservedLength - 20;
     const text = entries.join('\n');
@@ -191,6 +285,7 @@ export class TelegramCommandHandler {
     return '...(earlier entries omitted)\n' + clean;
   }
 
+  /** Handles the /watch command — runs the spending watch or explains it runs automatically. */
   private async handleWatch(): Promise<void> {
     if (!this.runWatch) {
       await this.reply(
@@ -209,6 +304,7 @@ export class TelegramCommandHandler {
     }
   }
 
+  /** Handles the /check_config command — runs offline and online config validation. */
   private async handleCheckConfig(): Promise<void> {
     if (!this.runValidate) {
       await this.reply('⚙️ Config validation unavailable.');
@@ -223,6 +319,7 @@ export class TelegramCommandHandler {
     }
   }
 
+  /** Handles the /preview command — runs a dry-run import without writing to Actual Budget. */
   private async handlePreview(): Promise<void> {
     if (!this.runPreview) {
       await this.reply('🔍 Preview mode unavailable.');
@@ -234,6 +331,10 @@ export class TelegramCommandHandler {
     await this.importPromise;
   }
 
+  /**
+   * Runs the preview function and reports completion or error to Telegram.
+   * @param run - Async function that executes the dry-run import.
+   */
   private async executePreview(run: () => Promise<number>): Promise<void> {
     const start = Date.now();
     try {
@@ -247,6 +348,7 @@ export class TelegramCommandHandler {
     }
   }
 
+  /** Sends the list of available bot commands to Telegram. */
   private async handleHelp(): Promise<void> {
     const lines = [
       '🤖 <b>Available Commands</b>', '',
@@ -262,6 +364,10 @@ export class TelegramCommandHandler {
     await this.reply(lines.join('\n'));
   }
 
+  /**
+   * Sends a message to Telegram, catching and logging any send failures.
+   * @param text - The message text to send.
+   */
   private async reply(text: string): Promise<void> {
     try { await this.notifier.sendMessage(text); }
     catch (error: unknown) {
@@ -269,6 +375,11 @@ export class TelegramCommandHandler {
     }
   }
 
+  /**
+   * Returns a human-readable string describing how long ago the given date was.
+   * @param date - The Date to compare against the current time.
+   * @returns Duration string like "45s", "5m", or "2h".
+   */
   private timeSince(date: Date): string {
     const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
     if (seconds < 60) return `${seconds}s`;

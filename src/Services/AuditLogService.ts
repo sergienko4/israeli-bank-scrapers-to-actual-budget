@@ -29,12 +29,22 @@ export interface IAuditLog {
 
 const DEFAULT_MAX_ENTRIES = 90;
 
+/** Persists import run history to a local JSON file for debugging and /status history. */
 export class AuditLogService implements IAuditLog {
+  /**
+   * Creates an AuditLogService writing to the given file path.
+   * @param filePath - Absolute path to the JSON audit log file.
+   * @param maxEntries - Maximum number of entries to retain in the log.
+   */
   constructor(
     private readonly filePath: string = '/app/data/audit-log.json',
     private readonly maxEntries: number = DEFAULT_MAX_ENTRIES
   ) {}
 
+  /**
+   * Appends a new audit entry built from the given import summary.
+   * @param summary - The ImportSummary from the completed import run.
+   */
   record(summary: ImportSummary): void {
     const entry = this.buildEntry(summary);
     const entries = this.loadEntries();
@@ -42,10 +52,20 @@ export class AuditLogService implements IAuditLog {
     this.saveEntries(entries.slice(-this.maxEntries));
   }
 
+  /**
+   * Returns the most recent audit entries up to the requested count.
+   * @param count - Maximum number of entries to return.
+   * @returns Array of AuditEntry objects, most recent last.
+   */
   getRecent(count: number): AuditEntry[] {
     return this.loadEntries().slice(-count);
   }
 
+  /**
+   * Constructs an AuditEntry from an ImportSummary.
+   * @param summary - The import summary to convert.
+   * @returns A new AuditEntry with a timestamp and per-bank details.
+   */
   private buildEntry(summary: ImportSummary): AuditEntry {
     return {
       timestamp: new Date().toISOString(),
@@ -60,6 +80,11 @@ export class AuditLogService implements IAuditLog {
     };
   }
 
+  /**
+   * Maps a BankMetrics object to the compact shape stored in the audit log.
+   * @param b - The BankMetrics to map.
+   * @returns A flat object with name, status, duration, txns, and optional fields.
+   */
   private mapBank(b: BankMetrics): AuditEntry['banks'][number] {
     return {
       name: b.bankName, status: b.status,
@@ -71,12 +96,20 @@ export class AuditLogService implements IAuditLog {
     };
   }
 
+  /**
+   * Reads and parses the audit log file, returning an empty array if absent or corrupt.
+   * @returns Array of AuditEntry objects from the log file.
+   */
   private loadEntries(): AuditEntry[] {
     if (!existsSync(this.filePath)) return [];
     try { return JSON.parse(readFileSync(this.filePath, 'utf8')) as AuditEntry[]; }
     catch { return []; }
   }
 
+  /**
+   * Serialises the audit entry array and writes it to the log file.
+   * @param entries - The full list of AuditEntry objects to persist.
+   */
   private saveEntries(entries: AuditEntry[]): void {
     try { writeFileSync(this.filePath, JSON.stringify(entries, null, 2)); }
     catch (error: unknown) {

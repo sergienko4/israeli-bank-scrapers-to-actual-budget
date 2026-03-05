@@ -6,6 +6,9 @@ import type { BankConfig } from '../Types/Index.js';
  * When otpRetriever is provided, it is included in the credentials for
  * banks that read otpCodeRetriever from credentials (e.g. oneZero), and
  * is also passed via ScraperOptions for banks that use OtpHandler (e.g. beinleumi).
+ * @param bankConfig - The BankConfig containing login credentials for the bank.
+ * @param otpRetriever - Optional async function that returns an OTP code on demand.
+ * @returns ScraperCredentials object ready for use with the israeli-bank-scrapers library.
  */
 export function buildCredentials(
   bankConfig: BankConfig, otpRetriever?: () => Promise<string>

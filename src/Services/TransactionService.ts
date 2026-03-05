@@ -32,17 +32,25 @@ interface SingleTxnContext {
   existingTransactions: TransactionRecord[];
 }
 
+/** Handles importing bank transactions into Actual Budget. */
 export class TransactionService {
   private api: typeof api;
   private categoryResolver?: ICategoryResolver;
 
+  /**
+   * Creates a TransactionService with the given Actual API and optional category resolver.
+   * @param actualApi - The Actual Budget API module for all database operations.
+   * @param categoryResolver - Optional resolver to auto-assign categories by description.
+   */
   constructor(actualApi: typeof api, categoryResolver?: ICategoryResolver) {
     this.api = actualApi;
     this.categoryResolver = categoryResolver;
   }
 
   /**
-   * Import transactions for an account into Actual Budget
+   * Imports transactions for an account into Actual Budget.
+   * @param opts - Options including bank name, account number, account ID, and transactions.
+   * @returns ImportResult with counts of new and skipped transactions.
    */
   async importTransactions(opts: ImportTransactionsOpts): Promise<ImportResult> {
     getLogger().info(`     📥 Importing ${opts.transactions.length} transactions...`);
@@ -57,7 +65,11 @@ export class TransactionService {
   }
 
   /**
-   * Get an existing account or create a new one in Actual Budget
+   * Returns an existing Actual account or creates a new one with the given UUID.
+   * @param accountId - UUID to look up or create.
+   * @param bankName - Bank name used when creating the account label.
+   * @param accountNumber - Account number used when creating the account label.
+   * @returns The found or newly created ActualAccount.
    */
   async getOrCreateAccount(
     accountId: string, bankName: string, accountNumber: string
@@ -79,6 +91,11 @@ export class TransactionService {
     return account;
   }
 
+  /**
+   * Iterates the transaction list and separates new from already-imported transactions.
+   * @param opts - Import options containing the transactions to process.
+   * @returns Object with arrays of new and existing TransactionRecord objects.
+   */
   private async processTransactionBatch(
     opts: ImportTransactionsOpts
   ): Promise<{ newTransactions: TransactionRecord[]; existingTransactions: TransactionRecord[] }> {
@@ -97,6 +114,10 @@ export class TransactionService {
     return { newTransactions, existingTransactions };
   }
 
+  /**
+   * Imports a single transaction into Actual Budget, handling duplicate errors gracefully.
+   * @param ctx - Context containing account ID, transaction data, and target arrays.
+   */
   private async importSingleTransaction(ctx: SingleTxnContext): Promise<void> {
     const { actualAccountId, txn, parsed, importedId, target, existingTransactions } = ctx;
     try {
@@ -116,12 +137,24 @@ export class TransactionService {
     }
   }
 
+  /**
+   * Builds a stable unique identifier for a transaction to detect duplicates.
+   * @param accountKey - Combined bank-account string used as a namespace.
+   * @param txn - The raw BankTransaction from the scraper.
+   * @param parsed - The parsed TransactionRecord with formatted date.
+   * @returns A string imported_id for use with Actual's importTransactions API.
+   */
   private buildImportedId(accountKey: string, txn: BankTransaction, parsed: TransactionRecord)
     : string {
     const fallback = `${parsed.date}-${txn.chargedAmount ?? txn.originalAmount}`;
     return `${accountKey}-${txn.identifier || fallback}`;
   }
 
+  /**
+   * Queries Actual Budget for all imported_id values already in the account.
+   * @param accountId - UUID of the Actual account to query.
+   * @returns Set of imported_id strings for fast duplicate detection.
+   */
   private async getExistingImportedIds(accountId: string): Promise<Set<string>> {
     const result = await this.api.runQuery(
       this.api.q('transactions')
@@ -132,6 +165,11 @@ export class TransactionService {
     return new Set(rows.map((t) => t.imported_id));
   }
 
+  /**
+   * Converts a raw BankTransaction from the scraper into a TransactionRecord.
+   * @param txn - The raw BankTransaction to convert.
+   * @returns A TransactionRecord with formatted date and amount in cents.
+   */
   private parseTransaction(txn: BankTransaction): TransactionRecord {
     return {
       date: formatDate(txn.date),

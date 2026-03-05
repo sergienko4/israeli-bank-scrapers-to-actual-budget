@@ -16,14 +16,23 @@ interface PayeeCategory {
   date: string;
 }
 
+/** Resolves transaction categories by matching payee names against import history. */
 export class HistoryCategoryResolver implements ICategoryResolver {
   private categoryMap = new Map<string, string>();
   private actualApi: typeof api;
 
+  /**
+   * Creates a HistoryCategoryResolver using the given Actual API instance.
+   * @param actualApi - The Actual Budget API module to query transaction history from.
+   */
   constructor(actualApi: typeof api) {
     this.actualApi = actualApi;
   }
 
+  /**
+   * Loads historical payee→category mappings from Actual Budget transaction history.
+   * Failures are logged and do not throw; the resolver will simply return no matches.
+   */
   async initialize(): Promise<void> {
     try {
       const rows = await this.queryPayeeCategories();
@@ -35,16 +44,31 @@ export class HistoryCategoryResolver implements ICategoryResolver {
     }
   }
 
+  /**
+   * Finds the most recent historical category for the given payee description.
+   * @param description - The transaction description or payee name to match.
+   * @returns A ResolvedCategory with the matched category ID, or undefined if no match.
+   */
   resolve(description: string): ResolvedCategory | undefined {
     if (!description) return undefined;
     const categoryId = this.findExactMatch(description) ?? this.findPartialMatch(description);
     return categoryId ? { categoryId } : undefined;
   }
 
+  /**
+   * Looks up the exact lowercased description in the category map.
+   * @param description - The description to look up.
+   * @returns The matching category ID, or undefined if not found.
+   */
   private findExactMatch(description: string): string | undefined {
     return this.categoryMap.get(description.toLowerCase());
   }
 
+  /**
+   * Searches for a partial substring match between the description and known payees.
+   * @param description - The description to match against known payees.
+   * @returns The first matching category ID, or undefined if no partial match found.
+   */
   private findPartialMatch(description: string): string | undefined {
     const lower = description.toLowerCase();
     for (const [payee, categoryId] of this.categoryMap) {
@@ -53,6 +77,10 @@ export class HistoryCategoryResolver implements ICategoryResolver {
     return undefined;
   }
 
+  /**
+   * Queries Actual Budget for all transactions that have a category and imported_payee.
+   * @returns Array of PayeeCategory rows from the most recent transactions first.
+   */
   private async queryPayeeCategories(): Promise<PayeeCategory[]> {
     const result = await this.actualApi.runQuery(
       this.actualApi.q('transactions')
@@ -63,6 +91,10 @@ export class HistoryCategoryResolver implements ICategoryResolver {
     return extractQueryData<PayeeCategory[]>(result, []);
   }
 
+  /**
+   * Populates the categoryMap from query rows, keeping the first (most recent) entry per payee.
+   * @param rows - Array of PayeeCategory rows from Actual Budget.
+   */
   private buildMap(rows: PayeeCategory[]): void {
     for (const row of rows) {
       if (!row.imported_payee) continue;

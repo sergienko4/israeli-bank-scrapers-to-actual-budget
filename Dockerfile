@@ -30,17 +30,26 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Update npm to latest version for security patches
-# Patch minimatch in npm's bundled packages: CVE-2026-27903/CVE-2026-27904 (DoS, HIGH)
-# npm bundles minimatch@10.2.2; fix is 10.2.3 — install globally and replace npm's copy
+# Update npm to latest, then refresh ALL npm-bundled packages to @latest.
+# npm ships its own private node_modules (minimatch, tar, etc.) that are independent
+# of our project deps and can't be updated via npm update. The proven fix: install
+# each package globally at @latest, then replace npm's bundled copy.
+# Add new packages to the install line whenever Trivy flags a new npm-bundled CVE.
 RUN npm install -g npm@latest \
-    && npm install -g minimatch@10.2.3 \
+    && npm install -g minimatch@latest tar@latest \
     && rm -rf /usr/local/lib/node_modules/npm/node_modules/minimatch \
     && cp -r /usr/local/lib/node_modules/minimatch \
-             /usr/local/lib/node_modules/npm/node_modules/minimatch
+             /usr/local/lib/node_modules/npm/node_modules/minimatch \
+    && rm -rf /usr/local/lib/node_modules/npm/node_modules/tar \
+    && cp -r /usr/local/lib/node_modules/tar \
+             /usr/local/lib/node_modules/npm/node_modules/tar
 
-# Install ALL dependencies (including devDependencies for build)
-RUN npm install
+# Install ALL project dependencies (devDependencies included for build).
+# npm update --no-save brings every dep to its latest patch version within
+# the semver ranges declared in package.json — picks up security fixes
+# without requiring a manual lock-file update in the repo.
+RUN npm install \
+    && npm update --no-save
 
 # Install Playwright Chromium with system dependencies
 # Use shared path so both root (build) and node (runtime) can access it

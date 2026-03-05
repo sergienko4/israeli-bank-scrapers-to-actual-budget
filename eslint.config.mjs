@@ -4,6 +4,7 @@ import tseslint from 'typescript-eslint';
 import unusedImports from 'eslint-plugin-unused-imports';
 import checkFile from 'eslint-plugin-check-file';
 import pluginN from 'eslint-plugin-n';
+import jsdoc from 'eslint-plugin-jsdoc';
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -19,6 +20,7 @@ export default tseslint.config(
       'unused-imports': unusedImports,
       'check-file': checkFile,
       'n': pluginN,
+      'jsdoc': jsdoc,
     },
     rules: {
       // === THE "ONE PER FILE" & PASCAL_CASE NAMING ===
@@ -38,6 +40,28 @@ export default tseslint.config(
       'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
       '@typescript-eslint/max-params': ['error', { max: 3 }],
       'complexity': ['error', 10],
+
+      // === JSDOC DOCUMENTATION ===
+      'jsdoc/require-jsdoc': ['error', {
+        publicOnly: false, // Ensures ALL functions (even private) have comments
+        require: {
+          FunctionDeclaration: true,
+          MethodDefinition: true,
+          ClassDeclaration: true,
+          ArrowFunctionExpression: true,
+          FunctionExpression: true,
+        },
+      }],
+      'jsdoc/require-description': ['error', { contexts: ['any'] }],
+      'jsdoc/require-param': 'error',
+      'jsdoc/require-param-description': 'error',
+      'jsdoc/require-param-type': 'off', // TS handles types
+      'jsdoc/require-returns': 'error',
+      'jsdoc/require-returns-description': 'error',
+      'jsdoc/require-returns-type': 'off', // TS handles types
+      'jsdoc/check-param-names': 'error',
+      'jsdoc/check-tag-names': 'error',
+
 
       // === STRICT TYPE SAFETY (NO ANY) ===
       '@typescript-eslint/no-explicit-any': 'error',
@@ -101,6 +125,7 @@ export default tseslint.config(
         },
       ],
     },
+
   },
   // === EXEMPTION: Logger implementations may call console (they ARE the logging layer) ===
   {
@@ -122,13 +147,14 @@ export default tseslint.config(
           selector: [
             "FunctionDeclaration:not(:has(CallExpression[callee.object.name='logger']))",
             "VariableDeclarator > ArrowFunctionExpression" +
-              ":not(:has(CallExpression[callee.object.name='logger']))",
+            ":not(:has(CallExpression[callee.object.name='logger']))",
           ].join(', '),
           message: "Utility functions must include a 'logger' call for traceability.",
         },
       ],
     },
   },
+
   // === EXEMPTIONS: tests/configs ===
   {
     files: ['**/*.test.ts', '**/*.spec.ts', '**/mocks/**', 'eslint.config.mjs'],
@@ -148,6 +174,9 @@ export default tseslint.config(
       '@typescript-eslint/member-ordering': 'error',
       'no-restricted-syntax': 'error',
       'no-console': 'off',
+      'jsdoc/require-jsdoc': 'error',
+      'jsdoc/require-description': 'error',
     },
   },
+
 );
