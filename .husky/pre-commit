@@ -68,14 +68,17 @@ docker run --rm \
 
 # ── 11. Trivy Container Scan ────────────────────────────────────
 echo ""
-echo "🛡️  [11/13] Scanning Docker image for vulnerabilities (Trivy)..."
+echo "🛡️  [11/13] Scanning Docker image for vulnerabilities + secrets (Trivy)..."
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$(pwd)/config/trivy:/trivy-config" \
   aquasec/trivy:latest \
   image \
   --exit-code 1 \
   --severity CRITICAL,HIGH \
   --ignore-unfixed \
+  --scanners vuln,secret \
+  --secret-config /trivy-config/secret.yaml \
   --vuln-type os,library \
   --skip-dirs 'root/.npm' \
   "$LOCAL_IMAGE" || exit 1
