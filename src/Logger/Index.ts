@@ -20,6 +20,12 @@ const FORMAT_MAP: Record<MessageFormat, LogFormat> = {
   emoji:   'words',
 };
 
+/**
+ * Derives the pino LogFormat from the user-facing message format and bot mode.
+ * @param messageFormat - Optional user-configured message format.
+ * @param listenForCommands - When true, forces phone format for bot output.
+ * @returns The resolved LogFormat to use for the logger instance.
+ */
 export function deriveLogFormat(
   messageFormat?: MessageFormat,
   listenForCommands?: boolean
@@ -33,6 +39,11 @@ let instance: ILogger | null = null;
 // Initialised eagerly so getLogBuffer() never needs a conditional
 let bufferInstance: LogBuffer = new LogBuffer(0);
 
+/**
+ * Initialises and returns the global logger instance.
+ * @param config - Optional log configuration (format, logDir).
+ * @returns The configured ILogger instance (stdout only or stdout + file).
+ */
 export function createLogger(config?: LogConfig): ILogger {
   const format: LogFormat = config?.format ?? 'words';
   bufferInstance = new LogBuffer(0); // buffer deprecated; kept for backward compat
@@ -52,11 +63,19 @@ export function createLogger(config?: LogConfig): ILogger {
   return instance;
 }
 
+/**
+ * Returns the active global logger, creating a default instance if needed.
+ * @returns The current ILogger singleton.
+ */
 export function getLogger(): ILogger {
   if (!instance) return createLogger();
   return instance;
 }
 
+/**
+ * Returns the global LogBuffer instance used by the bot's /logs command.
+ * @returns The current LogBuffer singleton.
+ */
 export function getLogBuffer(): LogBuffer {
   return bufferInstance;
 }

@@ -20,13 +20,25 @@ interface ReconciliationTxn {
   currency: string;
 }
 
+/** Creates idempotent balance-adjustment transactions in Actual Budget. */
 export class ReconciliationService {
   private api: typeof api;
 
+  /**
+   * Creates a ReconciliationService using the given Actual API instance.
+   * @param actualApi - The Actual Budget API module to use for queries and imports.
+   */
   constructor(actualApi: typeof api) {
     this.api = actualApi;
   }
 
+  /**
+   * Reconciles an Actual account to match the expected bank balance.
+   * @param accountId - UUID of the Actual account to reconcile.
+   * @param expectedBalance - The bank-reported balance in currency units.
+   * @param currency - Currency code for the adjustment note (default 'ILS').
+   * @returns Result indicating whether a transaction was created, skipped, or already existed.
+   */
   async reconcile(
     accountId: string, expectedBalance: number, currency: string = 'ILS'
   ): Promise<ReconciliationResult> {
@@ -44,6 +56,11 @@ export class ReconciliationService {
     }
   }
 
+  /**
+   * Queries Actual Budget for the current sum of all transactions in an account.
+   * @param accountId - UUID of the Actual account to query.
+   * @returns The current balance in cents as a number.
+   */
   private async getCurrentBalance(accountId: string): Promise<number> {
     return extractQueryData<number>(
       await this.api.runQuery(
@@ -55,6 +72,10 @@ export class ReconciliationService {
     );
   }
 
+  /**
+   * Imports a balance-adjustment transaction into Actual Budget.
+   * @param txn - The reconciliation transaction parameters including diff and account ID.
+   */
   private async createReconciliationTransaction(txn: ReconciliationTxn): Promise<void> {
     const today = formatDate(new Date());
     await this.api.importTransactions(txn.accountId, [{

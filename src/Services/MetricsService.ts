@@ -51,12 +51,13 @@ export interface ImportSummary {
   banks: BankMetrics[];
 }
 
+/** Tracks per-bank import performance and aggregates import-wide statistics. */
 export class MetricsService {
   private banks: Map<string, BankMetrics> = new Map();
   private importStartTime: number = 0;
 
   /**
-   * Mark the start of the import process
+   * Marks the start of the import process and clears previous bank metrics.
    */
   startImport(): void {
     this.importStartTime = Date.now();
@@ -64,7 +65,8 @@ export class MetricsService {
   }
 
   /**
-   * Start tracking a bank import
+   * Starts tracking metrics for a single bank import.
+   * @param bankName - The name of the bank being imported.
    */
   startBank(bankName: string): void {
     this.banks.set(bankName, {
@@ -78,7 +80,9 @@ export class MetricsService {
   }
 
   /**
-   * Record account transactions for a bank
+   * Records transaction counts for a specific account within a bank import.
+   * @param bankName - The bank this account belongs to.
+   * @param record - The account transaction record to append.
    */
   recordAccountTransactions(bankName: string, record: AccountTransactionsRecord): void {
     const metrics = this.banks.get(bankName);
@@ -88,7 +92,10 @@ export class MetricsService {
   }
 
   /**
-   * Record bank import success
+   * Records a successful bank import with transaction counts and duration.
+   * @param bankName - The bank that was successfully imported.
+   * @param transactionsImported - Number of new transactions added to Actual Budget.
+   * @param transactionsSkipped - Number of duplicate transactions that were skipped.
    */
   recordBankSuccess(
     bankName: string,
@@ -106,7 +113,9 @@ export class MetricsService {
   }
 
   /**
-   * Record bank import failure
+   * Records a failed bank import with the error that caused it.
+   * @param bankName - The bank whose import failed.
+   * @param error - The error that caused the failure.
    */
   recordBankFailure(bankName: string, error: Error): void {
     const metrics = this.banks.get(bankName);
@@ -119,7 +128,10 @@ export class MetricsService {
   }
 
   /**
-   * Record reconciliation result
+   * Records the reconciliation result for a bank import.
+   * @param bankName - The bank whose reconciliation result is being recorded.
+   * @param status - Whether a reconciliation transaction was created, skipped, or already exists.
+   * @param amount - Optional reconciliation adjustment amount in cents.
    */
   recordReconciliation(
     bankName: string,
@@ -134,7 +146,8 @@ export class MetricsService {
   }
 
   /**
-   * Get summary of all metrics
+   * Aggregates all bank metrics into an ImportSummary.
+   * @returns An ImportSummary with totals and per-bank breakdown.
    */
   getSummary(): ImportSummary {
     const banksArray = Array.from(this.banks.values());
@@ -159,7 +172,7 @@ export class MetricsService {
   }
 
   /**
-   * Print formatted summary to console
+   * Logs a formatted import summary including overall stats and per-bank performance.
    */
   printSummary(): void {
     const summary = this.getSummary();
@@ -171,21 +184,25 @@ export class MetricsService {
   }
 
   /**
-   * Get metrics for a specific bank
+   * Returns the BankMetrics for a specific bank, if it was tracked.
+   * @param bankName - The bank whose metrics to retrieve.
+   * @returns The BankMetrics for the bank, or undefined if not tracked.
    */
   getBankMetrics(bankName: string): BankMetrics | undefined {
     return this.banks.get(bankName);
   }
 
   /**
-   * Check if any banks failed
+   * Returns true if any bank import has a failure status.
+   * @returns True when at least one bank recorded a failure.
    */
   hasFailures(): boolean {
     return Array.from(this.banks.values()).some(b => b.status === 'failure');
   }
 
   /**
-   * Get error breakdown by type
+   * Returns a map of error message to count for all failed banks.
+   * @returns Record mapping each error string to the number of banks that produced it.
    */
   getErrorBreakdown(): Record<string, number> {
     const breakdown: Record<string, number> = {};
@@ -197,6 +214,11 @@ export class MetricsService {
     return breakdown;
   }
 
+  /**
+   * Logs overall import statistics (counts, rates, durations).
+   * @param summary - The aggregated ImportSummary to display.
+   * @param importDuration - Total wall-clock time of the import in milliseconds.
+   */
   private printOverallStats(summary: ImportSummary, importDuration: number): void {
     getLogger().info('📊 Import Summary\n');
     getLogger().info(`  Total banks: ${summary.totalBanks}`);
@@ -214,6 +236,10 @@ export class MetricsService {
     }
   }
 
+  /**
+   * Logs per-bank performance lines including status, duration, and reconciliation.
+   * @param banks - Array of BankMetrics to display.
+   */
   private printBankPerformance(banks: BankMetrics[]): void {
     getLogger().info('\n🏦 Bank Performance:\n');
     for (const bank of banks) {
@@ -222,6 +248,10 @@ export class MetricsService {
     }
   }
 
+  /**
+   * Logs a single summary line for one bank's import result.
+   * @param bank - The BankMetrics to format and log.
+   */
   private printBankLine(bank: BankMetrics): void {
     const icon = bank.status === 'success' ? '✅' : '❌';
     const dur = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : 'N/A';
@@ -231,6 +261,10 @@ export class MetricsService {
     getLogger().info(`  ${icon} ${bank.bankName}: ${dur}${detail}`);
   }
 
+  /**
+   * Logs the reconciliation status line beneath a bank's summary line.
+   * @param bank - The BankMetrics containing the reconciliation status to display.
+   */
   private printReconciliationLine(bank: BankMetrics): void {
     const reconIcon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
     const reconMessages: Record<string, string> = {

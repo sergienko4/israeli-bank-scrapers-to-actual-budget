@@ -10,18 +10,30 @@ import { getLogger } from '../Logger/Index.js';
 const TELEGRAM_API = 'https://api.telegram.org';
 const POLL_TIMEOUT = 30;
 
+/** Long-polls the Telegram Bot API for updates and dispatches them to a handler. */
 export class TelegramPoller {
   private offset = 0;
   private running = false;
   private startedAt = 0;
   private abortController: AbortController | null = null;
 
+  /**
+   * Creates a TelegramPoller for the given bot and chat.
+   * @param botToken - The Telegram Bot API token.
+   * @param chatId - The chat ID to filter updates from (security boundary).
+   * @param onMessage - Async callback invoked for each incoming message or callback query text.
+   */
   constructor(
     private botToken: string,
     private chatId: string,
     private onMessage: (text: string) => Promise<void>
   ) {}
 
+
+  /**
+   * Starts the long-poll loop, blocking until stop() is called.
+   * Clears any old pending messages before entering the loop.
+   */
   async start(): Promise<void> {
     this.running = true;
     this.startedAt = Math.floor(Date.now() / 1000);
@@ -38,11 +50,13 @@ export class TelegramPoller {
     }
   }
 
+  /** Stops the poll loop and aborts any in-flight HTTP request. */
   stop(): void {
     this.running = false;
     this.abortController?.abort();
   }
 
+  /** Executes one long-poll request and processes any returned updates. */
   private async poll(): Promise<void> {
     this.abortController = new AbortController();
     const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates` +
@@ -59,6 +73,10 @@ export class TelegramPoller {
     }
   }
 
+  /**
+   * Processes a batch of Telegram updates, advancing the offset and dispatching each one.
+   * @param data - The parsed TelegramApiResponse from a getUpdates call.
+   */
   private async applyUpdates(data: TelegramApiResponse): Promise<void> {
     if (!data.ok || !data.result?.length) return;
     for (const update of data.result) {
@@ -68,6 +86,10 @@ export class TelegramPoller {
     }
   }
 
+  /**
+   * Dispatches a plain message update to the onMessage handler if it passes all filters.
+   * @param message - The Telegram message object from the update, or undefined.
+   */
   private async processUpdate(
     message: { text?: string; chat: { id: number }; date: number } | undefined
   ): Promise<void> {
@@ -77,6 +99,10 @@ export class TelegramPoller {
     await this.onMessage(message.text);
   }
 
+  /**
+   * Answers and dispatches an inline keyboard callback query.
+   * @param query - The TelegramCallbackQuery from the update, or undefined.
+   */
   private async processCallbackQuery(query: TelegramCallbackQuery | undefined): Promise<void> {
     if (!query?.data) return;
     if (String(query.message?.chat.id) !== this.chatId) return;
@@ -84,6 +110,10 @@ export class TelegramPoller {
     await this.onMessage(query.data);
   }
 
+  /**
+   * Sends an answerCallbackQuery to remove the loading indicator from the inline button.
+   * @param queryId - The callback_query_id to acknowledge.
+   */
   private async answerCallbackQuery(queryId: string): Promise<void> {
     const url = `${TELEGRAM_API}/bot${this.botToken}/answerCallbackQuery`;
     await fetch(url, {
@@ -93,6 +123,11 @@ export class TelegramPoller {
     }).catch(() => { /* non-critical */ });
   }
 
+
+  /**
+   * Sets the offset to skip all messages that arrived before the bot started.
+   * Prevents replaying stale commands from a previous session.
+   */
   private async clearOldMessages(): Promise<void> {
     try {
       const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=-1`;
@@ -108,6 +143,11 @@ export class TelegramPoller {
     }
   }
 
+  /**
+   * Pauses execution for the given duration.
+   * @param ms - Duration in milliseconds to wait.
+   * @returns Promise that resolves after the delay.
+   */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }

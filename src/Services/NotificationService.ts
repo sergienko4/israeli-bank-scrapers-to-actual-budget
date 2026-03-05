@@ -13,9 +13,14 @@ import { TelegramNotifier } from './Notifications/TelegramNotifier.js';
 import { WebhookNotifier } from './Notifications/WebhookNotifier.js';
 import { getLogger } from '../Logger/Index.js';
 
+/** Orchestrates sending notifications to all configured channels (Telegram, webhook). */
 export class NotificationService {
   private notifiers: INotifier[] = [];
 
+  /**
+   * Creates a NotificationService, registering notifiers for each enabled channel.
+   * @param config - Optional notification configuration with channel-specific settings.
+   */
   constructor(config?: NotificationConfig) {
     if (!config?.enabled) return;
     if (config.telegram) {
@@ -28,18 +33,34 @@ export class NotificationService {
     }
   }
 
+  /**
+   * Sends an import summary notification to all registered channels.
+   * @param summary - The ImportSummary to broadcast.
+   */
   async sendSummary(summary: ImportSummary): Promise<void> {
     await this.notifyAll(n => n.sendSummary(summary));
   }
 
+  /**
+   * Sends an error notification to all registered channels.
+   * @param error - The error message string to broadcast.
+   */
   async sendError(error: string): Promise<void> {
     await this.notifyAll(n => n.sendError(error));
   }
 
+  /**
+   * Sends a plain text message to all registered channels.
+   * @param text - The text to broadcast.
+   */
   async sendMessage(text: string): Promise<void> {
     await this.notifyAll(n => n.sendMessage(text));
   }
 
+  /**
+   * Runs the given action on all registered notifiers in parallel.
+   * @param action - Async function to call on each INotifier; errors are caught and logged.
+   */
   private async notifyAll(action: (n: INotifier) => Promise<void>): Promise<void> {
     if (this.notifiers.length === 0) return;
     const results = await Promise.allSettled(this.notifiers.map(action));

@@ -10,6 +10,10 @@ export const REDACT_PATHS = [
   'headers.authorization', '*.password', '*.token',
 ];
 
+/**
+ * Returns the shared pino base options including log level and redact paths.
+ * @returns A pino LoggerOptions object with level and redact configuration.
+ */
 export function baseOptions(): pino.LoggerOptions {
   return {
     level: process.env['LOG_LEVEL'] ?? 'debug',

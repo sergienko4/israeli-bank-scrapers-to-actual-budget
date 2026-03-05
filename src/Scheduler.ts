@@ -33,6 +33,11 @@ let activePoller: TelegramPoller | null = null;
 
 // ─── Config helpers ───
 
+/**
+ * Reads a JSON file, decrypting it first if it is an EncryptedConfig.
+ * @param filePath - Absolute path to the JSON file to read.
+ * @returns Parsed object, or null if the file is absent or cannot be decrypted.
+ */
 function readJsonOrEncrypted(filePath: string): Record<string, unknown> | null {
   if (!existsSync(filePath)) return null;
   const raw = readFileSync(filePath, 'utf8');
@@ -44,6 +49,10 @@ function readJsonOrEncrypted(filePath: string): Record<string, unknown> | null {
     : null;
 }
 
+/**
+ * Loads and shallow-merges config.json with credentials.json at startup.
+ * @returns The merged ImporterConfig, or null if config.json is absent.
+ */
 function loadFullConfig(): ImporterConfig | null {
   try {
     const config = readJsonOrEncrypted('/app/config.json');
@@ -53,6 +62,10 @@ function loadFullConfig(): ImporterConfig | null {
   } catch { return null; }
 }
 
+/**
+ * Derives the LogConfig from the full config, applying format and logDir defaults.
+ * @returns LogConfig to pass to createLogger, or undefined if config cannot be loaded.
+ */
 function loadLogConfig(): LogConfig | undefined {
   const config = loadFullConfig();
   if (!config) return undefined;
@@ -66,6 +79,11 @@ function loadLogConfig(): LogConfig | undefined {
 
 // ─── Import execution ───
 
+/**
+ * Ensures only one import runs at a time, resuming the Telegram poller when done.
+ * @param importFn - Async function that performs the import and returns an exit code.
+ * @returns Promise resolving to the import exit code.
+ */
 function runLocked(importFn: () => Promise<number>): Promise<number> {
   if (activeImport) { logger.warn('⚠️  Import already running, skipping'); return activeImport; }
   activePoller?.stop();
@@ -76,14 +94,29 @@ function runLocked(importFn: () => Promise<number>): Promise<number> {
   return activeImport;
 }
 
+/**
+ * Runs a bank import with optional bank filter, guarded by the single-import lock.
+ * @param banks - Optional list of bank names to import; undefined imports all.
+ * @returns Promise resolving to the import process exit code.
+ */
 function runImportLocked(banks?: string[]): Promise<number> {
   const extraEnv: Record<string, string> = banks?.length ? { IMPORT_BANKS: banks.join(',') } : {};
   return runLocked(() => runImport(extraEnv));
 }
+
+/**
+ * Runs a dry-run import guarded by the single-import lock.
+ * @returns Promise resolving to the dry-run process exit code.
+ */
 function runPreviewLocked(): Promise<number> {
   return runLocked(() => runImport({ DRY_RUN: 'true' }));
 }
 
+/**
+ * Spawns the import child process and resolves with its exit code.
+ * @param extraEnv - Additional environment variables to inject into the child process.
+ * @returns Promise resolving to the child process exit code (0 = success).
+ */
 function runImport(extraEnv: Record<string, string> = {}): Promise<number> {
   return new Promise((resolve) => {
     const startTime = new Date();
@@ -98,6 +131,11 @@ function runImport(extraEnv: Record<string, string> = {}): Promise<number> {
   });
 }
 
+/**
+ * Logs the result of a completed import child process.
+ * @param code - Exit code from the child process (null if terminated by signal).
+ * @param startTime - The Date when the import started, used to compute duration.
+ */
 function logImportResult(code: number | null, startTime: Date): void {
   const duration = Math.round((Date.now() - startTime.getTime()) / 1000);
   const time = new Date().toISOString();
@@ -110,6 +148,10 @@ function logImportResult(code: number | null, startTime: Date): void {
 
 // ─── Telegram commands ───
 
+/**
+ * Logs how many bot commands will be registered including extra commands.
+ * @param extras - Additional commands beyond the built-in set.
+ */
 function logCommandCount(extras: Array<{ command: string; description: string }>): void {
   const cmdNames = extras.map(c => c.command).join(', /');
   logger.info(
@@ -118,6 +160,10 @@ function logCommandCount(extras: Array<{ command: string; description: string }>
   );
 }
 
+/**
+ * Lazily imports ConfigLoader and ConfigValidator and runs all validation checks.
+ * @returns Formatted validation report string for display in Telegram.
+ */
 async function runConfigValidation(): Promise<string> {
   // Use ConfigLoader.loadRaw() for correct deep-merge of config.json + credentials.json.
   // loadFullConfig() uses a shallow spread which loses nested fields like actual.init.serverURL.
@@ -135,17 +181,36 @@ async function runConfigValidation(): Promise<string> {
   return validator.formatReport(results);
 }
 
+/**
+ * Constructs a TelegramCommandHandler wired up to all scheduler callbacks.
+ * @param notifier - The TelegramNotifier used to send responses.
+ * @returns A configured TelegramCommandHandler instance.
+ */
 function buildCommandHandler(notifier: TelegramNotifier): TelegramCommandHandler {
   return new TelegramCommandHandler({
     runImport: runImportLocked, notifier, auditLog: new AuditLogService(),
     runValidate: runConfigValidation,
     runPreview: runPreviewLocked,
+    /**
+     * Returns the names of all configured banks from the live config.
+     * @returns Array of bank name strings from the current config.
+     */
     getBankNames: () => Object.keys(loadFullConfig()?.banks ?? {}),
+    /**
+     * Delegates scan menu display to the notifier.
+     * @param banks - Bank names to display as inline keyboard buttons.
+     * @returns Promise that resolves when the menu message is sent.
+     */
     sendScanMenu: (banks) => notifier.sendScanMenu(banks),
     logDir: logConfig?.logDir,
   });
 }
 
+/**
+ * Creates the TelegramNotifier, registers commands, and starts the TelegramPoller.
+ * @param telegram - Telegram bot configuration (token, chatId, etc.).
+ * @param config - Full importer config used to detect optional commands (e.g. watch).
+ */
 async function createHandlerAndPoller(
   telegram: TelegramConfig, config: ImporterConfig | null
 ): Promise<void> {
@@ -162,6 +227,10 @@ async function createHandlerAndPoller(
   });
 }
 
+/**
+ * Starts the Telegram command listener when listenForCommands is enabled in config.
+ * Errors are caught and logged so the scheduler continues in cron-only mode.
+ */
 async function startTelegramCommands(): Promise<void> {
   const config = loadFullConfig();
   const telegram = config?.notifications?.enabled ? config.notifications.telegram : null;
@@ -173,6 +242,11 @@ async function startTelegramCommands(): Promise<void> {
   }
 }
 
+/**
+ * Builds the list of extra bot commands beyond the built-in set based on config features.
+ * @param config - Full importer config used to detect enabled optional features.
+ * @returns Array of extra command+description objects to register with Telegram.
+ */
 function buildExtraCommands(
   config: ImporterConfig | null
 ): Array<{ command: string; description: string }> {
@@ -188,6 +262,11 @@ function buildExtraCommands(
 
 // ─── Scheduling ───
 
+/**
+ * Validates the cron schedule and logs the next scheduled run time.
+ * Exits the process with code 1 if the expression is invalid.
+ * @param schedule - Cron expression string to validate.
+ */
 function validateSchedule(schedule: string): void {
   try {
     const interval = CronExpressionParser.parse(schedule, { tz: process.env.TZ || 'UTC' });
@@ -202,10 +281,20 @@ function validateSchedule(schedule: string): void {
 // Max safe setTimeout value (2^31 - 1 ms ≈ 24.8 days) — prevents overflow to 1ms
 const MAX_TIMEOUT_MS = 2147483647;
 
+/**
+ * Pauses for the given duration, clamping to the max safe setTimeout value.
+ * @param ms - Desired sleep duration in milliseconds.
+ * @returns Promise that resolves after the (clamped) delay.
+ */
 function safeSleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, Math.min(ms, MAX_TIMEOUT_MS)));
 }
 
+/**
+ * Runs the cron scheduling loop, sleeping until the next scheduled time and triggering imports.
+ * @param schedule - Cron expression defining the import frequency.
+ * @returns Promise that never resolves (runs forever until the process exits).
+ */
 async function scheduleLoop(schedule: string): Promise<never> {
   while (true) {
     try {
@@ -224,6 +313,9 @@ async function scheduleLoop(schedule: string): Promise<never> {
   }
 }
 
+/**
+ * Scheduler entry point: starts Telegram commands and either runs once or enters cron loop.
+ */
 async function main(): Promise<void> {
   await startTelegramCommands();
   const schedule = process.env.SCHEDULE;

@@ -52,7 +52,14 @@ const messageCategories: MessageCategory[] = [
     suffix: '. Bank WAF blocked the request. Wait 1-2 hours and retry.' },
 ];
 
+/** Formats Error objects into human-readable notification strings. */
 export class ErrorFormatter implements IErrorFormatter {
+  /**
+   * Format an error into a user-friendly message string.
+   * @param error - The error to format.
+   * @param context - Optional context label appended in parentheses.
+   * @returns A formatted string with icon, label, and error detail.
+   */
   format(error: Error, context: string = ''): string {
     const ctx = context ? ` (${context})` : '';
     if (error.name === 'WafBlockError') {
@@ -66,6 +73,12 @@ export class ErrorFormatter implements IErrorFormatter {
     return this.categorizeByMessage(error, ctx);
   }
 
+  /**
+   * Classify an unknown error by keywords in its message.
+   * @param error - The error whose message will be inspected.
+   * @param ctx - Formatted context string to include in the output.
+   * @returns A categorized or generic error string.
+   */
   private categorizeByMessage(error: Error, ctx: string): string {
     const message = error.message || 'Unknown error';
     const match = messageCategories.find(c => c.keywords.some(k => message.includes(k)));

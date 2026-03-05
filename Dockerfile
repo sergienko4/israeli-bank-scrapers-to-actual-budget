@@ -33,11 +33,17 @@ COPY tsconfig.json ./
 # Update npm to latest version for security patches
 # Patch minimatch in npm's bundled packages: CVE-2026-27903/CVE-2026-27904 (DoS, HIGH)
 # npm bundles minimatch@10.2.2; fix is 10.2.3 — install globally and replace npm's copy
+# Patch tar in npm's bundled packages: GHSA-qffp-2rhf-9h96 (path traversal, HIGH)
+# npm bundles tar@7.5.9; fix is 7.5.10 — install globally and replace npm's copy
 RUN npm install -g npm@latest \
     && npm install -g minimatch@10.2.3 \
     && rm -rf /usr/local/lib/node_modules/npm/node_modules/minimatch \
     && cp -r /usr/local/lib/node_modules/minimatch \
-             /usr/local/lib/node_modules/npm/node_modules/minimatch
+             /usr/local/lib/node_modules/npm/node_modules/minimatch \
+    && npm install -g tar@latest \
+    && rm -rf /usr/local/lib/node_modules/npm/node_modules/tar \
+    && cp -r /usr/local/lib/node_modules/tar \
+             /usr/local/lib/node_modules/npm/node_modules/tar
 
 # Install ALL dependencies (including devDependencies for build)
 RUN npm install

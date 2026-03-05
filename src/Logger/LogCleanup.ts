@@ -7,6 +7,10 @@ import { join } from 'node:path';
 
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
+/**
+ * Removes log files older than 3 days from the log directory.
+ * @param logDir - Path to the directory containing log files to clean.
+ */
 export function cleanOldLogs(logDir: string): void {
   if (!existsSync(logDir)) return;
   const cutoff = new Date(Date.now() - THREE_DAYS_MS);

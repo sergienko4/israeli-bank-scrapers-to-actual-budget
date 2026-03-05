@@ -7,7 +7,11 @@
 // Using Intl.DateTimeFormat with explicit timezone avoids any server-TZ dependency.
 const IL_TIMEZONE = 'Asia/Jerusalem';
 
-/** Format a Date or ISO date string as YYYY-MM-DD in Jerusalem (Israel) local time */
+/**
+ * Format a Date or ISO date string as YYYY-MM-DD in Jerusalem (Israel) local time.
+ * @param date - A Date object or ISO date string to format.
+ * @returns A YYYY-MM-DD string in the Jerusalem timezone.
+ */
 // eslint-disable-next-line no-restricted-syntax -- pure date formatter, no logging needed
 export function formatDate(date: Date | string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: IL_TIMEZONE }).format(new Date(date));
@@ -16,7 +20,9 @@ export function formatDate(date: Date | string): string {
 /**
  * Filter transactions to only those whose date (Jerusalem time) is on or after cutoff.
  * Works with both Date objects and ISO/date strings.
- * @param cutoff YYYY-MM-DD string — any transaction before this date is dropped
+ * @param transactions - Array of objects with a `date` field to filter.
+ * @param cutoff - YYYY-MM-DD string — any transaction before this date is dropped.
+ * @returns Filtered array containing only transactions on or after the cutoff.
  */
 // eslint-disable-next-line no-restricted-syntax -- pure date filter, no logging needed
 export function filterByDateCutoff<T extends { date: Date | string }>(
