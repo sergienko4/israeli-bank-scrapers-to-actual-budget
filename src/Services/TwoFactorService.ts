@@ -3,7 +3,7 @@
  * Creates otpCodeRetriever callbacks for banks requiring SMS verification
  */
 
-import { TelegramNotifier } from './Notifications/TelegramNotifier.js';
+import type { TelegramNotifier } from './Notifications/TelegramNotifier.js';
 import { getLogger } from '../Logger/Index.js';
 
 export class TwoFactorService {

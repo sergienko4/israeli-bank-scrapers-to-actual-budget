@@ -4,9 +4,9 @@
  * Follows Single Responsibility Principle: Only handles configuration loading
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
-import {
+import { readFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import type {
   ImporterConfig, BankConfig, BankTarget,
   NotificationConfig, SpendingWatchRule, ProxyConfig
 } from '../Types/Index.js';
@@ -429,7 +429,7 @@ export class ConfigLoader implements IConfigLoader {
       throw new ConfigurationError(`Invalid email format for ${bankName}: "${config.email}"`);
     }
     const phone = config.phoneNumber?.replace(/[\s-]/g, '');
-    if (config.phoneNumber && !/^\+?\d{10,15}$/.test(phone!)) {
+    if (config.phoneNumber && phone && !/^\+?\d{10,15}$/.test(phone)) {
       throw new ConfigurationError(
         `Invalid phone number format for ${bankName}: "${config.phoneNumber}". ` +
         `Expected 10-15 digits.`

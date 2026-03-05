@@ -3,7 +3,7 @@
  * Zero external dependencies — uses Node.js built-in crypto module
  */
 
-import { randomBytes, pbkdf2Sync, createCipheriv, createDecipheriv } from 'crypto';
+import { randomBytes, pbkdf2Sync, createCipheriv, createDecipheriv } from 'node:crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;

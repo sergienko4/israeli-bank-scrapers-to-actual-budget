@@ -3,7 +3,7 @@
  * Used by both PinoTransports (stdout) and FileLogger (file) to keep
  * redact paths consistent across all log destinations.
  */
-import pino from 'pino';
+import type pino from 'pino';
 
 export const REDACT_PATHS = [
   'password', 'token', 'secret', 'auth', 'creditCard', 'cvv',

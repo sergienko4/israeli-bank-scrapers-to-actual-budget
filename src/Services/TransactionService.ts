@@ -4,10 +4,10 @@
  */
 
 import type api from '@actual-app/api';
-import { BankTransaction, TransactionRecord, ActualAccount } from '../Types/Index.js';
+import type { BankTransaction, TransactionRecord, ActualAccount } from '../Types/Index.js';
 import { formatDate, toCents, extractQueryData } from '../Utils/Index.js';
 import { getLogger } from '../Logger/Index.js';
-import { ICategoryResolver } from './ICategoryResolver.js';
+import type { ICategoryResolver } from './ICategoryResolver.js';
 
 export interface ImportResult {
   imported: number;
@@ -118,7 +118,7 @@ export class TransactionService {
 
   private buildImportedId(accountKey: string, txn: BankTransaction, parsed: TransactionRecord)
     : string {
-    const fallback = `${parsed.date}-${txn.chargedAmount || txn.originalAmount}`;
+    const fallback = `${parsed.date}-${txn.chargedAmount ?? txn.originalAmount}`;
     return `${accountKey}-${txn.identifier || fallback}`;
   }
 

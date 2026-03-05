@@ -5,8 +5,8 @@
  */
 
 import type api from '@actual-app/api';
-import { ResolvedCategory } from '../Types/Index.js';
-import { ICategoryResolver } from './ICategoryResolver.js';
+import type { ResolvedCategory } from '../Types/Index.js';
+import type { ICategoryResolver } from './ICategoryResolver.js';
 import { extractQueryData } from '../Utils/Index.js';
 import { getLogger } from '../Logger/Index.js';
 
