@@ -3,11 +3,6 @@
  * Follows Open/Closed Principle: Add new error types to the map without modifying format()
  */
 
-import {
-  TimeoutError, AuthenticationError, NetworkError,
-  TwoFactorAuthError, ShutdownError, BankScrapingError, ConfigurationError
-} from './ErrorTypes.js';
-
 export interface IErrorFormatter {
   format(error: Error, context?: string): string;
 }
@@ -15,25 +10,23 @@ export interface IErrorFormatter {
 // OCP: add new error types by adding entries — no changes to format()
 type ErrorFormatEntry = { icon: string; label: string; suffix?: string };
 
-// Constructor type for instanceof checks — requires function-type for polymorphic dispatch
-// eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-type ErrorClass = Function;
-
-const errorFormats: Array<{ type: ErrorClass; entry: ErrorFormatEntry }> = [
-  { type: TimeoutError,
+// Uses error.name instead of instanceof to avoid the Function type entirely.
+// All project error classes set this.name in their constructor.
+const errorFormats: Array<{ name: string; entry: ErrorFormatEntry }> = [
+  { name: 'TimeoutError',
     entry: { icon: '⏱️ ', label: 'Timeout Error',
       suffix: ". The bank's website may be slow or unresponsive." } },
-  { type: AuthenticationError,
+  { name: 'AuthenticationError',
     entry: { icon: '🔐', label: 'Authentication Error',
       suffix: '. Please verify your credentials.' } },
-  { type: NetworkError,
+  { name: 'NetworkError',
     entry: { icon: '🌐', label: 'Network Error',
       suffix: '. Check your internet connection.' } },
-  { type: TwoFactorAuthError,
+  { name: 'TwoFactorAuthError',
     entry: { icon: '📱', label: '2FA Error', suffix: '. Check your 2FA device or SMS.' } },
-  { type: ShutdownError,  entry: { icon: '🛑', label: 'Operation Cancelled' } },
-  { type: BankScrapingError, entry: { icon: '❌', label: 'Bank Scraping Error' } },
-  { type: ConfigurationError, entry: { icon: '⚙️ ', label: 'Configuration Error' } },
+  { name: 'ShutdownError',  entry: { icon: '🛑', label: 'Operation Cancelled' } },
+  { name: 'BankScrapingError', entry: { icon: '❌', label: 'Bank Scraping Error' } },
+  { name: 'ConfigurationError', entry: { icon: '⚙️ ', label: 'Configuration Error' } },
 ];
 
 // Keyword-based fallback categorization (OCP map)
@@ -65,7 +58,7 @@ export class ErrorFormatter implements IErrorFormatter {
     if (error.name === 'WafBlockError') {
       return `🛡️ WAF Blocked${ctx}: ${error.message}. Wait 1-2 hours and retry.`;
     }
-    const match = errorFormats.find(f => error instanceof f.type);
+    const match = errorFormats.find(f => error.name === f.name);
     if (match) {
       const suffix = match.entry.suffix || '';
       return `${match.entry.icon} ${match.entry.label}${ctx}: ${error.message}${suffix}`;

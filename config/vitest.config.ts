@@ -13,7 +13,6 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: [
         'src/Index.ts',
-        'src/Scheduler.ts',
       ],
       thresholds: {
         lines: 90,

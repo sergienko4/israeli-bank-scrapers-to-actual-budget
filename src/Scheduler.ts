@@ -38,7 +38,7 @@ let activePoller: TelegramPoller | null = null;
  * @param filePath - Absolute path to the JSON file to read.
  * @returns Parsed object, or null if the file is absent or cannot be decrypted.
  */
-function readJsonOrEncrypted(filePath: string): Record<string, unknown> | null {
+export function readJsonOrEncrypted(filePath: string): Record<string, unknown> | null {
   if (!existsSync(filePath)) return null;
   const raw = readFileSync(filePath, 'utf8');
   const parsed: unknown = JSON.parse(raw);
@@ -53,7 +53,7 @@ function readJsonOrEncrypted(filePath: string): Record<string, unknown> | null {
  * Loads and shallow-merges config.json with credentials.json at startup.
  * @returns The merged ImporterConfig, or null if config.json is absent.
  */
-function loadFullConfig(): ImporterConfig | null {
+export function loadFullConfig(): ImporterConfig | null {
   try {
     const config = readJsonOrEncrypted('/app/config.json');
     if (!config) return null;
@@ -66,7 +66,7 @@ function loadFullConfig(): ImporterConfig | null {
  * Derives the LogConfig from the full config, applying format and logDir defaults.
  * @returns LogConfig to pass to createLogger, or undefined if config cannot be loaded.
  */
-function loadLogConfig(): LogConfig | undefined {
+export function loadLogConfig(): LogConfig | undefined {
   const config = loadFullConfig();
   if (!config) return undefined;
   const tg = config.notifications?.telegram;
@@ -84,7 +84,7 @@ function loadLogConfig(): LogConfig | undefined {
  * @param importFn - Async function that performs the import and returns an exit code.
  * @returns Promise resolving to the import exit code.
  */
-function runLocked(importFn: () => Promise<number>): Promise<number> {
+export function runLocked(importFn: () => Promise<number>): Promise<number> {
   if (activeImport) { logger.warn('⚠️  Import already running, skipping'); return activeImport; }
   activePoller?.stop();
   activeImport = importFn().finally(() => {
@@ -99,7 +99,7 @@ function runLocked(importFn: () => Promise<number>): Promise<number> {
  * @param banks - Optional list of bank names to import; undefined imports all.
  * @returns Promise resolving to the import process exit code.
  */
-function runImportLocked(banks?: string[]): Promise<number> {
+export function runImportLocked(banks?: string[]): Promise<number> {
   const extraEnv: Record<string, string> = banks?.length ? { IMPORT_BANKS: banks.join(',') } : {};
   return runLocked(() => runImport(extraEnv));
 }
@@ -108,7 +108,7 @@ function runImportLocked(banks?: string[]): Promise<number> {
  * Runs a dry-run import guarded by the single-import lock.
  * @returns Promise resolving to the dry-run process exit code.
  */
-function runPreviewLocked(): Promise<number> {
+export function runPreviewLocked(): Promise<number> {
   return runLocked(() => runImport({ DRY_RUN: 'true' }));
 }
 
@@ -136,7 +136,7 @@ function runImport(extraEnv: Record<string, string> = {}): Promise<number> {
  * @param code - Exit code from the child process (null if terminated by signal).
  * @param startTime - The Date when the import started, used to compute duration.
  */
-function logImportResult(code: number | null, startTime: Date): void {
+export function logImportResult(code: number | null, startTime: Date): void {
   const duration = Math.round((Date.now() - startTime.getTime()) / 1000);
   const time = new Date().toISOString();
   if (code === 0) {
@@ -152,7 +152,7 @@ function logImportResult(code: number | null, startTime: Date): void {
  * Logs how many bot commands will be registered including extra commands.
  * @param extras - Additional commands beyond the built-in set.
  */
-function logCommandCount(extras: Array<{ command: string; description: string }>): void {
+export function logCommandCount(extras: Array<{ command: string; description: string }>): void {
   const cmdNames = extras.map(c => c.command).join(', /');
   logger.info(
     `📋 Registering ${4 + extras.length} bot commands` +
@@ -186,7 +186,7 @@ async function runConfigValidation(): Promise<string> {
  * @param notifier - The TelegramNotifier used to send responses.
  * @returns A configured TelegramCommandHandler instance.
  */
-function buildCommandHandler(notifier: TelegramNotifier): TelegramCommandHandler {
+export function buildCommandHandler(notifier: TelegramNotifier): TelegramCommandHandler {
   return new TelegramCommandHandler({
     runImport: runImportLocked, notifier, auditLog: new AuditLogService(),
     runValidate: runConfigValidation,
@@ -247,7 +247,7 @@ async function startTelegramCommands(): Promise<void> {
  * @param config - Full importer config used to detect enabled optional features.
  * @returns Array of extra command+description objects to register with Telegram.
  */
-function buildExtraCommands(
+export function buildExtraCommands(
   config: ImporterConfig | null
 ): Array<{ command: string; description: string }> {
   const extras: Array<{ command: string; description: string }> = [
@@ -286,7 +286,7 @@ const MAX_TIMEOUT_MS = 2147483647;
  * @param ms - Desired sleep duration in milliseconds.
  * @returns Promise that resolves after the (clamped) delay.
  */
-function safeSleep(ms: number): Promise<void> {
+export function safeSleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, Math.min(ms, MAX_TIMEOUT_MS)));
 }
 
@@ -329,7 +329,10 @@ async function main(): Promise<void> {
   await scheduleLoop(schedule);
 }
 
-main().catch(err => {
-  logger.error(`❌ Fatal error: ${errorMessage(err)}`);
-  process.exit(1);
-});
+// Run only when executed directly (not when imported by tests)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(err => {
+    logger.error(`❌ Fatal error: ${errorMessage(err)}`);
+    process.exit(1);
+  });
+}

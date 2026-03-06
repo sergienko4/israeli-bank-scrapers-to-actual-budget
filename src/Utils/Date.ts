@@ -1,6 +1,7 @@
 /**
  * Date formatting utilities
  */
+import { logger } from './UtilLogger.js';
 
 // Israel is the only supported timezone — all bank transactions are in Jerusalem local time.
 // Scrapers produce UTC ISO strings (e.g. "2026-02-14T22:00:00.000Z" = Feb 15 midnight Jerusalem).
@@ -12,8 +13,8 @@ const IL_TIMEZONE = 'Asia/Jerusalem';
  * @param date - A Date object or ISO date string to format.
  * @returns A YYYY-MM-DD string in the Jerusalem timezone.
  */
-// eslint-disable-next-line no-restricted-syntax -- pure date formatter, no logging needed
 export function formatDate(date: Date | string): string {
+  logger.debug('formatDate');
   return new Intl.DateTimeFormat('en-CA', { timeZone: IL_TIMEZONE }).format(new Date(date));
 }
 
@@ -24,9 +25,9 @@ export function formatDate(date: Date | string): string {
  * @param cutoff - YYYY-MM-DD string — any transaction before this date is dropped.
  * @returns Filtered array containing only transactions on or after the cutoff.
  */
-// eslint-disable-next-line no-restricted-syntax -- pure date filter, no logging needed
 export function filterByDateCutoff<T extends { date: Date | string }>(
   transactions: T[], cutoff: string
 ): T[] {
+  logger.debug('filterByDateCutoff');
   return transactions.filter(txn => formatDate(txn.date) >= cutoff);
 }
