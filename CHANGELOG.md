@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.32.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.31.0...v1.32.0) (2026-03-06)
+
+
+### Added
+
+* strict ESLint — no-warning-comments + mandatory logger in Utils ([#205](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/205)) ([d23f73c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d23f73c0867cf649ebc3d8160de9430aad97251e))
+
 ## [1.31.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.30.0...v1.31.0) (2026-03-05)
 
 
