@@ -13,20 +13,6 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: [
         'src/Index.ts',
-        'src/Scheduler.ts',
-        // Orchestration classes extracted from Index.ts — covered by E2E tests, not unit tests
-        'src/Scraper/BankScraper.ts',
-        'src/Services/AccountImporter.ts',
-        // Validation helpers extracted from ConfigLoader — tested indirectly via ConfigLoader tests
-        'src/Config/ConfigLoaderValidator.ts',
-        // Individual error class files — trivial constructors, tested via ErrorFormatter tests
-        'src/Errors/TimeoutError.ts',
-        'src/Errors/AuthenticationError.ts',
-        'src/Errors/NetworkError.ts',
-        'src/Errors/TwoFactorAuthError.ts',
-        'src/Errors/ShutdownError.ts',
-        'src/Errors/BankScrapingError.ts',
-        'src/Errors/ConfigurationError.ts',
       ],
       thresholds: {
         lines: 90,
