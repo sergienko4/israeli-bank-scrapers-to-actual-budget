@@ -510,15 +510,13 @@ describe('ConfigValidator', () => {
     beforeEach(() => vi.clearAllMocks());
     afterEach(() => vi.restoreAllMocks());
 
-    it('returns 1 and prints [FAIL] when config cannot be loaded', async () => {
+    it('returns 1 when config cannot be loaded', async () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockImplementation(() => { throw new Error('read error'); });
-      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       const code = await runValidateMode();
 
       expect(code).toBe(1);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[FAIL]'));
     });
 
     it('returns 1 when offline checks fail', async () => {

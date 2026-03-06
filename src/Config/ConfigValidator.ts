@@ -3,6 +3,8 @@
  * Returns ValidationResult[] instead of throwing, so all issues surface at once.
  */
 
+import { getLogger } from '../Logger/Index.js';
+
 import type { ImporterConfig, NotificationConfig, BankConfig, BankTarget } from '../Types/Index.js';
 import { ConfigLoader } from './ConfigLoader.js';
 import { errorMessage } from '../Utils/Index.js';
@@ -450,13 +452,11 @@ export async function runValidateMode(): Promise<number> {
   try {
     config = loader.loadRaw();
   } catch (e) {
-    // eslint-disable-next-line no-console -- validation CLI reports to stdout, not logger
-    console.log(`[FAIL] Cannot load config: ${errorMessage(e)}`);
+    getLogger().info(`[FAIL] Cannot load config: ${errorMessage(e)}`);
     return 1;
   }
   const validator = new ConfigValidator();
   const results = await validator.validateAll(config);
-  // eslint-disable-next-line no-console -- validation CLI reports to stdout, not logger
-  console.log(validator.formatReport(results));
+  getLogger().info(validator.formatReport(results));
   return results.some(r => r.status === 'fail') ? 1 : 0;
 }

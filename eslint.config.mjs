@@ -23,6 +23,25 @@ export default tseslint.config(
       'jsdoc': jsdoc,
     },
     rules: {
+      // ── Logging & Security ───────────────────────────────────────────────
+      'no-console': 'error',
+      'no-warning-comments': [
+        'error',
+        {
+          terms: [
+            'todo',
+            'fixme',
+            'istanbul ignore',
+            'c8 ignore',
+            'v8 ignore',
+            '@ts-ignore',
+            '@ts-nocheck',
+            '@ts-expect-error',
+            'eslint-disable'
+          ],
+          location: 'anywhere'
+        }
+      ],
       // === THE "ONE PER FILE" & PASCAL_CASE NAMING ===
       "max-classes-per-file": ["error", 1],
       'check-file/filename-naming-convention': [
@@ -115,7 +134,6 @@ export default tseslint.config(
       }],
 
       // === LOGGING & SECURITY ===
-      'no-console': 'error',
       'no-restricted-syntax': [
         'error',
         {
@@ -151,8 +169,44 @@ export default tseslint.config(
           ].join(', '),
           message: "Utility functions must include a 'logger' call for traceability.",
         },
+        // Block: /* istanbul ignore next */
+        {
+          selector: "Program > Block:matches([value*='istanbul ignore'], [value*='c8 ignore'])",
+          message: "🚫 COVERAGE SKIP: Write a test instead of ignoring coverage.",
+        },
+        // Block: // eslint-disable-next-line
+        {
+          selector: "Line:matches([value*='eslint-disable'])",
+          message: "🚫 LINT SKIP: Do not disable ESLint rules. Fix the underlying issue.",
+        },
+        // Block: ! (Non-null assertion) - The "Code Skip"
+        {
+          selector: "TSNonNullExpression",
+          message: "🚫 TYPE SKIP: Do not use non-null assertions (!). Use optional chaining (?.) or a proper null check.",
+        },
+        // ── Your existing security selectors ────────────────────────────────
+        {
+          selector: "CallExpression[callee.object.name='logger'] Property[key.name=/password|token|secret|auth|creditCard/i]",
+          message: 'SECURITY: Do not log sensitive data keys.',
+        },
+        {
+          selector: "ThrowStatement > NewExpression[callee.name='Error']",
+          message: "Do not use 'throw new Error()'. Use a custom Error class.",
+        },
+        {
+          selector: "CallExpression[callee.property.name='isStuckOnLoginPage']",
+          message: "🚫 FORBIDDEN METHOD: Usage of 'isStuckOnLoginPage' is globally banned.",
+        },
+        {
+          // Targets: any function call that has another function call as an argument
+          selector: "CallExpression > .arguments[type='CallExpression']",
+          message: "🚫 FORBIDDEN NESTED CALL: Do not pass a function call as an argument. Assign the result to a descriptive variable first for better readability and debugging.",
+        },
+        'ForInStatement',
+        'LabeledStatement',
+        'WithStatement',
       ],
-    },
+    }
   },
 
   // === EXEMPTIONS: tests/configs ===

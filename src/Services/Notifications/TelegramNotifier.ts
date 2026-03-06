@@ -1,4 +1,3 @@
-/* eslint-disable max-lines */
 /**
  * Telegram notification channel using native fetch() (Node.js 22+)
  * Zero external dependencies - uses Telegram Bot API directly
@@ -14,9 +13,10 @@ import type {
   TelegramConfig, MessageFormat, ShowTransactions, TelegramApiResponse
 } from '../../Types/Index.js';
 import type {
-  ImportSummary, BankMetrics, AccountMetrics, TransactionRecord
+  ImportSummary
 } from '../MetricsService.js';
 import type { INotifier } from './INotifier.js';
+import { formatSummaryMessage, escapeHtml } from './TelegramFormatter.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const MAX_MESSAGE_LENGTH = 4096;
@@ -66,7 +66,8 @@ export class TelegramNotifier implements INotifier {
    * @param summary - The ImportSummary to format and send.
    */
   async sendSummary(summary: ImportSummary): Promise<void> {
-    await this.send(this.formatSummary(summary));
+    const opts = { showTransactions: this.showTransactions, maxTransactions: this.maxTransactions };
+    await this.send(formatSummaryMessage(summary, this.format, opts));
   }
 
   /**
@@ -82,7 +83,7 @@ export class TelegramNotifier implements INotifier {
    * @param error - The error message string to include.
    */
   async sendError(error: string): Promise<void> {
-    await this.send(['🚨 <b>Import Failed</b>', '', this.escapeHtml(error)].join('\n'));
+    await this.send(['🚨 <b>Import Failed</b>', '', escapeHtml(error)].join('\n'));
   }
 
   /**
@@ -107,8 +108,6 @@ export class TelegramNotifier implements INotifier {
       }),
     });
   }
-
-  // ─── 2FA reply polling ───
 
   /**
    * Sends a prompt and polls for the next non-command reply from the chat.
@@ -136,8 +135,6 @@ export class TelegramNotifier implements INotifier {
     }
     throw new Error('2FA timeout: no reply received');
   }
-
-  // ─── Bot command registration ───
 
   /**
    * Registers the bot's command list with Telegram via setMyCommands.
@@ -231,8 +228,6 @@ export class TelegramNotifier implements INotifier {
     }
   }
 
-  // ─── Send with truncation ───
-
   /**
    * Truncates a message to Telegram's 4096-character limit, closing open HTML tags.
    * @param text - The full message text that may exceed the limit.
@@ -288,330 +283,5 @@ export class TelegramNotifier implements INotifier {
       const body = await response.text();
       throw new Error(`Telegram API error ${response.status}: ${body}`);
     }
-  }
-
-  // ─── Format dispatch ───
-
-  /**
-   * Dispatches to the correct format method based on the configured message format.
-   * @param summary - The ImportSummary to format.
-   * @returns Formatted HTML message string.
-   */
-  private formatSummary(summary: ImportSummary): string {
-    const formatters: Record<MessageFormat, (s: ImportSummary) => string> = {
-      /**
-       * Formats as compact style (A).
-       * @param s - The ImportSummary to format.
-       * @returns HTML-formatted compact string.
-       */
-      compact: (s) => this.formatCompact(s),
-      /**
-       * Formats as ledger style (B).
-       * @param s - The ImportSummary to format.
-       * @returns HTML-formatted ledger string.
-       */
-      ledger: (s) => this.formatLedger(s),
-      /**
-       * Formats as emoji style (C).
-       * @param s - The ImportSummary to format.
-       * @returns HTML-formatted emoji string.
-       */
-      emoji: (s) => this.formatEmoji(s),
-      /**
-       * Formats as default summary style (D).
-       * @param s - The ImportSummary to format.
-       * @returns HTML-formatted summary string.
-       */
-      summary: (s) => this.formatDefault(s),
-    };
-    return (formatters[this.format] ?? formatters.summary)(summary);
-  }
-
-  // ─── Shared format helpers ───
-
-  /**
-   * Builds the bold header line with success/warning icon for the import summary.
-   * @param summary - The ImportSummary used to choose the icon.
-   * @returns HTML header string.
-   */
-  private buildHeader(summary: ImportSummary): string {
-    return `${summary.failedBanks === 0 ? '✅' : '⚠️'} <b>Import Summary</b>`;
-  }
-
-  /**
-   * Returns a status icon for a bank based on its import result.
-   * @param bank - The BankMetrics to check.
-   * @returns '✅' for success or '❌' for failure.
-   */
-  private bankIcon(bank: BankMetrics): string {
-    return bank.status === 'success' ? '✅' : '❌';
-  }
-
-  /**
-   * Appends a bank-level footer line and error message when no accounts were reported.
-   * @param lines - Mutable array of message lines to append to.
-   * @param bank - The BankMetrics whose footer to build.
-   */
-  private appendBankFooter(lines: string[], bank: BankMetrics): void {
-    if (!bank.accounts?.length) {
-      lines.push('');
-      lines.push(`${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b>`);
-    }
-    if (bank.error) lines.push(`❌ ${this.escapeHtml(bank.error)}`);
-  }
-
-  // ─── Format D: Summary (default) ───
-
-  /**
-   * Formats the import summary in the default "summary" style.
-   * @param summary - The ImportSummary to format.
-   * @returns HTML-formatted summary string.
-   */
-  private formatDefault(summary: ImportSummary): string {
-    const dur = (summary.totalDuration / 1000).toFixed(1);
-    const lines: string[] = [
-      this.buildHeader(summary), '',
-      `🏦 Banks: ${summary.successfulBanks}/${summary.totalBanks} ` +
-        `(${summary.successRate.toFixed(0)}%)`,
-      `📥 Transactions: ${summary.totalTransactions} imported`,
-      `🔄 Duplicates: ${summary.totalDuplicates} skipped`,
-      `⏱ Duration: ${dur}s`,
-    ];
-    if (summary.banks.length > 0) {
-      lines.push('');
-      summary.banks.forEach(b => this.appendDefaultBank(lines, b));
-    }
-    return lines.join('\n');
-  }
-
-  /**
-   * Appends a single bank line to the default summary format output.
-   * @param lines - Mutable array of message lines to append to.
-   * @param bank - The BankMetrics to format.
-   */
-  private appendDefaultBank(lines: string[], bank: BankMetrics): void {
-    const d = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : '';
-    const name = this.escapeHtml(bank.bankName);
-    lines.push(`${this.bankIcon(bank)} ${name}: ${bank.transactionsImported} txns ${d}`);
-    this.appendReconciliation(lines, bank);
-    if (bank.error) lines.push(`   ❌ ${this.escapeHtml(bank.error)}`);
-  }
-
-  // ─── Format A: Compact ───
-
-  /**
-   * Formats the import summary in the compact "A" style with per-transaction lines.
-   * @param summary - The ImportSummary to format.
-   * @returns HTML-formatted compact message string.
-   */
-  private formatCompact(summary: ImportSummary): string {
-    const dur = (summary.totalDuration / 1000).toFixed(1);
-    const lines: string[] = [
-      this.buildHeader(summary),
-      `${summary.successfulBanks}/${summary.totalBanks} banks | ` +
-        `${summary.totalTransactions} txns | ${dur}s`,
-    ];
-    for (const bank of summary.banks) {
-      for (const account of bank.accounts || []) this.appendCompactAccount(lines, bank, account);
-      this.appendBankFooter(lines, bank);
-    }
-    return lines.join('\n');
-  }
-
-  /**
-   * Appends compact-format transaction lines for a single account.
-   * @param lines - Mutable array of message lines to append to.
-   * @param bank - The bank this account belongs to.
-   * @param account - The account whose transactions to format.
-   */
-  private appendCompactAccount(
-    lines: string[], bank: BankMetrics, account: AccountMetrics
-  ): void {
-    lines.push('');
-    lines.push(
-      `${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b>` +
-      ` · ${this.escapeHtml(account.accountName ?? account.accountNumber)}`
-    );
-    for (const txn of this.getTransactions(account)) {
-      lines.push(`${this.fmtDate(txn.date)}  ${this.escapeHtml(txn.description)}`);
-      lines.push(`       <b>${this.fmtAmount(txn.amount)}</b>`);
-    }
-    this.appendBalance(lines, account, bank);
-  }
-
-  // ─── Format B: Ledger ───
-
-  /**
-   * Formats the import summary in the ledger "B" style with monospace table layout.
-   * @param summary - The ImportSummary to format.
-   * @returns HTML-formatted ledger message string.
-   */
-  private formatLedger(summary: ImportSummary): string {
-    const dur = (summary.totalDuration / 1000).toFixed(1);
-    const lines: string[] = [
-      this.buildHeader(summary),
-      `${summary.totalTransactions} transactions · ${dur}s`,
-    ];
-    for (const bank of summary.banks) {
-      for (const account of bank.accounts || []) this.appendLedgerAccount(lines, bank, account);
-      this.appendBankFooter(lines, bank);
-    }
-    return lines.join('\n');
-  }
-
-  /**
-   * Appends ledger-format transaction lines for a single account.
-   * @param lines - Mutable array of message lines to append to.
-   * @param bank - The bank this account belongs to.
-   * @param account - The account whose transactions to format.
-   */
-  private appendLedgerAccount(
-    lines: string[], bank: BankMetrics, account: AccountMetrics
-  ): void {
-    lines.push('');
-    lines.push(
-      `${this.bankIcon(bank)} <b>${this.escapeHtml(bank.bankName)}</b>` +
-      ` · ${this.escapeHtml(account.accountName ?? account.accountNumber)}`
-    );
-    const txns = this.getTransactions(account);
-    if (txns.length > 0) this.appendLedgerTransactions(lines, txns);
-    this.appendBalance(lines, account, bank);
-  }
-
-  /**
-   * Appends monospace-formatted transaction rows inside a &lt;code&gt; block.
-   * @param lines - Mutable array of message lines to append to.
-   * @param txns - Transactions to render in table format.
-   */
-  private appendLedgerTransactions(lines: string[], txns: TransactionRecord[]): void {
-    lines.push('<code>');
-    for (const txn of txns) {
-      const raw = txn.description.length > 18
-        ? txn.description.slice(0, 18) + '..' : txn.description;
-      const desc = this.escapeHtml(raw);
-      lines.push(`${this.fmtDate(txn.date)} ${desc}`);
-      lines.push(`${''.padStart(6)}${this.fmtAmount(txn.amount).padStart(9)}`);
-    }
-    lines.push('</code>');
-  }
-
-  // ─── Format C: Emoji ───
-
-  /**
-   * Formats the import summary in the emoji "C" style with directional icons per transaction.
-   * @param summary - The ImportSummary to format.
-   * @returns HTML-formatted emoji message string.
-   */
-  private formatEmoji(summary: ImportSummary): string {
-    const dur = (summary.totalDuration / 1000).toFixed(1);
-    const dup = summary.totalDuplicates > 0 ? ` · ${summary.totalDuplicates} dup` : '';
-    const lines: string[] = [
-      this.buildHeader(summary), '',
-      `📊 ${summary.successfulBanks}/${summary.totalBanks} banks · ` +
-        `${summary.totalTransactions} txns${dup} · ${dur}s`,
-    ];
-    for (const bank of summary.banks) {
-      for (const account of bank.accounts || []) this.appendEmojiAccount(lines, bank, account);
-      this.appendBankFooter(lines, bank);
-    }
-    return lines.join('\n');
-  }
-
-  /**
-   * Appends emoji-format transaction lines for a single account.
-   * @param lines - Mutable array of message lines to append to.
-   * @param bank - The bank this account belongs to.
-   * @param account - The account whose transactions to format.
-   */
-  private appendEmojiAccount(
-    lines: string[], bank: BankMetrics, account: AccountMetrics
-  ): void {
-    lines.push('');
-    lines.push(
-      `💳 <b>${this.escapeHtml(bank.bankName)}</b>` +
-      ` · ${this.escapeHtml(account.accountName ?? account.accountNumber)}`
-    );
-    for (const txn of this.getTransactions(account)) {
-      const dir = txn.amount >= 0 ? '📥' : '📤';
-      lines.push(
-        `${dir} <b>${this.fmtAmount(txn.amount)}</b>  ${this.escapeHtml(txn.description)}`
-      );
-    }
-    if (account.balance !== undefined) {
-      lines.push(`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`);
-    }
-    this.appendReconciliation(lines, bank);
-  }
-
-  // ─── Shared helpers ───
-
-  /**
-   * Appends the account balance and reconciliation status lines.
-   * @param lines - Mutable array of message lines to append to.
-   * @param account - The account whose balance to display.
-   * @param bank - The bank whose reconciliation status to display.
-   */
-  private appendBalance(lines: string[], account: AccountMetrics, bank: BankMetrics): void {
-    if (account.balance !== undefined) {
-      lines.push(`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`);
-    }
-    this.appendReconciliation(lines, bank);
-  }
-
-  /**
-   * Appends a reconciliation status line when one exists for the bank.
-   * @param lines - Mutable array of message lines to append to.
-   * @param bank - The bank whose reconciliation status to check.
-   */
-  private appendReconciliation(lines: string[], bank: BankMetrics): void {
-    if (bank.reconciliationStatus === 'created' && bank.reconciliationAmount !== undefined) {
-      const sign = bank.reconciliationAmount > 0 ? '+' : '';
-      lines.push(`🔄 Reconciled: ${sign}${(bank.reconciliationAmount / 100).toFixed(2)} ILS`);
-    } else if (bank.reconciliationStatus === 'skipped') {
-      lines.push(`✅ Balance matched`);
-    } else if (bank.reconciliationStatus === 'already-reconciled') {
-      lines.push(`✅ Already reconciled`);
-    }
-  }
-
-  /**
-   * Returns the transactions to display for an account, filtered by showTransactions setting.
-   * @param account - The account whose transactions to retrieve.
-   * @returns Sliced array of TransactionRecord objects up to maxTransactions.
-   */
-  private getTransactions(account: AccountMetrics): TransactionRecord[] {
-    if (this.showTransactions === 'none') return [];
-    const txns = this.showTransactions === 'all'
-      ? [...account.newTransactions, ...account.existingTransactions]
-      : account.newTransactions;
-    return txns.slice(0, this.maxTransactions);
-  }
-
-  /**
-   * Formats a cent amount as a signed decimal string (e.g. "+12.34" or "-5.67").
-   * @param cents - The amount in cents to format.
-   * @returns Signed decimal string with 2 decimal places.
-   */
-  private fmtAmount(cents: number): string {
-    return `${cents >= 0 ? '+' : ''}${(cents / 100).toFixed(2)}`;
-  }
-
-  /**
-   * Formats a YYYY-MM-DD date string to DD/MM for compact display.
-   * @param date - YYYY-MM-DD formatted date string.
-   * @returns Two-part date string like "15/03".
-   */
-  private fmtDate(date: string): string {
-    const parts = date.split('-');
-    return `${parts[2]}/${parts[1]}`;
-  }
-
-  /**
-   * Escapes HTML special characters to prevent Telegram parse errors.
-   * @param text - Raw text that may contain &, <, or > characters.
-   * @returns HTML-safe string with special characters escaped.
-   */
-  private escapeHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 }
