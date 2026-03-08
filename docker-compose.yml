@@ -32,11 +32,11 @@ services:
     cap_drop:
       - ALL                # Drop all capabilities first
     cap_add:
-      - SYS_ADMIN          # Required for Chromium sandboxing
+      - SYS_ADMIN          # Required for Camoufox (Firefox) browser sandboxing
     security_opt:
       - no-new-privileges:true
     tmpfs:
-      - /dev/shm:size=256m       # Chromium shared memory
+      - /dev/shm:size=256m       # Browser shared memory
     deploy:
       resources:
         limits:
@@ -56,7 +56,7 @@ services:
       # - ./credentials.json:/app/credentials.json:ro  # Secrets (optional, see README)
       - importer-data:/app/data             # Actual Budget sync data
       - importer-cache:/app/cache           # App cache
-      - importer-chrome:/app/chrome-data    # Browser session (2FA persistence)
+      # - importer-chrome:/app/chrome-data  # Legacy (unused with Camoufox v7.9.0+)
     healthcheck:
       test: ["CMD", "ps", "aux"]
       interval: 5m
@@ -69,4 +69,4 @@ volumes:
   actual-data:
   importer-data:
   importer-cache:
-  importer-chrome:
+  # importer-chrome:  # Legacy (unused with Camoufox v7.9.0+)

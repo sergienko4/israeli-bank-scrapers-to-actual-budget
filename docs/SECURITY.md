@@ -60,7 +60,7 @@ DISCOUNT_NUM=your_num
 
 ### Required Capabilities
 
-The importer requires `SYS_ADMIN` capability for Chromium browser sandboxing:
+The importer requires `SYS_ADMIN` capability for Camoufox (Firefox) browser sandboxing:
 
 ```yaml
 cap_add:
@@ -69,7 +69,7 @@ cap_add:
 
 **Why is this needed?**
 
-- Chromium requires kernel namespaces for browser sandboxing
+- Camoufox (Firefox) requires kernel namespaces for browser sandboxing
 - This is standard for headless browser automation
 - Without it, the browser cannot launch
 
@@ -127,7 +127,7 @@ The importer uses these volumes:
 | `config.json` | Bank credentials | 🔴 **HIGH** |
 | `data/` | Actual Budget cache | 🟡 **MEDIUM** |
 | `cache/` | Scraper cache | 🟡 **MEDIUM** |
-| `chrome-data/` | Browser profile (2FA) | 🟡 **MEDIUM** |
+| `chrome-data/` | Browser profile (legacy, unused with Camoufox) | 🟢 **LOW** |
 
 **Recommendations**:
 
@@ -259,7 +259,7 @@ If a security vulnerability is discovered in a released version:
 - ✅ Health checks enabled (auto-restart on failure)
 - ✅ `cap_drop: ALL` + only `SYS_ADMIN` (least privilege)
 - ✅ `no-new-privileges` security option
-- ✅ Dedicated `/dev/shm` tmpfs for Chromium shared memory
+- ✅ Dedicated `/dev/shm` tmpfs for browser shared memory
 
 #### Application Security
 

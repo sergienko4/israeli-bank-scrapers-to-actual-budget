@@ -9,16 +9,18 @@ LABEL org.opencontainers.image.title="Israeli Bank Importer"
 LABEL org.opencontainers.image.description="Import transactions from 18 Israeli banks into Actual Budget"
 LABEL org.opencontainers.image.source="https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget"
 LABEL org.opencontainers.image.licenses="MIT"
-LABEL security.capabilities="SYS_ADMIN required for Chromium sandboxing"
+LABEL security.capabilities="Camoufox (Firefox) runs without SYS_ADMIN"
 
-# Install minimal system deps (fonts, certs)
-# Playwright install chromium --with-deps handles browser-specific libs
+# Install minimal system deps (fonts, certs, Firefox/Camoufox libs)
 # APT_CACHE_BUST is set by CI to force fresh packages on every release
 ARG APT_CACHE_BUST=1
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     fonts-liberation \
     ca-certificates \
     curl \
+    libgtk-3-0 \
+    libx11-xcb1 \
+    libasound2 \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -51,10 +53,9 @@ RUN npm install -g npm@latest \
 RUN npm install \
     && npm update --no-save
 
-# Install Playwright Chromium with system dependencies
-# Use shared path so both root (build) and node (runtime) can access it
-ENV PLAYWRIGHT_BROWSERS_PATH=/app/browsers
-RUN npx playwright install chromium --with-deps
+# Install Camoufox browser (Firefox-based anti-detect)
+# Binary is downloaded to ~/.cache/camoufox
+RUN npx @hieutran094/camoufox-js fetch
 
 # Copy source code
 COPY src ./src
@@ -71,8 +72,8 @@ RUN npm prune --production
 # Create directories for data persistence with proper ownership
 # /app/logs is created here so the node user can write log files without a volume mount
 RUN mkdir -p /app/data /app/cache /app/logs && \
-    chown -R node:node /app/data /app/cache /app/logs /app/browsers && \
-    chmod -R 755 /app/data /app/cache /app/logs /app/browsers
+    chown -R node:node /app/data /app/cache /app/logs /root/.cache/camoufox && \
+    chmod -R 755 /app/data /app/cache /app/logs /root/.cache/camoufox
 
 # Run as non-root user for security
 USER node
