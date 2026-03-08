@@ -54,8 +54,11 @@ RUN npm install \
     && npm update --no-save
 
 # Install Camoufox browser (Firefox-based anti-detect)
-# Binary is downloaded to ~/.cache/camoufox
-RUN npx @hieutran094/camoufox-js fetch
+# Fetch runs as root → binary lands in /root/.cache/camoufox
+# Move to /home/node/.cache/ so the node user (runtime) can find it
+RUN npx @hieutran094/camoufox-js fetch \
+    && mkdir -p /home/node/.cache \
+    && mv /root/.cache/camoufox /home/node/.cache/camoufox
 
 # Copy source code
 COPY src ./src
@@ -72,8 +75,8 @@ RUN npm prune --production
 # Create directories for data persistence with proper ownership
 # /app/logs is created here so the node user can write log files without a volume mount
 RUN mkdir -p /app/data /app/cache /app/logs && \
-    chown -R node:node /app/data /app/cache /app/logs /root/.cache/camoufox && \
-    chmod -R 755 /app/data /app/cache /app/logs /root/.cache/camoufox
+    chown -R node:node /app/data /app/cache /app/logs /home/node/.cache/camoufox && \
+    chmod -R 755 /app/data /app/cache /app/logs /home/node/.cache/camoufox
 
 # Run as non-root user for security
 USER node
