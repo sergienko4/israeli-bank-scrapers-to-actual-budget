@@ -322,7 +322,7 @@ Set timezone: `TZ=Asia/Jerusalem`
 
 ### Proxy Support
 
-Route browser traffic through a proxy to bypass network restrictions:
+> **Note:** Proxy is not yet supported with Camoufox (v7.9.0+). This config option is kept for future use.
 
 ```json
 "proxy": {
@@ -332,14 +332,14 @@ Route browser traffic through a proxy to bypass network restrictions:
 
 Or via environment: `PROXY_SERVER=socks5://localhost:1080`
 
-Supported protocols: `socks5://`, `socks4://`, `http://`, `https://`. Only affects Chromium browser traffic (bank scraping), not Actual Budget API calls.
+Supported protocols: `socks5://`, `socks4://`, `http://`, `https://`.
 
 ### Anti-Detection (Built-in)
 
-Anti-detection is handled automatically by the scraper library (v7.0.0+). No configuration needed. Features include:
+Anti-detection is handled automatically by the scraper library (v7.9.0+) using **Camoufox** (Firefox with C++-level stealth). No configuration needed. Features include:
 
-- Realistic User-Agent and HTTP headers (Hebrew locale, client hints)
-- Playwright browser context with Israeli locale and timezone
+- C++-level browser fingerprint masking (Camoufox)
+- Israeli locale and timezone context
 - Native Cloudflare WAF bypass (no retry backoff needed)
 
 ### Logging
@@ -847,8 +847,8 @@ No transactions are created, no accounts are modified, and the audit log is not 
 
 ### 2FA Required Every Time
 
-- **Cause:** Browser session not saved
-- **Fix:** Mount chrome-data volume: `-v ./chrome-data:/app/chrome-data`
+- **Cause:** Browser session not persisted (Camoufox does not persist sessions by default)
+- **Fix:** Use `otpLongTermToken` in config for banks that support it (e.g., oneZero)
 
 ### Windows Volume Mount Error
 
@@ -896,7 +896,7 @@ docker run --rm ^
 | [israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers) | 6.7.1 | Bank scraping |
 | [@actual-app/api](https://github.com/actualbudget/actual) | 26.2.0 | Actual Budget integration |
 | Node.js | 22 | Runtime |
-| Chromium | Latest | Browser automation |
+| Camoufox (Firefox) | Latest | Browser automation (anti-detect) |
 | Docker | - | Containerization |
 | [Vitest](https://vitest.dev/) | 4.x | Unit testing |
 
@@ -960,7 +960,7 @@ E2E tests run automatically on PRs that change `src/` or `Dockerfile` (see `.git
 - Mount config as read-only: `:ro`
 - Never commit credentials to git
 
-**Why SYS_ADMIN?** Required for Chromium sandboxing. Safe when running trusted code.
+**Why SYS_ADMIN?** Required for Camoufox/Firefox browser sandboxing. Safe when running trusted code.
 
 See [SECURITY.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/SECURITY.md) for full security policy.
 

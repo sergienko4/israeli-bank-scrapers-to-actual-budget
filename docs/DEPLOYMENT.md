@@ -383,9 +383,9 @@ docker compose ps
 | `/app/config.json` | Bank credentials | Yes |
 | `/app/data` | Actual Budget sync data | Yes |
 | `/app/cache` | Scraper cache | Recommended |
-| `/app/chrome-data` | Browser session (2FA persistence) | Recommended |
+| `/app/chrome-data` | Browser session (legacy, no-op with Camoufox) | Optional |
 
-**Why persist chrome-data?** Stores browser cookies and sessions, preventing repeated 2FA challenges.
+> **Note (v7.9.0+):** Camoufox does not use Chrome data directories. The `chrome-data` volume is kept for backward compatibility but has no effect. Use `otpLongTermToken` for persistent 2FA.
 
 ---
 
@@ -394,7 +394,7 @@ docker compose ps
 - **Never commit `config.json` to git**
 - Set read-only permission: `chmod 600 config.json`
 - Use `:ro` mount flag for read-only config
-- `SYS_ADMIN` is required for Chromium sandboxing — only run trusted images with this capability
+- `SYS_ADMIN` is required for Camoufox/Firefox browser sandboxing — only run trusted images with this capability
 - Container runs as non-root user (`node`, UID 1000)
 
 ---
@@ -419,11 +419,10 @@ docker compose logs -f importer
 
 **Browser fails to launch**
 - Ensure `SYS_ADMIN` capability is set
-- Check Chromium is installed in container
+- Check Camoufox browser is installed in container
 
 **2FA Required Every Run**
-- Ensure `chrome-data` volume is mounted
-- Check volume permissions
+- Use `otpLongTermToken` in config for banks that support it (e.g., oneZero)
 
 **Scheduled runs not working**
 - Verify `SCHEDULE` format is correct
