@@ -90,7 +90,7 @@ docker run --rm \
   --ignore-unfixed \
   --scanners vuln,secret \
   --secret-config /trivy-config/secret.yaml \
-  --vuln-type os,library \
+  --pkg-types os,library \
   --skip-dirs 'root/.npm' \
   "$LOCAL_IMAGE" || exit 1
 
