@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.33.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.1...v1.33.2) (2026-03-08)
+
+
+### Fixed
+
+* replace deprecated npm and Trivy CLI flags ([#211](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/211)) ([1a4dd82](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1a4dd8207469fc2456c8522afb4a39fdb3a615cd))
+
 ## [1.33.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.0...v1.33.1) (2026-03-08)
 
 
