@@ -47,11 +47,22 @@ echo ""
 echo "⚙️  [8/13] Checking config structure..."
 npm run lint:config-structure || exit 1
 
-# ── 9. Docker Build ─────────────────────────────────────────────
+# ── 9. Docker Build + Browser Smoke Test ──────────────────────────
 echo ""
 echo "🐳 [9/13] Building Docker image..."
 LOCAL_IMAGE="israeli-bank-importer:pre-commit"
 docker build -t "$LOCAL_IMAGE" . || exit 1
+
+echo ""
+echo "🌐 [9/13] Browser smoke test (verifying scraper can launch browser)..."
+docker run --rm --cap-add SYS_ADMIN "$LOCAL_IMAGE" \
+  node --input-type=module -e "
+    import { createScraper } from '@sergienko4/israeli-bank-scrapers';
+    const s = createScraper({ companyId: 'hapoalim', startDate: new Date() });
+    await s.initialize();
+    await s.terminate(true);
+    console.log('Browser smoke test passed');
+  " || exit 1
 
 # ── 10. Lychee Link Check (via Docker) ──────────────────────────
 echo ""
