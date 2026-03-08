@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.33.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.32.0...v1.33.0) (2026-03-08)
+
+
+### Added
+
+* upgrade scraper to v7.9.0 — Camoufox replaces Chromium ([#207](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/207)) ([c31f67e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c31f67e3e22910d91e40cec0ec0362a553ac2da1))
+
 ## [1.32.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.31.0...v1.32.0) (2026-03-06)
 
 
