@@ -67,7 +67,7 @@ COPY src ./src
 RUN npm run build
 
 # Remove devDependencies to reduce image size
-RUN npm prune --production
+RUN npm prune --omit=dev
 
 # Note: config.json should be mounted as a volume at runtime, not copied into the image
 # This prevents credentials from being baked into the Docker image

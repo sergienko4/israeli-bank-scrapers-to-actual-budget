@@ -96,7 +96,7 @@ jobs:
           ignore-unfixed: true
           scanners: 'vuln,secret'
           trivy-config: 'config/trivy/secret.yaml'
-          vuln-type: 'os,library'
+          pkg-types: 'os,library'
           skip-dirs: 'root/.npm'
 
       - name: Upload Trivy SARIF to Security tab
@@ -110,7 +110,7 @@ jobs:
           ignore-unfixed: true
           scanners: 'vuln,secret'
           trivy-config: 'config/trivy/secret.yaml'
-          vuln-type: 'os,library'
+          pkg-types: 'os,library'
           skip-dirs: 'root/.npm'
 
       - name: Upload SARIF results
