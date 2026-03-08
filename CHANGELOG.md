@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.33.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.0...v1.33.1) (2026-03-08)
+
+
+### Fixed
+
+* move Camoufox binary to node user home + add browser smoke test ([#209](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/209)) ([83a787b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/83a787bdf7bfa59ecf7d6625185cbccdcf77958f))
+
 ## [1.33.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.32.0...v1.33.0) (2026-03-08)
 
 
