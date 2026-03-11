@@ -131,6 +131,7 @@ export class TelegramNotifier implements INotifier {
         await this.sendMessage('⚠️ Please send the numeric OTP code from your SMS (4–8 digits).');
         continue;
       }
+      await this.confirmOffset(offset);
       return reply;
     }
     throw new Error('2FA timeout: no reply received');
@@ -197,6 +198,20 @@ export class TelegramNotifier implements INotifier {
     if (!response.ok) return 0;
     const data = await response.json() as TelegramApiResponse;
     return data.result?.length ? data.result[data.result.length - 1].update_id + 1 : 0;
+  }
+
+  /**
+   * Confirms all updates up to the given offset with Telegram.
+   * Ensures the next getLatestOffset() call returns a clean state.
+   * @param offset - The offset to confirm (all updates below this are acknowledged).
+   */
+  private async confirmOffset(offset: number): Promise<void> {
+    try {
+      const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=${offset}&timeout=0`;
+      await fetch(url);
+    } catch {
+      // Non-critical — getLatestOffset() will still work
+    }
   }
 
   /**

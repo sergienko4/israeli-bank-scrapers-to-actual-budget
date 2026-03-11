@@ -719,6 +719,120 @@ describe('TelegramNotifier', () => {
       });
       await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
     });
+
+    it('confirms the OTP update offset before returning', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        // 1: getLatestOffset
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        // 2: send prompt
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        // 3: poll → OTP reply at update_id=51
+        if (callCount === 3) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 51, message: { chat: { id: -100 }, text: '123456', date: futureTime } }] }),
+        });
+        // 4: confirmOffset call (offset=52)
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+      });
+      await notifier.waitForReply('Enter OTP:', 5000);
+      expect(callCount).toBe(4);
+      const confirmUrl: string = fetchMock.mock.calls[3]?.[0] ?? '';
+      expect(confirmUrl).toContain('getUpdates');
+      expect(confirmUrl).toContain('offset=52');
+      expect(confirmUrl).toContain('timeout=0');
+    });
+
+    it('two sequential waitForReply calls both succeed (scan-all scenario)', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        // ── Bank A OTP flow ──
+        // 1: getLatestOffset → empty
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        // 2: send prompt A
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        // 3: poll → Bank A OTP at update_id=51
+        if (callCount === 3) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 51, message: { chat: { id: -100 }, text: '111111', date: futureTime } }] }),
+        });
+        // 4: confirmOffset(52)
+        if (callCount === 4) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        // ── Bank B OTP flow ──
+        // 5: getLatestOffset → returns update 51 confirmed, latest is empty
+        if (callCount === 5) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        // 6: send prompt B
+        if (callCount === 6) return Promise.resolve({ ok: true, text: vi.fn() });
+        // 7: poll → Bank B OTP at update_id=52
+        if (callCount === 7) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 52, message: { chat: { id: -100 }, text: '222222', date: futureTime } }] }),
+        });
+        // 8: confirmOffset(53)
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+      });
+
+      const resultA = await notifier.waitForReply('OTP for Bank A:', 5000);
+      const resultB = await notifier.waitForReply('OTP for Bank B:', 5000);
+      expect(resultA).toBe('111111');
+      expect(resultB).toBe('222222');
+    });
+
+    it('does not return stale OTP from a previous bank', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const pastTime = Math.floor(Date.now() / 1000) - 10;
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        // 1: getLatestOffset → last update is 51 (Bank A's stale OTP)
+        if (callCount === 1) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 51 }] }),
+        });
+        // 2: send prompt
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        // 3: poll(offset=52) → Bank A's stale OTP NOT returned (it's before sentAt)
+        if (callCount === 3) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 52, message: { chat: { id: -100 }, text: '111111', date: pastTime } }] }),
+        });
+        // 4: poll(offset=53) → Bank B's real OTP
+        if (callCount === 4) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 53, message: { chat: { id: -100 }, text: '222222', date: futureTime } }] }),
+        });
+        // 5: confirmOffset(54)
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+      });
+      const result = await notifier.waitForReply('OTP for Bank B:', 5000);
+      expect(result).toBe('222222');
+    });
+
+    it('confirmation failure does not break waitForReply', async () => {
+      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const futureTime = Math.floor(Date.now() / 1000) + 100;
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+        if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
+        if (callCount === 3) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -100 }, text: '654321', date: futureTime } }] }),
+        });
+        // 4: confirmOffset fails
+        return Promise.reject(new Error('Network error'));
+      });
+      const result = await notifier.waitForReply('Enter OTP:', 5000);
+      expect(result).toBe('654321');
+    });
   });
 
   describe('registerCommands', () => {

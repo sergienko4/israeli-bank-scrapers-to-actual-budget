@@ -56,6 +56,24 @@ export class TelegramPoller {
     this.abortController?.abort();
   }
 
+  /**
+   * Stops the poller and confirms all processed updates with Telegram.
+   * Makes a final getUpdates call with the current offset so Telegram marks
+   * all prior updates as acknowledged — prevents a child process from seeing
+   * stale updates via getUpdates(offset=-1).
+   */
+  async stopAndFlush(): Promise<void> {
+    this.stop();
+    if (this.offset === 0) return;
+    try {
+      const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates` +
+        `?offset=${this.offset}&timeout=0`;
+      await fetch(url);
+    } catch {
+      // Non-critical — child process will still work via getLatestOffset()
+    }
+  }
+
   /** Executes one long-poll request and processes any returned updates. */
   private async poll(): Promise<void> {
     this.abortController = new AbortController();
