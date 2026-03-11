@@ -5,7 +5,7 @@
  */
 
 import api from '@actual-app/api';
-import type { ScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
+import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import { ConfigLoader } from './Config/ConfigLoader.js';
 import { ErrorFormatter } from './Errors/ErrorFormatter.js';
 import { ExponentialBackoffRetry } from './Resilience/RetryStrategy.js';
@@ -151,9 +151,9 @@ function logBankScrapedInfo(bankName: string, accountCount: number): void {
 /**
  * Handles a failed scrape result by logging the error and recording metrics.
  * @param bankName - The bank that failed to scrape.
- * @param result - The failed ScraperScrapingResult containing error details.
+ * @param result - The failed IScraperScrapingResult containing error details.
  */
-function handleFailedScrape(bankName: string, result: ScraperScrapingResult): void {
+function handleFailedScrape(bankName: string, result: IScraperScrapingResult): void {
   if (isEmptyResultError(result)) {
     logger.info(`  ✅ ${bankName}: no transactions in selected period`);
     metrics.recordBankSuccess(bankName, 0, 0);
