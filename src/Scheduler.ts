@@ -84,9 +84,9 @@ export function loadLogConfig(): LogConfig | undefined {
  * @param importFn - Async function that performs the import and returns an exit code.
  * @returns Promise resolving to the import exit code.
  */
-export function runLocked(importFn: () => Promise<number>): Promise<number> {
+export async function runLocked(importFn: () => Promise<number>): Promise<number> {
   if (activeImport) { logger.warn('⚠️  Import already running, skipping'); return activeImport; }
-  activePoller?.stop();
+  await activePoller?.stopAndFlush();
   activeImport = importFn().finally(() => {
     activeImport = null;
     activePoller?.start().catch(() => {});

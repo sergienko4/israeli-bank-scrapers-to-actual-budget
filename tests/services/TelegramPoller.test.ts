@@ -298,4 +298,94 @@ describe('TelegramPoller', () => {
     const answerUrl = fetchMock.mock.calls[2]?.[0] ?? '';
     expect(answerUrl).toContain('answerCallbackQuery');
   });
+
+  describe('stopAndFlush', () => {
+    it('confirms processed updates with a final getUpdates call', async () => {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn().mockResolvedValue(undefined));
+
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // clearOldMessages → offset becomes 51
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ ok: true, result: [{ update_id: 50 }] }),
+          });
+        }
+        if (callCount === 2) {
+          // first poll → delivers a message, offset becomes 52
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              ok: true,
+              result: [{ update_id: 51, message: { chat: { id: 999 }, text: '/help', date: Date.now() } }],
+            }),
+          });
+        }
+        // call 3+ = next poll → stop, or flush call
+        poller.stop();
+        return emptyResponse();
+      });
+
+      await poller.start();
+      const callsBefore = fetchMock.mock.calls.length;
+      await poller.stopAndFlush();
+
+      const flushUrl: string = fetchMock.mock.calls[callsBefore]?.[0] ?? '';
+      expect(flushUrl).toContain('getUpdates');
+      expect(flushUrl).toContain('offset=52');
+      expect(flushUrl).toContain('timeout=0');
+    });
+
+    it('skips flush when offset is 0 (no updates processed)', async () => {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      await poller.stopAndFlush();
+      // Only stop() is called, no fetch for flush
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when flush fetch fails', async () => {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn().mockResolvedValue(undefined));
+
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ ok: true, result: [{ update_id: 10 }] }),
+          });
+        }
+        poller.stop();
+        return emptyResponse();
+      });
+
+      await poller.start();
+      fetchMock.mockRejectedValue(new Error('Network error'));
+      await expect(poller.stopAndFlush()).resolves.toBeUndefined();
+    });
+
+    it('is idempotent — calling twice does not throw', async () => {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn().mockResolvedValue(undefined));
+
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ ok: true, result: [{ update_id: 5 }] }),
+          });
+        }
+        poller.stop();
+        return emptyResponse();
+      });
+
+      await poller.start();
+      fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
+      await poller.stopAndFlush();
+      await expect(poller.stopAndFlush()).resolves.toBeUndefined();
+    });
+  });
 });
