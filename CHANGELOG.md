@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.33.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.2...v1.33.3) (2026-03-11)
+
+
+### Fixed
+
+* confirm Telegram offset in OTP flow to prevent scan-all timeout ([#222](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/222)) ([f1d937e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f1d937e98765373473f5f27c5dca9d5209369ecf))
+
 ## [1.33.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.1...v1.33.2) (2026-03-08)
 
 
