@@ -3,7 +3,7 @@
  */
 import { readFileSync, existsSync, rmSync } from 'node:fs';
 import type {
-  ScraperOptions, ScraperCredentials, ScraperScrapingResult
+  ScraperOptions, ScraperCredentials, IScraperScrapingResult
 } from '@sergienko4/israeli-bank-scrapers';
 import { createScraper, CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 import type { IRetryStrategy } from '../Resilience/RetryStrategy.js';
@@ -72,10 +72,10 @@ export function filterTransactionsByDate<T extends { date: Date | string }>(
 
 /**
  * Checks whether a scraper failure indicates "no transactions found" vs. a real error.
- * @param result - The ScraperScrapingResult to inspect.
+ * @param result - The IScraperScrapingResult to inspect.
  * @returns True when the error message matches a known empty-result pattern.
  */
-export function isEmptyResultError(result: ScraperScrapingResult): boolean {
+export function isEmptyResultError(result: IScraperScrapingResult): boolean {
   const msg = (result.errorMessage ?? '').toLowerCase();
   return NO_RECORDS_PATTERNS.some(p => msg.includes(p.toLowerCase()));
 }
@@ -83,9 +83,9 @@ export function isEmptyResultError(result: ScraperScrapingResult): boolean {
 /**
  * Logs a scraper failure with a user-friendly hint based on the error type.
  * @param bankName - The name of the bank that failed.
- * @param result - The failed ScraperScrapingResult containing error details.
+ * @param result - The failed IScraperScrapingResult containing error details.
  */
-export function logScrapeFailure(bankName: string, result: ScraperScrapingResult): void {
+export function logScrapeFailure(bankName: string, result: IScraperScrapingResult): void {
   const hint = scrapeErrorHints[result.errorType ?? ''] ?? '';
   getLogger().error(
     `  ❌ Failed to scrape ${bankName}: ${result.errorMessage || 'Unknown error'}${hint}`
@@ -120,11 +120,11 @@ export class BankScraper {
    * Scrapes a bank: uses mock data in E2E mode, retries once on INVALID_OTP.
    * @param bankName - The bank key to scrape.
    * @param bankConfig - The bank's full configuration.
-   * @returns The final ScraperScrapingResult after resilience handling.
+   * @returns The final IScraperScrapingResult after resilience handling.
    */
   async scrapeBankWithResilience(
     bankName: string, bankConfig: BankConfig
-  ): Promise<ScraperScrapingResult> {
+  ): Promise<IScraperScrapingResult> {
     const mockResult = this.loadMockScraperResult(bankName);
     if (mockResult) return mockResult;
     getLogger().info(`  🔍 Scraping transactions from ${bankName}...`);
@@ -139,11 +139,11 @@ export class BankScraper {
    * Performs a single scrape attempt, applying the appropriate retry strategy.
    * @param bankName - The bank to scrape.
    * @param bankConfig - The bank's configuration.
-   * @returns The ScraperScrapingResult from the attempt.
+   * @returns The IScraperScrapingResult from the attempt.
    */
   private async executeScrapeAttempt(
     bankName: string, bankConfig: BankConfig
-  ): Promise<ScraperScrapingResult> {
+  ): Promise<IScraperScrapingResult> {
     const { scraper, credentials } = this.initBankScrape(bankName, bankConfig);
     const strategy = bankConfig.twoFactorAuth ? this.opts.noRetryStrategy : this.opts.retryStrategy;
     return strategy.execute(
@@ -160,11 +160,11 @@ export class BankScraper {
    * Notifies the user that an OTP was rejected and retries the scrape.
    * @param bankName - The bank whose OTP was rejected.
    * @param bankConfig - The bank's configuration for the retry.
-   * @returns The ScraperScrapingResult from the retry attempt.
+   * @returns The IScraperScrapingResult from the retry attempt.
    */
   private async retryOtpScrape(
     bankName: string, bankConfig: BankConfig
-  ): Promise<ScraperScrapingResult> {
+  ): Promise<IScraperScrapingResult> {
     getLogger().warn(`  ⚠️  OTP rejected — requesting a new code for ${bankName}`);
     await this.opts.notificationService.sendMessage(
       `⚠️ OTP for <b>${bankName}</b> was rejected. ` +
@@ -289,9 +289,9 @@ export class BankScraper {
   /**
    * Loads a mock scraper result when E2E mock env vars are set.
    * @param bankName - The bank whose mock data file to load.
-   * @returns Parsed ScraperScrapingResult or null if mock mode is inactive.
+   * @returns Parsed IScraperScrapingResult or null if mock mode is inactive.
    */
-  private loadMockScraperResult(bankName: string): ScraperScrapingResult | null {
+  private loadMockScraperResult(bankName: string): IScraperScrapingResult | null {
     const mockDir = process.env.E2E_MOCK_SCRAPER_DIR;
     const file = mockDir
       ? (existsSync(`${mockDir}/${bankName}.json`)
@@ -305,14 +305,14 @@ export class BankScraper {
   /**
    * Reads and parses a mock scraper JSON file for E2E testing.
    * @param filePath - Absolute path to the mock JSON file.
-   * @returns Parsed ScraperScrapingResult.
+   * @returns Parsed IScraperScrapingResult.
    */
-  private parseMockFile(filePath: string): ScraperScrapingResult {
+  private parseMockFile(filePath: string): IScraperScrapingResult {
     const parsed: unknown = JSON.parse(readFileSync(filePath, 'utf8'));
     const data = parsed as { success?: boolean; accounts?: unknown[] };
     if (typeof data.success !== 'boolean' || !Array.isArray(data.accounts)) {
       throw new Error(`Invalid mock scraper file: missing success or accounts`);
     }
-    return data as ScraperScrapingResult;
+    return data as IScraperScrapingResult;
   }
 }

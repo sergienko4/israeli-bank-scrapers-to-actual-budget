@@ -2,7 +2,7 @@
  * Account import orchestration extracted from Index.ts to keep it under 300 lines.
  */
 import type { BankConfig, BankTarget, BankTransaction } from '../Types/Index.js';
-import type { ScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
+import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import type {
   TransactionService, ImportResult, ImportTransactionsOpts
 } from './TransactionService.js';
@@ -85,7 +85,7 @@ export class AccountImporter {
    * @returns Aggregated totals of imported and skipped transactions.
    */
   async processAllAccounts(
-    bankName: string, bankConfig: BankConfig, scrapeResult: ScraperScrapingResult
+    bankName: string, bankConfig: BankConfig, scrapeResult: IScraperScrapingResult
   ): Promise<{ imported: number; skipped: number }> {
     let totalImported = 0, totalSkipped = 0;
     for (const account of scrapeResult.accounts ?? []) {
