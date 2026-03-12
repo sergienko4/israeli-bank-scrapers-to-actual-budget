@@ -159,7 +159,7 @@ jobs:
         id: sync
         run: |
           # Get last line from budget creation output (the syncId)
-          SYNC_ID=$(echo "${{ steps.budget.outputs.stdout }}" | grep -v '^\[' | grep -v '^=' | grep -v '^Bootstrap' | grep -v '^Drone' | grep -v '^$' | tail -1 | tr -d '[:space:]')
+          SYNC_ID=$(echo "${{ steps.budget.outputs.stdout }}" | grep -oE 'real-e2e-[0-9]+-[a-f0-9]+' | tail -1)
           echo "Budget syncId: $SYNC_ID"
           echo "id=$SYNC_ID" >> "$GITHUB_OUTPUT"
 
