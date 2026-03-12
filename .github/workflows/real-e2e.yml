@@ -58,7 +58,7 @@ jobs:
           username: ${{ secrets.ORACLE_VM_USER }}
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           port: ${{ secrets.ORACLE_VM_PORT }}
-          script: docker compose -f ${{ env.PROD_COMPOSE }} stop
+          script: docker-compose -f ${{ env.PROD_COMPOSE }} stop
 
       # ── Prepare test environment on VM ────────────────────────────
 
@@ -127,7 +127,7 @@ jobs:
           command_timeout: 120s
           script: |
             cd ${{ env.VM_WORK_DIR }}
-            docker compose -f docker-compose.real-e2e.yml up -d actual-server-test
+            docker-compose -f docker-compose.real-e2e.yml up -d actual-server-test
             echo "Waiting for Actual server to be healthy..."
             for i in $(seq 1 30); do
               STATUS=$(docker inspect actual-test-server --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
@@ -192,7 +192,7 @@ jobs:
           envs: ENCRYPTION_PASSWORD,BUDGET_SYNC_ID
           script: |
             cd ${{ env.VM_WORK_DIR }}
-            docker compose -f docker-compose.real-e2e.yml run --rm \
+            docker-compose -f docker-compose.real-e2e.yml run --rm \
               -e CREDENTIALS_ENCRYPTION_PASSWORD="$ENCRYPTION_PASSWORD" \
               -e ACTUAL_BUDGET_SYNC_ID="$BUDGET_SYNC_ID" \
               -e ACTUAL_SERVER_URL=http://actual-server-test:5006 \
@@ -252,7 +252,7 @@ jobs:
           port: ${{ secrets.ORACLE_VM_PORT }}
           script: |
             cd ${{ env.VM_WORK_DIR }} 2>/dev/null || true
-            docker compose -f docker-compose.real-e2e.yml down -v 2>/dev/null || true
+            docker-compose -f docker-compose.real-e2e.yml down -v 2>/dev/null || true
             docker rmi israeli-bank-importer:real-e2e 2>/dev/null || true
             docker rmi ${{ env.GHCR_IMAGE }}:pr-${{ github.event.pull_request.number }} 2>/dev/null || true
             docker logout ghcr.io 2>/dev/null || true
@@ -266,4 +266,4 @@ jobs:
           username: ${{ secrets.ORACLE_VM_USER }}
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           port: ${{ secrets.ORACLE_VM_PORT }}
-          script: docker compose -f ${{ env.PROD_COMPOSE }} start
+          script: docker-compose -f ${{ env.PROD_COMPOSE }} start
