@@ -6,30 +6,26 @@
  * that accounts and transactions were created.
  *
  * Usage:
- *   docker run --rm --network real-e2e-net \
+ *   docker run --rm \
  *     -v /path/to/data:/app/data \
  *     israeli-bank-importer:real-e2e \
- *     node scripts/real-e2e/verify.mjs <serverURL> <password> <syncId>
+ *     node scripts/real-e2e/verify.mjs <budgetId>
  *
- * @param {string} serverURL - Actual Budget server URL
- * @param {string} password  - Server password
- * @param {string} syncId    - Budget sync ID to verify
+ * @param {string} budgetId - Local budget folder name (e.g., real-e2e-1773330306107-e7ccaf4)
  */
 
 import api from '@actual-app/api';
 
-const serverURL = process.argv[2];
-const password = process.argv[3];
-const syncId = process.argv[4];
+const budgetId = process.argv[2];
 
-if (!serverURL || !password || !syncId) {
-  console.error('Usage: node verify.mjs <serverURL> <password> <syncId>');
+if (!budgetId) {
+  console.error('Usage: node verify.mjs <budgetId>');
   process.exit(1);
 }
 
 try {
-  await api.init({ dataDir: '/app/data', serverURL, password });
-  await api.downloadBudget(syncId);
+  await api.init({ dataDir: '/app/data' });
+  await api.loadBudget(budgetId);
 
   const accounts = await api.getAccounts();
   console.log(`Accounts: ${accounts.length}`);

@@ -159,7 +159,7 @@ jobs:
         id: sync
         run: |
           # Get last line from budget creation output (the syncId)
-          SYNC_ID=$(echo "${{ steps.budget.outputs.stdout }}" | tail -1 | tr -d '[:space:]')
+          SYNC_ID=$(echo "${{ steps.budget.outputs.stdout }}" | grep -v '^\[' | grep -v '^=' | grep -v '^Bootstrap' | grep -v '^Drone' | grep -v '^$' | tail -1 | tr -d '[:space:]')
           echo "Budget syncId: $SYNC_ID"
           echo "id=$SYNC_ID" >> "$GITHUB_OUTPUT"
 
@@ -214,17 +214,16 @@ jobs:
           username: ${{ secrets.ORACLE_VM_USER }}
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           port: ${{ secrets.ORACLE_VM_PORT }}
+          envs: BUDGET_ID
           script: |
             cd ${{ env.VM_WORK_DIR }}
             docker run --rm \
-              --network real-e2e_real-e2e-net \
               -v ${{ env.VM_WORK_DIR }}/data/importer:/app/data \
               -v ${{ env.VM_WORK_DIR }}/verify.mjs:/app/scripts/real-e2e/verify.mjs:ro \
               israeli-bank-importer:real-e2e \
-              node /app/scripts/real-e2e/verify.mjs \
-                http://actual-server-test:5006 \
-                real-e2e-password \
-                "${{ steps.sync.outputs.id }}"
+              node /app/scripts/real-e2e/verify.mjs "$BUDGET_ID"
+        env:
+          BUDGET_ID: ${{ steps.sync.outputs.id }}
 
       - name: Collect importer logs
         if: always()
