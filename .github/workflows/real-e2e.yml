@@ -72,6 +72,7 @@ jobs:
           script: |
             sudo rm -rf ${{ env.VM_WORK_DIR }}
             mkdir -p ${{ env.VM_WORK_DIR }}/data/actual ${{ env.VM_WORK_DIR }}/data/importer ${{ env.VM_WORK_DIR }}/logs
+            chmod -R 777 ${{ env.VM_WORK_DIR }}/data ${{ env.VM_WORK_DIR }}/logs
 
       - name: Pull PR image on VM
         uses: appleboy/ssh-action@v1
