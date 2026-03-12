@@ -1,0 +1,48 @@
+# Real E2E Validation — Fresh deployment on Oracle VM
+#
+# Deployed to the VM by the real-e2e.yml GitHub Actions workflow.
+# Tests the full pipeline: Actual Budget server + real bank scraping.
+#
+# This compose file is NOT used locally — it runs on the Oracle VM only.
+
+services:
+  actual-server-test:
+    image: actualbudget/actual-server:latest
+    container_name: actual-test-server
+    restart: "no"
+    volumes:
+      - ./data/actual:/data
+    networks:
+      - real-e2e-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:5006/').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      start_period: 10s
+      retries: 12
+
+  importer-test:
+    image: israeli-bank-importer:real-e2e
+    container_name: real-e2e-importer
+    restart: "no"
+    depends_on:
+      actual-server-test:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_ADMIN
+    tmpfs:
+      - /dev/shm:size=256m
+    environment:
+      - TZ=Asia/Jerusalem
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data/importer:/app/data
+      - ./logs:/app/logs
+    networks:
+      - real-e2e-net
+
+networks:
+  real-e2e-net:
+    driver: bridge

@@ -1,0 +1,269 @@
+name: Real E2E (Oracle VM)
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: real-e2e
+  cancel-in-progress: true
+
+env:
+  GHCR_IMAGE: ghcr.io/sergienko4/israeli-bank-scrapers-to-actual-budget
+  VM_WORK_DIR: /home/ubuntu/real-e2e
+  PROD_COMPOSE: /home/ubuntu/actual-data/docker-compose.yml
+
+jobs:
+  real-e2e:
+    name: Real Bank E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # ── Build & push image to GHCR ────────────────────────────────
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push PR image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ env.GHCR_IMAGE }}:pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Stop production ───────────────────────────────────────────
+
+      - name: Stop production containers
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          script: docker compose -f ${{ env.PROD_COMPOSE }} stop
+
+      # ── Prepare test environment on VM ────────────────────────────
+
+      - name: Clean and prepare VM workspace
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          script: |
+            rm -rf ${{ env.VM_WORK_DIR }}
+            mkdir -p ${{ env.VM_WORK_DIR }}/data/actual ${{ env.VM_WORK_DIR }}/data/importer ${{ env.VM_WORK_DIR }}/logs
+
+      - name: Pull PR image on VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          envs: GITHUB_TOKEN
+          script: |
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ${{ env.GHCR_IMAGE }}:pr-${{ github.event.pull_request.number }}
+            docker tag ${{ env.GHCR_IMAGE }}:pr-${{ github.event.pull_request.number }} israeli-bank-importer:real-e2e
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy compose and scripts to VM
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          source: "docker-compose.real-e2e.yml,scripts/real-e2e/create-budget.mjs,scripts/real-e2e/verify.mjs"
+          target: ${{ env.VM_WORK_DIR }}
+          strip_components: 2
+          overwrite: true
+
+      - name: Flatten scripts in VM workspace
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          script: |
+            cd ${{ env.VM_WORK_DIR }}
+            # scp-action preserves directory structure — move files to workspace root
+            if [ -d scripts/real-e2e ]; then
+              mv scripts/real-e2e/*.mjs .
+              rm -rf scripts
+            fi
+
+      # ── Start Actual server & create budget ───────────────────────
+
+      - name: Start Actual Budget server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          command_timeout: 120s
+          script: |
+            cd ${{ env.VM_WORK_DIR }}
+            docker compose -f docker-compose.real-e2e.yml up -d actual-server-test
+            echo "Waiting for Actual server to be healthy..."
+            for i in $(seq 1 30); do
+              STATUS=$(docker inspect actual-test-server --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
+              if [ "$STATUS" = "healthy" ]; then
+                echo "Actual server is healthy"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "ERROR: Actual server did not become healthy in 60s"
+            docker logs actual-test-server
+            exit 1
+
+      - name: Create test budget
+        id: budget
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          capture_stdout: true
+          script: |
+            cd ${{ env.VM_WORK_DIR }}
+            docker run --rm \
+              --network real-e2e_real-e2e-net \
+              -v ${{ env.VM_WORK_DIR }}/data/importer:/app/data \
+              -v ${{ env.VM_WORK_DIR }}/create-budget.mjs:/app/scripts/real-e2e/create-budget.mjs:ro \
+              israeli-bank-importer:real-e2e \
+              node /app/scripts/real-e2e/create-budget.mjs http://actual-server-test:5006 real-e2e-password
+
+      - name: Extract budget sync ID
+        id: sync
+        run: |
+          # Get last line from budget creation output (the syncId)
+          SYNC_ID=$(echo "${{ steps.budget.outputs.stdout }}" | tail -1 | tr -d '[:space:]')
+          echo "Budget syncId: $SYNC_ID"
+          echo "id=$SYNC_ID" >> "$GITHUB_OUTPUT"
+
+      # ── Deploy encrypted config & run importer ──────────────────
+
+      - name: Deploy encrypted config.json to VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          envs: REAL_E2E_CONFIG_ENCRYPTED
+          script: echo "$REAL_E2E_CONFIG_ENCRYPTED" > ${{ env.VM_WORK_DIR }}/config.json
+        env:
+          REAL_E2E_CONFIG_ENCRYPTED: ${{ secrets.REAL_E2E_CONFIG_ENCRYPTED }}
+
+      - name: "Run importer (real bank scraping)"
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          command_timeout: 20m
+          envs: ENCRYPTION_PASSWORD,BUDGET_SYNC_ID
+          script: |
+            cd ${{ env.VM_WORK_DIR }}
+            docker compose -f docker-compose.real-e2e.yml run --rm \
+              -e CREDENTIALS_ENCRYPTION_PASSWORD="$ENCRYPTION_PASSWORD" \
+              -e ACTUAL_BUDGET_SYNC_ID="$BUDGET_SYNC_ID" \
+              -e ACTUAL_SERVER_URL=http://actual-server-test:5006 \
+              -e ACTUAL_PASSWORD=real-e2e-password \
+              importer-test
+            EXIT_CODE=$?
+            echo "Importer exit code: $EXIT_CODE"
+            if [ $EXIT_CODE -gt 1 ]; then
+              echo "Importer crashed with exit code $EXIT_CODE"
+              exit 1
+            fi
+            exit 0
+        env:
+          ENCRYPTION_PASSWORD: ${{ secrets.REAL_E2E_ENCRYPTION_PASSWORD }}
+          BUDGET_SYNC_ID: ${{ steps.sync.outputs.id }}
+
+      # ── Verify results ────────────────────────────────────────────
+
+      - name: Verify import results
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          script: |
+            cd ${{ env.VM_WORK_DIR }}
+            docker run --rm \
+              --network real-e2e_real-e2e-net \
+              -v ${{ env.VM_WORK_DIR }}/data/importer:/app/data \
+              -v ${{ env.VM_WORK_DIR }}/verify.mjs:/app/scripts/real-e2e/verify.mjs:ro \
+              israeli-bank-importer:real-e2e \
+              node /app/scripts/real-e2e/verify.mjs \
+                http://actual-server-test:5006 \
+                real-e2e-password \
+                "${{ steps.sync.outputs.id }}"
+
+      - name: Collect importer logs
+        if: always()
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          script: cat ${{ env.VM_WORK_DIR }}/logs/*.log 2>/dev/null | head -200 || echo 'No logs found'
+
+      # ── Cleanup & restart production ──────────────────────────────
+
+      - name: Cleanup test environment
+        if: always()
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          script: |
+            cd ${{ env.VM_WORK_DIR }} 2>/dev/null || true
+            docker compose -f docker-compose.real-e2e.yml down -v 2>/dev/null || true
+            docker rmi israeli-bank-importer:real-e2e 2>/dev/null || true
+            docker rmi ${{ env.GHCR_IMAGE }}:pr-${{ github.event.pull_request.number }} 2>/dev/null || true
+            docker logout ghcr.io 2>/dev/null || true
+            rm -rf ${{ env.VM_WORK_DIR }}
+
+      - name: Restart production
+        if: always()
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_VM_HOST }}
+          username: ${{ secrets.ORACLE_VM_USER }}
+          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          port: ${{ secrets.ORACLE_VM_PORT }}
+          script: docker compose -f ${{ env.PROD_COMPOSE }} start

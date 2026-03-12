@@ -61,7 +61,18 @@ export class ConfigLoader implements IConfigLoader {
    * @param config - The config object to mutate with env-var values.
    */
   private applyEnvOverrides(config: ImporterConfig): void {
-    if (process.env.PROXY_SERVER) config.proxy = { server: process.env.PROXY_SERVER };
+    if (process.env.PROXY_SERVER) {
+      config.proxy = { server: process.env.PROXY_SERVER };
+    }
+    if (process.env.ACTUAL_BUDGET_SYNC_ID) {
+      config.actual.budget.syncId = process.env.ACTUAL_BUDGET_SYNC_ID;
+    }
+    if (process.env.ACTUAL_SERVER_URL) {
+      config.actual.init.serverURL = process.env.ACTUAL_SERVER_URL;
+    }
+    if (process.env.ACTUAL_PASSWORD) {
+      config.actual.init.password = process.env.ACTUAL_PASSWORD;
+    }
   }
 
   /**
