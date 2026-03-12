@@ -97,7 +97,6 @@ jobs:
           port: ${{ secrets.ORACLE_VM_PORT }}
           source: "docker-compose.real-e2e.yml,scripts/real-e2e/create-budget.mjs,scripts/real-e2e/verify.mjs"
           target: ${{ env.VM_WORK_DIR }}
-          strip_components: 2
           overwrite: true
 
       - name: Flatten scripts in VM workspace
@@ -109,11 +108,8 @@ jobs:
           port: ${{ secrets.ORACLE_VM_PORT }}
           script: |
             cd ${{ env.VM_WORK_DIR }}
-            # scp-action preserves directory structure — move files to workspace root
-            if [ -d scripts/real-e2e ]; then
-              mv scripts/real-e2e/*.mjs .
-              rm -rf scripts
-            fi
+            mv scripts/real-e2e/*.mjs . 2>/dev/null || true
+            rm -rf scripts 2>/dev/null || true
 
       # ── Start Actual server & create budget ───────────────────────
 
@@ -130,8 +126,7 @@ jobs:
             docker-compose -f docker-compose.real-e2e.yml up -d actual-server-test
             echo "Waiting for Actual server to be healthy..."
             for i in $(seq 1 30); do
-              STATUS=$(docker inspect actual-test-server --format '{{.State.Health.Status}}' 2>/dev/null || echo "starting")
-              if [ "$STATUS" = "healthy" ]; then
+              if docker inspect actual-test-server 2>/dev/null | grep -q '"Status": "healthy"'; then
                 echo "Actual server is healthy"
                 exit 0
               fi
