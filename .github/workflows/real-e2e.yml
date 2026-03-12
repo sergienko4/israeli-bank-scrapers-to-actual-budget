@@ -70,7 +70,7 @@ jobs:
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           port: ${{ secrets.ORACLE_VM_PORT }}
           script: |
-            rm -rf ${{ env.VM_WORK_DIR }}
+            sudo rm -rf ${{ env.VM_WORK_DIR }}
             mkdir -p ${{ env.VM_WORK_DIR }}/data/actual ${{ env.VM_WORK_DIR }}/data/importer ${{ env.VM_WORK_DIR }}/logs
 
       - name: Pull PR image on VM
@@ -251,7 +251,7 @@ jobs:
             docker rmi israeli-bank-importer:real-e2e 2>/dev/null || true
             docker rmi ${{ env.GHCR_IMAGE }}:pr-${{ github.event.pull_request.number }} 2>/dev/null || true
             docker logout ghcr.io 2>/dev/null || true
-            rm -rf ${{ env.VM_WORK_DIR }}
+            sudo rm -rf ${{ env.VM_WORK_DIR }}
 
       - name: Restart production
         if: always()
