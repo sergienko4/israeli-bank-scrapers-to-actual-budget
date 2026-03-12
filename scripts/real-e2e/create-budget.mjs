@@ -25,6 +25,16 @@ if (!serverURL || !password) {
 }
 
 try {
+  // Bootstrap the fresh Actual server (set password on first use)
+  console.log('Bootstrapping Actual server...');
+  const res = await fetch(`${serverURL}/account/bootstrap`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  const body = await res.text();
+  console.log(`Bootstrap: ${res.status} ${body}`);
+
   await api.init({ dataDir: '/app/data', serverURL, password });
 
   const budgetName = `real-e2e-${Date.now()}`;
