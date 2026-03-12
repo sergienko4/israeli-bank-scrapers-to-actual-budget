@@ -1,41 +1,14 @@
 /**
- * Creates a fresh budget on the Actual Budget server for real E2E testing.
+ * Creates a local test budget for real E2E testing.
+ * Same pattern as tests/e2e/e2e-setup.ts — no server needed.
  *
- * Runs inside the importer Docker container (which has @actual-app/api).
- * Prints the budget syncId to stdout for the workflow to capture.
- *
- * Usage:
- *   docker run --rm --network real-e2e-net \
- *     -v /path/to/data:/app/data \
- *     israeli-bank-importer:real-e2e \
- *     node scripts/real-e2e/create-budget.mjs <serverURL> <password>
- *
- * @param {string} serverURL - Actual Budget server URL (e.g., http://actual-server-test:5006)
- * @param {string} password  - Password for the Actual Budget server
+ * Prints BUDGET_ID=<id> to stdout for the workflow to capture.
  */
 
 import api from '@actual-app/api';
 
-const serverURL = process.argv[2];
-const password = process.argv[3];
-
-if (!serverURL || !password) {
-  console.error('Usage: node create-budget.mjs <serverURL> <password>');
-  process.exit(1);
-}
-
 try {
-  // Bootstrap the fresh Actual server (set password on first use)
-  console.log('Bootstrapping Actual server...');
-  const res = await fetch(`${serverURL}/account/bootstrap`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
-  });
-  const body = await res.text();
-  console.log(`Bootstrap: ${res.status} ${body}`);
-
-  await api.init({ dataDir: '/app/data', serverURL, password });
+  await api.init({ dataDir: '/app/data' });
 
   const budgetName = `real-e2e-${Date.now()}`;
   await api.runImport(budgetName, () => {});
@@ -46,8 +19,7 @@ try {
 
   await api.shutdown();
 
-  // Print only the syncId — captured by the workflow via $(...)
-  console.log(budget.groupId ?? budget.id);
+  console.log(`BUDGET_ID=${budget.id}`);
 } catch (error) {
   console.error('Budget creation failed:', error);
   process.exit(1);

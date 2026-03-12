@@ -71,7 +71,7 @@ jobs:
           port: ${{ secrets.ORACLE_VM_PORT }}
           script: |
             sudo rm -rf ${{ env.VM_WORK_DIR }}
-            mkdir -p ${{ env.VM_WORK_DIR }}/data/actual ${{ env.VM_WORK_DIR }}/data/importer ${{ env.VM_WORK_DIR }}/logs
+            mkdir -p ${{ env.VM_WORK_DIR }}/data ${{ env.VM_WORK_DIR }}/logs
             chmod -R 777 ${{ env.VM_WORK_DIR }}/data ${{ env.VM_WORK_DIR }}/logs
 
       - name: Pull PR image on VM
@@ -112,32 +112,9 @@ jobs:
             mv scripts/real-e2e/*.mjs . 2>/dev/null || true
             rm -rf scripts 2>/dev/null || true
 
-      # ── Start Actual server & create budget ───────────────────────
+      # ── Create local budget ──────────────────────────────────────
 
-      - name: Start Actual Budget server
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.ORACLE_VM_HOST }}
-          username: ${{ secrets.ORACLE_VM_USER }}
-          key: ${{ secrets.ORACLE_VM_SSH_KEY }}
-          port: ${{ secrets.ORACLE_VM_PORT }}
-          command_timeout: 120s
-          script: |
-            cd ${{ env.VM_WORK_DIR }}
-            docker-compose -f docker-compose.real-e2e.yml up -d actual-server-test
-            echo "Waiting for Actual server to be healthy..."
-            for i in $(seq 1 30); do
-              if docker inspect actual-test-server 2>/dev/null | grep -q '"Status": "healthy"'; then
-                echo "Actual server is healthy"
-                exit 0
-              fi
-              sleep 2
-            done
-            echo "ERROR: Actual server did not become healthy in 60s"
-            docker logs actual-test-server
-            exit 1
-
-      - name: Create test budget
+      - name: Create local test budget
         id: budget
         uses: appleboy/ssh-action@v1
         with:
@@ -149,21 +126,19 @@ jobs:
           script: |
             cd ${{ env.VM_WORK_DIR }}
             docker run --rm \
-              --network real-e2e_real-e2e-net \
-              -v ${{ env.VM_WORK_DIR }}/data/importer:/app/data \
+              -v ${{ env.VM_WORK_DIR }}/data:/app/data \
               -v ${{ env.VM_WORK_DIR }}/create-budget.mjs:/app/scripts/real-e2e/create-budget.mjs:ro \
               israeli-bank-importer:real-e2e \
-              node /app/scripts/real-e2e/create-budget.mjs http://actual-server-test:5006 real-e2e-password
+              node /app/scripts/real-e2e/create-budget.mjs
 
-      - name: Extract budget sync ID
-        id: sync
+      - name: Extract budget ID
+        id: bid
         run: |
-          # Get last line from budget creation output (the syncId)
-          SYNC_ID=$(echo "${{ steps.budget.outputs.stdout }}" | grep -oE 'real-e2e-[0-9]+-[a-f0-9]+' | tail -1)
-          echo "Budget syncId: $SYNC_ID"
-          echo "id=$SYNC_ID" >> "$GITHUB_OUTPUT"
+          BUDGET_ID=$(echo "${{ steps.budget.outputs.stdout }}" | grep -oE 'BUDGET_ID=[^ ]+' | cut -d= -f2)
+          echo "Budget ID: $BUDGET_ID"
+          echo "id=$BUDGET_ID" >> "$GITHUB_OUTPUT"
 
-      # ── Deploy encrypted config & run importer ──────────────────
+      # ── Deploy config & run importer (local budget mode) ─────────
 
       - name: Deploy encrypted config.json to VM
         uses: appleboy/ssh-action@v1
@@ -185,15 +160,20 @@ jobs:
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           port: ${{ secrets.ORACLE_VM_PORT }}
           command_timeout: 20m
-          envs: ENCRYPTION_PASSWORD,BUDGET_SYNC_ID
+          envs: ENCRYPTION_PASSWORD,BUDGET_ID
           script: |
             cd ${{ env.VM_WORK_DIR }}
-            docker-compose -f docker-compose.real-e2e.yml run --rm \
+            docker run --rm \
+              --cap-drop ALL --cap-add SYS_ADMIN \
+              --tmpfs /dev/shm:size=256m \
+              -e TZ=Asia/Jerusalem \
               -e CREDENTIALS_ENCRYPTION_PASSWORD="$ENCRYPTION_PASSWORD" \
-              -e ACTUAL_BUDGET_SYNC_ID="$BUDGET_SYNC_ID" \
-              -e ACTUAL_SERVER_URL=http://actual-server-test:5006 \
-              -e ACTUAL_PASSWORD=real-e2e-password \
-              importer-test
+              -e E2E_LOCAL_BUDGET_ID="$BUDGET_ID" \
+              -v ${{ env.VM_WORK_DIR }}/config.json:/app/config.json:ro \
+              -v ${{ env.VM_WORK_DIR }}/data:/app/data \
+              -v ${{ env.VM_WORK_DIR }}/logs:/app/logs \
+              israeli-bank-importer:real-e2e \
+              node dist/Index.js
             EXIT_CODE=$?
             echo "Importer exit code: $EXIT_CODE"
             if [ $EXIT_CODE -gt 1 ]; then
@@ -203,7 +183,7 @@ jobs:
             exit 0
         env:
           ENCRYPTION_PASSWORD: ${{ secrets.REAL_E2E_ENCRYPTION_PASSWORD }}
-          BUDGET_SYNC_ID: ${{ steps.sync.outputs.id }}
+          BUDGET_ID: ${{ steps.bid.outputs.id }}
 
       # ── Verify results ────────────────────────────────────────────
 
@@ -218,12 +198,12 @@ jobs:
           script: |
             cd ${{ env.VM_WORK_DIR }}
             docker run --rm \
-              -v ${{ env.VM_WORK_DIR }}/data/importer:/app/data \
+              -v ${{ env.VM_WORK_DIR }}/data:/app/data \
               -v ${{ env.VM_WORK_DIR }}/verify.mjs:/app/scripts/real-e2e/verify.mjs:ro \
               israeli-bank-importer:real-e2e \
               node /app/scripts/real-e2e/verify.mjs "$BUDGET_ID"
         env:
-          BUDGET_ID: ${{ steps.sync.outputs.id }}
+          BUDGET_ID: ${{ steps.bid.outputs.id }}
 
       - name: Collect importer logs
         if: always()
@@ -246,8 +226,6 @@ jobs:
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           port: ${{ secrets.ORACLE_VM_PORT }}
           script: |
-            cd ${{ env.VM_WORK_DIR }} 2>/dev/null || true
-            docker-compose -f docker-compose.real-e2e.yml down -v 2>/dev/null || true
             docker rmi israeli-bank-importer:real-e2e 2>/dev/null || true
             docker rmi ${{ env.GHCR_IMAGE }}:pr-${{ github.event.pull_request.number }} 2>/dev/null || true
             docker logout ghcr.io 2>/dev/null || true
