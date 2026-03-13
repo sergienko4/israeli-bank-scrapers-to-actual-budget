@@ -1,8 +1,6 @@
-name: E2E Tests
+name: E2E Tests (Scheduled)
 
 on:
-  pull_request:
-    branches: [main]
   schedule:
     - cron: '0 6 * * 1'
 
@@ -18,14 +16,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22.x
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
+      - uses: ./.github/actions/ci/setup
 
       - name: Build TypeScript
         run: npm run build
@@ -47,8 +38,20 @@ jobs:
           cp tests/e2e/fixtures/mock-scraper-result-bank2.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank2.json
           chmod -R 777 tests/e2e/fixtures/e2e-data
 
-      - name: Build Docker image from current branch
-        run: docker build -t israeli-bank-importer:e2e .
+      - uses: ./.github/actions/docker/camoufox-cache
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: israeli-bank-importer:e2e
+          build-args: SKIP_BROWSER_FETCH=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Browser smoke test (verify scraper can launch browser)
         run: |

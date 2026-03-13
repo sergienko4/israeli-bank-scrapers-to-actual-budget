@@ -54,11 +54,21 @@ RUN npm install \
     && npm update --no-save
 
 # Install Camoufox browser (Firefox-based anti-detect)
-# Fetch runs as root → binary lands in /root/.cache/camoufox
-# Move to /home/node/.cache/ so the node user (runtime) can find it
-RUN npx @hieutran094/camoufox-js fetch \
-    && mkdir -p /home/node/.cache \
-    && mv /root/.cache/camoufox /home/node/.cache/camoufox
+# CI pre-downloads the binary into .camoufox-cache/ to avoid GitHub API rate limits.
+# Local/release builds fetch normally via npx.
+ARG SKIP_BROWSER_FETCH=false
+COPY .camoufox-cache/ /tmp/camoufox-precache/
+
+RUN if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ -f /tmp/camoufox-precache/camoufox-bin ]; then \
+      echo "Using pre-cached Camoufox binary" && \
+      mkdir -p /home/node/.cache/camoufox && \
+      cp -r /tmp/camoufox-precache/* /home/node/.cache/camoufox/; \
+    else \
+      npx @hieutran094/camoufox-js fetch && \
+      mkdir -p /home/node/.cache && \
+      mv /root/.cache/camoufox /home/node/.cache/camoufox; \
+    fi && \
+    rm -rf /tmp/camoufox-precache
 
 # Copy source code
 COPY src ./src

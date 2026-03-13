@@ -1,0 +1,44 @@
+name: Camoufox Cache
+description: >
+  Cache the Camoufox browser binary with actions/cache, falling back to
+  authenticated gh release download when camoufox-js fetch is rate-limited.
+  Injects the binary into .camoufox-cache/ for Docker build context.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore Camoufox cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/camoufox
+        key: camoufox-${{ hashFiles('package-lock.json') }}
+        restore-keys: |
+          camoufox-
+
+    - name: Install Camoufox browser
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if [ -f ~/.cache/camoufox/camoufox-bin ]; then
+          echo "Camoufox already cached, skipping fetch"
+        else
+          echo "Cache miss — attempting camoufox-js fetch..."
+          if npx @hieutran094/camoufox-js fetch; then
+            echo "Camoufox installed via camoufox-js"
+          else
+            echo "camoufox-js fetch failed (likely rate-limited) — falling back to gh release download"
+            ASSET_DIR=$(mktemp -d)
+            gh release download --repo daijro/camoufox --pattern 'camoufox-*-lin.x86_64.zip' --dir "$ASSET_DIR" --clobber
+            mkdir -p ~/.cache/camoufox
+            unzip -o "$ASSET_DIR"/*.zip -d ~/.cache/camoufox/
+            rm -rf "$ASSET_DIR"
+            chmod -R 755 ~/.cache/camoufox
+            test -f ~/.cache/camoufox/camoufox-bin || (echo "ERROR: camoufox-bin not found after fallback" && exit 1)
+            echo "Camoufox installed via authenticated gh fallback"
+          fi
+        fi
+
+    - name: Inject Camoufox into Docker build context
+      shell: bash
+      run: cp -r ~/.cache/camoufox/* .camoufox-cache/
