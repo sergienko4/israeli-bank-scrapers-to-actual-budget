@@ -12,6 +12,7 @@ import { getLogger, LogFileReader } from '../Logger/Index.js';
 
 const MAX_TELEGRAM_LENGTH = 4096;
 const DEFAULT_LOG_COUNT = 50;
+const ALREADY_RUNNING = '⏳ Import already running. Please wait.';
 
 /** Options for constructing a TelegramCommandHandler. */
 export interface CommandHandlerOptions {
@@ -124,7 +125,7 @@ export class TelegramCommandHandler {
   /** Handles the scan_all callback — imports all configured banks. */
   private async handleScanAll(): Promise<void> {
     if (this.mediator.isImporting()) {
-      await this.reply('⏳ Import already running. Please wait.');
+      await this.reply(ALREADY_RUNNING);
       return;
     }
     await this.executeImport(undefined);
@@ -136,7 +137,7 @@ export class TelegramCommandHandler {
    */
   private async handleScan(bankArg?: string): Promise<void> {
     if (this.mediator.isImporting()) {
-      await this.reply('⏳ Import already running. Please wait.');
+      await this.reply(ALREADY_RUNNING);
       return;
     }
     if (!bankArg && this.sendScanMenu && this.getBankNames) {
@@ -180,7 +181,7 @@ export class TelegramCommandHandler {
     const label = banks ? ` (${banks.join(', ')})` : '';
     await this.reply(`⏳ Starting import...${label}`);
     const batchId = this.mediator.requestImport({ source: 'telegram', banks });
-    if (!batchId) { await this.reply('⏳ Import already running. Please wait.'); return; }
+    if (!batchId) { await this.reply(ALREADY_RUNNING); return; }
     const result = await this.mediator.waitForBatch(batchId);
     if (result.failureCount > 0) {
       await this.reply(this.buildBatchErrorReply(result));
@@ -329,14 +330,14 @@ export class TelegramCommandHandler {
   /** Handles the /preview command — runs a dry-run import without writing to Actual Budget. */
   private async handlePreview(): Promise<void> {
     if (this.mediator.isImporting()) {
-      await this.reply('⏳ Import already running. Please wait.');
+      await this.reply(ALREADY_RUNNING);
       return;
     }
     await this.reply('🔍 Starting dry run — no changes will be made...');
     const batchId = this.mediator.requestImport({
       source: 'telegram', extraEnv: { DRY_RUN: 'true' },
     });
-    if (!batchId) { await this.reply('⏳ Import already running. Please wait.'); return; }
+    if (!batchId) { await this.reply(ALREADY_RUNNING); return; }
     const result = await this.mediator.waitForBatch(batchId);
     const dur = (result.totalDurationMs / 1000).toFixed(0);
     await this.reply(`✅ Dry run completed (${dur}s). See preview report above.`);
