@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.33.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.4...v1.33.5) (2026-03-13)
+
+
+### Fixed
+
+* update README badge URL for renamed pr.yml workflow ([#229](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/229)) ([b1e50ca](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b1e50ca1c81cf56c23691163339b51fad8242824))
+
+## [1.33.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.3...v1.33.4) (2026-03-13)
+
+
+### Fixed
+
+* **deps:** update critical dependencies ([#224](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/224)) ([169dcf7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/169dcf748137ed6e2e1d6968fc4a298fd24d0079))
+
 ## [1.33.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.2...v1.33.3) (2026-03-11)
 
 

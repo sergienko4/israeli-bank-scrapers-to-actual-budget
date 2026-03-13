@@ -61,3 +61,7 @@ tasks/
 
 # Generated API documentation
 docs/api/
+
+# Camoufox cache (CI-injected, only .gitkeep committed)
+.camoufox-cache/*
+!.camoufox-cache/.gitkeep

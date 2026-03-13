@@ -1,0 +1,206 @@
+name: PR Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  security-events: write
+
+jobs:
+  # ─── BUILD ─────────────────────────────────────────
+  build:
+    name: Build & Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/ci/setup
+      - run: npm audit --audit-level=moderate
+      - run: npm run build
+      - run: npm run docs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          retention-days: 1
+
+  # ─── DOCKER BUILD ──────────────────────────────────
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/docker/camoufox-cache
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: israeli-bank-importer:ci
+          build-args: SKIP_BROWSER_FETCH=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Save Docker image
+        run: docker save israeli-bank-importer:ci | gzip > /tmp/image.tar.gz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docker-image
+          path: /tmp/image.tar.gz
+          retention-days: 1
+          compression-level: 0
+
+  # ─── TEST & LINT ───────────────────────────────────
+  validate:
+    name: Test & Lint
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/ci/setup
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - run: npm run validate:ci
+        env:
+          E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
+          E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+  # ─── DOCUMENTATION ─────────────────────────────────
+  docs:
+    name: Documentation Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Lint markdown
+        run: npx markdownlint-cli2 --config config/markdownlint/.markdownlint.jsonc "README.md" ".github/**/*.md"
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: '--exclude-path config/lychee/ignore --exclude "https://sergienko4\.github\.io" **/*.md'
+          fail: true
+
+  # ─── CODEQL ────────────────────────────────────────
+  security:
+    name: CodeQL Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v4
+
+  # ─── TRIVY ─────────────────────────────────────────
+  trivy:
+    name: Container Security Scan
+    needs: docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          name: docker-image
+          path: /tmp
+      - name: Load Docker image
+        run: gunzip -c /tmp/image.tar.gz | docker load
+      - uses: ./.github/actions/security/trivy-scan
+        with:
+          image-ref: israeli-bank-importer:ci
+
+  # ─── E2E ───────────────────────────────────────────
+  e2e:
+    name: E2E Tests
+    if: github.event_name == 'pull_request'
+    needs: [build, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/ci/setup
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/download-artifact@v7
+        with:
+          name: docker-image
+          path: /tmp
+      - name: Load Docker image
+        run: gunzip -c /tmp/image.tar.gz | docker load
+
+      - name: Create test budget
+        run: npm run test:e2e:setup
+      - name: Extract budget ID
+        id: budget
+        run: |
+          BUDGET_ID=$(ls tests/e2e/fixtures/e2e-data/ | grep "e2e-test-budget-" | head -1)
+          echo "id=$BUDGET_ID" >> "$GITHUB_OUTPUT"
+          echo "Budget ID: $BUDGET_ID"
+      - name: Prepare per-bank mock data
+        run: |
+          mkdir -p tests/e2e/fixtures/mock-scraper-dir
+          cp tests/e2e/fixtures/mock-scraper-result.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank.json
+          cp tests/e2e/fixtures/mock-scraper-result-bank2.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank2.json
+          chmod -R 777 tests/e2e/fixtures/e2e-data
+
+      - name: Browser smoke test (verify scraper can launch browser)
+        run: |
+          docker run --rm --cap-add SYS_ADMIN israeli-bank-importer:ci \
+            node --input-type=module -e "
+              import { createScraper } from '@sergienko4/israeli-bank-scrapers';
+              const s = createScraper({ companyId: 'hapoalim', startDate: new Date() });
+              await s.initialize();
+              await s.terminate(true);
+              console.log('Browser smoke test passed');
+            "
+
+      - name: "Run #1: First import (creates transactions)"
+        run: |
+          set +e
+          docker run --rm \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/config.generated.json:/app/config.json:ro \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/e2e-data:/app/data \
+            -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
+            -e E2E_LOCAL_BUDGET_ID=${{ steps.budget.outputs.id }} \
+            israeli-bank-importer:ci \
+            node dist/Index.js
+          EXIT_CODE=$?
+          echo "Run #1 exit code: $EXIT_CODE"
+          if [ $EXIT_CODE -gt 1 ]; then
+            echo "::error::Importer crashed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+      - name: "Run #2: Dedup verification (same data, no new transactions)"
+        run: |
+          set +e
+          docker run --rm \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/config.generated.json:/app/config.json:ro \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro \
+            -v ${{ github.workspace }}/tests/e2e/fixtures/e2e-data:/app/data \
+            -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
+            -e E2E_LOCAL_BUDGET_ID=${{ steps.budget.outputs.id }} \
+            israeli-bank-importer:ci \
+            node dist/Index.js
+          EXIT_CODE=$?
+          echo "Run #2 exit code: $EXIT_CODE"
+          if [ $EXIT_CODE -gt 1 ]; then
+            echo "::error::Importer crashed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+      - name: Verify pipeline results
+        run: npm run test:e2e
+        env:
+          E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
+          E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
