@@ -59,7 +59,7 @@ RUN npm install \
 ARG SKIP_BROWSER_FETCH=false
 COPY .camoufox-cache/ /tmp/camoufox-precache/
 
-RUN if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ -f /tmp/camoufox-precache/camoufox-bin ]; then \
+RUN if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ -f /tmp/camoufox-precache/camoufox-bin ] && [ -f /tmp/camoufox-precache/version.json ]; then \
       echo "Using pre-cached Camoufox binary" && \
       mkdir -p /home/node/.cache/camoufox && \
       cp -r /tmp/camoufox-precache/* /home/node/.cache/camoufox/; \

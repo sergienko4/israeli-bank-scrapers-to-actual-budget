@@ -20,8 +20,8 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        if [ -f ~/.cache/camoufox/camoufox-bin ]; then
-          echo "Camoufox already cached, skipping fetch"
+        if [ -f ~/.cache/camoufox/camoufox-bin ] && [ -f ~/.cache/camoufox/version.json ]; then
+          echo "Camoufox already cached (binary + version.json), skipping fetch"
         else
           echo "Cache miss — attempting camoufox-js fetch..."
           if npx @hieutran094/camoufox-js fetch; then

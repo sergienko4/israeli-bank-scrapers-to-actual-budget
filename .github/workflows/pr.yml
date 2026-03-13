@@ -81,17 +81,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: DavidAnson/markdownlint-cli2-action@v22
-        with:
-          config: config/markdownlint/.markdownlint.jsonc
+      - name: Lint markdown
+        run: npx markdownlint-cli2 --config config/markdownlint/.markdownlint.jsonc "README.md" ".github/**/*.md"
       - uses: lycheeverse/lychee-action@v2
         with:
           args: '--exclude-path config/lychee/ignore --exclude "https://sergienko4\.github\.io" **/*.md'
           fail: true
 
   # ─── CODEQL ────────────────────────────────────────
-  # Handled by GitHub's default CodeQL setup (enabled via repo settings).
-  # Advanced (workflow-based) CodeQL conflicts with default setup on SARIF upload.
+  security:
+    name: CodeQL Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v4
 
   # ─── TRIVY ─────────────────────────────────────────
   trivy:
