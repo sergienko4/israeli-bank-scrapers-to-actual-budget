@@ -1,8 +1,6 @@
-name: E2E Tests
+name: E2E Tests (Scheduled)
 
 on:
-  pull_request:
-    branches: [main]
   schedule:
     - cron: '0 6 * * 1'
 
@@ -18,14 +16,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22.x
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
+      - uses: ./.github/actions/ci/setup
 
       - name: Build TypeScript
         run: npm run build
@@ -47,13 +38,11 @@ jobs:
           cp tests/e2e/fixtures/mock-scraper-result-bank2.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank2.json
           chmod -R 777 tests/e2e/fixtures/e2e-data
 
-      - name: Cache Camoufox browser
-        uses: ./.github/actions/camoufox-cache
+      - uses: ./.github/actions/docker/camoufox-cache
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@v4
 
-      - name: Build Docker image from current branch
+      - name: Build Docker image
         uses: docker/build-push-action@v7
         with:
           context: .

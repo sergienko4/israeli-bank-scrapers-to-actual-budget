@@ -20,11 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22.x
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/ci/setup
       - name: Run unit tests with JSON reporter
         run: npx vitest run --config config/vitest.config.ts --reporter=json --outputFile=test-results.json
       - name: Run E2E tests with JSON reporter
