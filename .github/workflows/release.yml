@@ -42,6 +42,45 @@ jobs:
             echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+
+      - name: Restore Camoufox cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/camoufox
+          key: camoufox-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            camoufox-
+
+      - name: Install Camoufox browser
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f ~/.cache/camoufox/camoufox-bin ]; then
+            echo "Camoufox already cached, skipping fetch"
+          else
+            echo "Cache miss — attempting camoufox-js fetch..."
+            if npx @hieutran094/camoufox-js fetch; then
+              echo "Camoufox installed via camoufox-js"
+            else
+              echo "camoufox-js fetch failed (likely rate-limited) — falling back to gh release download"
+              ASSET_DIR=$(mktemp -d)
+              gh release download --repo daijro/camoufox --pattern 'camoufox-*-lin.x86_64.zip' --dir "$ASSET_DIR" --clobber
+              mkdir -p ~/.cache/camoufox
+              unzip -o "$ASSET_DIR"/*.zip -d ~/.cache/camoufox/
+              rm -rf "$ASSET_DIR"
+              chmod -R 755 ~/.cache/camoufox
+              test -f ~/.cache/camoufox/camoufox-bin || (echo "ERROR: camoufox-bin not found after fallback" && exit 1)
+              echo "Camoufox installed via authenticated gh fallback"
+            fi
+          fi
+
+      - name: Inject Camoufox into Docker build context
+        run: cp -r ~/.cache/camoufox/* .camoufox-cache/
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -68,6 +107,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             APT_CACHE_BUST=${{ github.run_id }}
+            SKIP_BROWSER_FETCH=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
