@@ -5,50 +5,56 @@
 
 import type { INotifier } from './Notifications/INotifier.js';
 import type { IAuditLog, AuditEntry } from './AuditLogService.js';
+import type { ImportMediator } from './ImportMediator.js';
+import type { BatchResult } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import { getLogger, LogFileReader } from '../Logger/Index.js';
 
 const MAX_TELEGRAM_LENGTH = 4096;
 const DEFAULT_LOG_COUNT = 50;
+const ALREADY_RUNNING = '⏳ Import already running. Please wait.';
 
+/** Options for constructing a TelegramCommandHandler. */
 export interface CommandHandlerOptions {
-  runImport: (banks?: string[]) => Promise<number>;
-  notifier: INotifier;
-  auditLog?: IAuditLog;
-  runWatch?: () => Promise<string | null>;
-  runValidate?: () => Promise<string>;
-  runPreview?: () => Promise<number>;
-  getBankNames?: () => string[];
-  sendScanMenu?: (banks: string[]) => Promise<void>;
-  logDir?: string;
+  /** The ImportMediator that handles import requests. */
+  readonly mediator: ImportMediator;
+  /** Notifier for sending Telegram messages. */
+  readonly notifier: INotifier;
+  /** Optional audit log for recording import history. */
+  readonly auditLog?: IAuditLog;
+  /** Optional callback to run spending watch rules. */
+  readonly runWatch?: () => Promise<string | null>;
+  /** Optional callback to validate the configuration. */
+  readonly runValidate?: () => Promise<string>;
+  /** Optional callback to get all configured bank names. */
+  readonly getBankNames?: () => string[];
+  /** Optional callback to display the inline keyboard scan menu. */
+  readonly sendScanMenu?: (banks: string[]) => Promise<void>;
+  /** Directory containing log files. */
+  readonly logDir?: string;
 }
 
 /** Handles bot commands dispatched from TelegramPoller (scan, status, logs, help, etc.). */
 export class TelegramCommandHandler {
-  private runImport: (banks?: string[]) => Promise<number>;
-  private notifier: INotifier;
-  private auditLog?: IAuditLog;
-  private runWatch?: () => Promise<string | null>;
-  private runValidate?: () => Promise<string>;
-  private runPreview?: () => Promise<number>;
-  private getBankNames?: () => string[];
-  private sendScanMenu?: (banks: string[]) => Promise<void>;
-  private logDir: string;
-  private importPromise: Promise<void> | null = null;
-  private lastRunTime: Date | null = null;
-  private lastRunResult: string | null = null;
+  private readonly mediator: ImportMediator;
+  private readonly notifier: INotifier;
+  private readonly auditLog?: IAuditLog;
+  private readonly runWatch?: () => Promise<string | null>;
+  private readonly runValidate?: () => Promise<string>;
+  private readonly getBankNames?: () => string[];
+  private readonly sendScanMenu?: (banks: string[]) => Promise<void>;
+  private readonly logDir: string;
 
   /**
    * Creates a TelegramCommandHandler with the provided command callbacks and configuration.
-   * @param opts - Options including import runner, notifier, audit log, and optional features.
+   * @param opts - Options including mediator, notifier, audit log, and optional features.
    */
   constructor(opts: CommandHandlerOptions) {
-    this.runImport = opts.runImport;
+    this.mediator = opts.mediator;
     this.notifier = opts.notifier;
     this.auditLog = opts.auditLog;
     this.runWatch = opts.runWatch;
     this.runValidate = opts.runValidate;
-    this.runPreview = opts.runPreview;
     this.getBankNames = opts.getBankNames;
     this.sendScanMenu = opts.sendScanMenu;
     this.logDir = opts.logDir ?? './logs';
@@ -118,9 +124,11 @@ export class TelegramCommandHandler {
 
   /** Handles the scan_all callback — imports all configured banks. */
   private async handleScanAll(): Promise<void> {
-    if (this.importPromise) { await this.reply('⏳ Import already running. Please wait.'); return; }
-    this.importPromise = this.executeImport(undefined);
-    await this.importPromise;
+    if (this.mediator.isImporting()) {
+      await this.reply(ALREADY_RUNNING);
+      return;
+    }
+    await this.executeImport(undefined);
   }
 
   /**
@@ -128,15 +136,17 @@ export class TelegramCommandHandler {
    * @param bankArg - Optional bank name or comma-separated list to limit the import scope.
    */
   private async handleScan(bankArg?: string): Promise<void> {
-    if (this.importPromise) { await this.reply('⏳ Import already running. Please wait.'); return; }
+    if (this.mediator.isImporting()) {
+      await this.reply(ALREADY_RUNNING);
+      return;
+    }
     if (!bankArg && this.sendScanMenu && this.getBankNames) {
       const banks = this.getBankNames();
       if (banks.length > 0) { await this.sendScanMenu(banks); return; }
     }
     const banks = bankArg ? this.resolveBanks(bankArg) : undefined;
     if (typeof banks === 'string') { await this.reply(banks); return; }
-    this.importPromise = this.executeImport(banks);
-    await this.importPromise;
+    await this.executeImport(banks);
   }
 
   /**
@@ -164,32 +174,27 @@ export class TelegramCommandHandler {
   }
 
   /**
-   * Runs the import pipeline and reports success/failure back to Telegram.
+   * Requests an import via the mediator and reports the batch result.
    * @param banks - Optional list of banks to import; undefined imports all.
    */
   private async executeImport(banks?: string[]): Promise<void> {
     const label = banks ? ` (${banks.join(', ')})` : '';
     await this.reply(`⏳ Starting import...${label}`);
-    const start = Date.now();
-    try {
-      const exitCode = await this.runImport(banks);
-      const dur = ((Date.now() - start) / 1000).toFixed(0);
-      this.lastRunTime = new Date();
-      this.lastRunResult = exitCode === 0 ? 'success' : 'failed';
-      if (exitCode !== 0) {
-        await this.reply(this.buildErrorReply(dur));
-      }
-    } finally {
-      this.importPromise = null;
+    const batchId = this.mediator.requestImport({ source: 'telegram', banks });
+    if (!batchId) { await this.reply(ALREADY_RUNNING); return; }
+    const result = await this.mediator.waitForBatch(batchId);
+    if (result.failureCount > 0) {
+      await this.reply(this.buildBatchErrorReply(result));
     }
   }
 
   /**
-   * Builds a detailed error reply message using the most recent audit log entry.
-   * @param dur - Human-readable duration string for the failed import.
+   * Builds a detailed error reply from a BatchResult and the most recent audit entry.
+   * @param batch - The completed BatchResult with failure information.
    * @returns Multi-line error reply text with failed bank details.
    */
-  private buildErrorReply(dur: string): string {
+  private buildBatchErrorReply(batch: BatchResult): string {
+    const dur = (batch.totalDurationMs / 1000).toFixed(0);
     const entry = this.auditLog?.getRecent(1)[0];
     if (!entry || entry.failedBanks === 0) {
       return `❌ Import failed (${dur}s). Use /logs for details.`;
@@ -208,10 +213,13 @@ export class TelegramCommandHandler {
   /** Sends the current import status and recent audit history to Telegram. */
   private async handleStatus(): Promise<void> {
     const lines: string[] = ['📊 <b>Status</b>', ''];
-    lines.push(this.lastRunTime
-      ? `Last run: ${this.timeSince(this.lastRunTime)} ago (${this.lastRunResult})`
+    const lastTime = this.mediator.getLastRunTime();
+    const lastResult = this.mediator.getLastResult();
+    const label = lastResult ? (lastResult.failureCount === 0 ? 'success' : 'failed') : null;
+    lines.push(lastTime
+      ? `Last run: ${this.timeSince(lastTime)} ago (${label})`
       : 'No imports run yet');
-    lines.push(`Currently: ${this.importPromise ? '⏳ importing...' : '✅ idle'}`);
+    lines.push(`Currently: ${this.mediator.isImporting() ? '⏳ importing...' : '✅ idle'}`);
     this.appendRecentHistory(lines);
     await this.reply(lines.join('\n'));
   }
@@ -321,31 +329,18 @@ export class TelegramCommandHandler {
 
   /** Handles the /preview command — runs a dry-run import without writing to Actual Budget. */
   private async handlePreview(): Promise<void> {
-    if (!this.runPreview) {
-      await this.reply('🔍 Preview mode unavailable.');
+    if (this.mediator.isImporting()) {
+      await this.reply(ALREADY_RUNNING);
       return;
     }
-    if (this.importPromise) { await this.reply('⏳ Import already running. Please wait.'); return; }
     await this.reply('🔍 Starting dry run — no changes will be made...');
-    this.importPromise = this.executePreview(this.runPreview);
-    await this.importPromise;
-  }
-
-  /**
-   * Runs the preview function and reports completion or error to Telegram.
-   * @param run - Async function that executes the dry-run import.
-   */
-  private async executePreview(run: () => Promise<number>): Promise<void> {
-    const start = Date.now();
-    try {
-      await run();
-      const dur = ((Date.now() - start) / 1000).toFixed(0);
-      await this.reply(`✅ Dry run completed (${dur}s). See preview report above.`);
-    } catch (error: unknown) {
-      await this.reply(`❌ Preview error: ${errorMessage(error)}`);
-    } finally {
-      this.importPromise = null;
-    }
+    const batchId = this.mediator.requestImport({
+      source: 'telegram', extraEnv: { DRY_RUN: 'true' },
+    });
+    if (!batchId) { await this.reply(ALREADY_RUNNING); return; }
+    const result = await this.mediator.waitForBatch(batchId);
+    const dur = (result.totalDurationMs / 1000).toFixed(0);
+    await this.reply(`✅ Dry run completed (${dur}s). See preview report above.`);
   }
 
   /** Sends the list of available bot commands to Telegram. */

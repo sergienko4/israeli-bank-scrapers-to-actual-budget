@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
+import type { ImportMediator } from '../../src/Services/ImportMediator.js';
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
 
@@ -11,19 +12,45 @@ vi.mock('../../src/Logger/Index.js', () => ({
   deriveLogFormat: vi.fn().mockReturnValue('words'),
 }));
 
+/** Creates a mock ImportMediator with default happy-path behavior. */
+function createMockMediator(): {
+  requestImport: ReturnType<typeof vi.fn>;
+  waitForBatch: ReturnType<typeof vi.fn>;
+  isImporting: ReturnType<typeof vi.fn>;
+  getLastResult: ReturnType<typeof vi.fn>;
+  getLastRunTime: ReturnType<typeof vi.fn>;
+  setPoller: ReturnType<typeof vi.fn>;
+} {
+  return {
+    requestImport: vi.fn().mockReturnValue('batch-1'),
+    waitForBatch: vi.fn().mockResolvedValue({
+      batchId: 'batch-1', source: 'telegram',
+      jobs: [], totalDurationMs: 5000,
+      successCount: 1, failureCount: 0,
+    }),
+    isImporting: vi.fn().mockReturnValue(false),
+    getLastResult: vi.fn().mockReturnValue(null),
+    getLastRunTime: vi.fn().mockReturnValue(null),
+    setPoller: vi.fn(),
+  };
+}
+
 describe('TelegramCommandHandler', () => {
   let handler: TelegramCommandHandler;
-  let mockRunImport: any;
-  let mockNotifier: any;
+  let mockMediator: ReturnType<typeof createMockMediator>;
+  let mockNotifier: { sendMessage: ReturnType<typeof vi.fn>; sendSummary: ReturnType<typeof vi.fn>; sendError: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    mockRunImport = vi.fn().mockResolvedValue(0);
+    mockMediator = createMockMediator();
     mockNotifier = {
       sendMessage: vi.fn().mockResolvedValue(undefined),
       sendSummary: vi.fn(),
       sendError: vi.fn()
     };
-    handler = new TelegramCommandHandler({ runImport: mockRunImport, notifier: mockNotifier });
+    handler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+    });
     vi.clearAllMocks();
     mockGetRecent.mockReturnValue([]);
   });
@@ -32,41 +59,47 @@ describe('TelegramCommandHandler', () => {
     await handler.handle('/scan');
 
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Starting import'));
-    expect(mockRunImport).toHaveBeenCalledWith(undefined);
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({ source: 'telegram', banks: undefined });
   });
 
   it('runs import on /import', async () => {
     await handler.handle('/import');
-    expect(mockRunImport).toHaveBeenCalledWith(undefined);
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({ source: 'telegram', banks: undefined });
   });
 
-  it('/scan with single bank passes bank array to runImport', async () => {
+  it('/scan with single bank passes bank array to mediator', async () => {
     const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal', 'oneZero']);
     handler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
     });
 
     await handler.handle('/scan discount');
 
-    expect(mockRunImport).toHaveBeenCalledWith(['discount']);
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({ source: 'telegram', banks: ['discount'] });
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('discount'));
   });
 
   it('/scan with multiple banks comma-separated', async () => {
     const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal', 'oneZero']);
     handler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
     });
 
     await handler.handle('/scan visaCal,oneZero');
 
-    expect(mockRunImport).toHaveBeenCalledWith(['visaCal', 'oneZero']);
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({ source: 'telegram', banks: ['visaCal', 'oneZero'] });
   });
 
   it('/scan with unknown bank replies error and lists available', async () => {
     const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
     handler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
     });
 
     await handler.handle('/scan unknownBank');
@@ -77,59 +110,68 @@ describe('TelegramCommandHandler', () => {
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
       expect.stringContaining('discount')
     );
-    expect(mockRunImport).not.toHaveBeenCalled();
+    expect(mockMediator.requestImport).not.toHaveBeenCalled();
+  });
+
+  it('/scan with empty bank list falls through to import', async () => {
+    await handler.handle('/scan ');
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({ source: 'telegram', banks: undefined });
   });
 
   it('scan_all callback imports all banks (bypasses menu)', async () => {
     const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
     handler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier,
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
       getBankNames: mockGetBankNames,
       sendScanMenu: vi.fn(),
     });
 
     await handler.handle('scan_all');
 
-    expect(mockRunImport).toHaveBeenCalledWith(undefined);
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({ source: 'telegram', banks: undefined });
   });
 
   it('scan:bankName callback imports that bank directly', async () => {
     const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
     handler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
     });
 
     await handler.handle('scan:discount');
 
-    expect(mockRunImport).toHaveBeenCalledWith(['discount']);
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({ source: 'telegram', banks: ['discount'] });
   });
 
   it('/scan bank name is case-insensitive', async () => {
     const mockGetBankNames = vi.fn().mockReturnValue(['beinleumi', 'oneZero']);
     handler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, getBankNames: mockGetBankNames,
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
     });
 
     await handler.handle('/scan BEINLEUMI');  // uppercase, config has lowercase
 
-    expect(mockRunImport).toHaveBeenCalledWith(['beinleumi']);
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({ source: 'telegram', banks: ['beinleumi'] });
   });
 
-  it('prevents concurrent imports', async () => {
-    let resolveImport: any;
-    mockRunImport.mockImplementation(() => new Promise(resolve => { resolveImport = resolve; }));
+  it('prevents concurrent imports on /scan', async () => {
+    mockMediator.isImporting.mockReturnValue(true);
 
-    const first = handler.handle('/scan');
-
-    // Wait for first to start
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    // Try second while first is running
     await handler.handle('/scan');
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('already running'));
+    expect(mockMediator.requestImport).not.toHaveBeenCalled();
+  });
 
-    resolveImport(0);
-    await first;
+  it('prevents concurrent imports on scan_all', async () => {
+    mockMediator.isImporting.mockReturnValue(true);
+
+    await handler.handle('scan_all');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('already running'));
+    expect(mockMediator.requestImport).not.toHaveBeenCalled();
   });
 
   it('responds to /help', async () => {
@@ -151,7 +193,8 @@ describe('TelegramCommandHandler', () => {
   });
 
   it('responds to /status after a run', async () => {
-    await handler.handle('/scan');
+    mockMediator.getLastRunTime.mockReturnValue(new Date());
+    mockMediator.getLastResult.mockReturnValue({ failureCount: 0 });
     await handler.handle('/status');
 
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('ago'));
@@ -160,7 +203,7 @@ describe('TelegramCommandHandler', () => {
 
   it('ignores unknown commands', async () => {
     await handler.handle('/unknown');
-    expect(mockRunImport).not.toHaveBeenCalled();
+    expect(mockMediator.requestImport).not.toHaveBeenCalled();
   });
 
   it('/watch without runWatch shows hint message', async () => {
@@ -235,7 +278,9 @@ describe('TelegramCommandHandler', () => {
   it('/watch with runWatch: calls it and shows result', async () => {
     const mockRunWatch = vi.fn().mockResolvedValue('⚠️ Fast food: 120% of limit');
     const watchHandler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, runWatch: mockRunWatch
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      runWatch: mockRunWatch,
     });
     await watchHandler.handle('/watch');
     expect(mockRunWatch).toHaveBeenCalled();
@@ -245,7 +290,9 @@ describe('TelegramCommandHandler', () => {
   it('/watch with runWatch returning null shows default message', async () => {
     const mockRunWatch = vi.fn().mockResolvedValue(null);
     const watchHandler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, runWatch: mockRunWatch
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      runWatch: mockRunWatch,
     });
     await watchHandler.handle('/watch');
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
@@ -256,7 +303,9 @@ describe('TelegramCommandHandler', () => {
   it('/watch with runWatch throwing shows error message', async () => {
     const mockRunWatch = vi.fn().mockRejectedValue(new Error('Timeout'));
     const watchHandler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, runWatch: mockRunWatch
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      runWatch: mockRunWatch,
     });
     await watchHandler.handle('/watch');
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('Watch error'));
@@ -275,7 +324,9 @@ describe('TelegramCommandHandler', () => {
   it('/check_config with runValidate calls it and sends report in <pre> block', async () => {
     const mockRunValidate = vi.fn().mockResolvedValue('All checks passed ✓');
     const validateHandler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, runValidate: mockRunValidate,
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      runValidate: mockRunValidate,
     });
     await validateHandler.handle('/check_config');
     expect(mockRunValidate).toHaveBeenCalled();
@@ -287,7 +338,9 @@ describe('TelegramCommandHandler', () => {
   it('/check_config with runValidate throwing shows error message', async () => {
     const mockRunValidate = vi.fn().mockRejectedValue(new Error('load failed'));
     const validateHandler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, runValidate: mockRunValidate,
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      runValidate: mockRunValidate,
     });
     await validateHandler.handle('/check_config');
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
@@ -300,53 +353,33 @@ describe('TelegramCommandHandler', () => {
 
   // ─── /preview ───
 
-  it('/preview without runPreview shows unavailable message', async () => {
+  it('/preview requests dry run via mediator', async () => {
     await handler.handle('/preview');
-    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-      expect.stringContaining('unavailable')
-    );
-  });
-
-  it('/preview starts dry run and sends completion', async () => {
-    const mockRunPreview = vi.fn().mockResolvedValue(0);
-    const previewHandler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, runPreview: mockRunPreview,
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({
+      source: 'telegram', extraEnv: { DRY_RUN: 'true' },
     });
-    await previewHandler.handle('/preview');
-    expect(mockRunPreview).toHaveBeenCalled();
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
       expect.stringContaining('completed')
     );
   });
 
   it('/preview blocks when import already running', async () => {
-    const mockRunPreview = vi.fn().mockResolvedValue(0);
-    const previewHandler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, runPreview: mockRunPreview,
-    });
-    (previewHandler as unknown as { importPromise: Promise<void> }).importPromise =
-      new Promise(() => {});
-    await previewHandler.handle('/preview');
-    expect(mockRunPreview).not.toHaveBeenCalled();
+    mockMediator.isImporting.mockReturnValue(true);
+    await handler.handle('/preview');
+    expect(mockMediator.requestImport).not.toHaveBeenCalled();
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
       expect.stringContaining('already running')
     );
   });
 
-  it('/preview sends error message when preview throws', async () => {
-    const mockRunPreview = vi.fn().mockRejectedValue(new Error('scrape failed'));
-    const previewHandler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, runPreview: mockRunPreview,
-    });
-    await previewHandler.handle('/preview');
-    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Preview error')
-    );
-  });
-
-  // ─── buildErrorReply with auditLog (covers lines 91-99) ───
+  // ─── buildBatchErrorReply with auditLog ───
 
   it('/scan failure with audit log builds detailed error reply', async () => {
+    mockMediator.waitForBatch.mockResolvedValue({
+      batchId: 'batch-1', source: 'telegram',
+      jobs: [], totalDurationMs: 5000,
+      successCount: 0, failureCount: 1,
+    });
     const mockAuditLog = {
       record: vi.fn(),
       getRecent: vi.fn().mockReturnValue([{
@@ -358,7 +391,7 @@ describe('TelegramCommandHandler', () => {
       }]),
     };
     const auditHandler = new TelegramCommandHandler({
-      runImport: vi.fn().mockResolvedValue(1),
+      mediator: mockMediator as unknown as ImportMediator,
       notifier: mockNotifier,
       auditLog: mockAuditLog,
     });
@@ -369,9 +402,35 @@ describe('TelegramCommandHandler', () => {
     expect(errMsg).toContain('discount');
   });
 
-  // ─── appendRecentHistory with entries (covers lines 116-117) ───
+  it('/scan failure without audit log shows generic error', async () => {
+    mockMediator.waitForBatch.mockResolvedValue({
+      batchId: 'batch-1', source: 'telegram',
+      jobs: [], totalDurationMs: 3000,
+      successCount: 0, failureCount: 1,
+    });
+    // No auditLog provided — handler uses default (undefined)
+    await handler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    const errMsg = calls.find((m: string) => m.includes('Import failed'));
+    expect(errMsg).toContain('Use /logs for details');
+  });
+
+  it('/scan with menu but empty bank list falls through to import', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue([]);
+    handler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
+      sendScanMenu: vi.fn(),
+    });
+    await handler.handle('/scan');
+    expect(mockMediator.requestImport).toHaveBeenCalled();
+  });
+
+  // ─── appendRecentHistory with entries ───
 
   it('/status with audit entries calls formatAuditEntry for each', async () => {
+    mockMediator.getLastRunTime.mockReturnValue(null);
     const mockAuditLog = {
       record: vi.fn(),
       getRecent: vi.fn().mockReturnValue([{
@@ -387,7 +446,9 @@ describe('TelegramCommandHandler', () => {
       }]),
     };
     const auditHandler = new TelegramCommandHandler({
-      runImport: mockRunImport, notifier: mockNotifier, auditLog: mockAuditLog,
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog: mockAuditLog,
     });
     await auditHandler.handle('/status');
     const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
@@ -399,19 +460,17 @@ describe('TelegramCommandHandler', () => {
   // ─── timeSince direct branch coverage ───
 
   it('timeSince shows minutes (60-3599s)', async () => {
-    const h = new TelegramCommandHandler({ runImport: mockRunImport, notifier: mockNotifier });
-    (h as any).lastRunTime = new Date(Date.now() - 120_000); // 2 min ago
-    (h as any).lastRunResult = 'success';
-    await h.handle('/status');
+    mockMediator.getLastRunTime.mockReturnValue(new Date(Date.now() - 120_000));
+    mockMediator.getLastResult.mockReturnValue({ failureCount: 0 });
+    await handler.handle('/status');
     const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
     expect(msg).toMatch(/2m ago/);
   });
 
   it('timeSince shows hours (3600s+)', async () => {
-    const h = new TelegramCommandHandler({ runImport: mockRunImport, notifier: mockNotifier });
-    (h as any).lastRunTime = new Date(Date.now() - 7200_000); // 2 hours ago
-    (h as any).lastRunResult = 'success';
-    await h.handle('/status');
+    mockMediator.getLastRunTime.mockReturnValue(new Date(Date.now() - 7200_000));
+    mockMediator.getLastResult.mockReturnValue({ failureCount: 0 });
+    await handler.handle('/status');
     const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
     expect(msg).toMatch(/2h ago/);
   });

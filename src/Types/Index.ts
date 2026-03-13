@@ -204,3 +204,66 @@ export interface TelegramApiResponse {
   ok: boolean;
   result?: TelegramUpdate[];
 }
+
+// ─── Import queue / mediator types ───
+
+/** Source that triggered an import request. */
+export type ImportSource = 'cron' | 'telegram' | 'api';
+
+/** Options passed to ImportMediator.requestImport(). */
+export interface ImportRequestOptions {
+  /** Who triggered this import. */
+  readonly source: ImportSource;
+  /** Optional list of bank names; undefined = all banks. */
+  readonly banks?: string[];
+  /** Extra environment variables for the child process. */
+  readonly extraEnv?: Record<string, string>;
+}
+
+/** A single queued import job. */
+export interface ImportJob {
+  /** Unique job identifier. */
+  readonly id: string;
+  /** Bank name (or comma-separated list / "all"). */
+  readonly bankName: string;
+  /** Batch this job belongs to. */
+  readonly batchId: string;
+  /** Source that triggered this import. */
+  readonly source: ImportSource;
+}
+
+/** Result of a single import job. */
+export interface ImportJobResult {
+  /** The completed job. */
+  readonly job: ImportJob;
+  /** Child process exit code (0 = success). */
+  readonly exitCode: number;
+  /** Duration in milliseconds. */
+  readonly durationMs: number;
+}
+
+/** Aggregate result of a batch of import jobs. */
+export interface BatchResult {
+  /** Unique batch identifier. */
+  readonly batchId: string;
+  /** Source that triggered this batch. */
+  readonly source: ImportSource;
+  /** Individual job results. */
+  readonly jobs: ImportJobResult[];
+  /** Total duration in milliseconds. */
+  readonly totalDurationMs: number;
+  /** Number of successful jobs. */
+  readonly successCount: number;
+  /** Number of failed jobs. */
+  readonly failureCount: number;
+}
+
+/** Callbacks for ImportQueue lifecycle events. */
+export interface QueueCallbacks<T> {
+  /** Processes a single queued item. Returns the result. */
+  readonly process: (item: T) => Promise<unknown>;
+  /** Called after each item completes (success or failure). */
+  readonly onJobComplete: (item: T, result: unknown) => void;
+  /** Called when the queue drains completely. */
+  readonly onQueueEmpty: () => void;
+}

@@ -46,13 +46,12 @@ import {
   readJsonOrEncrypted,
   loadFullConfig,
   loadLogConfig,
-  runLocked,
-  runImportLocked,
-  runPreviewLocked,
+  spawnImport,
   logImportResult,
   logCommandCount,
   buildExtraCommands,
   safeSleep,
+  createMediator,
 } from '../src/Scheduler.js';
 
 // ─── readJsonOrEncrypted ─────────────────────────────────────────────────────
@@ -121,43 +120,29 @@ describe('loadLogConfig', () => {
   });
 });
 
-// ─── runLocked ───────────────────────────────────────────────────────────────
+// ─── spawnImport ─────────────────────────────────────────────────────────────
 
-describe('runLocked', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('executes the importFn and returns its exit code', async () => {
-    const fn = vi.fn().mockResolvedValue(0);
-    const result = await runLocked(fn);
-    expect(fn).toHaveBeenCalled();
-    expect(result).toBe(0);
-  });
-
-  it('returns non-zero exit code from failed importFn', async () => {
-    const fn = vi.fn().mockResolvedValue(1);
-    const result = await runLocked(fn);
-    expect(result).toBe(1);
-  });
-});
-
-// ─── runImportLocked / runPreviewLocked ──────────────────────────────────────
-
-describe('runImportLocked', () => {
-  it('calls runImport via runLocked and sets IMPORT_BANKS when banks provided', () => {
+describe('spawnImport', () => {
+  it('spawns node /app/dist/Index.js and returns a promise', () => {
     const mockChild = { on: vi.fn() } as never;
     vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
-    const promise = runImportLocked(['discount', 'leumi']);
-    // Just verify it returns a Promise
-    expect(promise).toBeInstanceOf(Promise);
-  });
-});
-
-describe('runPreviewLocked', () => {
-  it('returns a promise', () => {
-    const mockChild = { on: vi.fn() } as never;
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
-    const result = runPreviewLocked();
+    const result = spawnImport();
     expect(result).toBeInstanceOf(Promise);
+    expect(childProcess.spawn).toHaveBeenCalledWith(
+      'node', ['/app/dist/Index.js'], expect.objectContaining({ stdio: 'inherit' })
+    );
+  });
+});
+
+// ─── createMediator ──────────────────────────────────────────────────────────
+
+describe('createMediator', () => {
+  it('returns an ImportMediator instance', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const mediator = createMediator(null);
+    expect(mediator).toBeDefined();
+    expect(typeof mediator.requestImport).toBe('function');
+    expect(typeof mediator.isImporting).toBe('function');
   });
 });
 

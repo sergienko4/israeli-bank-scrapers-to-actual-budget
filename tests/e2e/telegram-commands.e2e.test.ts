@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { TelegramNotifier } from '../../src/Services/Notifications/TelegramNotifier.js';
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
+import { ImportMediator } from '../../src/Services/ImportMediator.js';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
 import { createLogger } from '../../src/Logger/Index.js';
 import { createTestSummary } from './helpers/testData.js';
@@ -11,6 +12,18 @@ import {
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { existsSync, unlinkSync } from 'fs';
+
+/**
+ * Creates a real ImportMediator for E2E tests with a no-op spawn.
+ * @returns ImportMediator that resolves immediately with exit code 0.
+ */
+function createE2eMediator(): ImportMediator {
+  return new ImportMediator({
+    spawnImport: async () => 0,
+    getBankNames: () => ['discount', 'visaCal', 'oneZero'],
+    notifier: null,
+  });
+}
 
 const collector = createMessageCollector();
 const auditFile = join(tmpdir(), `e2e-cmd-audit-${Date.now()}.json`);
@@ -25,7 +38,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
   it('delivers /help response to real Telegram', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    handler = new TelegramCommandHandler({ runImport: async () => 0, notifier });
+    handler = new TelegramCommandHandler({ mediator: createE2eMediator(), notifier });
 
     await handler.handle('/help');
     expect(collector.messageIds.length).toBeGreaterThan(0);
@@ -38,7 +51,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
     auditLog.record(createTestSummary());
 
     handler = new TelegramCommandHandler({
-      runImport: async () => 0, notifier, auditLog,
+      mediator: createE2eMediator(), notifier, auditLog,
     });
 
     await handler.handle('/status');
@@ -50,14 +63,12 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
   it('delivers /scan starting message to real Telegram', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    let importCalled = false;
-
-    handler = new TelegramCommandHandler({
-      runImport: async () => { importCalled = true; return 0; }, notifier,
-    });
+    const mediator = createE2eMediator();
+    handler = new TelegramCommandHandler({ mediator, notifier });
 
     await handler.handle('/scan');
-    expect(importCalled).toBe(true);
+    // mediator requested the import
+    expect(mediator.getLastRunTime()).not.toBeNull();
     expect(collector.messageIds.length).toBeGreaterThan(0);
   });
 
@@ -65,7 +76,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
     createLogger({ format: 'words', maxBufferSize: 50 });
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    handler = new TelegramCommandHandler({ runImport: async () => 0, notifier });
+    handler = new TelegramCommandHandler({ mediator: createE2eMediator(), notifier });
 
     await handler.handle('/logs');
     expect(collector.messageIds.length).toBeGreaterThan(0);
@@ -74,7 +85,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
   it('delivers /watch response to real Telegram', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    handler = new TelegramCommandHandler({ runImport: async () => 0, notifier });
+    handler = new TelegramCommandHandler({ mediator: createE2eMediator(), notifier });
 
     await handler.handle('/watch');
     expect(collector.messageIds.length).toBeGreaterThan(0);
@@ -85,52 +96,53 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
   it('scan_all callback runs import (bypasses menu)', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    let importCalled = false;
     const banks = ['discount', 'visaCal', 'oneZero'];
+    const mediator = createE2eMediator();
 
     handler = new TelegramCommandHandler({
-      runImport: async () => { importCalled = true; return 0; },
+      mediator,
       notifier,
       getBankNames: () => banks,
       sendScanMenu: (b) => notifier.sendScanMenu(b),
     });
 
     await handler.handle('scan_all');
-    expect(importCalled).toBe(true);
+    expect(mediator.getLastRunTime()).not.toBeNull();
     expect(collector.messageIds.length).toBeGreaterThan(0);
   });
 
   it('scan:bankName callback runs import for that bank', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    const calledWith: string[][] = [];
+    const mediator = createE2eMediator();
 
     handler = new TelegramCommandHandler({
-      runImport: async (banks) => { if (banks) calledWith.push(banks); return 0; },
+      mediator,
       notifier,
       getBankNames: () => ['discount', 'visaCal'],
     });
 
     await handler.handle('scan:discount');
-    expect(calledWith).toEqual([['discount']]);
+    expect(mediator.getLastRunTime()).not.toBeNull();
     expect(collector.messageIds.length).toBeGreaterThan(0);
   });
 
   it('/scan with menu shows inline keyboard (no import)', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    let importCalled = false;
+    const mediator = createE2eMediator();
     const banks = ['discount', 'visaCal', 'amex'];
 
     handler = new TelegramCommandHandler({
-      runImport: async () => { importCalled = true; return 0; },
+      mediator,
       notifier,
       getBankNames: () => banks,
       sendScanMenu: (b) => notifier.sendScanMenu(b),
     });
 
     await handler.handle('/scan');
-    expect(importCalled).toBe(false);
+    // Menu shown, no import triggered — mediator should have no last run
+    expect(mediator.getLastRunTime()).toBeNull();
     expect(collector.messageIds.length).toBeGreaterThan(0);
   });
 });
