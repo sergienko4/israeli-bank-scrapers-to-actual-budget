@@ -10,6 +10,7 @@ import { CronExpressionParser } from 'cron-parser';
 import { TelegramPoller } from './Services/TelegramPoller.js';
 import { TelegramCommandHandler } from './Services/TelegramCommandHandler.js';
 import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
+import { ImportMediator } from './Services/ImportMediator.js';
 import type { ImporterConfig, LogConfig, TelegramConfig } from './Types/Index.js';
 import { AuditLogService } from './Services/AuditLogService.js';
 import { errorMessage } from './Utils/Index.js';
@@ -27,9 +28,6 @@ const logger = getLogger();
 
 logger.info('🚀 Israeli Bank Importer Scheduler Starting...');
 logger.info(`📅 Timezone: ${process.env.TZ || 'UTC'}`);
-
-let activeImport: Promise<number> | null = null;
-let activePoller: TelegramPoller | null = null;
 
 // ─── Config helpers ───
 
@@ -80,44 +78,11 @@ export function loadLogConfig(): LogConfig | undefined {
 // ─── Import execution ───
 
 /**
- * Ensures only one import runs at a time, resuming the Telegram poller when done.
- * @param importFn - Async function that performs the import and returns an exit code.
- * @returns Promise resolving to the import exit code.
- */
-export async function runLocked(importFn: () => Promise<number>): Promise<number> {
-  if (activeImport) { logger.warn('⚠️  Import already running, skipping'); return activeImport; }
-  await activePoller?.stopAndFlush();
-  activeImport = importFn().finally(() => {
-    activeImport = null;
-    activePoller?.start().catch(() => {});
-  });
-  return activeImport;
-}
-
-/**
- * Runs a bank import with optional bank filter, guarded by the single-import lock.
- * @param banks - Optional list of bank names to import; undefined imports all.
- * @returns Promise resolving to the import process exit code.
- */
-export function runImportLocked(banks?: string[]): Promise<number> {
-  const extraEnv: Record<string, string> = banks?.length ? { IMPORT_BANKS: banks.join(',') } : {};
-  return runLocked(() => runImport(extraEnv));
-}
-
-/**
- * Runs a dry-run import guarded by the single-import lock.
- * @returns Promise resolving to the dry-run process exit code.
- */
-export function runPreviewLocked(): Promise<number> {
-  return runLocked(() => runImport({ DRY_RUN: 'true' }));
-}
-
-/**
  * Spawns the import child process and resolves with its exit code.
  * @param extraEnv - Additional environment variables to inject into the child process.
  * @returns Promise resolving to the child process exit code (0 = success).
  */
-function runImport(extraEnv: Record<string, string> = {}): Promise<number> {
+export function spawnImport(extraEnv: Record<string, string> = {}): Promise<number> {
   return new Promise((resolve) => {
     const startTime = new Date();
     logger.info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
@@ -144,6 +109,25 @@ export function logImportResult(code: number | null, startTime: Date): void {
   } else {
     logger.error(`❌ ${time}: Import failed with exit code ${code} (took ${duration}s)`);
   }
+}
+
+// ─── Mediator ───
+
+/**
+ * Creates an ImportMediator wired to spawnImport and the current config.
+ * @param notifier - Optional TelegramNotifier for batch summaries.
+ * @returns A configured ImportMediator instance.
+ */
+export function createMediator(notifier: TelegramNotifier | null): ImportMediator {
+  return new ImportMediator({
+    spawnImport,
+    /**
+     * Returns all configured bank names from the live config.
+     * @returns Array of bank name strings.
+     */
+    getBankNames: () => Object.keys(loadFullConfig()?.banks ?? {}),
+    notifier,
+  });
 }
 
 // ─── Telegram commands ───
@@ -184,22 +168,25 @@ async function runConfigValidation(): Promise<string> {
 /**
  * Constructs a TelegramCommandHandler wired up to all scheduler callbacks.
  * @param notifier - The TelegramNotifier used to send responses.
+ * @param mediator - The ImportMediator that handles import requests.
  * @returns A configured TelegramCommandHandler instance.
  */
-export function buildCommandHandler(notifier: TelegramNotifier): TelegramCommandHandler {
+export function buildCommandHandler(
+  notifier: TelegramNotifier,
+  mediator: ImportMediator
+): TelegramCommandHandler {
   return new TelegramCommandHandler({
-    runImport: runImportLocked, notifier, auditLog: new AuditLogService(),
+    mediator, notifier, auditLog: new AuditLogService(),
     runValidate: runConfigValidation,
-    runPreview: runPreviewLocked,
     /**
-     * Returns the names of all configured banks from the live config.
-     * @returns Array of bank name strings from the current config.
+     * Returns all configured bank names from the live config.
+     * @returns Array of bank name strings.
      */
     getBankNames: () => Object.keys(loadFullConfig()?.banks ?? {}),
     /**
      * Delegates scan menu display to the notifier.
-     * @param banks - Bank names to display as inline keyboard buttons.
-     * @returns Promise that resolves when the menu message is sent.
+     * @param banks - Bank names for the inline keyboard.
+     * @returns Promise resolving when the menu is sent.
      */
     sendScanMenu: (banks) => notifier.sendScanMenu(banks),
     logDir: logConfig?.logDir,
@@ -207,38 +194,44 @@ export function buildCommandHandler(notifier: TelegramNotifier): TelegramCommand
 }
 
 /**
- * Creates the TelegramNotifier, registers commands, and starts the TelegramPoller.
+ * Creates the mediator, handler, poller, and wires them together.
  * @param telegram - Telegram bot configuration (token, chatId, etc.).
  * @param config - Full importer config used to detect optional commands (e.g. watch).
+ * @returns The configured ImportMediator.
  */
 async function createHandlerAndPoller(
   telegram: TelegramConfig, config: ImporterConfig | null
-): Promise<void> {
+): Promise<ImportMediator> {
   const notifier = new TelegramNotifier(telegram);
   const extras = buildExtraCommands(config);
   logCommandCount(extras);
   await notifier.registerCommands(extras);
-  const handler = buildCommandHandler(notifier);
-  activePoller = new TelegramPoller(
+  const mediator = createMediator(notifier);
+  const handler = buildCommandHandler(notifier, mediator);
+  const poller = new TelegramPoller(
     telegram.botToken, telegram.chatId, (text) => handler.handle(text)
   );
-  activePoller.start().catch((err: unknown) => {
+  mediator.setPoller(poller);
+  poller.start().catch((err: unknown) => {
     logger.error(`Telegram command listener crashed: ${errorMessage(err)}`);
   });
+  return mediator;
 }
 
 /**
  * Starts the Telegram command listener when listenForCommands is enabled in config.
  * Errors are caught and logged so the scheduler continues in cron-only mode.
+ * @returns The ImportMediator if Telegram commands are enabled, or null otherwise.
  */
-async function startTelegramCommands(): Promise<void> {
+async function startTelegramCommands(): Promise<ImportMediator | null> {
   const config = loadFullConfig();
   const telegram = config?.notifications?.enabled ? config.notifications.telegram : null;
-  if (!telegram?.listenForCommands) return;
+  if (!telegram?.listenForCommands) return null;
   try {
-    await createHandlerAndPoller(telegram, config);
+    return await createHandlerAndPoller(telegram, config);
   } catch (error: unknown) {
     logger.error(`⚠️  Failed to start Telegram commands: ${errorMessage(error)}`);
+    return null;
   }
 }
 
@@ -291,11 +284,12 @@ export function safeSleep(ms: number): Promise<void> {
 }
 
 /**
- * Runs the cron scheduling loop, sleeping until the next scheduled time and triggering imports.
+ * Runs the cron scheduling loop, sleeping until the next scheduled time.
  * @param schedule - Cron expression defining the import frequency.
+ * @param mediator - The ImportMediator used to request imports.
  * @returns Promise that never resolves (runs forever until the process exits).
  */
-async function scheduleLoop(schedule: string): Promise<never> {
+async function scheduleLoop(schedule: string, mediator: ImportMediator): Promise<never> {
   while (true) {
     try {
       const interval = CronExpressionParser.parse(schedule, { tz: process.env.TZ || 'UTC' });
@@ -305,7 +299,7 @@ async function scheduleLoop(schedule: string): Promise<never> {
       logger.info(`⏳ Waiting until ${nextRun.toISOString()} (${minutesUntil} minutes)`);
       await safeSleep(msUntilNext);
       if (Date.now() < nextRun.getTime()) continue; // Woke early, re-check
-      await runImportLocked();
+      mediator.requestImport({ source: 'cron' });
     } catch (err: unknown) {
       logger.error(`❌ Scheduler error: ${errorMessage(err)}`);
       await safeSleep(60000);
@@ -317,16 +311,21 @@ async function scheduleLoop(schedule: string): Promise<never> {
  * Scheduler entry point: starts Telegram commands and either runs once or enters cron loop.
  */
 async function main(): Promise<void> {
-  await startTelegramCommands();
+  const mediator = await startTelegramCommands() ?? createMediator(null);
   const schedule = process.env.SCHEDULE;
   if (!schedule) {
     logger.info('📝 Running once (no SCHEDULE set)');
-    process.exit(await runImportLocked());
+    const batchId = mediator.requestImport({ source: 'cron' });
+    if (batchId) {
+      const result = await mediator.waitForBatch(batchId);
+      process.exit(result.failureCount > 0 ? 1 : 0);
+    }
+    process.exit(0);
   }
   logger.info(`⏰ Scheduled mode enabled: ${schedule}`);
   logger.info('💡 Import will run according to cron schedule\n');
   validateSchedule(schedule);
-  await scheduleLoop(schedule);
+  await scheduleLoop(schedule, mediator);
 }
 
 // Run only when executed directly (not when imported by tests)

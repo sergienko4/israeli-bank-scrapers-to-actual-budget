@@ -256,4 +256,36 @@ describe('ImportMediator', () => {
     // Should not throw — error is caught internally
     expect(poller.start).toHaveBeenCalled();
   });
+
+  it('sends warning icon in summary when batch has failures', async () => {
+    const notifier = { sendMessage: vi.fn().mockResolvedValue(undefined) };
+    const mediator = new ImportMediator({
+      spawnImport: vi.fn().mockResolvedValue(1),
+      getBankNames: () => ['discount'],
+      notifier: notifier as unknown as INotifier,
+    });
+
+    const batchId = mediator.requestImport({ source: 'telegram', banks: ['discount'] });
+    await mediator.waitForBatch(batchId!);
+
+    expect(notifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('⚠️'));
+  });
+
+  it('passes extraEnv to spawnImport for DRY_RUN', async () => {
+    const spawnImport = vi.fn().mockResolvedValue(0);
+    const mediator = new ImportMediator({
+      spawnImport,
+      getBankNames: () => ['discount'],
+      notifier: null,
+    });
+
+    const batchId = mediator.requestImport({
+      source: 'telegram', banks: ['discount'], extraEnv: { DRY_RUN: 'true' },
+    });
+    await mediator.waitForBatch(batchId!);
+
+    expect(spawnImport).toHaveBeenCalledWith(
+      expect.objectContaining({ DRY_RUN: 'true', IMPORT_BANKS: 'discount' })
+    );
+  });
 });
