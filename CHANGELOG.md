@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.33.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.5...v1.33.6) (2026-03-13)
+
+
+### Refactored
+
+* extract ImportMediator/Queue and wire into Scheduler ([#231](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/231)) ([9c08c97](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/9c08c97f70bac81ad447d3c8bcf45a1bd713fad1))
+
 ## [1.33.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.4...v1.33.5) (2026-03-13)
 
 
