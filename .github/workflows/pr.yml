@@ -89,8 +89,15 @@ jobs:
           fail: true
 
   # ─── CODEQL ────────────────────────────────────────
-  # Handled by GitHub's default CodeQL setup (enabled via repo settings).
-  # Advanced (workflow-based) CodeQL conflicts with default setup on SARIF upload.
+  security:
+    name: CodeQL Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v4
 
   # ─── TRIVY ─────────────────────────────────────────
   trivy:
