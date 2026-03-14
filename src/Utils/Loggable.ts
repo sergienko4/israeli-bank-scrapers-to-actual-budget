@@ -5,7 +5,8 @@
  */
 import { getLogger } from '../Logger/Index.js';
 
-type BoundMethod<This, Args extends unknown[], Return> =
+/** A bound class method signature used by the Loggable decorator. */
+export type BoundMethod<This, Args extends unknown[], Return> =
   (this: This, ...args: Args) => Return;
 
 /**
