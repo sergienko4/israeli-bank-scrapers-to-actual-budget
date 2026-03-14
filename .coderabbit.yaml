@@ -1,10 +1,17 @@
-language: en
+language: en-US
+early_access: false
+enable_free_tier: true
 reviews:
   profile: assertive
   request_changes_workflow: false
   high_level_summary: true
-  poem: false
+  high_level_summary_in_walkthrough: false
+  review_status: true
+  commit_status: true
   collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  poem: false
   path_instructions:
     - path: "src/**/*.ts"
       instructions: |
@@ -44,9 +51,27 @@ reviews:
         - CHANGELOG.md is auto-generated — never edit manually
   auto_review:
     enabled: true
+    auto_incremental_review: true
     ignore_title_keywords:
       - "chore(main): release"
       - "WIP"
     drafts: false
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+  tools:
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+    github-checks:
+      enabled: true
+      timeout_ms: 90000
+    biome:
+      enabled: true
+    languagetool:
+      enabled: true
 chat:
   auto_reply: true
