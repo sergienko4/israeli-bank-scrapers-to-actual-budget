@@ -12,6 +12,7 @@
     "../src/scheduler.ts",
     "**/*.test.ts"
   ],
+  "treatWarningsAsErrors": true,
   "readme": "none",
   "sort": ["source-order"],
   "groupOrder": ["Services", "Config", "Types", "Utils", "*"],
