@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.34.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.8...v1.34.0) (2026-03-14)
+
+
+### Added
+
+* actionable error messages, /retry command, and failure tracking ([#239](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/239)) ([aa0c87b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/aa0c87be3fc33e27d42f904013bf3ebf10c35139))
+
 ## [1.33.8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.7...v1.33.8) (2026-03-14)
 
 
