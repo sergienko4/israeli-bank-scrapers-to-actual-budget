@@ -127,6 +127,40 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
     expect(collector.messageIds.length).toBeGreaterThan(0);
   });
 
+  it('delivers /check_config with budget-found report to Telegram', async () => {
+    collector.startCapturing();
+    const notifier = new TelegramNotifier(config);
+    handler = new TelegramCommandHandler({
+      mediator: createE2eMediator(),
+      notifier,
+      runValidate: async () => [
+        '[PASS] Actual server reachable (200)',
+        '[PASS] Budget 12345678… found on server',
+        'All checks passed ✓',
+      ].join('\n'),
+    });
+
+    await handler.handle('/check_config');
+    expect(collector.messageIds.length).toBeGreaterThan(0);
+  });
+
+  it('delivers /check_config with budget-not-found report to Telegram', async () => {
+    collector.startCapturing();
+    const notifier = new TelegramNotifier(config);
+    handler = new TelegramCommandHandler({
+      mediator: createE2eMediator(),
+      notifier,
+      runValidate: async () => [
+        '[PASS] Actual server reachable (200)',
+        '[FAIL] Budget "bad-uuid" not found — check syncId in Settings → Advanced',
+        'Result: 1 error',
+      ].join('\n'),
+    });
+
+    await handler.handle('/check_config');
+    expect(collector.messageIds.length).toBeGreaterThan(0);
+  });
+
   it('/scan with menu shows inline keyboard (no import)', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);

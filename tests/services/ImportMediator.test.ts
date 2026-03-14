@@ -205,6 +205,29 @@ describe('ImportMediator', () => {
     expect(poller.start).toHaveBeenCalled();
   });
 
+  it('awaits poller stop before spawning import (OTP race condition)', async () => {
+    const callOrder: string[] = [];
+    const poller = createMockPoller();
+    (poller.stopAndFlush as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise<void>((resolve) => {
+        setTimeout(() => { callOrder.push('stopAndFlush'); resolve(); }, 50);
+      })
+    );
+    const trackedSpawn = vi.fn().mockImplementation(async () => {
+      callOrder.push('spawnImport');
+      return 0;
+    });
+    const mediator = new ImportMediator({
+      spawnImport: trackedSpawn, getBankNames, notifier: null,
+    });
+    mediator.setPoller(poller);
+
+    const batchId = mediator.requestImport({ source: 'telegram' });
+    await mediator.waitForBatch(batchId!);
+
+    expect(callOrder).toEqual(['stopAndFlush', 'spawnImport']);
+  });
+
   it('does not stop poller when none is set', async () => {
     const mediator = new ImportMediator({
       spawnImport, getBankNames, notifier: null,

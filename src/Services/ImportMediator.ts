@@ -77,7 +77,6 @@ export class ImportMediator {
     this.batches.set(batchId, tracker);
     const label = opts.banks?.join(',') ?? 'all';
     const job = this.createJob(label, batchId, opts.source);
-    void this.stopPoller();
     this.queue.enqueue(job);
     return batchId;
   }
@@ -164,11 +163,12 @@ export class ImportMediator {
   }
 
   /**
-   * Spawns a child process for an import job.
+   * Stops the poller and spawns a child process for an import job.
    * @param job - The ImportJob to execute.
    * @returns The ImportJobResult with exit code and duration.
    */
   private async processJob(job: ImportJob): Promise<ImportJobResult> {
+    await this.stopPoller();
     const tracker = this.batches.get(job.batchId);
     const extra = tracker?.extraEnv ?? {};
     const env = job.bankName === 'all'

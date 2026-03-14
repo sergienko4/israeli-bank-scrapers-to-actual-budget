@@ -394,12 +394,40 @@ describe('ConfigValidator', () => {
 
   // ─── Online (mocked fetch) ───
 
+  /**
+   * Returns mock responses for the budget login and list-user-files endpoints.
+   * @param syncId - The sync ID to include in the server file list.
+   * @returns Two mock response objects: login then list-user-files.
+   */
+  function budgetFoundMocks(syncId: string): object[] {
+    return [
+      { ok: true, status: 200, json: async () => ({ data: { token: 'tok' } }) },
+      { ok: true, status: 200, json: async () => ({ data: [{ groupId: syncId }] }) },
+    ];
+  }
+
+  /**
+   * Returns mock responses for budget check where the budget is not found.
+   * @returns Two mock response objects: login then empty file list.
+   */
+  function budgetNotFoundMocks(): object[] {
+    return [
+      { ok: true, status: 200, json: async () => ({ data: { token: 'tok' } }) },
+      { ok: true, status: 200, json: async () => ({ data: [] }) },
+    ];
+  }
+
   describe('validateOnline', () => {
     afterEach(() => vi.restoreAllMocks());
 
     it('passes when Actual server responds with 2xx', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
-      const results = await validator.validateOnline(makeConfig());
+      const cfg = makeConfig();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]); // list
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await validator.validateOnline(cfg);
       expect(pass(results).some(r => r.check === 'actual.server')).toBe(true);
     });
 
@@ -409,20 +437,28 @@ describe('ConfigValidator', () => {
       expect(fail(results).some(r => r.check === 'actual.server')).toBe(true);
     });
 
+    it('skips budget check when server is unreachable', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+      const results = await validator.validateOnline(makeConfig());
+      expect(results.some(r => r.check === 'actual.budget')).toBe(false);
+    });
+
     it('checks Telegram token when notifications enabled', async () => {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // actual server
-        .mockResolvedValueOnce({
-          ok: true, status: 200,
-          json: async () => ({ ok: true, result: { username: 'TestBot' } }),
-        });
-      vi.stubGlobal('fetch', fetchMock);
       const cfg = makeConfig({
         notifications: {
           enabled: true,
           telegram: { botToken: '123456789:ABCdef', chatId: '12345' },
         },
       });
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]) // list
+        .mockResolvedValueOnce({
+          ok: true, status: 200,
+          json: async () => ({ ok: true, result: { username: 'TestBot' } }),
+        });
+      vi.stubGlobal('fetch', fetchMock);
       const results = await validator.validateOnline(cfg);
       expect(pass(results).some(r => r.check === 'telegram.token')).toBe(true);
       expect(pass(results).find(r => r.check === 'telegram.token')?.message)
@@ -430,34 +466,38 @@ describe('ConfigValidator', () => {
     });
 
     it('fails on invalid Telegram token', async () => {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // actual server
-        .mockResolvedValueOnce({
-          ok: true, status: 200,
-          json: async () => ({ ok: false }),
-        });
-      vi.stubGlobal('fetch', fetchMock);
       const cfg = makeConfig({
         notifications: {
           enabled: true,
           telegram: { botToken: '000:bad', chatId: '12345' },
         },
       });
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]) // list
+        .mockResolvedValueOnce({
+          ok: true, status: 200,
+          json: async () => ({ ok: false }),
+        });
+      vi.stubGlobal('fetch', fetchMock);
       const results = await validator.validateOnline(cfg);
       expect(fail(results).some(r => r.check === 'telegram.token')).toBe(true);
     });
 
     it('warns when webhook returns non-2xx on HEAD', async () => {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // actual server
-        .mockResolvedValueOnce({ ok: false, status: 405 }); // webhook HEAD
-      vi.stubGlobal('fetch', fetchMock);
       const cfg = makeConfig({
         notifications: {
           enabled: true,
           webhook: { url: 'https://hooks.example.com/x' },
         },
       });
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]) // list
+        .mockResolvedValueOnce({ ok: false, status: 405 }); // webhook HEAD
+      vi.stubGlobal('fetch', fetchMock);
       const results = await validator.validateOnline(cfg);
       expect(warn(results).some(r => r.check === 'webhook.url')).toBe(true);
     });
@@ -472,15 +512,110 @@ describe('ConfigValidator', () => {
     });
 
     it('fails when webhook URL is unreachable', async () => {
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // actual server
-        .mockRejectedValueOnce(new Error('ECONNREFUSED')); // webhook
-      vi.stubGlobal('fetch', fetchMock);
       const cfg = makeConfig({
         notifications: { enabled: true, webhook: { url: 'https://gone.example.com' } },
       });
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]) // list
+        .mockRejectedValueOnce(new Error('ECONNREFUSED')); // webhook
+      vi.stubGlobal('fetch', fetchMock);
       const results = await validator.validateOnline(cfg);
       expect(fail(results).some(r => r.check === 'webhook.url')).toBe(true);
+    });
+  });
+
+  // ─── Budget existence check ───
+
+  describe('checkActualBudget', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('passes when budget is found on server', async () => {
+      const cfg = makeConfig();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]); // list
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await validator.validateOnline(cfg);
+      expect(pass(results).some(r => r.check === 'actual.budget')).toBe(true);
+      expect(pass(results).find(r => r.check === 'actual.budget')?.message)
+        .toContain('found on server');
+    });
+
+    it('fails when budget is not found on server', async () => {
+      const cfg = makeConfig();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetNotFoundMocks()[0]) // login
+        .mockResolvedValueOnce(budgetNotFoundMocks()[1]); // empty list
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await validator.validateOnline(cfg);
+      expect(fail(results).some(r => r.check === 'actual.budget')).toBe(true);
+      expect(fail(results).find(r => r.check === 'actual.budget')?.message)
+        .toContain('not found');
+    });
+
+    it('fails when login fails (no token returned)', async () => {
+      const cfg = makeConfig();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce({
+          ok: true, status: 200,
+          json: async () => ({ data: {} }), // no token
+        });
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await validator.validateOnline(cfg);
+      expect(fail(results).some(r => r.check === 'actual.budget')).toBe(true);
+      expect(fail(results).find(r => r.check === 'actual.budget')?.message)
+        .toContain('login failed');
+    });
+
+    it('fails on network error during budget check', async () => {
+      const cfg = makeConfig();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockRejectedValueOnce(new Error('ECONNRESET')); // login fails
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await validator.validateOnline(cfg);
+      expect(fail(results).some(r => r.check === 'actual.budget')).toBe(true);
+      expect(fail(results).find(r => r.check === 'actual.budget')?.message)
+        .toContain('ECONNRESET');
+    });
+  });
+
+  // ─── validateAll with budget check (end-to-end report) ───
+
+  describe('validateAll budget report', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('report shows PASS for correct syncId', async () => {
+      const cfg = makeConfig();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]); // list
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await validator.validateAll(cfg);
+      const report = validator.formatReport(results);
+      expect(report).toContain('[PASS] Budget');
+      expect(report).toContain('found on server');
+      expect(report).toContain('All checks passed');
+    });
+
+    it('report shows FAIL for wrong syncId', async () => {
+      const cfg = makeConfig();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetNotFoundMocks()[0]) // login
+        .mockResolvedValueOnce(budgetNotFoundMocks()[1]); // empty list
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await validator.validateAll(cfg);
+      const report = validator.formatReport(results);
+      expect(report).toContain('[FAIL] Budget');
+      expect(report).toContain('not found');
+      expect(report).not.toContain('All checks passed');
     });
   });
 
@@ -549,7 +684,17 @@ describe('ConfigValidator', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(goodConfig));
       vi.spyOn(console, 'log').mockImplementation(() => {});
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce({
+          ok: true, status: 200,
+          json: async () => ({ data: { token: 'tok' } }),
+        }) // login
+        .mockResolvedValueOnce({
+          ok: true, status: 200,
+          json: async () => ({ data: [{ groupId: VALID_UUID }] }),
+        }); // list budgets
+      vi.stubGlobal('fetch', fetchMock);
 
       const code = await runValidateMode();
 
