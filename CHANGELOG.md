@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.33.7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.6...v1.33.7) (2026-03-14)
+
+
+### Fixed
+
+* stale error reporting, budget validation, and OTP race condition ([#233](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/233)) ([b4523ec](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b4523eca7fe9cd61fb77f9f97223a9801573ee5c))
+
 ## [1.33.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.5...v1.33.6) (2026-03-13)
 
 
