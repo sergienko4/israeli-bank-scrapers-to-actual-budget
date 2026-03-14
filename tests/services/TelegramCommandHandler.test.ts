@@ -419,8 +419,10 @@ describe('TelegramCommandHandler', () => {
         totalBanks: 2, successfulBanks: 1, failedBanks: 1,
         totalTransactions: 3, totalDuplicates: 0,
         totalDuration: 5000, successRate: 50,
-        banks: [{ name: 'discount', status: 'failed', error: 'Auth timeout' }],
+        banks: [{ name: 'discount', status: 'failure', error: 'Auth timeout' }],
       }]),
+      getLastFailedBanks: vi.fn().mockReturnValue(['discount']),
+      getConsecutiveFailures: vi.fn().mockReturnValue(0),
     };
     const auditHandler = new TelegramCommandHandler({
       mediator: mockMediator as unknown as ImportMediator,
@@ -449,10 +451,12 @@ describe('TelegramCommandHandler', () => {
         totalTransactions: 100, totalDuplicates: 0,
         totalDuration: 30000, successRate: 71,
         banks: [
-          { name: 'discount', status: 'failed', error: 'Auth timeout', txns: 0 },
-          { name: 'leumi', status: 'failed', error: 'Network error', txns: 0 },
+          { name: 'discount', status: 'failure', error: 'Auth timeout', txns: 0 },
+          { name: 'leumi', status: 'failure', error: 'Network error', txns: 0 },
         ],
       }]),
+      getLastFailedBanks: vi.fn().mockReturnValue([]),
+      getConsecutiveFailures: vi.fn().mockReturnValue(0),
     };
     const auditHandler = new TelegramCommandHandler({
       mediator: mockMediator as unknown as ImportMediator,
@@ -483,6 +487,8 @@ describe('TelegramCommandHandler', () => {
         totalDuration: 3000, successRate: 100,
         banks: [{ name: 'discount', status: 'success', txns: 5 }],
       }]),
+      getLastFailedBanks: vi.fn().mockReturnValue([]),
+      getConsecutiveFailures: vi.fn().mockReturnValue(0),
     };
     const auditHandler = new TelegramCommandHandler({
       mediator: mockMediator as unknown as ImportMediator,
@@ -539,6 +545,8 @@ describe('TelegramCommandHandler', () => {
         totalTransactions: 0, totalDuplicates: 0,
         totalDuration: 1000, successRate: 0, banks: [],
       }]),
+      getLastFailedBanks: vi.fn().mockReturnValue([]),
+      getConsecutiveFailures: vi.fn().mockReturnValue(0),
     };
     const auditHandler = new TelegramCommandHandler({
       mediator: mockMediator as unknown as ImportMediator,
@@ -573,5 +581,190 @@ describe('TelegramCommandHandler', () => {
   it('reply catch block is exercised when sendMessage throws', async () => {
     mockNotifier.sendMessage.mockRejectedValueOnce(new Error('Network'));
     await expect(handler.handle('/help')).resolves.not.toThrow();
+  });
+
+  // ─── /retry command ───
+
+  it('/retry with failed banks triggers import for those banks only', async () => {
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([]),
+      getLastFailedBanks: vi.fn().mockReturnValue(['discount', 'amex']),
+      getConsecutiveFailures: vi.fn().mockReturnValue(0),
+    };
+    const retryHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog: mockAuditLog,
+    });
+    await retryHandler.handle('/retry');
+    expect(mockMediator.requestImport).toHaveBeenCalledWith({
+      source: 'telegram', banks: ['discount', 'amex'],
+    });
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Retrying 2 failed bank(s)')
+    );
+  });
+
+  it('/retry with no failures replies no failed banks', async () => {
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([]),
+      getLastFailedBanks: vi.fn().mockReturnValue([]),
+      getConsecutiveFailures: vi.fn().mockReturnValue(0),
+    };
+    const retryHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog: mockAuditLog,
+    });
+    await retryHandler.handle('/retry');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('No failed banks to retry')
+    );
+    expect(mockMediator.requestImport).not.toHaveBeenCalled();
+  });
+
+  it('/retry with empty audit log replies no failed banks', async () => {
+    // No auditLog provided
+    await handler.handle('/retry');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('No failed banks to retry')
+    );
+  });
+
+  it('/retry while import running shows already running', async () => {
+    mockMediator.isImporting.mockReturnValue(true);
+    await handler.handle('/retry');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+      expect.stringContaining('already running')
+    );
+  });
+
+  it('/retry is listed in /help output', async () => {
+    await handler.handle('/help');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('/retry');
+  });
+
+  // ─── formatBankError with advice ───
+
+  it('error reply includes advice for known scraper error code', async () => {
+    mockMediator.waitForBatch.mockResolvedValue({
+      batchId: 'batch-1', source: 'telegram',
+      jobs: [], totalDurationMs: 5000,
+      successCount: 0, failureCount: 1,
+    });
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([{
+        timestamp: new Date().toISOString(),
+        totalBanks: 1, successfulBanks: 0, failedBanks: 1,
+        totalTransactions: 0, totalDuplicates: 0,
+        totalDuration: 5000, successRate: 0,
+        banks: [{ name: 'discount', status: 'failure', error: 'INVALID_PASSWORD', txns: 0 }],
+      }]),
+      getLastFailedBanks: vi.fn().mockReturnValue(['discount']),
+      getConsecutiveFailures: vi.fn().mockReturnValue(0),
+    };
+    const auditHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog: mockAuditLog,
+    });
+    await auditHandler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    const errMsg = calls.find((m: string) => m.includes('Import failed'));
+    expect(errMsg).toContain('Verify your password');
+  });
+
+  it('error reply shows no advice for unknown error', async () => {
+    mockMediator.waitForBatch.mockResolvedValue({
+      batchId: 'batch-1', source: 'telegram',
+      jobs: [], totalDurationMs: 5000,
+      successCount: 0, failureCount: 1,
+    });
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([{
+        timestamp: new Date().toISOString(),
+        totalBanks: 1, successfulBanks: 0, failedBanks: 1,
+        totalTransactions: 0, totalDuplicates: 0,
+        totalDuration: 5000, successRate: 0,
+        banks: [{ name: 'discount', status: 'failure', error: 'SomeRandomError', txns: 0 }],
+      }]),
+      getLastFailedBanks: vi.fn().mockReturnValue(['discount']),
+      getConsecutiveFailures: vi.fn().mockReturnValue(0),
+    };
+    const auditHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog: mockAuditLog,
+    });
+    await auditHandler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    const errMsg = calls.find((m: string) => m.includes('Import failed'));
+    expect(errMsg).not.toContain('💡');
+  });
+
+  // ─── consecutive failure warnings ───
+
+  it('shows warning when bank failed 3+ times in a row', async () => {
+    mockMediator.waitForBatch.mockResolvedValue({
+      batchId: 'batch-1', source: 'telegram',
+      jobs: [], totalDurationMs: 5000,
+      successCount: 0, failureCount: 1,
+    });
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([{
+        timestamp: new Date().toISOString(),
+        totalBanks: 1, successfulBanks: 0, failedBanks: 1,
+        totalTransactions: 0, totalDuplicates: 0,
+        totalDuration: 5000, successRate: 0,
+        banks: [{ name: 'discount', status: 'failure', error: 'Error', txns: 0 }],
+      }]),
+      getLastFailedBanks: vi.fn().mockReturnValue(['discount']),
+      getConsecutiveFailures: vi.fn().mockReturnValue(3),
+    };
+    const auditHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog: mockAuditLog,
+    });
+    await auditHandler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    const errMsg = calls.find((m: string) => m.includes('Import failed'));
+    expect(errMsg).toContain('Failed 3 times in a row');
+  });
+
+  it('no consecutive failure warning when streak below 3', async () => {
+    mockMediator.waitForBatch.mockResolvedValue({
+      batchId: 'batch-1', source: 'telegram',
+      jobs: [], totalDurationMs: 5000,
+      successCount: 0, failureCount: 1,
+    });
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([{
+        timestamp: new Date().toISOString(),
+        totalBanks: 1, successfulBanks: 0, failedBanks: 1,
+        totalTransactions: 0, totalDuplicates: 0,
+        totalDuration: 5000, successRate: 0,
+        banks: [{ name: 'discount', status: 'failure', error: 'Error', txns: 0 }],
+      }]),
+      getLastFailedBanks: vi.fn().mockReturnValue(['discount']),
+      getConsecutiveFailures: vi.fn().mockReturnValue(2),
+    };
+    const auditHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog: mockAuditLog,
+    });
+    await auditHandler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    const errMsg = calls.find((m: string) => m.includes('Import failed'));
+    expect(errMsg).not.toContain('Failed');
+    expect(errMsg).not.toContain('🚨');
   });
 });

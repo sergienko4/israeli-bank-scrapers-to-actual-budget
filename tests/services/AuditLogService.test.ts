@@ -104,4 +104,75 @@ describe('AuditLogService', () => {
     expect(entries[0].banks[0]).not.toHaveProperty('reconciliationStatus');
     expect(entries[0].banks[0]).not.toHaveProperty('reconciliationAmount');
   });
+
+  // ─── getLastFailedBanks ───
+
+  it('getLastFailedBanks returns failed bank names', () => {
+    service.record(fakeImportSummary({
+      banks: [
+        { bankName: 'discount', startTime: 0, status: 'failure', error: 'Auth', transactionsImported: 0, transactionsSkipped: 0, accounts: [] },
+        { bankName: 'leumi', startTime: 0, status: 'success', transactionsImported: 5, transactionsSkipped: 0, accounts: [] },
+        { bankName: 'amex', startTime: 0, status: 'failure', error: 'Timeout', transactionsImported: 0, transactionsSkipped: 0, accounts: [] },
+      ],
+    }));
+    expect(service.getLastFailedBanks()).toEqual(['discount', 'amex']);
+  });
+
+  it('getLastFailedBanks returns empty when all succeeded', () => {
+    service.record(fakeImportSummary({
+      banks: [
+        { bankName: 'discount', startTime: 0, status: 'success', transactionsImported: 3, transactionsSkipped: 0, accounts: [] },
+      ],
+    }));
+    expect(service.getLastFailedBanks()).toEqual([]);
+  });
+
+  it('getLastFailedBanks returns empty when no entries', () => {
+    expect(service.getLastFailedBanks()).toEqual([]);
+  });
+
+  // ─── getConsecutiveFailures ───
+
+  it('getConsecutiveFailures counts streak correctly', () => {
+    for (let i = 0; i < 3; i++) {
+      service.record(fakeImportSummary({
+        banks: [{ bankName: 'discount', startTime: 0, status: 'failure', error: 'E', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }],
+      }));
+    }
+    expect(service.getConsecutiveFailures('discount')).toBe(3);
+  });
+
+  it('getConsecutiveFailures stops at first success', () => {
+    service.record(fakeImportSummary({
+      banks: [{ bankName: 'discount', startTime: 0, status: 'failure', error: 'E', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }],
+    }));
+    service.record(fakeImportSummary({
+      banks: [{ bankName: 'discount', startTime: 0, status: 'success', transactionsImported: 1, transactionsSkipped: 0, accounts: [] }],
+    }));
+    service.record(fakeImportSummary({
+      banks: [{ bankName: 'discount', startTime: 0, status: 'failure', error: 'E', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }],
+    }));
+    service.record(fakeImportSummary({
+      banks: [{ bankName: 'discount', startTime: 0, status: 'failure', error: 'E', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }],
+    }));
+    expect(service.getConsecutiveFailures('discount')).toBe(2);
+  });
+
+  it('getConsecutiveFailures returns 0 when bank always succeeds', () => {
+    service.record(fakeImportSummary({
+      banks: [{ bankName: 'discount', startTime: 0, status: 'success', transactionsImported: 5, transactionsSkipped: 0, accounts: [] }],
+    }));
+    expect(service.getConsecutiveFailures('discount')).toBe(0);
+  });
+
+  it('getConsecutiveFailures returns 0 for unknown bank', () => {
+    service.record(fakeImportSummary({
+      banks: [{ bankName: 'discount', startTime: 0, status: 'failure', error: 'E', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }],
+    }));
+    expect(service.getConsecutiveFailures('unknownBank')).toBe(0);
+  });
+
+  it('getConsecutiveFailures handles empty log', () => {
+    expect(service.getConsecutiveFailures('discount')).toBe(0);
+  });
 });

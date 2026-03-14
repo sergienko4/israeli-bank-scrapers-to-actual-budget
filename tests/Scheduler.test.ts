@@ -191,24 +191,25 @@ describe('logCommandCount', () => {
 // ─── buildExtraCommands ──────────────────────────────────────────────────────
 
 describe('buildExtraCommands', () => {
-  it('returns 2 default commands when config is null', () => {
+  it('returns 3 default commands when config is null', () => {
     const cmds = buildExtraCommands(null);
-    expect(cmds).toHaveLength(2);
-    expect(cmds[0].command).toBe('check_config');
-    expect(cmds[1].command).toBe('preview');
+    expect(cmds).toHaveLength(3);
+    expect(cmds.map(c => c.command)).toContain('retry');
+    expect(cmds.map(c => c.command)).toContain('check_config');
+    expect(cmds.map(c => c.command)).toContain('preview');
   });
 
-  it('returns 3 commands when config has spendingWatch rules', () => {
+  it('returns 4 commands when config has spendingWatch rules', () => {
     const config = { spendingWatch: [{ alertFromAmount: 100, numOfDayToCount: 7 }] } as never;
     const cmds = buildExtraCommands(config);
-    expect(cmds).toHaveLength(3);
-    expect(cmds[2].command).toBe('watch');
+    expect(cmds).toHaveLength(4);
+    expect(cmds.map(c => c.command)).toContain('watch');
   });
 
-  it('returns 2 commands when config has empty spendingWatch array', () => {
+  it('returns 3 commands when config has empty spendingWatch array', () => {
     const config = { spendingWatch: [] } as never;
     const cmds = buildExtraCommands(config);
-    expect(cmds).toHaveLength(2);
+    expect(cmds).toHaveLength(3);
   });
 });
 

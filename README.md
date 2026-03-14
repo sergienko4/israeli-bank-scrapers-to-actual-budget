@@ -657,6 +657,8 @@ When `listenForCommands` is `true`, control the importer from Telegram:
 | Command | Action |
 |---------|--------|
 | `/scan` | Run bank import now |
+| `/scan bankName` | Import a single bank (e.g., `/scan discount`) |
+| `/retry` | Re-import only banks that failed in the last run |
 | `/preview` | Dry run: scrape banks and show what would be imported — see [Dry Run / Preview Mode](#dry-run--preview-mode) |
 | `/status` | Show last 5 imports with transaction counts and duration |
 | `/check_config` | Check config (offline + online) — see [Config Validation](#config-validation) |
@@ -665,7 +667,7 @@ When `listenForCommands` is `true`, control the importer from Telegram:
 | `/logs N` | Show last N entries (max 150) |
 | `/help` | List commands |
 
-The bot listens alongside the cron scheduler. If an import is already running, it waits instead of starting a duplicate. If an import triggered via `/scan` fails, the bot sends an error acknowledgment with the elapsed time.
+The bot listens alongside the cron scheduler. If an import is already running, it waits instead of starting a duplicate. Error messages include actionable advice (e.g., "Bank requires password change — update password on bank website"). Banks that fail 3+ times in a row get escalated warnings.
 
 ### Webhooks (Slack, Discord, Generic)
 

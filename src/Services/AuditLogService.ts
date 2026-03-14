@@ -25,6 +25,8 @@ export interface AuditEntry {
 export interface IAuditLog {
   record(summary: ImportSummary): void;
   getRecent(count: number): AuditEntry[];
+  getLastFailedBanks(): string[];
+  getConsecutiveFailures(bankName: string): number;
 }
 
 const DEFAULT_MAX_ENTRIES = 90;
@@ -59,6 +61,32 @@ export class AuditLogService implements IAuditLog {
    */
   getRecent(count: number): AuditEntry[] {
     return this.loadEntries().slice(-count);
+  }
+
+  /**
+   * Returns the names of banks that failed in the most recent audit entry.
+   * @returns Array of failed bank names, or empty if last run was successful or no entries.
+   */
+  getLastFailedBanks(): string[] {
+    const recent = this.getRecent(1);
+    if (!recent.length) return [];
+    return recent[0].banks.filter(b => b.status === 'failure').map(b => b.name);
+  }
+
+  /**
+   * Counts how many consecutive recent entries have a failure for the given bank.
+   * @param bankName - The bank name to check for consecutive failures.
+   * @returns Number of consecutive failures from the most recent entry backwards.
+   */
+  getConsecutiveFailures(bankName: string): number {
+    const entries = this.getRecent(10).reverse();
+    let count = 0;
+    for (const entry of entries) {
+      const bank = entry.banks.find(b => b.name === bankName);
+      if (bank?.status === 'failure') count++;
+      else break;
+    }
+    return count;
   }
 
   /**
