@@ -1,6 +1,6 @@
 {
   "name": "israeli-bank-actual-importer",
-  "version": "1.33.7",
+  "version": "1.33.8",
   "description": "Import transactions from Israeli banks into Actual Budget",
   "main": "dist/Index.js",
   "type": "module",
