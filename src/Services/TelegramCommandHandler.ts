@@ -196,18 +196,48 @@ export class TelegramCommandHandler {
   private buildBatchErrorReply(batch: BatchResult): string {
     const dur = (batch.totalDurationMs / 1000).toFixed(0);
     const entry = this.auditLog?.getRecent(1)[0];
-    if (!entry || entry.failedBanks === 0) {
+    if (!entry || !this.isFreshEntry(entry, batch)) {
+      return `❌ Import failed (${dur}s). Use /logs for details.`;
+    }
+    return this.formatFailedBanks(entry, dur);
+  }
+
+  /**
+   * Checks whether an audit entry was recorded during or after the current batch.
+   * @param entry - The audit log entry to check.
+   * @param batch - The BatchResult whose timing to compare against.
+   * @returns True if the entry timestamp is at or after the batch start time.
+   */
+  private isFreshEntry(entry: AuditEntry, batch: BatchResult): boolean {
+    const batchStartMs = Date.now() - batch.totalDurationMs;
+    return new Date(entry.timestamp).getTime() >= batchStartMs;
+  }
+
+  /**
+   * Formats the failed-banks section of an error reply from an audit entry.
+   * @param entry - The audit entry containing bank failure details.
+   * @param dur - Human-readable duration string for display.
+   * @returns Multi-line formatted string listing failed banks and their errors.
+   */
+  private formatFailedBanks(entry: AuditEntry, dur: string): string {
+    if (entry.failedBanks === 0) {
       return `❌ Import failed (${dur}s). Use /logs for details.`;
     }
     const failed = entry.banks.filter(b => b.status === 'failed');
     const header = `❌ Import failed (${dur}s) — ` +
       `${entry.failedBanks}/${entry.totalBanks} banks had errors:`;
-    const lines = [header];
-    for (const b of failed) {
-      lines.push(`• ${b.name}${b.error ? `: ${b.error.slice(0, 80)}` : ''}`);
-    }
+    const lines = [header, ...failed.map(b => this.formatBankError(b))];
     lines.push('', 'Use /logs for details or /status for history.');
     return lines.join('\n');
+  }
+
+  /**
+   * Formats a single failed bank entry as a bullet-point line.
+   * @param bank - The bank object from the audit entry with name and optional error.
+   * @returns Formatted bullet-point string for the bank error.
+   */
+  private formatBankError(bank: AuditEntry['banks'][number]): string {
+    return `• ${bank.name}${bank.error ? `: ${bank.error.slice(0, 80)}` : ''}`;
   }
 
   /** Sends the current import status and recent audit history to Telegram. */

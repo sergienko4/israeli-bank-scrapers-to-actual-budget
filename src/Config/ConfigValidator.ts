@@ -47,12 +47,14 @@ export class ConfigValidator {
   }
 
   /**
-   * Runs online checks (server reachability, Telegram token, webhook URL).
+   * Runs online checks (server reachability, budget existence, Telegram token, webhook URL).
    * @param config - The ImporterConfig to validate.
    * @returns Array of ValidationResult objects from the online checks.
    */
   async validateOnline(config: ImporterConfig): Promise<ValidationResult[]> {
-    const results = [await this.checkActualServer(config)];
+    const serverResult = await this.checkActualServer(config);
+    const results = [serverResult];
+    if (serverResult.status === 'pass') results.push(await this.checkActualBudget(config));
     const tg = config.notifications?.enabled ? config.notifications.telegram : undefined;
     if (tg) results.push(await this.checkTelegramToken(tg));
     const wh = config.notifications?.enabled ? config.notifications.webhook : undefined;
@@ -342,6 +344,63 @@ export class ConfigValidator {
     } catch (e) {
       return this.fail('actual.server', `Cannot reach Actual server: ${errorMessage(e)}`);
     }
+  }
+
+  /**
+   * Verifies that the configured budget exists on the Actual Budget server.
+   * @param config - The ImporterConfig with server credentials and budget syncId.
+   * @returns A ValidationResult indicating whether the budget was found.
+   */
+  private async checkActualBudget(config: ImporterConfig): Promise<ValidationResult> {
+    const { serverURL, password } = config.actual.init;
+    const { syncId } = config.actual.budget;
+    try {
+      const token = await this.loginToActualServer(serverURL, password);
+      if (!token) return this.fail('actual.budget', 'Cannot verify budget — login failed');
+      return await this.findBudgetOnServer(serverURL, token, syncId);
+    } catch (e: unknown) {
+      return this.fail('actual.budget', `Cannot verify budget: ${errorMessage(e)}`);
+    }
+  }
+
+  /**
+   * Authenticates with the Actual Budget server and returns a session token.
+   * @param serverURL - The Actual server base URL.
+   * @param password - The Actual server password.
+   * @returns The session token string, or null if login failed.
+   */
+  private async loginToActualServer(serverURL: string, password: string): Promise<string | null> {
+    const resp = await fetch(`${serverURL}/account/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await resp.json() as { data?: { token?: string } };
+    return data.data?.token ?? null;
+  }
+
+  /**
+   * Lists budgets on the server and checks whether the given syncId exists.
+   * @param serverURL - The Actual server base URL.
+   * @param token - Authenticated session token.
+   * @param syncId - The budget sync ID to look for.
+   * @returns A pass result if found, fail if not found.
+   */
+  private async findBudgetOnServer(
+    serverURL: string, token: string, syncId: string
+  ): Promise<ValidationResult> {
+    const resp = await fetch(`${serverURL}/sync/list-user-files`, {
+      method: 'POST',
+      headers: { 'X-ACTUAL-TOKEN': token, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await resp.json() as { data?: Array<{ groupId?: string }> };
+    const found = (data.data ?? []).some(f => f.groupId === syncId);
+    return found
+      ? this.pass('actual.budget', `Budget ${syncId.slice(0, 8)}… found on server`)
+      : this.fail('actual.budget',
+        `Budget "${syncId}" not found — check syncId in Settings → Advanced`);
   }
 
   /**

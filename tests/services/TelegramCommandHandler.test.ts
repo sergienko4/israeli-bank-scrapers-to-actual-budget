@@ -351,6 +351,38 @@ describe('TelegramCommandHandler', () => {
     );
   });
 
+  it('/check_config shows budget not found when syncId is wrong', async () => {
+    const report = [
+      '[PASS] Actual server reachable: http://localhost:5006 (200)',
+      '[FAIL] Budget "bad-uuid" not found — check syncId in Settings → Advanced',
+    ].join('\n');
+    const validateHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      runValidate: vi.fn().mockResolvedValue(report),
+    });
+    await validateHandler.handle('/check_config');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('not found');
+    expect(msg).toContain('syncId');
+  });
+
+  it('/check_config shows budget found when syncId is correct', async () => {
+    const report = [
+      '[PASS] Actual server reachable: http://localhost:5006 (200)',
+      '[PASS] Budget 12345678… found on server',
+    ].join('\n');
+    const validateHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      runValidate: vi.fn().mockResolvedValue(report),
+    });
+    await validateHandler.handle('/check_config');
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('found on server');
+    expect(msg).not.toContain('not found');
+  });
+
   // ─── /preview ───
 
   it('/preview requests dry run via mediator', async () => {
@@ -374,7 +406,7 @@ describe('TelegramCommandHandler', () => {
 
   // ─── buildBatchErrorReply with auditLog ───
 
-  it('/scan failure with audit log builds detailed error reply', async () => {
+  it('/scan failure with fresh audit log builds detailed error reply', async () => {
     mockMediator.waitForBatch.mockResolvedValue({
       batchId: 'batch-1', source: 'telegram',
       jobs: [], totalDurationMs: 5000,
@@ -383,7 +415,7 @@ describe('TelegramCommandHandler', () => {
     const mockAuditLog = {
       record: vi.fn(),
       getRecent: vi.fn().mockReturnValue([{
-        timestamp: '2026-02-28T14:30:00.000Z',
+        timestamp: new Date().toISOString(),
         totalBanks: 2, successfulBanks: 1, failedBanks: 1,
         totalTransactions: 3, totalDuplicates: 0,
         totalDuration: 5000, successRate: 50,
@@ -400,6 +432,69 @@ describe('TelegramCommandHandler', () => {
     const errMsg = calls.find((m: string) => m.includes('Import failed'));
     expect(errMsg).toBeDefined();
     expect(errMsg).toContain('discount');
+    expect(errMsg).toContain('1/2 banks had errors');
+  });
+
+  it('/scan failure with stale audit entry shows generic error', async () => {
+    mockMediator.waitForBatch.mockResolvedValue({
+      batchId: 'batch-1', source: 'telegram',
+      jobs: [], totalDurationMs: 1000,
+      successCount: 0, failureCount: 1,
+    });
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([{
+        timestamp: '2020-01-01T00:00:00.000Z',
+        totalBanks: 7, successfulBanks: 5, failedBanks: 2,
+        totalTransactions: 100, totalDuplicates: 0,
+        totalDuration: 30000, successRate: 71,
+        banks: [
+          { name: 'discount', status: 'failed', error: 'Auth timeout', txns: 0 },
+          { name: 'leumi', status: 'failed', error: 'Network error', txns: 0 },
+        ],
+      }]),
+    };
+    const auditHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog: mockAuditLog,
+    });
+    await auditHandler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    const errMsg = calls.find((m: string) => m.includes('Import failed'));
+    expect(errMsg).toBeDefined();
+    expect(errMsg).toContain('Use /logs for details');
+    expect(errMsg).not.toContain('2/7');
+    expect(errMsg).not.toContain('discount');
+  });
+
+  it('/scan failure with fresh audit entry but zero failed banks shows generic error', async () => {
+    mockMediator.waitForBatch.mockResolvedValue({
+      batchId: 'batch-1', source: 'telegram',
+      jobs: [], totalDurationMs: 3000,
+      successCount: 0, failureCount: 1,
+    });
+    const mockAuditLog = {
+      record: vi.fn(),
+      getRecent: vi.fn().mockReturnValue([{
+        timestamp: new Date().toISOString(),
+        totalBanks: 1, successfulBanks: 1, failedBanks: 0,
+        totalTransactions: 5, totalDuplicates: 0,
+        totalDuration: 3000, successRate: 100,
+        banks: [{ name: 'discount', status: 'success', txns: 5 }],
+      }]),
+    };
+    const auditHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog: mockAuditLog,
+    });
+    await auditHandler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    const errMsg = calls.find((m: string) => m.includes('Import failed'));
+    expect(errMsg).toBeDefined();
+    expect(errMsg).toContain('Use /logs for details');
+    expect(errMsg).not.toContain('banks had errors');
   });
 
   it('/scan failure without audit log shows generic error', async () => {
