@@ -42,6 +42,23 @@ jobs:
             echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Verify tag matches manifest
+        run: |
+          VERSION="${{ steps.tag.outputs.version }}"
+          MANIFEST_VERSION=$(jq -r '.["."]//"unknown"' config/release-please/manifest.json)
+          if [ "$VERSION" != "v${MANIFEST_VERSION}" ]; then
+            echo "::error::Tag $VERSION does not match manifest v${MANIFEST_VERSION}"
+            exit 1
+          fi
+
+      - name: Verify CHANGELOG entry
+        run: |
+          BARE="${{ steps.tag.outputs.version }}"
+          BARE="${BARE#v}"
+          if ! grep -q "## \[${BARE}\]" CHANGELOG.md; then
+            echo "::warning::No CHANGELOG entry for ${BARE}"
+          fi
+
       - name: Cache Camoufox browser
         uses: ./.github/actions/docker/camoufox-cache
 
@@ -53,6 +70,31 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build for smoke test (amd64)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.DOCKER_IMAGE }}:smoke-test
+          build-args: |
+            APT_CACHE_BUST=${{ github.run_id }}
+            SKIP_BROWSER_FETCH=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Browser smoke test (verify scraper can launch)
+        run: |
+          docker run --rm --cap-add SYS_ADMIN ${{ env.DOCKER_IMAGE }}:smoke-test \
+            node --input-type=module -e "
+              import { createScraper } from '@sergienko4/israeli-bank-scrapers';
+              const s = createScraper({ companyId: 'hapoalim', startDate: new Date() });
+              await s.initialize();
+              await s.terminate(true);
+              console.log('Browser smoke test passed');
+            "
 
       - name: Extract metadata
         id: meta
@@ -91,8 +133,8 @@ jobs:
             COMMIT_COUNT=$(git rev-list --count ${PREV_TAG}..${VERSION})
             FILES_CHANGED=$(git diff --name-only ${PREV_TAG}..${VERSION} | wc -l | tr -d ' ')
             SHORTSTAT=$(git diff --shortstat ${PREV_TAG}..${VERSION})
-            LINES_ADDED=$(echo "$SHORTSTAT" | grep -oP '\d+(?= insertion)' || echo "0")
-            LINES_DELETED=$(echo "$SHORTSTAT" | grep -oP '\d+(?= deletion)' || echo "0")
+            LINES_ADDED=$(echo "$SHORTSTAT" | grep -oP '\d+(?= insertions?)' || echo "0")
+            LINES_DELETED=$(echo "$SHORTSTAT" | grep -oP '\d+(?= deletions?)' || echo "0")
             COMPARE_URL="https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/${PREV_TAG}...${VERSION}"
           else
             COMMIT_COUNT=$(git rev-list --count HEAD)

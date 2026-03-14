@@ -40,7 +40,9 @@ jobs:
           push: false
           load: true
           tags: israeli-bank-importer:ci
-          build-args: SKIP_BROWSER_FETCH=true
+          build-args: |
+            SKIP_BROWSER_FETCH=true
+            APT_CACHE_BUST=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Save Docker image
@@ -119,7 +121,6 @@ jobs:
   # ─── E2E ───────────────────────────────────────────
   e2e:
     name: E2E Tests
-    if: github.event_name == 'pull_request'
     needs: [build, docker]
     runs-on: ubuntu-latest
     timeout-minutes: 15
