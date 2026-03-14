@@ -1,0 +1,112 @@
+language: en-US
+early_access: false
+enable_free_tier: true
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: false
+  review_status: true
+  commit_status: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  poem: false
+  abort_on_close: true
+  path_instructions:
+    - path: "src/**/*.ts"
+      instructions: |
+        Enforce these project rules strictly:
+        - PascalCase for ALL filenames and folders under src/
+        - Max 10 lines per method (style intent); ESLint enforces max 20 (skipBlankLines+skipComments)
+        - Max 3 parameters per function — extract helpers or use options objects
+        - Zero `: any` types — use specific types, never `as any` or `as never[]`
+        - `error: unknown` + `errorMessage()` utility in ALL catch blocks
+        - JSDoc required on ALL functions/methods/classes/arrows with @param and @returns
+        - No eslint-disable, TODO, or FIXME comments — fix root cause instead
+        - OCP: prefer Record<string, ...> dispatch maps over if/else chains
+        - SRP: each function does ONE thing, named by WHAT it does
+        - Use `consistent-type-imports` (import type { X } from ...)
+        - No `console.log` — use the Logger (src/Logger/) except inside Logger itself
+        - Security: never log password, token, secret, auth, creditCard, cvv
+    - path: "tests/**/*.ts"
+      instructions: |
+        - Every new feature MUST have both unit tests AND E2E tests
+        - Use factories from tests/helpers/factories.ts for test data
+        - Use vi.mock for Logger, NOT vi.spyOn (ESM interception)
+        - LogFileReader mock: use function() not arrow => (can't be new'd)
+    - path: ".github/**"
+      instructions: |
+        - Conventional commit titles required (feat:, fix:, refactor:, ci:, chore:, docs:)
+        - RELEASE_TOKEN (PAT) required instead of GITHUB_TOKEN for release workflows
+        - CodeQL analyze must have category: '/language:javascript-typescript'
+        - APT_CACHE_BUST must match between pr.yml and release.yml Docker builds
+    - path: "Dockerfile"
+      instructions: |
+        - Camoufox binary fetched as root must be moved to /home/node/.cache/ for runtime user
+        - Browser smoke test must pass in CI (createScraper().initialize())
+        - Base image digest should be pinned for reproducibility
+    - path: "docs/**/*.md"
+      instructions: |
+        - Links must be absolute GitHub URLs (Docker Hub can't resolve relative)
+        - CHANGELOG.md is auto-generated — never edit manually
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    ignore_title_keywords:
+      - "chore(main): release"
+      - "WIP"
+    drafts: false
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+  pre_merge_checks:
+    docstrings:
+      mode: warning
+      threshold: 80
+    title:
+      mode: warning
+    description:
+      mode: warning
+  tools:
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+    github-checks:
+      enabled: true
+      timeout_ms: 90000
+    languagetool:
+      enabled: true
+    biome:
+      enabled: true
+    eslint:
+      enabled: true
+    hadolint:
+      enabled: true
+    actionlint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    yamllint:
+      enabled: true
+    trivy:
+      enabled: true
+    dotenvLint:
+      enabled: true
+chat:
+  auto_reply: true
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto
