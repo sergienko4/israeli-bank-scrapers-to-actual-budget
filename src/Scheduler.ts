@@ -244,6 +244,7 @@ export function buildExtraCommands(
   config: ImporterConfig | null
 ): Array<{ command: string; description: string }> {
   const extras: Array<{ command: string; description: string }> = [
+    { command: 'retry', description: 'Re-import only last failed banks' },
     { command: 'check_config', description: 'Check configuration (offline + online)' },
     { command: 'preview', description: 'Dry run: scrape banks without importing' },
   ];

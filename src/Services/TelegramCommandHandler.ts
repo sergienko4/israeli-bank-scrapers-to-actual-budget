@@ -9,6 +9,7 @@ import type { ImportMediator } from './ImportMediator.js';
 import type { BatchResult } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import { getLogger, LogFileReader } from '../Logger/Index.js';
+import { getScraperErrorAdvice } from '../Errors/ScraperErrorMessages.js';
 
 const MAX_TELEGRAM_LENGTH = 4096;
 const DEFAULT_LOG_COUNT = 50;
@@ -68,58 +69,39 @@ export class TelegramCommandHandler {
     const raw = text.trim().split(/\s+/);
     const command = raw[0].toLowerCase();
     const arg = raw.slice(1).join(' ').trim() || undefined;
-    // Callback query data: "scan:bankName" or "scan_all"
     if (command === 'scan_all') { await this.handleScanAll(); return; }
     if (command.startsWith('scan:')) { await this.handleScan(command.slice(5)); return; }
-    const handlers: Record<string, () => Promise<void>> = {
-      /**
-       * Handles /scan command.
-       * @returns Promise resolving when the command is processed.
-       */
-      '/scan': () => this.handleScan(arg),
-      /**
-       * Handles /import alias for /scan.
-       * @returns Promise resolving when the command is processed.
-       */
-      '/import': () => this.handleScan(arg),
-      /**
-       * Handles /status command.
-       * @returns Promise resolving when the command is processed.
-       */
-      '/status': () => this.handleStatus(),
-      /**
-       * Handles /logs command.
-       * @returns Promise resolving when the command is processed.
-       */
-      '/logs': () => this.handleLogs(arg),
-      /**
-       * Handles /watch command.
-       * @returns Promise resolving when the command is processed.
-       */
-      '/watch': () => this.handleWatch(),
-      /**
-       * Handles /check_config command.
-       * @returns Promise resolving when the command is processed.
-       */
-      '/check_config': () => this.handleCheckConfig(),
-      /**
-       * Handles /preview command.
-       * @returns Promise resolving when the command is processed.
-       */
-      '/preview': () => this.handlePreview(),
-      /**
-       * Handles /help command.
-       * @returns Promise resolving when the command is processed.
-       */
-      '/help': () => this.handleHelp(),
-      /**
-       * Handles /start command (alias for /help).
-       * @returns Promise resolving when the command is processed.
-       */
-      '/start': () => this.handleHelp(),
-    };
-    const handler = handlers[command];
+    const handler = this.buildHandlers(arg)[command];
     if (handler) await handler();
+  }
+
+  /**
+   * Builds the command → handler dispatch map for slash commands.
+   * @param arg - Optional argument parsed from the user's message.
+   * @returns Record mapping command strings to async handler functions.
+   */
+  private buildHandlers(arg?: string): Record<string, () => Promise<void>> {
+    return this.commandMap(arg);
+  }
+
+  /**
+   * Returns the slash-command dispatch map wired to handler methods.
+   * @param arg - Optional argument from the user's message.
+   * @returns Record mapping command strings to handler functions.
+   */
+  private commandMap(arg?: string): Record<string, () => Promise<void>> {
+    return {
+      '/scan': this.handleScan.bind(this, arg),
+      '/import': this.handleScan.bind(this, arg),
+      '/status': this.handleStatus.bind(this),
+      '/logs': this.handleLogs.bind(this, arg),
+      '/watch': this.handleWatch.bind(this),
+      '/check_config': this.handleCheckConfig.bind(this),
+      '/preview': this.handlePreview.bind(this),
+      '/help': this.handleHelp.bind(this),
+      '/retry': this.handleRetry.bind(this),
+      '/start': this.handleHelp.bind(this),
+    };
   }
 
   /** Handles the scan_all callback — imports all configured banks. */
@@ -223,7 +205,7 @@ export class TelegramCommandHandler {
     if (entry.failedBanks === 0) {
       return `❌ Import failed (${dur}s). Use /logs for details.`;
     }
-    const failed = entry.banks.filter(b => b.status === 'failed');
+    const failed = entry.banks.filter(b => b.status === 'failure');
     const header = `❌ Import failed (${dur}s) — ` +
       `${entry.failedBanks}/${entry.totalBanks} banks had errors:`;
     const lines = [header, ...failed.map(b => this.formatBankError(b))];
@@ -232,12 +214,38 @@ export class TelegramCommandHandler {
   }
 
   /**
-   * Formats a single failed bank entry as a bullet-point line.
+   * Formats a single failed bank entry with error details and actionable advice.
    * @param bank - The bank object from the audit entry with name and optional error.
-   * @returns Formatted bullet-point string for the bank error.
+   * @returns Formatted bullet-point string with error and optional advice line.
    */
   private formatBankError(bank: AuditEntry['banks'][number]): string {
-    return `• ${bank.name}${bank.error ? `: ${bank.error.slice(0, 80)}` : ''}`;
+    const line = `• ${bank.name}${bank.error ? `: ${bank.error.slice(0, 80)}` : ''}`;
+    const advice = bank.error ? getScraperErrorAdvice(bank.error) : undefined;
+    const streak = this.getFailureStreak(bank.name);
+    return [line, ...this.buildErrorAnnotations(advice, streak)].join('\n');
+  }
+
+  /**
+   * Builds annotation lines for a bank error (advice + consecutive failure warning).
+   * @param advice - Optional actionable advice string from ScraperErrorMessages.
+   * @param streak - Number of consecutive failures for this bank.
+   * @returns Array of annotation lines to append after the error line.
+   */
+  private buildErrorAnnotations(advice: string | undefined, streak: number): string[] {
+    const lines: string[] = [];
+    if (advice) lines.push(`  💡 ${advice}`);
+    if (streak >= 5) lines.push('  🚨 Failed 5+ times in a row — check credentials');
+    else if (streak >= 3) lines.push(`  ⚠️ Failed ${streak} times in a row`);
+    return lines;
+  }
+
+  /**
+   * Returns the consecutive failure count for a bank from the audit log.
+   * @param bankName - The bank to check.
+   * @returns Number of consecutive recent failures, or 0.
+   */
+  private getFailureStreak(bankName: string): number {
+    return this.auditLog?.getConsecutiveFailures(bankName) ?? 0;
   }
 
   /** Sends the current import status and recent audit history to Telegram. */
@@ -373,11 +381,24 @@ export class TelegramCommandHandler {
     await this.reply(`✅ Dry run completed (${dur}s). See preview report above.`);
   }
 
+  /** Re-imports only the banks that failed in the last run. */
+  private async handleRetry(): Promise<void> {
+    if (this.mediator.isImporting()) { await this.reply(ALREADY_RUNNING); return; }
+    const failed = this.auditLog?.getLastFailedBanks() ?? [];
+    if (!failed.length) {
+      await this.reply('✅ No failed banks to retry. Last run was successful.');
+      return;
+    }
+    await this.reply(`🔄 Retrying ${failed.length} failed bank(s): ${failed.join(', ')}...`);
+    await this.executeImport(failed);
+  }
+
   /** Sends the list of available bot commands to Telegram. */
   private async handleHelp(): Promise<void> {
     const lines = [
       '🤖 <b>Available Commands</b>', '',
       '/scan - Run bank import now',
+      '/retry - Re-import only last failed banks',
       '/preview - Dry run: scrape without importing',
       '/status - Show last run info + history',
       '/check_config - Check configuration (offline + online)',

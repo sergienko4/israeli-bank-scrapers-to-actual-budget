@@ -128,7 +128,7 @@ describe('logScrapeFailure', () => {
   it('logs the error message with WAF hint', () => {
     logScrapeFailure('leumi', { success: false, errorType: 'WAF_BLOCKED', errorMessage: 'blocked', accounts: [] });
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining('wait 1-2 hours')
+      expect.stringContaining('Wait 1-2 hours')
     );
   });
 

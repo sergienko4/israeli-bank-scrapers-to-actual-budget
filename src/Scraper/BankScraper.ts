@@ -17,6 +17,7 @@ import type { ImporterConfig, BankConfig } from '../Types/Index.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../Types/Index.js';
 import { formatDate, filterByDateCutoff } from '../Utils/Index.js';
 import { getLogger } from '../Logger/Index.js';
+import { getScraperErrorAdvice } from '../Errors/ScraperErrorMessages.js';
 
 /** Company type map used to look up the scraper ID for each bank name. */
 const companyTypeMap: Record<string, typeof CompanyTypes[keyof typeof CompanyTypes]> = {
@@ -32,12 +33,6 @@ const companyTypeMap: Record<string, typeof CompanyTypes[keyof typeof CompanyTyp
   'pagi': CompanyTypes.Pagi, 'oneZero': CompanyTypes.OneZero, 'onezero': CompanyTypes.OneZero,
 };
 
-const scrapeErrorHints: Record<string, string> = {
-  WAF_BLOCKED: '. WAF blocked the request — wait 1-2 hours before retrying',
-  CHANGE_PASSWORD: '. The bank requires a password change — log in via browser first',
-  ACCOUNT_BLOCKED: '. Your account is blocked — contact your bank',
-  INVALID_OTP: '. OTP rejected — the code may have expired. Enter it quickly next time',
-};
 
 const NO_RECORDS_PATTERNS = [
   'no transactions found', 'no results found', 'לא מצאנו תנועות',
@@ -86,10 +81,10 @@ export function isEmptyResultError(result: IScraperScrapingResult): boolean {
  * @param result - The failed IScraperScrapingResult containing error details.
  */
 export function logScrapeFailure(bankName: string, result: IScraperScrapingResult): void {
-  const hint = scrapeErrorHints[result.errorType ?? ''] ?? '';
-  getLogger().error(
-    `  ❌ Failed to scrape ${bankName}: ${result.errorMessage || 'Unknown error'}${hint}`
-  );
+  const baseMsg = result.errorMessage ?? 'Unknown error';
+  const advice = getScraperErrorAdvice(result.errorType ?? '');
+  const hint = advice ? `. ${advice}` : '';
+  getLogger().error(`  ❌ Failed to scrape ${bankName}: ${baseMsg}${hint}`);
 }
 
 /** Options injected into BankScraper for all scraping operations. */

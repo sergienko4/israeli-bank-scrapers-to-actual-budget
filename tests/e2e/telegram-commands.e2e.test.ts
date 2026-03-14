@@ -161,6 +161,35 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
     expect(collector.messageIds.length).toBeGreaterThan(0);
   });
 
+  it('delivers /retry "no failed banks" to Telegram', async () => {
+    collector.startCapturing();
+    const notifier = new TelegramNotifier(config);
+    handler = new TelegramCommandHandler({ mediator: createE2eMediator(), notifier });
+
+    await handler.handle('/retry');
+    expect(collector.messageIds.length).toBeGreaterThan(0);
+  });
+
+  it('delivers /retry with failed banks message to Telegram', async () => {
+    collector.startCapturing();
+    const notifier = new TelegramNotifier(config);
+    auditLog = new AuditLogService(auditFile, 10);
+    auditLog.record(createTestSummary({
+      banks: [
+        { bankName: 'discount', startTime: 0, status: 'failure', error: 'INVALID_PASSWORD', transactionsImported: 0, transactionsSkipped: 0, accounts: [] },
+      ],
+    }));
+
+    handler = new TelegramCommandHandler({
+      mediator: createE2eMediator(), notifier, auditLog,
+    });
+
+    await handler.handle('/retry');
+    expect(collector.messageIds.length).toBeGreaterThan(0);
+
+    if (existsSync(auditFile)) unlinkSync(auditFile);
+  });
+
   it('/scan with menu shows inline keyboard (no import)', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
