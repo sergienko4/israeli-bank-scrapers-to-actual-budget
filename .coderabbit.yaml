@@ -12,6 +12,7 @@ reviews:
   changed_files_summary: true
   sequence_diagrams: true
   poem: false
+  abort_on_close: true
   path_instructions:
     - path: "src/**/*.ts"
       instructions: |
@@ -61,6 +62,14 @@ reviews:
       enabled: true
     unit_tests:
       enabled: true
+  pre_merge_checks:
+    docstrings:
+      mode: warning
+      threshold: 80
+    title:
+      mode: warning
+    description:
+      mode: warning
   tools:
     shellcheck:
       enabled: true
@@ -69,9 +78,35 @@ reviews:
     github-checks:
       enabled: true
       timeout_ms: 90000
+    languagetool:
+      enabled: true
     biome:
       enabled: true
-    languagetool:
+    eslint:
+      enabled: true
+    hadolint:
+      enabled: true
+    actionlint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    yamllint:
+      enabled: true
+    trivy:
+      enabled: true
+    dotenvLint:
       enabled: true
 chat:
   auto_reply: true
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto
