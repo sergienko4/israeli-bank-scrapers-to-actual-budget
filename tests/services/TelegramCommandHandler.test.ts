@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
 import type { ImportMediator } from '../../src/Services/ImportMediator.js';
 import type { AuditEntry } from '../../src/Services/AuditLogService.js';
+import { fakeAuditEntry } from '../helpers/factories.js';
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
 
@@ -36,23 +37,7 @@ function createMockMediator(): {
   };
 }
 
-/** Default audit-log entry values for test factories. */
-const AUDIT_DEFAULTS: AuditEntry = {
-  timestamp: new Date().toISOString(),
-  totalBanks: 1, successfulBanks: 0, failedBanks: 1,
-  totalTransactions: 0, totalDuplicates: 0,
-  totalDuration: 5000, successRate: 0,
-  banks: [],
-};
 
-/**
- * Creates a fake audit-log entry with sensible defaults.
- * @param overrides - Fields to override on the default entry.
- * @returns A merged audit entry object.
- */
-function fakeAuditEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
-  return { ...AUDIT_DEFAULTS, ...overrides };
-}
 
 /**
  * Creates a mock audit-log object with standard spies.
