@@ -362,6 +362,7 @@ describe('ConfigLoader', () => {
       ['hapoalim', { password: TEST_CREDENTIAL }, 'Hapoalim requires: userCode, password'],
       ['yahav', { password: TEST_CREDENTIAL }, 'Yahav requires: nationalID, password'],
       ['oneZero', { password: TEST_CREDENTIAL, phoneNumber: '0501234567' }, 'OneZero requires: email, password, phoneNumber'],
+      ['max', { username: 'user', password: TEST_CREDENTIAL }, 'Max requires: username, password, id'],
     ])('throws when %s is missing required credentials', (bankName, creds, message) => {
       expectConfigToThrow({
         banks: { [bankName]: makeBankWithTarget(creds as Record<string, unknown>) },
