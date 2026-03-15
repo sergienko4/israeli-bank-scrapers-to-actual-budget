@@ -96,11 +96,13 @@ describe('TelegramNotifier', () => {
   /**
    * Asserts that an HTML tag has equal opening and closing counts.
    * @param text - the HTML string to validate
-   * @param tag - the tag name to check (e.g. 'b', 'code')
+   * @param tag - the tag name to check (must be 'b', 'i', 'code', 'strong', or 'em')
    */
-  function expectBalancedTags(text: string, tag: string): void {
-    const opens = (text.match(new RegExp(`<${tag}>`, 'g')) || []).length;
-    const closes = (text.match(new RegExp(`</${tag}>`, 'g')) || []).length;
+  function expectBalancedTags(text: string, tag: 'b' | 'i' | 'code' | 'strong' | 'em'): void {
+    const openTag = `<${tag}>`;
+    const closeTag = `</${tag}>`;
+    const opens = text.split(openTag).length - 1;
+    const closes = text.split(closeTag).length - 1;
     expect(closes).toBe(opens);
   }
 
