@@ -1,0 +1,18 @@
+title: "[Q&A] "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking! Please search existing discussions first to avoid duplicates.
+  - type: textarea
+    attributes:
+      label: Question
+      description: What would you like to know?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Context
+      description: Any relevant details about your setup (Docker version, banks used, config snippet).

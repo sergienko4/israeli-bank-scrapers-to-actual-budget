@@ -1,0 +1,18 @@
+title: "[Show & Tell] "
+labels:
+  - show-and-tell
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share your setup, dashboard, automation, or integration with the community!
+  - type: textarea
+    attributes:
+      label: What are you sharing?
+      description: Describe your setup, workflow, or integration.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Screenshots or config snippets
+      description: Optional visuals or sanitized config examples.

@@ -2,7 +2,7 @@
 
 [![PR Pipeline](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr.yml) [![Release](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Docker Pulls](https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer)](https://hub.docker.com/r/sergienko4/israeli-bank-importer) [![Node.js](https://img.shields.io/badge/node-22%2B-brightgreen)](https://nodejs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-test-count.json)](#testing) [![E2E](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-e2e-count.json)](#e2e-tests)
 
-**Automatically import transactions from 17 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
+**Automatically import transactions from 18 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
 
 Powered by [**@sergienko4/israeli-bank-scrapers**](https://github.com/sergienko4/israeli-bank-scrapers) (fork of [eshaham/israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers) with Amex/Isracard WAF fix).
 

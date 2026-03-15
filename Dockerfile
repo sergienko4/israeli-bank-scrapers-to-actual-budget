@@ -9,6 +9,9 @@ LABEL org.opencontainers.image.title="Israeli Bank Importer"
 LABEL org.opencontainers.image.description="Import transactions from 18 Israeli banks into Actual Budget"
 LABEL org.opencontainers.image.source="https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget"
 LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.url="https://hub.docker.com/r/sergienko4/israeli-bank-importer"
+LABEL org.opencontainers.image.documentation="https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget#readme"
+LABEL org.opencontainers.image.vendor="Israeli Bank Importer Contributors"
 LABEL security.capabilities="Camoufox (Firefox) runs without SYS_ADMIN"
 
 # Install minimal system deps (fonts, certs, Firefox/Camoufox libs)
