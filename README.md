@@ -185,7 +185,7 @@ See [Releases](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-bud
 | Pagi | `pagi` | username, password |
 | One Zero | `oneZero` | email, password, phoneNumber |
 | Visa Cal | `visaCal` | username, password |
-| Max | `max` | username, password |
+| Max | `max` | username, password, id |
 | Isracard | `isracard` | id, card6Digits, password |
 | Amex | `amex` | id, card6Digits, password |
 

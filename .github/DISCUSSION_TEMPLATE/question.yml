@@ -16,3 +16,4 @@ body:
     attributes:
       label: Context
       description: Any relevant details about your setup (Docker version, banks used, config snippet).
+      placeholder: "e.g., Docker 20.10, Ubuntu 22.04, config snippet or bank names"
