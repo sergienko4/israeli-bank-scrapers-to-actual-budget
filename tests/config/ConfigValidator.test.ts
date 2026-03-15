@@ -467,7 +467,10 @@ describe('ConfigValidator', () => {
   // ─── Online (mocked fetch) ───
 
   describe('validateOnline', () => {
-    afterEach(() => vi.restoreAllMocks());
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
 
     it('passes when Actual server responds with 2xx', async () => {
       const cfg = makeConfig();
@@ -555,7 +558,10 @@ describe('ConfigValidator', () => {
   // ─── Budget existence check ───
 
   describe('checkActualBudget', () => {
-    afterEach(() => vi.restoreAllMocks());
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
 
     it('passes when budget is found on server', async () => {
       const cfg = makeConfig();
@@ -610,7 +616,10 @@ describe('ConfigValidator', () => {
   // ─── validateAll with budget check (end-to-end report) ───
 
   describe('validateAll budget report', () => {
-    afterEach(() => vi.restoreAllMocks());
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
 
     it('report shows PASS for correct syncId', async () => {
       const cfg = makeConfig();
@@ -661,7 +670,10 @@ describe('ConfigValidator', () => {
 
   describe('runValidateMode', () => {
     beforeEach(() => vi.clearAllMocks());
-    afterEach(() => vi.restoreAllMocks());
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
 
     it('returns 1 when config cannot be loaded', async () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);

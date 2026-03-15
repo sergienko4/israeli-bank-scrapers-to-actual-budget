@@ -60,7 +60,7 @@ function fakeAuditEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
  * @returns A mock audit-log compatible with TelegramCommandHandler.
  */
 function createMockAuditLog(opts: {
-  entries?: Record<string, unknown>[];
+  entries?: AuditEntry[];
   lastFailed?: string[];
   consecutiveFailures?: number;
 } = {}): Record<string, ReturnType<typeof vi.fn>> {
