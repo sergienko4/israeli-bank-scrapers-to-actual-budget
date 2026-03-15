@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.35.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.34.0...v1.35.0) (2026-03-15)
+
+
+### Added
+
+* add SonarCloud analysis and license compliance to CI pipeline ([#241](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/241)) ([d5fbb3b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d5fbb3bbcb41c200f3d8b5fadd052a9b29823fa0))
+
+
+### Fixed
+
+* resolve SonarCloud security and reliability findings ([#242](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/242)) ([fd27ac0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fd27ac0a8f58270927270ca3b140f5b194efd34c))
+
 ## [1.34.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.33.8...v1.34.0) (2026-03-14)
 
 
