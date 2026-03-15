@@ -20,6 +20,8 @@ const credentialSpecs: Record<string, CredentialSpec> = {
     label: 'nationalID, password' },
   onezero:   { displayName: 'OneZero',       required: ['email', 'password', 'phoneNumber'],
     label: 'email, password, phoneNumber' },
+  max:       { displayName: 'Max',           required: ['username', 'password', 'id'],
+    label: 'username, password, id' },
 };
 
 /**

@@ -22,7 +22,7 @@ Complete list of all supported financial institutions and their required credent
 | Pagi | `pagi` | username, password |
 | One Zero | `oneZero` | email, password, phoneNumber |
 | Visa Cal | `visaCal` | username, password |
-| Max | `max` | username, password |
+| Max | `max` | username, password, id |
 | Isracard | `isracard` | id, card6Digits, password |
 | Amex | `amex` | id, card6Digits, password |
 
@@ -209,6 +209,7 @@ Complete list of all supported financial institutions and their required credent
   "max": {
     "username": "your_username",
     "password": "your_password",
+    "id": "123456789",
     "startDate": "2026-01-19",
     "targets": [...]
   }

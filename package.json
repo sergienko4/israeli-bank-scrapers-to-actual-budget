@@ -70,9 +70,18 @@
   "keywords": [
     "actual-budget",
     "israeli-banks",
-    "banking",
+    "bank-scraper",
+    "transaction-import",
+    "fintech",
+    "personal-finance",
+    "budgeting",
     "automation",
-    "finance",
-    "budgeting"
+    "self-hosted",
+    "docker",
+    "typescript",
+    "telegram-bot",
+    "open-banking",
+    "israel",
+    "camoufox"
   ]
 }
