@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramNotifier } from '../../../src/Services/Notifications/TelegramNotifier.js';
+import type { TelegramConfig } from '../../../src/Types/Index.js';
 import { ImportSummary } from '../../../src/Services/MetricsService.js';
 import { fakeImportSummary } from '../../helpers/factories.js';
 
@@ -67,11 +68,11 @@ describe('TelegramNotifier', () => {
    * @returns configured TelegramNotifier instance
    */
   function createNotifier(
-    options?: Record<string, unknown>,
+    options?: Partial<TelegramConfig>,
     maxTransactions?: number,
   ): TelegramNotifier {
-    const config = { botToken: '123:ABC', chatId: '-100', ...options };
-    return new TelegramNotifier(config as any, maxTransactions);
+    const config: TelegramConfig = { botToken: '123:ABC', chatId: '-100', ...options };
+    return new TelegramNotifier(config, maxTransactions);
   }
 
   /**

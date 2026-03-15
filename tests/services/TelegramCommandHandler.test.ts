@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
 import type { ImportMediator } from '../../src/Services/ImportMediator.js';
+import type { AuditEntry } from '../../src/Services/AuditLogService.js';
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
 
@@ -36,12 +37,12 @@ function createMockMediator(): {
 }
 
 /** Default audit-log entry values for test factories. */
-const AUDIT_DEFAULTS = {
+const AUDIT_DEFAULTS: AuditEntry = {
   timestamp: new Date().toISOString(),
   totalBanks: 1, successfulBanks: 0, failedBanks: 1,
   totalTransactions: 0, totalDuplicates: 0,
   totalDuration: 5000, successRate: 0,
-  banks: [] as Record<string, unknown>[],
+  banks: [],
 };
 
 /**
@@ -49,7 +50,7 @@ const AUDIT_DEFAULTS = {
  * @param overrides - Fields to override on the default entry.
  * @returns A merged audit entry object.
  */
-function fakeAuditEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function fakeAuditEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
   return { ...AUDIT_DEFAULTS, ...overrides };
 }
 
@@ -476,7 +477,7 @@ describe('TelegramCommandHandler', () => {
       entries: [fakeAuditEntry({
         totalBanks: 2, successfulBanks: 1, failedBanks: 1,
         totalTransactions: 3, successRate: 50,
-        banks: [{ name: 'discount', status: 'failure', error: 'Auth timeout' }],
+        banks: [{ name: 'discount', status: 'failure', error: 'Auth timeout', txns: 0 }],
       })],
       lastFailed: ['discount'],
     });

@@ -61,8 +61,9 @@ function warn(results: ValidationResult[]): ValidationResult[] {
  * @param status - Expected status: 'pass', 'fail', or 'warn'.
  */
 function expectCheck(results: ValidationResult[], check: string, status: 'pass' | 'fail' | 'warn'): void {
-  const filtered = byStatus(results, status);
-  expect(filtered.some(r => r.check === check)).toBe(true);
+  const matching = results.filter(r => r.check === check);
+  expect(matching.length).toBeGreaterThan(0);
+  expect(matching.every(r => r.status === status)).toBe(true);
 }
 
 /**
