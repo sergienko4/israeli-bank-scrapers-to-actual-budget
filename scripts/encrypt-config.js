@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Encrypt config.json in-place using AES-256-GCM
- * Usage: CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/encrypt-config.js [input]
+ * Usage: CREDENTIALS_ENCRYPTION_PASSWORD=<your-key> node scripts/encrypt-config.js [input]
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { encryptConfig, isEncryptedConfig } from '../dist/config/ConfigEncryption.js';
@@ -11,7 +11,7 @@ const password = process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
 
 if (!password) {
   console.error('❌ Set CREDENTIALS_ENCRYPTION_PASSWORD environment variable');
-  console.error('   Example: CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/encrypt-config.js');
+  console.error('   Example: CREDENTIALS_ENCRYPTION_PASSWORD=<your-key> node scripts/encrypt-config.js');
   process.exit(1);
 }
 

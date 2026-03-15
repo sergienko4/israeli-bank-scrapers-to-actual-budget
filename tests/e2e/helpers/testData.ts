@@ -4,6 +4,7 @@
  */
 
 import { ImportSummary, BankMetrics, AccountMetrics } from '../../../src/Services/MetricsService.js';
+import { TEST_CREDENTIAL } from '../../helpers/testCredentials.js';
 
 const TEST_BANK_NAME = 'e2eTestBank';
 const TEST_ACCOUNT_NUMBER = 'E2E-001';
@@ -51,12 +52,12 @@ export function createTestSummary(overrides?: Partial<ImportSummary>): ImportSum
 export function createBaseConfig(overrides?: Record<string, unknown>) {
   return {
     actual: {
-      init: { serverURL: 'http://localhost:5006', password: 'test', dataDir: '/app/data' },
+      init: { serverURL: 'http://localhost:5006', password: TEST_CREDENTIAL, dataDir: '/app/data' },
       budget: { syncId: '00000000-0000-0000-0000-000000000000', password: null },
     },
     banks: {
       e2eTestBank: {
-        id: 'test', password: 'test', num: '123', daysBack: 7,
+        id: 'test', password: TEST_CREDENTIAL, num: '123', daysBack: 7,
         targets: [{ actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' }],
       },
     },

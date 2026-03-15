@@ -9,6 +9,7 @@ import {
   validateBank,
 } from '../../src/Config/ConfigLoaderValidator.js';
 import { fakeUuid, fakeImporterConfig, fakeBankConfig, fakeBankTarget } from '../helpers/factories.js';
+import { TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
 const VALID_UUID = fakeUuid();
 
@@ -36,17 +37,17 @@ describe('validateActualConfig', () => {
   });
 
   it('throws when syncId is missing', () => {
-    const config = fakeImporterConfig({ actual: { init: { dataDir: './data', password: 'p', serverURL: 'http://x' }, budget: { syncId: '', password: null } } });
+    const config = fakeImporterConfig({ actual: { init: { dataDir: './data', password: TEST_CREDENTIAL_SHORT, serverURL: 'http://x' }, budget: { syncId: '', password: null } } });
     expect(() => validateActualConfig(config)).toThrow('ACTUAL_BUDGET_SYNC_ID is required');
   });
 
   it('throws when syncId is not a UUID', () => {
-    const config = fakeImporterConfig({ actual: { init: { dataDir: './data', password: 'p', serverURL: 'http://x' }, budget: { syncId: 'not-uuid', password: null } } });
+    const config = fakeImporterConfig({ actual: { init: { dataDir: './data', password: TEST_CREDENTIAL_SHORT, serverURL: 'http://x' }, budget: { syncId: 'not-uuid', password: null } } });
     expect(() => validateActualConfig(config)).toThrow('Invalid ACTUAL_BUDGET_SYNC_ID format');
   });
 
   it('does not throw for valid config', () => {
-    const config = fakeImporterConfig({ actual: { init: { dataDir: './data', password: 'p', serverURL: 'http://x' }, budget: { syncId: VALID_UUID, password: null } } });
+    const config = fakeImporterConfig({ actual: { init: { dataDir: './data', password: TEST_CREDENTIAL_SHORT, serverURL: 'http://x' }, budget: { syncId: VALID_UUID, password: null } } });
     expect(() => validateActualConfig(config)).not.toThrow();
   });
 });
@@ -208,7 +209,7 @@ describe('validateBank', () => {
 
   it('does not throw for a valid bank config', () => {
     const config = fakeBankConfig({
-      id: '123', password: 'p', num: 'ABC',
+      id: '123', password: TEST_CREDENTIAL_SHORT, num: 'ABC',
       daysBack: 7, startDate: undefined,
       targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
     });

@@ -3,6 +3,7 @@ import { ConfigValidator, ValidationResult, runValidateMode } from '../../src/Co
 import { ImporterConfig } from '../../src/Types/Index.js';
 import * as fs from 'fs';
 import { fakeUuid } from '../helpers/factories.js';
+import { TEST_CREDENTIAL, TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
 vi.mock('fs');
 
@@ -12,12 +13,12 @@ const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 function makeConfig(overrides: Record<string, unknown> = {}): ImporterConfig {
   return {
     actual: {
-      init: { dataDir: './data', password: 'pass', serverURL: 'http://localhost:5006' },
+      init: { dataDir: './data', password: TEST_CREDENTIAL, serverURL: 'http://localhost:5006' },
       budget: { syncId: fakeUuid(), password: null },
     },
     banks: {
       discount: {
-        id: '123', password: 'p', num: 'ABC', daysBack: 7,
+        id: '123', password: TEST_CREDENTIAL_SHORT, num: 'ABC', daysBack: 7,
         targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
       },
     },
@@ -122,7 +123,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: {
           oneZero: {
-            email: 'a@b.com', password: 'p', phoneNumber: '+1234567890',
+            email: 'a@b.com', password: TEST_CREDENTIAL_SHORT, phoneNumber: '+1234567890',
             targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
@@ -135,7 +136,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: {
           unknownxyz: {
-            password: 'p',
+            password: TEST_CREDENTIAL_SHORT,
             targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
@@ -148,7 +149,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: {
           disount: {
-            id: '1', password: 'p', num: 'A',
+            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A',
             targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
@@ -162,7 +163,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: {
           leumu: {
-            username: 'u', password: 'p',
+            username: 'u', password: TEST_CREDENTIAL_SHORT,
             targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
@@ -176,7 +177,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: {
           zzznotabank: {
-            password: 'p',
+            password: TEST_CREDENTIAL_SHORT,
             targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
@@ -194,7 +195,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: {
           leumi: {
-            username: 'u', password: 'p',
+            username: 'u', password: TEST_CREDENTIAL_SHORT,
             targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
@@ -207,7 +208,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: {
           leumi: {
-            username: 'u', password: 'p', daysBack: 7, startDate: '2026-01-01',
+            username: 'u', password: TEST_CREDENTIAL_SHORT, daysBack: 7, startDate: '2026-01-01',
             targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
           },
         },
@@ -227,7 +228,7 @@ describe('ConfigValidator', () => {
   describe('bank targets', () => {
     it('fails when no targets', () => {
       const cfg = makeConfig({
-        banks: { discount: { id: '1', password: 'p', num: 'A', daysBack: 7 } },
+        banks: { discount: { id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7 } },
       });
       const results = validator.validateOffline(cfg);
       expect(fail(results).some(r => r.check === 'bank.discount.targets')).toBe(true);
@@ -237,7 +238,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: {
           discount: {
-            id: '1', password: 'p', num: 'A', daysBack: 7,
+            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
             targets: [{ actualAccountId: 'bad-uuid', reconcile: true, accounts: 'all' }],
           },
         },
@@ -255,7 +256,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: {
           discount: {
-            id: '1', password: 'p', num: 'A', daysBack: 7,
+            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
             targets: [{ actualAccountId: fakeUuid(), accountName: 'Main Checking', reconcile: false, accounts: 'all' }],
           },
         },
@@ -657,10 +658,10 @@ describe('ConfigValidator', () => {
     it('returns 1 when offline checks fail', async () => {
       const badConfig = {
         actual: {
-          init: { dataDir: './data', password: 'p', serverURL: 'http://localhost:5006' },
+          init: { dataDir: './data', password: TEST_CREDENTIAL_SHORT, serverURL: 'http://localhost:5006' },
           budget: { syncId: 'not-a-uuid', password: null },
         },
-        banks: { discount: { id: '1', password: 'p', num: 'A', daysBack: 7,
+        banks: { discount: { id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
           targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }] } },
       };
       vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -675,10 +676,10 @@ describe('ConfigValidator', () => {
     it('returns 0 when all checks pass', async () => {
       const goodConfig = {
         actual: {
-          init: { dataDir: './data', password: 'p', serverURL: 'http://localhost:5006' },
+          init: { dataDir: './data', password: TEST_CREDENTIAL_SHORT, serverURL: 'http://localhost:5006' },
           budget: { syncId: VALID_UUID, password: null },
         },
-        banks: { discount: { id: '1', password: 'p', num: 'A', daysBack: 7,
+        banks: { discount: { id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
           targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }] } },
       };
       vi.mocked(fs.existsSync).mockReturnValue(true);

@@ -8,6 +8,7 @@ import { describe, it, expect, afterAll } from 'vitest';
 import { join } from 'path';
 import { runImporterDocker, getFixturesDir, writeTempConfig, createTempFileTracker, hasDockerImage } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 const FIXTURES = getFixturesDir();
 const temp = createTempFileTracker();
@@ -64,7 +65,7 @@ describe.runIf(hasDockerImage())('Config Validation E2E', () => {
       const config = createBaseConfig({
         banks: {
           discount: {
-            password: 'test', daysBack: 7,
+            password: TEST_CREDENTIAL, daysBack: 7,
             targets: [{ actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' }],
           },
         },

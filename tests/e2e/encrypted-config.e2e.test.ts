@@ -9,10 +9,11 @@ import { join } from 'path';
 import { encryptConfig } from '../../src/Config/ConfigEncryption.js';
 import { runImporterDocker, getFixturesDir, findBudgetId, createTempFileTracker, hasDockerImage } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
+import { TEST_ENCRYPTION_KEY } from '../helpers/testCredentials.js';
 import { writeFileSync } from 'fs';
 
 const FIXTURES = getFixturesDir();
-const ENCRYPTION_PASSWORD = 'e2e-test-encryption-key-2026';
+const ENCRYPTION_PASSWORD = TEST_ENCRYPTION_KEY;
 const temp = createTempFileTracker();
 const HAS_BUDGET = !!findBudgetId();
 

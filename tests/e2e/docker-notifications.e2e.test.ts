@@ -12,6 +12,7 @@ import { writeFileSync } from 'fs';
 import { createWebhookCapture, WebhookCapture } from './helpers/webhookCapture.js';
 import { runImporterDockerAsync, getFixturesDir, findBudgetId, createTempFileTracker, hasDockerImage } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 const FIXTURES = getFixturesDir();
 const IS_LINUX = process.platform === 'linux';
@@ -23,7 +24,7 @@ function writeWebhookConfig(webhookUrl: string): string {
   const config = createBaseConfig({
     banks: {
       e2eTestBank: {
-        id: 'test', password: 'test', num: '123', daysBack: 30,
+        id: 'test', password: TEST_CREDENTIAL, num: '123', daysBack: 30,
         targets: [{ actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: true, accounts: 'all' }],
       },
     },

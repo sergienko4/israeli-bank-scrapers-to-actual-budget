@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildCredentials } from '../../src/Scraper/CredentialsBuilder.js';
 import type { BankConfig } from '../../src/Types/Index.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
-const idBank = { id: 'user123', password: 'pass' } as BankConfig;
+const idBank = { id: 'user123', password: TEST_CREDENTIAL } as BankConfig;
 const emailBank = {
-  email: 'user@example.com', password: 'pass', phoneNumber: '+972501234567'
+  email: 'user@example.com', password: TEST_CREDENTIAL, phoneNumber: '+972501234567'
 } as BankConfig;
 
 describe('buildCredentials', () => {

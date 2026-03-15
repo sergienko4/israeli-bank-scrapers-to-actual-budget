@@ -3,6 +3,7 @@ import { ConfigLoader } from '../../src/Config/ConfigLoader.js';
 import { ConfigurationError } from '../../src/Errors/ErrorTypes.js';
 import * as fs from 'fs';
 import { faker } from '@faker-js/faker';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 vi.mock('fs');
 
@@ -69,17 +70,17 @@ describe('ConfigLoader', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
       // Set env vars for a valid discount config
-      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
       process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
       process.env.DISCOUNT_ID = '123';
-      process.env.DISCOUNT_PASSWORD = 'pass';
+      process.env.DISCOUNT_PASSWORD = TEST_CREDENTIAL;
       process.env.DISCOUNT_NUM = 'ABC';
       process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
 
       const loader = new ConfigLoader('/nonexistent/config.json');
       const config = loader.load();
 
-      expect(config.actual.init.password).toBe('test');
+      expect(config.actual.init.password).toBe(TEST_CREDENTIAL);
       expect(config.banks.discount).toBeDefined();
 
       // Cleanup
@@ -95,10 +96,10 @@ describe('ConfigLoader', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('not valid json{{{');
 
-      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
       process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
       process.env.DISCOUNT_ID = '123';
-      process.env.DISCOUNT_PASSWORD = 'pass';
+      process.env.DISCOUNT_PASSWORD = TEST_CREDENTIAL;
       process.env.DISCOUNT_NUM = 'ABC';
       process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
 
@@ -128,10 +129,10 @@ describe('ConfigLoader', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
       // Will fail validation, but we can test the path is /app/config.json
-      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
       process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
       process.env.DISCOUNT_ID = '123';
-      process.env.DISCOUNT_PASSWORD = 'pass';
+      process.env.DISCOUNT_PASSWORD = TEST_CREDENTIAL;
       process.env.DISCOUNT_NUM = 'ABC';
       process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
 
@@ -210,7 +211,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             startDate: 'not-a-date',
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
@@ -230,7 +231,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             startDate: futureDate.toISOString().split('T')[0],
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
@@ -250,7 +251,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             startDate: oldDate.toISOString().split('T')[0],
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
@@ -267,7 +268,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC'
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC'
             // no targets
           }
         }
@@ -283,7 +284,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             targets: []
           }
         }
@@ -299,7 +300,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             targets: [{ actualAccountId: '', reconcile: true, accounts: 'all' }]
           }
         }
@@ -315,7 +316,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             targets: [{ actualAccountId: 'not-uuid', reconcile: true, accounts: 'all' }]
           }
         }
@@ -330,12 +331,12 @@ describe('ConfigLoader', () => {
     it('throws on missing accounts field', () => {
       const config = {
         actual: {
-          init: { dataDir: './data', password: 'test', serverURL: 'http://localhost:5006' },
+          init: { dataDir: './data', password: TEST_CREDENTIAL, serverURL: 'http://localhost:5006' },
           budget: { syncId: VALID_UUID, password: null }
         },
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             targets: [{ actualAccountId: VALID_UUID, reconcile: true }]
           }
         }
@@ -350,12 +351,12 @@ describe('ConfigLoader', () => {
     it('throws on invalid reconcile type', () => {
       const config = {
         actual: {
-          init: { dataDir: './data', password: 'test', serverURL: 'http://localhost:5006' },
+          init: { dataDir: './data', password: TEST_CREDENTIAL, serverURL: 'http://localhost:5006' },
           budget: { syncId: VALID_UUID, password: null }
         },
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             targets: [{ actualAccountId: VALID_UUID, reconcile: 'yes', accounts: 'all' }]
           }
         }
@@ -371,7 +372,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: ['1234', '5678'] }]
           }
         }
@@ -389,7 +390,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            password: 'pass', num: 'ABC',
+            password: TEST_CREDENTIAL, num: 'ABC',
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
         }
@@ -405,7 +406,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           leumi: {
-            password: 'pass',
+            password: TEST_CREDENTIAL,
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
         }
@@ -421,7 +422,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           hapoalim: {
-            password: 'pass',
+            password: TEST_CREDENTIAL,
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
         }
@@ -437,7 +438,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           yahav: {
-            password: 'pass',
+            password: TEST_CREDENTIAL,
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
         }
@@ -453,7 +454,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           oneZero: {
-            password: 'pass', phoneNumber: '0501234567',
+            password: TEST_CREDENTIAL, phoneNumber: '0501234567',
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
         }
@@ -469,7 +470,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           oneZero: {
-            email: 'not-an-email', password: 'pass', phoneNumber: '0501234567890',
+            email: 'not-an-email', password: TEST_CREDENTIAL, phoneNumber: '0501234567890',
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
         }
@@ -485,7 +486,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           oneZero: {
-            email: 'user@example.com', password: 'pass', phoneNumber: '123',
+            email: 'user@example.com', password: TEST_CREDENTIAL, phoneNumber: '123',
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
         }
@@ -501,7 +502,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           isracard: {
-            id: '123456789', card6Digits: '12345', password: 'pass',
+            id: '123456789', card6Digits: '12345', password: TEST_CREDENTIAL,
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
         }
@@ -517,7 +518,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           isracard: {
-            id: '123456789', card6Digits: '123456', password: 'pass',
+            id: '123456789', card6Digits: '123456', password: TEST_CREDENTIAL,
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
           }
         }
@@ -551,10 +552,10 @@ describe('ConfigLoader', () => {
 
     it('splits comma-separated LEUMI_ACCOUNTS into array', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
       process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
       process.env.LEUMI_USERNAME = 'user';
-      process.env.LEUMI_PASSWORD = 'pass';
+      process.env.LEUMI_PASSWORD = TEST_CREDENTIAL;
       process.env.LEUMI_ACCOUNT_ID = VALID_UUID;
       process.env.LEUMI_ACCOUNTS = '1234,5678';
 
@@ -566,10 +567,10 @@ describe('ConfigLoader', () => {
 
     it('splits comma-separated HAPOALIM_ACCOUNTS into array', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
       process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
       process.env.HAPOALIM_USER_CODE = 'code';
-      process.env.HAPOALIM_PASSWORD = 'pass';
+      process.env.HAPOALIM_PASSWORD = TEST_CREDENTIAL;
       process.env.HAPOALIM_ACCOUNT_ID = VALID_UUID;
       process.env.HAPOALIM_ACCOUNTS = '111,222,333';
 
@@ -581,10 +582,10 @@ describe('ConfigLoader', () => {
 
     it('splits comma-separated DISCOUNT_ACCOUNTS into array', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
       process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
       process.env.DISCOUNT_ID = '123';
-      process.env.DISCOUNT_PASSWORD = 'pass';
+      process.env.DISCOUNT_PASSWORD = TEST_CREDENTIAL;
       process.env.DISCOUNT_NUM = 'ABC';
       process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
       process.env.DISCOUNT_ACCOUNTS = '9999,8888';
@@ -597,10 +598,10 @@ describe('ConfigLoader', () => {
 
     it('uses "all" as default for LEUMI_ACCOUNTS', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      process.env.ACTUAL_PASSWORD = 'test';
+      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
       process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
       process.env.LEUMI_USERNAME = 'user';
-      process.env.LEUMI_PASSWORD = 'pass';
+      process.env.LEUMI_PASSWORD = TEST_CREDENTIAL;
       process.env.LEUMI_ACCOUNT_ID = VALID_UUID;
 
       const loader = new ConfigLoader('/nonexistent');
@@ -615,7 +616,7 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig({
         banks: {
           discount: {
-            id: '123', password: 'pass', num: 'ABC',
+            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: [] }]
           }
         }
@@ -665,13 +666,13 @@ describe('ConfigLoader', () => {
   describe('split config (credentials.json + config.json)', () => {
     it('merges credentials.json into config.json', () => {
       const settings = { actual: { init: { serverURL: 'http://localhost:5006', dataDir: './data' } }, banks: { discount: { daysBack: 14, targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }] } } };
-      const credentials = { actual: { init: { password: 'secret' }, budget: { syncId: VALID_UUID, password: null } }, banks: { discount: { id: '123', password: 'pass', num: 'ABC' } } };
+      const credentials = { actual: { init: { password: TEST_CREDENTIAL }, budget: { syncId: VALID_UUID, password: null } }, banks: { discount: { id: '123', password: TEST_CREDENTIAL, num: 'ABC' } } };
 
       vi.mocked(fs.existsSync).mockImplementation((p) => String(p).includes('config.json') || String(p).includes('credentials.json'));
       vi.mocked(fs.readFileSync).mockImplementation((p) => String(p).includes('credentials') ? JSON.stringify(credentials) : JSON.stringify(settings));
 
       const config = new ConfigLoader('/test/config.json').load();
-      expect(config.actual.init.password).toBe('secret');
+      expect(config.actual.init.password).toBe(TEST_CREDENTIAL);
       expect(config.actual.init.serverURL).toBe('http://localhost:5006');
       expect(config.banks.discount.id).toBe('123');
       expect(config.banks.discount.daysBack).toBe(14);
@@ -687,28 +688,28 @@ describe('ConfigLoader', () => {
     });
 
     it('deep merges bank settings with bank credentials', () => {
-      const settings = { actual: { init: { serverURL: 'http://localhost:5006', password: 'p', dataDir: './data' }, budget: { syncId: VALID_UUID, password: null } }, banks: { discount: { daysBack: 7, targets: [{ actualAccountId: VALID_UUID, reconcile: false, accounts: 'all' }] } } };
-      const credentials = { banks: { discount: { id: '999', password: 'secret', num: 'XYZ' } } };
+      const settings = { actual: { init: { serverURL: 'http://localhost:5006', password: TEST_CREDENTIAL, dataDir: './data' }, budget: { syncId: VALID_UUID, password: null } }, banks: { discount: { daysBack: 7, targets: [{ actualAccountId: VALID_UUID, reconcile: false, accounts: 'all' }] } } };
+      const credentials = { banks: { discount: { id: '999', password: TEST_CREDENTIAL, num: 'XYZ' } } };
 
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockImplementation((p) => String(p).includes('credentials') ? JSON.stringify(credentials) : JSON.stringify(settings));
 
       const config = new ConfigLoader('/test/config.json').load();
       expect(config.banks.discount.id).toBe('999');
-      expect(config.banks.discount.password).toBe('secret');
+      expect(config.banks.discount.password).toBe(TEST_CREDENTIAL);
       expect(config.banks.discount.daysBack).toBe(7);
       expect(config.banks.discount.targets).toHaveLength(1);
     });
 
     it('credentials override conflicting config values', () => {
       const settings = makeValidConfig();
-      const credentials = { actual: { init: { password: 'overridden' } } };
+      const credentials = { actual: { init: { password: TEST_CREDENTIAL } } };
 
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockImplementation((p) => String(p).includes('credentials') ? JSON.stringify(credentials) : JSON.stringify(settings));
 
       const config = new ConfigLoader('/test/config.json').load();
-      expect(config.actual.init.password).toBe('overridden');
+      expect(config.actual.init.password).toBe(TEST_CREDENTIAL);
     });
   });
 
