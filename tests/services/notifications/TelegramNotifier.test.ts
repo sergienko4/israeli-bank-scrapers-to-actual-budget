@@ -2,52 +2,53 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramNotifier } from '../../../src/Services/Notifications/TelegramNotifier.js';
 import type { TelegramConfig } from '../../../src/Types/Index.js';
 import { ImportSummary } from '../../../src/Services/MetricsService.js';
-import { fakeImportSummary } from '../../helpers/factories.js';
+import {
+  fakeImportSummary, fakeAccountMetrics, fakeBankMetrics,
+} from '../../helpers/factories.js';
 
-const summaryWithTxns: ImportSummary = {
-  totalBanks: 1,
-  successfulBanks: 1,
-  failedBanks: 0,
-  totalTransactions: 2,
-  totalDuplicates: 0,
-  totalDuration: 5000,
-  averageDuration: 5000,
+const pinnedAccount = fakeAccountMetrics({
+  accountNumber: '0152228812',
+  balance: 16242.97,
+  currency: 'ILS',
+  newTransactions: [
+    { date: '2026-02-14', description: 'Transfer from account', amount: 1000 },
+    { date: '2026-02-14', description: 'Amex charge', amount: -66211 },
+  ],
+  existingTransactions: [],
+});
+
+const pinnedBank = fakeBankMetrics({
+  bankName: 'discount',
+  startTime: 0, endTime: 5000, duration: 5000,
+  status: 'success',
+  transactionsImported: 2, transactionsSkipped: 0,
+  reconciliationStatus: 'skipped',
+  accounts: [pinnedAccount],
+});
+
+const summaryWithTxns = fakeImportSummary({
+  totalTransactions: 2, totalDuplicates: 0,
+  totalDuration: 5000, averageDuration: 5000,
   successRate: 100,
-  banks: [{
-    bankName: 'discount',
-    startTime: 0, endTime: 5000, duration: 5000,
-    status: 'success',
-    transactionsImported: 2, transactionsSkipped: 0,
-    reconciliationStatus: 'skipped',
-    accounts: [{
-      accountNumber: '0152228812',
-      balance: 16242.97,
-      currency: 'ILS',
-      newTransactions: [
-        { date: '2026-02-14', description: 'Transfer from account', amount: 1000 },
-        { date: '2026-02-14', description: 'Amex charge', amount: -66211 }
-      ],
-      existingTransactions: []
-    }]
-  }]
-};
+  banks: [pinnedBank],
+});
 
-const failedSummary: ImportSummary = {
+const failedSummary = fakeImportSummary({
   totalBanks: 2, successfulBanks: 1, failedBanks: 1,
   totalTransactions: 2, totalDuplicates: 0,
   totalDuration: 8000, averageDuration: 4000, successRate: 50,
   banks: [
-    {
+    fakeBankMetrics({
       bankName: 'discount', startTime: 0, endTime: 5000, duration: 5000,
-      status: 'success', transactionsImported: 2, transactionsSkipped: 0, accounts: []
-    },
-    {
+      status: 'success', transactionsImported: 2, transactionsSkipped: 0, accounts: [],
+    }),
+    fakeBankMetrics({
       bankName: 'leumi', startTime: 0, endTime: 3000, duration: 3000,
       status: 'failure', error: 'AuthenticationError',
-      transactionsImported: 0, transactionsSkipped: 0, accounts: []
-    }
-  ]
-};
+      transactionsImported: 0, transactionsSkipped: 0, accounts: [],
+    }),
+  ],
+});
 
 function getText(fetchMock: any): string {
   return JSON.parse(fetchMock.mock.calls[0][1].body).text;
@@ -80,17 +81,14 @@ describe('TelegramNotifier', () => {
    * @param overrides - properties to spread into the first account
    * @returns ImportSummary with the modified account
    */
-  function withAccountOverrides(overrides: Record<string, unknown>): ImportSummary {
-    return {
+  function withAccountOverrides(overrides: Partial<typeof pinnedAccount>): ImportSummary {
+    return fakeImportSummary({
       ...summaryWithTxns,
-      banks: [{
-        ...summaryWithTxns.banks[0],
-        accounts: [{
-          ...summaryWithTxns.banks[0].accounts[0],
-          ...overrides,
-        }],
-      }],
-    };
+      banks: [fakeBankMetrics({
+        ...pinnedBank,
+        accounts: [fakeAccountMetrics({ ...pinnedAccount, ...overrides })],
+      })],
+    });
   }
 
   /**
