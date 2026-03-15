@@ -71,7 +71,7 @@ describe('@Loggable decorator', () => {
     class Idle {
       @Loggable public noop(): void { /* noop */ }
     }
-    new Idle();
+    const _idle = new Idle();
     expect(mockLogger.info).not.toHaveBeenCalled();
   });
 

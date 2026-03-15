@@ -3,6 +3,7 @@ import { mkdirSync, existsSync, readdirSync, readFileSync, unlinkSync, rmdirSync
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { FileLogger } from '../../src/Logger/FileLogger.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 let testDir: string;
 
@@ -90,7 +91,7 @@ describe('FileLogger', () => {
 
   it('redacts sensitive fields', async () => {
     const logger = new FileLogger(testDir);
-    logger.info('login', { password: 'secret123' });
+    logger.info('login', { password: TEST_CREDENTIAL });
     await flush();
     const entry = JSON.parse(readLogContent().trim());
     expect(entry.password).toBe('[REDACTED]');

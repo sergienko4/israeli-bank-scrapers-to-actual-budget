@@ -9,6 +9,7 @@ import {
   createTempFileTracker, hasDockerImage,
 } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 const FIXTURES = getFixturesDir();
 const temp = createTempFileTracker();
@@ -20,7 +21,7 @@ const VALID_UUID = 'e2e00000-0000-0000-0000-000000000001';
 function makeValidateConfig(banks: Record<string, unknown>) {
   return {
     actual: {
-      init: { serverURL: 'http://localhost:5006', password: 'test', dataDir: '/app/data' },
+      init: { serverURL: 'http://localhost:5006', password: TEST_CREDENTIAL, dataDir: '/app/data' },
       budget: { syncId: '00000000-0000-0000-0000-000000000000', password: null },
     },
     banks,
@@ -32,7 +33,7 @@ describe.runIf(hasDockerImage())('--validate flag E2E', () => {
   it('exits 0 and shows [PASS] for all offline checks with valid config', () => {
     const config = makeValidateConfig({
       discount: {
-        id: '123', password: 'pass', num: 'ABC', daysBack: 7,
+        id: '123', password: TEST_CREDENTIAL, num: 'ABC', daysBack: 7,
         targets: [{ actualAccountId: VALID_UUID, reconcile: false, accounts: 'all' }],
       },
     });
@@ -51,7 +52,7 @@ describe.runIf(hasDockerImage())('--validate flag E2E', () => {
   it('exits 1 and shows "Did you mean?" for typo bank name', () => {
     const config = makeValidateConfig({
       disount: {
-        id: '123', password: 'pass', num: 'ABC', daysBack: 7,
+        id: '123', password: TEST_CREDENTIAL, num: 'ABC', daysBack: 7,
         targets: [{ actualAccountId: VALID_UUID, reconcile: false, accounts: 'all' }],
       },
     });
@@ -69,7 +70,7 @@ describe.runIf(hasDockerImage())('--validate flag E2E', () => {
   it('exits 1 and reports invalid syncId UUID', () => {
     const config = makeValidateConfig({
       discount: {
-        id: '123', password: 'pass', num: 'ABC', daysBack: 7,
+        id: '123', password: TEST_CREDENTIAL, num: 'ABC', daysBack: 7,
         targets: [{ actualAccountId: VALID_UUID, reconcile: false, accounts: 'all' }],
       },
     });
@@ -87,7 +88,7 @@ describe.runIf(hasDockerImage())('--validate flag E2E', () => {
   it('shows warning when no daysBack/startDate set', () => {
     const config = makeValidateConfig({
       leumi: {
-        username: 'user', password: 'pass',
+        username: 'user', password: TEST_CREDENTIAL,
         targets: [{ actualAccountId: VALID_UUID, reconcile: false, accounts: 'all' }],
       },
     });

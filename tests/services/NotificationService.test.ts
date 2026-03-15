@@ -93,7 +93,7 @@ describe('NotificationService', () => {
   });
 
   it('logs when telegram is enabled', () => {
-    new NotificationService({
+    const _svc = new NotificationService({
       enabled: true,
       telegram: { botToken: '123:ABC', chatId: '-100' }
     });
@@ -104,7 +104,7 @@ describe('NotificationService', () => {
   });
 
   it('logs when webhook is enabled with explicit format', () => {
-    new NotificationService({
+    const _svc = new NotificationService({
       enabled: true,
       webhook: { url: 'https://hooks.example.com/test', format: 'slack' }
     });
@@ -114,7 +114,7 @@ describe('NotificationService', () => {
   });
 
   it('logs webhook enabled with plain fallback when format is omitted', () => {
-    new NotificationService({
+    const _svc = new NotificationService({
       enabled: true,
       webhook: { url: 'https://hooks.example.com/test' }
     });

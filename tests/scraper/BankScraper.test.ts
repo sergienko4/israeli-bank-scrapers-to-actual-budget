@@ -8,6 +8,7 @@ import {
   BankScraper,
 } from '../../src/Scraper/BankScraper.js';
 import { fakeBankConfig, fakeBankTransactions, fakeImporterConfig } from '../helpers/factories.js';
+import { TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
 // ── Logger mock ──────────────────────────────────────────────────────────────
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -42,7 +43,7 @@ vi.mock('../../src/Scraper/ScraperOptionsBuilder.js', () => ({
 
 // ── CredentialsBuilder mock ──────────────────────────────────────────────────
 vi.mock('../../src/Scraper/CredentialsBuilder.js', () => ({
-  buildCredentials: vi.fn(() => ({ username: 'u', password: 'p' })),
+  buildCredentials: vi.fn(() => ({ username: 'u', password: TEST_CREDENTIAL_SHORT })),
 }));
 
 // ── TwoFactorService mock ────────────────────────────────────────────────────
