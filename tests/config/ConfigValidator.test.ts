@@ -10,6 +10,11 @@ vi.mock('fs');
 // Used only in runValidateMode inline objects (where exact UUID is needed by readFileSync mock)
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 
+/**
+ * Creates a valid test config with optional overrides.
+ * @param overrides - Fields to merge over the default config.
+ * @returns A complete ImporterConfig for testing.
+ */
 function makeConfig(overrides: Record<string, unknown> = {}): ImporterConfig {
   return {
     actual: {
@@ -26,14 +31,79 @@ function makeConfig(overrides: Record<string, unknown> = {}): ImporterConfig {
   } as ImporterConfig;
 }
 
+/**
+ * Filters validation results by status.
+ * @param results - The full results array.
+ * @param status - The status to filter by.
+ * @returns Filtered results matching the given status.
+ */
+function byStatus(results: ValidationResult[], status: string): ValidationResult[] {
+  return results.filter(r => r.status === status);
+}
+
+/** @param results - Results to filter. @returns Only passing results. */
 function pass(results: ValidationResult[]): ValidationResult[] {
-  return results.filter(r => r.status === 'pass');
+  return byStatus(results, 'pass');
 }
+/** @param results - Results to filter. @returns Only failing results. */
 function fail(results: ValidationResult[]): ValidationResult[] {
-  return results.filter(r => r.status === 'fail');
+  return byStatus(results, 'fail');
 }
+/** @param results - Results to filter. @returns Only warning results. */
 function warn(results: ValidationResult[]): ValidationResult[] {
-  return results.filter(r => r.status === 'warn');
+  return byStatus(results, 'warn');
+}
+
+/**
+ * Asserts that a check with the given name exists with the expected status.
+ * @param results - The validation results to search.
+ * @param check - The check name to find.
+ * @param status - Expected status: 'pass', 'fail', or 'warn'.
+ */
+function expectCheck(results: ValidationResult[], check: string, status: 'pass' | 'fail' | 'warn'): void {
+  const filtered = byStatus(results, status);
+  expect(filtered.some(r => r.check === check)).toBe(true);
+}
+
+/**
+ * Returns mock responses for the budget login and list-user-files endpoints.
+ * @param syncId - The sync ID to include in the server file list.
+ * @returns Two mock response objects: login then list-user-files.
+ */
+function budgetFoundMocks(syncId: string): object[] {
+  return [
+    { ok: true, status: 200, json: async () => ({ data: { token: 'tok' } }) },
+    { ok: true, status: 200, json: async () => ({ data: [{ groupId: syncId }] }) },
+  ];
+}
+
+/**
+ * Returns mock responses for budget check where the budget is not found.
+ * @returns Two mock response objects: login then empty file list.
+ */
+function budgetNotFoundMocks(): object[] {
+  return [
+    { ok: true, status: 200, json: async () => ({ data: { token: 'tok' } }) },
+    { ok: true, status: 200, json: async () => ({ data: [] }) },
+  ];
+}
+
+/**
+ * Sets up fetch mocks for online validation: server ping + budget login/list.
+ * @param cfg - The config whose syncId to use for budget found response.
+ * @param extra - Additional mock responses to chain after budget mocks.
+ * @returns The vi.fn() fetch mock for further assertions.
+ */
+function setupOnlineMocks(cfg: ImporterConfig, extra: object[] = []): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce({ ok: true, status: 200 })
+    .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0])
+    .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]);
+  for (const mock of extra) {
+    fetchMock.mockResolvedValueOnce(mock);
+  }
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
 }
 
 describe('ConfigValidator', () => {
@@ -48,56 +118,56 @@ describe('ConfigValidator', () => {
   describe('actual.password', () => {
     it('passes when password set', () => {
       const results = validator.validateOffline(makeConfig());
-      expect(pass(results).some(r => r.check === 'actual.password')).toBe(true);
+      expectCheck(results, 'actual.password', 'pass');
     });
 
     it('fails when password empty', () => {
       const cfg = makeConfig();
       cfg.actual.init.password = '';
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'actual.password')).toBe(true);
+      expectCheck(results, 'actual.password', 'fail');
     });
   });
 
   describe('actual.syncId', () => {
     it('passes on valid UUID', () => {
       const results = validator.validateOffline(makeConfig());
-      expect(pass(results).some(r => r.check === 'actual.syncId')).toBe(true);
+      expectCheck(results, 'actual.syncId', 'pass');
     });
 
     it('fails on invalid UUID', () => {
       const cfg = makeConfig();
       cfg.actual.budget.syncId = 'not-a-uuid';
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'actual.syncId')).toBe(true);
+      expectCheck(results, 'actual.syncId', 'fail');
     });
 
     it('fails on empty syncId', () => {
       const cfg = makeConfig();
       cfg.actual.budget.syncId = '';
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'actual.syncId')).toBe(true);
+      expectCheck(results, 'actual.syncId', 'fail');
     });
   });
 
   describe('actual.serverURL', () => {
     it('passes on http URL', () => {
       const results = validator.validateOffline(makeConfig());
-      expect(pass(results).some(r => r.check === 'actual.serverURL')).toBe(true);
+      expectCheck(results, 'actual.serverURL', 'pass');
     });
 
     it('passes on https URL', () => {
       const cfg = makeConfig();
       cfg.actual.init.serverURL = 'https://actual.example.com';
       const results = validator.validateOffline(cfg);
-      expect(pass(results).some(r => r.check === 'actual.serverURL')).toBe(true);
+      expectCheck(results, 'actual.serverURL', 'pass');
     });
 
     it('fails on non-http URL', () => {
       const cfg = makeConfig();
       cfg.actual.init.serverURL = 'ftp://bad';
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'actual.serverURL')).toBe(true);
+      expectCheck(results, 'actual.serverURL', 'fail');
     });
 
     it('fails and does not crash when serverURL is undefined (shallow-merge bug regression)', () => {
@@ -107,7 +177,7 @@ describe('ConfigValidator', () => {
       (cfg.actual.init as Record<string, unknown>).serverURL = undefined;
       expect(() => validator.validateOffline(cfg)).not.toThrow();
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'actual.serverURL')).toBe(true);
+      expectCheck(results, 'actual.serverURL', 'fail');
     });
   });
 
@@ -116,7 +186,7 @@ describe('ConfigValidator', () => {
   describe('bank name validation', () => {
     it('passes for known bank', () => {
       const results = validator.validateOffline(makeConfig());
-      expect(pass(results).some(r => r.check === 'bank.discount')).toBe(true);
+      expectCheck(results, 'bank.discount', 'pass');
     });
 
     it('passes for camelCase alias (oneZero)', () => {
@@ -142,7 +212,7 @@ describe('ConfigValidator', () => {
         },
       });
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'bank.unknownxyz')).toBe(true);
+      expectCheck(results, 'bank.unknownxyz', 'fail');
     });
 
     it('suggests "discount" for "disount" typo', () => {
@@ -201,7 +271,7 @@ describe('ConfigValidator', () => {
         },
       });
       const results = validator.validateOffline(cfg);
-      expect(warn(results).some(r => r.check === 'bank.leumi.dates')).toBe(true);
+      expectCheck(results, 'bank.leumi.dates', 'warn');
     });
 
     it('fails when both startDate and daysBack are set', () => {
@@ -214,12 +284,12 @@ describe('ConfigValidator', () => {
         },
       });
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'bank.leumi.dates')).toBe(true);
+      expectCheck(results, 'bank.leumi.dates', 'fail');
     });
 
     it('passes when only daysBack set', () => {
       const results = validator.validateOffline(makeConfig());
-      expect(pass(results).some(r => r.check === 'bank.discount.dates')).toBe(true);
+      expectCheck(results, 'bank.discount.dates', 'pass');
     });
   });
 
@@ -231,7 +301,7 @@ describe('ConfigValidator', () => {
         banks: { discount: { id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7 } },
       });
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'bank.discount.targets')).toBe(true);
+      expectCheck(results, 'bank.discount.targets', 'fail');
     });
 
     it('fails on invalid UUID in actualAccountId', () => {
@@ -244,12 +314,12 @@ describe('ConfigValidator', () => {
         },
       });
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'bank.discount.target[0]')).toBe(true);
+      expectCheck(results, 'bank.discount.target[0]', 'fail');
     });
 
     it('passes on valid target', () => {
       const results = validator.validateOffline(makeConfig());
-      expect(pass(results).some(r => r.check === 'bank.discount.target[0]')).toBe(true);
+      expectCheck(results, 'bank.discount.target[0]', 'pass');
     });
 
     it('uses accountName as label in pass message when set', () => {
@@ -290,7 +360,7 @@ describe('ConfigValidator', () => {
         },
       });
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'telegram.botToken')).toBe(true);
+      expectCheck(results, 'telegram.botToken', 'fail');
     });
 
     it('passes on valid Telegram botToken format', () => {
@@ -301,7 +371,7 @@ describe('ConfigValidator', () => {
         },
       });
       const results = validator.validateOffline(cfg);
-      expect(pass(results).some(r => r.check === 'telegram.botToken')).toBe(true);
+      expectCheck(results, 'telegram.botToken', 'pass');
     });
 
     it('fails when Telegram chatId missing', () => {
@@ -312,7 +382,7 @@ describe('ConfigValidator', () => {
         },
       });
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'telegram.chatId')).toBe(true);
+      expectCheck(results, 'telegram.chatId', 'fail');
     });
 
     it('fails on invalid webhook URL format', () => {
@@ -323,7 +393,7 @@ describe('ConfigValidator', () => {
         },
       });
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'webhook.url')).toBe(true);
+      expectCheck(results, 'webhook.url', 'fail');
     });
 
     it('fails and does not crash when webhook url is undefined (missing field regression)', () => {
@@ -335,7 +405,7 @@ describe('ConfigValidator', () => {
       });
       expect(() => validator.validateOffline(cfg)).not.toThrow();
       const results = validator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'webhook.url')).toBe(true);
+      expectCheck(results, 'webhook.url', 'fail');
     });
 
     it('passes on valid webhook URL', () => {
@@ -346,7 +416,7 @@ describe('ConfigValidator', () => {
         },
       });
       const results = validator.validateOffline(cfg);
-      expect(pass(results).some(r => r.check === 'webhook.url')).toBe(true);
+      expectCheck(results, 'webhook.url', 'pass');
     });
   });
 
@@ -355,7 +425,7 @@ describe('ConfigValidator', () => {
   it('fails when banks is empty', () => {
     const cfg = makeConfig({ banks: {} });
     const results = validator.validateOffline(cfg);
-    expect(fail(results).some(r => r.check === 'banks')).toBe(true);
+    expectCheck(results, 'banks', 'fail');
   });
 
   // ─── formatReport ───
@@ -395,47 +465,20 @@ describe('ConfigValidator', () => {
 
   // ─── Online (mocked fetch) ───
 
-  /**
-   * Returns mock responses for the budget login and list-user-files endpoints.
-   * @param syncId - The sync ID to include in the server file list.
-   * @returns Two mock response objects: login then list-user-files.
-   */
-  function budgetFoundMocks(syncId: string): object[] {
-    return [
-      { ok: true, status: 200, json: async () => ({ data: { token: 'tok' } }) },
-      { ok: true, status: 200, json: async () => ({ data: [{ groupId: syncId }] }) },
-    ];
-  }
-
-  /**
-   * Returns mock responses for budget check where the budget is not found.
-   * @returns Two mock response objects: login then empty file list.
-   */
-  function budgetNotFoundMocks(): object[] {
-    return [
-      { ok: true, status: 200, json: async () => ({ data: { token: 'tok' } }) },
-      { ok: true, status: 200, json: async () => ({ data: [] }) },
-    ];
-  }
-
   describe('validateOnline', () => {
     afterEach(() => vi.restoreAllMocks());
 
     it('passes when Actual server responds with 2xx', async () => {
       const cfg = makeConfig();
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]); // list
-      vi.stubGlobal('fetch', fetchMock);
+      setupOnlineMocks(cfg);
       const results = await validator.validateOnline(cfg);
-      expect(pass(results).some(r => r.check === 'actual.server')).toBe(true);
+      expectCheck(results, 'actual.server', 'pass');
     });
 
     it('fails when Actual server is unreachable', async () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
       const results = await validator.validateOnline(makeConfig());
-      expect(fail(results).some(r => r.check === 'actual.server')).toBe(true);
+      expectCheck(results, 'actual.server', 'fail');
     });
 
     it('skips budget check when server is unreachable', async () => {
@@ -451,17 +494,12 @@ describe('ConfigValidator', () => {
           telegram: { botToken: '123456789:ABCdef', chatId: '12345' },
         },
       });
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]) // list
-        .mockResolvedValueOnce({
-          ok: true, status: 200,
-          json: async () => ({ ok: true, result: { username: 'TestBot' } }),
-        });
-      vi.stubGlobal('fetch', fetchMock);
+      setupOnlineMocks(cfg, [{
+        ok: true, status: 200,
+        json: async () => ({ ok: true, result: { username: 'TestBot' } }),
+      }]);
       const results = await validator.validateOnline(cfg);
-      expect(pass(results).some(r => r.check === 'telegram.token')).toBe(true);
+      expectCheck(results, 'telegram.token', 'pass');
       expect(pass(results).find(r => r.check === 'telegram.token')?.message)
         .toContain('@TestBot');
     });
@@ -473,17 +511,12 @@ describe('ConfigValidator', () => {
           telegram: { botToken: '000:bad', chatId: '12345' },
         },
       });
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]) // list
-        .mockResolvedValueOnce({
-          ok: true, status: 200,
-          json: async () => ({ ok: false }),
-        });
-      vi.stubGlobal('fetch', fetchMock);
+      setupOnlineMocks(cfg, [{
+        ok: true, status: 200,
+        json: async () => ({ ok: false }),
+      }]);
       const results = await validator.validateOnline(cfg);
-      expect(fail(results).some(r => r.check === 'telegram.token')).toBe(true);
+      expectCheck(results, 'telegram.token', 'fail');
     });
 
     it('warns when webhook returns non-2xx on HEAD', async () => {
@@ -493,14 +526,9 @@ describe('ConfigValidator', () => {
           webhook: { url: 'https://hooks.example.com/x' },
         },
       });
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]) // list
-        .mockResolvedValueOnce({ ok: false, status: 405 }); // webhook HEAD
-      vi.stubGlobal('fetch', fetchMock);
+      setupOnlineMocks(cfg, [{ ok: false, status: 405 }]);
       const results = await validator.validateOnline(cfg);
-      expect(warn(results).some(r => r.check === 'webhook.url')).toBe(true);
+      expectCheck(results, 'webhook.url', 'warn');
     });
 
     it('skips online checks when offline has failures', async () => {
@@ -509,21 +537,17 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({ banks: {} }); // will fail offline
       const results = await validator.validateAll(cfg);
       expect(mockFetch).not.toHaveBeenCalled();
-      expect(fail(results).some(r => r.check === 'banks')).toBe(true);
+      expectCheck(results, 'banks', 'fail');
     });
 
     it('fails when webhook URL is unreachable', async () => {
       const cfg = makeConfig({
         notifications: { enabled: true, webhook: { url: 'https://gone.example.com' } },
       });
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]) // list
-        .mockRejectedValueOnce(new Error('ECONNREFUSED')); // webhook
-      vi.stubGlobal('fetch', fetchMock);
+      const fetchMock = setupOnlineMocks(cfg);
+      fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED')); // webhook
       const results = await validator.validateOnline(cfg);
-      expect(fail(results).some(r => r.check === 'webhook.url')).toBe(true);
+      expectCheck(results, 'webhook.url', 'fail');
     });
   });
 
@@ -534,13 +558,9 @@ describe('ConfigValidator', () => {
 
     it('passes when budget is found on server', async () => {
       const cfg = makeConfig();
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]); // list
-      vi.stubGlobal('fetch', fetchMock);
+      setupOnlineMocks(cfg);
       const results = await validator.validateOnline(cfg);
-      expect(pass(results).some(r => r.check === 'actual.budget')).toBe(true);
+      expectCheck(results, 'actual.budget', 'pass');
       expect(pass(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('found on server');
     });
@@ -549,11 +569,11 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig();
       const fetchMock = vi.fn()
         .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockResolvedValueOnce(budgetNotFoundMocks()[0]) // login
-        .mockResolvedValueOnce(budgetNotFoundMocks()[1]); // empty list
+        .mockResolvedValueOnce(budgetNotFoundMocks()[0])
+        .mockResolvedValueOnce(budgetNotFoundMocks()[1]);
       vi.stubGlobal('fetch', fetchMock);
       const results = await validator.validateOnline(cfg);
-      expect(fail(results).some(r => r.check === 'actual.budget')).toBe(true);
+      expectCheck(results, 'actual.budget', 'fail');
       expect(fail(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('not found');
     });
@@ -568,7 +588,7 @@ describe('ConfigValidator', () => {
         });
       vi.stubGlobal('fetch', fetchMock);
       const results = await validator.validateOnline(cfg);
-      expect(fail(results).some(r => r.check === 'actual.budget')).toBe(true);
+      expectCheck(results, 'actual.budget', 'fail');
       expect(fail(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('login failed');
     });
@@ -577,10 +597,10 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig();
       const fetchMock = vi.fn()
         .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockRejectedValueOnce(new Error('ECONNRESET')); // login fails
+        .mockRejectedValueOnce(new Error('ECONNRESET'));
       vi.stubGlobal('fetch', fetchMock);
       const results = await validator.validateOnline(cfg);
-      expect(fail(results).some(r => r.check === 'actual.budget')).toBe(true);
+      expectCheck(results, 'actual.budget', 'fail');
       expect(fail(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('ECONNRESET');
     });
@@ -593,11 +613,7 @@ describe('ConfigValidator', () => {
 
     it('report shows PASS for correct syncId', async () => {
       const cfg = makeConfig();
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login
-        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[1]); // list
-      vi.stubGlobal('fetch', fetchMock);
+      setupOnlineMocks(cfg);
       const results = await validator.validateAll(cfg);
       const report = validator.formatReport(results);
       expect(report).toContain('[PASS] Budget');
@@ -608,9 +624,9 @@ describe('ConfigValidator', () => {
     it('report shows FAIL for wrong syncId', async () => {
       const cfg = makeConfig();
       const fetchMock = vi.fn()
-        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
-        .mockResolvedValueOnce(budgetNotFoundMocks()[0]) // login
-        .mockResolvedValueOnce(budgetNotFoundMocks()[1]); // empty list
+        .mockResolvedValueOnce({ ok: true, status: 200 })
+        .mockResolvedValueOnce(budgetNotFoundMocks()[0])
+        .mockResolvedValueOnce(budgetNotFoundMocks()[1]);
       vi.stubGlobal('fetch', fetchMock);
       const results = await validator.validateAll(cfg);
       const report = validator.formatReport(results);

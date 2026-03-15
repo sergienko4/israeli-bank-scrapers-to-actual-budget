@@ -60,9 +60,52 @@ describe('TelegramNotifier', () => {
     vi.stubGlobal('fetch', fetchMock);
   });
 
+  /**
+   * Creates a TelegramNotifier with default bot credentials.
+   * @param options - optional config overrides merged with defaults
+   * @param maxTransactions - optional max transactions per account
+   * @returns configured TelegramNotifier instance
+   */
+  function createNotifier(
+    options?: Record<string, unknown>,
+    maxTransactions?: number,
+  ): TelegramNotifier {
+    const config = { botToken: '123:ABC', chatId: '-100', ...options };
+    return new TelegramNotifier(config as any, maxTransactions);
+  }
+
+  /**
+   * Builds an ImportSummary with overridden account properties.
+   * @param overrides - properties to spread into the first account
+   * @returns ImportSummary with the modified account
+   */
+  function withAccountOverrides(overrides: Record<string, unknown>): ImportSummary {
+    return {
+      ...summaryWithTxns,
+      banks: [{
+        ...summaryWithTxns.banks[0],
+        accounts: [{
+          ...summaryWithTxns.banks[0].accounts[0],
+          ...overrides,
+        }],
+      }],
+    };
+  }
+
+  /**
+   * Asserts that an HTML tag has equal opening and closing counts.
+   * @param text - the HTML string to validate
+   * @param tag - the tag name to check (e.g. 'b', 'code')
+   */
+  function expectBalancedTags(text: string, tag: string): void {
+    const opens = (text.match(new RegExp(`<${tag}>`, 'g')) || []).length;
+    const closes = (text.match(new RegExp(`</${tag}>`, 'g')) || []).length;
+    expect(closes).toBe(opens);
+  }
+
   describe('API integration', () => {
     it('calls Telegram API with correct URL and headers', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await notifier.sendSummary(fakeImportSummary());
 
       const [url, options] = fetchMock.mock.calls[0];
@@ -74,21 +117,21 @@ describe('TelegramNotifier', () => {
 
     it('throws on API error', async () => {
       fetchMock.mockResolvedValue({ ok: false, status: 401, text: vi.fn().mockResolvedValue('Unauthorized') });
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await expect(notifier.sendSummary(fakeImportSummary())).rejects.toThrow('Telegram API error 401');
     });
   });
 
   describe('sendError', () => {
     it('sends formatted error', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await notifier.sendError('Connection failed');
       expect(getText(fetchMock)).toContain('Import Failed');
       expect(getText(fetchMock)).toContain('Connection failed');
     });
 
     it('escapes HTML', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await notifier.sendError('<script>xss</script>');
       expect(getText(fetchMock)).toContain('&lt;script&gt;');
     });
@@ -96,7 +139,7 @@ describe('TelegramNotifier', () => {
 
   describe('format: summary (default)', () => {
     it('uses summary format when no messageFormat set', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await notifier.sendSummary(summaryWithTxns);
       const text = getText(fetchMock);
       expect(text).toContain('Import Summary');
@@ -106,21 +149,21 @@ describe('TelegramNotifier', () => {
     });
 
     it('bank with duration 0 shows no duration suffix', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const noDurSummary = { ...summaryWithTxns, banks: [{ ...summaryWithTxns.banks[0], duration: 0 }] };
       await notifier.sendSummary(noDurSummary);
       expect(getText(fetchMock)).toContain('discount');
     });
 
     it('shows warning icon on failures', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await notifier.sendSummary(failedSummary);
       expect(getText(fetchMock)).toContain('⚠️');
       expect(getText(fetchMock)).toContain('AuthenticationError');
     });
 
     it('handles summary with no banks (empty banks array)', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const emptySummary = { ...summaryWithTxns, banks: [] };
       await notifier.sendSummary(emptySummary);
       const text = getText(fetchMock);
@@ -129,7 +172,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('falls back to summary format for unknown messageFormat', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'bogus' as never });
+      const notifier = createNotifier({ messageFormat: 'bogus' as never });
       await notifier.sendSummary(summaryWithTxns);
       expect(getText(fetchMock)).toContain('Import Summary');
     });
@@ -137,7 +180,7 @@ describe('TelegramNotifier', () => {
 
   describe('format: compact', () => {
     it('shows transaction details with amounts', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const notifier = createNotifier({ messageFormat: 'compact' });
       await notifier.sendSummary(summaryWithTxns);
       const text = getText(fetchMock);
       expect(text).toContain('0152228812');
@@ -148,7 +191,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('shows balance', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const notifier = createNotifier({ messageFormat: 'compact' });
       await notifier.sendSummary(summaryWithTxns);
       expect(getText(fetchMock)).toContain('16,242.97');
     });
@@ -156,7 +199,7 @@ describe('TelegramNotifier', () => {
 
   describe('format: ledger', () => {
     it('uses monospace code block', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' });
+      const notifier = createNotifier({ messageFormat: 'ledger' });
       await notifier.sendSummary(summaryWithTxns);
       const text = getText(fetchMock);
       expect(text).toContain('<code>');
@@ -166,20 +209,13 @@ describe('TelegramNotifier', () => {
     });
 
     it('truncates long descriptions', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' });
-      const longSummary = {
-        ...summaryWithTxns,
-        banks: [{
-          ...summaryWithTxns.banks[0],
-          accounts: [{
-            ...summaryWithTxns.banks[0].accounts[0],
-            newTransactions: [
-              { date: '2026-02-14', description: 'Very long transaction description that exceeds limit', amount: 1000 }
-            ],
-            existingTransactions: []
-          }]
-        }]
-      };
+      const notifier = createNotifier({ messageFormat: 'ledger' });
+      const longSummary = withAccountOverrides({
+        newTransactions: [
+          { date: '2026-02-14', description: 'Very long transaction description that exceeds limit', amount: 1000 }
+        ],
+        existingTransactions: [],
+      });
       await notifier.sendSummary(longSummary);
       expect(getText(fetchMock)).toContain('..');
     });
@@ -187,7 +223,7 @@ describe('TelegramNotifier', () => {
 
   describe('format: emoji', () => {
     it('uses deposit/payment icons', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
+      const notifier = createNotifier({ messageFormat: 'emoji' });
       await notifier.sendSummary(summaryWithTxns);
       const text = getText(fetchMock);
       expect(text).toContain('📥'); // deposit
@@ -197,7 +233,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('shows balance with currency', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
+      const notifier = createNotifier({ messageFormat: 'emoji' });
       await notifier.sendSummary(summaryWithTxns);
       expect(getText(fetchMock)).toContain('16,242.97 ILS');
     });
@@ -206,7 +242,7 @@ describe('TelegramNotifier', () => {
   describe('all formats handle failures', () => {
     for (const fmt of ['summary', 'compact', 'ledger', 'emoji'] as const) {
       it(`${fmt} format shows errors`, async () => {
-        const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: fmt });
+        const notifier = createNotifier({ messageFormat: fmt });
         await notifier.sendSummary(failedSummary);
         const text = getText(fetchMock);
         expect(text).toContain('AuthenticationError');
@@ -216,11 +252,11 @@ describe('TelegramNotifier', () => {
 
   describe('maxTransactions', () => {
     it('defaults to 5 transactions per account', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const notifier = createNotifier({ messageFormat: 'compact' });
       const txns = Array.from({ length: 10 }, (_, i) => ({
         date: '2026-02-14', description: `Txn ${i + 1}`, amount: -(i + 1) * 100
       }));
-      const summary = { ...summaryWithTxns, banks: [{ ...summaryWithTxns.banks[0], accounts: [{ ...summaryWithTxns.banks[0].accounts[0], newTransactions: txns, existingTransactions: [] }] }] };
+      const summary = withAccountOverrides({ newTransactions: txns, existingTransactions: [] });
       await notifier.sendSummary(summary);
       const text = getText(fetchMock);
       expect(text).toContain('Txn 5');
@@ -228,11 +264,11 @@ describe('TelegramNotifier', () => {
     });
 
     it('respects custom maxTransactions value', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' }, 3);
+      const notifier = createNotifier({ messageFormat: 'compact' }, 3);
       const txns = Array.from({ length: 10 }, (_, i) => ({
         date: '2026-02-14', description: `Txn ${i + 1}`, amount: -(i + 1) * 100
       }));
-      const summary = { ...summaryWithTxns, banks: [{ ...summaryWithTxns.banks[0], accounts: [{ ...summaryWithTxns.banks[0].accounts[0], newTransactions: txns, existingTransactions: [] }] }] };
+      const summary = withAccountOverrides({ newTransactions: txns, existingTransactions: [] });
       await notifier.sendSummary(summary);
       const text = getText(fetchMock);
       expect(text).toContain('Txn 3');
@@ -240,11 +276,11 @@ describe('TelegramNotifier', () => {
     });
 
     it('clamps to 25 maximum', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' }, 50);
+      const notifier = createNotifier({ messageFormat: 'compact' }, 50);
       const txns = Array.from({ length: 30 }, (_, i) => ({
         date: '2026-02-14', description: `Txn ${i + 1}`, amount: -(i + 1) * 100
       }));
-      const summary = { ...summaryWithTxns, banks: [{ ...summaryWithTxns.banks[0], accounts: [{ ...summaryWithTxns.banks[0].accounts[0], newTransactions: txns, existingTransactions: [] }] }] };
+      const summary = withAccountOverrides({ newTransactions: txns, existingTransactions: [] });
       await notifier.sendSummary(summary);
       const text = getText(fetchMock);
       expect(text).toContain('Txn 25');
@@ -267,46 +303,40 @@ describe('TelegramNotifier', () => {
     }
 
     it('short message is not truncated', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' });
+      const notifier = createNotifier({ messageFormat: 'ledger' });
       await notifier.sendSummary(summaryWithTxns);
       expect(getText(fetchMock)).not.toContain('truncated');
     });
 
     it('ledger: closes unclosed <code> tag after truncation', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' }, 25);
+      const notifier = createNotifier({ messageFormat: 'ledger' }, 25);
       await notifier.sendSummary(buildLongSummary(5));
       const text = getText(fetchMock);
       expect(text).toContain('(truncated)');
       expect(text.length).toBeLessThanOrEqual(4096);
-      const codeOpens = (text.match(/<code>/g) || []).length;
-      const codeCloses = (text.match(/<\/code>/g) || []).length;
-      expect(codeCloses).toBe(codeOpens);
+      expectBalancedTags(text, 'code');
     });
 
     it('compact: closes unclosed <b> tag after truncation', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' }, 25);
+      const notifier = createNotifier({ messageFormat: 'compact' }, 25);
       await notifier.sendSummary(buildLongSummary(5));
       const text = getText(fetchMock);
       expect(text).toContain('(truncated)');
       expect(text.length).toBeLessThanOrEqual(4096);
-      const bOpens = (text.match(/<b>/g) || []).length;
-      const bCloses = (text.match(/<\/b>/g) || []).length;
-      expect(bCloses).toBe(bOpens);
+      expectBalancedTags(text, 'b');
     });
 
     it('emoji: closes tags after truncation', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' }, 25);
+      const notifier = createNotifier({ messageFormat: 'emoji' }, 25);
       await notifier.sendSummary(buildLongSummary(5));
       const text = getText(fetchMock);
       expect(text).toContain('(truncated)');
       expect(text.length).toBeLessThanOrEqual(4096);
-      const bOpens = (text.match(/<b>/g) || []).length;
-      const bCloses = (text.match(/<\/b>/g) || []).length;
-      expect(bCloses).toBe(bOpens);
+      expectBalancedTags(text, 'b');
     });
 
     it('no partial HTML tags at cut point', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' }, 25);
+      const notifier = createNotifier({ messageFormat: 'ledger' }, 25);
       await notifier.sendSummary(buildLongSummary(5));
       const text = getText(fetchMock);
       // No unclosed < without matching >
@@ -316,7 +346,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('summary format truncates without HTML issues', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'summary' });
+      const notifier = createNotifier({ messageFormat: 'summary' });
       const longSummary = buildLongSummary(200);
       longSummary.banks = Array.from({ length: 50 }, (_, i) => ({
         ...summaryWithTxns.banks[0], bankName: `bank-${i}`
@@ -324,9 +354,7 @@ describe('TelegramNotifier', () => {
       await notifier.sendSummary(longSummary);
       const text = getText(fetchMock);
       if (text.includes('truncated')) {
-        const bOpens = (text.match(/<b>/g) || []).length;
-        const bCloses = (text.match(/<\/b>/g) || []).length;
-        expect(bCloses).toBe(bOpens);
+        expectBalancedTags(text, 'b');
       }
     });
   });
@@ -342,7 +370,7 @@ describe('TelegramNotifier', () => {
 
     for (const fmt of ['summary', 'compact', 'ledger', 'emoji'] as const) {
       it(`${fmt}: escapes special chars in bank name`, async () => {
-        const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: fmt });
+        const notifier = createNotifier({ messageFormat: fmt });
         await notifier.sendSummary(specialCharSummary);
         const text = getText(fetchMock);
         expect(text).not.toContain('<Test>');
@@ -354,17 +382,11 @@ describe('TelegramNotifier', () => {
   });
 
   describe('accountName display', () => {
-    const namedAccountSummary: ImportSummary = {
-      ...summaryWithTxns,
-      banks: [{
-        ...summaryWithTxns.banks[0],
-        accounts: [{ ...summaryWithTxns.banks[0].accounts[0], accountName: 'Savings Account' }]
-      }]
-    };
+    const namedAccountSummary = withAccountOverrides({ accountName: 'Savings Account' });
 
     for (const fmt of ['compact', 'ledger', 'emoji'] as const) {
       it(`${fmt}: shows accountName instead of accountNumber`, async () => {
-        const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: fmt });
+        const notifier = createNotifier({ messageFormat: fmt });
         await notifier.sendSummary(namedAccountSummary);
         const text = getText(fetchMock);
         expect(text).toContain('Savings Account');
@@ -372,23 +394,15 @@ describe('TelegramNotifier', () => {
       });
 
       it(`${fmt}: falls back to accountNumber when accountName is absent`, async () => {
-        const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: fmt });
+        const notifier = createNotifier({ messageFormat: fmt });
         await notifier.sendSummary(summaryWithTxns);
         expect(getText(fetchMock)).toContain('0152228812');
       });
     }
 
     it('accountName is HTML-escaped', async () => {
-      const notifier = new TelegramNotifier({
-        botToken: '123:ABC', chatId: '-100', messageFormat: 'compact'
-      });
-      const specialSummary = {
-        ...summaryWithTxns,
-        banks: [{
-          ...summaryWithTxns.banks[0],
-          accounts: [{ ...summaryWithTxns.banks[0].accounts[0], accountName: 'Savings & <Main>' }]
-        }]
-      };
+      const notifier = createNotifier({ messageFormat: 'compact' });
+      const specialSummary = withAccountOverrides({ accountName: 'Savings & <Main>' });
       await notifier.sendSummary(specialSummary);
       const text = getText(fetchMock);
       expect(text).not.toContain('<Main>');
@@ -399,7 +413,7 @@ describe('TelegramNotifier', () => {
 
   describe('sendMessage', () => {
     it('delivers text directly', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await notifier.sendMessage('Hello World');
       expect(getText(fetchMock)).toBe('Hello World');
     });
@@ -407,9 +421,7 @@ describe('TelegramNotifier', () => {
 
   describe('showTransactions modes', () => {
     it("none: hides all transactions", async () => {
-      const notifier = new TelegramNotifier(
-        { botToken: '123:ABC', chatId: '-100', messageFormat: 'compact', showTransactions: 'none' }
-      );
+      const notifier = createNotifier({ messageFormat: 'compact', showTransactions: 'none' });
       await notifier.sendSummary(summaryWithTxns);
       const text = getText(fetchMock);
       expect(text).not.toContain('Transfer from account');
@@ -417,19 +429,10 @@ describe('TelegramNotifier', () => {
     });
 
     it("all: includes existing transactions alongside new ones", async () => {
-      const notifier = new TelegramNotifier(
-        { botToken: '123:ABC', chatId: '-100', messageFormat: 'compact', showTransactions: 'all' }
-      );
-      const summary = {
-        ...summaryWithTxns,
-        banks: [{
-          ...summaryWithTxns.banks[0],
-          accounts: [{
-            ...summaryWithTxns.banks[0].accounts[0],
-            existingTransactions: [{ date: '2026-01-01', description: 'Old charge', amount: 500 }]
-          }]
-        }]
-      };
+      const notifier = createNotifier({ messageFormat: 'compact', showTransactions: 'all' });
+      const summary = withAccountOverrides({
+        existingTransactions: [{ date: '2026-01-01', description: 'Old charge', amount: 500 }],
+      });
       await notifier.sendSummary(summary);
       expect(getText(fetchMock)).toContain('Old charge');
     });
@@ -437,7 +440,7 @@ describe('TelegramNotifier', () => {
 
   describe('reconciliationStatus', () => {
     it("created: shows + prefix for positive reconciliation amount", async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const notifier = createNotifier({ messageFormat: 'compact' });
       const summary = {
         ...summaryWithTxns,
         banks: [{ ...summaryWithTxns.banks[0], reconciliationStatus: 'created' as const, reconciliationAmount: 5000 }]
@@ -447,7 +450,7 @@ describe('TelegramNotifier', () => {
     });
 
     it("created: shows no prefix for negative reconciliation amount", async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const notifier = createNotifier({ messageFormat: 'compact' });
       const summary = {
         ...summaryWithTxns,
         banks: [{ ...summaryWithTxns.banks[0], reconciliationStatus: 'created' as const, reconciliationAmount: -3000 }]
@@ -457,7 +460,7 @@ describe('TelegramNotifier', () => {
     });
 
     it("already-reconciled: shows 'Already reconciled'", async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const notifier = createNotifier({ messageFormat: 'compact' });
       const summary = {
         ...summaryWithTxns,
         banks: [{ ...summaryWithTxns.banks[0], reconciliationStatus: 'already-reconciled' as const }]
@@ -468,68 +471,43 @@ describe('TelegramNotifier', () => {
   });
 
   describe('account without balance', () => {
-    const noBalanceSummary = {
-      ...summaryWithTxns,
-      banks: [{
-        ...summaryWithTxns.banks[0],
-        accounts: [{ ...summaryWithTxns.banks[0].accounts[0], balance: undefined, currency: undefined }]
-      }]
-    };
+    const noBalanceSummary = withAccountOverrides({ balance: undefined, currency: undefined });
 
     it('compact: omits balance line when balance is undefined', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
+      const notifier = createNotifier({ messageFormat: 'compact' });
       await notifier.sendSummary(noBalanceSummary);
       expect(getText(fetchMock)).not.toContain('💰');
     });
 
     it('ledger: omits balance line when balance is undefined', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' });
+      const notifier = createNotifier({ messageFormat: 'ledger' });
       await notifier.sendSummary(noBalanceSummary);
       expect(getText(fetchMock)).not.toContain('💰');
     });
 
     it('emoji: omits balance line when balance is undefined', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
+      const notifier = createNotifier({ messageFormat: 'emoji' });
       await notifier.sendSummary(noBalanceSummary);
       expect(getText(fetchMock)).not.toContain('💰');
     });
   });
 
   describe('bank with undefined accounts', () => {
-    it('ledger: handles bank where accounts is undefined', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger' });
-      const summary = {
-        ...summaryWithTxns,
-        banks: [{ ...summaryWithTxns.banks[0], accounts: undefined as never }]
-      };
-      await notifier.sendSummary(summary);
-      expect(getText(fetchMock)).toContain('Import Summary');
-    });
+    const undefinedAccountsSummary = {
+      ...summaryWithTxns,
+      banks: [{ ...summaryWithTxns.banks[0], accounts: undefined as never }],
+    };
 
-    it('emoji: handles bank where accounts is undefined', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
-      const summary = {
-        ...summaryWithTxns,
-        banks: [{ ...summaryWithTxns.banks[0], accounts: undefined as never }]
-      };
-      await notifier.sendSummary(summary);
-      expect(getText(fetchMock)).toContain('Import Summary');
-    });
-
-    it('compact: handles bank where accounts is undefined', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
-      const summary = {
-        ...summaryWithTxns,
-        banks: [{ ...summaryWithTxns.banks[0], accounts: undefined as never }]
-      };
-      await notifier.sendSummary(summary);
-      expect(getText(fetchMock)).toContain('Import Summary');
-    });
+    for (const fmt of ['ledger', 'emoji', 'compact'] as const) {
+      it(`${fmt}: handles bank where accounts is undefined`, async () => {
+        const notifier = createNotifier({ messageFormat: fmt });
+        await notifier.sendSummary(undefinedAccountsSummary);
+        expect(getText(fetchMock)).toContain('Import Summary');
+      });
+    }
 
     it('ledger: showTransactions none produces no code block', async () => {
-      const notifier = new TelegramNotifier(
-        { botToken: '123:ABC', chatId: '-100', messageFormat: 'ledger', showTransactions: 'none' }
-      );
+      const notifier = createNotifier({ messageFormat: 'ledger', showTransactions: 'none' });
       await notifier.sendSummary(summaryWithTxns);
       expect(getText(fetchMock)).not.toContain('<code>');
     });
@@ -537,34 +515,22 @@ describe('TelegramNotifier', () => {
 
   describe('emoji format with duplicates and missing currency', () => {
     it('shows dup count when totalDuplicates > 0', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
+      const notifier = createNotifier({ messageFormat: 'emoji' });
       const dupSummary = { ...summaryWithTxns, totalDuplicates: 3 };
       await notifier.sendSummary(dupSummary);
       expect(getText(fetchMock)).toContain('3 dup');
     });
 
     it('shows ILS when account currency is undefined', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'emoji' });
-      const noCurrencySummary = {
-        ...summaryWithTxns,
-        banks: [{
-          ...summaryWithTxns.banks[0],
-          accounts: [{ ...summaryWithTxns.banks[0].accounts[0], currency: undefined }]
-        }]
-      };
+      const notifier = createNotifier({ messageFormat: 'emoji' });
+      const noCurrencySummary = withAccountOverrides({ currency: undefined });
       await notifier.sendSummary(noCurrencySummary);
       expect(getText(fetchMock)).toContain('ILS');
     });
 
     it('compact: shows ILS when account currency is undefined', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100', messageFormat: 'compact' });
-      const noCurrencySummary = {
-        ...summaryWithTxns,
-        banks: [{
-          ...summaryWithTxns.banks[0],
-          accounts: [{ ...summaryWithTxns.banks[0].accounts[0], currency: undefined }]
-        }]
-      };
+      const notifier = createNotifier({ messageFormat: 'compact' });
+      const noCurrencySummary = withAccountOverrides({ currency: undefined });
       await notifier.sendSummary(noCurrencySummary);
       expect(getText(fetchMock)).toContain('ILS');
     });
@@ -572,7 +538,7 @@ describe('TelegramNotifier', () => {
 
   describe('waitForReply', () => {
     it('returns matching reply message from poll', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
       fetchMock.mockImplementation(() => {
@@ -589,7 +555,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('throws timeout when no reply received within timeout', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       let callCount = 0;
       fetchMock.mockImplementation(() => {
         callCount++;
@@ -601,7 +567,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('ignores reply with date before prompt was sent', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       let callCount = 0;
       fetchMock.mockImplementation(() => {
         callCount++;
@@ -616,7 +582,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('ignores command messages starting with /', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
       fetchMock.mockImplementation(() => {
@@ -632,7 +598,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('ignores messages from wrong chatId', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
       fetchMock.mockImplementation(() => {
@@ -648,7 +614,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('uses latest offset from getLatestOffset when prior updates exist', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
       fetchMock.mockImplementation(() => {
@@ -668,7 +634,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('ignores non-OTP text and sends a hint, then accepts the valid code', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
       fetchMock.mockImplementation(() => {
@@ -692,7 +658,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('accepts OTP code containing spaces or surrounding text', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
       fetchMock.mockImplementation(() => {
@@ -709,7 +675,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('continues polling when pollUpdates response is not ok', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       let callCount = 0;
       fetchMock.mockImplementation(() => {
         callCount++;
@@ -721,7 +687,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('confirms the OTP update offset before returning', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
       fetchMock.mockImplementation(() => {
@@ -747,7 +713,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('two sequential waitForReply calls both succeed (scan-all scenario)', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
       fetchMock.mockImplementation(() => {
@@ -785,7 +751,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('does not return stale OTP from a previous bank', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const pastTime = Math.floor(Date.now() / 1000) - 10;
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
@@ -816,7 +782,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('confirmation failure does not break waitForReply', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
       let callCount = 0;
       fetchMock.mockImplementation(() => {
@@ -837,7 +803,7 @@ describe('TelegramNotifier', () => {
 
   describe('registerCommands', () => {
     it('registers base commands via setMyCommands API', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await notifier.registerCommands();
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.telegram.org/bot123:ABC/setMyCommands',
@@ -849,7 +815,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('includes extra commands when provided', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await notifier.registerCommands([{ command: 'watch', description: 'Check spending' }]);
       const body = JSON.parse(fetchMock.mock.calls[0][1].body);
       expect(body.commands).toHaveLength(5);
@@ -857,7 +823,7 @@ describe('TelegramNotifier', () => {
     });
 
     it('filters out invalid commands (uppercase, too long)', async () => {
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await notifier.registerCommands([
         { command: 'INVALID', description: 'uppercase' },
         { command: 'a'.repeat(33), description: 'too long command' },
@@ -871,7 +837,7 @@ describe('TelegramNotifier', () => {
 
     it('throws on API error', async () => {
       fetchMock.mockResolvedValue({ ok: false, status: 400, text: vi.fn().mockResolvedValue('Bad Request') });
-      const notifier = new TelegramNotifier({ botToken: '123:ABC', chatId: '-100' });
+      const notifier = createNotifier();
       await expect(notifier.registerCommands()).rejects.toThrow('setMyCommands failed');
     });
   });

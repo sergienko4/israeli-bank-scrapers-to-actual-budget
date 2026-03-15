@@ -10,6 +10,26 @@ vi.mock('fs');
 // UUID is asserted in tests like "expect(config.actual.budget.syncId).toBe(VALID_UUID)"
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 
+/** Default target used across bank configs in tests. */
+const DEFAULT_TARGET = { actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' };
+
+/**
+ * Environment variable names cleaned up after env-based tests.
+ */
+const ENV_KEYS_TO_CLEAN = [
+  'ACTUAL_PASSWORD', 'ACTUAL_BUDGET_SYNC_ID',
+  'DISCOUNT_ID', 'DISCOUNT_PASSWORD', 'DISCOUNT_NUM',
+  'DISCOUNT_ACCOUNT_ID', 'DISCOUNT_ACCOUNTS',
+  'LEUMI_USERNAME', 'LEUMI_PASSWORD', 'LEUMI_ACCOUNT_ID', 'LEUMI_ACCOUNTS',
+  'HAPOALIM_USER_CODE', 'HAPOALIM_PASSWORD', 'HAPOALIM_ACCOUNT_ID', 'HAPOALIM_ACCOUNTS',
+] as const;
+
+/**
+ * Builds a valid config object with optional overrides.
+ *
+ * @param overrides - Partial fields to override in the generated config.
+ * @returns A complete config object suitable for ConfigLoader.
+ */
 function makeValidConfig(overrides: Record<string, unknown> = {}) {
   const init = (overrides.init as Record<string, unknown> | undefined) ?? {};
   const budget = (overrides.budget as Record<string, unknown> | undefined) ?? {};
@@ -32,14 +52,83 @@ function makeValidConfig(overrides: Record<string, unknown> = {}) {
         id: faker.string.numeric(9),
         password: faker.internet.password({ length: 12 }),
         num: faker.string.alphanumeric(6).toUpperCase(),
-        targets: [{
-          actualAccountId: VALID_UUID,
-          reconcile: true,
-          accounts: 'all',
-        }],
+        targets: [DEFAULT_TARGET],
       },
     },
   };
+}
+
+/**
+ * Mocks fs to return the given config object from a file read.
+ *
+ * @param config - The config object to serialize and return from readFileSync.
+ */
+function mockFileConfig(config: ReturnType<typeof makeValidConfig>): void {
+  vi.mocked(fs.existsSync).mockReturnValue(true);
+  vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+}
+
+/**
+ * Builds a config with overrides, mocks fs, and asserts that loading throws.
+ *
+ * @param overrides - Partial fields to override in the generated config.
+ * @param message - Expected error message substring.
+ */
+function expectConfigToThrow(overrides: Record<string, unknown>, message: string): void {
+  const config = makeValidConfig(overrides);
+  mockFileConfig(config);
+  const loader = new ConfigLoader('/test/config.json');
+  expect(() => loader.load()).toThrow(message);
+}
+
+/**
+ * Builds a config with overrides, mocks fs, and asserts that loading succeeds.
+ *
+ * @param overrides - Partial fields to override in the generated config.
+ */
+function expectConfigNotToThrow(overrides: Record<string, unknown>): void {
+  const config = makeValidConfig(overrides);
+  mockFileConfig(config);
+  const loader = new ConfigLoader('/test/config.json');
+  expect(() => loader.load()).not.toThrow();
+}
+
+/**
+ * Sets the base Actual Budget environment variables required for env-based loading.
+ */
+function setBaseEnvVars(): void {
+  process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
+  process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
+}
+
+/**
+ * Sets discount bank environment variables for env-based config loading tests.
+ */
+function setDiscountEnvVars(): void {
+  setBaseEnvVars();
+  process.env.DISCOUNT_ID = '123';
+  process.env.DISCOUNT_PASSWORD = TEST_CREDENTIAL;
+  process.env.DISCOUNT_NUM = 'ABC';
+  process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
+}
+
+/**
+ * Clears all bank-related environment variables after env-based tests.
+ */
+function clearAllEnvVars(): void {
+  for (const key of ENV_KEYS_TO_CLEAN) {
+    delete process.env[key];
+  }
+}
+
+/**
+ * Builds a bank config entry with the given credentials and default target.
+ *
+ * @param creds - Credential fields for the bank.
+ * @returns A bank config object with credentials and default target.
+ */
+function makeBankWithTarget(creds: Record<string, unknown>) {
+  return { ...creds, targets: [DEFAULT_TARGET] };
 }
 
 describe('ConfigLoader', () => {
@@ -56,8 +145,7 @@ describe('ConfigLoader', () => {
   describe('file loading', () => {
     it('loads valid config from file', () => {
       const validConfig = makeValidConfig();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(validConfig));
+      mockFileConfig(validConfig);
 
       const loader = new ConfigLoader('/test/config.json');
       const config = loader.load();
@@ -68,14 +156,7 @@ describe('ConfigLoader', () => {
 
     it('falls back to env vars when config file not found', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-
-      // Set env vars for a valid discount config
-      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
-      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
-      process.env.DISCOUNT_ID = '123';
-      process.env.DISCOUNT_PASSWORD = TEST_CREDENTIAL;
-      process.env.DISCOUNT_NUM = 'ABC';
-      process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
+      setDiscountEnvVars();
 
       const loader = new ConfigLoader('/nonexistent/config.json');
       const config = loader.load();
@@ -83,43 +164,25 @@ describe('ConfigLoader', () => {
       expect(config.actual.init.password).toBe(TEST_CREDENTIAL);
       expect(config.banks.discount).toBeDefined();
 
-      // Cleanup
-      delete process.env.ACTUAL_PASSWORD;
-      delete process.env.ACTUAL_BUDGET_SYNC_ID;
-      delete process.env.DISCOUNT_ID;
-      delete process.env.DISCOUNT_PASSWORD;
-      delete process.env.DISCOUNT_NUM;
-      delete process.env.DISCOUNT_ACCOUNT_ID;
+      clearAllEnvVars();
     });
 
     it('falls back to env vars on invalid JSON', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('not valid json{{{');
-
-      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
-      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
-      process.env.DISCOUNT_ID = '123';
-      process.env.DISCOUNT_PASSWORD = TEST_CREDENTIAL;
-      process.env.DISCOUNT_NUM = 'ABC';
-      process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
+      setDiscountEnvVars();
 
       const loader = new ConfigLoader('/test/config.json');
       const config = loader.load();
 
       expect(config.banks.discount).toBeDefined();
 
-      delete process.env.ACTUAL_PASSWORD;
-      delete process.env.ACTUAL_BUDGET_SYNC_ID;
-      delete process.env.DISCOUNT_ID;
-      delete process.env.DISCOUNT_PASSWORD;
-      delete process.env.DISCOUNT_NUM;
-      delete process.env.DISCOUNT_ACCOUNT_ID;
+      clearAllEnvVars();
     });
 
     it('re-throws ConfigurationError from file loading', () => {
       const invalidConfig = makeValidConfig({ budget: { syncId: 'not-a-uuid', password: null } });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(invalidConfig));
+      mockFileConfig(invalidConfig);
 
       const loader = new ConfigLoader('/test/config.json');
       expect(() => loader.load()).toThrow(ConfigurationError);
@@ -127,222 +190,135 @@ describe('ConfigLoader', () => {
 
     it('uses default path when none provided', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-
-      // Will fail validation, but we can test the path is /app/config.json
-      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
-      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
-      process.env.DISCOUNT_ID = '123';
-      process.env.DISCOUNT_PASSWORD = TEST_CREDENTIAL;
-      process.env.DISCOUNT_NUM = 'ABC';
-      process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
+      setDiscountEnvVars();
 
       const loader = new ConfigLoader();
       loader.load();
 
       expect(fs.existsSync).toHaveBeenCalledWith('/app/config.json');
 
-      delete process.env.ACTUAL_PASSWORD;
-      delete process.env.ACTUAL_BUDGET_SYNC_ID;
-      delete process.env.DISCOUNT_ID;
-      delete process.env.DISCOUNT_PASSWORD;
-      delete process.env.DISCOUNT_NUM;
-      delete process.env.DISCOUNT_ACCOUNT_ID;
+      clearAllEnvVars();
     });
   });
 
   describe('validation - actual config', () => {
     it('throws on missing password', () => {
-      const config = makeValidConfig({ init: { password: '' } });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('ACTUAL_PASSWORD is required');
+      expectConfigToThrow({ init: { password: '' } }, 'ACTUAL_PASSWORD is required');
     });
 
     it('throws on missing syncId', () => {
-      const config = makeValidConfig({ budget: { syncId: '', password: null } });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('ACTUAL_BUDGET_SYNC_ID is required');
+      expectConfigToThrow({ budget: { syncId: '', password: null } }, 'ACTUAL_BUDGET_SYNC_ID is required');
     });
 
     it('throws on invalid syncId UUID format', () => {
-      const config = makeValidConfig({ budget: { syncId: 'invalid-uuid', password: null } });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Invalid ACTUAL_BUDGET_SYNC_ID format');
+      expectConfigToThrow({ budget: { syncId: 'invalid-uuid', password: null } }, 'Invalid ACTUAL_BUDGET_SYNC_ID format');
     });
 
     it('throws on invalid serverURL format', () => {
-      const config = makeValidConfig({ init: { serverURL: 'ftp://invalid' } });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Invalid serverURL format');
+      expectConfigToThrow({ init: { serverURL: 'ftp://invalid' } }, 'Invalid serverURL format');
     });
 
     it('accepts https serverURL', () => {
-      const config = makeValidConfig({ init: { serverURL: 'https://actual.example.com' } });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).not.toThrow();
+      expectConfigNotToThrow({ init: { serverURL: 'https://actual.example.com' } });
     });
   });
 
   describe('validation - bank config', () => {
     it('throws when no banks configured', () => {
-      const config = makeValidConfig({ banks: {} });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('No bank credentials configured');
+      expectConfigToThrow({ banks: {} }, 'No bank credentials configured');
     });
 
     it('throws on invalid startDate format', () => {
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
-          discount: {
+          discount: makeBankWithTarget({
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             startDate: 'not-a-date',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Invalid startDate format');
+          }),
+        },
+      }, 'Invalid startDate format');
     });
 
     it('throws on future startDate', () => {
       const futureDate = new Date();
       futureDate.setFullYear(futureDate.getFullYear() + 1);
 
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
-          discount: {
+          discount: makeBankWithTarget({
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             startDate: futureDate.toISOString().split('T')[0],
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('cannot be in the future');
+          }),
+        },
+      }, 'cannot be in the future');
     });
 
     it('throws on startDate more than 1 year ago', () => {
       const oldDate = new Date();
       oldDate.setFullYear(oldDate.getFullYear() - 2);
 
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
-          discount: {
+          discount: makeBankWithTarget({
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             startDate: oldDate.toISOString().split('T')[0],
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('cannot be more than 1 year ago');
+          }),
+        },
+      }, 'cannot be more than 1 year ago');
     });
 
     it('throws on missing targets', () => {
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
-          discount: {
-            id: '123', password: TEST_CREDENTIAL, num: 'ABC'
-            // no targets
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('No targets configured');
+          discount: { id: '123', password: TEST_CREDENTIAL, num: 'ABC' },
+        },
+      }, 'No targets configured');
     });
 
     it('throws on empty targets array', () => {
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
-          discount: {
-            id: '123', password: TEST_CREDENTIAL, num: 'ABC',
-            targets: []
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('No targets configured');
+          discount: { id: '123', password: TEST_CREDENTIAL, num: 'ABC', targets: [] },
+        },
+      }, 'No targets configured');
     });
 
     it('throws on missing actualAccountId', () => {
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
-            targets: [{ actualAccountId: '', reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Missing actualAccountId');
+            targets: [{ actualAccountId: '', reconcile: true, accounts: 'all' }],
+          },
+        },
+      }, 'Missing actualAccountId');
     });
 
     it('throws on invalid actualAccountId UUID', () => {
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
-            targets: [{ actualAccountId: 'not-uuid', reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Invalid actualAccountId format');
+            targets: [{ actualAccountId: 'not-uuid', reconcile: true, accounts: 'all' }],
+          },
+        },
+      }, 'Invalid actualAccountId format');
     });
 
     it('throws on missing accounts field', () => {
       const config = {
         actual: {
           init: { dataDir: './data', password: TEST_CREDENTIAL, serverURL: 'http://localhost:5006' },
-          budget: { syncId: VALID_UUID, password: null }
+          budget: { syncId: VALID_UUID, password: null },
         },
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true }]
-          }
-        }
+            targets: [{ actualAccountId: VALID_UUID, reconcile: true }],
+          },
+        },
       };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      mockFileConfig(config as ReturnType<typeof makeValidConfig>);
 
       const loader = new ConfigLoader('/test/config.json');
       expect(() => loader.load()).toThrow('Missing accounts field');
@@ -352,208 +328,95 @@ describe('ConfigLoader', () => {
       const config = {
         actual: {
           init: { dataDir: './data', password: TEST_CREDENTIAL, serverURL: 'http://localhost:5006' },
-          budget: { syncId: VALID_UUID, password: null }
+          budget: { syncId: VALID_UUID, password: null },
         },
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: 'yes', accounts: 'all' }]
-          }
-        }
+            targets: [{ actualAccountId: VALID_UUID, reconcile: 'yes', accounts: 'all' }],
+          },
+        },
       };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      mockFileConfig(config as ReturnType<typeof makeValidConfig>);
 
       const loader = new ConfigLoader('/test/config.json');
       expect(() => loader.load()).toThrow('Invalid reconcile field');
     });
 
     it('accepts accounts as array', () => {
-      const config = makeValidConfig({
+      expectConfigNotToThrow({
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: ['1234', '5678'] }]
-          }
-        }
+            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: ['1234', '5678'] }],
+          },
+        },
       });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).not.toThrow();
     });
   });
 
   describe('bank-specific credential validation', () => {
-    it('throws when discount missing id', () => {
-      const config = makeValidConfig({
-        banks: {
-          discount: {
-            password: TEST_CREDENTIAL, num: 'ABC',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Discount bank requires');
-    });
-
-    it('throws when leumi missing username', () => {
-      const config = makeValidConfig({
-        banks: {
-          leumi: {
-            password: TEST_CREDENTIAL,
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('leumi requires: username, password');
-    });
-
-    it('throws when hapoalim missing userCode', () => {
-      const config = makeValidConfig({
-        banks: {
-          hapoalim: {
-            password: TEST_CREDENTIAL,
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Hapoalim requires: userCode, password');
-    });
-
-    it('throws when yahav missing nationalID', () => {
-      const config = makeValidConfig({
-        banks: {
-          yahav: {
-            password: TEST_CREDENTIAL,
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Yahav requires: nationalID, password');
-    });
-
-    it('throws when oneZero missing email', () => {
-      const config = makeValidConfig({
-        banks: {
-          oneZero: {
-            password: TEST_CREDENTIAL, phoneNumber: '0501234567',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('OneZero requires: email, password, phoneNumber');
+    it.each([
+      ['discount', { password: TEST_CREDENTIAL, num: 'ABC' }, 'Discount bank requires'],
+      ['leumi', { password: TEST_CREDENTIAL }, 'leumi requires: username, password'],
+      ['hapoalim', { password: TEST_CREDENTIAL }, 'Hapoalim requires: userCode, password'],
+      ['yahav', { password: TEST_CREDENTIAL }, 'Yahav requires: nationalID, password'],
+      ['oneZero', { password: TEST_CREDENTIAL, phoneNumber: '0501234567' }, 'OneZero requires: email, password, phoneNumber'],
+    ])('throws when %s is missing required credentials', (bankName, creds, message) => {
+      expectConfigToThrow({
+        banks: { [bankName]: makeBankWithTarget(creds as Record<string, unknown>) },
+      }, message);
     });
 
     it('validates email format', () => {
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
-          oneZero: {
+          oneZero: makeBankWithTarget({
             email: 'not-an-email', password: TEST_CREDENTIAL, phoneNumber: '0501234567890',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Invalid email format');
+          }),
+        },
+      }, 'Invalid email format');
     });
 
     it('validates phone number format', () => {
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
-          oneZero: {
+          oneZero: makeBankWithTarget({
             email: 'user@example.com', password: TEST_CREDENTIAL, phoneNumber: '123',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Invalid phone number format');
+          }),
+        },
+      }, 'Invalid phone number format');
     });
 
     it('validates card6Digits format', () => {
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
-          isracard: {
+          isracard: makeBankWithTarget({
             id: '123456789', card6Digits: '12345', password: TEST_CREDENTIAL,
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Invalid card6Digits format');
+          }),
+        },
+      }, 'Invalid card6Digits format');
     });
 
     it('accepts valid card6Digits', () => {
-      const config = makeValidConfig({
+      expectConfigNotToThrow({
         banks: {
-          isracard: {
+          isracard: makeBankWithTarget({
             id: '123456789', card6Digits: '123456', password: TEST_CREDENTIAL,
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }]
-          }
-        }
+          }),
+        },
       });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).not.toThrow();
     });
   });
 
   describe('environment variable loading - account splitting', () => {
     afterEach(() => {
-      delete process.env.ACTUAL_PASSWORD;
-      delete process.env.ACTUAL_BUDGET_SYNC_ID;
-      delete process.env.DISCOUNT_ID;
-      delete process.env.DISCOUNT_PASSWORD;
-      delete process.env.DISCOUNT_NUM;
-      delete process.env.DISCOUNT_ACCOUNT_ID;
-      delete process.env.DISCOUNT_ACCOUNTS;
-      delete process.env.LEUMI_USERNAME;
-      delete process.env.LEUMI_PASSWORD;
-      delete process.env.LEUMI_ACCOUNT_ID;
-      delete process.env.LEUMI_ACCOUNTS;
-      delete process.env.HAPOALIM_USER_CODE;
-      delete process.env.HAPOALIM_PASSWORD;
-      delete process.env.HAPOALIM_ACCOUNT_ID;
-      delete process.env.HAPOALIM_ACCOUNTS;
+      clearAllEnvVars();
     });
 
     it('splits comma-separated LEUMI_ACCOUNTS into array', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
-      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
+      setBaseEnvVars();
       process.env.LEUMI_USERNAME = 'user';
       process.env.LEUMI_PASSWORD = TEST_CREDENTIAL;
       process.env.LEUMI_ACCOUNT_ID = VALID_UUID;
@@ -567,8 +430,7 @@ describe('ConfigLoader', () => {
 
     it('splits comma-separated HAPOALIM_ACCOUNTS into array', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
-      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
+      setBaseEnvVars();
       process.env.HAPOALIM_USER_CODE = 'code';
       process.env.HAPOALIM_PASSWORD = TEST_CREDENTIAL;
       process.env.HAPOALIM_ACCOUNT_ID = VALID_UUID;
@@ -582,12 +444,7 @@ describe('ConfigLoader', () => {
 
     it('splits comma-separated DISCOUNT_ACCOUNTS into array', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
-      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
-      process.env.DISCOUNT_ID = '123';
-      process.env.DISCOUNT_PASSWORD = TEST_CREDENTIAL;
-      process.env.DISCOUNT_NUM = 'ABC';
-      process.env.DISCOUNT_ACCOUNT_ID = VALID_UUID;
+      setDiscountEnvVars();
       process.env.DISCOUNT_ACCOUNTS = '9999,8888';
 
       const loader = new ConfigLoader('/nonexistent');
@@ -598,8 +455,7 @@ describe('ConfigLoader', () => {
 
     it('uses "all" as default for LEUMI_ACCOUNTS', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      process.env.ACTUAL_PASSWORD = TEST_CREDENTIAL;
-      process.env.ACTUAL_BUDGET_SYNC_ID = VALID_UUID;
+      setBaseEnvVars();
       process.env.LEUMI_USERNAME = 'user';
       process.env.LEUMI_PASSWORD = TEST_CREDENTIAL;
       process.env.LEUMI_ACCOUNT_ID = VALID_UUID;
@@ -613,19 +469,14 @@ describe('ConfigLoader', () => {
 
   describe('validation - empty accounts array', () => {
     it('throws on empty array accounts', () => {
-      const config = makeValidConfig({
+      expectConfigToThrow({
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
-            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: [] }]
-          }
-        }
-      });
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-
-      const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Invalid accounts field');
+            targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: [] }],
+          },
+        },
+      }, 'Invalid accounts field');
     });
   });
 
@@ -633,39 +484,25 @@ describe('ConfigLoader', () => {
     it('accepts valid webhook config', () => {
       const config = makeValidConfig();
       config.notifications = { enabled: true, webhook: { url: 'https://hooks.slack.com/test', format: 'slack' } };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      mockFileConfig(config);
       expect(() => new ConfigLoader('/test/config.json').load()).not.toThrow();
     });
 
-    it('throws when webhook url is missing', () => {
+    it.each([
+      [{ url: '', format: 'plain' }, 'Webhook url is required'],
+      [{ url: 'ftp://bad.com', format: 'plain' }, 'Invalid webhook url format'],
+      [{ url: 'https://example.com', format: 'invalid' }, 'Invalid webhook format'],
+    ])('throws on invalid webhook config: %s', (webhook, message) => {
       const config = makeValidConfig();
-      config.notifications = { enabled: true, webhook: { url: '', format: 'plain' } };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('Webhook url is required');
-    });
-
-    it('throws when webhook url is not http', () => {
-      const config = makeValidConfig();
-      config.notifications = { enabled: true, webhook: { url: 'ftp://bad.com', format: 'plain' } };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('Invalid webhook url format');
-    });
-
-    it('throws when webhook format is invalid', () => {
-      const config = makeValidConfig();
-      config.notifications = { enabled: true, webhook: { url: 'https://example.com', format: 'invalid' } };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('Invalid webhook format');
+      config.notifications = { enabled: true, webhook };
+      mockFileConfig(config);
+      expect(() => new ConfigLoader('/test/config.json').load()).toThrow(message);
     });
   });
 
   describe('split config (credentials.json + config.json)', () => {
     it('merges credentials.json into config.json', () => {
-      const settings = { actual: { init: { serverURL: 'http://localhost:5006', dataDir: './data' } }, banks: { discount: { daysBack: 14, targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' }] } } };
+      const settings = { actual: { init: { serverURL: 'http://localhost:5006', dataDir: './data' } }, banks: { discount: { daysBack: 14, targets: [DEFAULT_TARGET] } } };
       const credentials = { actual: { init: { password: TEST_CREDENTIAL }, budget: { syncId: VALID_UUID, password: null } }, banks: { discount: { id: '123', password: TEST_CREDENTIAL, num: 'ABC' } } };
 
       vi.mocked(fs.existsSync).mockImplementation((p) => String(p).includes('config.json') || String(p).includes('credentials.json'));
@@ -714,42 +551,29 @@ describe('ConfigLoader', () => {
   });
 
   describe('proxy validation', () => {
-    it('accepts valid socks5 proxy', () => {
+    it.each([
+      ['socks5://localhost:1080'],
+      ['http://proxy.example.com:8080'],
+    ])('accepts valid proxy: %s', (server) => {
       const config = makeValidConfig();
-      config.proxy = { server: 'socks5://localhost:1080' };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      config.proxy = { server };
+      mockFileConfig(config);
       expect(() => new ConfigLoader('/test/config.json').load()).not.toThrow();
     });
 
-    it('accepts valid http proxy', () => {
+    it.each([
+      [{ server: 'invalid://bad' }, 'Invalid proxy.server format'],
+      [{ server: '' }, 'proxy.server is required'],
+    ])('throws on invalid proxy config: %s', (proxy, message) => {
       const config = makeValidConfig();
-      config.proxy = { server: 'http://proxy.example.com:8080' };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-      expect(() => new ConfigLoader('/test/config.json').load()).not.toThrow();
-    });
-
-    it('throws on invalid proxy format', () => {
-      const config = makeValidConfig();
-      config.proxy = { server: 'invalid://bad' };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('Invalid proxy.server format');
-    });
-
-    it('throws on empty proxy server', () => {
-      const config = makeValidConfig();
-      config.proxy = { server: '' };
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
-      expect(() => new ConfigLoader('/test/config.json').load()).toThrow('proxy.server is required');
+      config.proxy = proxy;
+      mockFileConfig(config);
+      expect(() => new ConfigLoader('/test/config.json').load()).toThrow(message);
     });
 
     it('applies PROXY_SERVER env var override', () => {
       const config = makeValidConfig();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+      mockFileConfig(config);
       process.env.PROXY_SERVER = 'socks5://env-proxy:1080';
       const loaded = new ConfigLoader('/test/config.json').load();
       expect(loaded.proxy?.server).toBe('socks5://env-proxy:1080');
