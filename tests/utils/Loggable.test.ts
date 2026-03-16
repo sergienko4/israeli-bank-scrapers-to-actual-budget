@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as LoggerModule from '../../src/Logger/Index.js';
+import { getLogger } from '../../src/Logger/Index.js';
 import { Loggable } from '../../src/Utils/Loggable.js';
+
+vi.mock('../../src/Logger/Index.js', () => ({
+  getLogger: vi.fn(),
+}));
 
 const mockLogger = {
   info:  vi.fn(),
@@ -10,7 +14,7 @@ const mockLogger = {
 };
 
 beforeEach(() => {
-  vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger);
+  vi.mocked(getLogger).mockReturnValue(mockLogger);
   vi.clearAllMocks();
 });
 
@@ -47,7 +51,7 @@ describe('@Loggable decorator', () => {
     class AsyncSvc {
       @Loggable
       public async fetchData(): Promise<string> {
-        return Promise.resolve('data');
+        return 'data';
       }
     }
     const result = await new AsyncSvc().fetchData();
