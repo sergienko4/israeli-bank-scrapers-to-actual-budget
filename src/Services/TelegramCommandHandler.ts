@@ -273,7 +273,9 @@ export class TelegramCommandHandler {
     const recent = this.auditLog.getRecent(5);
     if (recent.length === 0) return;
     lines.push('', '<b>Recent imports:</b>');
-    [...recent].reverse().forEach((e) => lines.push(this.formatAuditEntry(e)));
+    for (const e of [...recent].reverse()) {
+      lines.push(this.formatAuditEntry(e));
+    }
   }
 
   /**

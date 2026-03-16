@@ -265,6 +265,9 @@ export class MetricsService {
    * @param bank - The BankMetrics containing the reconciliation status to display.
    */
   private printReconciliationLine(bank: BankMetrics): void {
+    if (bank.reconciliationStatus === 'created' && bank.reconciliationAmount === undefined) {
+      return;
+    }
     const reconIcon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
     const hasPositiveAmount = bank.reconciliationAmount !== undefined
       && bank.reconciliationAmount > 0;
