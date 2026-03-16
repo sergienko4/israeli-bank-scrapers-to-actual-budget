@@ -265,20 +265,27 @@ export class MetricsService {
    * @param bank - The BankMetrics containing the reconciliation status to display.
    */
   private printReconciliationLine(bank: BankMetrics): void {
-    if (bank.reconciliationStatus === 'created' && bank.reconciliationAmount === undefined) {
-      return;
-    }
-    const reconIcon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
+    const message = this.buildReconciliationMessage(bank);
+    if (!message) return;
+    getLogger().info(`     ${message}`);
+  }
+
+  /**
+   * Builds the formatted reconciliation message for a bank.
+   * @param bank - The BankMetrics containing reconciliation data.
+   * @returns Formatted message string, or undefined if line should be skipped.
+   */
+  private buildReconciliationMessage(bank: BankMetrics): string | undefined {
+    if (bank.reconciliationStatus === 'created' && bank.reconciliationAmount === undefined) return;
     const amount = bank.reconciliationAmount ?? 0;
     const sign = amount > 0 ? '+' : '';
-    const reconMessages: Record<string, string> = {
+    const icon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
+    const messages: Record<string, string> = {
       created: `${sign}${(amount / 100).toFixed(2)} ILS`,
       skipped: 'balanced',
       'already-reconciled': 'already reconciled',
     };
-    getLogger().info(
-      `     ${reconIcon} Reconciliation: ${reconMessages[bank.reconciliationStatus ?? '']}`
-    );
+    return `${icon} Reconciliation: ${messages[bank.reconciliationStatus ?? '']}`;
   }
 
 }
