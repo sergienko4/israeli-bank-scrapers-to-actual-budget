@@ -109,7 +109,7 @@ function formatDefault(summary: ImportSummary): string {
   ];
   if (summary.banks.length > 0) {
     lines.push('');
-    summary.banks.forEach(b => appendDefaultBank(lines, b));
+    summary.banks.forEach(b => { appendDefaultBank(lines, b); });
   }
   return lines.join('\n');
 }
@@ -214,7 +214,7 @@ function appendLedger(lines: string[], ctx: AccountCtx): void {
 function appendLedgerTransactions(lines: string[], txns: TransactionRecord[]): void {
   lines.push('<code>');
   for (const txn of txns) {
-    const raw = txn.description.length > 18 ? txn.description.slice(0, 18) + '..' : txn.description;
+    const raw = txn.description.length > 18 ? `${txn.description.slice(0, 18)}..` : txn.description;
     lines.push(`${fmtDate(txn.date)} ${escapeHtml(raw)}`,
       `${''.padStart(6)}${fmtAmount(txn.amount).padStart(9)}`);
   }

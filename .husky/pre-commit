@@ -34,27 +34,32 @@ npm run test:unit || exit 1
 
 # ── 6. ESLint (full src) ────────────────────────────────────────
 echo ""
-echo "🧹 [6/13] Running ESLint..."
+echo "🧹 [6/14] Running ESLint..."
 npm run lint || exit 1
+
+# ── 6b. Biome (catches what ESLint misses) ─────────────────────
+echo ""
+echo "🔬 [6b/14] Running Biome lint..."
+npm run lint:biome || exit 1
 
 # ── 7. Markdown Lint ────────────────────────────────────────────
 echo ""
-echo "📝 [7/13] Linting markdown docs..."
+echo "📝 [7/14] Linting markdown docs..."
 npm run lint:docs || exit 1
 
 # ── 8. Config Structure ─────────────────────────────────────────
 echo ""
-echo "⚙️  [8/13] Checking config structure..."
+echo "⚙️  [8/14] Checking config structure..."
 npm run lint:config-structure || exit 1
 
 # ── 9. Docker Build + Browser Smoke Test ──────────────────────────
 echo ""
-echo "🐳 [9/13] Building Docker image..."
+echo "🐳 [9/14] Building Docker image..."
 LOCAL_IMAGE="israeli-bank-importer:pre-commit"
 docker build -t "$LOCAL_IMAGE" . || exit 1
 
 echo ""
-echo "🌐 [9/13] Browser smoke test (verifying scraper can launch browser)..."
+echo "🌐 [9/14] Browser smoke test (verifying scraper can launch browser)..."
 docker run --rm --cap-add SYS_ADMIN "$LOCAL_IMAGE" \
   node --input-type=module -e "
     import { createScraper } from '@sergienko4/israeli-bank-scrapers';
@@ -66,7 +71,7 @@ docker run --rm --cap-add SYS_ADMIN "$LOCAL_IMAGE" \
 
 # ── 10. Lychee Link Check (via Docker) ──────────────────────────
 echo ""
-echo "🔗 [10/13] Checking markdown links (lychee)..."
+echo "🔗 [10/14] Checking markdown links (lychee)..."
 docker run --rm \
   -v "$(pwd):/data" \
   --workdir /data \
@@ -79,7 +84,7 @@ docker run --rm \
 
 # ── 11. Trivy Container Scan ────────────────────────────────────
 echo ""
-echo "🛡️  [11/13] Scanning Docker image for vulnerabilities + secrets (Trivy)..."
+echo "🛡️  [11/14] Scanning Docker image for vulnerabilities + secrets (Trivy)..."
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v "$(pwd)/config/trivy:/trivy-config" \
@@ -96,17 +101,17 @@ docker run --rm \
 
 # ── 12. Mocked E2E Tests ────────────────────────────────────────
 echo ""
-echo "🎭 [12/13] Running mocked E2E tests..."
+echo "🎭 [12/14] Running mocked E2E tests..."
 npm run test:e2e:mock || exit 1
 
 # ── 13. Real E2E Tests (Telegram) ───────────────────────────────
 echo ""
-echo "🌐 [13/13] Running real E2E tests (Telegram)..."
+echo "🌐 [13/14] Running real E2E tests (Telegram)..."
 npm run test:e2e || exit 1
 
 # ────────────────────────────────────────────────────────────────
 echo ""
 echo "==========================================="
-echo "✅ ALL 13 GATES PASSED. COMMITTING."
+echo "✅ ALL 14 GATES PASSED. COMMITTING."
 echo "   (CodeQL — GitHub CI only, no local equivalent)"
 echo "==========================================="

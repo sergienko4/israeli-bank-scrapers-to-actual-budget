@@ -100,7 +100,7 @@ export function validateSpendingWatch(rules: SpendingWatchRule[]): void {
   if (!Array.isArray(rules)) {
     throw new ConfigurationError('spendingWatch must be an array of rules');
   }
-  rules.forEach((rule, idx) => validateWatchRule(rule, idx));
+  rules.forEach((rule, idx) => { validateWatchRule(rule, idx); });
 }
 
 /**
@@ -271,7 +271,7 @@ function validateTargets(bankName: string, targets: BankConfig['targets']): void
       `No targets configured for ${bankName}. At least one target is required.`
     );
   }
-  targets.forEach((target, idx) => validateTarget(bankName, target, idx));
+  targets.forEach((target, idx) => { validateTarget(bankName, target, idx); });
 }
 
 /**

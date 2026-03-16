@@ -251,7 +251,7 @@ export class TelegramNotifier implements INotifier {
   private truncateMessage(text: string): string {
     if (text.length <= MAX_MESSAGE_LENGTH) return text;
     const cut = this.trimPartialTag(text.slice(0, MAX_MESSAGE_LENGTH - 30));
-    return this.closeUnclosedTags(cut + '\n\n... (truncated)');
+    return this.closeUnclosedTags(`${cut}\n\n... (truncated)`);
   }
 
   /**

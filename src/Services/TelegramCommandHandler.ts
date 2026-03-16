@@ -332,7 +332,7 @@ export class TelegramCommandHandler {
     const trimmed = text.slice(-maxLength);
     const firstNewline = trimmed.indexOf('\n');
     const clean = firstNewline > 0 ? trimmed.slice(firstNewline + 1) : trimmed;
-    return '...(earlier entries omitted)\n' + clean;
+    return `...(earlier entries omitted)\n${clean}`;
   }
 
   /** Handles the /watch command — runs the spending watch or explains it runs automatically. */

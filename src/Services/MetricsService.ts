@@ -176,7 +176,7 @@ export class MetricsService {
   printSummary(): void {
     const summary = this.getSummary();
     const importDuration = Date.now() - this.importStartTime;
-    getLogger().info('\n' + '='.repeat(60));
+    getLogger().info(`\n${'='.repeat(60)}`);
     this.printOverallStats(summary, importDuration);
     if (summary.banks.length > 0) this.printBankPerformance(summary.banks);
     getLogger().info('='.repeat(60));
