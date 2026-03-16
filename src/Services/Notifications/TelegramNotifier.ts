@@ -39,11 +39,11 @@ function isValidBotCommand(command: string, description: string): boolean {
 
 /** Telegram notification channel — formats and sends import summaries via the Bot API. */
 export class TelegramNotifier implements INotifier {
-  private botToken: string;
-  private chatId: string;
-  private format: MessageFormat;
-  private showTransactions: ShowTransactions;
-  private maxTransactions: number;
+  private readonly botToken: string;
+  private readonly chatId: string;
+  private readonly format: MessageFormat;
+  private readonly showTransactions: ShowTransactions;
+  private readonly maxTransactions: number;
 
   /**
    * Creates a TelegramNotifier from the given config.
@@ -166,9 +166,8 @@ export class TelegramNotifier implements INotifier {
     const response = await fetch(url);
     if (!response.ok) return null;
     const data = await response.json() as TelegramApiResponse;
-    const lastId = data.result?.length
-      ? data.result[data.result.length - 1].update_id
-      : offset - 1;
+    const last = data.result?.at(-1);
+    const lastId = last ? last.update_id : offset - 1;
     return { updates: data, nextOffset: lastId + 1 };
   }
 
@@ -197,7 +196,8 @@ export class TelegramNotifier implements INotifier {
     const response = await fetch(url);
     if (!response.ok) return 0;
     const data = await response.json() as TelegramApiResponse;
-    return data.result?.length ? data.result[data.result.length - 1].update_id + 1 : 0;
+    const lastResult = data.result?.at(-1);
+    return lastResult ? lastResult.update_id + 1 : 0;
   }
 
   /**
@@ -220,7 +220,7 @@ export class TelegramNotifier implements INotifier {
    * @returns True if the text looks like an OTP code.
    */
   private looksLikeOtp(text: string): boolean {
-    const digits = text.replace(/\D/g, '');
+    const digits = text.replaceAll(/\D/g, '');
     return digits.length >= 4 && digits.length <= 8;
   }
 
@@ -278,7 +278,7 @@ export class TelegramNotifier implements INotifier {
       if (match[1] === '/') { if (openTags.length > 0) openTags.pop(); }
       else { openTags.push(match[2]); }
     }
-    return text + openTags.reverse().map(t => `</${t}>`).join('');
+    return text + [...openTags].reverse().map((t) => `</${t}>`).join('');
   }
 
   /**

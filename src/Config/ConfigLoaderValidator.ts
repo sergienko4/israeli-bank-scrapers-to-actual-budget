@@ -242,7 +242,7 @@ function getOneYearAgo(): Date {
  */
 function validateStartDate(bankName: string, startDate: string): void {
   const date = new Date(startDate);
-  if (isNaN(date.getTime())) {
+  if (Number.isNaN(date.getTime())) {
     throw new ConfigurationError(
       `Invalid startDate format for ${bankName}: "${startDate}". ` +
       `Expected YYYY-MM-DD format (e.g., "2026-02-15")`
@@ -358,7 +358,7 @@ function validateFieldFormats(bankName: string, config: BankConfig): void {
   if (config.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.email)) {
     throw new ConfigurationError(`Invalid email format for ${bankName}: "${config.email}"`);
   }
-  const phone = config.phoneNumber?.replace(/[\s-]/g, '');
+  const phone = config.phoneNumber?.replaceAll(/[\s-]/g, '');
   if (config.phoneNumber && phone && !/^\+?\d{10,15}$/.test(phone)) {
     throw new ConfigurationError(
       `Invalid phone number format for ${bankName}: "${config.phoneNumber}". ` +

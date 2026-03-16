@@ -10,8 +10,8 @@ import type { INotifier } from './INotifier.js';
 
 /** Webhook notification channel — posts import events as JSON to a configurable URL. */
 export class WebhookNotifier implements INotifier {
-  private url: string;
-  private format: WebhookFormat;
+  private readonly url: string;
+  private readonly format: WebhookFormat;
 
   /**
    * Creates a WebhookNotifier from the given webhook configuration.

@@ -2,10 +2,9 @@
  * Metrics collection service for tracking import performance and success rates
  */
 
-import { TransactionRecord } from '../Types/Index.js';
+import type { TransactionRecord } from '../Types/Index.js';
+export type { TransactionRecord } from '../Types/Index.js';
 import { getLogger } from '../Logger/Index.js';
-
-export { TransactionRecord };
 
 export interface AccountMetrics {
   accountNumber: string;
@@ -53,7 +52,7 @@ export interface ImportSummary {
 
 /** Tracks per-bank import performance and aggregates import-wide statistics. */
 export class MetricsService {
-  private banks: Map<string, BankMetrics> = new Map();
+  private readonly banks: Map<string, BankMetrics> = new Map();
   private importStartTime: number = 0;
 
   /**
@@ -267,11 +266,13 @@ export class MetricsService {
    */
   private printReconciliationLine(bank: BankMetrics): void {
     const reconIcon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
+    const hasPositiveAmount = bank.reconciliationAmount !== undefined
+      && bank.reconciliationAmount > 0;
+    const sign = hasPositiveAmount ? '+' : '';
     const reconMessages: Record<string, string> = {
-      created: bank.reconciliationAmount !== undefined
-        ? `${bank.reconciliationAmount > 0 ? '+' : ''}` +
-          `${(bank.reconciliationAmount / 100).toFixed(2)} ILS`
-        : '',
+      created: bank.reconciliationAmount === undefined
+        ? ''
+        : `${sign}${(bank.reconciliationAmount / 100).toFixed(2)} ILS`,
       skipped: 'balanced',
       'already-reconciled': 'already reconciled',
     };

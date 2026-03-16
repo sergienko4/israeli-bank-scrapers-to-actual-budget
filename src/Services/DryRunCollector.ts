@@ -33,7 +33,7 @@ export interface PreviewInput {
  * and formats them for CLI and Telegram output.
  */
 export class DryRunCollector {
-  private accounts: AccountPreview[] = [];
+  private readonly accounts: AccountPreview[] = [];
 
   /**
    * Adds an account preview to the collected list.
@@ -109,8 +109,8 @@ export class DryRunCollector {
   private summaryLine(): string {
     const n = this.accounts.length;
     const t = this.totalTransactions();
-    return `Total: ${n} account${n !== 1 ? 's' : ''}, ` +
-      `${t} transaction${t !== 1 ? 's' : ''} (0 imported — dry run)`;
+    return `Total: ${n} account${n === 1 ? '' : 's'}, ` +
+      `${t} transaction${t === 1 ? '' : 's'} (0 imported — dry run)`;
   }
 
   /**
@@ -166,7 +166,7 @@ export class DryRunCollector {
    * @returns Formatted balance string like "1234.56 ILS" or "N/A".
    */
   private formatBalance(balance: number | undefined, currency: string): string {
-    return balance !== undefined ? `${balance.toFixed(2)} ${currency}` : 'N/A';
+    return balance === undefined ? 'N/A' : `${balance.toFixed(2)} ${currency}`;
   }
 
   /**
@@ -185,7 +185,7 @@ export class DryRunCollector {
    * @returns Object with from and to YYYY-MM-DD strings, or 'N/A' when empty.
    */
   private static computeDateRange(txns: BankTransaction[]): { from: string; to: string } {
-    const dates = txns.map(t => new Date(t.date).getTime()).filter(d => !isNaN(d));
+    const dates = txns.map(t => new Date(t.date).getTime()).filter(d => !Number.isNaN(d));
     if (dates.length === 0) return { from: 'N/A', to: 'N/A' };
     /**
      * Converts a Unix timestamp to a YYYY-MM-DD date string.

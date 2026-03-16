@@ -18,8 +18,8 @@ interface PayeeCategory {
 
 /** Resolves transaction categories by matching payee names against import history. */
 export class HistoryCategoryResolver implements ICategoryResolver {
-  private categoryMap = new Map<string, string>();
-  private actualApi: typeof api;
+  private readonly categoryMap = new Map<string, string>();
+  private readonly actualApi: typeof api;
 
   /**
    * Creates a HistoryCategoryResolver using the given Actual API instance.

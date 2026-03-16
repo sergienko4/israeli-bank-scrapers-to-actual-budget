@@ -24,9 +24,9 @@ export class TelegramPoller {
    * @param onMessage - Async callback invoked for each incoming message or callback query text.
    */
   constructor(
-    private botToken: string,
-    private chatId: string,
-    private onMessage: (text: string) => Promise<void>
+    private readonly botToken: string,
+    private readonly chatId: string,
+    private readonly onMessage: (text: string) => Promise<void>
   ) {}
 
 
@@ -153,8 +153,9 @@ export class TelegramPoller {
       if (!response.ok) return;
 
       const data = await response.json() as TelegramApiResponse;
-      if (data.ok && data.result?.length) {
-        this.offset = data.result[data.result.length - 1].update_id + 1;
+      const lastUpdate = data.ok ? data.result?.at(-1) : undefined;
+      if (lastUpdate) {
+        this.offset = lastUpdate.update_id + 1;
       }
     } catch {
       // Ignore - will start from current

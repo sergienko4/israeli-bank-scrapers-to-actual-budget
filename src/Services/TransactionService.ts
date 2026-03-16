@@ -34,8 +34,8 @@ interface SingleTxnContext {
 
 /** Handles importing bank transactions into Actual Budget. */
 export class TransactionService {
-  private api: typeof api;
-  private categoryResolver?: ICategoryResolver;
+  private readonly api: typeof api;
+  private readonly categoryResolver?: ICategoryResolver;
 
   /**
    * Creates a TransactionService with the given Actual API and optional category resolver.

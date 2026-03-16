@@ -15,7 +15,7 @@ import { getLogger } from '../Logger/Index.js';
 
 /** Orchestrates sending notifications to all configured channels (Telegram, webhook). */
 export class NotificationService {
-  private notifiers: INotifier[] = [];
+  private readonly notifiers: INotifier[] = [];
 
   /**
    * Creates a NotificationService, registering notifiers for each enabled channel.

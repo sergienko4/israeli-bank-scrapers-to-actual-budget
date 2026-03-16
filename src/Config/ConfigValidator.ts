@@ -83,7 +83,8 @@ export class ConfigValidator {
     const sep = '='.repeat(40);
     const lines = ['Config Validation Report', sep];
     for (const r of results) {
-      const label = r.status === 'pass' ? 'PASS' : r.status === 'fail' ? 'FAIL' : 'WARN';
+      const statusLabel = r.status === 'fail' ? 'FAIL' : 'WARN';
+      const label = r.status === 'pass' ? 'PASS' : statusLabel;
       lines.push(`[${label}] ${r.message}`);
     }
     lines.push(sep, this.summarizeCounts(results));

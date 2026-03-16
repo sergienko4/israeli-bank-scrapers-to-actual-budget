@@ -15,7 +15,7 @@ interface CompiledRule {
 
 /** Resolves transaction payee names by matching Hebrew text against translation rules. */
 export class TranslateCategoryResolver implements ICategoryResolver {
-  private rules: CompiledRule[];
+  private readonly rules: CompiledRule[];
 
   /**
    * Creates a TranslateCategoryResolver by pre-compiling the given translation rules.

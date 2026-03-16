@@ -331,8 +331,10 @@ async function main(): Promise<void> {
 
 // Run only when executed directly (not when imported by tests)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch(err => {
+  try {
+    await main();
+  } catch (err: unknown) {
     logger.error(`❌ Fatal error: ${errorMessage(err)}`);
     process.exit(1);
-  });
+  }
 }

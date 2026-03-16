@@ -280,7 +280,7 @@ export class AccountImporter {
     const label = info.accountName
       ? `${info.accountName} (${info.accountNumber})` : info.accountNumber;
     getLogger().info(`\n  💳 Processing account: ${label}`);
-    const bal = info.balance !== undefined ? `${info.balance} ${info.currency}` : 'N/A';
+    const bal = info.balance === undefined ? 'N/A' : `${info.balance} ${info.currency}`;
     getLogger().info(`     Balance: ${bal}`);
     getLogger().info(`     Transactions: ${info.txnCount}`);
   }

@@ -119,8 +119,8 @@ export class AuditLogService implements IAuditLog {
       duration: b.duration, txns: b.transactionsImported,
       ...(b.error ? { error: b.error } : {}),
       ...(b.reconciliationStatus ? { reconciliationStatus: b.reconciliationStatus } : {}),
-      ...(b.reconciliationAmount !== undefined
-        ? { reconciliationAmount: b.reconciliationAmount } : {}),
+      ...(b.reconciliationAmount === undefined
+        ? {} : { reconciliationAmount: b.reconciliationAmount }),
     };
   }
 
