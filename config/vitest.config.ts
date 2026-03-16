@@ -1,6 +1,18 @@
+import babel from 'vite-plugin-babel';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  oxc: false,
+  plugins: [
+    babel({
+      babelConfig: {
+        plugins: [
+          ['@babel/plugin-proposal-decorators', { version: '2023-11' }],
+          ['@babel/plugin-transform-typescript', { isTSX: false }],
+        ],
+      },
+    }),
+  ],
   test: {
     root: process.cwd(),
     globals: true,
