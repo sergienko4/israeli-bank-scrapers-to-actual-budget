@@ -251,17 +251,27 @@ export class TelegramCommandHandler {
 
   /** Sends the current import status and recent audit history to Telegram. */
   private async handleStatus(): Promise<void> {
+    const lines = this.buildStatusLines();
+    this.appendRecentHistory(lines);
+    await this.reply(lines.join('\n'));
+  }
+
+  /**
+   * Assembles the header and last-run lines for the /status response.
+   * @returns Array of message lines with status header, last run info, and current state.
+   */
+  private buildStatusLines(): string[] {
     const lines: string[] = ['📊 <b>Status</b>', ''];
     const lastTime = this.mediator.getLastRunTime();
     const lastResult = this.mediator.getLastResult();
     const resultLabel = lastResult?.failureCount === 0 ? 'success' : 'failed';
-    const label = lastResult ? resultLabel : null;
-    lines.push(lastTime
-      ? `Last run: ${this.timeSince(lastTime)} ago (${label})`
-      : 'No imports run yet');
-    lines.push(`Currently: ${this.mediator.isImporting() ? '⏳ importing...' : '✅ idle'}`);
-    this.appendRecentHistory(lines);
-    await this.reply(lines.join('\n'));
+    const label = lastResult ? ` (${resultLabel})` : '';
+    const runLine = lastTime
+      ? `Last run: ${this.timeSince(lastTime)} ago${label}`
+      : 'No imports run yet';
+    const currentLine = `Currently: ${this.mediator.isImporting() ? '⏳ importing...' : '✅ idle'}`;
+    lines.push(runLine, currentLine);
+    return lines;
   }
 
   /**

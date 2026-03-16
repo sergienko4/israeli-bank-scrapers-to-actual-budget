@@ -154,7 +154,7 @@ async function runConfigValidation(): Promise<string> {
   const { ConfigLoader } = await import('./Config/ConfigLoader.js');
   const { ConfigValidator } = await import('./Config/ConfigValidator.js');
   const loader = new ConfigLoader();
-  let config;
+  let config: ImporterConfig;
   try {
     config = loader.loadRaw();
   } catch (e) {

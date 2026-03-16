@@ -14,12 +14,9 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": false,
+      "recommended": true,
       "suspicious": {
-        "useIterableCallbackReturn": "error"
-      },
-      "style": {
-        "useTemplate": "warn"
+        "noAssignInExpressions": "off"
       }
     }
   },

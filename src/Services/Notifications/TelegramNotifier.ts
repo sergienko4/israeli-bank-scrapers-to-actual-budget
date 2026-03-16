@@ -273,7 +273,7 @@ export class TelegramNotifier implements INotifier {
   private closeUnclosedTags(text: string): string {
     const openTags: string[] = [];
     const tagRegex = /<(\/?)(\w+)[^>]*>/g;
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = tagRegex.exec(text)) !== null) {
       if (match[1] === '/') { if (openTags.length > 0) openTags.pop(); }
       else { openTags.push(match[2]); }

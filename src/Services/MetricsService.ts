@@ -269,13 +269,10 @@ export class MetricsService {
       return;
     }
     const reconIcon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
-    const hasPositiveAmount = bank.reconciliationAmount !== undefined
-      && bank.reconciliationAmount > 0;
-    const sign = hasPositiveAmount ? '+' : '';
+    const amount = bank.reconciliationAmount ?? 0;
+    const sign = amount > 0 ? '+' : '';
     const reconMessages: Record<string, string> = {
-      created: bank.reconciliationAmount === undefined
-        ? ''
-        : `${sign}${(bank.reconciliationAmount / 100).toFixed(2)} ILS`,
+      created: `${sign}${(amount / 100).toFixed(2)} ILS`,
       skipped: 'balanced',
       'already-reconciled': 'already reconciled',
     };
