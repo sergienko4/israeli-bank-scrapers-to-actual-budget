@@ -68,7 +68,7 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
   private async handleRetryBackoff(
     attempt: number, operationName: string, error: Error
   ): Promise<void> {
-    const backoffMs = this.options.initialBackoffMs * Math.pow(2, attempt - 1);
+    const backoffMs = this.options.initialBackoffMs * 2 ** (attempt - 1);
     getLogger().warn(
       `  ⚠️  ${operationName} failed ` +
       `(attempt ${attempt}/${this.options.maxAttempts}): ${error.message}`

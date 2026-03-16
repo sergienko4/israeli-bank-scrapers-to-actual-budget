@@ -110,7 +110,7 @@ export class TelegramCommandHandler {
       await this.reply(ALREADY_RUNNING);
       return;
     }
-    await this.executeImport(undefined);
+    await this.executeImport();
   }
 
   /**
@@ -219,7 +219,8 @@ export class TelegramCommandHandler {
    * @returns Formatted bullet-point string with error and optional advice line.
    */
   private formatBankError(bank: AuditEntry['banks'][number]): string {
-    const line = `• ${bank.name}${bank.error ? `: ${bank.error.slice(0, 80)}` : ''}`;
+    const errorSuffix = bank.error ? `: ${bank.error.slice(0, 80)}` : '';
+    const line = `• ${bank.name}${errorSuffix}`;
     const advice = bank.error ? getScraperErrorAdvice(bank.error) : undefined;
     const streak = this.getFailureStreak(bank.name);
     return [line, ...this.buildErrorAnnotations(advice, streak)].join('\n');
@@ -250,16 +251,27 @@ export class TelegramCommandHandler {
 
   /** Sends the current import status and recent audit history to Telegram. */
   private async handleStatus(): Promise<void> {
+    const lines = this.buildStatusLines();
+    this.appendRecentHistory(lines);
+    await this.reply(lines.join('\n'));
+  }
+
+  /**
+   * Assembles the header and last-run lines for the /status response.
+   * @returns Array of message lines with status header, last run info, and current state.
+   */
+  private buildStatusLines(): string[] {
     const lines: string[] = ['📊 <b>Status</b>', ''];
     const lastTime = this.mediator.getLastRunTime();
     const lastResult = this.mediator.getLastResult();
-    const label = lastResult ? (lastResult.failureCount === 0 ? 'success' : 'failed') : null;
-    lines.push(lastTime
-      ? `Last run: ${this.timeSince(lastTime)} ago (${label})`
-      : 'No imports run yet');
-    lines.push(`Currently: ${this.mediator.isImporting() ? '⏳ importing...' : '✅ idle'}`);
-    this.appendRecentHistory(lines);
-    await this.reply(lines.join('\n'));
+    const resultLabel = lastResult?.failureCount === 0 ? 'success' : 'failed';
+    const label = lastResult ? ` (${resultLabel})` : '';
+    const runLine = lastTime
+      ? `Last run: ${this.timeSince(lastTime)} ago${label}`
+      : 'No imports run yet';
+    const currentLine = `Currently: ${this.mediator.isImporting() ? '⏳ importing...' : '✅ idle'}`;
+    lines.push(runLine, currentLine);
+    return lines;
   }
 
   /**
@@ -271,7 +283,9 @@ export class TelegramCommandHandler {
     const recent = this.auditLog.getRecent(5);
     if (recent.length === 0) return;
     lines.push('', '<b>Recent imports:</b>');
-    recent.reverse().forEach(e => lines.push(this.formatAuditEntry(e)));
+    for (const e of [...recent].reverse()) {
+      lines.push(this.formatAuditEntry(e));
+    }
   }
 
   /**
@@ -311,8 +325,8 @@ export class TelegramCommandHandler {
    */
   private parseLogCount(arg?: string): number {
     if (!arg) return DEFAULT_LOG_COUNT;
-    const n = parseInt(arg, 10);
-    return isNaN(n) ? DEFAULT_LOG_COUNT : Math.min(Math.max(n, 1), 150);
+    const n = Number.parseInt(arg, 10);
+    return Number.isNaN(n) ? DEFAULT_LOG_COUNT : Math.min(Math.max(n, 1), 150);
   }
 
   /**
@@ -328,7 +342,7 @@ export class TelegramCommandHandler {
     const trimmed = text.slice(-maxLength);
     const firstNewline = trimmed.indexOf('\n');
     const clean = firstNewline > 0 ? trimmed.slice(firstNewline + 1) : trimmed;
-    return '...(earlier entries omitted)\n' + clean;
+    return `...(earlier entries omitted)\n${clean}`;
   }
 
   /** Handles the /watch command — runs the spending watch or explains it runs automatically. */

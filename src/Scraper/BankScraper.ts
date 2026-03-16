@@ -288,10 +288,11 @@ export class BankScraper {
    */
   private loadMockScraperResult(bankName: string): IScraperScrapingResult | null {
     const mockDir = process.env.E2E_MOCK_SCRAPER_DIR;
-    const file = mockDir
+    const mockDirFile = mockDir
       ? (existsSync(`${mockDir}/${bankName}.json`)
         ? `${mockDir}/${bankName}.json` : `${mockDir}/default.json`)
-      : (process.env.E2E_MOCK_SCRAPER_FILE ?? null);
+      : null;
+    const file = mockDirFile ?? (process.env.E2E_MOCK_SCRAPER_FILE ?? null);
     if (!file) return null;
     getLogger().info(`  🧪 Using mock scraper data from ${file}`);
     return this.parseMockFile(file);
@@ -306,7 +307,7 @@ export class BankScraper {
     const parsed: unknown = JSON.parse(readFileSync(filePath, 'utf8'));
     const data = parsed as { success?: boolean; accounts?: unknown[] };
     if (typeof data.success !== 'boolean' || !Array.isArray(data.accounts)) {
-      throw new Error(`Invalid mock scraper file: missing success or accounts`);
+      throw new TypeError(`Invalid mock scraper file: missing success or accounts`);
     }
     return data as IScraperScrapingResult;
   }

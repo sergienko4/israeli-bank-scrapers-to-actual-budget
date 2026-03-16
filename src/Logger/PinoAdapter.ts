@@ -15,7 +15,7 @@ const EMPTY: LogContext = {};
  * @returns Clean string with emojis removed and whitespace normalised.
  */
 function stripEmojis(text: string): string {
-  return text.replace(EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim();
+  return text.replaceAll(EMOJI_RE, '').replaceAll(/\s{2,}/g, ' ').trim();
 }
 
 /** pino-backed ILogger implementation for stdout output. */

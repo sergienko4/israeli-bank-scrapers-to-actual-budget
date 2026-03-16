@@ -18,7 +18,7 @@ export class LogMediator implements ILogger {
    * @param context - Optional structured key-value context.
    */
   debug(message: string, context?: LogContext): void {
-    this.targets.forEach(t => t.debug(message, context));
+    this.targets.forEach(t => { t.debug(message, context); });
   }
 
   /**
@@ -27,7 +27,7 @@ export class LogMediator implements ILogger {
    * @param context - Optional structured key-value context.
    */
   info(message: string, context?: LogContext): void {
-    this.targets.forEach(t => t.info(message, context));
+    this.targets.forEach(t => { t.info(message, context); });
   }
 
   /**
@@ -36,7 +36,7 @@ export class LogMediator implements ILogger {
    * @param context - Optional structured key-value context.
    */
   warn(message: string, context?: LogContext): void {
-    this.targets.forEach(t => t.warn(message, context));
+    this.targets.forEach(t => { t.warn(message, context); });
   }
 
   /**
@@ -45,6 +45,6 @@ export class LogMediator implements ILogger {
    * @param context - Optional structured key-value context.
    */
   error(message: string, context?: LogContext): void {
-    this.targets.forEach(t => t.error(message, context));
+    this.targets.forEach(t => { t.error(message, context); });
   }
 }

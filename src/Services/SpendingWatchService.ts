@@ -31,8 +31,8 @@ export class SpendingWatchService {
    * @param actualApi - The Actual Budget API module to query transactions from.
    */
   constructor(
-    private rules: SpendingWatchRule[],
-    private actualApi: typeof api
+    private readonly rules: SpendingWatchRule[],
+    private readonly actualApi: typeof api
   ) {}
 
   /**

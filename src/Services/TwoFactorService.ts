@@ -8,7 +8,7 @@ import { getLogger } from '../Logger/Index.js';
 
 /** Handles 2FA OTP collection via Telegram for bank scraping. */
 export class TwoFactorService {
-  private timeoutMs: number;
+  private readonly timeoutMs: number;
 
   /**
    * Creates a TwoFactorService using the given Telegram notifier.
@@ -16,7 +16,7 @@ export class TwoFactorService {
    * @param timeoutSeconds - OTP wait timeout in seconds (default 300).
    */
   constructor(
-    private notifier: TelegramNotifier,
+    private readonly notifier: TelegramNotifier,
     timeoutSeconds?: number
   ) {
     this.timeoutMs = (timeoutSeconds ?? 300) * 1000;
@@ -51,7 +51,7 @@ export class TwoFactorService {
    * @returns Masked code like "6****5".
    */
   private maskCode(code: string): string {
-    return code[0] + '*'.repeat(code.length - 2) + code[code.length - 1];
+    return code[0] + '*'.repeat(code.length - 2) + (code.at(-1) ?? '');
   }
 
   /**
@@ -60,7 +60,7 @@ export class TwoFactorService {
    * @returns The extracted digit-only OTP code string.
    */
   private extractCode(message: string): string {
-    const digits = message.replace(/\D/g, '');
+    const digits = message.replaceAll(/\D/g, '');
     if (digits.length < 4 || digits.length > 8) {
       const got = digits.length > 0 ? digits : message;
       throw new Error(`Invalid OTP code: expected 4-8 digits, got "${got}"`);

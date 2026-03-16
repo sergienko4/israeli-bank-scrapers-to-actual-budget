@@ -154,7 +154,7 @@ async function runConfigValidation(): Promise<string> {
   const { ConfigLoader } = await import('./Config/ConfigLoader.js');
   const { ConfigValidator } = await import('./Config/ConfigValidator.js');
   const loader = new ConfigLoader();
-  let config;
+  let config: ImporterConfig;
   try {
     config = loader.loadRaw();
   } catch (e) {
@@ -331,8 +331,10 @@ async function main(): Promise<void> {
 
 // Run only when executed directly (not when imported by tests)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch(err => {
+  try {
+    await main();
+  } catch (err: unknown) {
     logger.error(`❌ Fatal error: ${errorMessage(err)}`);
     process.exit(1);
-  });
+  }
 }

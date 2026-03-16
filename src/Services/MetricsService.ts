@@ -2,10 +2,9 @@
  * Metrics collection service for tracking import performance and success rates
  */
 
-import { TransactionRecord } from '../Types/Index.js';
+import type { TransactionRecord } from '../Types/Index.js';
+export type { TransactionRecord } from '../Types/Index.js';
 import { getLogger } from '../Logger/Index.js';
-
-export { TransactionRecord };
 
 export interface AccountMetrics {
   accountNumber: string;
@@ -53,7 +52,7 @@ export interface ImportSummary {
 
 /** Tracks per-bank import performance and aggregates import-wide statistics. */
 export class MetricsService {
-  private banks: Map<string, BankMetrics> = new Map();
+  private readonly banks: Map<string, BankMetrics> = new Map();
   private importStartTime: number = 0;
 
   /**
@@ -177,7 +176,7 @@ export class MetricsService {
   printSummary(): void {
     const summary = this.getSummary();
     const importDuration = Date.now() - this.importStartTime;
-    getLogger().info('\n' + '='.repeat(60));
+    getLogger().info(`\n${'='.repeat(60)}`);
     this.printOverallStats(summary, importDuration);
     if (summary.banks.length > 0) this.printBankPerformance(summary.banks);
     getLogger().info('='.repeat(60));
@@ -266,18 +265,27 @@ export class MetricsService {
    * @param bank - The BankMetrics containing the reconciliation status to display.
    */
   private printReconciliationLine(bank: BankMetrics): void {
-    const reconIcon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
-    const reconMessages: Record<string, string> = {
-      created: bank.reconciliationAmount !== undefined
-        ? `${bank.reconciliationAmount > 0 ? '+' : ''}` +
-          `${(bank.reconciliationAmount / 100).toFixed(2)} ILS`
-        : '',
+    const message = this.buildReconciliationMessage(bank);
+    if (!message) return;
+    getLogger().info(`     ${message}`);
+  }
+
+  /**
+   * Builds the formatted reconciliation message for a bank.
+   * @param bank - The BankMetrics containing reconciliation data.
+   * @returns Formatted message string, or undefined if line should be skipped.
+   */
+  private buildReconciliationMessage(bank: BankMetrics): string | undefined {
+    if (bank.reconciliationStatus === 'created' && bank.reconciliationAmount === undefined) return;
+    const amount = bank.reconciliationAmount ?? 0;
+    const sign = amount > 0 ? '+' : '';
+    const icon = bank.reconciliationStatus === 'created' ? '🔄' : '✅';
+    const messages: Record<string, string> = {
+      created: `${sign}${(amount / 100).toFixed(2)} ILS`,
       skipped: 'balanced',
       'already-reconciled': 'already reconciled',
     };
-    getLogger().info(
-      `     ${reconIcon} Reconciliation: ${reconMessages[bank.reconciliationStatus ?? '']}`
-    );
+    return `${icon} Reconciliation: ${messages[bank.reconciliationStatus ?? '']}`;
   }
 
 }

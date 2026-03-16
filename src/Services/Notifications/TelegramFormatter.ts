@@ -59,7 +59,7 @@ export function formatSummaryMessage(
  * @returns HTML-safe string.
  */
 export function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
 /**
@@ -87,8 +87,7 @@ function bankIcon(bank: BankMetrics): string {
  */
 function appendBankFooter(lines: string[], bank: BankMetrics): void {
   if (!bank.accounts?.length) {
-    lines.push('');
-    lines.push(`${bankIcon(bank)} <b>${escapeHtml(bank.bankName)}</b>`);
+    lines.push('', `${bankIcon(bank)} <b>${escapeHtml(bank.bankName)}</b>`);
   }
   if (bank.error) lines.push(`❌ ${escapeHtml(bank.error)}`);
 }
@@ -110,7 +109,7 @@ function formatDefault(summary: ImportSummary): string {
   ];
   if (summary.banks.length > 0) {
     lines.push('');
-    summary.banks.forEach(b => appendDefaultBank(lines, b));
+    summary.banks.forEach(b => { appendDefaultBank(lines, b); });
   }
   return lines.join('\n');
 }
@@ -159,14 +158,13 @@ function formatCompact(summary: ImportSummary, opts: FormatOpts): string {
  */
 function appendCompact(lines: string[], ctx: AccountCtx): void {
   const { bank, account, opts } = ctx;
-  lines.push('');
-  lines.push(
+  lines.push('',
     `${bankIcon(bank)} <b>${escapeHtml(bank.bankName)}</b>` +
     ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`
   );
   for (const txn of getTransactions(account, opts)) {
-    lines.push(`${fmtDate(txn.date)}  ${escapeHtml(txn.description)}`);
-    lines.push(`       <b>${fmtAmount(txn.amount)}</b>`);
+    lines.push(`${fmtDate(txn.date)}  ${escapeHtml(txn.description)}`,
+      `       <b>${fmtAmount(txn.amount)}</b>`);
   }
   appendBalance(lines, account, bank);
 }
@@ -199,8 +197,7 @@ function formatLedger(summary: ImportSummary, opts: FormatOpts): string {
  */
 function appendLedger(lines: string[], ctx: AccountCtx): void {
   const { bank, account, opts } = ctx;
-  lines.push('');
-  lines.push(
+  lines.push('',
     `${bankIcon(bank)} <b>${escapeHtml(bank.bankName)}</b>` +
     ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`
   );
@@ -217,9 +214,9 @@ function appendLedger(lines: string[], ctx: AccountCtx): void {
 function appendLedgerTransactions(lines: string[], txns: TransactionRecord[]): void {
   lines.push('<code>');
   for (const txn of txns) {
-    const raw = txn.description.length > 18 ? txn.description.slice(0, 18) + '..' : txn.description;
-    lines.push(`${fmtDate(txn.date)} ${escapeHtml(raw)}`);
-    lines.push(`${''.padStart(6)}${fmtAmount(txn.amount).padStart(9)}`);
+    const raw = txn.description.length > 18 ? `${txn.description.slice(0, 18)}..` : txn.description;
+    lines.push(`${fmtDate(txn.date)} ${escapeHtml(raw)}`,
+      `${''.padStart(6)}${fmtAmount(txn.amount).padStart(9)}`);
   }
   lines.push('</code>');
 }
@@ -255,8 +252,7 @@ function formatEmoji(summary: ImportSummary, opts: FormatOpts): string {
  */
 function appendEmoji(lines: string[], ctx: AccountCtx): void {
   const { bank, account, opts } = ctx;
-  lines.push('');
-  lines.push(
+  lines.push('',
     `💳 <b>${escapeHtml(bank.bankName)}</b>` +
     ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`
   );

@@ -223,6 +223,16 @@ describe('TelegramCommandHandler', () => {
     expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('success'));
   });
 
+  it('/status with lastTime but no lastResult does not show "(null)"', async () => {
+    mockMediator.getLastRunTime.mockReturnValue(new Date());
+    mockMediator.getLastResult.mockReturnValue(null);
+    await handler.handle('/status');
+
+    const msg = mockNotifier.sendMessage.mock.calls.at(-1)?.[0] as string;
+    expect(msg).toContain('ago');
+    expect(msg).not.toContain('null');
+  });
+
   it('ignores unknown commands', async () => {
     await handler.handle('/unknown');
     expect(mockMediator.requestImport).not.toHaveBeenCalled();

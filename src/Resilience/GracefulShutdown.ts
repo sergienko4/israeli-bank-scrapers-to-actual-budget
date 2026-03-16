@@ -13,7 +13,7 @@ export interface IShutdownHandler {
 /** Listens for SIGTERM/SIGINT and runs registered cleanup callbacks before exit. */
 export class GracefulShutdownHandler implements IShutdownHandler {
   private shuttingDown = false;
-  private callbacks: Array<() => void | Promise<void>> = [];
+  private readonly callbacks: Array<() => void | Promise<void>> = [];
 
   /** Registers process signal handlers for SIGTERM and SIGINT. */
   constructor() {

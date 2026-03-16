@@ -22,7 +22,7 @@ interface ReconciliationTxn {
 
 /** Creates idempotent balance-adjustment transactions in Actual Budget. */
 export class ReconciliationService {
-  private api: typeof api;
+  private readonly api: typeof api;
 
   /**
    * Creates a ReconciliationService using the given Actual API instance.

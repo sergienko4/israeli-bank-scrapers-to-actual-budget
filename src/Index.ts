@@ -309,7 +309,7 @@ async function finalizeImport(): Promise<void> {
  */
 async function handleFatalError(error: unknown): Promise<never> {
   const formattedError = errorFormatter.format(error as Error);
-  logger.error('\n' + formattedError);
+  logger.error(`\n${formattedError}`);
   if (error instanceof Error) logger.error(`Stack trace: ${error.stack}`);
   await notificationService.sendError(formattedError);
   try { await api.shutdown(); } catch { /* ignore shutdown error */ }
@@ -339,5 +339,5 @@ async function main(): Promise<void> {
 
 // Run if executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  void main();
+  await main();
 }

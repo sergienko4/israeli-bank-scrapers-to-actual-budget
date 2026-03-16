@@ -16,7 +16,7 @@ export const REDACT_PATHS = [
  */
 export function baseOptions(): pino.LoggerOptions {
   return {
-    level: process.env['LOG_LEVEL'] ?? 'debug',
+    level: process.env.LOG_LEVEL ?? 'debug',
     redact: { paths: REDACT_PATHS, censor: '[REDACTED]' },
   };
 }
