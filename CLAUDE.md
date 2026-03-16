@@ -116,7 +116,7 @@ After creating every PR:
 ## CI/CD
 
 - `pr.yml`: build+audit, validate:ci, Docker build, Trivy, CodeQL, SonarCloud, License Compliance, markdownlint+lychee, E2E
-- `.husky/pre-commit`: 14-gate hook; gate 12 mirrors CI e2e.yml exactly
+- `.husky/pre-commit`: 14-gate hook; gate 12 runs mocked E2E (`test:e2e:mock`); CI `e2e.yml` also includes Dockerized import runs
 - `release-please.yml`: on push to main → release PR + test count badge
 - `release.yml`: on tag push `v*` → multi-arch build+push → SBOM → enriched notes
 - Ruleset: squash only, required checks: Build+Test, Container Scan, CodeQL Security Scan, Docs Quality, E2E Tests, SonarCloud Analysis, License Compliance
