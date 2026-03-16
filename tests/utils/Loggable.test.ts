@@ -47,7 +47,7 @@ describe('@Loggable decorator', () => {
     class AsyncSvc {
       @Loggable
       public async fetchData(): Promise<string> {
-        return Promise.resolve('data');
+        return 'data';
       }
     }
     const result = await new AsyncSvc().fetchData();
