@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.36.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.35.0...v1.36.0) (2026-03-17)
+
+
+### Added
+
+* add Semgrep + ai-commit-guard pre-commit gates (15 gates) ([#259](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/259)) ([6cb9984](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/6cb998438323657ffd7ba51c28f43799c8dda519))
+* blocking ai-commit-guard + 120s Ollama timeout ([#261](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/261)) ([992aea7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/992aea79745bce80877e88f76b4b23040f6b9d0a))
+
+
+### Fixed
+
+* **deps:** update critical dependencies ([#247](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/247)) ([a1b0218](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/a1b0218b67acaee65f5b8283c4d9c10482213ce6))
+* **deps:** upgrade vitest 4.0.18→4.1.0 with Babel decorator support ([#256](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/256)) ([ed62ce2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ed62ce27613fc900f9caf8db715e4ac42f66785c))
+
+
+### Refactored
+
+* fix all 65 SonarCloud code smells ([#258](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/258)) ([79be880](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/79be880ca25fc79edbb725e340f13c08bf115565))
+
 ## [1.35.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.34.0...v1.35.0) (2026-03-15)
 
 
