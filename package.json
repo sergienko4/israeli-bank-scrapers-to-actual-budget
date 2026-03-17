@@ -19,7 +19,7 @@
     "validate:ci": "npm run type-check && npm run test:unit && npm run lint",
     "validate:all": "npm run type-check && npm run test:unit && npm run test:e2e:mock && npm run lint && npm run lint:docs && npm run lint:config-structure",
     "lint": "eslint src/",
-    "lint:biome": "biome lint src/",
+    "lint:biome": "npx biome lint src/",
     "lint:docs": "markdownlint-cli2 --config config/markdownlint/.markdownlint.jsonc \"README.md\" \".github/**/*.md\"",
     "lint:config-structure": "node config/check-structure.mjs",
     "lint:licenses": "node config/check-licenses.mjs",

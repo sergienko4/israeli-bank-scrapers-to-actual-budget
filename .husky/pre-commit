@@ -7,71 +7,94 @@ echo ""
 echo "🛑 MANDATORY QUALITY GATE INITIATED 🛑"
 echo "==========================================="
 
-# ── 1. Type Safety ──────────────────────────────────────────────
-echo ""
-echo "🔍 [1/15] Type-checking TypeScript..."
-npm run type-check || exit 1
+# ── Temp directory for parallel gate output ───────────────────────
+GATE_DIR=$(mktemp -d)
+trap 'rm -rf "$GATE_DIR"' EXIT
 
-# ── 2. Dependency Audit ─────────────────────────────────────────
-echo ""
-echo "🔒 [2/15] Auditing dependencies..."
-npm audit --audit-level=moderate || exit 1
+# run_gate <id> <label> <command...>
+# Runs a gate in the background, captures output and exit code.
+run_gate() {
+  _id="$1"; _label="$2"; shift 2
+  (
+    "$@" > "$GATE_DIR/${_id}.log" 2>&1
+    echo $? > "$GATE_DIR/${_id}.exit"
+  ) &
+}
 
-# ── 3. TypeScript Build ──────────────────────────────────────────
-echo ""
-echo "🏗️  [3/15] Compiling TypeScript..."
-npm run build || exit 1
+# wait_gates <id1> <id2> ...
+# Waits for all listed gates, prints results, exits on first failure.
+wait_gates() {
+  wait
+  _failed=""
+  for _id in "$@"; do
+    _exit_code=$(cat "$GATE_DIR/${_id}.exit" 2>/dev/null || echo 1)
+    if [ "$_exit_code" = "0" ]; then
+      echo "  ✅ $_id"
+    else
+      echo "  ❌ $_id (exit $_exit_code)"
+      _failed="${_failed} ${_id}"
+    fi
+  done
+  if [ -n "$_failed" ]; then
+    echo ""
+    echo "❌ FAILED GATES:${_failed}"
+    echo ""
+    for _id in $_failed; do
+      echo "── Output of $_id ──"
+      cat "$GATE_DIR/${_id}.log" 2>/dev/null
+      echo ""
+    done
+    exit 1
+  fi
+}
 
-# ── 4. TypeDoc API Docs ──────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════
+# PHASE 1: Independent gates (no dependencies — all parallel)
+# ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "📚 [4/15] Generating TypeDoc API docs..."
-npm run docs || exit 1
+echo "⚡ Phase 1/3: Running 9 independent gates in parallel..."
+echo ""
 
-# ── 5. Unit Tests + Coverage ────────────────────────────────────
-echo ""
-echo "🧪 [5/15] Running unit tests + coverage..."
-npm run test:unit || exit 1
+run_gate "1-typecheck"    "Type-checking TypeScript"       npm run type-check
+run_gate "2-audit"        "Auditing dependencies"          npm audit --audit-level=moderate
+run_gate "3-build"        "Compiling TypeScript"           npm run build
+run_gate "6-eslint"       "Running ESLint"                 npm run lint
+run_gate "6b-biome"       "Running Biome lint"             npm run lint:biome
+run_gate "7-semgrep"      "Running Semgrep security scan"  docker run --rm -v "$(pwd):/data" --workdir /data semgrep/semgrep@sha256:9fb6f44dc162b1e0aada85f072a95141844c61e3bfcedf40b8a46fecf208e986 semgrep scan --config auto --error src/
+run_gate "8-markdownlint" "Linting markdown docs"          npm run lint:docs
+run_gate "9-configcheck"  "Checking config structure"      npm run lint:config-structure
+run_gate "11-lychee"      "Checking markdown links"        docker run --rm -v "$(pwd):/data" --workdir /data -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" lycheeverse/lychee --exclude-path config/lychee/ignore --exclude-path CHANGELOG.md --no-progress '*.md' 'docs/**/*.md' '.github/**/*.md'
 
-# ── 6. ESLint (full src) ────────────────────────────────────────
-echo ""
-echo "🧹 [6/15] Running ESLint..."
-npm run lint || exit 1
+wait_gates \
+  "1-typecheck" "2-audit" "3-build" \
+  "6-eslint" "6b-biome" "7-semgrep" \
+  "8-markdownlint" "9-configcheck" "11-lychee"
 
-# ── 6b. Biome (catches what ESLint misses) ─────────────────────
 echo ""
-echo "🔬 [6b/15] Running Biome lint..."
-npm run lint:biome || exit 1
+echo "✅ Phase 1 complete (9 gates passed)"
 
-# ── 7. Semgrep Security Scan (Docker) ────────────────────────────
+# ═══════════════════════════════════════════════════════════════════
+# PHASE 2: Gates that need build output (parallel)
+# ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "🛡️  [7/15] Running Semgrep security scan..."
-docker run --rm \
-  -v "$(pwd):/data" \
-  --workdir /data \
-  semgrep/semgrep@sha256:9fb6f44dc162b1e0aada85f072a95141844c61e3bfcedf40b8a46fecf208e986 \
-  semgrep scan \
-  --config auto \
-  --error \
-  src/ || exit 1
+echo "⚡ Phase 2/3: Running 4 build-dependent gates in parallel..."
+echo ""
 
-# ── 8. Markdown Lint ────────────────────────────────────────────
-echo ""
-echo "📝 [8/15] Linting markdown docs..."
-npm run lint:docs || exit 1
+run_gate "4-typedoc"      "Generating TypeDoc API docs"    npm run docs
+run_gate "5-unittest"     "Running unit tests + coverage"  npm run test:unit
+run_gate "13-e2e-mock"    "Running mocked E2E tests"       npm run test:e2e:mock
 
-# ── 9. Config Structure ─────────────────────────────────────────
-echo ""
-echo "⚙️  [9/15] Checking config structure..."
-npm run lint:config-structure || exit 1
-
-# ── 10. Docker Build + Browser Smoke Test ──────────────────────────
-echo ""
-echo "🐳 [10/15] Building Docker image..."
+# Docker build runs in foreground — Phase 3 needs the image variable
+echo "  🐳 Building Docker image..."
 LOCAL_IMAGE="israeli-bank-importer:pre-commit"
-docker build -t "$LOCAL_IMAGE" . || exit 1
+docker build -t "$LOCAL_IMAGE" . > "$GATE_DIR/10-docker-build.log" 2>&1
+if [ $? -ne 0 ]; then
+  echo "  ❌ 10-docker-build"
+  cat "$GATE_DIR/10-docker-build.log"
+  exit 1
+fi
 
-echo ""
-echo "🌐 [10/15] Browser smoke test (verifying scraper can launch browser)..."
+echo "  🌐 Browser smoke test..."
 docker run --rm --cap-add SYS_ADMIN "$LOCAL_IMAGE" \
   node --input-type=module -e "
     import { createScraper } from '@sergienko4/israeli-bank-scrapers';
@@ -79,47 +102,33 @@ docker run --rm --cap-add SYS_ADMIN "$LOCAL_IMAGE" \
     await s.initialize();
     await s.terminate(true);
     console.log('Browser smoke test passed');
-  " || exit 1
+  " > "$GATE_DIR/10-docker-smoke.log" 2>&1
+if [ $? -ne 0 ]; then
+  echo "  ❌ 10-docker-smoke"
+  cat "$GATE_DIR/10-docker-smoke.log"
+  exit 1
+fi
+echo "  ✅ 10-docker"
 
-# ── 11. Lychee Link Check (via Docker) ──────────────────────────
-echo ""
-echo "🔗 [11/15] Checking markdown links (lychee)..."
-docker run --rm \
-  -v "$(pwd):/data" \
-  --workdir /data \
-  -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" \
-  lycheeverse/lychee \
-  --exclude-path config/lychee/ignore \
-  --exclude-path CHANGELOG.md \
-  --no-progress \
-  '*.md' 'docs/**/*.md' '.github/**/*.md' || exit 1
+wait_gates "4-typedoc" "5-unittest" "13-e2e-mock"
 
-# ── 12. Trivy Container Scan ────────────────────────────────────
 echo ""
-echo "🛡️  [12/15] Scanning Docker image for vulnerabilities + secrets (Trivy)..."
-docker run --rm \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v "$(pwd)/config/trivy:/trivy-config" \
-  aquasec/trivy:latest \
-  image \
-  --exit-code 1 \
-  --severity CRITICAL,HIGH \
-  --ignore-unfixed \
-  --scanners vuln,secret \
-  --secret-config /trivy-config/secret.yaml \
-  --pkg-types os,library \
-  --skip-dirs 'root/.npm' \
-  "$LOCAL_IMAGE" || exit 1
+echo "✅ Phase 2 complete (4 gates passed)"
 
-# ── 13. Mocked E2E Tests ────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════
+# PHASE 3: Gates that need Docker image (parallel)
+# ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "🎭 [13/15] Running mocked E2E tests..."
-npm run test:e2e:mock || exit 1
+echo "⚡ Phase 3/3: Running 2 final gates in parallel..."
+echo ""
 
-# ── 14. Real E2E Tests (Telegram) ───────────────────────────────
+run_gate "12-trivy" "Scanning Docker image (Trivy)" docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$(pwd)/config/trivy:/trivy-config" aquasec/trivy:latest image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln,secret --secret-config /trivy-config/secret.yaml --pkg-types os,library --skip-dirs 'root/.npm' "$LOCAL_IMAGE"
+run_gate "14-e2e-telegram" "Running real E2E tests (Telegram)" npm run test:e2e
+
+wait_gates "12-trivy" "14-e2e-telegram"
+
 echo ""
-echo "🌐 [14/15] Running real E2E tests (Telegram)..."
-npm run test:e2e || exit 1
+echo "✅ Phase 3 complete (2 gates passed)"
 
 # ────────────────────────────────────────────────────────────────
 echo ""
