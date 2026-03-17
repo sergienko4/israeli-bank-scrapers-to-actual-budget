@@ -36,14 +36,14 @@ jobs:
           context: .
           push: false
           load: true
-          tags: israeli-bank-importer:ci
+          tags: israeli-bank-importer:e2e
           build-args: |
             SKIP_BROWSER_FETCH=true
             APT_CACHE_BUST=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Save Docker image
-        run: docker save israeli-bank-importer:ci | gzip > /tmp/image.tar.gz
+        run: docker save israeli-bank-importer:e2e | gzip > /tmp/image.tar.gz
       - uses: actions/upload-artifact@v7
         with:
           name: docker-image
@@ -121,7 +121,7 @@ jobs:
         run: gunzip -c /tmp/image.tar.gz | docker load
       - uses: ./.github/actions/security/trivy-scan
         with:
-          image-ref: israeli-bank-importer:ci
+          image-ref: israeli-bank-importer:e2e
 
   # ─── LICENSE COMPLIANCE ────────────────────────────
   licenses:
@@ -190,7 +190,7 @@ jobs:
 
       - name: Browser smoke test (verify scraper can launch browser)
         run: |
-          docker run --rm --cap-add SYS_ADMIN israeli-bank-importer:ci \
+          docker run --rm --cap-add SYS_ADMIN israeli-bank-importer:e2e \
             node --input-type=module -e "
               import { createScraper } from '@sergienko4/israeli-bank-scrapers';
               const s = createScraper({ companyId: 'hapoalim', startDate: new Date() });
@@ -208,7 +208,7 @@ jobs:
             -v ${{ github.workspace }}/tests/e2e/fixtures/e2e-data:/app/data \
             -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
             -e E2E_LOCAL_BUDGET_ID=${{ steps.budget.outputs.id }} \
-            israeli-bank-importer:ci \
+            israeli-bank-importer:e2e \
             node dist/Index.js
           EXIT_CODE=$?
           echo "Run #1 exit code: $EXIT_CODE"
@@ -226,7 +226,7 @@ jobs:
             -v ${{ github.workspace }}/tests/e2e/fixtures/e2e-data:/app/data \
             -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
             -e E2E_LOCAL_BUDGET_ID=${{ steps.budget.outputs.id }} \
-            israeli-bank-importer:ci \
+            israeli-bank-importer:e2e \
             node dist/Index.js
           EXIT_CODE=$?
           echo "Run #2 exit code: $EXIT_CODE"
