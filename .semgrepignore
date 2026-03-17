@@ -1,0 +1,14 @@
+node_modules/
+dist/
+tests/
+coverage/
+cache/
+chrome-data/
+data/
+data-local-test/
+docs/
+config/
+scripts/
+tasks/
+*.json
+*.md
