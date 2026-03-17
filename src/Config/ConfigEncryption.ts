@@ -4,6 +4,7 @@
  */
 
 import { randomBytes, pbkdf2Sync, createCipheriv, createDecipheriv } from 'node:crypto';
+import { errorMessage } from '../Utils/Index.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
@@ -11,6 +12,7 @@ const IV_LENGTH = 16;
 const SALT_LENGTH = 32;
 const PBKDF2_ITERATIONS = 100_000;
 const PBKDF2_DIGEST = 'sha512';
+const AUTH_TAG_LENGTH = 16;
 
 export interface EncryptedConfig {
   encrypted: true;
@@ -76,7 +78,7 @@ export function encryptConfig(plainJson: string, password: string): string {
 function encryptBuffer(
   plaintext: string, key: Buffer, iv: Buffer
 ): { ciphertext: Buffer; tag: Buffer } {
-  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const cipher = createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   return { ciphertext, tag: cipher.getAuthTag() };
 }
@@ -115,14 +117,17 @@ export function decryptConfig(encryptedJson: string, password: string): string {
  * @returns The decrypted UTF-8 string.
  */
 function decryptBuffer(data: EncryptedConfig, key: Buffer): string {
-  const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(data.iv, 'base64'));
+  const iv = Buffer.from(data.iv, 'base64');
+  const decipher = createDecipheriv(
+    ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH }
+  );
   decipher.setAuthTag(Buffer.from(data.tag, 'base64'));
   try {
     return Buffer.concat([
       decipher.update(Buffer.from(data.ciphertext, 'base64')),
       decipher.final()
     ]).toString('utf8');
-  } catch {
-    throw new Error('Decryption failed: invalid password or corrupted data');
+  } catch (error: unknown) {
+    throw new Error(`Decryption failed: ${errorMessage(error)}`, { cause: error });
   }
 }
