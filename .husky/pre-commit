@@ -138,7 +138,11 @@ echo ""
 echo "⚡ Phase 4/4: Running AI commit guard..."
 echo ""
 
-AI_PROVIDER=ollama AI_MODEL=qwen2.5-coder:14b npx ai-commit-guard
+if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+  echo "  ❌ 15-ai-guard: Ollama is not running (start it with: ollama serve)"
+  exit 1
+fi
+AI_PROVIDER=ollama AI_MODEL=qwen2.5-coder:14b AI_GUARD_TIMEOUT=120000 npx ai-commit-guard
 if [ $? -ne 0 ]; then
   echo "  ❌ 15-ai-guard"
   exit 1
