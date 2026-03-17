@@ -138,7 +138,7 @@ echo ""
 echo "⚡ Phase 4/4: Running AI commit guard..."
 echo ""
 
-if ! curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
+if ! curl -s --connect-timeout 2 --max-time 5 http://localhost:11434/api/tags > /dev/null 2>&1; then
   echo "  ❌ 15-ai-guard: Ollama is not running (start it with: ollama serve)"
   exit 1
 fi
