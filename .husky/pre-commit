@@ -122,7 +122,7 @@ echo ""
 echo "⚡ Phase 3/3: Running 2 final gates in parallel..."
 echo ""
 
-run_gate "12-trivy" "Scanning Docker image (Trivy)" docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$(pwd)/config/trivy:/trivy-config" aquasec/trivy:latest image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln,secret --secret-config /trivy-config/secret.yaml --pkg-types os,library --skip-dirs 'root/.npm' "$LOCAL_IMAGE"
+run_gate "12-trivy" "Scanning Docker image (Trivy)" docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$(pwd)/config/trivy:/trivy-config" aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln,secret --secret-config /trivy-config/secret.yaml --pkg-types os,library --skip-dirs 'root/.npm' "$LOCAL_IMAGE"
 run_gate "14-e2e-telegram" "Running real E2E tests (Telegram)" npm run test:e2e
 
 wait_gates "12-trivy" "14-e2e-telegram"

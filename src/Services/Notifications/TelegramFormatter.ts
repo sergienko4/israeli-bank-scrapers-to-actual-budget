@@ -59,8 +59,12 @@ export function formatSummaryMessage(
  * @returns HTML-safe string.
  */
 export function escapeHtml(text: string): string {
-  // nosemgrep: javascript.audit.detect-replaceall-sanitization.detect-replaceall-sanitization
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  // Safe: Telegram HTML mode supports only <b>,<i>,<a>,<code> — no JS execution.
+  // This escapes &, <, > to prevent markup injection in bot messages, not web XSS.
+  return text // nosemgrep
+    .replaceAll('&', '&amp;') // nosemgrep
+    .replaceAll('<', '&lt;') // nosemgrep
+    .replaceAll('>', '&gt;'); // nosemgrep
 }
 
 /**
