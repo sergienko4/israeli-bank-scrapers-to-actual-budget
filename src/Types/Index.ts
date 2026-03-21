@@ -2,8 +2,14 @@
  * Type definitions for the Israeli Bank Importer
  */
 
+// Result Pattern
+import type { Procedure as ProcedureType } from './Procedure.js';
+export type { IProcedureFailure, IProcedureSuccess, Procedure } from './Procedure.js';
+export { fail, fromPromise, isFail,isSuccess, succeed } from './ProcedureHelpers.js';
+
+
 /** Connection and budget settings for the Actual Budget server. */
-export interface ActualConfig {
+export interface IActualConfig {
   init: {
     /** Local directory for cached budget data. */
     dataDir: string;
@@ -21,18 +27,18 @@ export interface ActualConfig {
 }
 
 /** Maps a scraped bank account to an Actual Budget account. */
-export interface BankTarget {
+export interface IBankTarget {
   actualAccountId: string;
   accountName?: string;      // optional friendly label shown in logs and notifications
   reconcile: boolean;
   accounts: string[] | 'all';
 }
 
-export interface BankConfig {
+export interface IBankConfig {
   // Common fields
   startDate?: string;   // Fixed date: "2026-02-15"
   daysBack?: number;    // Relative: 14 = last 14 days (overrides startDate)
-  targets?: BankTarget[];
+  targets?: IBankTarget[];
 
   // Bank-specific credentials (different per bank)
   // Discount
@@ -71,7 +77,7 @@ export interface BankConfig {
   [key: string]: unknown; // Allow other bank-specific fields
 }
 
-export interface BankTransaction {
+export interface IBankTransaction {
   identifier?: string | number;
   chargedAmount?: number;
   originalAmount?: number;
@@ -83,7 +89,7 @@ export interface BankTransaction {
 export type MessageFormat = 'compact' | 'ledger' | 'emoji' | 'summary';
 export type ShowTransactions = 'new' | 'all' | 'none';
 
-export interface TelegramConfig {
+export interface ITelegramConfig {
   botToken: string;
   chatId: string;
   messageFormat?: MessageFormat;       // Default: 'summary'
@@ -93,21 +99,21 @@ export interface TelegramConfig {
 
 export type WebhookFormat = 'slack' | 'discord' | 'plain';
 
-export interface WebhookConfig {
+export interface IWebhookConfig {
   url: string;
   format?: WebhookFormat;  // Default: 'plain'
 }
 
-export interface NotificationConfig {
+export interface INotificationConfig {
   enabled: boolean;
   maxTransactions?: number;  // Default: 5. Max transactions per account in notifications (1-25)
-  telegram?: TelegramConfig;
-  webhook?: WebhookConfig;
+  telegram?: ITelegramConfig;
+  webhook?: IWebhookConfig;
 }
 
 export type LogFormat = 'words' | 'json' | 'table' | 'phone';
 
-export interface LogConfig {
+export interface ILogConfig {
   format?: LogFormat;          // Default: 'words'
   maxBufferSize?: number;      // Deprecated: kept for backward compat, no longer functional
   logDir?: string;             // Log file directory. Default: './logs'
@@ -115,94 +121,94 @@ export interface LogConfig {
 
 export type CategorizationMode = 'history' | 'translate' | 'none';
 
-export interface TranslationRule {
+export interface ITranslationRule {
   fromPayee: string;   // Hebrew text to find in bank payee name
   toPayee: string;     // English name to use in Actual Budget
 }
 
-export interface CategorizationConfig {
+export interface ICategorizationConfig {
   mode?: CategorizationMode;        // Default: 'none'
-  translations?: TranslationRule[]; // Only used when mode='translate'
+  translations?: ITranslationRule[]; // Only used when mode='translate'
 }
 
 /** Result of category resolution — either a category ID or a payee translation */
-export interface ResolvedCategory {
+export interface IResolvedCategory {
   categoryId?: string;     // For history mode
   payeeName?: string;      // For translate mode (translated name)
   importedPayee?: string;  // Original name (preserved for reference)
 }
 
 /** Rule that triggers a Telegram alert when spending exceeds a threshold. */
-export interface SpendingWatchRule {
+export interface ISpendingWatchRule {
   alertFromAmount: number;     // Trigger if total spending > this (currency units)
   numOfDayToCount: number;     // Time window in days (1 = today only)
   watchPayees?: string[];      // Filter payees (substring match). Missing = all payees
 }
 
 /** Optional SOCKS5/HTTP proxy for Chromium scraping (useful in restricted networks). */
-export interface ProxyConfig {
+export interface IProxyConfig {
   server: string;  // socks5://host:port or http://host:port
 }
 
 /** Root configuration object — represents the full contents of `config.json`. */
-export interface ImporterConfig {
-  actual: ActualConfig;
-  banks: Record<string, BankConfig>;
-  notifications?: NotificationConfig;
-  logConfig?: LogConfig;
-  categorization?: CategorizationConfig;
-  spendingWatch?: SpendingWatchRule[];  // Spending watch rules (empty/missing = disabled)
+export interface IImporterConfig {
+  actual: IActualConfig;
+  banks: Record<string, IBankConfig>;
+  notifications?: INotificationConfig;
+  logConfig?: ILogConfig;
+  categorization?: ICategorizationConfig;
+  spendingWatch?: ISpendingWatchRule[];  // Spending watch rules (empty/missing = disabled)
   delayBetweenBanks?: number;  // Milliseconds to wait between bank imports (default: 0)
-  proxy?: ProxyConfig;   // Optional proxy for Chromium (socks5/http)
+  proxy?: IProxyConfig;   // Optional proxy for Chromium (socks5/http)
 }
 
-export interface ResilienceConfig {
+export interface IResilienceConfig {
   scrapingTimeoutMs: number;
   maxRetryAttempts: number;
   initialBackoffMs: number;
 }
 
-export const DEFAULT_RESILIENCE_CONFIG: ResilienceConfig = {
+export const DEFAULT_RESILIENCE_CONFIG: IResilienceConfig = {
   scrapingTimeoutMs: 10 * 60 * 1000, // 10 minutes
   maxRetryAttempts: 3,
   initialBackoffMs: 1000 // 1 second
 };
 
-export interface TransactionRecord {
+export interface ITransactionRecord {
   date: string;
   description: string;
   amount: number;
 }
 
 /** Matches @actual-app/api's APIAccountEntity shape */
-export interface ActualAccount {
+export interface IActualAccount {
   id: string;
   name: string;
   offbudget?: boolean;
   closed?: boolean;
 }
 
-export interface TelegramMessageData {
+export interface ITelegramMessageData {
   chat: { id: number };
   text?: string;
   date: number;
 }
 
-export interface TelegramCallbackQuery {
+export interface ITelegramCallbackQuery {
   id: string;
   data?: string;
   message?: { chat: { id: number }; date: number };
 }
 
-export interface TelegramUpdate {
+export interface ITelegramUpdate {
   update_id: number;
-  message?: TelegramMessageData;
-  callback_query?: TelegramCallbackQuery;
+  message?: ITelegramMessageData;
+  callback_query?: ITelegramCallbackQuery;
 }
 
-export interface TelegramApiResponse {
+export interface ITelegramApiResponse {
   ok: boolean;
-  result?: TelegramUpdate[];
+  result?: ITelegramUpdate[];
 }
 
 // ─── Import queue / mediator types ───
@@ -211,7 +217,7 @@ export interface TelegramApiResponse {
 export type ImportSource = 'cron' | 'telegram' | 'api';
 
 /** Options passed to ImportMediator.requestImport(). */
-export interface ImportRequestOptions {
+export interface IImportRequestOptions {
   /** Who triggered this import. */
   readonly source: ImportSource;
   /** Optional list of bank names; undefined = all banks. */
@@ -221,7 +227,7 @@ export interface ImportRequestOptions {
 }
 
 /** A single queued import job. */
-export interface ImportJob {
+export interface IImportJob {
   /** Unique job identifier. */
   readonly id: string;
   /** Bank name (or comma-separated list / "all"). */
@@ -233,9 +239,9 @@ export interface ImportJob {
 }
 
 /** Result of a single import job. */
-export interface ImportJobResult {
+export interface IImportJobResult {
   /** The completed job. */
-  readonly job: ImportJob;
+  readonly job: IImportJob;
   /** Child process exit code (0 = success). */
   readonly exitCode: number;
   /** Duration in milliseconds. */
@@ -243,13 +249,13 @@ export interface ImportJobResult {
 }
 
 /** Aggregate result of a batch of import jobs. */
-export interface BatchResult {
+export interface IBatchResult {
   /** Unique batch identifier. */
   readonly batchId: string;
   /** Source that triggered this batch. */
   readonly source: ImportSource;
   /** Individual job results. */
-  readonly jobs: ImportJobResult[];
+  readonly jobs: IImportJobResult[];
   /** Total duration in milliseconds. */
   readonly totalDurationMs: number;
   /** Number of successful jobs. */
@@ -259,11 +265,11 @@ export interface BatchResult {
 }
 
 /** Callbacks for ImportQueue lifecycle events. */
-export interface QueueCallbacks<T> {
+export interface IQueueCallbacks<T, TResult = IImportJobResult> {
   /** Processes a single queued item. Returns the result. */
-  readonly process: (item: T) => Promise<unknown>;
+  readonly process: (item: T) => Promise<TResult>;
   /** Called after each item completes (success or failure). */
-  readonly onJobComplete: (item: T, result: unknown) => void;
+  readonly onJobComplete: (item: T, result: TResult | Error) => ProcedureType<{ status: string }>;
   /** Called when the queue drains completely. */
-  readonly onQueueEmpty: () => void;
+  readonly onQueueEmpty: () => ProcedureType<{ status: string }>;
 }

@@ -17,8 +17,10 @@ describe('AuditLogService', () => {
     if (existsSync(TEST_FILE)) unlinkSync(TEST_FILE);
   });
 
-  it('creates file on first record', () => {
-    service.record(fakeImportSummary());
+  it('creates file on first record and returns succeed', () => {
+    const result = service.record(fakeImportSummary());
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.status).toBe('recorded');
     expect(existsSync(TEST_FILE)).toBe(true);
   });
 
@@ -47,16 +49,21 @@ describe('AuditLogService', () => {
     expect(entries[4].totalTransactions).toBe(6); // newest
   });
 
-  it('getRecent returns last N entries', () => {
+  it('getRecent returns last N entries wrapped in Procedure', () => {
     for (let i = 0; i < 5; i++) service.record(fakeImportSummary({ totalTransactions: i }));
-    const recent = service.getRecent(2);
-    expect(recent).toHaveLength(2);
-    expect(recent[0].totalTransactions).toBe(3);
-    expect(recent[1].totalTransactions).toBe(4);
+    const result = service.getRecent(2);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].totalTransactions).toBe(3);
+      expect(result.data[1].totalTransactions).toBe(4);
+    }
   });
 
   it('getRecent returns empty array when no file', () => {
-    expect(service.getRecent(5)).toEqual([]);
+    const result = service.getRecent(5);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toEqual([]);
   });
 
   it('handles corrupted file gracefully', () => {
@@ -115,7 +122,9 @@ describe('AuditLogService', () => {
         { bankName: 'amex', startTime: 0, status: 'failure', error: 'Timeout', transactionsImported: 0, transactionsSkipped: 0, accounts: [] },
       ],
     }));
-    expect(service.getLastFailedBanks()).toEqual(['discount', 'amex']);
+    const result = service.getLastFailedBanks();
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toEqual(['discount', 'amex']);
   });
 
   it('getLastFailedBanks returns empty when all succeeded', () => {
@@ -124,11 +133,15 @@ describe('AuditLogService', () => {
         { bankName: 'discount', startTime: 0, status: 'success', transactionsImported: 3, transactionsSkipped: 0, accounts: [] },
       ],
     }));
-    expect(service.getLastFailedBanks()).toEqual([]);
+    const result = service.getLastFailedBanks();
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toEqual([]);
   });
 
   it('getLastFailedBanks returns empty when no entries', () => {
-    expect(service.getLastFailedBanks()).toEqual([]);
+    const result = service.getLastFailedBanks();
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toEqual([]);
   });
 
   // ─── getConsecutiveFailures ───
@@ -139,7 +152,9 @@ describe('AuditLogService', () => {
         banks: [{ bankName: 'discount', startTime: 0, status: 'failure', error: 'E', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }],
       }));
     }
-    expect(service.getConsecutiveFailures('discount')).toBe(3);
+    const result = service.getConsecutiveFailures('discount');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toBe(3);
   });
 
   it('getConsecutiveFailures stops at first success', () => {
@@ -155,24 +170,32 @@ describe('AuditLogService', () => {
     service.record(fakeImportSummary({
       banks: [{ bankName: 'discount', startTime: 0, status: 'failure', error: 'E', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }],
     }));
-    expect(service.getConsecutiveFailures('discount')).toBe(2);
+    const result = service.getConsecutiveFailures('discount');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toBe(2);
   });
 
   it('getConsecutiveFailures returns 0 when bank always succeeds', () => {
     service.record(fakeImportSummary({
       banks: [{ bankName: 'discount', startTime: 0, status: 'success', transactionsImported: 5, transactionsSkipped: 0, accounts: [] }],
     }));
-    expect(service.getConsecutiveFailures('discount')).toBe(0);
+    const result = service.getConsecutiveFailures('discount');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toBe(0);
   });
 
   it('getConsecutiveFailures returns 0 for unknown bank', () => {
     service.record(fakeImportSummary({
       banks: [{ bankName: 'discount', startTime: 0, status: 'failure', error: 'E', transactionsImported: 0, transactionsSkipped: 0, accounts: [] }],
     }));
-    expect(service.getConsecutiveFailures('unknownBank')).toBe(0);
+    const result = service.getConsecutiveFailures('unknownBank');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toBe(0);
   });
 
   it('getConsecutiveFailures handles empty log', () => {
-    expect(service.getConsecutiveFailures('discount')).toBe(0);
+    const result = service.getConsecutiveFailures('discount');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toBe(0);
   });
 });

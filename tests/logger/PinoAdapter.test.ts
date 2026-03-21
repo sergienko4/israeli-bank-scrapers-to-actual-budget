@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PinoAdapter } from '../../src/Logger/PinoAdapter.js';
+import PinoAdapter from '../../src/Logger/PinoAdapter.js';
 
 function makeMockPino() {
   return {

@@ -1,7 +1,7 @@
 /**
  * Currency conversion utilities
  */
-import { logger } from './UtilLogger.js';
+import logger from './UtilLogger.js';
 
 /**
  * Convert currency units to cents using integer arithmetic for accuracy.

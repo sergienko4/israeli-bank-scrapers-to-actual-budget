@@ -4,10 +4,11 @@
  */
 import pino from 'pino';
 import pinoPretty from 'pino-pretty';
+
 import type { LogFormat } from '../Types/Index.js';
 import { baseOptions } from './LoggerOptions.js';
 
-const transportFactories: Record<LogFormat, () => pino.Logger> = {
+const TRANSPORT_FACTORIES: Record<LogFormat, () => pino.Logger> = {
   words: createWordsLogger,
   json: createJsonLogger,
   table: createTableLogger,
@@ -19,8 +20,9 @@ const transportFactories: Record<LogFormat, () => pino.Logger> = {
  * @param format - The desired log format (words, json, table, or phone).
  * @returns A configured pino.Logger instance.
  */
-export function createPinoInstance(format: LogFormat): pino.Logger {
-  const factory = transportFactories[format] ?? transportFactories.words;
+export default function createPinoInstance(format: LogFormat): pino.Logger {
+  const factory = (TRANSPORT_FACTORIES as Partial<Record<LogFormat, () => pino.Logger>>)[format]
+    ?? TRANSPORT_FACTORIES.words;
   return factory();
 }
 
@@ -29,7 +31,9 @@ export function createPinoInstance(format: LogFormat): pino.Logger {
  * @returns A pino logger with pino-pretty colorized output.
  */
 function createWordsLogger(): pino.Logger {
-  return pino(baseOptions(), pinoPretty({ colorize: true }));
+  const options = baseOptions();
+  const prettyStream = pinoPretty({ colorize: true });
+  return pino(options, prettyStream);
 }
 
 /**
@@ -37,7 +41,8 @@ function createWordsLogger(): pino.Logger {
  * @returns A pino logger writing plain NDJSON to stdout.
  */
 function createJsonLogger(): pino.Logger {
-  return pino(baseOptions());
+  const options = baseOptions();
+  return pino(options);
 }
 
 /**
@@ -45,7 +50,9 @@ function createJsonLogger(): pino.Logger {
  * @returns A pino logger with pino-pretty table formatting.
  */
 function createTableLogger(): pino.Logger {
-  return pino(baseOptions(), pinoPretty({ colorize: false, ignore: 'pid,hostname' }));
+  const options = baseOptions();
+  const prettyStream = pinoPretty({ colorize: false, ignore: 'pid,hostname' });
+  return pino(options, prettyStream);
 }
 
 /**
@@ -53,9 +60,11 @@ function createTableLogger(): pino.Logger {
  * @returns A pino logger stripped to message-only output.
  */
 function createPhoneLogger(): pino.Logger {
-  return pino(baseOptions(), pinoPretty({
+  const options = baseOptions();
+  const prettyStream = pinoPretty({
     messageFormat: '{msg}',
     ignore: 'pid,hostname,time,level',
     colorize: false,
-  }));
+  });
+  return pino(options, prettyStream);
 }

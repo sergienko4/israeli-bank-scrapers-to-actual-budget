@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GracefulShutdownHandler } from '../../src/Resilience/GracefulShutdown.js';
 import * as LoggerModule from '../../src/Logger/Index.js';
+import { succeed } from '../../src/Types/ProcedureHelpers.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -54,14 +55,16 @@ describe('GracefulShutdownHandler', () => {
 
   it('executes registered callbacks on shutdown', async () => {
     const handler = new GracefulShutdownHandler();
-    const cb1 = vi.fn();
-    const cb2 = vi.fn();
+    const cb1 = vi.fn().mockReturnValue(succeed({ status: 'ok' }));
+    const cb2 = vi.fn().mockReturnValue(succeed({ status: 'ok' }));
     handler.onShutdown(cb1);
     handler.onShutdown(cb2);
 
     process.emit('SIGTERM');
-    await vi.waitFor(() => expect(cb1).toHaveBeenCalledTimes(1));
-    expect(cb2).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => {
+      expect(cb1).toHaveBeenCalledTimes(1);
+      expect(cb2).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('executes async callbacks on shutdown', async () => {

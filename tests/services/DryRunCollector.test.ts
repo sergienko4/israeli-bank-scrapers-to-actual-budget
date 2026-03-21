@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { DryRunCollector, AccountPreview } from '../../src/Services/DryRunCollector.js';
-import { BankTransaction } from '../../src/Types/Index.js';
+import { DryRunCollector, IAccountPreview } from '../../src/Services/DryRunCollector.js';
+import { IBankTransaction } from '../../src/Types/Index.js';
 
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 
-function makeTxns(count: number): BankTransaction[] {
+function makeTxns(count: number): IBankTransaction[] {
   return Array.from({ length: count }, (_, i) => ({
     date: `2026-02-${String(i + 1).padStart(2, '0')}`,
     chargedAmount: -(100 + i) * 10,
@@ -12,7 +12,7 @@ function makeTxns(count: number): BankTransaction[] {
   }));
 }
 
-function makePreview(overrides: Partial<AccountPreview> = {}): AccountPreview {
+function makePreview(overrides: Partial<IAccountPreview> = {}): IAccountPreview {
   return {
     bankName: 'discount', accountNumber: '123456',
     balance: 5000, currency: 'ILS',
@@ -55,7 +55,7 @@ describe('DryRunCollector', () => {
     });
 
     it('computes date range from transactions', () => {
-      const txns: BankTransaction[] = [
+      const txns: IBankTransaction[] = [
         { date: '2026-02-10', chargedAmount: -100, description: 'A' },
         { date: '2026-02-05', chargedAmount: -50, description: 'B' },
         { date: '2026-02-20', chargedAmount: -75, description: 'C' },
@@ -165,7 +165,7 @@ describe('DryRunCollector', () => {
 
   describe('date range edge cases', () => {
     it('handles transactions with Date objects', () => {
-      const txns: BankTransaction[] = [
+      const txns: IBankTransaction[] = [
         { date: new Date('2026-02-10'), chargedAmount: -100 },
         { date: new Date('2026-02-15'), chargedAmount: -50 },
       ];
@@ -197,7 +197,7 @@ describe('DryRunCollector', () => {
 
   describe('parseSample fallbacks', () => {
     it('uses memo when description is missing', () => {
-      const txns: BankTransaction[] = [{ date: '2026-02-01', memo: 'Memo payee' }];
+      const txns: IBankTransaction[] = [{ date: '2026-02-01', memo: 'Memo payee' }];
       const p = DryRunCollector.buildPreview(
         { bankName: 'leumi', accountNumber: '1', balance: 0, currency: 'ILS', txns }
       );
@@ -205,7 +205,7 @@ describe('DryRunCollector', () => {
     });
 
     it('uses empty string when neither description nor memo', () => {
-      const txns: BankTransaction[] = [{ date: '2026-02-01' }];
+      const txns: IBankTransaction[] = [{ date: '2026-02-01' }];
       const p = DryRunCollector.buildPreview(
         { bankName: 'leumi', accountNumber: '1', balance: 0, currency: 'ILS', txns }
       );
@@ -213,7 +213,7 @@ describe('DryRunCollector', () => {
     });
 
     it('uses 0 when chargedAmount is missing', () => {
-      const txns: BankTransaction[] = [{ date: '2026-02-01', description: 'Fee' }];
+      const txns: IBankTransaction[] = [{ date: '2026-02-01', description: 'Fee' }];
       const p = DryRunCollector.buildPreview(
         { bankName: 'leumi', accountNumber: '1', balance: 0, currency: 'ILS', txns }
       );

@@ -1,5 +1,5 @@
 /** Thrown when a bank scraping attempt fails. */
-export class BankScrapingError extends Error {
+export default class BankScrapingError extends Error {
   /**
    * Creates a BankScrapingError.
    * @param bankName - Name of the bank that failed to scrape.

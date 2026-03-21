@@ -3,22 +3,24 @@
  * Uses its own pino instance (no pino-pretty) so files are always parseable.
  */
 import pino from 'pino';
+
 import type { ILogger, LogContext } from './ILogger.js';
-import { LogRotatingStream } from './LogRotatingStream.js';
 import { baseOptions } from './LoggerOptions.js';
+import LogRotatingStream from './LogRotatingStream.js';
 
 const EMPTY: LogContext = {};
 
 /** ILogger implementation that writes NDJSON log entries to a rotating file. */
-export class FileLogger implements ILogger {
-  private readonly pinoLogger: pino.Logger;
+export default class FileLogger implements ILogger {
+  private readonly _pinoLogger: pino.Logger;
 
   /**
    * Creates a FileLogger writing to the given directory.
    * @param logDir - Absolute path to the directory where log files are written.
    */
   constructor(logDir: string) {
-    this.pinoLogger = pino(baseOptions(), new LogRotatingStream(logDir));
+    const options = baseOptions();
+    this._pinoLogger = pino(options, new LogRotatingStream(logDir));
   }
 
   /**
@@ -26,8 +28,8 @@ export class FileLogger implements ILogger {
    * @param message - The message text.
    * @param context - Optional structured key-value context.
    */
-  debug(message: string, context?: LogContext): void {
-    this.pinoLogger.debug(context ?? EMPTY, message);
+  public debug(message: string, context?: LogContext): void {
+    this._pinoLogger.debug(context ?? EMPTY, message);
   }
 
   /**
@@ -35,8 +37,8 @@ export class FileLogger implements ILogger {
    * @param message - The message text.
    * @param context - Optional structured key-value context.
    */
-  info(message: string, context?: LogContext): void {
-    this.pinoLogger.info(context ?? EMPTY, message);
+  public info(message: string, context?: LogContext): void {
+    this._pinoLogger.info(context ?? EMPTY, message);
   }
 
   /**
@@ -44,8 +46,8 @@ export class FileLogger implements ILogger {
    * @param message - The message text.
    * @param context - Optional structured key-value context.
    */
-  warn(message: string, context?: LogContext): void {
-    this.pinoLogger.warn(context ?? EMPTY, message);
+  public warn(message: string, context?: LogContext): void {
+    this._pinoLogger.warn(context ?? EMPTY, message);
   }
 
   /**
@@ -53,7 +55,7 @@ export class FileLogger implements ILogger {
    * @param message - The message text.
    * @param context - Optional structured key-value context.
    */
-  error(message: string, context?: LogContext): void {
-    this.pinoLogger.error(context ?? EMPTY, message);
+  public error(message: string, context?: LogContext): void {
+    this._pinoLogger.error(context ?? EMPTY, message);
   }
 }

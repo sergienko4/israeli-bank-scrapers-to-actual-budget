@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TelegramPoller } from '../../src/Services/TelegramPoller.js';
+import TelegramPoller from '../../src/Services/TelegramPoller.js';
 import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -363,7 +363,8 @@ describe('TelegramPoller', () => {
 
       await poller.start();
       fetchMock.mockRejectedValue(new Error('Network error'));
-      await expect(poller.stopAndFlush()).resolves.toBeUndefined();
+      const flushResult = await poller.stopAndFlush();
+      expect(flushResult.success).toBe(true);
     });
 
     it('is idempotent — calling twice does not throw', async () => {
@@ -385,7 +386,8 @@ describe('TelegramPoller', () => {
       await poller.start();
       fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
       await poller.stopAndFlush();
-      await expect(poller.stopAndFlush()).resolves.toBeUndefined();
+      const secondFlush = await poller.stopAndFlush();
+      expect(secondFlush.success).toBe(true);
     });
   });
 });

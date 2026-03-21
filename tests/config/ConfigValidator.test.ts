@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConfigValidator, ValidationResult, runValidateMode } from '../../src/Config/ConfigValidator.js';
-import { ImporterConfig } from '../../src/Types/Index.js';
+import { IImporterConfig } from '../../src/Types/Index.js';
 import * as fs from 'fs';
 import { fakeUuid } from '../helpers/factories.js';
 import { TEST_CREDENTIAL, TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
@@ -13,9 +13,9 @@ const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 /**
  * Creates a valid test config with optional overrides.
  * @param overrides - Fields to merge over the default config.
- * @returns A complete ImporterConfig for testing.
+ * @returns A complete IImporterConfig for testing.
  */
-function makeConfig(overrides: Record<string, unknown> = {}): ImporterConfig {
+function makeConfig(overrides: Record<string, unknown> = {}): IImporterConfig {
   return {
     actual: {
       init: { dataDir: './data', password: TEST_CREDENTIAL, serverURL: 'http://localhost:5006' },
@@ -28,7 +28,7 @@ function makeConfig(overrides: Record<string, unknown> = {}): ImporterConfig {
       },
     },
     ...overrides,
-  } as ImporterConfig;
+  } as IImporterConfig;
 }
 
 /**
@@ -95,7 +95,7 @@ function budgetNotFoundMocks(): object[] {
  * @param extra - Additional mock responses to chain after budget mocks.
  * @returns The vi.fn() fetch mock for further assertions.
  */
-function setupOnlineMocks(cfg: ImporterConfig, extra: object[] = []): ReturnType<typeof vi.fn> {
+function setupOnlineMocks(cfg: IImporterConfig, extra: object[] = []): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn()
     .mockResolvedValueOnce({ ok: true, status: 200 })
     .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0])
@@ -118,56 +118,56 @@ describe('ConfigValidator', () => {
 
   describe('actual.password', () => {
     it('passes when password set', () => {
-      const results = validator.validateOffline(makeConfig());
+      const results = ConfigValidator.validateOffline(makeConfig());
       expectCheck(results, 'actual.password', 'pass');
     });
 
     it('fails when password empty', () => {
       const cfg = makeConfig();
       cfg.actual.init.password = '';
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'actual.password', 'fail');
     });
   });
 
   describe('actual.syncId', () => {
     it('passes on valid UUID', () => {
-      const results = validator.validateOffline(makeConfig());
+      const results = ConfigValidator.validateOffline(makeConfig());
       expectCheck(results, 'actual.syncId', 'pass');
     });
 
     it('fails on invalid UUID', () => {
       const cfg = makeConfig();
       cfg.actual.budget.syncId = 'not-a-uuid';
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'actual.syncId', 'fail');
     });
 
     it('fails on empty syncId', () => {
       const cfg = makeConfig();
       cfg.actual.budget.syncId = '';
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'actual.syncId', 'fail');
     });
   });
 
   describe('actual.serverURL', () => {
     it('passes on http URL', () => {
-      const results = validator.validateOffline(makeConfig());
+      const results = ConfigValidator.validateOffline(makeConfig());
       expectCheck(results, 'actual.serverURL', 'pass');
     });
 
     it('passes on https URL', () => {
       const cfg = makeConfig();
       cfg.actual.init.serverURL = 'https://actual.example.com';
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'actual.serverURL', 'pass');
     });
 
     it('fails on non-http URL', () => {
       const cfg = makeConfig();
       cfg.actual.init.serverURL = 'ftp://bad';
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'actual.serverURL', 'fail');
     });
 
@@ -176,8 +176,8 @@ describe('ConfigValidator', () => {
       // when credentials.json has an 'actual' section
       const cfg = makeConfig();
       (cfg.actual.init as Record<string, unknown>).serverURL = undefined;
-      expect(() => validator.validateOffline(cfg)).not.toThrow();
-      const results = validator.validateOffline(cfg);
+      expect(() => ConfigValidator.validateOffline(cfg)).not.toThrow();
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'actual.serverURL', 'fail');
     });
   });
@@ -186,7 +186,7 @@ describe('ConfigValidator', () => {
 
   describe('bank name validation', () => {
     it('passes for known bank', () => {
-      const results = validator.validateOffline(makeConfig());
+      const results = ConfigValidator.validateOffline(makeConfig());
       expectCheck(results, 'bank.discount', 'pass');
     });
 
@@ -199,7 +199,7 @@ describe('ConfigValidator', () => {
           },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expect(fail(results).some(r => r.check === 'bank.oneZero')).toBe(false);
     });
 
@@ -212,7 +212,7 @@ describe('ConfigValidator', () => {
           },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'bank.unknownxyz', 'fail');
     });
 
@@ -225,7 +225,7 @@ describe('ConfigValidator', () => {
           },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       const failResult = fail(results).find(r => r.check === 'bank.disount');
       expect(failResult?.message).toContain('discount');
     });
@@ -239,7 +239,7 @@ describe('ConfigValidator', () => {
           },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       const failResult = fail(results).find(r => r.check === 'bank.leumu');
       expect(failResult?.message).toContain('leumi');
     });
@@ -253,7 +253,7 @@ describe('ConfigValidator', () => {
           },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       const failResult = fail(results).find(r => r.check === 'bank.zzznotabank');
       expect(failResult?.message).not.toContain('Did you mean');
     });
@@ -271,7 +271,7 @@ describe('ConfigValidator', () => {
           },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'bank.leumi.dates', 'warn');
     });
 
@@ -284,12 +284,12 @@ describe('ConfigValidator', () => {
           },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'bank.leumi.dates', 'fail');
     });
 
     it('passes when only daysBack set', () => {
-      const results = validator.validateOffline(makeConfig());
+      const results = ConfigValidator.validateOffline(makeConfig());
       expectCheck(results, 'bank.discount.dates', 'pass');
     });
   });
@@ -301,7 +301,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig({
         banks: { discount: { id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7 } },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'bank.discount.targets', 'fail');
     });
 
@@ -314,12 +314,12 @@ describe('ConfigValidator', () => {
           },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'bank.discount.target[0]', 'fail');
     });
 
     it('passes on valid target', () => {
-      const results = validator.validateOffline(makeConfig());
+      const results = ConfigValidator.validateOffline(makeConfig());
       expectCheck(results, 'bank.discount.target[0]', 'pass');
     });
 
@@ -332,13 +332,13 @@ describe('ConfigValidator', () => {
           },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       const msg = pass(results).find(r => r.check === 'bank.discount.target[0]')?.message ?? '';
       expect(msg).toContain('"Main Checking"');
     });
 
     it('falls back to last UUID segment as label when accountName is absent', () => {
-      const results = validator.validateOffline(makeConfig());
+      const results = ConfigValidator.validateOffline(makeConfig());
       const msg = pass(results).find(r => r.check === 'bank.discount.target[0]')?.message ?? '';
       expect(msg).toMatch(/"\.\.\.[0-9a-f]+"/);
     });
@@ -349,7 +349,7 @@ describe('ConfigValidator', () => {
   describe('notifications offline', () => {
     it('skips when notifications disabled', () => {
       const cfg = makeConfig({ notifications: { enabled: false } });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expect(results.some(r => r.check.startsWith('telegram'))).toBe(false);
     });
 
@@ -360,7 +360,7 @@ describe('ConfigValidator', () => {
           telegram: { botToken: 'badtoken', chatId: '12345' },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'telegram.botToken', 'fail');
     });
 
@@ -371,7 +371,7 @@ describe('ConfigValidator', () => {
           telegram: { botToken: '123456789:ABCdef', chatId: '12345' },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'telegram.botToken', 'pass');
     });
 
@@ -382,7 +382,7 @@ describe('ConfigValidator', () => {
           telegram: { botToken: '123456789:ABCdef', chatId: '' },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'telegram.chatId', 'fail');
     });
 
@@ -393,7 +393,7 @@ describe('ConfigValidator', () => {
           webhook: { url: 'ftp://bad.com' },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'webhook.url', 'fail');
     });
 
@@ -404,8 +404,8 @@ describe('ConfigValidator', () => {
           webhook: { url: undefined as unknown as string },
         },
       });
-      expect(() => validator.validateOffline(cfg)).not.toThrow();
-      const results = validator.validateOffline(cfg);
+      expect(() => ConfigValidator.validateOffline(cfg)).not.toThrow();
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'webhook.url', 'fail');
     });
 
@@ -416,7 +416,7 @@ describe('ConfigValidator', () => {
           webhook: { url: 'https://hooks.example.com/abc' },
         },
       });
-      const results = validator.validateOffline(cfg);
+      const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'webhook.url', 'pass');
     });
   });
@@ -425,7 +425,7 @@ describe('ConfigValidator', () => {
 
   it('fails when banks is empty', () => {
     const cfg = makeConfig({ banks: {} });
-    const results = validator.validateOffline(cfg);
+    const results = ConfigValidator.validateOffline(cfg);
     expectCheck(results, 'banks', 'fail');
   });
 
@@ -438,7 +438,7 @@ describe('ConfigValidator', () => {
         { status: 'fail', check: 'b', message: 'bad' },
         { status: 'warn', check: 'c', message: 'warning' },
       ];
-      const report = validator.formatReport(results);
+      const report = ConfigValidator.formatReport(results);
       expect(report).toContain('[PASS] good');
       expect(report).toContain('[FAIL] bad');
       expect(report).toContain('[WARN] warning');
@@ -448,7 +448,7 @@ describe('ConfigValidator', () => {
       const results: ValidationResult[] = [
         { status: 'pass', check: 'a', message: 'ok' },
       ];
-      const report = validator.formatReport(results);
+      const report = ConfigValidator.formatReport(results);
       expect(report).toContain('All checks passed');
     });
 
@@ -458,7 +458,7 @@ describe('ConfigValidator', () => {
         { status: 'fail', check: 'b', message: 'bad2' },
         { status: 'warn', check: 'c', message: 'w1' },
       ];
-      const report = validator.formatReport(results);
+      const report = ConfigValidator.formatReport(results);
       expect(report).toContain('2 errors');
       expect(report).toContain('1 warning');
     });
@@ -475,19 +475,19 @@ describe('ConfigValidator', () => {
     it('passes when Actual server responds with 2xx', async () => {
       const cfg = makeConfig();
       setupOnlineMocks(cfg);
-      const results = await validator.validateOnline(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
       expectCheck(results, 'actual.server', 'pass');
     });
 
     it('fails when Actual server is unreachable', async () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
-      const results = await validator.validateOnline(makeConfig());
+      const results = await ConfigValidator.validateOnline(makeConfig());
       expectCheck(results, 'actual.server', 'fail');
     });
 
     it('skips budget check when server is unreachable', async () => {
       vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
-      const results = await validator.validateOnline(makeConfig());
+      const results = await ConfigValidator.validateOnline(makeConfig());
       expect(results.some(r => r.check === 'actual.budget')).toBe(false);
     });
 
@@ -502,7 +502,7 @@ describe('ConfigValidator', () => {
         ok: true, status: 200,
         json: async () => ({ ok: true, result: { username: 'TestBot' } }),
       }]);
-      const results = await validator.validateOnline(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
       expectCheck(results, 'telegram.token', 'pass');
       expect(pass(results).find(r => r.check === 'telegram.token')?.message)
         .toContain('@TestBot');
@@ -519,7 +519,7 @@ describe('ConfigValidator', () => {
         ok: true, status: 200,
         json: async () => ({ ok: false }),
       }]);
-      const results = await validator.validateOnline(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
       expectCheck(results, 'telegram.token', 'fail');
     });
 
@@ -531,7 +531,7 @@ describe('ConfigValidator', () => {
         },
       });
       setupOnlineMocks(cfg, [{ ok: false, status: 405 }]);
-      const results = await validator.validateOnline(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
       expectCheck(results, 'webhook.url', 'warn');
     });
 
@@ -550,7 +550,7 @@ describe('ConfigValidator', () => {
       });
       const fetchMock = setupOnlineMocks(cfg);
       fetchMock.mockRejectedValueOnce(new Error('ECONNREFUSED')); // webhook
-      const results = await validator.validateOnline(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
       expectCheck(results, 'webhook.url', 'fail');
     });
   });
@@ -566,7 +566,7 @@ describe('ConfigValidator', () => {
     it('passes when budget is found on server', async () => {
       const cfg = makeConfig();
       setupOnlineMocks(cfg);
-      const results = await validator.validateOnline(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
       expectCheck(results, 'actual.budget', 'pass');
       expect(pass(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('found on server');
@@ -579,7 +579,7 @@ describe('ConfigValidator', () => {
         .mockResolvedValueOnce(budgetNotFoundMocks()[0])
         .mockResolvedValueOnce(budgetNotFoundMocks()[1]);
       vi.stubGlobal('fetch', fetchMock);
-      const results = await validator.validateOnline(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
       expectCheck(results, 'actual.budget', 'fail');
       expect(fail(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('not found');
@@ -594,7 +594,7 @@ describe('ConfigValidator', () => {
           json: async () => ({ data: {} }), // no token
         });
       vi.stubGlobal('fetch', fetchMock);
-      const results = await validator.validateOnline(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
       expectCheck(results, 'actual.budget', 'fail');
       expect(fail(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('login failed');
@@ -606,7 +606,7 @@ describe('ConfigValidator', () => {
         .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
         .mockRejectedValueOnce(new Error('ECONNRESET'));
       vi.stubGlobal('fetch', fetchMock);
-      const results = await validator.validateOnline(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
       expectCheck(results, 'actual.budget', 'fail');
       expect(fail(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('ECONNRESET');
@@ -625,7 +625,7 @@ describe('ConfigValidator', () => {
       const cfg = makeConfig();
       setupOnlineMocks(cfg);
       const results = await validator.validateAll(cfg);
-      const report = validator.formatReport(results);
+      const report = ConfigValidator.formatReport(results);
       expect(report).toContain('[PASS] Budget');
       expect(report).toContain('found on server');
       expect(report).toContain('All checks passed');
@@ -639,7 +639,7 @@ describe('ConfigValidator', () => {
         .mockResolvedValueOnce(budgetNotFoundMocks()[1]);
       vi.stubGlobal('fetch', fetchMock);
       const results = await validator.validateAll(cfg);
-      const report = validator.formatReport(results);
+      const report = ConfigValidator.formatReport(results);
       expect(report).toContain('[FAIL] Budget');
       expect(report).toContain('not found');
       expect(report).not.toContain('All checks passed');
@@ -653,16 +653,16 @@ describe('ConfigValidator', () => {
       const results: ValidationResult[] = [
         { status: 'fail', check: 'a', message: 'bad' },
       ];
-      expect(validator.formatReport(results)).toContain('1 error');
-      expect(validator.formatReport(results)).not.toContain('errors');
+      expect(ConfigValidator.formatReport(results)).toContain('1 error');
+      expect(ConfigValidator.formatReport(results)).not.toContain('errors');
     });
 
     it('uses singular "warning" for exactly 1 warning', () => {
       const results: ValidationResult[] = [
         { status: 'warn', check: 'a', message: 'warn' },
       ];
-      expect(validator.formatReport(results)).toContain('1 warning');
-      expect(validator.formatReport(results)).not.toContain('warnings');
+      expect(ConfigValidator.formatReport(results)).toContain('1 warning');
+      expect(ConfigValidator.formatReport(results)).not.toContain('warnings');
     });
   });
 

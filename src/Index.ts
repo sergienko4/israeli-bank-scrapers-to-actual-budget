@@ -1,35 +1,40 @@
 /**
  * Israeli Bank Importer for Actual Budget
- * Main entry point — coordinates all services.
- * Scraping is delegated to BankScraper; account processing to AccountImporter.
+ * Main entry point — initializes services and runs the import pipeline.
  */
 
 import api from '@actual-app/api';
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
+
 import { ConfigLoader } from './Config/ConfigLoader.js';
 import { ErrorFormatter } from './Errors/ErrorFormatter.js';
+import { createLogger, deriveLogFormat, getLogger } from './Logger/Index.js';
+import { GracefulShutdownHandler } from './Resilience/GracefulShutdown.js';
 import { ExponentialBackoffRetry } from './Resilience/RetryStrategy.js';
 import { TimeoutWrapper } from './Resilience/TimeoutWrapper.js';
-import { GracefulShutdownHandler } from './Resilience/GracefulShutdown.js';
-import { MetricsService } from './Services/MetricsService.js';
-import { TransactionService } from './Services/TransactionService.js';
-import { ReconciliationService } from './Services/ReconciliationService.js';
-import { NotificationService } from './Services/NotificationService.js';
-import { AuditLogService } from './Services/AuditLogService.js';
-import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
-import type { ImporterConfig, BankConfig, CategorizationMode } from './Types/Index.js';
-import { DEFAULT_RESILIENCE_CONFIG } from './Types/Index.js';
-import { errorMessage } from './Utils/Index.js';
-import { createLogger, getLogger, deriveLogFormat } from './Logger/Index.js';
-import type { ICategoryResolver } from './Services/ICategoryResolver.js';
-import { HistoryCategoryResolver } from './Services/HistoryCategoryResolver.js';
-import { TranslateCategoryResolver } from './Services/TranslateCategoryResolver.js';
-import { SpendingWatchService } from './Services/SpendingWatchService.js';
-import { DryRunCollector } from './Services/DryRunCollector.js';
-import {
-  BankScraper, isEmptyResultError, logScrapeFailure
-} from './Scraper/BankScraper.js';
+import { BankScraper } from './Scraper/BankScraper.js';
+import createInitialContext from './Scrapers/Pipeline/ContextFactory.js';
+// Pipeline imports
+import { ChainBuilder, execute } from './Scrapers/Pipeline/Index.js';
+import createEvaluateSpendingWatchStep from './Scrapers/Pipeline/Steps/EvaluateSpendingWatchStep.js';
+import createFinalizeImportStep from './Scrapers/Pipeline/Steps/FinalizeImportStep.js';
+import createInitializeApiStep from './Scrapers/Pipeline/Steps/InitializeApiStep.js';
+import createInitializeCategoryResolverStep from './Scrapers/Pipeline/Steps/InitializeCategoryResolverStep.js';
+import createProcessAllBanksStep from './Scrapers/Pipeline/Steps/ProcessAllBanksStep.js';
 import { AccountImporter } from './Services/AccountImporter.js';
+import { AuditLogService } from './Services/AuditLogService.js';
+import { DryRunCollector } from './Services/DryRunCollector.js';
+import HistoryCategoryResolver from './Services/HistoryCategoryResolver.js';
+import type { ICategoryResolver } from './Services/ICategoryResolver.js';
+import { MetricsService } from './Services/MetricsService.js';
+import TelegramNotifier from './Services/Notifications/TelegramNotifier.js';
+import NotificationService from './Services/NotificationService.js';
+import { ReconciliationService } from './Services/ReconciliationService.js';
+import SpendingWatchService from './Services/SpendingWatchService.js';
+import { TransactionService } from './Services/TransactionService.js';
+import TranslateCategoryResolver from './Services/TranslateCategoryResolver.js';
+import type { CategorizationMode, IImporterConfig, Procedure } from './Types/Index.js';
+import { DEFAULT_RESILIENCE_CONFIG, fail, isFail, succeed } from './Types/Index.js';
+import { errorMessage } from './Utils/Index.js';
 
 // --validate mode: validate config and exit before full initialization
 if (process.argv.includes('--validate')) {
@@ -38,269 +43,171 @@ if (process.argv.includes('--validate')) {
 }
 
 // Load configuration and initialize logger
-const configLoader = new ConfigLoader();
-const config: ImporterConfig = configLoader.load();
-const tg = config.notifications?.telegram;
-const derivedFormat = deriveLogFormat(tg?.messageFormat, tg?.listenForCommands);
+const CONFIG_LOADER = new ConfigLoader();
+const CONFIG_RESULT = CONFIG_LOADER.load();
+if (isFail(CONFIG_RESULT)) {
+  process.stderr.write(`Fatal: ${CONFIG_RESULT.message}\n`);
+  process.exit(1);
+}
+const CONFIG: IImporterConfig = CONFIG_RESULT.data;
+const TG = CONFIG.notifications?.telegram;
+const DERIVED_FORMAT = deriveLogFormat(TG?.messageFormat, TG?.listenForCommands);
 createLogger({
-  ...config.logConfig,
-  format: config.logConfig?.format ?? derivedFormat,
-  logDir: config.logConfig?.logDir ?? './logs',
+  ...CONFIG.logConfig,
+  format: CONFIG.logConfig?.format ?? DERIVED_FORMAT,
+  logDir: CONFIG.logConfig?.logDir ?? './logs',
 });
-const logger = getLogger();
+const LOGGER = getLogger();
 
 // Initialize resilience components
-const shutdownHandler = new GracefulShutdownHandler();
-const retryStrategy = new ExponentialBackoffRetry({
+const SHUTDOWN_HANDLER = new GracefulShutdownHandler();
+const RETRY_STRATEGY = new ExponentialBackoffRetry({
   maxAttempts: DEFAULT_RESILIENCE_CONFIG.maxRetryAttempts,
   initialBackoffMs: DEFAULT_RESILIENCE_CONFIG.initialBackoffMs,
   /**
    * Returns whether the shutdown handler is active.
    * @returns True once a shutdown signal has been received.
    */
-  shouldShutdown: () => shutdownHandler.isShuttingDown(),
+  shouldShutdown: (): boolean => SHUTDOWN_HANDLER.isShuttingDown(),
   /**
    * Returns false for WAF block errors so they are not retried.
    * @param error - The error from the failed attempt.
    * @returns True to retry, false for WAF blocks.
    */
-  shouldRetry: (error) => error.name !== 'WafBlockError',
+  shouldRetry: (error: Error): boolean => error.name !== 'WafBlockError',
 });
-const noRetryStrategy = new ExponentialBackoffRetry({
+const NO_RETRY_STRATEGY = new ExponentialBackoffRetry({
   maxAttempts: 1,
   initialBackoffMs: 0,
   /**
    * Returns whether the shutdown handler is active.
    * @returns True once a shutdown signal has been received.
    */
-  shouldShutdown: () => shutdownHandler.isShuttingDown(),
+  shouldShutdown: (): boolean => SHUTDOWN_HANDLER.isShuttingDown(),
 });
-const timeoutWrapper = new TimeoutWrapper();
-const errorFormatter = new ErrorFormatter();
+const TIMEOUT_WRAPPER = new TimeoutWrapper();
+const ERROR_FORMATTER = new ErrorFormatter();
 
 // ─── Category resolver (OCP dispatch) ───
-const resolverFactories: Record<
-  CategorizationMode, (cfg: ImporterConfig) => ICategoryResolver | undefined
+const RESOLVER_FACTORIES: Record<
+  CategorizationMode,
+  (cfg: IImporterConfig) => Procedure<ICategoryResolver | false>
 > = {
   /**
-   * Returns undefined — no categorization applied.
-   * @returns Always undefined.
+   * Returns a success with false — no categorization applied.
+   * @returns Procedure with false payload.
    */
-  none: () => undefined,
+  none: (): Procedure<ICategoryResolver | false> => succeed(false as const),
   /**
    * Returns a HistoryCategoryResolver backed by the Actual API.
-   * @returns A new HistoryCategoryResolver.
+   * @returns Procedure with a new HistoryCategoryResolver.
    */
-  history: () => new HistoryCategoryResolver(api),
+  history: (): Procedure<ICategoryResolver | false> => succeed(new HistoryCategoryResolver(api)),
   /**
    * Returns a TranslateCategoryResolver using the configured translation rules.
-   * @param cfg - The full ImporterConfig containing translation rules.
-   * @returns A new TranslateCategoryResolver.
+   * @param cfg - The full IImporterConfig containing translation rules.
+   * @returns Procedure with a new TranslateCategoryResolver.
    */
-  translate: (cfg) => new TranslateCategoryResolver(cfg.categorization?.translations ?? []),
+  translate: (cfg: IImporterConfig): Procedure<ICategoryResolver | false> => succeed(
+    new TranslateCategoryResolver(cfg.categorization?.translations ?? [])
+  ),
 };
 
 /**
  * Creates the appropriate ICategoryResolver based on the categorization mode in config.
- * @param cfg - The ImporterConfig containing categorization settings.
- * @returns The resolver for the configured mode, or undefined for mode 'none'.
+ * @param cfg - The IImporterConfig containing categorization settings.
+ * @returns Procedure with the resolver, or false for mode 'none'.
  */
-function createCategoryResolver(cfg: ImporterConfig): ICategoryResolver | undefined {
+function createCategoryResolver(cfg: IImporterConfig): Procedure<ICategoryResolver | false> {
   const mode = cfg.categorization?.mode ?? 'none';
-  return (resolverFactories[mode] ?? resolverFactories.none)(cfg);
+  return RESOLVER_FACTORIES[mode](cfg);
 }
 
 // Initialize services
 const isDryRun = process.env.DRY_RUN === 'true';
-const dryRunCollector = new DryRunCollector();
-const categoryResolver = createCategoryResolver(config);
-const transactionService = new TransactionService(api, categoryResolver);
-const reconciliationService = new ReconciliationService(api);
-const metrics = new MetricsService();
-const auditLog = new AuditLogService();
-const notificationService = new NotificationService(config.notifications);
-const telegram = config.notifications?.telegram;
-const telegramNotifier = telegram ? new TelegramNotifier(telegram) : null;
+const DRY_RUN_COLLECTOR = new DryRunCollector();
+const CATEGORY_RESULT = createCategoryResolver(CONFIG);
+const hasResolver = CATEGORY_RESULT.success && CATEGORY_RESULT.data !== false;
+const CATEGORY_RESOLVER = hasResolver ? CATEGORY_RESULT.data : void 0;
+const TRANSACTION_SERVICE = new TransactionService(api, CATEGORY_RESOLVER);
+const RECONCILIATION_SERVICE = new ReconciliationService(api);
+const METRICS = new MetricsService();
+const AUDIT_LOG = new AuditLogService();
+const NOTIFICATION_SERVICE = new NotificationService(CONFIG.notifications);
+const TELEGRAM_CFG = CONFIG.notifications?.telegram;
+const TELEGRAM_NOTIFIER = TELEGRAM_CFG ? new TelegramNotifier(TELEGRAM_CFG) : null;
 
-logger.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
-if (isDryRun) logger.info('🔍 DRY RUN MODE — no changes will be made to Actual Budget\n');
-if (config.proxy?.server) logger.info(`🌐 Using proxy: ${config.proxy.server}`);
+LOGGER.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
+if (isDryRun) LOGGER.info('🔍 DRY RUN MODE — no changes will be made to Actual Budget\n');
+if (CONFIG.proxy?.server) LOGGER.info(`🌐 Using proxy: ${CONFIG.proxy.server}`);
 
-// Wire up the two orchestration classes
-const bankScraper = new BankScraper({
-  config, retryStrategy, noRetryStrategy, timeoutWrapper,
-  telegramNotifier, notificationService,
+// Wire up orchestration
+const BANK_SCRAPER = new BankScraper({
+  config: CONFIG,
+  retryStrategy: RETRY_STRATEGY,
+  noRetryStrategy: NO_RETRY_STRATEGY,
+  timeoutWrapper: TIMEOUT_WRAPPER,
+  telegramNotifier: TELEGRAM_NOTIFIER,
+  notificationService: NOTIFICATION_SERVICE,
 });
-const accountImporter = new AccountImporter({
-  transactionService, reconciliationService, metrics,
-  isDryRun, dryRunCollector, shutdownHandler,
+const ACCOUNT_IMPORTER = new AccountImporter({
+  transactionService: TRANSACTION_SERVICE,
+  reconciliationService: RECONCILIATION_SERVICE,
+  metrics: METRICS,
+  isDryRun: isDryRun,
+  dryRunCollector: DRY_RUN_COLLECTOR,
+  shutdownHandler: SHUTDOWN_HANDLER,
 });
 
-// ─── Bank import orchestration ───
+// ─── Build Pipeline ───
+
+const WATCH_SERVICE = CONFIG.spendingWatch?.length
+  ? new SpendingWatchService(CONFIG.spendingWatch, api) : null;
+
+const PIPELINE_CONTEXT = createInitialContext({
+  config: CONFIG,
+  logger: LOGGER,
+  shutdownHandler: SHUTDOWN_HANDLER,
+  transactionService: TRANSACTION_SERVICE,
+  reconciliationService: RECONCILIATION_SERVICE,
+  metricsService: METRICS,
+  auditLogService: AUDIT_LOG,
+  notificationService: NOTIFICATION_SERVICE,
+  bankScraper: BANK_SCRAPER,
+  accountImporter: ACCOUNT_IMPORTER,
+  categoryResolver: CATEGORY_RESOLVER ?? false,
+  dryRunCollector: DRY_RUN_COLLECTOR,
+  isDryRun: isDryRun,
+});
 
 /**
- * Logs that a bank was scraped successfully with its account count.
- * @param bankName - The name of the successfully scraped bank.
- * @param accountCount - Number of accounts found in the scrape result.
+ * No-op watch service used when spending watch is not configured.
+ * @returns Procedure with the unchanged pipeline context.
  */
-function logBankScrapedInfo(bankName: string, accountCount: number): void {
-  logger.info(`  ✅ Successfully scraped ${bankName}`);
-  logger.info(`  📝 Found ${accountCount} accounts`);
-}
+const NO_OP_WATCH = {
+  /**
+   * Returns a no-alerts result — no spending rules configured.
+   * @returns Procedure with noAlerts flag.
+   */
+  evaluate: (): Promise<Procedure<{ noAlerts: true }>> => {
+    const noAlertsResult = succeed({ noAlerts: true as const }, 'no-rules');
+    return Promise.resolve(noAlertsResult);
+  },
+};
+const EFFECTIVE_WATCH = WATCH_SERVICE ?? NO_OP_WATCH;
+const INIT_API_STEP = createInitializeApiStep(api);
+const INIT_RESOLVER_STEP = createInitializeCategoryResolverStep();
+const PROCESS_BANKS_STEP = createProcessAllBanksStep();
+const SPENDING_WATCH_STEP = createEvaluateSpendingWatchStep(EFFECTIVE_WATCH);
+const FINALIZE_STEP = createFinalizeImportStep(api);
 
-/**
- * Handles a failed scrape result by logging the error and recording metrics.
- * @param bankName - The bank that failed to scrape.
- * @param result - The failed IScraperScrapingResult containing error details.
- */
-function handleFailedScrape(bankName: string, result: IScraperScrapingResult): void {
-  if (isEmptyResultError(result)) {
-    logger.info(`  ✅ ${bankName}: no transactions in selected period`);
-    metrics.recordBankSuccess(bankName, 0, 0);
-    return;
-  }
-  logScrapeFailure(bankName, result);
-  const rawMsg = result.errorMessage?.trim();
-  const safeMsg = rawMsg && rawMsg !== 'undefined' ? rawMsg : 'Unknown error';
-  metrics.recordBankFailure(bankName, new Error(safeMsg));
-}
-
-/**
- * Orchestrates the full import pipeline for one bank.
- * @param bankName - The bank key to import.
- * @param bankConfig - The bank's full configuration.
- */
-async function importFromBank(bankName: string, bankConfig: BankConfig): Promise<void> {
-  logger.info(`\n📊 Processing ${bankName}...`);
-  metrics.startBank(bankName);
-  try {
-    const scrapeResult = await bankScraper.scrapeBankWithResilience(bankName, bankConfig);
-    if (!scrapeResult.success) { handleFailedScrape(bankName, scrapeResult); return; }
-    logBankScrapedInfo(bankName, scrapeResult.accounts?.length ?? 0);
-    const totals = await accountImporter.processAllAccounts(bankName, bankConfig, scrapeResult);
-    metrics.recordBankSuccess(bankName, totals.imported, totals.skipped);
-    logger.info(`\n✅ Completed ${bankName}`);
-  } catch (error) {
-    metrics.recordBankFailure(bankName, error as Error);
-    logger.error(errorFormatter.format(error as Error, bankName));
-    if (error instanceof Error) logger.error(`Stack trace: ${error.stack}`);
-  }
-}
-
-/**
- * Filters the bank list by the IMPORT_BANKS environment variable when set.
- * @param all - Full list of [bankName, BankConfig] entries from config.
- * @returns Filtered list matching the IMPORT_BANKS names, or the full list if unset.
- */
-function applyBankFilter(all: [string, BankConfig][]): [string, BankConfig][] {
-  const filter = process.env.IMPORT_BANKS?.split(',').map(b => b.trim()).filter(Boolean);
-  if (!filter?.length) return all;
-  const filtered = all.filter(([n]) => filter.some(f => f.toLowerCase() === n.toLowerCase()));
-  logger.info(`  🔍 Bank filter: ${filtered.map(([n]) => n).join(', ')}`);
-  return filtered;
-}
-
-/**
- * Iterates all configured banks (after filter) and runs importFromBank for each.
- */
-async function processAllBanks(): Promise<void> {
-  const banks = applyBankFilter(Object.entries(config.banks || {}));
-  for (let i = 0; i < banks.length; i++) {
-    if (shutdownHandler.isShuttingDown()) {
-      logger.warn('⚠️  Shutdown requested, stopping imports...'); break;
-    }
-    if (i > 0) await delayBeforeNextBank(config.delayBetweenBanks);
-    await importFromBank(banks[i][0], banks[i][1]);
-  }
-}
-
-/**
- * Waits for the configured delay between bank imports when delayBetweenBanks is set.
- * @param delayMs - Optional delay in milliseconds; no delay if zero or undefined.
- */
-async function delayBeforeNextBank(delayMs?: number): Promise<void> {
-  if (!delayMs || delayMs <= 0) return;
-  logger.info(`\n⏳ Waiting ${(delayMs / 1000).toFixed(0)}s before next bank...`);
-  await new Promise(resolve => setTimeout(resolve, delayMs));
-}
-
-/**
- * Runs the SpendingWatchService and sends an alert notification if any rules are triggered.
- */
-async function evaluateSpendingWatch(): Promise<void> {
-  if (!config.spendingWatch?.length) return;
-  logger.info('\n🔔 Evaluating spending watch rules...');
-  const watchService = new SpendingWatchService(config.spendingWatch, api);
-  const message = await watchService.evaluate();
-  if (message) await notificationService.sendMessage(message);
-  logger.info(message ? '⚠️  Spending watch alerts triggered' : '✅ All spending within limits');
-}
-
-/**
- * Initializes the Actual Budget API in local mode using a local budget ID (E2E testing).
- */
-async function initializeLocalBudget(): Promise<void> {
-  const budgetId = process.env.E2E_LOCAL_BUDGET_ID ?? '';
-  logger.info('🔌 Initializing Actual Budget (local mode)...');
-  await api.init({ dataDir: config.actual.init.dataDir });
-  logger.info(`📂 Loading local budget: ${budgetId}`);
-  await api.loadBudget(budgetId);
-}
-
-/**
- * Connects to the Actual Budget server and downloads the configured budget.
- */
-async function initializeServerBudget(): Promise<void> {
-  logger.info('🔌 Connecting to Actual Budget...');
-  const { dataDir, serverURL, password } = config.actual.init;
-  await api.init({ dataDir, serverURL, password });
-  logger.info('✅ Connected to Actual Budget server');
-  logger.info(`📂 Loading budget: ${config.actual.budget.syncId}`);
-  await api.downloadBudget(
-    config.actual.budget.syncId,
-    { password: config.actual.budget.password || undefined }
-  );
-}
-
-/**
- * Initializes the Actual Budget API in either local or server mode based on env vars.
- */
-async function initializeApi(): Promise<void> {
-  if (process.env.E2E_LOCAL_BUDGET_ID) { await initializeLocalBudget(); }
-  else { await initializeServerBudget(); }
-  logger.info('✅ Budget loaded successfully\n');
-  logger.info('='.repeat(60));
-}
-
-/**
- * Records the import in the audit log and sends a summary notification (normal mode).
- */
-async function finalizeNormalImport(): Promise<void> {
-  auditLog.record(metrics.getSummary());
-  await notificationService.sendSummary(metrics.getSummary());
-  logger.info('\n🎉 Import process completed!\n');
-}
-
-/**
- * Logs the dry-run preview and sends it as a Telegram message (dry-run mode).
- */
-async function finalizeDryRun(): Promise<void> {
-  logger.info(dryRunCollector.formatText());
-  logger.info('\n✅ No changes made to Actual Budget (dry run)\n');
-  if (dryRunCollector.hasAccounts()) {
-    await notificationService.sendMessage(dryRunCollector.formatTelegram());
-  }
-}
-
-/**
- * Prints summary metrics, finalizes in normal or dry-run mode, shuts down the API, and exits.
- */
-async function finalizeImport(): Promise<void> {
-  metrics.printSummary();
-  await (isDryRun ? finalizeDryRun() : finalizeNormalImport());
-  await api.shutdown();
-  process.exit(metrics.hasFailures() ? 1 : 0);
-}
+const PIPELINE = new ChainBuilder()
+  .add(INIT_API_STEP, { name: 'init-api', description: 'Connect to Actual Budget' })
+  .add(INIT_RESOLVER_STEP, { name: 'init-resolver', description: 'Load category resolver' })
+  .add(PROCESS_BANKS_STEP, { name: 'process-banks', description: 'Scrape and import all banks' })
+  .add(SPENDING_WATCH_STEP, { name: 'spending-watch', description: 'Check spending rules' })
+  .add(FINALIZE_STEP, { name: 'finalize', description: 'Print summary and notify' })
+  .build();
 
 /**
  * Handles an unrecoverable error: logs it, sends a Telegram notification, and exits.
@@ -308,32 +215,41 @@ async function finalizeImport(): Promise<void> {
  * @returns Never — always exits the process with code 1.
  */
 async function handleFatalError(error: unknown): Promise<never> {
-  const formattedError = errorFormatter.format(error as Error);
-  logger.error(`\n${formattedError}`);
-  if (error instanceof Error) logger.error(`Stack trace: ${error.stack}`);
-  await notificationService.sendError(formattedError);
+  const formattedError = ERROR_FORMATTER.format(error as Error);
+  LOGGER.error(`\n${formattedError}`);
+  if (error instanceof Error) LOGGER.error(`Stack trace: ${error.stack ?? 'N/A'}`);
+  await NOTIFICATION_SERVICE.sendError(formattedError);
   try { await api.shutdown(); } catch { /* ignore shutdown error */ }
   process.exit(1);
 }
 
 /**
- * Main entry point: initialises the API, imports all banks, and finalises the run.
+ * Gracefully shuts down the Actual Budget API during process termination.
+ * @returns Procedure indicating shutdown result.
  */
-async function main(): Promise<void> {
+async function shutdownApiGracefully(): Promise<Procedure<{ status: string }>> {
+  LOGGER.info('🔌 Shutting down Actual Budget API...');
+  try { await api.shutdown(); }
+  catch (e: unknown) { LOGGER.error(`Error during API shutdown: ${errorMessage(e)}`); }
+  return succeed({ status: 'api-shutdown' });
+}
+
+/**
+ * Main entry point: registers shutdown handler, executes the pipeline, handles errors.
+ * @returns Procedure indicating overall import result.
+ */
+async function main(): Promise<Procedure<{ status: string }>> {
   try {
-    shutdownHandler.onShutdown(async () => {
-      logger.info('🔌 Shutting down Actual Budget API...');
-      try { await api.shutdown(); }
-      catch (e: unknown) { logger.error(`Error during API shutdown: ${errorMessage(e)}`); }
-    });
-    await initializeApi();
-    if (!isDryRun) await categoryResolver?.initialize();
-    metrics.startImport();
-    await processAllBanks();
-    if (!isDryRun) await evaluateSpendingWatch();
-    await finalizeImport();
+    SHUTDOWN_HANDLER.onShutdown(shutdownApiGracefully);
+    const result = await execute(PIPELINE, PIPELINE_CONTEXT);
+    if (isFail(result)) {
+      LOGGER.error(`Pipeline failed: ${result.message}`);
+      return fail(result.message);
+    }
+    const exitCode = result.data.state.exitCode as number;
+    process.exit(exitCode);
   } catch (error) {
-    await handleFatalError(error);
+    return handleFatalError(error);
   }
 }
 

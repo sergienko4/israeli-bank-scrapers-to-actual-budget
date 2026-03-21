@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildCredentials } from '../../src/Scraper/CredentialsBuilder.js';
-import type { BankConfig } from '../../src/Types/Index.js';
+import buildCredentials from '../../src/Scraper/CredentialsBuilder.js';
+import type { IBankConfig } from '../../src/Types/Index.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
-const idBank = { id: 'user123', password: TEST_CREDENTIAL } as BankConfig;
+const idBank = { id: 'user123', password: TEST_CREDENTIAL } as IBankConfig;
 const emailBank = {
   email: 'user@example.com', password: TEST_CREDENTIAL, phoneNumber: '+972501234567'
-} as BankConfig;
+} as IBankConfig;
 
 describe('buildCredentials', () => {
   describe('with otpRetriever', () => {
@@ -41,7 +41,7 @@ describe('buildCredentials', () => {
 
   describe('otpLongTermToken', () => {
     it('returns email+password+token credentials', () => {
-      const config = { ...emailBank, otpLongTermToken: 'tok123' } as BankConfig;
+      const config = { ...emailBank, otpLongTermToken: 'tok123' } as IBankConfig;
       const creds = buildCredentials(config) as Record<string, unknown>;
       expect(creds.otpLongTermToken).toBe('tok123');
       expect(creds.email).toBe('user@example.com');
@@ -50,7 +50,7 @@ describe('buildCredentials', () => {
 
     it('takes precedence over otpRetriever — token path skips retriever', () => {
       const retriever = vi.fn();
-      const config = { ...emailBank, otpLongTermToken: 'tok123' } as BankConfig;
+      const config = { ...emailBank, otpLongTermToken: 'tok123' } as IBankConfig;
       const creds = buildCredentials(config, retriever) as Record<string, unknown>;
       expect(creds.otpLongTermToken).toBe('tok123');
       expect(creds.otpCodeRetriever).toBeUndefined();

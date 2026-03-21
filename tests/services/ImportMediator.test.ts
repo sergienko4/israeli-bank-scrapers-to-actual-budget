@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ImportMediator } from '../../src/Services/ImportMediator.js';
-import type { TelegramPoller } from '../../src/Services/TelegramPoller.js';
+import type TelegramPoller from '../../src/Services/TelegramPoller.js';
 
 vi.mock('../../src/Logger/Index.js', () => ({
   getLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -64,12 +64,12 @@ describe('ImportMediator', () => {
     expect(first).toBeTruthy();
 
     const second = mediator.requestImport({ source: 'telegram' });
-    expect(second).toBeNull();
+    expect(second).toBe(false);
 
     resolveSpawn?.(0);
   });
 
-  it('waitForBatch resolves with BatchResult on completion', async () => {
+  it('waitForBatch resolves with IBatchResult on completion', async () => {
     const mediator = new ImportMediator({
       spawnImport, getBankNames, notifier: null,
     });
@@ -145,7 +145,8 @@ describe('ImportMediator', () => {
 
     resolveSpawn?.(0);
     await mediator.waitForBatch(batchId!);
-    expect(mediator.isImporting()).toBe(false);
+    // Allow drain() to finish (microtask after finalizeBatch resolves the tracker)
+    await vi.waitFor(() => expect(mediator.isImporting()).toBe(false));
   });
 
   it('getLastResult and getLastRunTime update after completion', async () => {
@@ -200,9 +201,10 @@ describe('ImportMediator', () => {
 
     const batchId = mediator.requestImport({ source: 'telegram' });
     await mediator.waitForBatch(batchId!);
+    // Allow drain() to finish so handleQueueEmpty resumes the poller
+    await vi.waitFor(() => expect(poller.start).toHaveBeenCalled());
 
     expect(poller.stopAndFlush).toHaveBeenCalled();
-    expect(poller.start).toHaveBeenCalled();
   });
 
   it('awaits poller stop before spawning import (OTP race condition)', async () => {
@@ -277,7 +279,8 @@ describe('ImportMediator', () => {
     await mediator.waitForBatch(batchId!);
 
     // Should not throw — error is caught internally
-    expect(poller.start).toHaveBeenCalled();
+    // Allow drain() to finish so handleQueueEmpty calls poller.start()
+    await vi.waitFor(() => expect(poller.start).toHaveBeenCalled());
   });
 
   it('sends warning icon in summary when batch has failures', async () => {

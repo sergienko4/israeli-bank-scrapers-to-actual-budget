@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConfigLoader } from '../../src/Config/ConfigLoader.js';
-import { ConfigurationError } from '../../src/Errors/ErrorTypes.js';
 import * as fs from 'fs';
 import { faker } from '@faker-js/faker';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
+import { isSuccess, isFail } from '../../src/Types/Index.js';
 
 vi.mock('fs');
 
-// UUID is asserted in tests like "expect(config.actual.budget.syncId).toBe(VALID_UUID)"
+// UUID is asserted in tests like "expect(result.data.actual.budget.syncId).toBe(VALID_UUID)"
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 
 /** Default target used across bank configs in tests. */
@@ -69,16 +69,19 @@ function mockFileConfig(config: ReturnType<typeof makeValidConfig>): void {
 }
 
 /**
- * Builds a config with overrides, mocks fs, and asserts that loading throws.
+ * Builds a config with overrides, mocks fs, and asserts that loading fails.
  *
  * @param overrides - Partial fields to override in the generated config.
  * @param message - Expected error message substring.
  */
-function expectConfigToThrow(overrides: Record<string, unknown>, message: string): void {
+function expectConfigToFail(overrides: Record<string, unknown>, message: string): void {
   const config = makeValidConfig(overrides);
   mockFileConfig(config);
   const loader = new ConfigLoader('/test/config.json');
-  expect(() => loader.load()).toThrow(message);
+  const result = loader.load();
+  expect(result.success).toBe(false);
+  if (!isFail(result)) return;
+  expect(result.message).toContain(message);
 }
 
 /**
@@ -86,11 +89,12 @@ function expectConfigToThrow(overrides: Record<string, unknown>, message: string
  *
  * @param overrides - Partial fields to override in the generated config.
  */
-function expectConfigNotToThrow(overrides: Record<string, unknown>): void {
+function expectConfigToSucceed(overrides: Record<string, unknown>): void {
   const config = makeValidConfig(overrides);
   mockFileConfig(config);
   const loader = new ConfigLoader('/test/config.json');
-  expect(() => loader.load()).not.toThrow();
+  const result = loader.load();
+  expect(result.success).toBe(true);
 }
 
 /**
@@ -148,10 +152,12 @@ describe('ConfigLoader', () => {
       mockFileConfig(validConfig);
 
       const loader = new ConfigLoader('/test/config.json');
-      const config = loader.load();
+      const result = loader.load();
 
-      expect(config.actual.budget.syncId).toBe(VALID_UUID);
-      expect(config.banks.discount).toBeDefined();
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.actual.budget.syncId).toBe(VALID_UUID);
+      expect(result.data.banks.discount).toBeDefined();
     });
 
     it('falls back to env vars when config file not found', () => {
@@ -159,10 +165,12 @@ describe('ConfigLoader', () => {
       setDiscountEnvVars();
 
       const loader = new ConfigLoader('/nonexistent/config.json');
-      const config = loader.load();
+      const result = loader.load();
 
-      expect(config.actual.init.password).toBe(TEST_CREDENTIAL);
-      expect(config.banks.discount).toBeDefined();
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.actual.init.password).toBe(TEST_CREDENTIAL);
+      expect(result.data.banks.discount).toBeDefined();
 
       clearAllEnvVars();
     });
@@ -173,19 +181,25 @@ describe('ConfigLoader', () => {
       setDiscountEnvVars();
 
       const loader = new ConfigLoader('/test/config.json');
-      const config = loader.load();
+      const result = loader.load();
 
-      expect(config.banks.discount).toBeDefined();
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.banks.discount).toBeDefined();
 
       clearAllEnvVars();
     });
 
-    it('re-throws ConfigurationError from file loading', () => {
+    it('returns failure for invalid syncId from file loading', () => {
       const invalidConfig = makeValidConfig({ budget: { syncId: 'not-a-uuid', password: null } });
       mockFileConfig(invalidConfig);
 
       const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow(ConfigurationError);
+      const result = loader.load();
+
+      expect(result.success).toBe(false);
+      if (!isFail(result)) return;
+      expect(result.message).toContain('ACTUAL_BUDGET_SYNC_ID');
     });
 
     it('uses default path when none provided', () => {
@@ -202,48 +216,48 @@ describe('ConfigLoader', () => {
   });
 
   describe('validation - actual config', () => {
-    it('throws on missing password', () => {
-      expectConfigToThrow({ init: { password: '' } }, 'ACTUAL_PASSWORD is required');
+    it('fails on missing password', () => {
+      expectConfigToFail({ init: { password: '' } }, 'ACTUAL_PASSWORD is required');
     });
 
-    it('throws on missing syncId', () => {
-      expectConfigToThrow({ budget: { syncId: '', password: null } }, 'ACTUAL_BUDGET_SYNC_ID is required');
+    it('fails on missing syncId', () => {
+      expectConfigToFail({ budget: { syncId: '', password: null } }, 'ACTUAL_BUDGET_SYNC_ID is required');
     });
 
-    it('throws on invalid syncId UUID format', () => {
-      expectConfigToThrow({ budget: { syncId: 'invalid-uuid', password: null } }, 'Invalid ACTUAL_BUDGET_SYNC_ID format');
+    it('fails on invalid syncId UUID format', () => {
+      expectConfigToFail({ budget: { syncId: 'invalid-uuid', password: null } }, 'Invalid ACTUAL_BUDGET_SYNC_ID format');
     });
 
-    it('throws on invalid serverURL format', () => {
-      expectConfigToThrow({ init: { serverURL: 'ftp://invalid' } }, 'Invalid serverURL format');
+    it('fails on invalid serverURL format', () => {
+      expectConfigToFail({ init: { serverURL: 'ftp://invalid' } }, 'Invalid serverURL format');
     });
 
     it('accepts https serverURL', () => {
-      expectConfigNotToThrow({ init: { serverURL: 'https://actual.example.com' } });
+      expectConfigToSucceed({ init: { serverURL: 'https://actual.example.com' } });
     });
   });
 
   describe('validation - bank config', () => {
-    it('throws when no banks configured', () => {
-      expectConfigToThrow({ banks: {} }, 'No bank credentials configured');
+    it('fails when no banks configured', () => {
+      expectConfigToFail({ banks: {} }, 'No bank credentials configured');
     });
 
-    it('throws on invalid startDate format', () => {
-      expectConfigToThrow({
+    it('fails on invalid startDate format', () => {
+      expectConfigToFail({
         banks: {
           discount: makeBankWithTarget({
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             startDate: 'not-a-date',
           }),
         },
-      }, 'Invalid startDate format');
+      }, 'Invalid startDate for');
     });
 
-    it('throws on future startDate', () => {
+    it('fails on future startDate', () => {
       const futureDate = new Date();
       futureDate.setFullYear(futureDate.getFullYear() + 1);
 
-      expectConfigToThrow({
+      expectConfigToFail({
         banks: {
           discount: makeBankWithTarget({
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
@@ -253,38 +267,38 @@ describe('ConfigLoader', () => {
       }, 'cannot be in the future');
     });
 
-    it('throws on startDate more than 1 year ago', () => {
+    it('fails on startDate more than 1 year ago', () => {
       const oldDate = new Date();
       oldDate.setFullYear(oldDate.getFullYear() - 2);
 
-      expectConfigToThrow({
+      expectConfigToFail({
         banks: {
           discount: makeBankWithTarget({
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             startDate: oldDate.toISOString().split('T')[0],
           }),
         },
-      }, 'cannot be more than 1 year ago');
+      }, 'startDate too old');
     });
 
-    it('throws on missing targets', () => {
-      expectConfigToThrow({
+    it('fails on missing targets', () => {
+      expectConfigToFail({
         banks: {
           discount: { id: '123', password: TEST_CREDENTIAL, num: 'ABC' },
         },
       }, 'No targets configured');
     });
 
-    it('throws on empty targets array', () => {
-      expectConfigToThrow({
+    it('fails on empty targets array', () => {
+      expectConfigToFail({
         banks: {
           discount: { id: '123', password: TEST_CREDENTIAL, num: 'ABC', targets: [] },
         },
       }, 'No targets configured');
     });
 
-    it('throws on missing actualAccountId', () => {
-      expectConfigToThrow({
+    it('fails on missing actualAccountId', () => {
+      expectConfigToFail({
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
@@ -294,8 +308,8 @@ describe('ConfigLoader', () => {
       }, 'Missing actualAccountId');
     });
 
-    it('throws on invalid actualAccountId UUID', () => {
-      expectConfigToThrow({
+    it('fails on invalid actualAccountId UUID', () => {
+      expectConfigToFail({
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
@@ -305,7 +319,7 @@ describe('ConfigLoader', () => {
       }, 'Invalid actualAccountId format');
     });
 
-    it('throws on missing accounts field', () => {
+    it('fails on missing accounts field', () => {
       const config = {
         actual: {
           init: { dataDir: './data', password: TEST_CREDENTIAL, serverURL: 'http://localhost:5006' },
@@ -321,10 +335,13 @@ describe('ConfigLoader', () => {
       mockFileConfig(config as ReturnType<typeof makeValidConfig>);
 
       const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Missing accounts field');
+      const result = loader.load();
+      expect(result.success).toBe(false);
+      if (!isFail(result)) return;
+      expect(result.message).toContain('Invalid accounts for');
     });
 
-    it('throws on invalid reconcile type', () => {
+    it('fails on invalid reconcile type', () => {
       const config = {
         actual: {
           init: { dataDir: './data', password: TEST_CREDENTIAL, serverURL: 'http://localhost:5006' },
@@ -340,11 +357,14 @@ describe('ConfigLoader', () => {
       mockFileConfig(config as ReturnType<typeof makeValidConfig>);
 
       const loader = new ConfigLoader('/test/config.json');
-      expect(() => loader.load()).toThrow('Invalid reconcile field');
+      const result = loader.load();
+      expect(result.success).toBe(false);
+      if (!isFail(result)) return;
+      expect(result.message).toContain('Invalid reconcile for');
     });
 
     it('accepts accounts as array', () => {
-      expectConfigNotToThrow({
+      expectConfigToSucceed({
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
@@ -363,14 +383,14 @@ describe('ConfigLoader', () => {
       ['yahav', { password: TEST_CREDENTIAL }, 'Yahav requires: nationalID, password'],
       ['oneZero', { password: TEST_CREDENTIAL, phoneNumber: '0501234567' }, 'OneZero requires: email, password, phoneNumber'],
       ['max', { username: 'user', password: TEST_CREDENTIAL }, 'Max requires: username, password, id'],
-    ])('throws when %s is missing required credentials', (bankName, creds, message) => {
-      expectConfigToThrow({
+    ])('fails when %s is missing required credentials', (bankName, creds, message) => {
+      expectConfigToFail({
         banks: { [bankName]: makeBankWithTarget(creds as Record<string, unknown>) },
       }, message);
     });
 
     it('validates email format', () => {
-      expectConfigToThrow({
+      expectConfigToFail({
         banks: {
           oneZero: makeBankWithTarget({
             email: 'not-an-email', password: TEST_CREDENTIAL, phoneNumber: '0501234567890',
@@ -380,7 +400,7 @@ describe('ConfigLoader', () => {
     });
 
     it('validates phone number format', () => {
-      expectConfigToThrow({
+      expectConfigToFail({
         banks: {
           oneZero: makeBankWithTarget({
             email: 'user@example.com', password: TEST_CREDENTIAL, phoneNumber: '123',
@@ -390,7 +410,7 @@ describe('ConfigLoader', () => {
     });
 
     it('validates card6Digits format', () => {
-      expectConfigToThrow({
+      expectConfigToFail({
         banks: {
           isracard: makeBankWithTarget({
             id: '123456789', card6Digits: '12345', password: TEST_CREDENTIAL,
@@ -400,7 +420,7 @@ describe('ConfigLoader', () => {
     });
 
     it('accepts valid card6Digits', () => {
-      expectConfigNotToThrow({
+      expectConfigToSucceed({
         banks: {
           isracard: makeBankWithTarget({
             id: '123456789', card6Digits: '123456', password: TEST_CREDENTIAL,
@@ -424,9 +444,11 @@ describe('ConfigLoader', () => {
       process.env.LEUMI_ACCOUNTS = '1234,5678';
 
       const loader = new ConfigLoader('/nonexistent');
-      const config = loader.load();
+      const result = loader.load();
 
-      expect(config.banks.leumi?.targets?.[0].accounts).toEqual(['1234', '5678']);
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.banks.leumi?.targets?.[0].accounts).toEqual(['1234', '5678']);
     });
 
     it('splits comma-separated HAPOALIM_ACCOUNTS into array', () => {
@@ -438,9 +460,11 @@ describe('ConfigLoader', () => {
       process.env.HAPOALIM_ACCOUNTS = '111,222,333';
 
       const loader = new ConfigLoader('/nonexistent');
-      const config = loader.load();
+      const result = loader.load();
 
-      expect(config.banks.hapoalim?.targets?.[0].accounts).toEqual(['111', '222', '333']);
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.banks.hapoalim?.targets?.[0].accounts).toEqual(['111', '222', '333']);
     });
 
     it('splits comma-separated DISCOUNT_ACCOUNTS into array', () => {
@@ -449,9 +473,11 @@ describe('ConfigLoader', () => {
       process.env.DISCOUNT_ACCOUNTS = '9999,8888';
 
       const loader = new ConfigLoader('/nonexistent');
-      const config = loader.load();
+      const result = loader.load();
 
-      expect(config.banks.discount?.targets?.[0].accounts).toEqual(['9999', '8888']);
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.banks.discount?.targets?.[0].accounts).toEqual(['9999', '8888']);
     });
 
     it('uses "all" as default for LEUMI_ACCOUNTS', () => {
@@ -462,22 +488,24 @@ describe('ConfigLoader', () => {
       process.env.LEUMI_ACCOUNT_ID = VALID_UUID;
 
       const loader = new ConfigLoader('/nonexistent');
-      const config = loader.load();
+      const result = loader.load();
 
-      expect(config.banks.leumi?.targets?.[0].accounts).toBe('all');
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.banks.leumi?.targets?.[0].accounts).toBe('all');
     });
   });
 
   describe('validation - empty accounts array', () => {
-    it('throws on empty array accounts', () => {
-      expectConfigToThrow({
+    it('fails on empty array accounts', () => {
+      expectConfigToFail({
         banks: {
           discount: {
             id: '123', password: TEST_CREDENTIAL, num: 'ABC',
             targets: [{ actualAccountId: VALID_UUID, reconcile: true, accounts: [] }],
           },
         },
-      }, 'Invalid accounts field');
+      }, 'Invalid accounts for');
     });
   });
 
@@ -486,18 +514,22 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig();
       config.notifications = { enabled: true, webhook: { url: 'https://hooks.slack.com/test', format: 'slack' } };
       mockFileConfig(config);
-      expect(() => new ConfigLoader('/test/config.json').load()).not.toThrow();
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(result.success).toBe(true);
     });
 
     it.each([
       [{ url: '', format: 'plain' }, 'Webhook url is required'],
       [{ url: 'ftp://bad.com', format: 'plain' }, 'Invalid webhook url format'],
       [{ url: 'https://example.com', format: 'invalid' }, 'Invalid webhook format'],
-    ])('throws on invalid webhook config: %s', (webhook, message) => {
+    ])('fails on invalid webhook config: %s', (webhook, message) => {
       const config = makeValidConfig();
       config.notifications = { enabled: true, webhook };
       mockFileConfig(config);
-      expect(() => new ConfigLoader('/test/config.json').load()).toThrow(message);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(result.success).toBe(false);
+      if (!isFail(result)) return;
+      expect(result.message).toContain(message);
     });
   });
 
@@ -509,11 +541,13 @@ describe('ConfigLoader', () => {
       vi.mocked(fs.existsSync).mockImplementation((p) => String(p).includes('config.json') || String(p).includes('credentials.json'));
       vi.mocked(fs.readFileSync).mockImplementation((p) => String(p).includes('credentials') ? JSON.stringify(credentials) : JSON.stringify(settings));
 
-      const config = new ConfigLoader('/test/config.json').load();
-      expect(config.actual.init.password).toBe(TEST_CREDENTIAL);
-      expect(config.actual.init.serverURL).toBe('http://localhost:5006');
-      expect(config.banks.discount.id).toBe('123');
-      expect(config.banks.discount.daysBack).toBe(14);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.actual.init.password).toBe(TEST_CREDENTIAL);
+      expect(result.data.actual.init.serverURL).toBe('http://localhost:5006');
+      expect(result.data.banks.discount.id).toBe('123');
+      expect(result.data.banks.discount.daysBack).toBe(14);
     });
 
     it('works without credentials.json (backward compatible)', () => {
@@ -521,8 +555,10 @@ describe('ConfigLoader', () => {
       vi.mocked(fs.existsSync).mockImplementation((p) => String(p).includes('config.json'));
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fullConfig));
 
-      const config = new ConfigLoader('/test/config.json').load();
-      expect(config.banks.discount.password).toBe(fullConfig.banks.discount.password);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.banks.discount.password).toBe(fullConfig.banks.discount.password);
     });
 
     it('deep merges bank settings with bank credentials', () => {
@@ -532,11 +568,13 @@ describe('ConfigLoader', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockImplementation((p) => String(p).includes('credentials') ? JSON.stringify(credentials) : JSON.stringify(settings));
 
-      const config = new ConfigLoader('/test/config.json').load();
-      expect(config.banks.discount.id).toBe('999');
-      expect(config.banks.discount.password).toBe(TEST_CREDENTIAL);
-      expect(config.banks.discount.daysBack).toBe(7);
-      expect(config.banks.discount.targets).toHaveLength(1);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.banks.discount.id).toBe('999');
+      expect(result.data.banks.discount.password).toBe(TEST_CREDENTIAL);
+      expect(result.data.banks.discount.daysBack).toBe(7);
+      expect(result.data.banks.discount.targets).toHaveLength(1);
     });
 
     it('credentials override conflicting config values', () => {
@@ -546,8 +584,10 @@ describe('ConfigLoader', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockImplementation((p) => String(p).includes('credentials') ? JSON.stringify(credentials) : JSON.stringify(settings));
 
-      const config = new ConfigLoader('/test/config.json').load();
-      expect(config.actual.init.password).toBe(TEST_CREDENTIAL);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.actual.init.password).toBe(TEST_CREDENTIAL);
     });
   });
 
@@ -559,25 +599,31 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig();
       config.proxy = { server };
       mockFileConfig(config);
-      expect(() => new ConfigLoader('/test/config.json').load()).not.toThrow();
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(result.success).toBe(true);
     });
 
     it.each([
       [{ server: 'invalid://bad' }, 'Invalid proxy.server format'],
       [{ server: '' }, 'proxy.server is required'],
-    ])('throws on invalid proxy config: %s', (proxy, message) => {
+    ])('fails on invalid proxy config: %s', (proxy, message) => {
       const config = makeValidConfig();
       config.proxy = proxy;
       mockFileConfig(config);
-      expect(() => new ConfigLoader('/test/config.json').load()).toThrow(message);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(result.success).toBe(false);
+      if (!isFail(result)) return;
+      expect(result.message).toContain(message);
     });
 
     it('applies PROXY_SERVER env var override', () => {
       const config = makeValidConfig();
       mockFileConfig(config);
       process.env.PROXY_SERVER = 'socks5://env-proxy:1080';
-      const loaded = new ConfigLoader('/test/config.json').load();
-      expect(loaded.proxy?.server).toBe('socks5://env-proxy:1080');
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.proxy?.server).toBe('socks5://env-proxy:1080');
       delete process.env.PROXY_SERVER;
     });
   });

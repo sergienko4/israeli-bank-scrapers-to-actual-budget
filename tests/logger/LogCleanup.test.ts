@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, writeFileSync, existsSync, readdirSync, unlinkSync, rmdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { cleanOldLogs } from '../../src/Logger/LogCleanup.js';
+import cleanOldLogs from '../../src/Logger/LogCleanup.js';
 
 let testDir: string;
 

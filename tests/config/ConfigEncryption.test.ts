@@ -20,7 +20,7 @@ describe('ConfigEncryption', () => {
       expect(encrypted.encrypted).toBe(true);
       expect(encrypted.version).toBe(1);
       expect(encrypted.salt).toBeDefined();
-      expect(encrypted.iv).toBeDefined();
+      expect(encrypted.initVector).toBeDefined();
       expect(encrypted.tag).toBeDefined();
       expect(encrypted.ciphertext).toBeDefined();
     });
@@ -85,10 +85,10 @@ describe('ConfigEncryption', () => {
       expect(getEncryptionPassword()).toBe('fallback-pass');
     });
 
-    it('returns undefined when neither env var is set', () => {
+    it('returns empty string when neither env var is set', () => {
       delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
       delete process.env.CONFIG_PASSWORD;
-      expect(getEncryptionPassword()).toBeUndefined();
+      expect(getEncryptionPassword()).toBe('');
     });
   });
 
@@ -102,9 +102,9 @@ describe('ConfigEncryption', () => {
       expect(isEncryptedConfig(JSON.parse(SAMPLE_CONFIG))).toBe(false);
     });
 
-    it('returns false for null/undefined', () => {
-      expect(isEncryptedConfig(null)).toBe(false);
-      expect(isEncryptedConfig(undefined)).toBe(false);
+    it('returns false for empty object', () => {
+      expect(isEncryptedConfig({})).toBe(false);
+      expect(isEncryptedConfig({ encrypted: false })).toBe(false);
     });
   });
 });

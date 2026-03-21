@@ -5,7 +5,7 @@
 import type { ILogger, LogContext } from './ILogger.js';
 
 /** Fan-out mediator that routes each log call to all registered ILogger targets. */
-export class LogMediator implements ILogger {
+export default class LogMediator implements ILogger {
   /**
    * Creates a LogMediator that broadcasts to the provided targets.
    * @param targets - Array of ILogger implementations to receive every log call.
@@ -17,7 +17,7 @@ export class LogMediator implements ILogger {
    * @param message - The message text.
    * @param context - Optional structured key-value context.
    */
-  debug(message: string, context?: LogContext): void {
+  public debug(message: string, context?: LogContext): void {
     this.targets.forEach(t => { t.debug(message, context); });
   }
 
@@ -26,7 +26,7 @@ export class LogMediator implements ILogger {
    * @param message - The message text.
    * @param context - Optional structured key-value context.
    */
-  info(message: string, context?: LogContext): void {
+  public info(message: string, context?: LogContext): void {
     this.targets.forEach(t => { t.info(message, context); });
   }
 
@@ -35,7 +35,7 @@ export class LogMediator implements ILogger {
    * @param message - The message text.
    * @param context - Optional structured key-value context.
    */
-  warn(message: string, context?: LogContext): void {
+  public warn(message: string, context?: LogContext): void {
     this.targets.forEach(t => { t.warn(message, context); });
   }
 
@@ -44,7 +44,7 @@ export class LogMediator implements ILogger {
    * @param message - The message text.
    * @param context - Optional structured key-value context.
    */
-  error(message: string, context?: LogContext): void {
+  public error(message: string, context?: LogContext): void {
     this.targets.forEach(t => { t.error(message, context); });
   }
 }

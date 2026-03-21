@@ -20,7 +20,7 @@ describe('TransactionService', () => {
       importTransactions: vi.fn().mockResolvedValue(undefined),
       getAccounts: vi.fn(),
       createAccount: vi.fn(),
-      runQuery: vi.fn().mockResolvedValue({ data: [] }),
+      aqlQuery: vi.fn().mockResolvedValue({ data: [] }),
       q: vi.fn(() => ({
         filter: vi.fn(() => ({
           select: vi.fn()
@@ -38,8 +38,9 @@ describe('TransactionService', () => {
       const txns = fakeBankTransactions(2);
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
-      expect(result.imported).toBe(2);
-      expect(result.skipped).toBe(0);
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(2);
+      expect(result.data.skipped).toBe(0);
       expect(mockApi.importTransactions).toHaveBeenCalledTimes(2);
     });
 
@@ -92,8 +93,9 @@ describe('TransactionService', () => {
       const txns = fakeBankTransactions(2);
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
-      expect(result.imported).toBe(1);
-      expect(result.skipped).toBe(1);
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(1);
+      expect(result.data.skipped).toBe(1);
     });
 
     it('logs non-duplicate errors without counting as skipped', async () => {
@@ -102,8 +104,9 @@ describe('TransactionService', () => {
       const txns = [fakeBankTransaction()];
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
-      expect(result.imported).toBe(0);
-      expect(result.skipped).toBe(0);
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(0);
+      expect(result.data.skipped).toBe(0);
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error importing transaction: Database error')
       );
@@ -150,26 +153,29 @@ describe('TransactionService', () => {
       mockApi.importTransactions.mockRejectedValue('network failure');
       const txns = [fakeBankTransaction()];
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
-      expect(result.imported).toBe(0);
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(0);
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('network failure')
       );
     });
 
     it('routes to existingTransactions when importedId already present in Actual', async () => {
-      mockApi.runQuery.mockResolvedValue({ data: [{ imported_id: 'discount-123456-preexist' }] });
+      mockApi.aqlQuery.mockResolvedValue({ data: [{ imported_id: 'discount-123456-preexist' }] });
       mockApi.importTransactions.mockResolvedValue(undefined);
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Update', identifier: 'preexist' }];
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
-      expect(result.imported).toBe(0);
-      expect(result.skipped).toBe(1);
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(0);
+      expect(result.data.skipped).toBe(1);
     });
 
     it('handles empty transactions array', async () => {
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: [] });
 
-      expect(result.imported).toBe(0);
-      expect(result.skipped).toBe(0);
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(0);
+      expect(result.data.skipped).toBe(0);
       expect(mockApi.importTransactions).not.toHaveBeenCalled();
     });
   });
@@ -181,7 +187,8 @@ describe('TransactionService', () => {
 
       const result = await service.getOrCreateAccount('acc-123', 'discount', '999999');
 
-      expect(result).toEqual(existingAccount);
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(existingAccount);
       expect(mockApi.createAccount).not.toHaveBeenCalled();
     });
 
@@ -192,7 +199,8 @@ describe('TransactionService', () => {
 
       const result = await service.getOrCreateAccount('acc-new', 'discount', '999999');
 
-      expect(result).toEqual(newAccount);
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(newAccount);
       expect(mockApi.createAccount).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'acc-new',
@@ -212,7 +220,28 @@ describe('TransactionService', () => {
 
       const result = await service.getOrCreateAccount('acc-222', 'leumi', '888888');
 
-      expect(result).toEqual({ id: 'acc-222', name: 'Account 2' });
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ id: 'acc-222', name: 'Account 2' });
+    });
+
+    it('returns failure when createAccount returns a string', async () => {
+      mockApi.getAccounts.mockResolvedValue([]);
+      mockApi.createAccount.mockResolvedValue('some-string-id');
+
+      const result = await service.getOrCreateAccount('acc-new', 'discount', '999999');
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('account not found');
+    });
+
+    it('returns failure when createAccount returns undefined', async () => {
+      mockApi.getAccounts.mockResolvedValue([]);
+      mockApi.createAccount.mockResolvedValue(undefined);
+
+      const result = await service.getOrCreateAccount('acc-new', 'discount', '999999');
+
+      expect(result.success).toBe(false);
+      expect(result.status).toBe('account-not-found');
     });
   });
 
@@ -227,7 +256,7 @@ describe('TransactionService', () => {
     });
 
     it('sets category from history resolver', async () => {
-      (mockResolver.resolve as any).mockReturnValue({ categoryId: 'cat-groceries' });
+      (mockResolver.resolve as any).mockReturnValue({ success: true, data: { categoryId: 'cat-groceries' } });
       const svc = new TransactionService(mockApi, mockResolver);
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Shufersal', identifier: '1' }];
       await svc.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
@@ -238,7 +267,7 @@ describe('TransactionService', () => {
     });
 
     it('sets payee_name and imported_payee from translate resolver', async () => {
-      (mockResolver.resolve as any).mockReturnValue({ payeeName: 'Supermarket', importedPayee: 'סופר כל הטעמים' });
+      (mockResolver.resolve as any).mockReturnValue({ success: true, data: { payeeName: 'Supermarket', importedPayee: 'סופר כל הטעמים' } });
       const svc = new TransactionService(mockApi, mockResolver);
       const txns = [{ date: '2026-02-14', chargedAmount: -50, description: 'סופר כל הטעמים', identifier: '1' }];
       await svc.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
@@ -249,7 +278,7 @@ describe('TransactionService', () => {
     });
 
     it('falls back to description when resolver returns undefined', async () => {
-      (mockResolver.resolve as any).mockReturnValue(undefined);
+      (mockResolver.resolve as any).mockReturnValue({ success: false, message: 'no match' });
       const svc = new TransactionService(mockApi, mockResolver);
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Unknown Store', identifier: '1' }];
       await svc.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });

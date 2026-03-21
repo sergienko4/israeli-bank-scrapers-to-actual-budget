@@ -4,10 +4,12 @@
  * so they use this no-op shim to satisfy the "must call logger" traceability rule.
  * At production log levels (info+) no output is produced.
  */
-export const logger = {
+const LOGGER = {
   /**
    * Records a debug-level trace for a utility function call.
    * @param _msg - The trace message (suppressed at info+ log level).
    */
-  debug(_msg: string): void {},
+  debug(_msg: string): void { /* no-op at production log levels */ },
 };
+
+export default LOGGER;

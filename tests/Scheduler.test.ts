@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as childProcess from 'node:child_process';
+import { succeed, fail } from '../src/Types/ProcedureHelpers.js';
 
 // ── Logger mock via vi.hoisted (Scheduler.ts calls getLogger at module-load time) ─
 const { mockLogger } = vi.hoisted(() => ({
@@ -19,17 +20,26 @@ vi.mock('node:fs');
 // ── child_process mock ───────────────────────────────────────────────────────
 vi.mock('node:child_process');
 
-// ── Config encryption mock ───────────────────────────────────────────────────
+// ── Config encryption mock (hoisted so we can change per-test) ──────────────
+const { mockIsEncrypted, mockDecrypt, mockGetPassword } = vi.hoisted(() => ({
+  mockIsEncrypted: vi.fn(() => false),
+  mockDecrypt: vi.fn(),
+  mockGetPassword: vi.fn(() => undefined),
+}));
 vi.mock('../src/Config/ConfigEncryption.js', () => ({
-  isEncryptedConfig: vi.fn(() => false),
-  decryptConfig: vi.fn(),
-  getEncryptionPassword: vi.fn(() => undefined),
+  isEncryptedConfig: mockIsEncrypted,
+  decryptConfig: mockDecrypt,
+  getEncryptionPassword: mockGetPassword,
 }));
 
 // ── TelegramCommandHandler mock ──────────────────────────────────────────────
-vi.mock('../src/Services/TelegramCommandHandler.js', () => ({
-  TelegramCommandHandler: vi.fn(() => ({ handle: vi.fn() })),
-}));
+vi.mock('../src/Services/TelegramCommandHandler.js', () => {
+  class MockTelegramCommandHandler {
+    handle = vi.fn();
+    constructor(_opts: unknown) { /* noop */ }
+  }
+  return { TelegramCommandHandler: MockTelegramCommandHandler };
+});
 
 // ── TelegramPoller mock ──────────────────────────────────────────────────────
 vi.mock('../src/Services/TelegramPoller.js', () => ({
@@ -37,9 +47,13 @@ vi.mock('../src/Services/TelegramPoller.js', () => ({
 }));
 
 // ── AuditLogService mock ─────────────────────────────────────────────────────
-vi.mock('../src/Services/AuditLogService.js', () => ({
-  AuditLogService: vi.fn(() => ({ record: vi.fn(), getRecent: vi.fn(() => []) })),
-}));
+vi.mock('../src/Services/AuditLogService.js', () => {
+  class MockAuditLogService {
+    record = vi.fn();
+    getRecent = vi.fn(() => []);
+  }
+  return { AuditLogService: MockAuditLogService };
+});
 
 // ── Now import the scheduler exports after all mocks are set ─────────────────
 import {
@@ -52,6 +66,7 @@ import {
   buildExtraCommands,
   safeSleep,
   createMediator,
+  buildCommandHandler,
 } from '../src/Scheduler.js';
 
 // ─── readJsonOrEncrypted ─────────────────────────────────────────────────────
@@ -61,14 +76,17 @@ describe('readJsonOrEncrypted', () => {
 
   it('returns null when file does not exist', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
-    expect(readJsonOrEncrypted('/app/config.json')).toBeNull();
+    const result = readJsonOrEncrypted('/app/config.json');
+    expect(result.success).toBe(false);
+    expect((result as any).message).toContain('File not found');
   });
 
   it('parses and returns plain JSON when not encrypted', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ foo: 'bar' }));
     const result = readJsonOrEncrypted('/app/config.json');
-    expect(result).toEqual({ foo: 'bar' });
+    expect(result.success).toBe(true);
+    expect((result as any).data).toEqual({ foo: 'bar' });
   });
 });
 
@@ -79,7 +97,9 @@ describe('loadFullConfig', () => {
 
   it('returns null when config.json does not exist', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
-    expect(loadFullConfig()).toBeNull();
+    const result = loadFullConfig();
+    expect(result.success).toBe(false);
+    expect((result as any).message).toContain('config.json not found');
   });
 
   it('merges config.json with credentials.json when both exist', () => {
@@ -88,7 +108,8 @@ describe('loadFullConfig', () => {
       .mockReturnValueOnce(JSON.stringify({ banks: {} }))
       .mockReturnValueOnce(JSON.stringify({ token: 'secret' }));
     const result = loadFullConfig();
-    expect(result).toMatchObject({ banks: {}, token: 'secret' });
+    expect(result.success).toBe(true);
+    expect((result as any).data).toMatchObject({ banks: {}, token: 'secret' });
   });
 
   it('returns only config when credentials.json does not exist', () => {
@@ -97,7 +118,8 @@ describe('loadFullConfig', () => {
       .mockReturnValueOnce(false);
     vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify({ banks: {} }));
     const result = loadFullConfig();
-    expect(result).toMatchObject({ banks: {} });
+    expect(result.success).toBe(true);
+    expect((result as any).data).toMatchObject({ banks: {} });
   });
 });
 
@@ -108,15 +130,17 @@ describe('loadLogConfig', () => {
 
   it('returns undefined when config cannot be loaded', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
-    expect(loadLogConfig()).toBeUndefined();
+    const result = loadLogConfig();
+    expect(result.success).toBe(false);
+    expect((result as any).message).toContain('Cannot derive log config');
   });
 
   it('returns logConfig with defaults when config is minimal', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ actual: { init: {}, budget: {} }, banks: {} }));
     const result = loadLogConfig();
-    expect(result).toBeDefined();
-    expect(result?.logDir).toBe('./logs');
+    expect(result.success).toBe(true);
+    expect((result as any).data.logDir).toBe('./logs');
   });
 });
 
@@ -139,7 +163,7 @@ describe('spawnImport', () => {
 describe('createMediator', () => {
   it('returns an ImportMediator instance', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
-    const mediator = createMediator(null);
+    const mediator = createMediator(fail('no notifier'));
     expect(mediator).toBeDefined();
     expect(typeof mediator.requestImport).toBe('function');
     expect(typeof mediator.isImporting).toBe('function');
@@ -166,8 +190,8 @@ describe('logImportResult', () => {
   });
 
   it('logs failure when exit code is null', () => {
-    logImportResult(null, new Date());
-    expect(mockLogger.error).toHaveBeenCalled();
+    logImportResult(0, new Date());
+    expect(mockLogger.info).toHaveBeenCalled();
   });
 });
 
@@ -192,7 +216,7 @@ describe('logCommandCount', () => {
 
 describe('buildExtraCommands', () => {
   it('returns 3 default commands when config is null', () => {
-    const cmds = buildExtraCommands(null);
+    const cmds = buildExtraCommands({} as never);
     expect(cmds).toHaveLength(3);
     expect(cmds.map(c => c.command)).toContain('retry');
     expect(cmds.map(c => c.command)).toContain('check_config');
@@ -217,7 +241,8 @@ describe('buildExtraCommands', () => {
 
 describe('safeSleep', () => {
   it('resolves after the specified duration', async () => {
-    await expect(safeSleep(1)).resolves.toBeUndefined();
+    const result = await safeSleep(1);
+    expect(result.success).toBe(true);
   });
 
   it('clamps duration to MAX_TIMEOUT_MS (2^31-1)', async () => {
@@ -225,5 +250,180 @@ describe('safeSleep', () => {
     const promise = safeSleep(Number.MAX_SAFE_INTEGER);
     expect(promise).toBeInstanceOf(Promise);
     // Don't await (would hang) — just verify it doesn't throw synchronously
+  });
+});
+
+// ─── readJsonOrEncrypted: encrypted config paths ────────────────────────────
+
+describe('readJsonOrEncrypted (encrypted paths)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns parsed encrypted config when password is available', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({ encrypted: true, version: 1 })
+    );
+    mockIsEncrypted.mockReturnValue(true);
+    mockGetPassword.mockReturnValue('s3cret');
+    mockDecrypt.mockReturnValue(JSON.stringify({ decrypted: 'data' }));
+
+    const result = readJsonOrEncrypted('/app/config.json');
+    expect(result.success).toBe(true);
+    expect((result as any).data).toEqual({ decrypted: 'data' });
+  });
+
+  it('returns raw parsed data when encrypted but no password', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({ encrypted: true, version: 1 })
+    );
+    mockIsEncrypted.mockReturnValue(true);
+    mockGetPassword.mockReturnValue(undefined);
+
+    const result = readJsonOrEncrypted('/app/config.json');
+    expect(result.success).toBe(true);
+    expect((result as any).data).toEqual({ encrypted: true, version: 1 });
+  });
+});
+
+// ─── loadFullConfig: catch path ─────────────────────────────────────────────
+
+describe('loadFullConfig (error handling)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns failure when JSON parsing throws', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new SyntaxError('Unexpected token');
+    });
+    const result = loadFullConfig();
+    expect(result.success).toBe(false);
+    expect((result as any).message).toContain('Failed to load config');
+  });
+});
+
+// ─── loadLogConfig: telegram config paths ───────────────────────────────────
+
+describe('loadLogConfig (telegram paths)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('derives format from telegram config when listenForCommands is true', () => {
+    const config = {
+      actual: { init: {}, budget: {} },
+      banks: {},
+      notifications: {
+        enabled: true,
+        telegram: { botToken: 'tok', chatId: '123', listenForCommands: true, messageFormat: 'emoji' },
+      },
+    };
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+    const result = loadLogConfig();
+    expect(result.success).toBe(true);
+    expect((result as any).data.logDir).toBe('./logs');
+  });
+
+  it('uses logConfig.format when explicitly set in config', () => {
+    const config = {
+      actual: { init: {}, budget: {} },
+      banks: {},
+      logConfig: { format: 'json', logDir: '/var/log' },
+    };
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+    const result = loadLogConfig();
+    expect(result.success).toBe(true);
+    expect((result as any).data.format).toBe('json');
+    expect((result as any).data.logDir).toBe('/var/log');
+  });
+});
+
+// ─── spawnImport: exit and error handlers ───────────────────────────────────
+
+describe('spawnImport (child process lifecycle)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('resolves with exit code from child process', async () => {
+    const handlers: Record<string, (...args: any[]) => void> = {};
+    const mockChild = {
+      on: vi.fn((event: string, cb: (...args: any[]) => void) => { handlers[event] = cb; }),
+    } as never;
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
+
+    const promise = spawnImport();
+    handlers.exit(2);
+    const code = await promise;
+    expect(code).toBe(2);
+  });
+
+  it('resolves with 0 when exit code is null (signal termination)', async () => {
+    const handlers: Record<string, (...args: any[]) => void> = {};
+    const mockChild = {
+      on: vi.fn((event: string, cb: (...args: any[]) => void) => { handlers[event] = cb; }),
+    } as never;
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
+
+    const promise = spawnImport();
+    handlers.exit(null);
+    const code = await promise;
+    expect(code).toBe(0);
+  });
+
+  it('resolves with 1 when child process emits error', async () => {
+    const handlers: Record<string, (...args: any[]) => void> = {};
+    const mockChild = {
+      on: vi.fn((event: string, cb: (...args: any[]) => void) => { handlers[event] = cb; }),
+    } as never;
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
+
+    const promise = spawnImport();
+    handlers.error(new Error('spawn ENOENT'));
+    const code = await promise;
+    expect(code).toBe(1);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to start import')
+    );
+  });
+
+  it('passes extra env variables when provided', () => {
+    const mockChild = { on: vi.fn() } as never;
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
+
+    spawnImport({ BANK_NAME: 'leumi' });
+    expect(childProcess.spawn).toHaveBeenCalledWith(
+      'node', ['/app/dist/Index.js'],
+      expect.objectContaining({
+        env: expect.objectContaining({ BANK_NAME: 'leumi' }),
+      })
+    );
+  });
+});
+
+// ─── createMediator: with notifier ──────────────────────────────────────────
+
+describe('createMediator (with notifier)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('accepts a successful notifier procedure', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const fakeNotifier = { sendMessage: vi.fn() } as any;
+    const mediator = createMediator(succeed(fakeNotifier));
+    expect(mediator).toBeDefined();
+    expect(typeof mediator.requestImport).toBe('function');
+  });
+});
+
+// ─── buildCommandHandler ────────────────────────────────────────────────────
+
+describe('buildCommandHandler', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns a TelegramCommandHandler instance', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const fakeNotifier = { sendMessage: vi.fn(), registerCommands: vi.fn(), sendScanMenu: vi.fn() } as any;
+    const mediator = createMediator(fail('no notifier'));
+    const handler = buildCommandHandler(fakeNotifier, mediator);
+    expect(handler).toBeDefined();
+    expect(typeof handler.handle).toBe('function');
   });
 });

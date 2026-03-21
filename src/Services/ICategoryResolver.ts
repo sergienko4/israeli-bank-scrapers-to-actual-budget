@@ -3,9 +3,9 @@
  * or translated payee. Implementations: HistoryCategoryResolver, TranslateCategoryResolver
  */
 
-import type { ResolvedCategory } from '../Types/Index.js';
+import type { IResolvedCategory, Procedure } from '../Types/Index.js';
 
 export interface ICategoryResolver {
-  initialize(): Promise<void>;
-  resolve(description: string): ResolvedCategory | undefined;
+  initialize(): Promise<Procedure<{ status: string }>>;
+  resolve(description: string): Procedure<IResolvedCategory>;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { TelegramNotifier } from '../../src/Services/Notifications/TelegramNotifier.js';
+import TelegramNotifier from '../../src/Services/Notifications/TelegramNotifier.js';
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
 import { ImportMediator } from '../../src/Services/ImportMediator.js';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';

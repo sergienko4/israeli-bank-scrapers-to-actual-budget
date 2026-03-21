@@ -5,9 +5,9 @@
  */
 import { getLogger } from '../Logger/Index.js';
 
-/** A bound class method signature used by the Loggable decorator. */
-export type BoundMethod<This, Args extends unknown[], Return> =
-  (this: This, ...args: Args) => Return;
+/** A bound class method signature used by the loggable decorator. */
+export type BoundMethod<TThis, TArgs extends unknown[], TReturn> =
+  (this: TThis, ...args: TArgs) => TReturn;
 
 /**
  * Wraps a class method to log its name at INFO level before each call.
@@ -15,12 +15,12 @@ export type BoundMethod<This, Args extends unknown[], Return> =
  * @param context - The decorator context providing the method name.
  * @returns A wrapped method that logs execution and delegates to the original.
  */
-export function Loggable<This, Args extends unknown[], Return>(
-  target: BoundMethod<This, Args, Return>,
-  context: ClassMethodDecoratorContext<This, BoundMethod<This, Args, Return>>
-): BoundMethod<This, Args, Return> {
+export function loggable<TThis, TArgs extends unknown[], TReturn>(
+  target: BoundMethod<TThis, TArgs, TReturn>,
+  context: ClassMethodDecoratorContext<TThis, BoundMethod<TThis, TArgs, TReturn>>
+): BoundMethod<TThis, TArgs, TReturn> {
   const label = `[EXEC] ${String(context.name)}`;
-  return function (this: This, ...args: Args): Return {
+  return function (this: TThis, ...args: TArgs): TReturn {
     const logger = getLogger();
     logger.info(label);
     return Reflect.apply(target, this, args);

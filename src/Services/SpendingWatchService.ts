@@ -4,65 +4,73 @@
  */
 
 import type api from '@actual-app/api';
-import type { SpendingWatchRule } from '../Types/Index.js';
-import { toCents, fromCents, formatDate, extractQueryData, errorMessage } from '../Utils/Index.js';
-import { getLogger } from '../Logger/Index.js';
 
-interface TransactionRow {
+import { getLogger } from '../Logger/Index.js';
+import type { ISpendingWatchRule, Procedure } from '../Types/Index.js';
+import { fail, succeed } from '../Types/Index.js';
+import { errorMessage,extractQueryData, formatDate, fromCents, toCents } from '../Utils/Index.js';
+
+interface ITransactionRow {
   date: string;
   imported_payee: string;
   amount: number;
 }
 
-interface RuleResult {
-  rule: SpendingWatchRule;
+interface IRuleResult {
+  rule: ISpendingWatchRule;
   totalSpent: number;
   triggered: boolean;
-  matched: TransactionRow[];
+  matched: ITransactionRow[];
 }
 
 const MAX_DISPLAYED_TRANSACTIONS = 5;
 
 /** Evaluates spending watch rules against Actual Budget transaction history. */
-export class SpendingWatchService {
+export default class SpendingWatchService {
   /**
    * Creates a SpendingWatchService with the given rules and Actual API.
-   * @param rules - Array of SpendingWatchRule configurations to evaluate.
+   * @param rules - Array of ISpendingWatchRule configurations to evaluate.
    * @param actualApi - The Actual Budget API module to query transactions from.
    */
   constructor(
-    private readonly rules: SpendingWatchRule[],
+    private readonly rules: ISpendingWatchRule[],
     private readonly actualApi: typeof api
   ) {}
 
   /**
-   * Evaluates all configured spending rules and returns a formatted alert message.
-   * @returns HTML alert string when any rule is triggered, or null if none are.
+   * Evaluates all configured spending rules and returns a Procedure result.
+   * @returns Procedure with alert message when triggered, noAlerts flag when clean, or failure.
    */
-  async evaluate(): Promise<string | null> {
-    if (this.rules.length === 0) return null;
+  public async evaluate(): Promise<Procedure<{ message: string } | { noAlerts: true }>> {
+    if (this.rules.length === 0) return succeed({ noAlerts: true as const }, 'no-alerts');
     try {
       const maxDays = Math.max(...this.rules.map(r => r.numOfDayToCount));
       const allTransactions = await this.queryTransactions(maxDays);
-      const results = this.rules.map(r => this.evaluateRule(r, allTransactions));
-      return this.formatMessage(results);
+      const results = this.rules.map(r => SpendingWatchService.evaluateRule(r, allTransactions));
+      const alertMessage = SpendingWatchService.formatMessage(results);
+      if (!alertMessage) return succeed({ noAlerts: true as const }, 'no-alerts');
+      return succeed({ message: alertMessage }, 'alert-triggered');
     } catch (error: unknown) {
       getLogger().error(`Spending watch error: ${errorMessage(error)}`);
-      return null;
+      const err = error instanceof Error ? error : new Error(String(error));
+      const message = errorMessage(error);
+      return fail(message, { error: err, status: 'evaluation-error' });
     }
   }
 
   /**
    * Evaluates a single spending rule against the pre-fetched transaction list.
-   * @param rule - The SpendingWatchRule to evaluate.
+   * @param rule - The ISpendingWatchRule to evaluate.
    * @param allTransactions - All transactions fetched for the max time window.
-   * @returns RuleResult with totals and trigger status.
+   * @returns IRuleResult with totals and trigger status.
    */
-  private evaluateRule(rule: SpendingWatchRule, allTransactions: TransactionRow[]): RuleResult {
-    const startDate = this.buildStartDate(rule.numOfDayToCount);
+  private static evaluateRule(
+    rule: ISpendingWatchRule, allTransactions: ITransactionRow[]
+  ): IRuleResult {
+    const startDate = SpendingWatchService.buildStartDate(rule.numOfDayToCount);
     const inWindow = allTransactions.filter(t => t.date >= startDate);
-    const filtered = this.filterByPayees(inWindow, rule.watchPayees);
-    const totalSpent = this.sumDebits(filtered);
+    const filtered = SpendingWatchService.filterByPayees(inWindow, rule.watchPayees);
+    const totalSpent = SpendingWatchService.sumDebits(filtered);
     const threshold = toCents(rule.alertFromAmount);
     return { rule, totalSpent, triggered: totalSpent > threshold, matched: filtered };
   }
@@ -72,7 +80,7 @@ export class SpendingWatchService {
    * @param days - Number of days to look back from today.
    * @returns YYYY-MM-DD string for the start of the window.
    */
-  private buildStartDate(days: number): string {
+  private static buildStartDate(days: number): string {
     const date = new Date();
     date.setDate(date.getDate() - days + 1);
     return formatDate(date);
@@ -81,17 +89,16 @@ export class SpendingWatchService {
   /**
    * Queries Actual Budget for all debit transactions within the given window.
    * @param maxDays - Number of days back to query; determines the start date filter.
-   * @returns Array of TransactionRow objects for matching transactions.
+   * @returns Array of ITransactionRow objects for matching transactions.
    */
-  private async queryTransactions(maxDays: number): Promise<TransactionRow[]> {
-    const startDate = this.buildStartDate(maxDays);
-    const result = await this.actualApi.runQuery(
-      this.actualApi.q('transactions')
-        .filter({ date: { $gte: startDate }, amount: { $lt: 0 } })
-        .select(['date', 'imported_payee', 'amount'])
-        .orderBy({ date: 'desc' })
-    );
-    return extractQueryData<TransactionRow[]>(result, []);
+  private async queryTransactions(maxDays: number): Promise<ITransactionRow[]> {
+    const startDate = SpendingWatchService.buildStartDate(maxDays);
+    const query = this.actualApi.q('transactions')
+      .filter({ date: { $gte: startDate }, amount: { $lt: 0 } })
+      .select(['date', 'imported_payee', 'amount'])
+      .orderBy({ date: 'desc' });
+    const result = await this.actualApi.aqlQuery(query);
+    return extractQueryData<ITransactionRow[]>(result, []);
   }
 
   /**
@@ -100,10 +107,12 @@ export class SpendingWatchService {
    * @param watchPayees - Optional list of payee substrings to filter by; absent means all.
    * @returns Filtered array of transactions matching the payee list.
    */
-  private filterByPayees(txns: TransactionRow[], watchPayees?: string[]): TransactionRow[] {
+  private static filterByPayees(
+    txns: ITransactionRow[], watchPayees?: string[]
+  ): ITransactionRow[] {
     if (!watchPayees || watchPayees.length === 0) return txns;
     const lowerPayees = watchPayees.map(p => p.toLowerCase());
-    return txns.filter(t => this.matchesAnyPayee(t.imported_payee, lowerPayees));
+    return txns.filter(t => SpendingWatchService.matchesAnyPayee(t.imported_payee, lowerPayees));
   }
 
   /**
@@ -112,7 +121,7 @@ export class SpendingWatchService {
    * @param lowerPayees - Pre-lowercased list of payee substrings to match against.
    * @returns True if the description contains at least one payee substring.
    */
-  private matchesAnyPayee(description: string, lowerPayees: string[]): boolean {
+  private static matchesAnyPayee(description: string, lowerPayees: string[]): boolean {
     const lower = (description || '').toLowerCase();
     return lowerPayees.some(p => lower.includes(p));
   }
@@ -122,58 +131,64 @@ export class SpendingWatchService {
    * @param txns - Array of transactions whose amounts to sum.
    * @returns Total absolute debit amount in cents.
    */
-  private sumDebits(txns: TransactionRow[]): number {
+  private static sumDebits(txns: ITransactionRow[]): number {
     return txns.reduce((sum, t) => sum + Math.abs(t.amount), 0);
   }
 
   /**
    * Formats triggered rule results into a Telegram HTML alert message.
-   * @param results - Array of RuleResult objects to filter and format.
-   * @returns HTML alert string, or null when no rules are triggered.
+   * @param results - Array of IRuleResult objects to filter and format.
+   * @returns HTML alert string, or empty string when no rules are triggered.
    */
-  private formatMessage(results: RuleResult[]): string | null {
+  private static formatMessage(results: IRuleResult[]): string {
     const triggered = results.filter(r => r.triggered);
-    if (triggered.length === 0) return null;
-    const sections = triggered.map(r => this.formatRule(r));
+    if (triggered.length === 0) return '';
+    const sections = triggered.map(r => SpendingWatchService.formatRule(r));
     return `🔔 <b>Spending Watch</b>\n\n${sections.join('\n\n')}`;
   }
 
   /**
    * Formats a single triggered rule result as a multi-line alert section.
-   * @param result - The RuleResult to format.
+   * @param result - The IRuleResult to format.
    * @returns Multi-line string with header and transaction detail lines.
    */
-  private formatRule(result: RuleResult): string {
-    const header = this.buildRuleHeader(result);
-    const details = this.buildTransactionDetails(result.matched);
+  private static formatRule(result: IRuleResult): string {
+    const header = SpendingWatchService.buildRuleHeader(result);
+    const details = SpendingWatchService.buildTransactionDetails(result.matched);
     return [header, ...details].filter(Boolean).join('\n');
   }
 
   /**
    * Builds the header line for a triggered spending rule alert.
-   * @param result - The RuleResult containing the rule and total spent.
+   * @param result - The IRuleResult containing the rule and total spent.
    * @returns Header string with payee label, amount, and time window.
    */
-  private buildRuleHeader(result: RuleResult): string {
+  private static buildRuleHeader(result: IRuleResult): string {
     const { rule, totalSpent } = result;
     const payeeLabel = rule.watchPayees?.length ? rule.watchPayees.join(', ') : 'All payees';
-    const dayLabel = rule.numOfDayToCount === 1 ? '1 day' : `${rule.numOfDayToCount} days`;
+    const dayLabel = rule.numOfDayToCount === 1
+      ? '1 day'
+      : `${String(rule.numOfDayToCount)} days`;
     return (
-      `⚠️ ${payeeLabel}: ${this.formatAmount(totalSpent)} in ${dayLabel} ` +
+      `⚠️ ${payeeLabel}: ${SpendingWatchService.formatAmount(totalSpent)} in ${dayLabel} ` +
       `(limit: ${rule.alertFromAmount.toLocaleString()})`
     );
   }
 
   /**
    * Formats up to 5 matched transactions as detail lines, with an overflow notice.
-   * @param matched - Array of matching TransactionRow objects to display.
+   * @param matched - Array of matching ITransactionRow objects to display.
    * @returns Array of formatted detail strings for the alert message.
    */
-  private buildTransactionDetails(matched: TransactionRow[]): string[] {
+  private static buildTransactionDetails(matched: ITransactionRow[]): string[] {
     const lines = matched.slice(0, MAX_DISPLAYED_TRANSACTIONS)
-      .map(t => `  ${this.formatAmount(t.amount)}  ${t.imported_payee || 'Unknown'}`);
+      .map(t =>
+        `  ${SpendingWatchService.formatAmount(t.amount)}  ${t.imported_payee || 'Unknown'}`
+      );
     if (matched.length > MAX_DISPLAYED_TRANSACTIONS) {
-      lines.push(`  ... and ${matched.length - MAX_DISPLAYED_TRANSACTIONS} more`);
+      lines.push(
+        `  ... and ${String(matched.length - MAX_DISPLAYED_TRANSACTIONS)} more`
+      );
     }
     return lines;
   }
@@ -183,7 +198,7 @@ export class SpendingWatchService {
    * @param cents - The amount in cents to format.
    * @returns Formatted string like "1,234.56".
    */
-  private formatAmount(cents: number): string {
+  private static formatAmount(cents: number): string {
     return fromCents(cents).toLocaleString('en-US',
       { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }

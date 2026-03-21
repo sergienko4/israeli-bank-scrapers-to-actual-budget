@@ -3,11 +3,13 @@
  * Enables debugging, trend analysis, and /status command history
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import type { ImportSummary, BankMetrics } from './MetricsService.js';
-import { getLogger } from '../Logger/Index.js';
+import { existsSync,readFileSync, writeFileSync } from 'node:fs';
 
-export interface AuditEntry {
+import type { Procedure } from '../Types/Index.js';
+import { fail,succeed } from '../Types/Index.js';
+import type { IBankMetrics,IImportSummary } from './MetricsService.js';
+
+export interface IAuditEntry {
   timestamp: string;
   totalBanks: number;
   successfulBanks: number;
@@ -16,17 +18,17 @@ export interface AuditEntry {
   totalDuplicates: number;
   totalDuration: number;
   successRate: number;
-  banks: Array<{
+  banks: {
     name: string; status: string; duration?: number; txns: number;
     error?: string; reconciliationStatus?: string; reconciliationAmount?: number
-  }>;
+  }[];
 }
 
 export interface IAuditLog {
-  record(summary: ImportSummary): void;
-  getRecent(count: number): AuditEntry[];
-  getLastFailedBanks(): string[];
-  getConsecutiveFailures(bankName: string): number;
+  record(summary: IImportSummary): Procedure<{ status: 'recorded' }>;
+  getRecent(count: number): Procedure<IAuditEntry[]>;
+  getLastFailedBanks(): Procedure<string[]>;
+  getConsecutiveFailures(bankName: string): Procedure<number>;
 }
 
 const DEFAULT_MAX_ENTRIES = 90;
@@ -39,62 +41,79 @@ export class AuditLogService implements IAuditLog {
    * @param maxEntries - Maximum number of entries to retain in the log.
    */
   constructor(
-    private readonly filePath: string = '/app/data/audit-log.json',
+    private readonly filePath = '/app/data/audit-log.json',
     private readonly maxEntries: number = DEFAULT_MAX_ENTRIES
   ) {}
 
   /**
    * Appends a new audit entry built from the given import summary.
-   * @param summary - The ImportSummary from the completed import run.
+   * @param summary - The IImportSummary from the completed import run.
+   * @returns Procedure indicating the entry was recorded or describing the write failure.
    */
-  record(summary: ImportSummary): void {
-    const entry = this.buildEntry(summary);
-    const entries = this.loadEntries();
-    entries.push(entry);
-    this.saveEntries(entries.slice(-this.maxEntries));
+  public record(summary: IImportSummary): Procedure<{ status: 'recorded' }> {
+    try {
+      const entry = AuditLogService.buildEntry(summary);
+      const entries = this.loadEntries();
+      entries.push(entry);
+      const trimmed = entries.slice(-this.maxEntries);
+      this.saveEntries(trimmed);
+      return succeed({ status: 'recorded' as const });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return fail('audit write failed', { error: error instanceof Error ? error : new Error(msg) });
+    }
   }
 
   /**
    * Returns the most recent audit entries up to the requested count.
    * @param count - Maximum number of entries to return.
-   * @returns Array of AuditEntry objects, most recent last.
+   * @returns Procedure containing an array of IAuditEntry objects, most recent last.
    */
-  getRecent(count: number): AuditEntry[] {
-    return this.loadEntries().slice(-count);
+  public getRecent(count: number): Procedure<IAuditEntry[]> {
+    const entries = this.loadEntries();
+    const sliced = entries.slice(-count);
+    return succeed(sliced);
   }
 
   /**
    * Returns the names of banks that failed in the most recent audit entry.
-   * @returns Array of failed bank names, or empty if last run was successful or no entries.
+   * @returns Procedure containing an array of failed bank names, or empty if last run was successful.
    */
-  getLastFailedBanks(): string[] {
-    const recent = this.getRecent(1);
-    if (!recent.length) return [];
-    return recent[0].banks.filter(b => b.status === 'failure').map(b => b.name);
+  public getLastFailedBanks(): Procedure<string[]> {
+    const recentResult = this.getRecent(1);
+    if (!recentResult.success) return succeed([]);
+    const recent = recentResult.data;
+    if (!recent.length) return succeed([]);
+    const failedBanks = recent[0].banks
+      .filter(b => b.status === 'failure')
+      .map(b => b.name);
+    return succeed(failedBanks);
   }
 
   /**
    * Counts how many consecutive recent entries have a failure for the given bank.
    * @param bankName - The bank name to check for consecutive failures.
-   * @returns Number of consecutive failures from the most recent entry backwards.
+   * @returns Procedure containing the number of consecutive failures from the most recent entry.
    */
-  getConsecutiveFailures(bankName: string): number {
-    const entries = this.getRecent(10).reverse();
+  public getConsecutiveFailures(bankName: string): Procedure<number> {
+    const recentResult = this.getRecent(10);
+    if (!recentResult.success) return succeed(0);
+    const entries = [...recentResult.data].reverse();
     let count = 0;
     for (const entry of entries) {
       const bank = entry.banks.find(b => b.name === bankName);
       if (bank?.status === 'failure') count++;
       else break;
     }
-    return count;
+    return succeed(count);
   }
 
   /**
-   * Constructs an AuditEntry from an ImportSummary.
+   * Constructs an IAuditEntry from an IImportSummary.
    * @param summary - The import summary to convert.
-   * @returns A new AuditEntry with a timestamp and per-bank details.
+   * @returns A new IAuditEntry with a timestamp and per-bank details.
    */
-  private buildEntry(summary: ImportSummary): AuditEntry {
+  private static buildEntry(summary: IImportSummary): IAuditEntry {
     return {
       timestamp: new Date().toISOString(),
       totalBanks: summary.totalBanks,
@@ -104,7 +123,7 @@ export class AuditLogService implements IAuditLog {
       totalDuplicates: summary.totalDuplicates,
       totalDuration: summary.totalDuration,
       successRate: summary.successRate,
-      banks: summary.banks.map(b => this.mapBank(b)),
+      banks: summary.banks.map(b => AuditLogService.mapBank(b)),
     };
   }
 
@@ -113,7 +132,7 @@ export class AuditLogService implements IAuditLog {
    * @param b - The BankMetrics to map.
    * @returns A flat object with name, status, duration, txns, and optional fields.
    */
-  private mapBank(b: BankMetrics): AuditEntry['banks'][number] {
+  private static mapBank(b: IBankMetrics): IAuditEntry['banks'][number] {
     return {
       name: b.bankName, status: b.status,
       duration: b.duration, txns: b.transactionsImported,
@@ -126,23 +145,24 @@ export class AuditLogService implements IAuditLog {
 
   /**
    * Reads and parses the audit log file, returning an empty array if absent or corrupt.
-   * @returns Array of AuditEntry objects from the log file.
+   * @returns Array of IAuditEntry objects from the log file.
    */
-  private loadEntries(): AuditEntry[] {
+  private loadEntries(): IAuditEntry[] {
     if (!existsSync(this.filePath)) return [];
-    try { return JSON.parse(readFileSync(this.filePath, 'utf8')) as AuditEntry[]; }
+    try {
+      const fileContent = readFileSync(this.filePath, 'utf8');
+      return JSON.parse(fileContent) as IAuditEntry[];
+    }
     catch { return []; }
   }
 
   /**
    * Serialises the audit entry array and writes it to the log file.
-   * @param entries - The full list of AuditEntry objects to persist.
+   * Throws on write failure so the caller's try/catch can produce a fail() result.
+   * @param entries - The full list of IAuditEntry objects to persist.
    */
-  private saveEntries(entries: AuditEntry[]): void {
-    try { writeFileSync(this.filePath, JSON.stringify(entries, null, 2)); }
-    catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      getLogger().error(`Failed to write audit log: ${msg}`);
-    }
+  private saveEntries(entries: IAuditEntry[]): void {
+    const serialized = JSON.stringify(entries, null, 2);
+    writeFileSync(this.filePath, serialized);
   }
 }

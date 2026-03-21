@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AccountImporter } from '../../src/Services/AccountImporter.js';
 import { DryRunCollector } from '../../src/Services/DryRunCollector.js';
+import { succeed, fail } from '../../src/Types/Index.js';
 import {
   fakeBankConfig, fakeBankTransactions, fakeBankTarget, fakeUuid,
 } from '../helpers/factories.js';
@@ -28,17 +29,17 @@ const ACCOUNT_ID = fakeUuid();
 
 function makeMockTransactionService() {
   return {
-    importTransactions: vi.fn().mockResolvedValue({
+    importTransactions: vi.fn().mockResolvedValue(succeed({
       imported: 2, skipped: 0,
       newTransactions: [{ date: '2026-01-01', description: 'x', amount: -100 }],
       existingTransactions: [],
-    }),
-    getOrCreateAccount: vi.fn().mockResolvedValue(undefined),
+    })),
+    getOrCreateAccount: vi.fn().mockResolvedValue(succeed({ id: ACCOUNT_ID, name: 'Test' })),
   };
 }
 
 function makeMockReconciliationService() {
-  return { reconcile: vi.fn().mockResolvedValue({ status: 'skipped', diff: 0 }) };
+  return { reconcile: vi.fn().mockResolvedValue(succeed({ status: 'skipped', diff: 0 })) };
 }
 
 function makeMockMetrics() {
@@ -183,7 +184,10 @@ describe('AccountImporter.processAllAccounts', () => {
 
   it('handles reconciliation error gracefully without throwing', async () => {
     const opts = makeOpts();
-    opts.reconciliationService.reconcile.mockRejectedValue(new Error('reconcile failed'));
+    const reconcileError = new Error('reconcile failed');
+    opts.reconciliationService.reconcile.mockResolvedValue(
+      fail('Reconciliation failed: reconcile failed', { error: reconcileError })
+    );
     const importer = new AccountImporter(opts);
     const target = fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all', reconcile: true });
     const config = fakeBankConfig({ targets: [target] });

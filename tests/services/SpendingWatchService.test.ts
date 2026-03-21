@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import type api from '@actual-app/api';
-import { SpendingWatchService } from '../../src/Services/SpendingWatchService.js';
-import { SpendingWatchRule } from '../../src/Types/Index.js';
+import SpendingWatchService from '../../src/Services/SpendingWatchService.js';
+import { ISpendingWatchRule } from '../../src/Types/Index.js';
 import { formatDate } from '../../src/Utils/Date.js';
 import { fakeActualTransaction } from '../helpers/factories.js';
 
 function createMockApi(transactions: Array<{ date: string; imported_payee: string; amount: number }> = []) {
   return {
-    runQuery: vi.fn().mockResolvedValue({ data: transactions }),
+    aqlQuery: vi.fn().mockResolvedValue({ data: transactions }),
     q: vi.fn().mockReturnValue({
       filter: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
@@ -24,24 +24,36 @@ function createMockApi(transactions: Array<{ date: string; imported_payee: strin
 
 const today = formatDate(new Date());
 
+const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+vi.mock('../../src/Logger/Index.js', () => ({
+  getLogger: () => mockLogger,
+  getLogBuffer: vi.fn(),
+  createLogger: vi.fn(),
+}));
+
 describe('SpendingWatchService', () => {
   describe('evaluate', () => {
-    it('returns null when no rules', async () => {
+    it('returns success with noAlerts when no rules', async () => {
       const service = new SpendingWatchService([], createMockApi());
-      expect(await service.evaluate()).toBeNull();
+      const result = await service.evaluate();
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ noAlerts: true });
     });
 
-    it('returns null when spending is below threshold', async () => {
-      const rules: SpendingWatchRule[] = [
+    it('returns success with noAlerts when spending is below threshold', async () => {
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 1000, numOfDayToCount: 1 }
       ];
       const txns = [fakeActualTransaction({ date: today, amount: -500 })];
       const service = new SpendingWatchService(rules, createMockApi(txns));
-      expect(await service.evaluate()).toBeNull();
+      const result = await service.evaluate();
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ noAlerts: true });
     });
 
     it('returns alert when spending exceeds threshold', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 100, numOfDayToCount: 1 }
       ];
       const txns = [
@@ -49,13 +61,16 @@ describe('SpendingWatchService', () => {
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('Spending Watch');
-      expect(result).toContain('All payees');
-      expect(result).toContain('Supermarket');
+      expect(result.success).toBe(true);
+      expect('message' in result.data).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('Spending Watch');
+      expect(msg).toContain('All payees');
+      expect(msg).toContain('Supermarket');
     });
 
     it('filters by watchPayees when configured', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 40, numOfDayToCount: 7, watchPayees: ['Netflix'] }
       ];
       const txns = [
@@ -64,12 +79,14 @@ describe('SpendingWatchService', () => {
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('Netflix');
-      expect(result).not.toContain('Supermarket');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('Netflix');
+      expect(msg).not.toContain('Supermarket');
     });
 
     it('uses case-insensitive substring matching for payees', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 10, numOfDayToCount: 1, watchPayees: ['netflix'] }
       ];
       const txns = [
@@ -77,11 +94,13 @@ describe('SpendingWatchService', () => {
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('NETFLIX Premium HD');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('NETFLIX Premium HD');
     });
 
     it('counts all payees when watchPayees is empty', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 100, numOfDayToCount: 1, watchPayees: [] }
       ];
       const txns = [
@@ -90,12 +109,14 @@ describe('SpendingWatchService', () => {
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('All payees');
-      expect(result).toContain('130.00');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('All payees');
+      expect(msg).toContain('130.00');
     });
 
     it('evaluates multiple rules independently', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 50, numOfDayToCount: 1 },
         { alertFromAmount: 99999, numOfDayToCount: 30 }
       ];
@@ -104,20 +125,24 @@ describe('SpendingWatchService', () => {
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('1 day');
-      expect(result).not.toContain('30 days');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('1 day');
+      expect(msg).not.toContain('30 days');
     });
 
-    it('returns null when no transactions exist', async () => {
+    it('returns success with noAlerts when no transactions exist', async () => {
       const service = new SpendingWatchService(
         [{ alertFromAmount: 100, numOfDayToCount: 7 }],
         createMockApi([]),
       );
-      expect(await service.evaluate()).toBeNull();
+      const result = await service.evaluate();
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ noAlerts: true });
     });
 
     it('shows max 5 transactions per rule with overflow count', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 1, numOfDayToCount: 1 }
       ];
       const txns = Array.from({ length: 8 }, (_, i) => ({
@@ -125,13 +150,15 @@ describe('SpendingWatchService', () => {
       }));
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('Store 1');
-      expect(result).toContain('Store 5');
-      expect(result).toContain('3 more');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('Store 1');
+      expect(msg).toContain('Store 5');
+      expect(msg).toContain('3 more');
     });
 
     it('handles null imported_payee gracefully', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 1, numOfDayToCount: 1, watchPayees: ['test'] }
       ];
       const txns = [
@@ -139,17 +166,21 @@ describe('SpendingWatchService', () => {
         { date: today, imported_payee: '', amount: -3000 }
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
-      expect(await service.evaluate()).toBeNull();
+      const result = await service.evaluate();
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ noAlerts: true });
     });
 
-    it('handles API errors gracefully', async () => {
+    it('returns failure when API throws an error', async () => {
       const mockApi = createMockApi();
-      (mockApi as unknown as { runQuery: ReturnType<typeof vi.fn> }).runQuery.mockRejectedValue(new Error('API down'));
-      const rules: SpendingWatchRule[] = [
+      (mockApi as unknown as { aqlQuery: ReturnType<typeof vi.fn> }).aqlQuery.mockRejectedValue(new Error('API down'));
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 100, numOfDayToCount: 1 }
       ];
       const service = new SpendingWatchService(rules, mockApi);
-      expect(await service.evaluate()).toBeNull();
+      const result = await service.evaluate();
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('API down');
     });
 
     it('formats day label correctly for 1 day', async () => {
@@ -158,7 +189,10 @@ describe('SpendingWatchService', () => {
         [{ alertFromAmount: 1, numOfDayToCount: 1 }],
         createMockApi(txns),
       );
-      expect(await service.evaluate()).toContain('1 day');
+      const result = await service.evaluate();
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('1 day');
     });
 
     it('formats day label correctly for multiple days', async () => {
@@ -167,21 +201,26 @@ describe('SpendingWatchService', () => {
         [{ alertFromAmount: 1, numOfDayToCount: 7 }],
         createMockApi(txns),
       );
-      expect(await service.evaluate()).toContain('7 days');
+      const result = await service.evaluate();
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('7 days');
     });
 
     it('shows watchPayees names in alert header', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 1, numOfDayToCount: 1, watchPayees: ['Netflix', 'Gym'] }
       ];
       const txns = [{ date: today, imported_payee: 'Netflix Inc', amount: -5000 }];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('Netflix, Gym');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('Netflix, Gym');
     });
 
     it('does not trigger when payee matches but amount below threshold', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 50000, numOfDayToCount: 14, watchPayees: ['מגדל'] }
       ];
       const txns = [
@@ -189,11 +228,13 @@ describe('SpendingWatchService', () => {
         { date: today, imported_payee: 'חיוב מ-מגדל חברה לביטו', amount: -200000 }
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
-      expect(await service.evaluate()).toBeNull();
+      const result = await service.evaluate();
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ noAlerts: true });
     });
 
     it('triggers when payee matches and amount exceeds threshold', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 10, numOfDayToCount: 14, watchPayees: ['מגדל'] }
       ];
       const txns = [
@@ -202,12 +243,14 @@ describe('SpendingWatchService', () => {
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('מגדל');
-      expect(result).toContain('4,000.00');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('מגדל');
+      expect(msg).toContain('4,000.00');
     });
 
     it('does not trigger when payee filter has no matches in data', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 1, numOfDayToCount: 30, watchPayees: ['NONEXISTENT'] }
       ];
       const txns = [
@@ -215,12 +258,14 @@ describe('SpendingWatchService', () => {
         { date: today, imported_payee: 'כ.א.ל חיוב', amount: -300000 }
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
-      expect(await service.evaluate()).toBeNull();
+      const result = await service.evaluate();
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ noAlerts: true });
     });
 
     it('filters transactions by date window correctly', async () => {
       const oldDate = '2020-01-01';
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 1, numOfDayToCount: 7 }
       ];
       const txns = [
@@ -229,12 +274,14 @@ describe('SpendingWatchService', () => {
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('Recent');
-      expect(result).not.toContain('Old');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('Recent');
+      expect(msg).not.toContain('Old');
     });
 
     it('shows Unknown for null payee in triggered alert details', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 1, numOfDayToCount: 1 }
       ];
       const txns = [
@@ -242,11 +289,13 @@ describe('SpendingWatchService', () => {
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('Unknown');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('Unknown');
     });
 
     it('combines multiple triggered rules in one message', async () => {
-      const rules: SpendingWatchRule[] = [
+      const rules: ISpendingWatchRule[] = [
         { alertFromAmount: 1, numOfDayToCount: 1 },
         { alertFromAmount: 1, numOfDayToCount: 7, watchPayees: ['Netflix'] },
         { alertFromAmount: 999999, numOfDayToCount: 30 }
@@ -257,9 +306,11 @@ describe('SpendingWatchService', () => {
       ];
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
-      expect(result).toContain('All payees');
-      expect(result).toContain('Netflix');
-      expect(result).not.toContain('30 days');
+      expect(result.success).toBe(true);
+      const msg = (result.data as { message: string }).message;
+      expect(msg).toContain('All payees');
+      expect(msg).toContain('Netflix');
+      expect(msg).not.toContain('30 days');
     });
   });
 });

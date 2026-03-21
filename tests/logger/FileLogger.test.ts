@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, existsSync, readdirSync, readFileSync, unlinkSync, rmdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { FileLogger } from '../../src/Logger/FileLogger.js';
+import FileLogger from '../../src/Logger/FileLogger.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 let testDir: string;

@@ -34,11 +34,11 @@ describe('ScraperErrorMessages', () => {
     });
 
     it('returns undefined for unknown error text', () => {
-      expect(getScraperErrorAdvice('SOME_RANDOM_ERROR')).toBeUndefined();
+      expect(getScraperErrorAdvice('SOME_RANDOM_ERROR')).toBe('');
     });
 
     it('returns undefined for empty string', () => {
-      expect(getScraperErrorAdvice('')).toBeUndefined();
+      expect(getScraperErrorAdvice('')).toBe('');
     });
 
     it('matches code embedded in longer error message', () => {
@@ -47,9 +47,9 @@ describe('ScraperErrorMessages', () => {
     });
 
     it('does not false-positive on partial match', () => {
-      expect(getScraperErrorAdvice('PASSWORD_RESET')).toBeUndefined();
-      expect(getScraperErrorAdvice('BLOCK')).toBeUndefined();
-      expect(getScraperErrorAdvice('TIME')).toBeUndefined();
+      expect(getScraperErrorAdvice('PASSWORD_RESET')).toBe('');
+      expect(getScraperErrorAdvice('BLOCK')).toBe('');
+      expect(getScraperErrorAdvice('TIME')).toBe('');
     });
   });
 });

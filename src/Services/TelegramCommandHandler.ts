@@ -3,20 +3,22 @@
  * Commands: /scan, /import, /status, /watch, /logs, /help
  */
 
-import type { INotifier } from './Notifications/INotifier.js';
-import type { IAuditLog, AuditEntry } from './AuditLogService.js';
-import type { ImportMediator } from './ImportMediator.js';
-import type { BatchResult } from '../Types/Index.js';
-import { errorMessage } from '../Utils/Index.js';
 import { getLogger, LogFileReader } from '../Logger/Index.js';
-import { getScraperErrorAdvice } from '../Errors/ScraperErrorMessages.js';
+import type { IBatchResult, Procedure } from '../Types/Index.js';
+import { succeed } from '../Types/Index.js';
+import { errorMessage } from '../Utils/Index.js';
+import type { IAuditLog } from './AuditLogService.js';
+import type { ImportMediator } from './ImportMediator.js';
+import type { INotifier } from './Notifications/INotifier.js';
+import {
+  formatAuditEntry, formatFailedBanks,
+  isFreshEntry, parseLogCount, timeSince,
+  truncateForTelegram} from './TelegramCommandFormatters.js';
 
-const MAX_TELEGRAM_LENGTH = 4096;
-const DEFAULT_LOG_COUNT = 50;
 const ALREADY_RUNNING = '⏳ Import already running. Please wait.';
 
 /** Options for constructing a TelegramCommandHandler. */
-export interface CommandHandlerOptions {
+export interface ICommandHandlerOptions {
   /** The ImportMediator that handles import requests. */
   readonly mediator: ImportMediator;
   /** Notifier for sending Telegram messages. */
@@ -24,55 +26,61 @@ export interface CommandHandlerOptions {
   /** Optional audit log for recording import history. */
   readonly auditLog?: IAuditLog;
   /** Optional callback to run spending watch rules. */
-  readonly runWatch?: () => Promise<string | null>;
+  readonly runWatch?: () => Promise<string>;
   /** Optional callback to validate the configuration. */
   readonly runValidate?: () => Promise<string>;
   /** Optional callback to get all configured bank names. */
   readonly getBankNames?: () => string[];
   /** Optional callback to display the inline keyboard scan menu. */
-  readonly sendScanMenu?: (banks: string[]) => Promise<void>;
+  readonly sendScanMenu?: (banks: string[]) => Promise<Procedure<{ status: string }>>;
   /** Directory containing log files. */
   readonly logDir?: string;
 }
 
 /** Handles bot commands dispatched from TelegramPoller (scan, status, logs, help, etc.). */
 export class TelegramCommandHandler {
-  private readonly mediator: ImportMediator;
-  private readonly notifier: INotifier;
-  private readonly auditLog?: IAuditLog;
-  private readonly runWatch?: () => Promise<string | null>;
-  private readonly runValidate?: () => Promise<string>;
-  private readonly getBankNames?: () => string[];
-  private readonly sendScanMenu?: (banks: string[]) => Promise<void>;
-  private readonly logDir: string;
+  private readonly _mediator: ImportMediator;
+  private readonly _notifier: INotifier;
+  private readonly _auditLog?: IAuditLog;
+  private readonly _runWatch?: () => Promise<string>;
+  private readonly _runValidate?: () => Promise<string>;
+  private readonly _getBankNames?: () => string[];
+  private readonly _sendScanMenu?: (banks: string[]) => Promise<Procedure<{ status: string }>>;
+  private readonly _logDir: string;
 
   /**
    * Creates a TelegramCommandHandler with the provided command callbacks and configuration.
    * @param opts - Options including mediator, notifier, audit log, and optional features.
    */
-  constructor(opts: CommandHandlerOptions) {
-    this.mediator = opts.mediator;
-    this.notifier = opts.notifier;
-    this.auditLog = opts.auditLog;
-    this.runWatch = opts.runWatch;
-    this.runValidate = opts.runValidate;
-    this.getBankNames = opts.getBankNames;
-    this.sendScanMenu = opts.sendScanMenu;
-    this.logDir = opts.logDir ?? './logs';
+  constructor(opts: ICommandHandlerOptions) {
+    this._mediator = opts.mediator;
+    this._notifier = opts.notifier;
+    this._auditLog = opts.auditLog;
+    this._runWatch = opts.runWatch;
+    this._runValidate = opts.runValidate;
+    this._getBankNames = opts.getBankNames;
+    this._sendScanMenu = opts.sendScanMenu;
+    this._logDir = opts.logDir ?? './logs';
   }
 
   /**
    * Routes an incoming message or callback query text to the correct command handler.
    * @param text - The raw message text or callback_data string to dispatch.
+   * @returns Procedure indicating the command was handled.
    */
-  async handle(text: string): Promise<void> {
+  public async handle(text: string): Promise<Procedure<{ status: string }>> {
     const raw = text.trim().split(/\s+/);
     const command = raw[0].toLowerCase();
     const arg = raw.slice(1).join(' ').trim() || undefined;
-    if (command === 'scan_all') { await this.handleScanAll(); return; }
-    if (command.startsWith('scan:')) { await this.handleScan(command.slice(5)); return; }
-    const handler = this.buildHandlers(arg)[command];
-    if (handler) await handler();
+    if (command === 'scan_all') { await this.handleScanAll(); return succeed({ status: 'handled' }); }
+    if (command.startsWith('scan:')) {
+      const bankName = command.slice(5);
+      await this.handleScan(bankName);
+      return succeed({ status: 'handled' });
+    }
+    const handlers = this.buildHandlers(arg);
+    if (command in handlers) await handlers[command]();
+    return succeed({ status: 'handled' });
   }
 
   /**
@@ -80,7 +88,9 @@ export class TelegramCommandHandler {
    * @param arg - Optional argument parsed from the user's message.
    * @returns Record mapping command strings to async handler functions.
    */
-  private buildHandlers(arg?: string): Record<string, () => Promise<void>> {
+  private buildHandlers(
+    arg?: string
+  ): Record<string, () => Promise<Procedure<{ status: string }>>> {
     return this.commandMap(arg);
   }
 
@@ -89,7 +99,7 @@ export class TelegramCommandHandler {
    * @param arg - Optional argument from the user's message.
    * @returns Record mapping command strings to handler functions.
    */
-  private commandMap(arg?: string): Record<string, () => Promise<void>> {
+  private commandMap(arg?: string): Record<string, () => Promise<Procedure<{ status: string }>>> {
     return {
       '/scan': this.handleScan.bind(this, arg),
       '/import': this.handleScan.bind(this, arg),
@@ -104,31 +114,37 @@ export class TelegramCommandHandler {
     };
   }
 
-  /** Handles the scan_all callback — imports all configured banks. */
-  private async handleScanAll(): Promise<void> {
-    if (this.mediator.isImporting()) {
+  /**
+   * Handles the scan_all callback — imports all configured banks.
+   * @returns Procedure indicating the scan-all result.
+   */
+  private async handleScanAll(): Promise<Procedure<{ status: string }>> {
+    if (this._mediator.isImporting()) {
       await this.reply(ALREADY_RUNNING);
-      return;
+      return succeed({ status: 'already-running' });
     }
     await this.executeImport();
+    return succeed({ status: 'scan-all-started' });
   }
 
   /**
    * Handles the /scan command — shows bank menu or starts a targeted import.
    * @param bankArg - Optional bank name or comma-separated list to limit the import scope.
+   * @returns Procedure indicating the scan result.
    */
-  private async handleScan(bankArg?: string): Promise<void> {
-    if (this.mediator.isImporting()) {
+  private async handleScan(bankArg?: string): Promise<Procedure<{ status: string }>> {
+    if (this._mediator.isImporting()) {
       await this.reply(ALREADY_RUNNING);
-      return;
+      return succeed({ status: 'already-running' });
     }
-    if (!bankArg && this.sendScanMenu && this.getBankNames) {
-      const banks = this.getBankNames();
-      if (banks.length > 0) { await this.sendScanMenu(banks); return; }
+    if (!bankArg && this._sendScanMenu && this._getBankNames) {
+      const banks = this._getBankNames();
+      if (banks.length > 0) { await this._sendScanMenu(banks); return succeed({ status: 'menu-sent' }); }
     }
     const banks = bankArg ? this.resolveBanks(bankArg) : undefined;
-    if (typeof banks === 'string') { await this.reply(banks); return; }
+    if (typeof banks === 'string') { await this.reply(banks); return succeed({ status: 'error-sent' }); }
     await this.executeImport(banks);
+    return succeed({ status: 'scan-started' });
   }
 
   /**
@@ -138,7 +154,7 @@ export class TelegramCommandHandler {
    */
   private resolveBanks(bankArg: string): string[] | string {
     const requested = bankArg.split(',').map(b => b.trim()).filter(Boolean);
-    const available = this.getBankNames?.() ?? [];
+    const available = this._getBankNames?.() ?? [];
     if (!available.length) return requested; // no validation if getBankNames not provided
     /**
      * Case-insensitively matches a requested bank name against the available list.
@@ -158,102 +174,46 @@ export class TelegramCommandHandler {
   /**
    * Requests an import via the mediator and reports the batch result.
    * @param banks - Optional list of banks to import; undefined imports all.
+   * @returns Procedure indicating the import completion status.
    */
-  private async executeImport(banks?: string[]): Promise<void> {
+  private async executeImport(banks?: string[]): Promise<Procedure<{ status: string }>> {
     const label = banks ? ` (${banks.join(', ')})` : '';
     await this.reply(`⏳ Starting import...${label}`);
-    const batchId = this.mediator.requestImport({ source: 'telegram', banks });
-    if (!batchId) { await this.reply(ALREADY_RUNNING); return; }
-    const result = await this.mediator.waitForBatch(batchId);
+    const batchId = this._mediator.requestImport({ source: 'telegram', banks });
+    if (!batchId) { await this.reply(ALREADY_RUNNING); return succeed({ status: 'already-running' }); }
+    const result = await this._mediator.waitForBatch(batchId);
     if (result.failureCount > 0) {
-      await this.reply(this.buildBatchErrorReply(result));
+      const errorReply = this.buildBatchErrorReply(result);
+      await this.reply(errorReply);
     }
+    return succeed({ status: 'import-complete' });
   }
 
   /**
-   * Builds a detailed error reply from a BatchResult and the most recent audit entry.
-   * @param batch - The completed BatchResult with failure information.
+   * Builds a detailed error reply from a IBatchResult.
+   * @param batch - The completed IBatchResult with failure information.
    * @returns Multi-line error reply text with failed bank details.
    */
-  private buildBatchErrorReply(batch: BatchResult): string {
+  private buildBatchErrorReply(batch: IBatchResult): string {
     const dur = (batch.totalDurationMs / 1000).toFixed(0);
-    const entry = this.auditLog?.getRecent(1)[0];
-    if (!entry || !this.isFreshEntry(entry, batch)) {
+    const recentResult = this._auditLog?.getRecent(1);
+    const entry = recentResult?.success ? recentResult.data[0] : undefined;
+    if (!entry || !isFreshEntry(entry, batch)) {
       return `❌ Import failed (${dur}s). Use /logs for details.`;
     }
-    return this.formatFailedBanks(entry, dur);
+    return formatFailedBanks(entry, dur, this._auditLog);
   }
 
   /**
-   * Checks whether an audit entry was recorded during or after the current batch.
-   * @param entry - The audit log entry to check.
-   * @param batch - The BatchResult whose timing to compare against.
-   * @returns True if the entry timestamp is at or after the batch start time.
+   * Sends the current import status and recent audit history to Telegram.
+   * @returns Procedure indicating the status message was sent.
    */
-  private isFreshEntry(entry: AuditEntry, batch: BatchResult): boolean {
-    const batchStartMs = Date.now() - batch.totalDurationMs;
-    return new Date(entry.timestamp).getTime() >= batchStartMs;
-  }
-
-  /**
-   * Formats the failed-banks section of an error reply from an audit entry.
-   * @param entry - The audit entry containing bank failure details.
-   * @param dur - Human-readable duration string for display.
-   * @returns Multi-line formatted string listing failed banks and their errors.
-   */
-  private formatFailedBanks(entry: AuditEntry, dur: string): string {
-    if (entry.failedBanks === 0) {
-      return `❌ Import failed (${dur}s). Use /logs for details.`;
-    }
-    const failed = entry.banks.filter(b => b.status === 'failure');
-    const header = `❌ Import failed (${dur}s) — ` +
-      `${entry.failedBanks}/${entry.totalBanks} banks had errors:`;
-    const lines = [header, ...failed.map(b => this.formatBankError(b))];
-    lines.push('', 'Use /logs for details or /status for history.');
-    return lines.join('\n');
-  }
-
-  /**
-   * Formats a single failed bank entry with error details and actionable advice.
-   * @param bank - The bank object from the audit entry with name and optional error.
-   * @returns Formatted bullet-point string with error and optional advice line.
-   */
-  private formatBankError(bank: AuditEntry['banks'][number]): string {
-    const errorSuffix = bank.error ? `: ${bank.error.slice(0, 80)}` : '';
-    const line = `• ${bank.name}${errorSuffix}`;
-    const advice = bank.error ? getScraperErrorAdvice(bank.error) : undefined;
-    const streak = this.getFailureStreak(bank.name);
-    return [line, ...this.buildErrorAnnotations(advice, streak)].join('\n');
-  }
-
-  /**
-   * Builds annotation lines for a bank error (advice + consecutive failure warning).
-   * @param advice - Optional actionable advice string from ScraperErrorMessages.
-   * @param streak - Number of consecutive failures for this bank.
-   * @returns Array of annotation lines to append after the error line.
-   */
-  private buildErrorAnnotations(advice: string | undefined, streak: number): string[] {
-    const lines: string[] = [];
-    if (advice) lines.push(`  💡 ${advice}`);
-    if (streak >= 5) lines.push('  🚨 Failed 5+ times in a row — check credentials');
-    else if (streak >= 3) lines.push(`  ⚠️ Failed ${streak} times in a row`);
-    return lines;
-  }
-
-  /**
-   * Returns the consecutive failure count for a bank from the audit log.
-   * @param bankName - The bank to check.
-   * @returns Number of consecutive recent failures, or 0.
-   */
-  private getFailureStreak(bankName: string): number {
-    return this.auditLog?.getConsecutiveFailures(bankName) ?? 0;
-  }
-
-  /** Sends the current import status and recent audit history to Telegram. */
-  private async handleStatus(): Promise<void> {
+  private async handleStatus(): Promise<Procedure<{ status: string }>> {
     const lines = this.buildStatusLines();
     this.appendRecentHistory(lines);
-    await this.reply(lines.join('\n'));
+    const statusMessage = lines.join('\n');
+    await this.reply(statusMessage);
+    return succeed({ status: 'status-sent' });
   }
 
   /**
@@ -262,14 +222,14 @@ export class TelegramCommandHandler {
    */
   private buildStatusLines(): string[] {
     const lines: string[] = ['📊 <b>Status</b>', ''];
-    const lastTime = this.mediator.getLastRunTime();
-    const lastResult = this.mediator.getLastResult();
+    const lastTime = this._mediator.getLastRunTime();
+    const lastResult = this._mediator.getLastResult();
     const resultLabel = lastResult?.failureCount === 0 ? 'success' : 'failed';
     const label = lastResult ? ` (${resultLabel})` : '';
     const runLine = lastTime
-      ? `Last run: ${this.timeSince(lastTime)} ago${label}`
+      ? `Last run: ${timeSince(lastTime)} ago${label}`
       : 'No imports run yet';
-    const currentLine = `Currently: ${this.mediator.isImporting() ? '⏳ importing...' : '✅ idle'}`;
+    const currentLine = `Currently: ${this._mediator.isImporting() ? '⏳ importing...' : '✅ idle'}`;
     lines.push(runLine, currentLine);
     return lines;
   }
@@ -277,138 +237,129 @@ export class TelegramCommandHandler {
   /**
    * Appends the 5 most recent audit entries to the status message lines.
    * @param lines - Mutable array of message lines to append audit history to.
+   * @returns Procedure indicating whether history was appended.
    */
-  private appendRecentHistory(lines: string[]): void {
-    if (!this.auditLog) return;
-    const recent = this.auditLog.getRecent(5);
-    if (recent.length === 0) return;
-    lines.push('', '<b>Recent imports:</b>');
-    for (const e of [...recent].reverse()) {
-      lines.push(this.formatAuditEntry(e));
+  private appendRecentHistory(lines: string[]): Procedure<{ status: string }> {
+    if (!this._auditLog) return succeed({ status: 'no-audit-log' });
+    const recentResult = this._auditLog.getRecent(5);
+    if (!recentResult.success || recentResult.data.length === 0) {
+      return succeed({ status: 'no-history' });
     }
-  }
-
-  /**
-   * Formats a single audit log entry as a one-line status summary.
-   * @param entry - The AuditEntry to format.
-   * @returns Formatted string with date, transaction count, and bank success rate.
-   */
-  private formatAuditEntry(entry: AuditEntry): string {
-    const date = entry.timestamp.split('T')[0];
-    const time = entry.timestamp.split('T')[1]?.slice(0, 5) || '';
-    const dur = `${(entry.totalDuration / 1000).toFixed(0)}s`;
-    const icon = entry.failedBanks === 0 ? '✅' : '⚠️';
-    return (
-      `${icon} ${date} ${time} — ` +
-      `${entry.totalTransactions} txns, ${entry.successfulBanks}/${entry.totalBanks} banks, ${dur}`
-    );
+    lines.push('', '<b>Recent imports:</b>');
+    for (const entry of [...recentResult.data].reverse()) {
+      const formatted = formatAuditEntry(entry);
+      lines.push(formatted);
+    }
+    return succeed({ status: 'history-appended' });
   }
 
   /**
    * Reads recent log entries from files and sends them to Telegram.
    * @param countArg - Optional string number of entries to retrieve (default 50, max 150).
+   * @returns Procedure indicating the logs were sent.
    */
-  private async handleLogs(countArg?: string): Promise<void> {
-    const reader = new LogFileReader(this.logDir);
-    const entries = reader.getRecent(this.parseLogCount(countArg));
-    if (entries.length === 0) { await this.reply('📋 No log entries yet.'); return; }
-    const header = `📋 <b>Recent Logs</b> (${entries.length} entries)\n\n<pre>`;
+  private async handleLogs(countArg?: string): Promise<Procedure<{ status: string }>> {
+    const reader = new LogFileReader(this._logDir);
+    const logCount = parseLogCount(countArg);
+    const entries = reader.getRecent(logCount);
+    if (entries.length === 0) {
+      await this.reply('📋 No log entries yet.');
+      return succeed({ status: 'no-logs' });
+    }
+    const header = `📋 <b>Recent Logs</b> (${String(entries.length)} entries)\n\n<pre>`;
     const footer = '</pre>';
-    const body = this.truncateForTelegram(entries, header.length + footer.length);
+    const body = truncateForTelegram(entries, header.length + footer.length);
     await this.reply(header + body + footer);
+    return succeed({ status: 'logs-sent' });
   }
 
   /**
-   * Parses an optional count argument string to a bounded integer.
-   * @param arg - Optional string argument from the user (e.g. "100").
-   * @returns Integer count between 1 and 150, defaulting to 50.
+   * Handles the /watch command — runs the spending watch or explains it runs automatically.
+   * @returns Procedure indicating the watch command result.
    */
-  private parseLogCount(arg?: string): number {
-    if (!arg) return DEFAULT_LOG_COUNT;
-    const n = Number.parseInt(arg, 10);
-    return Number.isNaN(n) ? DEFAULT_LOG_COUNT : Math.min(Math.max(n, 1), 150);
-  }
-
-  /**
-   * Truncates a list of log entries to fit within Telegram's message size limit.
-   * @param entries - Array of log line strings to truncate.
-   * @param reservedLength - Number of characters already used by header/footer wrappers.
-   * @returns Truncated log string with an omission notice if needed.
-   */
-  private truncateForTelegram(entries: string[], reservedLength: number): string {
-    const maxLength = MAX_TELEGRAM_LENGTH - reservedLength - 20;
-    const text = entries.join('\n');
-    if (text.length <= maxLength) return text;
-    const trimmed = text.slice(-maxLength);
-    const firstNewline = trimmed.indexOf('\n');
-    const clean = firstNewline > 0 ? trimmed.slice(firstNewline + 1) : trimmed;
-    return `...(earlier entries omitted)\n${clean}`;
-  }
-
-  /** Handles the /watch command — runs the spending watch or explains it runs automatically. */
-  private async handleWatch(): Promise<void> {
-    if (!this.runWatch) {
+  private async handleWatch(): Promise<Procedure<{ status: string }>> {
+    if (!this._runWatch) {
       await this.reply(
         '🔔 Spending watch runs automatically after each import.\n' +
         'On-demand /watch is coming soon.\n\n' +
         'Use /scan to trigger an import with spending watch.'
       );
-      return;
+      return succeed({ status: 'watch-unavailable' });
     }
     await this.reply('🔍 Checking spending rules...');
     try {
-      const message = await this.runWatch();
-      await this.reply(message ?? '✅ All spending within limits.');
+      const message = await this._runWatch();
+      await this.reply(message || '✅ All spending within limits.');
     } catch (error: unknown) {
       await this.reply(`❌ Watch error: ${errorMessage(error)}`);
     }
+    return succeed({ status: 'watch-complete' });
   }
 
-  /** Handles the /check_config command — runs offline and online config validation. */
-  private async handleCheckConfig(): Promise<void> {
-    if (!this.runValidate) {
+  /**
+   * Handles the /check_config command — runs offline and online config validation.
+   * @returns Procedure indicating the config check result.
+   */
+  private async handleCheckConfig(): Promise<Procedure<{ status: string }>> {
+    if (!this._runValidate) {
       await this.reply('⚙️ Config validation unavailable.');
-      return;
+      return succeed({ status: 'validate-unavailable' });
     }
     await this.reply('🔍 Validating configuration...');
     try {
-      const report = await this.runValidate();
+      const report = await this._runValidate();
       await this.reply(`<pre>${report}</pre>`);
     } catch (error: unknown) {
       await this.reply(`❌ Validation error: ${errorMessage(error)}`);
     }
+    return succeed({ status: 'config-checked' });
   }
 
-  /** Handles the /preview command — runs a dry-run import without writing to Actual Budget. */
-  private async handlePreview(): Promise<void> {
-    if (this.mediator.isImporting()) {
+  /**
+   * Handles the /preview command — runs a dry-run import without writing to Actual Budget.
+   * @returns Procedure indicating the preview result.
+   */
+  private async handlePreview(): Promise<Procedure<{ status: string }>> {
+    if (this._mediator.isImporting()) {
       await this.reply(ALREADY_RUNNING);
-      return;
+      return succeed({ status: 'already-running' });
     }
     await this.reply('🔍 Starting dry run — no changes will be made...');
-    const batchId = this.mediator.requestImport({
+    const batchId = this._mediator.requestImport({
       source: 'telegram', extraEnv: { DRY_RUN: 'true' },
     });
-    if (!batchId) { await this.reply(ALREADY_RUNNING); return; }
-    const result = await this.mediator.waitForBatch(batchId);
+    if (!batchId) { await this.reply(ALREADY_RUNNING); return succeed({ status: 'already-running' }); }
+    const result = await this._mediator.waitForBatch(batchId);
     const dur = (result.totalDurationMs / 1000).toFixed(0);
     await this.reply(`✅ Dry run completed (${dur}s). See preview report above.`);
+    return succeed({ status: 'preview-complete' });
   }
 
-  /** Re-imports only the banks that failed in the last run. */
-  private async handleRetry(): Promise<void> {
-    if (this.mediator.isImporting()) { await this.reply(ALREADY_RUNNING); return; }
-    const failed = this.auditLog?.getLastFailedBanks() ?? [];
+  /**
+   * Re-imports only the banks that failed in the last run.
+   * @returns Procedure indicating the retry result.
+   */
+  private async handleRetry(): Promise<Procedure<{ status: string }>> {
+    if (this._mediator.isImporting()) {
+      await this.reply(ALREADY_RUNNING);
+      return succeed({ status: 'already-running' });
+    }
+    const failedResult = this._auditLog?.getLastFailedBanks();
+    const failed = failedResult?.success ? failedResult.data : [];
     if (!failed.length) {
       await this.reply('✅ No failed banks to retry. Last run was successful.');
-      return;
+      return succeed({ status: 'nothing-to-retry' });
     }
-    await this.reply(`🔄 Retrying ${failed.length} failed bank(s): ${failed.join(', ')}...`);
+    await this.reply(`🔄 Retrying ${String(failed.length)} failed bank(s): ${failed.join(', ')}...`);
     await this.executeImport(failed);
+    return succeed({ status: 'retry-started' });
   }
 
-  /** Sends the list of available bot commands to Telegram. */
-  private async handleHelp(): Promise<void> {
+  /**
+   * Sends the list of available bot commands to Telegram.
+   * @returns Procedure indicating the help message was sent.
+   */
+  private async handleHelp(): Promise<Procedure<{ status: string }>> {
     const lines = [
       '🤖 <b>Available Commands</b>', '',
       '/scan - Run bank import now',
@@ -421,29 +372,24 @@ export class TelegramCommandHandler {
       '/logs 100 - Show last 100 entries (max 150)',
       '/help - Show this message',
     ];
-    await this.reply(lines.join('\n'));
+    const helpMessage = lines.join('\n');
+    await this.reply(helpMessage);
+    return succeed({ status: 'help-sent' });
   }
 
   /**
    * Sends a message to Telegram, catching and logging any send failures.
    * @param text - The message text to send.
+   * @returns Procedure indicating whether the reply was sent or failed.
    */
-  private async reply(text: string): Promise<void> {
-    try { await this.notifier.sendMessage(text); }
-    catch (error: unknown) {
+  private async reply(text: string): Promise<Procedure<{ status: string }>> {
+    try {
+      await this._notifier.sendMessage(text);
+      return succeed({ status: 'reply-sent' });
+    } catch (error: unknown) {
       getLogger().debug(`Failed to send reply: ${errorMessage(error)}`);
+      return succeed({ status: 'reply-failed' });
     }
   }
 
-  /**
-   * Returns a human-readable string describing how long ago the given date was.
-   * @param date - The Date to compare against the current time.
-   * @returns Duration string like "45s", "5m", or "2h".
-   */
-  private timeSince(date: Date): string {
-    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    return `${Math.floor(seconds / 3600)}h`;
-  }
 }
