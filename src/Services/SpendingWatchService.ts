@@ -50,7 +50,7 @@ export default class SpendingWatchService {
       const alertMessage = SpendingWatchService.formatMessage(results);
       if (!alertMessage) return succeed({ noAlerts: true as const }, 'no-alerts');
       return succeed({ message: alertMessage }, 'alert-triggered');
-    } catch (error: unknown) {
+    } catch (error) {
       getLogger().error(`Spending watch error: ${errorMessage(error)}`);
       const err = error instanceof Error ? error : new Error(String(error));
       const message = errorMessage(error);

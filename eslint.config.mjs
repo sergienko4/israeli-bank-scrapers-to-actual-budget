@@ -67,24 +67,23 @@ const RESTRICTED_SYNTAX_RULES = [
     message: "Do not use 'throw new Error()'. Use a custom Error class (e.g., 'throw new ScraperError()') for PII safety.",
   },
 
-  // Type Integrity (Blocking 'unknown' bypasses)
-  {
-    selector: ':matches(TSFunctionType, TSMethodDefinition, FunctionDeclaration) > TSTypeAnnotation TSUnknownKeyword',
-    message: "🚫 ARCHITECTURE: Functions cannot return 'unknown'. Define a specific Interface or Type.",
-  },
-  {
-    selector: 'TSParameterProperty TSUnknownKeyword, FunctionDeclaration TSParameterProperty TSUnknownKeyword, TSTypeReference TSUnknownKeyword',
-    message: "🚫 ARCHITECTURE: Function parameters cannot be 'unknown'.",
-  },
+  // 7. Type Integrity (Global — non-Pipeline)
   {
     selector: 'VariableDeclarator > TSTypeAnnotation TSUnknownKeyword',
     message: "🚫 TYPE SKIP: Do not declare variables as 'unknown'. Cast them to a concrete type immediately.",
   },
-
   // Type Bypasses (as never / as any)
   {
     selector: "TSAsExpression > :matches(TSNeverKeyword, TSAnyKeyword)",
     message: "🚫 TEST INTEGRITY: Do not use 'as never' or 'as any' in mocks. Use 'DeepPartial<T>' or implement the required interface members.",
+  },
+  // Note: error.message, empty-string, empty-assignment, hardcoded-success,
+  // non-null assertion, and unknown param/return rules are in Pipeline section 6 only.
+
+  // Procedure caller: do not discard Procedure results
+  {
+    selector: "ExpressionStatement > CallExpression[callee.property.name=/^(record|printSummary|sendSummary|sendError|sendMessage|startImport|cleanOldLogs)$/]",
+    message: "🚫 PROCEDURE: Do not discard Procedure result. Check with isSuccess()/isFail() or assign to variable.",
   },
 
   // Block: for-in loops, labeled statements, with statements
@@ -392,26 +391,26 @@ export default tseslint.config(
     rules: {
       // === DEPENDENCY INJECTION & MEDIATOR BOUNDARY ===
       'no-restricted-imports': ['error', {
-        patterns: [
-          {
-            group: ['**/Registry/Config/**'],
-            message: '🚫 DI: Use ctx.config — do not import ScraperConfig directly.',
-          },
-          {
-            group: ['**/Constants/**', '**/env'],
-            message: '🚫 DI: Use ctx.config instead of direct imports.',
-          },
-          {
-            group: ['**/Mediator/Internals/**'],
-            message: '🚫 MEDIATOR: Access HTML resolution only via ctx.mediator.',
-          },
-          // GAP FIX #3 — Block deep relative imports (mediator bypass)
-          {
-            group: ['../../../*'],
-            message: '🚫 MEDIATOR: Deep relative imports bypass the mediator. Use ctx.mediator or ctx.services.',
-          },
-        ],
-      }],
+          patterns: [
+            {
+              group: ['**/Registry/Config/**'],
+              message: '🚫 DI: Use ctx.config — do not import ScraperConfig directly.',
+            },
+            {
+              group: ['**/Constants/**', '**/env'],
+              message: '🚫 DI: Use ctx.config instead of direct imports.',
+            },
+            {
+              group: ['**/Mediator/Internals/**'],
+              message: '🚫 MEDIATOR: Access HTML resolution only via ctx.mediator.',
+            },
+            // GAP FIX #3 — Block deep relative imports (mediator bypass)
+            {
+              group: ['../../../*'],
+              message: '🚫 MEDIATOR: Deep relative imports bypass the mediator. Use ctx.mediator or ctx.services.',
+            },
+          ],
+        }],
 
       // === IMMUTABLE CONTEXT (Middleware Pipeline pattern) ===
       // GAP FIX #1 — Prevents ctx.foo = bar mutations
@@ -421,6 +420,18 @@ export default tseslint.config(
       'no-restricted-syntax': [
         'error',
         ...RESTRICTED_SYNTAX_RULES,
+
+        // Type Integrity (Pipeline-only — stricter than global)
+        {
+          // Matches: function(x: unknown) or (x: unknown) => ...
+          selector: ':matches(FunctionDeclaration, ArrowFunctionExpression, TSMethodDefinition) Identifier > TSTypeAnnotation > TSUnknownKeyword',
+          message: "🚫 ARCHITECTURE: Function parameters cannot be 'unknown'. Define a specific Interface (e.g., IBankData).",
+        },
+        {
+          // Matches: function(): unknown { ... }
+          selector: ':matches(FunctionDeclaration, ArrowFunctionExpression, TSMethodDefinition) > TSTypeAnnotation TSUnknownKeyword',
+          message: "🚫 ARCHITECTURE: Functions cannot return 'unknown'. Define a concrete return Type.",
+        },
 
         // DI: No hardcoded Config keys in Objects
         {
@@ -444,6 +455,32 @@ export default tseslint.config(
         {
           selector: "BinaryExpression[operator='==='] > Literal[value=/^(success|failure|pending|error|done)$/i]",
           message: '🚫 ARCHITECTURE: Use Enums or Constants for type discriminators/status checks.',
+        },
+
+        // Error Handling: No manual error.message access
+        {
+          selector: "CatchClause MemberExpression[property.name='message']",
+          message: '🚫 Use errorMessage(error) utility instead of manual error.message access.',
+        },
+        // Non-null assertion guard
+        {
+          selector: 'TSNonNullExpression',
+          message: '🚫 TYPE SKIP: Do not use (!). Use optional chaining (?.) or a proper null check.',
+        },
+        // Empty string fallback guard
+        {
+          selector: "LogicalExpression[right.type='Literal'][right.value='']",
+          message: "🚫 DATA INTEGRITY: Do not fallback to an empty string (''). Return a Failure Result or throw a ScraperError.",
+        },
+        // Empty assignment guard
+        {
+          selector: "AssignmentExpression[right.type='Literal'][right.value='']",
+          message: "🚫 ARCHITECTURE: Do not assign empty strings. Use a concrete value or handle the 'Missing' state explicitly.",
+        },
+        // Result Pattern: force succeed()/fail() factories
+        {
+          selector: "ReturnStatement > ObjectExpression > Property[key.name='success']",
+          message: "🚫 RESULT PATTERN: Do not hardcode the success boolean. Use the 'succeed()' or 'fail()' factory functions.",
         },
 
         // Handler Delegation: Phases must call handlers

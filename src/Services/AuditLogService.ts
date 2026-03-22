@@ -58,7 +58,7 @@ export class AuditLogService implements IAuditLog {
       const trimmed = entries.slice(-this.maxEntries);
       this.saveEntries(trimmed);
       return succeed({ status: 'recorded' as const });
-    } catch (error: unknown) {
+    } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       return fail('audit write failed', { error: error instanceof Error ? error : new Error(msg) });
     }

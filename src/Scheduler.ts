@@ -53,7 +53,7 @@ export function readJsonOrEncrypted(filePath: string): Procedure<Record<string, 
     if (!password) return fail('Encryption password required');
     const decryptedJson = decryptConfig(raw, password);
     return succeed(JSON.parse(decryptedJson) as Record<string, string>);
-  } catch (error: unknown) {
+  } catch (error) {
     return fail(`Failed to read ${filePath}: ${errorMessage(error)}`);
   }
 }
@@ -67,7 +67,7 @@ export function loadFullConfig(): Procedure<IImporterConfig> {
   try {
     const loader = new ConfigLoader();
     return loader.loadRaw();
-  } catch (error: unknown) {
+  } catch (error) {
     return fail(`Failed to load config: ${errorMessage(error)}`);
   }
 }
@@ -266,7 +266,7 @@ async function startTelegramCommands(): Promise<Procedure<ImportMediator>> {
   try {
     const mediator = await createHandlerAndPoller(tg, config);
     return succeed(mediator);
-  } catch (error: unknown) {
+  } catch (error) {
     LOGGER.error(`⚠️  Failed to start Telegram commands: ${errorMessage(error)}`);
     return fail('Telegram command startup failed', { error: error as Error });
   }

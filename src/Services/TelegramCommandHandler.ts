@@ -290,7 +290,7 @@ export class TelegramCommandHandler {
     try {
       const message = await this._runWatch();
       await this.reply(message || '✅ All spending within limits.');
-    } catch (error: unknown) {
+    } catch (error) {
       await this.reply(`❌ Watch error: ${errorMessage(error)}`);
     }
     return succeed({ status: 'watch-complete' });
@@ -309,7 +309,7 @@ export class TelegramCommandHandler {
     try {
       const report = await this._runValidate();
       await this.reply(`<pre>${report}</pre>`);
-    } catch (error: unknown) {
+    } catch (error) {
       await this.reply(`❌ Validation error: ${errorMessage(error)}`);
     }
     return succeed({ status: 'config-checked' });
@@ -386,7 +386,7 @@ export class TelegramCommandHandler {
     try {
       await this._notifier.sendMessage(text);
       return succeed({ status: 'reply-sent' });
-    } catch (error: unknown) {
+    } catch (error) {
       getLogger().debug(`Failed to send reply: ${errorMessage(error)}`);
       return succeed({ status: 'reply-failed' });
     }

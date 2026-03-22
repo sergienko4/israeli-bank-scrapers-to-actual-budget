@@ -48,7 +48,7 @@ export default function createInitializeApiStep(
    */
   return async (ctx: IPipelineContext): ReturnType<PipelineStep> => {
     const envRecord = process.env;
-    const localBudgetId = envRecord.E2E_LOCAL_BUDGET_ID ?? '';
+    const localBudgetId = envRecord.E2E_LOCAL_BUDGET_ID;
 
     if (localBudgetId) {
       return initLocal(ctx, actualApi, localBudgetId);

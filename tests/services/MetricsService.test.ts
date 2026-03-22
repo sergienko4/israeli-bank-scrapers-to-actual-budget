@@ -368,15 +368,16 @@ describe('MetricsService', () => {
       // Record success immediately — duration will be ~0ms
       const successResult = metrics.recordBankSuccess('instant', 1, 0);
       expect(successResult.success).toBe(true);
-      metrics.printSummary();
+      const printResult = metrics.printSummary();
+      expect(printResult.success).toBe(true);
       const calls = mockLogger.info.mock.calls.map(c => c[0]);
       expect(calls.some((c: string) => typeof c === 'string' && c.includes('instant'))).toBe(true);
     });
 
     it('prints with no banks', () => {
       vi.clearAllMocks();
-      const result = metrics.printSummary();
-      expect(result.success).toBe(true);
+      const printResult = metrics.printSummary();
+      expect(printResult.success).toBe(true);
       const calls = mockLogger.info.mock.calls.map(c => c[0]);
       expect(calls.some((c: string) => typeof c === 'string' && c.includes('Summary'))).toBe(true);
     });

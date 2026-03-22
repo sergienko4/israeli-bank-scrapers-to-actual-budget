@@ -16,7 +16,7 @@ function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
     shutdownHandler: { isShuttingDown: vi.fn().mockReturnValue(false), onShutdown: vi.fn() },
     services: {
       metricsService: {
-        startImport: vi.fn(),
+        startImport: vi.fn().mockReturnValue({ success: true, data: { status: 'started' } }),
         startBank: vi.fn(),
         recordBankSuccess: vi.fn(),
         recordBankFailure: vi.fn(),

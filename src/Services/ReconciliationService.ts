@@ -51,7 +51,7 @@ export class ReconciliationService {
       if (diff === 0) return succeed({ status: 'skipped', diff: 0 });
       await this.createReconciliationTransaction({ accountId, diff, expectedBalance, currency });
       return succeed({ status: 'created', diff });
-    } catch (error: unknown) {
+    } catch (error) {
       if (error instanceof Error && error.message.includes('already exists')) {
         return succeed({ status: 'already-reconciled', diff: 0 });
       }

@@ -38,7 +38,8 @@ export default function createProcessAllBanksStep(): PipelineStep {
     ctx: IPipelineContext
   ): ReturnType<PipelineStep> => {
     ctx.logger.info('Processing all banks...');
-    ctx.services.metricsService.startImport();
+    const metricsInit = ctx.services.metricsService.startImport();
+    if (!metricsInit.success) return fail('metrics init failed');
 
     const bankEntries = buildBankEntries(ctx);
     const pauseMs = ctx.config.delayBetweenBanks ?? 0;

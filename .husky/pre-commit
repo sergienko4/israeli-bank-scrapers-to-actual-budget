@@ -70,9 +70,11 @@ run_gate "16-pii-check"  "Checking for PII in error messages" bash -c '
   # e.g., `throw new Error(\`got ${otp}\`)` or `fail(\`token: ${token}\`)`
   # Excludes: static field names like "password is missing" or "token format"
   HITS=$(grep -rn "\${password}\|\${token}\|\${otp}\|\${secret}\|\${digits}\|\${creditCard}" src/ --include="*.ts" | grep -i "throw\|Error\|fail(" || true)
-  if [ -n "$HITS" ]; then
+  HITS2=$(grep -rn "\${.*proxy.*}" src/ --include="*.ts" | grep -i "logger\|\.info\|\.warn\|\.error" || true)
+  ALL="${HITS}${HITS2}"
+  if [ -n "$ALL" ]; then
     echo "PII variable interpolation detected in error messages:"
-    echo "$HITS"
+    echo "$ALL"
     exit 1
   fi
   echo "No PII in error messages"

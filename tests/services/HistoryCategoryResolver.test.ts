@@ -15,7 +15,11 @@ interface IMockApi {
   q: ReturnType<typeof vi.fn>;
 }
 
-/** Casts an IMockApi to the typeof api expected by the constructor. */
+/**
+ * Casts an IMockApi to the typeof api expected by the constructor.
+ * @param mock - The IMockApi stub to cast.
+ * @returns The mock cast as typeof api for use in HistoryCategoryResolver.
+ */
 function asApi(mock: IMockApi): typeof api {
   return mock as unknown as typeof api;
 }
@@ -24,18 +28,21 @@ describe('HistoryCategoryResolver', () => {
   let resolver: HistoryCategoryResolver;
   let mockApi: IMockApi;
 
+  const sentinel = { __query: 'ordered' };
+
   /**
    * Builds a mock Actual API with pre-loaded transaction rows.
    * @param rows - Array of payee/category/date objects returned by aqlQuery.
    * @returns An IMockApi stub with aqlQuery and q methods configured.
    */
   function buildMockApi(rows: Array<{ imported_payee: string; category: string; date: string }>): IMockApi {
+    const orderBy = vi.fn().mockReturnValue(sentinel);
     return {
       aqlQuery: vi.fn().mockResolvedValue({ data: rows }),
       q: vi.fn(() => ({
         filter: vi.fn(() => ({
           select: vi.fn(() => ({
-            orderBy: vi.fn()
+            orderBy
           }))
         }))
       }))
@@ -56,6 +63,11 @@ describe('HistoryCategoryResolver', () => {
       await resolver.initialize();
 
       expect(mockApi.q).toHaveBeenCalledWith('transactions');
+      const qResult = mockApi.q.mock.results[0].value;
+      const filterResult = qResult.filter.mock.results[0].value;
+      const selectResult = filterResult.select.mock.results[0].value;
+      expect(selectResult.orderBy).toHaveBeenCalledWith({ date: 'desc' });
+      expect(mockApi.aqlQuery).toHaveBeenCalledWith(sentinel);
       const result = resolver.resolve('Supermarket');
       expect(isSuccess(result)).toBe(true);
       if (isSuccess(result)) {
@@ -99,7 +111,7 @@ describe('HistoryCategoryResolver', () => {
       );
     });
 
-    it('skips rows with null imported_payee', async () => {
+    it('skips rows with empty imported_payee', async () => {
       mockApi = buildMockApi([
         { imported_payee: '', category: 'cat-1', date: '2026-02-18' },
         { imported_payee: 'Valid', category: 'cat-2', date: '2026-02-17' }

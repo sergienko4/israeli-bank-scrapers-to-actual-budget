@@ -43,7 +43,7 @@ export default class HistoryCategoryResolver implements ICategoryResolver {
       this.buildMap(rows);
       getLogger().info(`  📂 Category history loaded: ${String(this._categoryMap.size)} payees`);
       return succeed({ status: 'initialized' });
-    } catch (error: unknown) {
+    } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       getLogger().error(`  ⚠️  Category history failed to load: ${msg}`);
       return fail(`category history load failed: ${msg}`);

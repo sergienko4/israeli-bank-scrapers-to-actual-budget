@@ -139,7 +139,7 @@ function decryptBuffer(data: IEncryptedConfig, key: Buffer): string {
       decipher.update(ciphertextBuffer),
       decipher.final()
     ]).toString('utf8');
-  } catch (error: unknown) {
+  } catch (error) {
     throw new ConfigurationError(
       `Decryption failed: ${errorMessage(error)}`
     );

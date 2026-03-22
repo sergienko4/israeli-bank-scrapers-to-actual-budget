@@ -5,6 +5,7 @@
  */
 
 import type { ILogConfig, LogFormat, MessageFormat } from '../Types/Index.js';
+import { isFail } from '../Types/Index.js';
 import FileLogger from './FileLogger.js';
 import type { ILogger } from './ILogger.js';
 import LogBuffer from './LogBuffer.js';
@@ -49,7 +50,10 @@ export function createLogger(config?: ILogConfig): ILogger {
   bufferInstance = new LogBuffer(0); // buffer deprecated; kept for backward compat
   const stdout = new PinoAdapter(createPinoInstance(format), format);
   if (config?.logDir) {
-    cleanOldLogs(config.logDir);
+    const cleanupResult = cleanOldLogs(config.logDir);
+    if (isFail(cleanupResult)) {
+      stdout.warn(`Log cleanup failed: ${cleanupResult.message}`);
+    }
     try {
       instance = new LogMediator([stdout, new FileLogger(config.logDir)]);
     } catch {

@@ -93,7 +93,7 @@ export default class TelegramPoller {
     try {
       await this.poll();
       return succeed({ status: 'poll-ok' });
-    } catch (error: unknown) {
+    } catch (error) {
       getLogger().error(`⚠️  Telegram poll error: ${errorMessage(error)}`);
       await TelegramPoller.sleep(5000);
       return succeed({ status: 'poll-error-recovered' });

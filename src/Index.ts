@@ -139,7 +139,7 @@ const TELEGRAM_NOTIFIER = TELEGRAM_CFG ? new TelegramNotifier(TELEGRAM_CFG) : nu
 
 LOGGER.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
 if (isDryRun) LOGGER.info('🔍 DRY RUN MODE — no changes will be made to Actual Budget\n');
-if (CONFIG.proxy?.server) LOGGER.info(`🌐 Using proxy: ${CONFIG.proxy.server}`);
+if (CONFIG.proxy?.server) LOGGER.info('🌐 Using configured proxy');
 
 // Wire up orchestration
 const BANK_SCRAPER = new BankScraper({
@@ -245,6 +245,7 @@ async function main(): Promise<Procedure<{ status: string }>> {
     const result = await execute(PIPELINE, PIPELINE_CONTEXT);
     if (isFail(result)) {
       LOGGER.error(`Pipeline failed: ${result.message}`);
+      process.exitCode = 1;
       return fail(result.message);
     }
     const exitCode = (result.data.state.exitCode as number | undefined) ?? 0;

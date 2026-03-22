@@ -211,7 +211,7 @@ export class TransactionService {
       await this._api.importTransactions(ctx.actualAccountId, [payload]);
       ctx.target.push(ctx.parsed);
       return succeed({ status: 'imported' });
-    } catch (error: unknown) {
+    } catch (error) {
       return TransactionService.handleImportError(error, ctx);
     }
   }

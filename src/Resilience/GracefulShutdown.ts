@@ -86,7 +86,7 @@ export class GracefulShutdownHandler implements IShutdownHandler {
   ): Promise<Procedure<{ status: string }>> {
     if (index >= this._callbacks.length) return succeed({ status: 'callbacks-complete' });
     try { await this._callbacks[index](); }
-    catch (error: unknown) {
+    catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       getLogger().error(`Error during shutdown callback: ${msg}`);
     }

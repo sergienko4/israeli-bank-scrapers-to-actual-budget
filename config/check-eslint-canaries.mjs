@@ -37,6 +37,10 @@ const CANARIES = {
     minErrors: 1,
     description: 'for-in loop ban',
   },
+  'tests/eslint-canaries/DiscardedProcedure.canary.ts': {
+    minErrors: 1,
+    description: 'discarded Procedure result ban',
+  },
 };
 
 let allPassed = true;

@@ -31,7 +31,7 @@ function tryDeleteLogFile(filePath: string): Procedure<{ status: string }> {
   try {
     unlinkSync(filePath);
     return succeed({ status: 'deleted' });
-  } catch (error: unknown) {
+  } catch (error) {
     if (isLockedFileError(error)) {
       return succeed({ status: 'skipped' });
     }
@@ -82,7 +82,7 @@ export default function cleanOldLogs(
     if (!existsSync(logDir)) return succeed({ status: 'no-dir' });
     const cutoff = new Date(Date.now() - THREE_DAYS_MS);
     return processLogFiles(logDir, cutoff);
-  } catch (error: unknown) {
+  } catch (error) {
     return fail(`log cleanup failed: ${errorMessage(error)}`);
   }
 }

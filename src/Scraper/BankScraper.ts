@@ -297,7 +297,7 @@ export class BankScraper {
     if (!existsSync(bankDir)) return;
     getLogger().info(`  🧹 Clearing browser session for ${bankName}`);
     try { rmSync(bankDir, { recursive: true, force: true }); }
-    catch (error: unknown) {
+    catch (error) {
       const msg = errorMessage(error);
       getLogger().warn(`  ⚠️  Failed to clear session for ${bankName}: ${msg}`);
     }

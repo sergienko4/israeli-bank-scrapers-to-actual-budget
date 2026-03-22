@@ -54,7 +54,7 @@ vi.mock('../src/Services/TelegramCommandHandler.js', () => {
 
 // ── TelegramPoller mock ──────────────────────────────────────────────────────
 vi.mock('../src/Services/TelegramPoller.js', () => ({
-  TelegramPoller: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), stopAndFlush: vi.fn().mockResolvedValue(undefined) })),
+  default: vi.fn(() => ({ start: vi.fn(), stop: vi.fn(), stopAndFlush: vi.fn().mockResolvedValue(undefined) })),
 }));
 
 // ── AuditLogService mock ─────────────────────────────────────────────────────
