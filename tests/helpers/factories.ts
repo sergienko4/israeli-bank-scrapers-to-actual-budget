@@ -20,6 +20,7 @@ import type {
   IImportSummary,
   IBankMetrics,
   IAccountMetrics,
+  IAccountTransactionsRecord,
 } from '../../src/Services/MetricsService.js';
 import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
 
@@ -118,6 +119,19 @@ export function fakeAccountMetrics(overrides?: Partial<IAccountMetrics>): IAccou
     balance: faker.number.int({ min: -100000, max: 1000000 }),
     currency: 'ILS',
     newTransactions: [fakeTransactionRecord()],
+    existingTransactions: [],
+    ...overrides,
+  };
+}
+
+export function fakeAccountTransactionsRecord(
+  overrides?: Partial<IAccountTransactionsRecord>,
+): IAccountTransactionsRecord {
+  return {
+    accountNumber: faker.string.numeric(10),
+    balance: faker.number.int({ min: -100000, max: 1000000 }),
+    currency: 'ILS',
+    newTransactions: [],
     existingTransactions: [],
     ...overrides,
   };

@@ -15,25 +15,25 @@ import jsdoc from 'eslint-plugin-jsdoc';
  * These apply to all source files to ensure a "Zero-Skip" and Security-First environment.
  */
 const RESTRICTED_SYNTAX_RULES = [
-  // 1. Coverage Bypasses
+  // Coverage Bypasses
   {
     selector: "Program > Block:matches([value*='istanbul ignore'], [value*='c8 ignore'], [value*='v8 ignore'])",
     message: '🚫 COVERAGE SKIP: Write a test instead of ignoring coverage.',
   },
 
-  // 2. Lint Bypasses
+  // Lint Bypasses
   {
     selector: "Line:matches([value*='eslint-disable'])",
     message: '🚫 LINT SKIP: Do not disable ESLint rules. Fix the underlying issue.',
   },
 
-  // 3. Type Bypasses (Non-null assertions)
+  // Type Bypasses (Non-null assertions)
   {
     selector: 'TSNonNullExpression',
     message: '🚫 TYPE SKIP: Do not use non-null assertions (!). Use optional chaining (?.) or a proper null check.',
   },
 
-  // 4. Return Value Integrity (Blocking null & undefined returns)
+  // Return Value Integrity (Blocking null & undefined returns)
   {
     selector: ':matches(TSFunctionType, TSMethodDefinition, FunctionDeclaration) TSTypeAnnotation :matches(Identifier[name=\'null\'], Identifier[name=\'undefined\'], TSNullKeyword, TSUndefinedKeyword)',
     message: "🚫 ARCHITECTURE: Functions cannot return 'null' or 'undefined'. Use a Result Pattern (e.g., IScraperResult).",
@@ -47,7 +47,7 @@ const RESTRICTED_SYNTAX_RULES = [
     message: '🚫 LOGIC: Forbidden return value. Functions must explicitly return a valid object or primitive.',
   },
 
-  // 5. Nested Logic & Readability
+  // Nested Logic & Readability
   {
     selector: "CallExpression > .arguments[type='CallExpression']",
     message: '🚫 FORBIDDEN NESTED CALL: Assign the nested function result to a descriptive variable first for better debugging.',
@@ -57,7 +57,7 @@ const RESTRICTED_SYNTAX_RULES = [
     message: "🚫 FORBIDDEN METHOD: Usage of 'isStuckOnLoginPage' is globally banned.",
   },
 
-  // 6. Security & Logging
+  // Security & Logging
   {
     selector: "CallExpression[callee.object.name='logger'] Property[key.name=/password|token|secret|auth|creditCard/i]",
     message: 'SECURITY: Do not log sensitive data keys.',
@@ -67,7 +67,7 @@ const RESTRICTED_SYNTAX_RULES = [
     message: "Do not use 'throw new Error()'. Use a custom Error class (e.g., 'throw new ScraperError()') for PII safety.",
   },
 
-  // 7. Type Integrity (Blocking 'unknown' bypasses)
+  // Type Integrity (Blocking 'unknown' bypasses)
   {
     selector: ':matches(TSFunctionType, TSMethodDefinition, FunctionDeclaration) > TSTypeAnnotation TSUnknownKeyword',
     message: "🚫 ARCHITECTURE: Functions cannot return 'unknown'. Define a specific Interface or Type.",
@@ -81,10 +81,10 @@ const RESTRICTED_SYNTAX_RULES = [
     message: "🚫 TYPE SKIP: Do not declare variables as 'unknown'. Cast them to a concrete type immediately.",
   },
 
-  // 3b. Type Bypasses (as never)
+  // Type Bypasses (as never / as any)
   {
-    selector: "TSAsExpression[typeAnnotation.type='TSNeverKeyword']",
-    message: "🚫 TYPE SKIP: Do not use 'as never'. Use Partial<T> or proper mock types.",
+    selector: "TSAsExpression > :matches(TSNeverKeyword, TSAnyKeyword)",
+    message: "🚫 TEST INTEGRITY: Do not use 'as never' or 'as any' in mocks. Use 'DeepPartial<T>' or implement the required interface members.",
   },
 
   // Block: for-in loops, labeled statements, with statements
@@ -114,7 +114,11 @@ const RESTRICTED_SYNTAX_RULES = [
   },
   // GUARD 2: Prevent transforming Errors into "Empty Success"
   {
-    selector: "IfStatement[test.argument.property.name='isOk'] ReturnStatement > ArrayExpression[elements.length=0]",
+    selector: [
+      "IfStatement[test.argument.property.name='isOk'] ReturnStatement > ArrayExpression[elements.length=0]",
+      "IfStatement[test.callee.name='isFail'] ReturnStatement > ArrayExpression[elements.length=0]",
+      "IfStatement[test.argument.callee.name='isSuccess'] ReturnStatement > ArrayExpression[elements.length=0]",
+    ].join(', '),
     message: "🚫 DATA INTEGRITY: Do not return an empty array [] on failure. This triggers false 'Zero Data' states. Propagate the failure Result instead.",
   },
 
@@ -126,7 +130,7 @@ const RESTRICTED_SYNTAX_RULES = [
   {
     selector: "CallExpression[callee.name='describe'] > Literal[value=/^(test|run|batch|suite)/i]",
     message: '🚫 GENERIC DESCRIPTION: Use the Feature Name in the describe block.',
-  },
+  }
 ];
 
 export default tseslint.config(
@@ -361,10 +365,15 @@ export default tseslint.config(
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unused-vars': 'error',
       '@typescript-eslint/member-ordering': 'error',
-      'no-restricted-syntax': 'error',
       'jsdoc/require-jsdoc': 'error',
       'jsdoc/require-description': 'error',
+      'no-restricted-syntax': [
+        'error',
+        ...RESTRICTED_SYNTAX_RULES,
+      ],
+
     },
+
   },
 
   // 5. PIPELINE TESTS: inherit section 4 test rules (no special exemptions)
@@ -491,12 +500,32 @@ export default tseslint.config(
     },
   },
 
-  // 7. ENTRY POINT EXEMPTIONS
+  // 7. CANARY TEST FILES (applies guardrail rules so canary checks work)
+  {
+    files: ['tests/eslint-canaries/**/*.ts'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      parserOptions: {
+        project: './tsconfig.test.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      'no-restricted-syntax': ['error', ...RESTRICTED_SYNTAX_RULES],
+      '@typescript-eslint/no-non-null-assertion': 'error',
+      '@typescript-eslint/no-explicit-any': 'error',
+      'no-console': 'error',
+    },
+  },
+
+  // 8. ENTRY POINT EXEMPTIONS
   {
     files: ['src/index.ts', 'src/Index.ts', 'src/scheduler.ts', 'src/Scheduler.ts', 'src/**/index.ts', 'src/**/Index.ts'],
     rules: {
       'check-file/filename-naming-convention': 'off',
       'import-x/max-dependencies': 'off',
+      'no-await-in-loop': 'off',
     },
   },
 );

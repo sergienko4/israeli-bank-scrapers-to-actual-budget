@@ -23,6 +23,7 @@
     "lint:docs": "markdownlint-cli2 --config config/markdownlint/.markdownlint.jsonc \"README.md\" \".github/**/*.md\"",
     "lint:config-structure": "node config/check-structure.mjs",
 
+    "lint:canaries": "node config/check-eslint-canaries.mjs",
     "lint:licenses": "node config/check-licenses.mjs",
     "docs": "typedoc --options config/typedoc.json",
     "audit": "npm audit --audit-level=moderate",

@@ -93,4 +93,16 @@ describe('cleanOldLogs', () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0]).toContain(daysAgo(1));
   });
+
+  it('logs warning and continues when deletion fails with non-locked error', () => {
+    const oldFile = `app.${daysAgo(5)}.log`;
+    writeLog(oldFile);
+    // Remove file then make it a directory so unlinkSync fails with EISDIR
+    unlinkSync(join(testDir, oldFile));
+    mkdirSync(join(testDir, oldFile));
+    const result = cleanOldLogs(testDir);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.status).toBe('cleaned');
+    rmdirSync(join(testDir, oldFile));
+  });
 });

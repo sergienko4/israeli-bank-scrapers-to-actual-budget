@@ -12,6 +12,7 @@ import { CronExpressionParser } from 'cron-parser';
 import {
 decryptConfig, getEncryptionPassword,
   isEncryptedConfig} from './Config/ConfigEncryption.js';
+import { ConfigLoader } from './Config/ConfigLoader.js';
 import { createLogger, deriveLogFormat,getLogger } from './Logger/Index.js';
 import { AuditLogService } from './Services/AuditLogService.js';
 import { ImportMediator } from './Services/ImportMediator.js';
@@ -44,28 +45,31 @@ LOGGER.info(`📅 Timezone: ${process.env.TZ || 'UTC'}`);
  */
 export function readJsonOrEncrypted(filePath: string): Procedure<Record<string, string>> {
   if (!existsSync(filePath)) return fail(`File not found: ${filePath}`);
-  const raw = readFileSync(filePath, 'utf8');
-  const parsed = JSON.parse(raw) as Record<string, string>;
-  if (!isEncryptedConfig(parsed)) return succeed(parsed);
-  const password = getEncryptionPassword();
-  if (!password) return succeed(parsed);
-  const decryptedJson = decryptConfig(raw, password);
-  return succeed(JSON.parse(decryptedJson) as Record<string, string>);
+  try {
+    const raw = readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    if (!isEncryptedConfig(parsed)) return succeed(parsed);
+    const password = getEncryptionPassword();
+    if (!password) return fail('Encryption password required');
+    const decryptedJson = decryptConfig(raw, password);
+    return succeed(JSON.parse(decryptedJson) as Record<string, string>);
+  } catch (error: unknown) {
+    return fail(`Failed to read ${filePath}: ${errorMessage(error)}`);
+  }
 }
 
 /**
- * Loads and shallow-merges config.json with credentials.json at startup.
+ * Loads and deep-merges config.json with credentials.json at startup.
+ * Delegates to ConfigLoader.loadRaw() which handles proper deep-merge of nested objects.
  * @returns Procedure with the merged IImporterConfig, or failure if absent.
  */
 export function loadFullConfig(): Procedure<IImporterConfig> {
   try {
-    const configResult = readJsonOrEncrypted('/app/config.json');
-    if (isFail(configResult)) return fail('config.json not found');
-    const credsResult = readJsonOrEncrypted('/app/credentials.json');
-    const merged = credsResult.success
-      ? { ...configResult.data, ...credsResult.data } : configResult.data;
-    return succeed(merged as unknown as IImporterConfig);
-  } catch { return fail('Failed to load config'); }
+    const loader = new ConfigLoader();
+    return loader.loadRaw();
+  } catch (error: unknown) {
+    return fail(`Failed to load config: ${errorMessage(error)}`);
+  }
 }
 
 /**
@@ -97,7 +101,12 @@ export function spawnImport(extraEnv: Record<string, string> = {}): Promise<numb
     LOGGER.info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
     const env = Object.keys(extraEnv).length > 0 ? { ...process.env, ...extraEnv } : process.env;
     const child: ChildProcess = spawn('node', ['/app/dist/Index.js'], { stdio: 'inherit', env });
-    child.on('exit', (exitCode) => { const code = exitCode ?? 0; logImportResult(code, startTime); resolve(code); });
+    child.on('exit', (exitCode, signal) => {
+      const code = exitCode ?? (signal ? 1 : 0);
+      if (signal) LOGGER.warn(`Import killed by signal: ${signal}`);
+      logImportResult(code, startTime);
+      resolve(code);
+    });
     child.on('error', (err) => {
       LOGGER.error(`❌ Failed to start import: ${err.message}`);
       resolve(1);
@@ -339,18 +348,19 @@ async function executeScheduleIteration(
 }
 
 /**
- * Runs the cron scheduling loop via recursion to avoid no-await-in-loop.
+ * Runs the cron scheduling loop iteratively to avoid unbounded promise chains.
  * @param schedule - Cron expression defining the import frequency.
  * @param mediator - The ImportMediator used to request imports.
  * @returns Promise that never resolves (runs forever until the process exits).
  */
 async function scheduleLoop(schedule: string, mediator: ImportMediator): Promise<never> {
-  try { await executeScheduleIteration(schedule, mediator); }
-  catch (err: unknown) {
-    LOGGER.error(`❌ Scheduler error: ${errorMessage(err)}`);
-    await safeSleep(60000);
+  for (;;) {
+    try { await executeScheduleIteration(schedule, mediator); }
+    catch (err: unknown) {
+      LOGGER.error(`❌ Scheduler error: ${errorMessage(err)}`);
+      await safeSleep(60000);
+    }
   }
-  return scheduleLoop(schedule, mediator);
 }
 
 /**

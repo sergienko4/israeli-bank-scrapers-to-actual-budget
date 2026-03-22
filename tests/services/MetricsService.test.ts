@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MetricsService } from '../../src/Services/MetricsService.js';
+import { fakeAccountTransactionsRecord } from '../helpers/factories.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -292,7 +293,8 @@ describe('MetricsService', () => {
       const result = metrics.printSummary();
       expect(result.success).toBe(true);
       if (result.success) expect(result.data.status).toBe('printed');
-      expect(mockLogger.info).toHaveBeenCalled();
+      const calls = mockLogger.info.mock.calls.map(c => c[0]);
+      expect(calls.some((c: string) => typeof c === 'string' && c.includes('discount'))).toBe(true);
     });
 
     it('prints failed banks correctly', () => {
@@ -303,7 +305,8 @@ describe('MetricsService', () => {
 
       const result = metrics.printSummary();
       expect(result.success).toBe(true);
-      expect(mockLogger.info).toHaveBeenCalled();
+      const calls = mockLogger.info.mock.calls.map(c => c[0]);
+      expect(calls.some((c: string) => typeof c === 'string' && c.includes('leumi'))).toBe(true);
     });
 
     it('prints already-reconciled status', () => {
@@ -361,24 +364,25 @@ describe('MetricsService', () => {
       // Record success immediately — duration will be ~0ms
       metrics.recordBankSuccess('instant', 1, 0);
       metrics.printSummary();
-      expect(mockLogger.info).toHaveBeenCalled();
+      const calls = mockLogger.info.mock.calls.map(c => c[0]);
+      expect(calls.some((c: string) => typeof c === 'string' && c.includes('instant'))).toBe(true);
     });
 
     it('prints with no banks', () => {
       vi.clearAllMocks();
       const result = metrics.printSummary();
       expect(result.success).toBe(true);
-      expect(mockLogger.info).toHaveBeenCalled();
+      const calls = mockLogger.info.mock.calls.map(c => c[0]);
+      expect(calls.some((c: string) => typeof c === 'string' && c.includes('Summary'))).toBe(true);
     });
   });
 
   describe('recordAccountTransactions', () => {
     it('stores accountName in AccountMetrics when provided', () => {
       metrics.startBank('discount');
-      const result = metrics.recordAccountTransactions('discount', {
-        accountNumber: '1234567', accountName: 'Savings Account',
-        balance: 10000, currency: 'ILS', newTransactions: [], existingTransactions: []
-      });
+      const result = metrics.recordAccountTransactions(
+        'discount', fakeAccountTransactionsRecord({ accountName: 'Savings Account' })
+      );
       expect(result.success).toBe(true);
       if (result.success) expect(result.data.status).toBe('recorded');
 
@@ -391,10 +395,9 @@ describe('MetricsService', () => {
 
     it('stores undefined accountName when not provided', () => {
       metrics.startBank('discount');
-      metrics.recordAccountTransactions('discount', {
-        accountNumber: '1234567', balance: 10000, currency: 'ILS',
-        newTransactions: [], existingTransactions: []
-      });
+      metrics.recordAccountTransactions(
+        'discount', fakeAccountTransactionsRecord({ accountName: undefined })
+      );
       const bankResult = metrics.getBankMetrics('discount');
       expect(bankResult.success).toBe(true);
       if (bankResult.success) {

@@ -17,7 +17,7 @@ import type NotificationService from '../Services/NotificationService.js';
 import TwoFactorService from '../Services/TwoFactorService.js';
 import type { IBankConfig,IImporterConfig, IProcedureSuccess, Procedure } from '../Types/Index.js';
 import { DEFAULT_RESILIENCE_CONFIG, fail, succeed } from '../Types/Index.js';
-import { filterByDateCutoff,formatDate } from '../Utils/Index.js';
+import { errorMessage, filterByDateCutoff,formatDate } from '../Utils/Index.js';
 import buildCredentials from './CredentialsBuilder.js';
 import { buildChromeArgs, getChromeDataDir } from './ScraperOptionsBuilder.js';
 
@@ -297,7 +297,10 @@ export class BankScraper {
     if (!existsSync(bankDir)) return;
     getLogger().info(`  🧹 Clearing browser session for ${bankName}`);
     try { rmSync(bankDir, { recursive: true, force: true }); }
-    catch { getLogger().warn(`  ⚠️  Failed to clear session for ${bankName}`); }
+    catch (error: unknown) {
+      const msg = errorMessage(error);
+      getLogger().warn(`  ⚠️  Failed to clear session for ${bankName}: ${msg}`);
+    }
   }
 
   /**

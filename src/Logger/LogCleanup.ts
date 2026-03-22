@@ -6,7 +6,7 @@ import { existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Procedure } from '../Types/Index.js';
-import { fail, succeed } from '../Types/Index.js';
+import { fail, isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
@@ -32,11 +32,29 @@ function tryDeleteLogFile(filePath: string): Procedure<{ status: string }> {
     unlinkSync(filePath);
     return succeed({ status: 'deleted' });
   } catch (error: unknown) {
-    if (!isLockedFileError(error)) {
-      console.warn(`⚠️  Could not delete ${filePath}: ${errorMessage(error)}`);
+    if (isLockedFileError(error)) {
+      return succeed({ status: 'skipped' });
     }
-    return succeed({ status: 'skipped' });
+    return fail(`Could not delete ${filePath}: ${errorMessage(error)}`);
   }
+}
+
+/**
+ * Checks whether a log file is expired and attempts to delete it if so.
+ * @param logDir - Directory containing the log file.
+ * @param file - The log file name to evaluate and possibly delete.
+ * @param cutoff - Files dated before this cutoff will be deleted.
+ * @returns Procedure indicating whether the file was processed.
+ */
+function deleteIfExpired(
+  logDir: string, file: string, cutoff: Date
+): Procedure<{ status: string }> {
+  const match = /^app\.(\d{4}-\d{2}-\d{2})/.exec(file);
+  if (!match || new Date(match[1]) >= cutoff) return succeed({ status: 'skipped' });
+  const filePath = join(logDir, file);
+  const deleteResult = tryDeleteLogFile(filePath);
+  if (isFail(deleteResult)) console.warn(`⚠️  ${deleteResult.message}`);
+  return deleteResult;
 }
 
 /**
@@ -51,10 +69,7 @@ export default function cleanOldLogs(
     if (!existsSync(logDir)) return succeed({ status: 'no-dir' });
     const cutoff = new Date(Date.now() - THREE_DAYS_MS);
     for (const file of readdirSync(logDir)) {
-      const match = /^app\.(\d{4}-\d{2}-\d{2})/.exec(file);
-      if (!match || new Date(match[1]) >= cutoff) continue;
-      const filePath = join(logDir, file);
-      tryDeleteLogFile(filePath);
+      deleteIfExpired(logDir, file, cutoff);
     }
     return succeed({ status: 'cleaned' });
   } catch (error: unknown) {

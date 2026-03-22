@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, rmdirSync, writeFileSync, unlinkSync } from 'fs';
 import { fakeImportSummary } from '../helpers/factories.js';
 
 const TEST_FILE = '/tmp/test-audit-log.json';
@@ -200,9 +202,15 @@ describe('AuditLogService', () => {
   });
 
   it('returns failure when file write throws', () => {
-    const badService = new AuditLogService('/nonexistent/dir/audit.json', 5);
-    const result = badService.record(fakeImportSummary());
-    expect(result.success).toBe(false);
-    if (!result.success) expect(result.message).toContain('audit write failed');
+    const badPath = join(tmpdir(), 'audit-test-dir-' + String(Date.now()));
+    mkdirSync(badPath);
+    try {
+      const badService = new AuditLogService(badPath, 5);
+      const result = badService.record(fakeImportSummary());
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.message).toContain('audit write failed');
+    } finally {
+      rmdirSync(badPath);
+    }
   });
 });

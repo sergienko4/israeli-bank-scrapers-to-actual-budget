@@ -27,6 +27,11 @@ describe('HistoryCategoryResolver', () => {
   let resolver: HistoryCategoryResolver;
   let mockApi: IMockApi;
 
+  /**
+   * Builds a mock Actual API with pre-loaded transaction rows.
+   * @param rows - Array of payee/category/date objects returned by aqlQuery.
+   * @returns An IMockApi stub with aqlQuery and q methods configured.
+   */
   function buildMockApi(rows: Array<{ imported_payee: string; category: string; date: string }>): IMockApi {
     return {
       aqlQuery: vi.fn().mockResolvedValue({ data: rows }),

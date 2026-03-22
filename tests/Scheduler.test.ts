@@ -23,16 +23,25 @@ vi.mock('node:fs');
 vi.mock('node:child_process');
 
 // ── Config encryption mock (hoisted so we can change per-test) ──────────────
-const { mockIsEncrypted, mockDecrypt, mockGetPassword } = vi.hoisted(() => ({
+const { mockIsEncrypted, mockDecrypt, mockGetPassword, mockLoadRaw } = vi.hoisted(() => ({
   mockIsEncrypted: vi.fn(() => false),
   mockDecrypt: vi.fn(),
   mockGetPassword: vi.fn(() => undefined),
+  mockLoadRaw: vi.fn(() => ({ success: false, message: 'no config (test default)' })),
 }));
 vi.mock('../src/Config/ConfigEncryption.js', () => ({
   isEncryptedConfig: mockIsEncrypted,
   decryptConfig: mockDecrypt,
   getEncryptionPassword: mockGetPassword,
 }));
+
+// ── ConfigLoader mock ───────────────────────────────────────────────────────
+vi.mock('../src/Config/ConfigLoader.js', () => {
+  class MockConfigLoader {
+    loadRaw = mockLoadRaw;
+  }
+  return { ConfigLoader: MockConfigLoader };
+});
 
 // ── TelegramCommandHandler mock ──────────────────────────────────────────────
 vi.mock('../src/Services/TelegramCommandHandler.js', () => {
@@ -107,7 +116,7 @@ describe('loadFullConfig', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns null when config.json does not exist', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
+    mockLoadRaw.mockReturnValue(fail('config.json not found'));
     const result = loadFullConfig();
     expect(result.success).toBe(false);
     if (!isFail(result)) return;
@@ -115,10 +124,7 @@ describe('loadFullConfig', () => {
   });
 
   it('merges config.json with credentials.json when both exist', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync)
-      .mockReturnValueOnce(JSON.stringify({ banks: {} }))
-      .mockReturnValueOnce(JSON.stringify({ token: 'secret' }));
+    mockLoadRaw.mockReturnValue(succeed({ banks: {}, token: 'secret' }));
     const result = loadFullConfig();
     expect(result.success).toBe(true);
     if (!isSuccess(result)) return;
@@ -126,10 +132,7 @@ describe('loadFullConfig', () => {
   });
 
   it('returns only config when credentials.json does not exist', () => {
-    vi.mocked(fs.existsSync)
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(false);
-    vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify({ banks: {} }));
+    mockLoadRaw.mockReturnValue(succeed({ banks: {} }));
     const result = loadFullConfig();
     expect(result.success).toBe(true);
     if (!isSuccess(result)) return;
@@ -143,7 +146,7 @@ describe('loadLogConfig', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns undefined when config cannot be loaded', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
+    mockLoadRaw.mockReturnValue(fail('config.json not found'));
     const result = loadLogConfig();
     expect(result.success).toBe(false);
     if (!isFail(result)) return;
@@ -151,8 +154,7 @@ describe('loadLogConfig', () => {
   });
 
   it('returns logConfig with defaults when config is minimal', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ actual: { init: {}, budget: {} }, banks: {} }));
+    mockLoadRaw.mockReturnValue(succeed({ actual: { init: {}, budget: {} }, banks: {} }));
     const result = loadLogConfig();
     expect(result.success).toBe(true);
     if (!isSuccess(result)) return;
@@ -283,7 +285,7 @@ describe('readJsonOrEncrypted (encrypted paths)', () => {
     expect(result.data).toEqual({ decrypted: 'data' });
   });
 
-  it('returns raw parsed data when encrypted but no password', () => {
+  it('returns failure when encrypted but no password', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({ encrypted: true, version: 1 })
@@ -292,9 +294,9 @@ describe('readJsonOrEncrypted (encrypted paths)', () => {
     mockGetPassword.mockReturnValue(undefined);
 
     const result = readJsonOrEncrypted('/app/config.json');
-    expect(result.success).toBe(true);
-    if (!isSuccess(result)) return;
-    expect(result.data).toEqual({ encrypted: true, version: 1 });
+    expect(result.success).toBe(false);
+    if (!isFail(result)) return;
+    expect(result.message).toContain('Encryption password required');
   });
 });
 
@@ -304,10 +306,7 @@ describe('loadFullConfig (error handling)', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('returns failure when JSON parsing throws', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockImplementation(() => {
-      throw new SyntaxError('Unexpected token');
-    });
+    mockLoadRaw.mockImplementation(() => { throw new SyntaxError('Unexpected token'); });
     const result = loadFullConfig();
     expect(result.success).toBe(false);
     if (!isFail(result)) return;
@@ -329,8 +328,7 @@ describe('loadLogConfig (telegram paths)', () => {
         telegram: { botToken: 'tok', chatId: '123', listenForCommands: true, messageFormat: 'emoji' },
       },
     };
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+    mockLoadRaw.mockReturnValue(succeed(config));
     const result = loadLogConfig();
     expect(result.success).toBe(true);
     if (!isSuccess(result)) return;
@@ -343,8 +341,7 @@ describe('loadLogConfig (telegram paths)', () => {
       banks: {},
       logConfig: { format: 'json', logDir: '/var/log' },
     };
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
+    mockLoadRaw.mockReturnValue(succeed(config));
     const result = loadLogConfig();
     expect(result.success).toBe(true);
     if (!isSuccess(result)) return;
@@ -371,7 +368,7 @@ describe('spawnImport (child process lifecycle)', () => {
     expect(code).toBe(2);
   });
 
-  it('resolves with 0 when exit code is null (signal termination)', async () => {
+  it('resolves with 0 when exit code is null and no signal', async () => {
     const handlers: Record<string, (...args: unknown[]) => void> = {};
     const capturingChild = mockChild({
       on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as MockChildProcess['on'],
@@ -379,9 +376,25 @@ describe('spawnImport (child process lifecycle)', () => {
     vi.mocked(childProcess.spawn).mockReturnValue(capturingChild);
 
     const promise = spawnImport();
-    handlers.exit(null);
+    handlers.exit(null, null);
     const code = await promise;
     expect(code).toBe(0);
+  });
+
+  it('resolves with 1 and logs warning when killed by signal', async () => {
+    const handlers: Record<string, (...args: unknown[]) => void> = {};
+    const capturingChild = mockChild({
+      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as MockChildProcess['on'],
+    });
+    vi.mocked(childProcess.spawn).mockReturnValue(capturingChild);
+
+    const promise = spawnImport();
+    handlers.exit(null, 'SIGTERM');
+    const code = await promise;
+    expect(code).toBe(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Import killed by signal: SIGTERM')
+    );
   });
 
   it('resolves with 1 when child process emits error', async () => {
