@@ -224,14 +224,17 @@ describe('TransactionService', () => {
       expect(result.data).toEqual({ id: 'acc-222', name: 'Account 2' });
     });
 
-    it('returns failure when createAccount returns a string', async () => {
+    it('handles createAccount returning string ID (Actual API normal behavior)', async () => {
       mockApi.getAccounts.mockResolvedValue([]);
       mockApi.createAccount.mockResolvedValue('some-string-id');
 
       const result = await service.getOrCreateAccount('acc-new', 'discount', '999999');
 
-      expect(result.success).toBe(false);
-      expect(result.message).toBe('account not found');
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.id).toBe('some-string-id');
+        expect(result.data.name).toBe('discount - 999999');
+      }
     });
 
     it('returns failure when createAccount returns undefined', async () => {

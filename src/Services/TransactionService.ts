@@ -89,27 +89,40 @@ export class TransactionService {
    * @param accountNumber - Account number used when creating the account label.
    * @returns Procedure wrapping the found or newly created IActualAccount, or failure.
    */
+  /**
+   * Returns an existing Actual account or creates a new one with the given UUID.
+   * @param accountId - UUID to look up or create.
+   * @param bankName - Bank name used when creating the account label.
+   * @param accountNumber - Account number used when creating the account label.
+   * @returns Procedure wrapping the found or newly created IActualAccount, or failure.
+   */
   public async getOrCreateAccount(
     accountId: string, bankName: string, accountNumber: string
   ): Promise<Procedure<IActualAccount>> {
     const accounts = await this._api.getAccounts() as IActualAccount[];
     const existing = accounts.find((a) => a.id === accountId);
-
     if (existing) return succeed(existing);
 
     getLogger().info(`     ➕ Creating new account: ${accountId}`);
-    // Actual accepts id to set specific UUID, though not in official type
+    const accountLabel = `${bankName} - ${accountNumber}`;
+    return this.createNewAccount(accountId, accountLabel);
+  }
+
+  /**
+   * Creates a new Actual Budget account and returns it as a Procedure.
+   * @param accountId - UUID for the new account.
+   * @param accountLabel - Display name for the new account.
+   * @returns Procedure wrapping the created IActualAccount.
+   */
+  private async createNewAccount(
+    accountId: string, accountLabel: string
+  ): Promise<Procedure<IActualAccount>> {
     const created = await this._api.createAccount({
-      id: accountId,
-      name: `${bankName} - ${accountNumber}`,
-      offbudget: false,
-      closed: false
+      id: accountId, name: accountLabel, offbudget: false, closed: false,
     } as Omit<IActualAccount, 'id'>);
-
-    if (!created || typeof created === 'string') {
-      return fail('account not found', { status: 'account-not-found' });
-    }
-
+    if (!created) return fail('account creation returned empty', { status: 'account-not-found' });
+    // createAccount returns string ID on success — build account object
+    if (typeof created === 'string') return succeed({ id: created, name: accountLabel });
     return succeed(created as IActualAccount);
   }
 

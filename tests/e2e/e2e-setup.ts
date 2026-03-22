@@ -60,10 +60,41 @@ function addWebhookConfig(template: Record<string, unknown>): void {
   notifications.webhook = { url: webhookUrl, format: 'plain' };
 }
 
+/**
+ * Rewrites mock scraper JSON files so transaction dates are recent (within daysBack window).
+ * Prevents date-expiry failures when hardcoded dates age past the filter window.
+ */
+function refreshMockDates(): void {
+  const mockDir = join(import.meta.dirname, 'fixtures', 'mock-scraper-dir');
+  if (!existsSync(mockDir)) mkdirSync(mockDir, { recursive: true });
+
+  const sourceFiles = [
+    { src: 'mock-scraper-result.json', dest: 'e2eTestBank.json' },
+    { src: 'mock-scraper-result-bank2.json', dest: 'e2eTestBank2.json' },
+  ];
+
+  for (const { src, dest } of sourceFiles) {
+    const srcPath = join(import.meta.dirname, 'fixtures', src);
+    if (!existsSync(srcPath)) continue;
+    const data = JSON.parse(readFileSync(srcPath, 'utf8'));
+    let dayOffset = 3;
+    for (const account of data.accounts ?? []) {
+      for (const txn of account.txns ?? []) {
+        const recent = new Date(Date.now() - dayOffset * 24 * 60 * 60 * 1000);
+        txn.date = recent.toISOString().split('T')[0] + 'T00:00:00.000Z';
+        dayOffset++;
+      }
+    }
+    writeFileSync(join(mockDir, dest), JSON.stringify(data, null, 2));
+  }
+  console.log('Mock scraper dates refreshed to recent');
+}
+
 async function main(): Promise<void> {
   console.log('=== E2E Setup ===');
   const budgetId = await createTestBudget();
   generateConfig();
+  refreshMockDates();
   console.log(`Budget ID for E2E_LOCAL_BUDGET_ID: ${budgetId}`);
   console.log('=== Setup complete ===');
 }
