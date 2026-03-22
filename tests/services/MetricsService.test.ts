@@ -345,6 +345,25 @@ describe('MetricsService', () => {
       expect(calls.some((c: string) => typeof c === 'string' && c.includes('-50.00'))).toBe(true);
     });
 
+    it('skips reconciliation line when created but amount is undefined', () => {
+      vi.clearAllMocks();
+      metrics.startBank('discount');
+      metrics.recordBankSuccess('discount', 5, 0);
+      metrics.recordReconciliation('discount', 'created');
+      metrics.printSummary();
+      const calls = mockLogger.info.mock.calls.map(c => c[0]);
+      expect(calls.every((c: string) => typeof c !== 'string' || !c.includes('Reconciliation'))).toBe(true);
+    });
+
+    it('prints bank with no duration', () => {
+      vi.clearAllMocks();
+      metrics.startBank('instant');
+      // Record success immediately — duration will be ~0ms
+      metrics.recordBankSuccess('instant', 1, 0);
+      metrics.printSummary();
+      expect(mockLogger.info).toHaveBeenCalled();
+    });
+
     it('prints with no banks', () => {
       vi.clearAllMocks();
       const result = metrics.printSummary();

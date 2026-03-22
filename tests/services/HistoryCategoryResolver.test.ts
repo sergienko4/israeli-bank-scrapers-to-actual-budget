@@ -1,15 +1,33 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type api from '@actual-app/api';
 import HistoryCategoryResolver from '../../src/Services/HistoryCategoryResolver.js';
 import { isSuccess, isFail } from '../../src/Types/Index.js';
 import * as LoggerModule from '../../src/Logger/Index.js';
 
-const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+interface IMockLogger {
+  info: ReturnType<typeof vi.fn>;
+  debug: ReturnType<typeof vi.fn>;
+  warn: ReturnType<typeof vi.fn>;
+  error: ReturnType<typeof vi.fn>;
+}
+
+interface IMockApi {
+  aqlQuery: ReturnType<typeof vi.fn>;
+  q: ReturnType<typeof vi.fn>;
+}
+
+const mockLogger: IMockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+/** Casts an IMockApi to the typeof api expected by the constructor. */
+function asApi(mock: IMockApi): typeof api {
+  return mock as unknown as typeof api;
+}
 
 describe('HistoryCategoryResolver', () => {
   let resolver: HistoryCategoryResolver;
-  let mockApi: any;
+  let mockApi: IMockApi;
 
-  function buildMockApi(rows: Array<{ imported_payee: string; category: string; date: string }>) {
+  function buildMockApi(rows: Array<{ imported_payee: string; category: string; date: string }>): IMockApi {
     return {
       aqlQuery: vi.fn().mockResolvedValue({ data: rows }),
       q: vi.fn(() => ({
@@ -24,7 +42,7 @@ describe('HistoryCategoryResolver', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as any);
+    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger);
   });
 
   describe('initialize', () => {
@@ -33,7 +51,7 @@ describe('HistoryCategoryResolver', () => {
         { imported_payee: 'Supermarket', category: 'cat-groceries', date: '2026-02-18' },
         { imported_payee: 'Gas Station', category: 'cat-transport', date: '2026-02-17' }
       ]);
-      resolver = new HistoryCategoryResolver(mockApi);
+      resolver = new HistoryCategoryResolver(asApi(mockApi));
       await resolver.initialize();
 
       expect(mockApi.q).toHaveBeenCalledWith('transactions');
@@ -46,7 +64,7 @@ describe('HistoryCategoryResolver', () => {
 
     it('handles empty database', async () => {
       mockApi = buildMockApi([]);
-      resolver = new HistoryCategoryResolver(mockApi);
+      resolver = new HistoryCategoryResolver(asApi(mockApi));
       await resolver.initialize();
 
       const result = resolver.resolve('Anything');
@@ -58,7 +76,7 @@ describe('HistoryCategoryResolver', () => {
         { imported_payee: 'Store', category: 'cat-new', date: '2026-02-18' },
         { imported_payee: 'Store', category: 'cat-old', date: '2026-01-01' }
       ]);
-      resolver = new HistoryCategoryResolver(mockApi);
+      resolver = new HistoryCategoryResolver(asApi(mockApi));
       await resolver.initialize();
 
       const result = resolver.resolve('Store');
@@ -73,7 +91,7 @@ describe('HistoryCategoryResolver', () => {
         ...buildMockApi([]),
         aqlQuery: vi.fn().mockRejectedValue('network down')
       };
-      resolver = new HistoryCategoryResolver(mockApi);
+      resolver = new HistoryCategoryResolver(asApi(mockApi));
       await resolver.initialize(); // should not throw
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('network down')
@@ -85,7 +103,7 @@ describe('HistoryCategoryResolver', () => {
         { imported_payee: '', category: 'cat-1', date: '2026-02-18' },
         { imported_payee: 'Valid', category: 'cat-2', date: '2026-02-17' }
       ]);
-      resolver = new HistoryCategoryResolver(mockApi);
+      resolver = new HistoryCategoryResolver(asApi(mockApi));
       await resolver.initialize();
 
       const emptyResult = resolver.resolve('');
@@ -105,7 +123,7 @@ describe('HistoryCategoryResolver', () => {
         { imported_payee: 'חברת חשמל', category: 'cat-utilities', date: '2026-02-17' },
         { imported_payee: 'Gas Station', category: 'cat-transport', date: '2026-02-16' }
       ]);
-      resolver = new HistoryCategoryResolver(mockApi);
+      resolver = new HistoryCategoryResolver(asApi(mockApi));
       await resolver.initialize();
     });
 
@@ -147,7 +165,7 @@ describe('HistoryCategoryResolver', () => {
     });
 
     it('returns undefined before initialize is called', () => {
-      const uninitResolver = new HistoryCategoryResolver(buildMockApi([]));
+      const uninitResolver = new HistoryCategoryResolver(asApi(buildMockApi([])));
       const result = uninitResolver.resolve('Anything');
       expect(result.success).toBe(false);
     });

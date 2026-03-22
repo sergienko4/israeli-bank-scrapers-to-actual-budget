@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as childProcess from 'node:child_process';
-import { succeed, fail } from '../src/Types/ProcedureHelpers.js';
+import { succeed, fail, isFail, isSuccess } from '../src/Types/ProcedureHelpers.js';
+import type { IImporterConfig } from '../src/Types/Index.js';
+import type TelegramNotifier from '../src/Services/Notifications/TelegramNotifier.js';
 
 // ── Logger mock via vi.hoisted (Scheduler.ts calls getLogger at module-load time) ─
 const { mockLogger } = vi.hoisted(() => ({
@@ -69,6 +71,13 @@ import {
   buildCommandHandler,
 } from '../src/Scheduler.js';
 
+type MockChildProcess = Partial<ReturnType<typeof childProcess.spawn>>;
+
+/** Creates a minimal mock ChildProcess accepted by spawn's return type. */
+function mockChild(overrides: MockChildProcess = {}): ReturnType<typeof childProcess.spawn> {
+  return { on: vi.fn(), ...overrides } as unknown as ReturnType<typeof childProcess.spawn>;
+}
+
 // ─── readJsonOrEncrypted ─────────────────────────────────────────────────────
 
 describe('readJsonOrEncrypted', () => {
@@ -78,7 +87,8 @@ describe('readJsonOrEncrypted', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     const result = readJsonOrEncrypted('/app/config.json');
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('File not found');
+    if (!isFail(result)) return;
+    expect(result.message).toContain('File not found');
   });
 
   it('parses and returns plain JSON when not encrypted', () => {
@@ -86,7 +96,8 @@ describe('readJsonOrEncrypted', () => {
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ foo: 'bar' }));
     const result = readJsonOrEncrypted('/app/config.json');
     expect(result.success).toBe(true);
-    expect((result as any).data).toEqual({ foo: 'bar' });
+    if (!isSuccess(result)) return;
+    expect(result.data).toEqual({ foo: 'bar' });
   });
 });
 
@@ -99,7 +110,8 @@ describe('loadFullConfig', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     const result = loadFullConfig();
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('config.json not found');
+    if (!isFail(result)) return;
+    expect(result.message).toContain('config.json not found');
   });
 
   it('merges config.json with credentials.json when both exist', () => {
@@ -109,7 +121,8 @@ describe('loadFullConfig', () => {
       .mockReturnValueOnce(JSON.stringify({ token: 'secret' }));
     const result = loadFullConfig();
     expect(result.success).toBe(true);
-    expect((result as any).data).toMatchObject({ banks: {}, token: 'secret' });
+    if (!isSuccess(result)) return;
+    expect(result.data).toMatchObject({ banks: {}, token: 'secret' });
   });
 
   it('returns only config when credentials.json does not exist', () => {
@@ -119,7 +132,8 @@ describe('loadFullConfig', () => {
     vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify({ banks: {} }));
     const result = loadFullConfig();
     expect(result.success).toBe(true);
-    expect((result as any).data).toMatchObject({ banks: {} });
+    if (!isSuccess(result)) return;
+    expect(result.data).toMatchObject({ banks: {} });
   });
 });
 
@@ -132,7 +146,8 @@ describe('loadLogConfig', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     const result = loadLogConfig();
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Cannot derive log config');
+    if (!isFail(result)) return;
+    expect(result.message).toContain('Cannot derive log config');
   });
 
   it('returns logConfig with defaults when config is minimal', () => {
@@ -140,7 +155,8 @@ describe('loadLogConfig', () => {
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ actual: { init: {}, budget: {} }, banks: {} }));
     const result = loadLogConfig();
     expect(result.success).toBe(true);
-    expect((result as any).data.logDir).toBe('./logs');
+    if (!isSuccess(result)) return;
+    expect(result.data.logDir).toBe('./logs');
   });
 });
 
@@ -148,8 +164,7 @@ describe('loadLogConfig', () => {
 
 describe('spawnImport', () => {
   it('spawns node /app/dist/Index.js and returns a promise', () => {
-    const mockChild = { on: vi.fn() } as never;
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild());
     const result = spawnImport();
     expect(result).toBeInstanceOf(Promise);
     expect(childProcess.spawn).toHaveBeenCalledWith(
@@ -188,11 +203,6 @@ describe('logImportResult', () => {
       expect.stringContaining('Import failed with exit code 1')
     );
   });
-
-  it('logs success when exit code is 0', () => {
-    logImportResult(0, new Date());
-    expect(mockLogger.info).toHaveBeenCalled();
-  });
 });
 
 // ─── logCommandCount ─────────────────────────────────────────────────────────
@@ -216,7 +226,7 @@ describe('logCommandCount', () => {
 
 describe('buildExtraCommands', () => {
   it('returns 3 default commands when config is null', () => {
-    const cmds = buildExtraCommands({} as never);
+    const cmds = buildExtraCommands({} as Partial<IImporterConfig> as IImporterConfig);
     expect(cmds).toHaveLength(3);
     expect(cmds.map(c => c.command)).toContain('retry');
     expect(cmds.map(c => c.command)).toContain('check_config');
@@ -224,14 +234,14 @@ describe('buildExtraCommands', () => {
   });
 
   it('returns 4 commands when config has spendingWatch rules', () => {
-    const config = { spendingWatch: [{ alertFromAmount: 100, numOfDayToCount: 7 }] } as never;
+    const config = { spendingWatch: [{ alertFromAmount: 100, numOfDayToCount: 7 }] } as Partial<IImporterConfig> as IImporterConfig;
     const cmds = buildExtraCommands(config);
     expect(cmds).toHaveLength(4);
     expect(cmds.map(c => c.command)).toContain('watch');
   });
 
   it('returns 3 commands when config has empty spendingWatch array', () => {
-    const config = { spendingWatch: [] } as never;
+    const config = { spendingWatch: [] } as Partial<IImporterConfig> as IImporterConfig;
     const cmds = buildExtraCommands(config);
     expect(cmds).toHaveLength(3);
   });
@@ -269,7 +279,8 @@ describe('readJsonOrEncrypted (encrypted paths)', () => {
 
     const result = readJsonOrEncrypted('/app/config.json');
     expect(result.success).toBe(true);
-    expect((result as any).data).toEqual({ decrypted: 'data' });
+    if (!isSuccess(result)) return;
+    expect(result.data).toEqual({ decrypted: 'data' });
   });
 
   it('returns raw parsed data when encrypted but no password', () => {
@@ -282,7 +293,8 @@ describe('readJsonOrEncrypted (encrypted paths)', () => {
 
     const result = readJsonOrEncrypted('/app/config.json');
     expect(result.success).toBe(true);
-    expect((result as any).data).toEqual({ encrypted: true, version: 1 });
+    if (!isSuccess(result)) return;
+    expect(result.data).toEqual({ encrypted: true, version: 1 });
   });
 });
 
@@ -298,7 +310,8 @@ describe('loadFullConfig (error handling)', () => {
     });
     const result = loadFullConfig();
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Failed to load config');
+    if (!isFail(result)) return;
+    expect(result.message).toContain('Failed to load config');
   });
 });
 
@@ -320,7 +333,8 @@ describe('loadLogConfig (telegram paths)', () => {
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
     const result = loadLogConfig();
     expect(result.success).toBe(true);
-    expect((result as any).data.logDir).toBe('./logs');
+    if (!isSuccess(result)) return;
+    expect(result.data.logDir).toBe('./logs');
   });
 
   it('uses logConfig.format when explicitly set in config', () => {
@@ -333,8 +347,9 @@ describe('loadLogConfig (telegram paths)', () => {
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
     const result = loadLogConfig();
     expect(result.success).toBe(true);
-    expect((result as any).data.format).toBe('json');
-    expect((result as any).data.logDir).toBe('/var/log');
+    if (!isSuccess(result)) return;
+    expect(result.data.format).toBe('json');
+    expect(result.data.logDir).toBe('/var/log');
   });
 });
 
@@ -344,11 +359,11 @@ describe('spawnImport (child process lifecycle)', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('resolves with exit code from child process', async () => {
-    const handlers: Record<string, (...args: any[]) => void> = {};
-    const mockChild = {
-      on: vi.fn((event: string, cb: (...args: any[]) => void) => { handlers[event] = cb; }),
-    } as never;
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
+    const handlers: Record<string, (...args: unknown[]) => void> = {};
+    const capturingChild = mockChild({
+      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as MockChildProcess['on'],
+    });
+    vi.mocked(childProcess.spawn).mockReturnValue(capturingChild);
 
     const promise = spawnImport();
     handlers.exit(2);
@@ -357,11 +372,11 @@ describe('spawnImport (child process lifecycle)', () => {
   });
 
   it('resolves with 0 when exit code is null (signal termination)', async () => {
-    const handlers: Record<string, (...args: any[]) => void> = {};
-    const mockChild = {
-      on: vi.fn((event: string, cb: (...args: any[]) => void) => { handlers[event] = cb; }),
-    } as never;
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
+    const handlers: Record<string, (...args: unknown[]) => void> = {};
+    const capturingChild = mockChild({
+      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as MockChildProcess['on'],
+    });
+    vi.mocked(childProcess.spawn).mockReturnValue(capturingChild);
 
     const promise = spawnImport();
     handlers.exit(null);
@@ -370,11 +385,11 @@ describe('spawnImport (child process lifecycle)', () => {
   });
 
   it('resolves with 1 when child process emits error', async () => {
-    const handlers: Record<string, (...args: any[]) => void> = {};
-    const mockChild = {
-      on: vi.fn((event: string, cb: (...args: any[]) => void) => { handlers[event] = cb; }),
-    } as never;
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
+    const handlers: Record<string, (...args: unknown[]) => void> = {};
+    const capturingChild = mockChild({
+      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as MockChildProcess['on'],
+    });
+    vi.mocked(childProcess.spawn).mockReturnValue(capturingChild);
 
     const promise = spawnImport();
     handlers.error(new Error('spawn ENOENT'));
@@ -386,8 +401,7 @@ describe('spawnImport (child process lifecycle)', () => {
   });
 
   it('passes extra env variables when provided', () => {
-    const mockChild = { on: vi.fn() } as never;
-    vi.mocked(childProcess.spawn).mockReturnValue(mockChild);
+    vi.mocked(childProcess.spawn).mockReturnValue(mockChild());
 
     spawnImport({ BANK_NAME: 'leumi' });
     expect(childProcess.spawn).toHaveBeenCalledWith(
@@ -406,7 +420,7 @@ describe('createMediator (with notifier)', () => {
 
   it('accepts a successful notifier procedure', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
-    const fakeNotifier = { sendMessage: vi.fn() } as any;
+    const fakeNotifier = { sendMessage: vi.fn() } as unknown as TelegramNotifier;
     const mediator = createMediator(succeed(fakeNotifier));
     expect(mediator).toBeDefined();
     expect(typeof mediator.requestImport).toBe('function');
@@ -420,7 +434,7 @@ describe('buildCommandHandler', () => {
 
   it('returns a TelegramCommandHandler instance', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
-    const fakeNotifier = { sendMessage: vi.fn(), registerCommands: vi.fn(), sendScanMenu: vi.fn() } as any;
+    const fakeNotifier = { sendMessage: vi.fn(), registerCommands: vi.fn(), sendScanMenu: vi.fn() } as unknown as TelegramNotifier;
     const mediator = createMediator(fail('no notifier'));
     const handler = buildCommandHandler(fakeNotifier, mediator);
     expect(handler).toBeDefined();

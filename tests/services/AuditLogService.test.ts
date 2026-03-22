@@ -198,4 +198,11 @@ describe('AuditLogService', () => {
     expect(result.success).toBe(true);
     if (result.success) expect(result.data).toBe(0);
   });
+
+  it('returns failure when file write throws', () => {
+    const badService = new AuditLogService('/nonexistent/dir/audit.json', 5);
+    const result = badService.record(fakeImportSummary());
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toContain('audit write failed');
+  });
 });

@@ -22,7 +22,8 @@ import buildCredentials from './CredentialsBuilder.js';
 import { buildChromeArgs, getChromeDataDir } from './ScraperOptionsBuilder.js';
 
 /** Company type map used to look up the scraper ID for each bank name. */
-const COMPANY_TYPE_MAP: Record<string, typeof CompanyTypes[keyof typeof CompanyTypes]> = {
+type CompanyType = typeof CompanyTypes[keyof typeof CompanyTypes];
+const COMPANY_TYPE_MAP: Partial<Record<string, CompanyType>> = {
   'hapoalim': CompanyTypes.Hapoalim, 'leumi': CompanyTypes.Leumi,
   'discount': CompanyTypes.Discount, 'mizrahi': CompanyTypes.Mizrahi,
   'mercantile': CompanyTypes.Mercantile, 'otsarHahayal': CompanyTypes.OtsarHahayal,
@@ -198,8 +199,7 @@ export class BankScraper {
   private initBankScrape(
     bankName: string, bankConfig: IBankConfig
   ): { scraper: ReturnType<typeof createScraper>; credentials: ScraperCredentials } {
-    const companyType = COMPANY_TYPE_MAP[bankName.toLowerCase()] as
-      typeof CompanyTypes[keyof typeof CompanyTypes] | undefined;
+    const companyType = COMPANY_TYPE_MAP[bankName.toLowerCase()];
     if (!companyType) throw new TypeError(`Unknown bank: ${bankName}`);
     const otpRetriever = this.buildOtpRetriever(bankName, bankConfig);
     const options = this.buildScraperOptions(companyType, bankConfig, otpRetriever);

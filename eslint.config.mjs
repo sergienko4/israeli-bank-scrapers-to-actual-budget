@@ -81,6 +81,12 @@ const RESTRICTED_SYNTAX_RULES = [
     message: "🚫 TYPE SKIP: Do not declare variables as 'unknown'. Cast them to a concrete type immediately.",
   },
 
+  // 3b. Type Bypasses (as never)
+  {
+    selector: "TSAsExpression[typeAnnotation.type='TSNeverKeyword']",
+    message: "🚫 TYPE SKIP: Do not use 'as never'. Use Partial<T> or proper mock types.",
+  },
+
   // Block: for-in loops, labeled statements, with statements
   'ForInStatement',
   'LabeledStatement',

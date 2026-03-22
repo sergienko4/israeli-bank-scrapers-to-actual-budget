@@ -63,6 +63,7 @@ describe('ReconciliationService', () => {
 
       await service.reconcile('account-123', 150, 'ILS');
 
+      expect(mockApi.importTransactions).toHaveBeenCalledTimes(1);
       const callArgs = mockApi.importTransactions.mock.calls[0];
       expect(callArgs[0]).toBe('account-123');
 
@@ -142,6 +143,7 @@ describe('ReconciliationService', () => {
 
       await service.reconcile('account-123', 150);
 
+      expect(mockApi.importTransactions).toHaveBeenCalledTimes(1);
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.notes).toContain('ILS');
     });
@@ -164,6 +166,7 @@ describe('ReconciliationService', () => {
 
       await service.reconcile('account-123', 150, 'USD');
 
+      expect(mockApi.importTransactions).toHaveBeenCalledTimes(1);
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.notes).toContain('USD');
       expect(transaction.notes).toContain('Expected 150');
@@ -187,6 +190,7 @@ describe('ReconciliationService', () => {
 
       await service.reconcile('account-123', 150, 'ILS');
 
+      expect(mockApi.importTransactions).toHaveBeenCalledTimes(1);
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
       expect(transaction.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });

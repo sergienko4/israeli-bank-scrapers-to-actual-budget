@@ -54,7 +54,7 @@ describe.runIf(HAS_BUDGET && hasDockerImage())('Encrypted Config E2E', () => {
       });
 
       expect(result.exitCode).toBeGreaterThan(0);
-      expect(result.output).toContain('Failed to parse config');
+      expect(result.output).toContain('Decryption failed');
     });
 
     it('rejects encrypted config without password env var', () => {

@@ -97,7 +97,7 @@ export function spawnImport(extraEnv: Record<string, string> = {}): Promise<numb
     LOGGER.info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
     const env = Object.keys(extraEnv).length > 0 ? { ...process.env, ...extraEnv } : process.env;
     const child: ChildProcess = spawn('node', ['/app/dist/Index.js'], { stdio: 'inherit', env });
-    child.on('exit', (code) => { const exitCode = code ?? 0; logImportResult(exitCode, startTime); resolve(exitCode); });
+    child.on('exit', (exitCode) => { const code = exitCode ?? 0; logImportResult(code, startTime); resolve(code); });
     child.on('error', (err) => {
       LOGGER.error(`❌ Failed to start import: ${err.message}`);
       resolve(1);
