@@ -58,6 +58,19 @@ function deleteIfExpired(
 }
 
 /**
+ * Iterates over log files in a directory and deletes those older than the cutoff.
+ * @param logDir - Directory containing the log files.
+ * @param cutoff - Files dated before this cutoff will be deleted.
+ * @returns Procedure indicating the files were processed.
+ */
+function processLogFiles(logDir: string, cutoff: Date): Procedure<{ status: string }> {
+  for (const file of readdirSync(logDir)) {
+    deleteIfExpired(logDir, file, cutoff);
+  }
+  return succeed({ status: 'cleaned' });
+}
+
+/**
  * Removes log files older than 3 days from the log directory.
  * @param logDir - Path to the directory containing log files to clean.
  * @returns Procedure indicating the cleanup completed.
@@ -68,12 +81,8 @@ export default function cleanOldLogs(
   try {
     if (!existsSync(logDir)) return succeed({ status: 'no-dir' });
     const cutoff = new Date(Date.now() - THREE_DAYS_MS);
-    for (const file of readdirSync(logDir)) {
-      deleteIfExpired(logDir, file, cutoff);
-    }
-    return succeed({ status: 'cleaned' });
+    return processLogFiles(logDir, cutoff);
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error);
-    return fail(`log cleanup failed: ${msg}`);
+    return fail(`log cleanup failed: ${errorMessage(error)}`);
   }
 }

@@ -258,10 +258,15 @@ describe('safeSleep', () => {
   });
 
   it('clamps duration to MAX_TIMEOUT_MS (2^31-1)', async () => {
-    // safeSleep should not throw even for huge values
-    const promise = safeSleep(Number.MAX_SAFE_INTEGER);
-    expect(promise).toBeInstanceOf(Promise);
-    // Don't await (would hang) — just verify it doesn't throw synchronously
+    const mockSetTimeout = vi.fn().mockResolvedValue(undefined);
+    vi.doMock('node:timers/promises', () => ({ setTimeout: mockSetTimeout }));
+
+    // Re-import to pick up the doMock
+    const { safeSleep: freshSafeSleep } = await import('../src/Scheduler.js');
+    await freshSafeSleep(Number.MAX_SAFE_INTEGER);
+
+    expect(mockSetTimeout).toHaveBeenCalledWith(2147483647);
+    vi.doUnmock('node:timers/promises');
   });
 });
 

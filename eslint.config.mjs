@@ -130,7 +130,11 @@ const RESTRICTED_SYNTAX_RULES = [
   {
     selector: "CallExpression[callee.name='describe'] > Literal[value=/^(test|run|batch|suite)/i]",
     message: '🚫 GENERIC DESCRIPTION: Use the Feature Name in the describe block.',
-  }
+  },
+  {
+    selector: "CatchClause BinaryExpression[left.property.name='message']",
+    message: "🚫 Use errorMessage() utility instead of manual error.message access in catch blocks.",
+  },
 ];
 
 export default tseslint.config(
@@ -370,6 +374,10 @@ export default tseslint.config(
       'no-restricted-syntax': [
         'error',
         ...RESTRICTED_SYNTAX_RULES,
+        {
+          selector: "CallExpression[callee.object.name='vi'][callee.property.name='spyOn'] Literal[value='getLogger']",
+          message: "🚫 TEST: Do not use vi.spyOn for logger. Use vi.mock with hoisted pattern instead.",
+        },
       ],
 
     },

@@ -350,9 +350,12 @@ describe('MetricsService', () => {
 
     it('skips reconciliation line when created but amount is undefined', () => {
       vi.clearAllMocks();
-      metrics.startBank('discount');
-      metrics.recordBankSuccess('discount', 5, 0);
-      metrics.recordReconciliation('discount', 'created');
+      const startResult = metrics.startBank('discount');
+      expect(startResult.success).toBe(true);
+      const successResult = metrics.recordBankSuccess('discount', 5, 0);
+      expect(successResult.success).toBe(true);
+      const reconResult = metrics.recordReconciliation('discount', 'created');
+      expect(reconResult.success).toBe(true);
       metrics.printSummary();
       const calls = mockLogger.info.mock.calls.map(c => c[0]);
       expect(calls.every((c: string) => typeof c !== 'string' || !c.includes('Reconciliation'))).toBe(true);
@@ -360,9 +363,11 @@ describe('MetricsService', () => {
 
     it('prints bank with no duration', () => {
       vi.clearAllMocks();
-      metrics.startBank('instant');
+      const startResult = metrics.startBank('instant');
+      expect(startResult.success).toBe(true);
       // Record success immediately — duration will be ~0ms
-      metrics.recordBankSuccess('instant', 1, 0);
+      const successResult = metrics.recordBankSuccess('instant', 1, 0);
+      expect(successResult.success).toBe(true);
       metrics.printSummary();
       const calls = mockLogger.info.mock.calls.map(c => c[0]);
       expect(calls.some((c: string) => typeof c === 'string' && c.includes('instant'))).toBe(true);

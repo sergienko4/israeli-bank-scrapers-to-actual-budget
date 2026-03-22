@@ -2,21 +2,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type api from '@actual-app/api';
 import HistoryCategoryResolver from '../../src/Services/HistoryCategoryResolver.js';
 import { isSuccess, isFail } from '../../src/Types/Index.js';
-import * as LoggerModule from '../../src/Logger/Index.js';
 
-interface IMockLogger {
-  info: ReturnType<typeof vi.fn>;
-  debug: ReturnType<typeof vi.fn>;
-  warn: ReturnType<typeof vi.fn>;
-  error: ReturnType<typeof vi.fn>;
-}
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+vi.mock('../../src/Logger/Index.js', () => ({
+  getLogger: () => mockLogger,
+}));
 
 interface IMockApi {
   aqlQuery: ReturnType<typeof vi.fn>;
   q: ReturnType<typeof vi.fn>;
 }
-
-const mockLogger: IMockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
 /** Casts an IMockApi to the typeof api expected by the constructor. */
 function asApi(mock: IMockApi): typeof api {
@@ -47,7 +44,6 @@ describe('HistoryCategoryResolver', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger);
   });
 
   describe('initialize', () => {
