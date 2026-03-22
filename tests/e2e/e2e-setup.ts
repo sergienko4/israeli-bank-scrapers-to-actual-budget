@@ -86,6 +86,8 @@ function refreshMockDates(): void {
       }
     }
     writeFileSync(join(mockDir, dest), JSON.stringify(data, null, 2));
+    // Also overwrite the source file so standalone mockScraperFile uses get fresh dates
+    writeFileSync(srcPath, JSON.stringify(data, null, 2));
   }
   console.log('Mock scraper dates refreshed to recent');
 }
