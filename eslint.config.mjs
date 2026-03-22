@@ -361,16 +361,7 @@ export default tseslint.config(
     },
   },
 
-  // 5. PIPELINE TESTS: RELAXED (test files don't need source-level strictness)
-  {
-    files: ['src/Tests/**/Pipeline/**/*.ts', 'tests/scrapers/pipeline/**/*.ts'],
-    rules: {
-      'max-lines-per-function': 'off',
-      'max-len': 'off',
-      'jsdoc/require-jsdoc': 'off',
-      'jsdoc/require-description': 'off',
-    },
-  },
+  // 5. PIPELINE TESTS: inherit section 4 test rules (no special exemptions)
 
   // 6. PIPELINE LOGIC (DI, MEDIATOR, HANDLERS & RESULT PATTERN)
   {
