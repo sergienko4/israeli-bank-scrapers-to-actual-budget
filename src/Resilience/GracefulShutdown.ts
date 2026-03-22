@@ -5,7 +5,7 @@
 
 import { getLogger } from '../Logger/Index.js';
 import type { Procedure } from '../Types/Index.js';
-import { succeed } from '../Types/Index.js';
+import { isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 
 /** Callback function type for shutdown handlers. */
@@ -79,8 +79,12 @@ export class GracefulShutdownHandler implements IShutdownHandler {
    */
   private async executeCallbacks(): Promise<Procedure<{ status: string }>> {
     for (const callback of this._callbacks) {
-      try { await callback(); }
-      catch (error: unknown) {
+      try {
+        const result = await callback();
+        if (isFail(result)) {
+          getLogger().error(`Shutdown callback failed: ${result.message}`);
+        }
+      } catch (error: unknown) {
         getLogger().error(`Error during shutdown callback: ${errorMessage(error)}`);
       }
     }

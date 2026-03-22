@@ -298,7 +298,7 @@ describe('TransactionService', () => {
       const txn = mockApi.importTransactions.mock.calls[0][1][0];
       expect(txn.payee_name).toBe('Unknown Store');
       expect(txn.category).toBeUndefined();
-      expect(txn.imported_payee).toBeUndefined();
+      expect(txn.imported_payee).toBe('Unknown Store');
     });
 
     it('works without resolver (undefined)', async () => {

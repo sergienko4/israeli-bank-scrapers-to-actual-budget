@@ -91,7 +91,7 @@ export class ConfigLoader implements IConfigLoader {
       const merged = credResult.success
         ? this.deepMerge(config, credResult.data) : config;
       return succeed(merged);
-    } catch (error) {
+    } catch (error: unknown) {
       if (error instanceof ConfigurationError) {
         return fail(error.message, { error, status: 'config-error' });
       }

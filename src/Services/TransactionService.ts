@@ -208,7 +208,8 @@ export class TransactionService {
     const payload = {
       account: ctx.actualAccountId, date: ctx.parsed.date, amount: ctx.parsed.amount,
       payee_name: resolved?.payeeName ?? ctx.parsed.description,
-      imported_payee: resolved?.importedPayee, imported_id: ctx.importedId,
+      imported_payee: resolved?.importedPayee ?? ctx.parsed.description,
+      imported_id: ctx.importedId,
       category: resolved?.categoryId, notes: ctx.txn.memo ?? ctx.parsed.description,
       cleared: true,
     };

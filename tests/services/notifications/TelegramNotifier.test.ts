@@ -836,10 +836,12 @@ describe('TelegramNotifier', () => {
       expect(names).not.toContain('INVALID');
     });
 
-    it('throws on API error', async () => {
+    it('returns failure on API error', async () => {
       fetchMock.mockResolvedValue({ ok: false, status: 400, text: vi.fn().mockResolvedValue('Bad Request') });
       const notifier = createNotifier();
-      await expect(notifier.registerCommands()).rejects.toThrow('setMyCommands failed');
+      const result = await notifier.registerCommands();
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Failed to register commands');
     });
   });
 });

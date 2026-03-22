@@ -53,7 +53,7 @@ const RESTRICTED_SYNTAX_RULES = [
 
   // Security & Logging
   {
-    selector: "CallExpression[callee.object.name='logger'] Property[key.name=/password|token|secret|auth|creditCard/i]",
+    selector: "CallExpression[callee.object.name='logger'] Property[key.name=/password|token|secret|auth|creditCard|cvv/i]",
     message: 'SECURITY: Do not log sensitive data keys.',
   },
   {
@@ -76,7 +76,7 @@ const RESTRICTED_SYNTAX_RULES = [
 
   // Procedure caller: do not discard Procedure results
   {
-    selector: "ExpressionStatement > CallExpression[callee.property.name=/^(record|printSummary|sendSummary|sendError|sendMessage|startImport|cleanOldLogs)$/]",
+    selector: "ExpressionStatement > :matches(CallExpression[callee.property.name=/^(record|printSummary|sendSummary|sendError|sendMessage|startImport|cleanOldLogs)$/], AwaitExpression > CallExpression[callee.property.name=/^(record|printSummary|sendSummary|sendError|sendMessage|startImport|cleanOldLogs)$/])",
     message: "🚫 PROCEDURE: Do not discard Procedure result. Check with isSuccess()/isFail() or assign to variable.",
   },
 
@@ -178,7 +178,6 @@ export default tseslint.config(
             'v8 ignore',
             '@ts-ignore',
             '@ts-nocheck',
-            '@ts-expect-error',
             'eslint-disable',
           ],
           location: 'anywhere',
@@ -386,26 +385,26 @@ export default tseslint.config(
     rules: {
       // === DEPENDENCY INJECTION & MEDIATOR BOUNDARY ===
       'no-restricted-imports': ['error', {
-          patterns: [
-            {
-              group: ['**/Registry/Config/**'],
-              message: '🚫 DI: Use ctx.config — do not import ScraperConfig directly.',
-            },
-            {
-              group: ['**/Constants/**', '**/env'],
-              message: '🚫 DI: Use ctx.config instead of direct imports.',
-            },
-            {
-              group: ['**/Mediator/Internals/**'],
-              message: '🚫 MEDIATOR: Access HTML resolution only via ctx.mediator.',
-            },
-            // GAP FIX #3 — Block deep relative imports (mediator bypass)
-            {
-              group: ['../../../*'],
-              message: '🚫 MEDIATOR: Deep relative imports bypass the mediator. Use ctx.mediator or ctx.services.',
-            },
-          ],
-        }],
+        patterns: [
+          {
+            group: ['**/Registry/Config/**'],
+            message: '🚫 DI: Use ctx.config — do not import ScraperConfig directly.',
+          },
+          {
+            group: ['**/Constants/**', '**/env'],
+            message: '🚫 DI: Use ctx.config instead of direct imports.',
+          },
+          {
+            group: ['**/Mediator/Internals/**'],
+            message: '🚫 MEDIATOR: Access HTML resolution only via ctx.mediator.',
+          },
+          // GAP FIX #3 — Block deep relative imports (mediator bypass)
+          {
+            group: ['../../../*'],
+            message: '🚫 MEDIATOR: Deep relative imports bypass the mediator. Use ctx.mediator or ctx.services.',
+          },
+        ],
+      }],
 
       // === IMMUTABLE CONTEXT (Middleware Pipeline pattern) ===
       // GAP FIX #1 — Prevents ctx.foo = bar mutations

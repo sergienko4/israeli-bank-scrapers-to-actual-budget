@@ -152,8 +152,13 @@ export default class TelegramNotifier implements INotifier {
       { command: 'logs', description: 'Show recent log entries' },
       { command: 'help', description: 'List available commands' },
     ];
-    await this.sendBotCommands(commands);
-    return succeed({ status: 'commands-registered' });
+    try {
+      await this.sendBotCommands(commands);
+      return succeed({ status: 'commands-registered' });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return fail(`Failed to register commands: ${msg}`);
+    }
   }
 
   /**
