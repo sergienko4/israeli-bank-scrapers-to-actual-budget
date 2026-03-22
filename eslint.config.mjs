@@ -15,17 +15,8 @@ import jsdoc from 'eslint-plugin-jsdoc';
  * These apply to all source files to ensure a "Zero-Skip" and Security-First environment.
  */
 const RESTRICTED_SYNTAX_RULES = [
-  // Coverage Bypasses
-  {
-    selector: "Program > Block:matches([value*='istanbul ignore'], [value*='c8 ignore'], [value*='v8 ignore'])",
-    message: '🚫 COVERAGE SKIP: Write a test instead of ignoring coverage.',
-  },
-
-  // Lint Bypasses
-  {
-    selector: "Line:matches([value*='eslint-disable'])",
-    message: '🚫 LINT SKIP: Do not disable ESLint rules. Fix the underlying issue.',
-  },
+  // Coverage & lint bypasses are enforced by no-warning-comments rule (line ~175)
+  // (AST selectors cannot match comments — they are not AST nodes)
 
   // Type Bypasses (Non-null assertions)
   {
@@ -35,6 +26,9 @@ const RESTRICTED_SYNTAX_RULES = [
 
   // Return Value Integrity (Blocking null & undefined returns)
   {
+    // NOTE: TSMethodDefinition is not a real AST node — this selector only matches
+    // TSFunctionType and FunctionDeclaration. Fixing to MethodDefinition requires
+    // migrating all void/null returns in class methods first (separate PR).
     selector: ':matches(TSFunctionType, TSMethodDefinition, FunctionDeclaration) TSTypeAnnotation :matches(Identifier[name=\'null\'], Identifier[name=\'undefined\'], TSNullKeyword, TSUndefinedKeyword)',
     message: "🚫 ARCHITECTURE: Functions cannot return 'null' or 'undefined'. Use a Result Pattern (e.g., IScraperResult).",
   },
@@ -134,6 +128,7 @@ const RESTRICTED_SYNTAX_RULES = [
     selector: "CatchClause BinaryExpression[left.property.name='message']",
     message: "🚫 Use errorMessage() utility instead of manual error.message access in catch blocks.",
   },
+
 ];
 
 export default tseslint.config(
@@ -163,7 +158,7 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
-      globals: { ...globals.node, ...globals.jest, ...globals.es2021, document: 'readonly', window: 'readonly', fetch: 'readonly', Headers: 'readonly' },
+      globals: { ...globals.node, ...globals.es2021, document: 'readonly', window: 'readonly', fetch: 'readonly', Headers: 'readonly' },
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
@@ -353,7 +348,7 @@ export default tseslint.config(
 
   // 4. TEST / MOCK (RELAXED)
   {
-    files: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/Tests/**/*.ts', '**/mocks/**/*.ts', 'eslint.config.mjs'],
+    files: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/Tests/**/*.ts', '**/mocks/**/*.ts'],
     rules: {
       'no-console': 'off',
       'max-lines-per-function': 'off',
@@ -570,6 +565,22 @@ export default tseslint.config(
     rules: {
       'check-file/filename-naming-convention': 'off',
       'import-x/max-dependencies': 'off',
+      'no-await-in-loop': 'off',
+    },
+  },
+
+  // 9. SEQUENTIAL PROCESSING EXEMPTIONS (iterative await-in-loop is intentional)
+  {
+    files: [
+      'src/Services/TelegramPoller.ts',
+      'src/Services/Notifications/TelegramNotifier.ts',
+      'src/Resilience/GracefulShutdown.ts',
+      'src/Resilience/RetryStrategy.ts',
+      'src/Services/AccountImporter.ts',
+      'src/Services/ImportQueue.ts',
+      'src/Services/TransactionService.ts',
+    ],
+    rules: {
       'no-await-in-loop': 'off',
     },
   },

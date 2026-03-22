@@ -170,6 +170,15 @@ describe('TransactionService', () => {
       expect(result.data.skipped).toBe(1);
     });
 
+    it('warns and treats as new when aqlQuery returns null data', async () => {
+      mockApi.aqlQuery.mockResolvedValue(null);
+      mockApi.importTransactions.mockResolvedValue(undefined);
+      const txns = [{ date: '2026-02-14', chargedAmount: -50, description: 'Test', identifier: 'txn-1' }];
+      const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(1);
+    });
+
     it('handles empty transactions array', async () => {
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: [] });
 

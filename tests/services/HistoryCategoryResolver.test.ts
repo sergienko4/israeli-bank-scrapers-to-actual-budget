@@ -99,6 +99,18 @@ describe('HistoryCategoryResolver', () => {
       }
     });
 
+    it('warns and returns empty when aqlQuery returns null data', async () => {
+      mockApi = {
+        ...buildMockApi([]),
+        aqlQuery: vi.fn().mockResolvedValue(null)
+      };
+      resolver = new HistoryCategoryResolver(asApi(mockApi));
+      await resolver.initialize();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Category resolver query returned no data')
+      );
+    });
+
     it('logs non-Error object when initialize throws non-Error', async () => {
       mockApi = {
         ...buildMockApi([]),

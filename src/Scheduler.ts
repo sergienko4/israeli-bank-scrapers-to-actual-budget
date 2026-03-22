@@ -152,7 +152,11 @@ export function createMediator(notifierResult: Procedure<TelegramNotifier>): Imp
      */
     getBankNames: () => {
       const r = loadFullConfig();
-      return r.success ? Object.keys(r.data.banks) : [];
+      if (!r.success) {
+        LOGGER.warn(`getBankNames: config load failed — ${r.message}`);
+        return [];
+      }
+      return Object.keys(r.data.banks);
     },
     notifier: notifier ?? null,
   });
@@ -214,7 +218,11 @@ export function buildCommandHandler(
      */
     getBankNames: () => {
       const cfg = loadFullConfig();
-      return cfg.success ? Object.keys(cfg.data.banks) : [];
+      if (!cfg.success) {
+        LOGGER.warn(`getBankNames: config load failed — ${cfg.message}`);
+        return [];
+      }
+      return Object.keys(cfg.data.banks);
     },
     /**
      * Delegates scan menu display to the notifier.

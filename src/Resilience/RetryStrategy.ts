@@ -46,24 +46,25 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
   }
 
   /**
-   * Recursively attempts to execute the function, retrying on failure.
+   * Iteratively attempts to execute the function, retrying on failure.
    * @param fn - Async function to execute.
    * @param operationName - Human-readable label for logs.
-   * @param attempt - Current attempt number (1-based).
+   * @param startAttempt - Initial attempt number (1-based).
    * @returns The resolved value from fn on success.
    */
   private async executeAttempt<T>(
-    fn: () => Promise<T>, operationName: string, attempt: number
+    fn: () => Promise<T>, operationName: string, startAttempt: number
   ): Promise<T> {
-    const result = await this.tryOneAttempt(fn, operationName, attempt);
-    if (result.success) return result.data;
-    if (attempt >= this.options.maxAttempts) {
-      throw new ShutdownError(
-        `${operationName} failed after ${String(this.options.maxAttempts)} attempts. ` +
-        `Last error: ${result.error.message}`
-      );
+    for (let attempt = startAttempt; ; attempt++) {
+      const result = await this.tryOneAttempt(fn, operationName, attempt);
+      if (result.success) return result.data;
+      if (attempt >= this.options.maxAttempts) {
+        throw new ShutdownError(
+          `${operationName} failed after ${String(this.options.maxAttempts)} attempts. ` +
+          `Last error: ${result.error.message}`
+        );
+      }
     }
-    return this.executeAttempt(fn, operationName, attempt + 1);
   }
 
   /**

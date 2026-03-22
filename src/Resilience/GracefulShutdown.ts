@@ -73,23 +73,21 @@ export class GracefulShutdownHandler implements IShutdownHandler {
    * @returns Procedure indicating all callbacks have been executed.
    */
   private async executeCallbacks(): Promise<Procedure<{ status: string }>> {
-    return this.executeCallbacksSequentially(0);
+    return this.executeCallbacksSequentially();
   }
 
   /**
-   * Recursively executes callbacks starting from the given index.
-   * @param index - Zero-based index of the next callback to execute.
+   * Iteratively executes all registered shutdown callbacks in order.
    * @returns Procedure indicating all callbacks have been executed.
    */
-  private async executeCallbacksSequentially(
-    index: number
-  ): Promise<Procedure<{ status: string }>> {
-    if (index >= this._callbacks.length) return succeed({ status: 'callbacks-complete' });
-    try { await this._callbacks[index](); }
-    catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      getLogger().error(`Error during shutdown callback: ${msg}`);
+  private async executeCallbacksSequentially(): Promise<Procedure<{ status: string }>> {
+    for (const callback of this._callbacks) {
+      try { await callback(); }
+      catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        getLogger().error(`Error during shutdown callback: ${msg}`);
+      }
     }
-    return this.executeCallbacksSequentially(index + 1);
+    return succeed({ status: 'callbacks-complete' });
   }
 }

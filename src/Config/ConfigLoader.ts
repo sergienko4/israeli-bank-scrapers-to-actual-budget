@@ -95,7 +95,7 @@ export class ConfigLoader implements IConfigLoader {
       if (error instanceof ConfigurationError) {
         return fail(error.message, { error, status: 'config-error' });
       }
-      getLogger().warn('⚠️  Failed to parse config, falling back to environment variables');
+      getLogger().warn('⚠️  Failed to parse config file');
       return fail('Failed to parse config file', { status: 'parse-error' });
     }
   }

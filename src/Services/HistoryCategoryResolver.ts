@@ -9,7 +9,6 @@ import type api from '@actual-app/api';
 import { getLogger } from '../Logger/Index.js';
 import type { IResolvedCategory, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
-import { extractQueryData } from '../Utils/Index.js';
 import type { ICategoryResolver } from './ICategoryResolver.js';
 
 interface IPayeeCategory {
@@ -96,7 +95,12 @@ export default class HistoryCategoryResolver implements ICategoryResolver {
       .select(['imported_payee', 'category', 'date'])
       .orderBy({ date: 'desc' });
     const result = await this._actualApi.aqlQuery(query);
-    return extractQueryData<IPayeeCategory[]>(result, []);
+    const data = (result as { data?: IPayeeCategory[] } | null)?.data;
+    if (!data) {
+      getLogger().warn('Category resolver query returned no data');
+      return [];
+    }
+    return data;
   }
 
   /**

@@ -61,7 +61,7 @@ run_gate "2-audit"        "Auditing dependencies"          npm audit --audit-lev
 run_gate "3-build"        "Compiling TypeScript"           npm run build
 run_gate "6-eslint"       "Running ESLint"                 npm run lint
 run_gate "6b-biome"       "Running Biome lint"             npm run lint:biome
-run_gate "7-semgrep"      "Running Semgrep security scan"  docker run --rm -v "$(pwd):/data" --workdir /data semgrep/semgrep@sha256:9fb6f44dc162b1e0aada85f072a95141844c61e3bfcedf40b8a46fecf208e986 semgrep scan --config auto --error src/
+run_gate "7-semgrep"      "Running Semgrep security scan"  docker run --rm -v "$(pwd):/data" --workdir /data semgrep/semgrep@sha256:9fb6f44dc162b1e0aada85f072a95141844c61e3bfcedf40b8a46fecf208e986 semgrep scan --config auto --config .semgrep/ --error src/
 run_gate "8-markdownlint" "Linting markdown docs"          npm run lint:docs
 run_gate "9-configcheck"  "Checking config structure"      npm run lint:config-structure
 run_gate "11-lychee"      "Checking markdown links"        docker run --rm -v "$(pwd):/data" --workdir /data -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" lycheeverse/lychee@sha256:609d1bea17f053bee6df907017e4eb8a0163e90633a26fce3ce8aaba1a3df443 --exclude-path config/lychee/ignore --exclude-path CHANGELOG.md --no-progress '*.md' 'docs/**/*.md' '.github/**/*.md'

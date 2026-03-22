@@ -8,7 +8,8 @@ import type api from '@actual-app/api';
 import { getLogger } from '../Logger/Index.js';
 import type { ISpendingWatchRule, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
-import { errorMessage, extractQueryData, formatDate, fromCents, toCents } from '../Utils/Index.js';
+import { errorMessage, formatDate, fromCents, toCents } from '../Utils/Index.js';
+import { escapeHtml } from './Notifications/TelegramFormatter.js';
 
 interface ITransactionRow {
   date: string;
@@ -98,7 +99,12 @@ export default class SpendingWatchService {
       .select(['date', 'imported_payee', 'amount'])
       .orderBy({ date: 'desc' });
     const result = await this.actualApi.aqlQuery(query);
-    return extractQueryData<ITransactionRow[]>(result, []);
+    const data = (result as { data?: ITransactionRow[] } | null)?.data;
+    if (!data) {
+      getLogger().warn('Spending watch query returned no data — verify account has transactions');
+      return [];
+    }
+    return data;
   }
 
   /**
@@ -165,7 +171,8 @@ export default class SpendingWatchService {
    */
   private static buildRuleHeader(result: IRuleResult): string {
     const { rule, totalSpent } = result;
-    const payeeLabel = rule.watchPayees?.length ? rule.watchPayees.join(', ') : 'All payees';
+    const rawPayeeLabel = rule.watchPayees?.length ? rule.watchPayees.join(', ') : 'All payees';
+    const payeeLabel = escapeHtml(rawPayeeLabel);
     const dayLabel = rule.numOfDayToCount === 1
       ? '1 day'
       : `${String(rule.numOfDayToCount)} days`;
@@ -183,7 +190,7 @@ export default class SpendingWatchService {
   private static buildTransactionDetails(matched: ITransactionRow[]): string[] {
     const lines = matched.slice(0, MAX_DISPLAYED_TRANSACTIONS)
       .map(t =>
-        `  ${SpendingWatchService.formatAmount(t.amount)}  ${t.imported_payee || 'Unknown'}`
+        `  ${SpendingWatchService.formatAmount(t.amount)}  ${escapeHtml(t.imported_payee || 'Unknown')}`
       );
     if (matched.length > MAX_DISPLAYED_TRANSACTIONS) {
       lines.push(

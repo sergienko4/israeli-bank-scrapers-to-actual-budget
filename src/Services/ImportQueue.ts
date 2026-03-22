@@ -78,14 +78,15 @@ export default class ImportQueue<T> {
   }
 
   /**
-   * Recursively processes the next item in the queue.
+   * Iteratively processes all items in the queue.
    * @returns Procedure indicating all items were processed.
    */
   private async processNextItem(): Promise<Procedure<{ status: string }>> {
-    if (this._items.length === 0) return succeed({ status: 'empty' });
-    const job = this._items.shift() as T;
-    await this.processOneJob(job);
-    return this.processNextItem();
+    while (this._items.length > 0) {
+      const job = this._items.shift() as T;
+      await this.processOneJob(job);
+    }
+    return succeed({ status: 'empty' });
   }
 
   /**

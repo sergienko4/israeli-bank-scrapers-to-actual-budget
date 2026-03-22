@@ -149,18 +149,25 @@ describe('TelegramPoller', () => {
   });
 
   it('skips update when poll response.ok is false', async () => {
-    const onMessage = vi.fn();
-    const poller = new TelegramPoller('123:ABC', '999', onMessage);
-    let callCount = 0;
-    fetchMock.mockImplementation(() => {
-      callCount++;
-      if (callCount <= 1) return emptyResponse();
-      if (callCount === 2) return Promise.resolve({ ok: false });
-      poller.stop();
-      return emptyResponse();
-    });
-    await poller.start();
-    expect(onMessage).not.toHaveBeenCalled();
+    vi.useFakeTimers();
+    try {
+      const onMessage = vi.fn();
+      const poller = new TelegramPoller('123:ABC', '999', onMessage);
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) return Promise.resolve({ ok: false });
+        poller.stop();
+        return emptyResponse();
+      });
+      const startPromise = poller.start();
+      await vi.advanceTimersByTimeAsync(5001);
+      await startPromise;
+      expect(onMessage).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('handles clearOldMessages fetch exception gracefully', async () => {

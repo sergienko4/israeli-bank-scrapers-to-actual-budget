@@ -76,13 +76,14 @@ export default class TelegramPoller {
   }
 
   /**
-   * Recursively runs the poll loop until the poller is stopped.
+   * Iteratively runs the poll loop until the poller is stopped.
    * @returns Procedure indicating the loop has ended.
    */
   private async pollLoop(): Promise<Procedure<{ status: string }>> {
-    if (!this._running) return succeed({ status: 'stopped' });
-    await this.runOnePollCycle();
-    return this.pollLoop();
+    while (this._running) {
+      await this.runOnePollCycle();
+    }
+    return succeed({ status: 'stopped' });
   }
 
   /**
@@ -91,11 +92,15 @@ export default class TelegramPoller {
    */
   private async runOnePollCycle(): Promise<Procedure<{ status: string }>> {
     try {
-      await this.poll();
+      const pollResult = await this.poll();
+      if (pollResult.success && pollResult.data.status === 'poll-http-error' && this._running) {
+        getLogger().warn('⚠️  Telegram poll HTTP error, backing off');
+        await TelegramPoller.sleep(5000);
+      }
       return succeed({ status: 'poll-ok' });
     } catch (error) {
       getLogger().error(`⚠️  Telegram poll error: ${errorMessage(error)}`);
-      await TelegramPoller.sleep(5000);
+      if (this._running) await TelegramPoller.sleep(5000);
       return succeed({ status: 'poll-error-recovered' });
     }
   }
@@ -130,21 +135,21 @@ export default class TelegramPoller {
    */
   private async applyUpdates(data: ITelegramApiResponse): Promise<Procedure<{ status: string }>> {
     if (!data.ok || !data.result?.length) return succeed({ status: 'no-updates' });
-    return this.processUpdatesSequentially(data.result, 0);
+    return this.processUpdatesSequentially(data.result);
   }
 
   /**
-   * Recursively processes updates from the array starting at the given index.
+   * Iteratively processes all updates from the array in order.
    * @param updates - The array of ITelegramUpdate objects to process.
-   * @param index - Zero-based index of the next update to process.
    * @returns Procedure indicating all updates have been processed.
    */
   private async processUpdatesSequentially(
-    updates: ITelegramUpdate[], index: number
+    updates: ITelegramUpdate[]
   ): Promise<Procedure<{ status: string }>> {
-    if (index >= updates.length) return succeed({ status: 'updates-applied' });
-    await this.processSingleUpdate(updates[index]);
-    return this.processUpdatesSequentially(updates, index + 1);
+    for (const update of updates) {
+      await this.processSingleUpdate(update);
+    }
+    return succeed({ status: 'updates-applied' });
   }
 
   /**
@@ -237,8 +242,7 @@ export default class TelegramPoller {
    */
   private static sleep(ms: number): Promise<void> {
     return new Promise<void>(resolve => {
-      const timer = ms;
-      globalThis.setTimeout(resolve, timer);
+      globalThis.setTimeout(resolve, ms);
     });
   }
 }

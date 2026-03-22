@@ -171,6 +171,18 @@ describe('SpendingWatchService', () => {
       expect(result.data).toEqual({ noAlerts: true });
     });
 
+    it('warns and returns no alerts when query returns null data', async () => {
+      const mockApi = createMockApi();
+      (mockApi as unknown as { aqlQuery: ReturnType<typeof vi.fn> }).aqlQuery.mockResolvedValue(null);
+      const rules: ISpendingWatchRule[] = [
+        { alertFromAmount: 9999, numOfDayToCount: 7 }
+      ];
+      const service = new SpendingWatchService(rules, mockApi);
+      const result = await service.evaluate();
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({ noAlerts: true });
+    });
+
     it('returns failure when API throws an error', async () => {
       const mockApi = createMockApi();
       (mockApi as unknown as { aqlQuery: ReturnType<typeof vi.fn> }).aqlQuery.mockRejectedValue(new Error('API down'));

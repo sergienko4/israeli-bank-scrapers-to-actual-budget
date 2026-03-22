@@ -110,19 +110,20 @@ export class AccountImporter {
     accounts: { accountNumber: string; balance?: number; txns: IBankTransaction[] }[];
     index: number; imported: number; skipped: number;
   }): Promise<{ imported: number; skipped: number }> {
-    if (ctx.index >= ctx.accounts.length) return { imported: ctx.imported, skipped: ctx.skipped };
-    if (this.opts.shutdownHandler.isShuttingDown()) {
-      getLogger().warn('  ⚠️  Shutdown requested, stopping import...');
-      return { imported: ctx.imported, skipped: ctx.skipped };
+    let imported = ctx.imported;
+    let skipped = ctx.skipped;
+    for (let i = ctx.index; i < ctx.accounts.length; i++) {
+      if (this.opts.shutdownHandler.isShuttingDown()) {
+        getLogger().warn('  ⚠️  Shutdown requested, stopping import...');
+        return { imported, skipped };
+      }
+      const counts = await this.processSingleAccount(
+        ctx.bankName, ctx.bankConfig, ctx.accounts[i]
+      );
+      imported += counts.imported;
+      skipped += counts.skipped;
     }
-    const account = ctx.accounts[ctx.index];
-    const counts = await this.processSingleAccount(
-      ctx.bankName, ctx.bankConfig, account
-    );
-    return this.processAccountsSequentially({
-      ...ctx, index: ctx.index + 1,
-      imported: ctx.imported + counts.imported, skipped: ctx.skipped + counts.skipped,
-    });
+    return { imported, skipped };
   }
 
   /**

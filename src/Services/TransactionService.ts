@@ -10,7 +10,7 @@ import type {
   IActualAccount, IBankTransaction, IResolvedCategory,
   ITransactionRecord, Procedure} from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
-import { extractQueryData,formatDate, toCents } from '../Utils/Index.js';
+import { errorMessage, formatDate, toCents } from '../Utils/Index.js';
 import type { ICategoryResolver } from './ICategoryResolver.js';
 
 export interface IImportResult {
@@ -71,15 +71,19 @@ export class TransactionService {
     getLogger().info(
       `     📥 Importing ${String(opts.transactions.length)} transactions...`
     );
-    const { newTransactions, existingTransactions } = await this.processTransactionBatch(opts);
-    getLogger().info(
-      `     ✅ New: ${String(newTransactions.length)}, ` +
-        `Existing: ${String(existingTransactions.length)}`
-    );
-    return succeed({
-      imported: newTransactions.length, skipped: existingTransactions.length,
-      newTransactions, existingTransactions
-    });
+    try {
+      const { newTransactions, existingTransactions } = await this.processTransactionBatch(opts);
+      getLogger().info(
+        `     ✅ New: ${String(newTransactions.length)}, ` +
+          `Existing: ${String(existingTransactions.length)}`
+      );
+      return succeed({
+        imported: newTransactions.length, skipped: existingTransactions.length,
+        newTransactions, existingTransactions
+      });
+    } catch (error) {
+      return fail(`Transaction import failed: ${errorMessage(error)}`, { error: error as Error });
+    }
   }
 
   /**
@@ -99,13 +103,17 @@ export class TransactionService {
   public async getOrCreateAccount(
     accountId: string, bankName: string, accountNumber: string
   ): Promise<Procedure<IActualAccount>> {
-    const accounts = await this._api.getAccounts() as IActualAccount[];
-    const existing = accounts.find((a) => a.id === accountId);
-    if (existing) return succeed(existing);
+    try {
+      const accounts = await this._api.getAccounts() as IActualAccount[];
+      const existing = accounts.find((a) => a.id === accountId);
+      if (existing) return succeed(existing);
 
-    getLogger().info(`     ➕ Creating new account: ${accountId}`);
-    const accountLabel = `${bankName} - ${accountNumber}`;
-    return this.createNewAccount(accountId, accountLabel);
+      getLogger().info(`     ➕ Creating new account: ${accountId}`);
+      const accountLabel = `${bankName} - ${accountNumber}`;
+      return await this.createNewAccount(accountId, accountLabel);
+    } catch (error) {
+      return fail(`Account lookup failed: ${errorMessage(error)}`, { error: error as Error });
+    }
   }
 
   /**
@@ -117,13 +125,16 @@ export class TransactionService {
   private async createNewAccount(
     accountId: string, accountLabel: string
   ): Promise<Procedure<IActualAccount>> {
-    const created = await this._api.createAccount({
-      id: accountId, name: accountLabel, offbudget: false, closed: false,
-    } as Omit<IActualAccount, 'id'>);
-    if (!created) return fail('account creation returned empty', { status: 'account-not-found' });
-    // createAccount returns string ID on success — build account object
-    if (typeof created === 'string') return succeed({ id: created, name: accountLabel });
-    return succeed(created as IActualAccount);
+    try {
+      const created = await this._api.createAccount({
+        id: accountId, name: accountLabel, offbudget: false, closed: false,
+      } as Omit<IActualAccount, 'id'>);
+      if (!created) return fail('account creation returned empty', { status: 'account-not-found' });
+      if (typeof created === 'string') return succeed({ id: created, name: accountLabel });
+      return succeed(created as IActualAccount);
+    } catch (error) {
+      return fail(`Account creation failed: ${errorMessage(error)}`, { error: error as Error });
+    }
   }
 
   /**
@@ -152,7 +163,7 @@ export class TransactionService {
   }
 
   /**
-   * Recursively processes a transaction at the given index.
+   * Iteratively processes all transactions in the batch.
    * @param ctx - Batch context with transactions and accumulators.
    * @param ctx.txns - Full transaction array.
    * @param ctx.accountKey - Bank-account key for imported_id.
@@ -160,25 +171,26 @@ export class TransactionService {
    * @param ctx.existingIds - Set of already-imported IDs.
    * @param ctx.newTxns - Accumulator for new transactions.
    * @param ctx.existingTxns - Accumulator for existing transactions.
-   * @param idx - Current index to process.
+   * @param startIdx - Zero-based index to start processing from.
    * @returns Procedure indicating all transactions were processed.
    */
   private async processTxnAt(
-    ctx: IBatchContext, idx: number
+    ctx: IBatchContext, startIdx: number
   ): Promise<Procedure<{ status: string }>> {
-    if (idx >= ctx.txns.length) return succeed({ status: 'done' });
-    const parsed = TransactionService.parseTransaction(ctx.txns[idx]);
-    const importedId = TransactionService.buildImportedId(
-      ctx.accountKey, ctx.txns[idx], parsed
-    );
-    const target = ctx.existingIds.has(importedId)
-      ? ctx.existingTxns : ctx.newTxns;
-    await this.importSingleTransaction({
-      actualAccountId: ctx.actualAccountId, txn: ctx.txns[idx],
-      parsed, importedId, target,
-      existingTransactions: ctx.existingTxns,
-    });
-    return this.processTxnAt(ctx, idx + 1);
+    for (let idx = startIdx; idx < ctx.txns.length; idx++) {
+      const parsed = TransactionService.parseTransaction(ctx.txns[idx]);
+      const importedId = TransactionService.buildImportedId(
+        ctx.accountKey, ctx.txns[idx], parsed
+      );
+      const target = ctx.existingIds.has(importedId)
+        ? ctx.existingTxns : ctx.newTxns;
+      await this.importSingleTransaction({
+        actualAccountId: ctx.actualAccountId, txn: ctx.txns[idx],
+        parsed, importedId, target,
+        existingTransactions: ctx.existingTxns,
+      });
+    }
+    return succeed({ status: 'done' });
   }
 
   /**
@@ -260,8 +272,12 @@ export class TransactionService {
       .filter({ account: accountId, imported_id: { $ne: null } })
       .select(['imported_id']);
     const result = await this._api.aqlQuery(query);
-    const rows = extractQueryData<{ imported_id: string }[]>(result, []);
-    return new Set(rows.map((t) => t.imported_id));
+    const data = (result as { data?: { imported_id: string }[] } | null)?.data;
+    if (!data) {
+      getLogger().warn(`No existing imported IDs found for account ${accountId}`);
+      return new Set<string>();
+    }
+    return new Set(data.map((t) => t.imported_id));
   }
 
   /**

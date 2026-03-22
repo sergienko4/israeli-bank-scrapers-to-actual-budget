@@ -157,19 +157,22 @@ export default class TelegramNotifier implements INotifier {
   }
 
   /**
-   * Recursively polls for an OTP reply until the deadline expires.
+   * Iteratively polls for an OTP reply until the deadline expires.
    * @param offset - Current Telegram update offset.
    * @param sentAt - Unix timestamp of when the prompt was sent.
    * @param deadline - Absolute time in ms after which to throw TimeoutError.
    * @returns The OTP reply text.
    */
   private async pollForReply(offset: number, sentAt: number, deadline: number): Promise<string> {
-    if (Date.now() >= deadline) throw new TimeoutError('2FA reply wait', deadline - Date.now());
-    const iterResult = await this.processOneReplyPoll(offset, sentAt);
-    if (isFail(iterResult)) return this.pollForReply(offset, sentAt, deadline);
-    const nextOffset = iterResult.data.nextOffset;
-    if (iterResult.data.reply) return iterResult.data.reply;
-    return this.pollForReply(nextOffset, sentAt, deadline);
+    let currentOffset = offset;
+    for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new TimeoutError('2FA reply wait', 0);
+      const iterResult = await this.processOneReplyPoll(currentOffset, sentAt);
+      if (isFail(iterResult)) continue;
+      currentOffset = iterResult.data.nextOffset;
+      if (iterResult.data.reply) return iterResult.data.reply;
+    }
   }
 
   /**
