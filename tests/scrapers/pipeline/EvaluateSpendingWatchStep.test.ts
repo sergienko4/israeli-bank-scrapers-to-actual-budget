@@ -11,7 +11,7 @@ function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     shutdownHandler: { isShuttingDown: vi.fn().mockReturnValue(false), onShutdown: vi.fn() },
     services: {
-      notificationService: { sendMessage: vi.fn().mockResolvedValue(undefined) },
+      notificationService: { sendMessage: vi.fn().mockResolvedValue({ success: true, status: 'ok', data: { sent: 1 } }) },
     } as unknown as IPipelineContext['services'],
     state: { isDryRun: false, apiInitialized: true, banksProcessed: 2 },
     ...overrides,

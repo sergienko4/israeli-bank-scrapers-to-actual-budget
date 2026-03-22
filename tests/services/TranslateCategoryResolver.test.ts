@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import TranslateCategoryResolver from '../../src/Services/TranslateCategoryResolver.js';
-import { ITranslationRule } from '../../src/Types/Index.js';
+import type { ITranslationRule } from '../../src/Types/Index.js';
+import { isSuccess } from '../../src/Types/Index.js';
 import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -34,11 +35,13 @@ describe('TranslateCategoryResolver', () => {
   describe('resolve', () => {
     it('translates Hebrew payee to English', () => {
       const result = resolver.resolve('דלק פז רחובות');
-      expect(result.success).toBe(true);
-      expect((result as any).data).toEqual({
-        payeeName: 'Gas Station',
-        importedPayee: 'דלק פז רחובות'
-      });
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data).toEqual({
+          payeeName: 'Gas Station',
+          importedPayee: 'דלק פז רחובות'
+        });
+      }
     });
 
     it('returns undefined for unmatched payee', () => {
@@ -48,32 +51,40 @@ describe('TranslateCategoryResolver', () => {
 
     it('preserves original description in importedPayee', () => {
       const result = resolver.resolve('חשמל ישראל');
-      expect(result.success).toBe(true);
-      expect((result as any).data.importedPayee).toBe('חשמל ישראל');
-      expect((result as any).data.payeeName).toBe('Electric Company');
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data.importedPayee).toBe('חשמל ישראל');
+        expect(result.data.payeeName).toBe('Electric Company');
+      }
     });
 
     it('matches longest rule first (שופרסל before סופר)', () => {
       const result = resolver.resolve('שופרסל דיזנגוף');
-      expect(result.success).toBe(true);
-      expect((result as any).data.payeeName).toBe('Shufersal');
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data.payeeName).toBe('Shufersal');
+      }
     });
 
     it('falls back to shorter match for non-specific text', () => {
       const result = resolver.resolve('סופר כל הטעמים');
-      expect(result.success).toBe(true);
-      expect((result as any).data.payeeName).toBe('Supermarket');
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data.payeeName).toBe('Supermarket');
+      }
     });
 
     it('is case-insensitive for English descriptions', () => {
       const rules: ITranslationRule[] = [{ fromPayee: 'store', toPayee: 'General Store' }];
       const eng = new TranslateCategoryResolver(rules);
       const result = eng.resolve('STORE checkout');
-      expect(result.success).toBe(true);
-      expect((result as any).data).toEqual({
-        payeeName: 'General Store',
-        importedPayee: 'STORE checkout'
-      });
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data).toEqual({
+          payeeName: 'General Store',
+          importedPayee: 'STORE checkout'
+        });
+      }
     });
 
     it('handles empty translations array', () => {
@@ -89,18 +100,22 @@ describe('TranslateCategoryResolver', () => {
 
     it('does not set categoryId (translate mode only sets payeeName)', () => {
       const result = resolver.resolve('רמי לוי תל אביב');
-      expect(result.success).toBe(true);
-      expect((result as any).data.categoryId).toBeUndefined();
-      expect((result as any).data.payeeName).toBe('Rami Levy');
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data.categoryId).toBeUndefined();
+        expect(result.data.payeeName).toBe('Rami Levy');
+      }
     });
 
     it('matches when fromPayee is at the start of description', () => {
       const result = resolver.resolve('סופר');
-      expect(result.success).toBe(true);
-      expect((result as any).data).toEqual({
-        payeeName: 'Supermarket',
-        importedPayee: 'סופר'
-      });
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data).toEqual({
+          payeeName: 'Supermarket',
+          importedPayee: 'סופר'
+        });
+      }
     });
   });
 });

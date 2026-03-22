@@ -33,11 +33,11 @@ describe('ScraperErrorMessages', () => {
       }
     });
 
-    it('returns undefined for unknown error text', () => {
+    it('returns empty string for unknown error text', () => {
       expect(getScraperErrorAdvice('SOME_RANDOM_ERROR')).toBe('');
     });
 
-    it('returns undefined for empty string', () => {
+    it('returns empty string for empty string', () => {
       expect(getScraperErrorAdvice('')).toBe('');
     });
 

@@ -8,6 +8,7 @@ import {
   isValidUUID,
   validateBank,
 } from '../../src/Config/ConfigLoaderValidator.js';
+import { isFail } from '../../src/Types/ProcedureHelpers.js';
 import { fakeUuid, fakeImporterConfig, fakeBankConfig, fakeBankTarget } from '../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
@@ -35,21 +36,21 @@ describe('validateActualConfig', () => {
     const config = fakeImporterConfig({ actual: { init: { dataDir: './data', password: '', serverURL: 'http://x' }, budget: { syncId: VALID_UUID, password: null } } });
     const result = validateActualConfig(config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('ACTUAL_PASSWORD is required');
+    expect(isFail(result) && result.message).toContain('ACTUAL_PASSWORD is required');
   });
 
   it('throws when syncId is missing', () => {
     const config = fakeImporterConfig({ actual: { init: { dataDir: './data', password: TEST_CREDENTIAL_SHORT, serverURL: 'http://x' }, budget: { syncId: '', password: null } } });
     const result = validateActualConfig(config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('ACTUAL_BUDGET_SYNC_ID is required');
+    expect(isFail(result) && result.message).toContain('ACTUAL_BUDGET_SYNC_ID is required');
   });
 
   it('throws when syncId is not a UUID', () => {
     const config = fakeImporterConfig({ actual: { init: { dataDir: './data', password: TEST_CREDENTIAL_SHORT, serverURL: 'http://x' }, budget: { syncId: 'not-uuid', password: null } } });
     const result = validateActualConfig(config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid ACTUAL_BUDGET_SYNC_ID format');
+    expect(isFail(result) && result.message).toContain('Invalid ACTUAL_BUDGET_SYNC_ID format');
   });
 
   it('does not throw for valid config', () => {
@@ -64,7 +65,7 @@ describe('validateServerUrl', () => {
   it('throws for non-http URL', () => {
     const result = validateServerUrl('ftp://host');
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid serverURL format');
+    expect(isFail(result) && result.message).toContain('Invalid serverURL format');
   });
   it('does not throw for http URL', () => {
     const result = validateServerUrl('http://localhost:5006');
@@ -84,7 +85,7 @@ describe('validateNotifications', () => {
       telegram: { botToken: 'bad-token', chatId: '-123' },
     });
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid botToken format');
+    expect(isFail(result) && result.message).toContain('Invalid botToken format');
   });
 
   it('throws when Telegram botToken is missing', () => {
@@ -93,7 +94,7 @@ describe('validateNotifications', () => {
       telegram: { botToken: '', chatId: '-123' },
     });
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('botToken is required');
+    expect(isFail(result) && result.message).toContain('botToken is required');
   });
 
   it('throws when Telegram chatId is missing', () => {
@@ -102,7 +103,7 @@ describe('validateNotifications', () => {
       telegram: { botToken: '123456:ABCdef', chatId: '' },
     });
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('chatId is required');
+    expect(isFail(result) && result.message).toContain('chatId is required');
   });
 
   it('throws for invalid webhook URL', () => {
@@ -111,7 +112,7 @@ describe('validateNotifications', () => {
       webhook: { url: 'ftp://bad', format: 'slack' },
     });
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid webhook url format');
+    expect(isFail(result) && result.message).toContain('Invalid webhook url format');
   });
 
   it('does not throw for valid telegram config', () => {
@@ -128,7 +129,7 @@ describe('validateNotifications', () => {
       telegram: { botToken: '123456789:ABCdef', chatId: '-100', messageFormat: 'invalid' as never },
     });
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid messageFormat');
+    expect(isFail(result) && result.message).toContain('Invalid messageFormat');
   });
 });
 
@@ -137,19 +138,19 @@ describe('validateSpendingWatch', () => {
   it('throws when alertFromAmount is zero', () => {
     const result = validateSpendingWatch([{ alertFromAmount: 0, numOfDayToCount: 7 }]);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('alertFromAmount is required and must be positive');
+    expect(isFail(result) && result.message).toContain('alertFromAmount is required and must be positive');
   });
 
   it('throws when numOfDayToCount is out of range', () => {
     const result = validateSpendingWatch([{ alertFromAmount: 100, numOfDayToCount: 400 }]);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('numOfDayToCount must be an integer between 1 and 365');
+    expect(isFail(result) && result.message).toContain('numOfDayToCount must be an integer between 1 and 365');
   });
 
   it('throws when numOfDayToCount is 0', () => {
     const result = validateSpendingWatch([{ alertFromAmount: 100, numOfDayToCount: 0 }]);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('numOfDayToCount');
+    expect(isFail(result) && result.message).toContain('numOfDayToCount');
   });
 
   it('throws when watchPayees is not an array', () => {
@@ -157,7 +158,7 @@ describe('validateSpendingWatch', () => {
       alertFromAmount: 100, numOfDayToCount: 7, watchPayees: 'not-array' as never,
     }]);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('watchPayees must be an array');
+    expect(isFail(result) && result.message).toContain('watchPayees must be an array');
   });
 
   it('does not throw for valid rule', () => {
@@ -178,13 +179,13 @@ describe('validateProxy', () => {
   it('throws when server is empty', () => {
     const result = validateProxy({ server: '' });
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('proxy.server is required');
+    expect(isFail(result) && result.message).toContain('proxy.server is required');
   });
 
   it('throws for unsupported protocol', () => {
     const result = validateProxy({ server: 'ftp://proxy:8080' });
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid proxy.server format');
+    expect(isFail(result) && result.message).toContain('Invalid proxy.server format');
   });
 
   it('does not throw for socks5 proxy', () => {
@@ -204,21 +205,21 @@ describe('validateBank', () => {
     const config = fakeBankConfig({ startDate: '2026-01-01', daysBack: 7 });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('cannot use both');
+    expect(isFail(result) && result.message).toContain('cannot use both');
   });
 
   it('throws when daysBack is out of range', () => {
     const config = fakeBankConfig({ daysBack: 50, startDate: undefined });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('"daysBack" must be an integer between 1 and 30');
+    expect(isFail(result) && result.message).toContain('"daysBack" must be an integer between 1 and 30');
   });
 
   it('throws when no targets are configured', () => {
     const config = fakeBankConfig({ daysBack: 7, startDate: undefined, targets: [] });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('No targets configured');
+    expect(isFail(result) && result.message).toContain('No targets configured');
   });
 
   it('throws when actualAccountId is not a UUID', () => {
@@ -226,7 +227,7 @@ describe('validateBank', () => {
     const config = fakeBankConfig({ daysBack: 7, startDate: undefined, targets: [target] });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid actualAccountId format');
+    expect(isFail(result) && result.message).toContain('Invalid actualAccountId format');
   });
 
   it('throws when required Discount credentials are missing', () => {
@@ -236,7 +237,7 @@ describe('validateBank', () => {
     });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Discount bank requires');
+    expect(isFail(result) && result.message).toContain('Discount bank requires');
   });
 
   it('throws when startDate is in the future', () => {
@@ -246,14 +247,14 @@ describe('validateBank', () => {
     const config = fakeBankConfig({ startDate: dateStr, daysBack: undefined });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('cannot be in the future');
+    expect(isFail(result) && result.message).toContain('cannot be in the future');
   });
 
   it('throws when startDate is more than 1 year ago', () => {
     const config = fakeBankConfig({ startDate: '2000-01-01', daysBack: undefined });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('startDate too old');
+    expect(isFail(result) && result.message).toContain('startDate too old');
   });
 
   it('does not throw for a valid bank config', () => {
@@ -280,7 +281,7 @@ describe('validateBank', () => {
     const config = fakeBankConfig({ daysBack: 7, startDate: undefined, targets: [target] });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid accounts for');
+    expect(isFail(result) && result.message).toContain('Invalid accounts for');
   });
 
   it('validates reconcile field must be boolean', () => {
@@ -288,7 +289,7 @@ describe('validateBank', () => {
     const config = fakeBankConfig({ daysBack: 7, startDate: undefined, targets: [target] });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid reconcile for');
+    expect(isFail(result) && result.message).toContain('Invalid reconcile for');
   });
 
   it('throws for invalid email format', () => {
@@ -299,6 +300,6 @@ describe('validateBank', () => {
     });
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
-    expect((result as any).message).toContain('Invalid email format');
+    expect(isFail(result) && result.message).toContain('Invalid email format');
   });
 });

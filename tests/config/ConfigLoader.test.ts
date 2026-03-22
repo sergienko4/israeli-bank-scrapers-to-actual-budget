@@ -175,7 +175,7 @@ describe('ConfigLoader', () => {
       clearAllEnvVars();
     });
 
-    it('falls back to env vars on invalid JSON', () => {
+    it('returns failure on invalid JSON (does not fall back to env)', () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('not valid json{{{');
       setDiscountEnvVars();
@@ -183,9 +183,9 @@ describe('ConfigLoader', () => {
       const loader = new ConfigLoader('/test/config.json');
       const result = loader.load();
 
-      expect(result.success).toBe(true);
-      if (!isSuccess(result)) return;
-      expect(result.data.banks.discount).toBeDefined();
+      expect(result.success).toBe(false);
+      if (!isFail(result)) return;
+      expect(result.message).toContain('Failed to parse config file');
 
       clearAllEnvVars();
     });

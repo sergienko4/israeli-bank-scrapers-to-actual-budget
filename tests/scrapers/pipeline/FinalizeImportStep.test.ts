@@ -10,14 +10,14 @@ function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
     shutdownHandler: { isShuttingDown: vi.fn().mockReturnValue(false), onShutdown: vi.fn() },
     services: {
       metricsService: {
-        printSummary: vi.fn(),
-        getSummary: vi.fn().mockReturnValue({ success: true, data: { total: 10, imported: 8, skipped: 2 } }),
-        hasFailures: vi.fn().mockReturnValue({ success: true, data: false }),
+        printSummary: vi.fn().mockReturnValue({ success: true, status: 'ok', data: { status: 'printed' } }),
+        getSummary: vi.fn().mockReturnValue({ success: true, status: 'ok', data: { total: 10, imported: 8, skipped: 2 } }),
+        hasFailures: vi.fn().mockReturnValue({ success: true, status: 'ok', data: false }),
       },
-      auditLogService: { record: vi.fn() },
+      auditLogService: { record: vi.fn().mockReturnValue({ success: true, status: 'ok', data: { status: 'recorded' } }) },
       notificationService: {
-        sendSummary: vi.fn().mockResolvedValue(undefined),
-        sendMessage: vi.fn().mockResolvedValue(undefined),
+        sendSummary: vi.fn().mockResolvedValue({ success: true, status: 'ok', data: { sent: 1 } }),
+        sendMessage: vi.fn().mockResolvedValue({ success: true, status: 'ok', data: { sent: 1 } }),
       },
       dryRunCollector: {
         formatText: vi.fn().mockReturnValue('=== DRY-RUN PREVIEW ==='),
@@ -58,7 +58,7 @@ describe('FinalizeImportStep', () => {
     const api = makeApi();
     const ctx = makeCtx();
     (ctx.services.metricsService.getSummary as ReturnType<typeof vi.fn>)
-      .mockReturnValue({ success: false });
+      .mockReturnValue({ success: false, status: 'error', message: 'no data' });
     const step = createFinalizeImportStep(api);
 
     const result = await step(ctx);
@@ -123,18 +123,18 @@ describe('FinalizeImportStep', () => {
     }
   });
 
-  it('exit code 0 when hasFailures returns unsuccessful result', async () => {
+  it('exit code 1 when hasFailures returns unsuccessful result (fail-safe)', async () => {
     const api = makeApi();
     const ctx = makeCtx();
     (ctx.services.metricsService.hasFailures as ReturnType<typeof vi.fn>)
-      .mockReturnValue({ success: false });
+      .mockReturnValue({ success: false, status: 'error', message: 'metrics error' });
     const step = createFinalizeImportStep(api);
 
     const result = await step(ctx);
 
     expect(isSuccess(result)).toBe(true);
     if (isSuccess(result)) {
-      expect(result.data.state.exitCode).toBe(0);
+      expect(result.data.state.exitCode).toBe(1);
     }
   });
 
@@ -159,6 +159,106 @@ describe('FinalizeImportStep', () => {
     if (isSuccess(result)) {
       expect(result.data).not.toBe(ctx);
       expect(result.data.state).not.toBe(ctx.state);
+    }
+  });
+
+  it('logs warning when printSummary fails', async () => {
+    const api = makeApi();
+    const ctx = makeCtx();
+    (ctx.services.metricsService.printSummary as ReturnType<typeof vi.fn>)
+      .mockReturnValue({ success: false, status: 'error', message: 'print broke' });
+    const step = createFinalizeImportStep(api);
+
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    expect(ctx.logger.warn).toHaveBeenCalledWith('printSummary failed: print broke');
+    expect(api.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('logs warning when audit record fails', async () => {
+    const api = makeApi();
+    const ctx = makeCtx();
+    (ctx.services.auditLogService.record as ReturnType<typeof vi.fn>)
+      .mockReturnValue({ success: false, status: 'error', message: 'audit db down' });
+    const step = createFinalizeImportStep(api);
+
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    expect(ctx.logger.warn).toHaveBeenCalledWith('audit record failed: audit db down');
+    // sendSummary should still be called even if record fails
+    expect(ctx.services.notificationService.sendSummary).toHaveBeenCalledOnce();
+  });
+
+  it('logs warning when sendSummary fails', async () => {
+    const api = makeApi();
+    const ctx = makeCtx();
+    (ctx.services.notificationService.sendSummary as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, status: 'error', message: 'telegram down' });
+    const step = createFinalizeImportStep(api);
+
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    expect(ctx.logger.warn).toHaveBeenCalledWith('sendSummary failed: telegram down');
+  });
+
+  it('dry-run: logs warning when sendMessage fails', async () => {
+    const api = makeApi();
+    const ctx = makeCtx({
+      state: { isDryRun: true, apiInitialized: true, banksProcessed: 0 },
+    });
+    (ctx.services.notificationService.sendMessage as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, status: 'error', message: 'msg send error' });
+    const step = createFinalizeImportStep(api);
+
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    if (isSuccess(result)) {
+      expect(result.data.state.exitCode).toBe(0);
+    }
+    expect(ctx.logger.warn).toHaveBeenCalledWith('sendMessage failed: msg send error');
+  });
+
+  it('shuts down API even when finalize throws', async () => {
+    const api = makeApi();
+    const ctx = makeCtx();
+    // Force an error inside dispatchFinalize by making getSummary throw
+    (ctx.services.metricsService.getSummary as ReturnType<typeof vi.fn>)
+      .mockImplementation(() => { throw new Error('unexpected'); });
+    const step = createFinalizeImportStep(api);
+
+    await expect(step(ctx)).rejects.toThrow('unexpected');
+    expect(api.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('suppresses shutdown error in finally block', async () => {
+    const api = { shutdown: vi.fn().mockRejectedValue(new Error('shutdown boom')) };
+    const ctx = makeCtx();
+    const step = createFinalizeImportStep(api);
+
+    const result = await step(ctx);
+
+    // The step still succeeds despite shutdown failure
+    expect(isSuccess(result)).toBe(true);
+    expect(api.shutdown).toHaveBeenCalledOnce();
+  });
+
+  it('exit code defaults to 1 when EXIT_CODE map has no matching key', async () => {
+    const api = makeApi();
+    const ctx = makeCtx();
+    // Return a non-boolean data value so String(data) is not 'true' or 'false'
+    (ctx.services.metricsService.hasFailures as ReturnType<typeof vi.fn>)
+      .mockReturnValue({ success: true, status: 'ok', data: 'unknown' });
+    const step = createFinalizeImportStep(api);
+
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    if (isSuccess(result)) {
+      expect(result.data.state.exitCode).toBe(1);
     }
   });
 });

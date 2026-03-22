@@ -5,7 +5,7 @@
  */
 
 import { getLogger } from '../Logger/Index.js';
-import type { IResolvedCategory,ITranslationRule, Procedure } from '../Types/Index.js';
+import type { IResolvedCategory, ITranslationRule, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import type { ICategoryResolver } from './ICategoryResolver.js';
 

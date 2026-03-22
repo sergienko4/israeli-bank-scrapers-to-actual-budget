@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type api from '@actual-app/api';
 import SpendingWatchService from '../../src/Services/SpendingWatchService.js';
-import { ISpendingWatchRule } from '../../src/Types/Index.js';
+import type { ISpendingWatchRule } from '../../src/Types/Index.js';
 import { formatDate } from '../../src/Utils/Date.js';
 import { fakeActualTransaction } from '../helpers/factories.js';
 

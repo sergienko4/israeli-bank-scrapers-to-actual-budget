@@ -87,8 +87,10 @@ export default class TwoFactorService {
   private static extractCode(message: string): string {
     const digits = message.replaceAll(/\D/g, '');
     if (digits.length < 4 || digits.length > 8) {
-      const got = digits.length > 0 ? digits : message;
-      throw new TwoFactorAuthError(`Invalid OTP code: expected 4-8 digits, got "${got}"`);
+      const len = String(digits.length);
+      throw new TwoFactorAuthError(
+        `Invalid OTP code: expected 4-8 digits, got ${len} digits`
+      );
     }
     return digits;
   }

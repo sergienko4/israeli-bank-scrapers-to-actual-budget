@@ -49,6 +49,7 @@ export class ConfigLoader implements IConfigLoader {
    */
   public load(): Procedure<IImporterConfig> {
     const fileResult = this.loadFromFile();
+    if (isFail(fileResult) && fileResult.status !== 'not-found') return fileResult;
     const config = isFail(fileResult) ? ConfigLoader.loadFromEnvironment() : fileResult.data;
     ConfigLoader.applyEnvOverrides(config);
     return ConfigLoader.validate(config);
@@ -60,6 +61,7 @@ export class ConfigLoader implements IConfigLoader {
    */
   public loadRaw(): Procedure<IImporterConfig> {
     const fileResult = this.loadFromFile();
+    if (isFail(fileResult) && fileResult.status !== 'not-found') return fileResult;
     const config = isFail(fileResult) ? ConfigLoader.loadFromEnvironment() : fileResult.data;
     ConfigLoader.applyEnvOverrides(config);
     return succeed(config);

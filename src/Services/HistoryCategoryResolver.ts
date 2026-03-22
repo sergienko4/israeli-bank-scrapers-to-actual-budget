@@ -39,6 +39,7 @@ export default class HistoryCategoryResolver implements ICategoryResolver {
   public async initialize(): Promise<Procedure<{ status: string }>> {
     try {
       const rows = await this.queryPayeeCategories();
+      this._categoryMap.clear();
       this.buildMap(rows);
       getLogger().info(`  📂 Category history loaded: ${String(this._categoryMap.size)} payees`);
       return succeed({ status: 'initialized' });

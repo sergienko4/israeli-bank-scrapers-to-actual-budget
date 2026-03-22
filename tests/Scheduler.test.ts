@@ -189,7 +189,7 @@ describe('logImportResult', () => {
     );
   });
 
-  it('logs failure when exit code is null', () => {
+  it('logs success when exit code is 0', () => {
     logImportResult(0, new Date());
     expect(mockLogger.info).toHaveBeenCalled();
   });

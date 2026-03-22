@@ -50,7 +50,7 @@ export const SCRAPER_ERROR_ADVICE: Record<string, IErrorAdvice> = {
 /**
  * Looks up actionable advice for a scraper error by matching known codes.
  * @param errorText - The error message or error type string from the scraper.
- * @returns Formatted advice string, or undefined if no matching code found.
+ * @returns Formatted advice string, or empty string if no matching code found.
  */
 export function getScraperErrorAdvice(errorText: string): string {
   const entry = Object.entries(SCRAPER_ERROR_ADVICE)

@@ -215,7 +215,8 @@ const PIPELINE = new ChainBuilder()
  * @returns Never — always exits the process with code 1.
  */
 async function handleFatalError(error: unknown): Promise<never> {
-  const formattedError = ERROR_FORMATTER.format(error as Error);
+  const err = error instanceof Error ? error : new Error(String(error));
+  const formattedError = ERROR_FORMATTER.format(err);
   LOGGER.error(`\n${formattedError}`);
   if (error instanceof Error) LOGGER.error(`Stack trace: ${error.stack ?? 'N/A'}`);
   await NOTIFICATION_SERVICE.sendError(formattedError);
@@ -246,7 +247,7 @@ async function main(): Promise<Procedure<{ status: string }>> {
       LOGGER.error(`Pipeline failed: ${result.message}`);
       return fail(result.message);
     }
-    const exitCode = result.data.state.exitCode as number;
+    const exitCode = (result.data.state.exitCode as number | undefined) ?? 0;
     process.exit(exitCode);
   } catch (error) {
     return handleFatalError(error);

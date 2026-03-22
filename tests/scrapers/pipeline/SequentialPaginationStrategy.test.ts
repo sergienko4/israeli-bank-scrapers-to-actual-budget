@@ -150,4 +150,38 @@ describe('SequentialPaginationStrategy', () => {
       expect(result1.data).not.toBe(result2.data);
     }
   });
+
+  it('shutdown after pause aborts with failure', async () => {
+    vi.useFakeTimers();
+    const isShuttingDown = vi.fn()
+      .mockReturnValueOnce(false)  // processAt check for item 0
+      .mockReturnValueOnce(false)  // processAt check for item 1 (before pause)
+      .mockReturnValueOnce(true);  // pauseIfNeeded check after pause completes
+    const ctx = makeCtx({
+      shutdownHandler: {
+        isShuttingDown,
+        onShutdown: vi.fn(),
+      } as unknown as IPipelineContext['shutdownHandler'],
+    });
+    const strategy = createSequentialStrategy<string, number>({ pauseMs: 50 });
+    const processor = vi.fn().mockResolvedValue(succeed(10));
+
+    const promise = strategy.paginate(['a', 'b'], processor, ctx);
+
+    // First item processes (no pause for index 0)
+    await vi.advanceTimersByTimeAsync(0);
+    // Advance past the pause for index 1 -- triggers post-pause shutdown check
+    await vi.advanceTimersByTimeAsync(50);
+
+    const result = await promise;
+
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) {
+      expect(result.message).toContain('shutdown requested after pause');
+      expect(result.status).toBe('shutdown');
+    }
+    // Only the first item should have been processed
+    expect(processor).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
 });

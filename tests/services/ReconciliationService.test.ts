@@ -1,10 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { Mock } from 'vitest';
+import type api from '@actual-app/api';
 import { ReconciliationService } from '../../src/Services/ReconciliationService.js';
 import { isSuccess, isFail } from '../../src/Types/Index.js';
 
+interface IMockApi {
+  aqlQuery: Mock;
+  importTransactions: Mock;
+  q: Mock;
+}
+
 describe('ReconciliationService', () => {
   let service: ReconciliationService;
-  let mockApi: any;
+  let mockApi: IMockApi;
 
   beforeEach(() => {
     mockApi = {
@@ -16,7 +24,7 @@ describe('ReconciliationService', () => {
         }))
       }))
     };
-    service = new ReconciliationService(mockApi);
+    service = new ReconciliationService(mockApi as unknown as typeof api);
   });
 
   describe('reconcile', () => {

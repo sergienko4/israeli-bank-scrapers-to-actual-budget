@@ -79,16 +79,50 @@ async function processAt<TItem, TResult>(
     return succeed([...results], 'all-processed');
   }
   if (state.ctx.shutdownHandler.isShuttingDown()) {
-    return fail('Pagination aborted: shutdown requested', {
-      status: 'shutdown',
-    });
+    return shutdownAbort('shutdown requested');
   }
-
-  if (index > 0 && state.options.pauseMs > 0) {
-    await waitForDuration(state.options.pauseMs);
+  const pauseCheck = await pauseIfNeeded(state, index);
+  if (isFail(pauseCheck)) {
+    return pauseCheck;
   }
-
   return processItem(state, index, results);
+}
+
+/**
+ * Returns a shutdown-abort failure result.
+ * @param reason - Description of why shutdown was triggered.
+ * @returns Failure procedure with shutdown status.
+ */
+function shutdownAbort(
+  reason: string
+): Procedure<readonly never[]> {
+  return fail(
+    `Pagination aborted: ${reason}`,
+    { status: 'shutdown' }
+  );
+}
+
+/**
+ * Pauses between items and checks for shutdown after pause.
+ * @param state - Shared processing state.
+ * @param index - Current item index.
+ * @returns Success if no shutdown, failure if aborted.
+ */
+async function pauseIfNeeded<TItem, TResult>(
+  state: IProcessState<TItem, TResult>,
+  index: number
+): Promise<Procedure<boolean>> {
+  if (index <= 0 || state.options.pauseMs <= 0) {
+    return succeed(false, 'no-pause-needed');
+  }
+  await waitForDuration(state.options.pauseMs);
+  if (state.ctx.shutdownHandler.isShuttingDown()) {
+    return fail(
+      'Pagination aborted: shutdown requested after pause',
+      { status: 'shutdown' }
+    );
+  }
+  return succeed(true, 'pause-complete');
 }
 
 /**

@@ -8,7 +8,7 @@ import type api from '@actual-app/api';
 import { getLogger } from '../Logger/Index.js';
 import type { ISpendingWatchRule, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
-import { errorMessage,extractQueryData, formatDate, fromCents, toCents } from '../Utils/Index.js';
+import { errorMessage, extractQueryData, formatDate, fromCents, toCents } from '../Utils/Index.js';
 
 interface ITransactionRow {
   date: string;

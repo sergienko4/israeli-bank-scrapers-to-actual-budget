@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import HistoryCategoryResolver from '../../src/Services/HistoryCategoryResolver.js';
+import { isSuccess, isFail } from '../../src/Types/Index.js';
 import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -37,8 +38,10 @@ describe('HistoryCategoryResolver', () => {
 
       expect(mockApi.q).toHaveBeenCalledWith('transactions');
       const result = resolver.resolve('Supermarket');
-      expect(result.success).toBe(true);
-      expect((result as any).data).toEqual({ categoryId: 'cat-groceries' });
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data).toEqual({ categoryId: 'cat-groceries' });
+      }
     });
 
     it('handles empty database', async () => {
@@ -59,8 +62,10 @@ describe('HistoryCategoryResolver', () => {
       await resolver.initialize();
 
       const result = resolver.resolve('Store');
-      expect(result.success).toBe(true);
-      expect((result as any).data).toEqual({ categoryId: 'cat-new' });
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data).toEqual({ categoryId: 'cat-new' });
+      }
     });
 
     it('logs non-Error object when initialize throws non-Error', async () => {
@@ -86,8 +91,10 @@ describe('HistoryCategoryResolver', () => {
       const emptyResult = resolver.resolve('');
       expect(emptyResult.success).toBe(false);
       const validResult = resolver.resolve('Valid');
-      expect(validResult.success).toBe(true);
-      expect((validResult as any).data).toEqual({ categoryId: 'cat-2' });
+      expect(isSuccess(validResult)).toBe(true);
+      if (isSuccess(validResult)) {
+        expect(validResult.data).toEqual({ categoryId: 'cat-2' });
+      }
     });
   });
 
@@ -104,20 +111,26 @@ describe('HistoryCategoryResolver', () => {
 
     it('matches exact payee (case-insensitive)', () => {
       const result = resolver.resolve('שופרסל דיזנגוף');
-      expect(result.success).toBe(true);
-      expect((result as any).data).toEqual({ categoryId: 'cat-groceries' });
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data).toEqual({ categoryId: 'cat-groceries' });
+      }
     });
 
     it('matches partial — description contains known payee', () => {
       const result = resolver.resolve('gas station branch 5');
-      expect(result.success).toBe(true);
-      expect((result as any).data).toEqual({ categoryId: 'cat-transport' });
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data).toEqual({ categoryId: 'cat-transport' });
+      }
     });
 
     it('matches partial — known payee contains description', () => {
       const result = resolver.resolve('שופרסל');
-      expect(result.success).toBe(true);
-      expect((result as any).data).toEqual({ categoryId: 'cat-groceries' });
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data).toEqual({ categoryId: 'cat-groceries' });
+      }
     });
 
     it('returns undefined for unknown payee', () => {
@@ -127,8 +140,10 @@ describe('HistoryCategoryResolver', () => {
 
     it('is case-insensitive for English payees', () => {
       const result = resolver.resolve('GAS STATION');
-      expect(result.success).toBe(true);
-      expect((result as any).data).toEqual({ categoryId: 'cat-transport' });
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect(result.data).toEqual({ categoryId: 'cat-transport' });
+      }
     });
 
     it('returns undefined before initialize is called', () => {

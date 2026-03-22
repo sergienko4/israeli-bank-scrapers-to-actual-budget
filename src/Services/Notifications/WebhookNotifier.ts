@@ -6,7 +6,7 @@
 
 import { NetworkError } from '../../Errors/ErrorTypes.js';
 import type { IWebhookConfig, WebhookFormat } from '../../Types/Index.js';
-import type { IBankMetrics,IImportSummary } from '../MetricsService.js';
+import type { IBankMetrics, IImportSummary } from '../MetricsService.js';
 import type { INotifier } from './INotifier.js';
 
 /** Webhook notification channel — posts import events as JSON to a configurable URL. */

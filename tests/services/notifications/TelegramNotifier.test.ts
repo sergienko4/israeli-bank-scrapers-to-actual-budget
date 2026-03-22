@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import TelegramNotifier from '../../../src/Services/Notifications/TelegramNotifier.js';
 import type { ITelegramConfig } from '../../../src/Types/Index.js';
-import { IImportSummary } from '../../../src/Services/MetricsService.js';
+import type { IImportSummary } from '../../../src/Services/MetricsService.js';
 import {
   fakeImportSummary, fakeAccountMetrics, fakeBankMetrics,
 } from '../../helpers/factories.js';

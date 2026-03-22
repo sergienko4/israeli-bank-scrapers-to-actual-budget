@@ -21,7 +21,8 @@ export default class ChainBuilder {
    * @returns This builder for chaining.
    */
   public add(step: PipelineStep, meta: IStepMeta): this {
-    const frozenStep = Object.freeze({ execute: step, meta });
+    const frozenMeta = Object.freeze({ ...meta });
+    const frozenStep = Object.freeze({ execute: step, meta: frozenMeta });
     this._steps.push(frozenStep);
     return this;
   }

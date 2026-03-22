@@ -90,11 +90,15 @@ async function sendAlertIfPresent(
   ctx: IPipelineContext,
   data: IWatchResultData | { noAlerts: true }
 ): Promise<boolean> {
-  const hasAlert = 'message' in data;
-  if (hasAlert) {
-    await ctx.services.notificationService.sendMessage(
-      data.message ?? ''
-    );
+  if (!('message' in data) || typeof data.message !== 'string' || data.message.length === 0) {
+    return false;
   }
-  return hasAlert;
+  const sendResult = await ctx.services.notificationService.sendMessage(
+    data.message
+  );
+  if (isFail(sendResult)) {
+    ctx.logger.warn(`Spending watch alert failed to send: ${sendResult.message}`);
+    return false;
+  }
+  return true;
 }

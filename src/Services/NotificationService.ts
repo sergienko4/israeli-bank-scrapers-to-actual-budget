@@ -8,7 +8,7 @@
 
 import { getLogger } from '../Logger/Index.js';
 import type { INotificationConfig, Procedure } from '../Types/Index.js';
-import { fail,succeed } from '../Types/Index.js';
+import { fail, succeed } from '../Types/Index.js';
 import type { IImportSummary } from './MetricsService.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import TelegramNotifier from './Notifications/TelegramNotifier.js';
