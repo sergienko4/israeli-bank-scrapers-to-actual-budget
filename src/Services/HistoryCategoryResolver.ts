@@ -9,6 +9,7 @@ import type api from '@actual-app/api';
 import { getLogger } from '../Logger/Index.js';
 import type { IResolvedCategory, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
+import { errorMessage } from '../Utils/Index.js';
 import type { ICategoryResolver } from './ICategoryResolver.js';
 
 interface IPayeeCategory {
@@ -42,8 +43,8 @@ export default class HistoryCategoryResolver implements ICategoryResolver {
       this.buildMap(rows);
       getLogger().info(`  📂 Category history loaded: ${String(this._categoryMap.size)} payees`);
       return succeed({ status: 'initialized' });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+    } catch (error: unknown) {
+      const msg = errorMessage(error);
       getLogger().error(`  ⚠️  Category history failed to load: ${msg}`);
       return fail(`category history load failed: ${msg}`);
     }

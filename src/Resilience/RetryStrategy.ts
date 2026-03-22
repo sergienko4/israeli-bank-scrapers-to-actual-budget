@@ -85,8 +85,8 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
       getLogger().info(`  🔄 Attempt ${String(attempt)}/${String(this.options.maxAttempts)}...`);
       const data = await fn();
       return { success: true, data };
-    } catch (error) {
-      const lastError = error as Error;
+    } catch (error: unknown) {
+      const lastError = error instanceof Error ? error : new Error(String(error));
       if (attempt >= this.options.maxAttempts) return { success: false, error: lastError };
       if (this.options.shouldRetry && !this.options.shouldRetry(lastError)) throw lastError;
       await this.handleRetryBackoff(attempt, operationName, lastError);

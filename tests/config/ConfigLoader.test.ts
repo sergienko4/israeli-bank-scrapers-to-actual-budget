@@ -185,7 +185,7 @@ describe('ConfigLoader', () => {
 
       expect(result.success).toBe(false);
       if (!isFail(result)) return;
-      expect(result.message).toContain('Failed to parse config file');
+      expect(result.message).toContain('Failed to parse /test/config.json');
 
       clearAllEnvVars();
     });

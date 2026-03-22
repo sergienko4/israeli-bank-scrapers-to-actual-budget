@@ -354,7 +354,7 @@ export default tseslint.config(
       'max-lines-per-function': 'off',
       'max-len': 'off',
       'check-file/filename-naming-convention': 'off',
-      'check-file/folder-naming-convention': 'error',
+      'check-file/folder-naming-convention': ['error', { 'src/**/': 'PASCAL_CASE' }],
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unsafe-assignment': 'error',
       '@typescript-eslint/no-unsafe-call': 'error',

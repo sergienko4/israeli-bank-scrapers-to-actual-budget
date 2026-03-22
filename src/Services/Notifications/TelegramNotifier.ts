@@ -169,7 +169,10 @@ export default class TelegramNotifier implements INotifier {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new TimeoutError('2FA reply wait', 0);
       const iterResult = await this.processOneReplyPoll(currentOffset, sentAt);
-      if (isFail(iterResult)) continue;
+      if (isFail(iterResult)) {
+        await new Promise<void>(r => { globalThis.setTimeout(r, 2000); });
+        continue;
+      }
       currentOffset = iterResult.data.nextOffset;
       if (iterResult.data.reply) return iterResult.data.reply;
     }

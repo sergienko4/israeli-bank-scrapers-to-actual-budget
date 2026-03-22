@@ -81,18 +81,11 @@ export class TransactionService {
         imported: newTransactions.length, skipped: existingTransactions.length,
         newTransactions, existingTransactions
       });
-    } catch (error) {
+    } catch (error: unknown) {
       return fail(`Transaction import failed: ${errorMessage(error)}`, { error: error as Error });
     }
   }
 
-  /**
-   * Returns an existing Actual account or creates a new one with the given UUID.
-   * @param accountId - UUID to look up or create.
-   * @param bankName - Bank name used when creating the account label.
-   * @param accountNumber - Account number used when creating the account label.
-   * @returns Procedure wrapping the found or newly created IActualAccount, or failure.
-   */
   /**
    * Returns an existing Actual account or creates a new one with the given UUID.
    * @param accountId - UUID to look up or create.
@@ -111,7 +104,7 @@ export class TransactionService {
       getLogger().info(`     ➕ Creating new account: ${accountId}`);
       const accountLabel = `${bankName} - ${accountNumber}`;
       return await this.createNewAccount(accountId, accountLabel);
-    } catch (error) {
+    } catch (error: unknown) {
       return fail(`Account lookup failed: ${errorMessage(error)}`, { error: error as Error });
     }
   }
@@ -132,7 +125,7 @@ export class TransactionService {
       if (!created) return fail('account creation returned empty', { status: 'account-not-found' });
       if (typeof created === 'string') return succeed({ id: created, name: accountLabel });
       return succeed(created as IActualAccount);
-    } catch (error) {
+    } catch (error: unknown) {
       return fail(`Account creation failed: ${errorMessage(error)}`, { error: error as Error });
     }
   }
@@ -244,7 +237,7 @@ export class TransactionService {
       return succeed({ status: 'duplicate' });
     }
     getLogger().error(`     ❌ Error importing transaction: ${msg}`);
-    return succeed({ status: 'error' });
+    return fail(`Import error: ${msg}`);
   }
 
   /**
