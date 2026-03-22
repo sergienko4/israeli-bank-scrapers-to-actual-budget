@@ -254,7 +254,13 @@ async function main(): Promise<Procedure<{ status: string }>> {
   }
 }
 
-// Run if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run if executed directly (resolve paths for Docker compatibility)
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const CURRENT_PATH = fileURLToPath(import.meta.url);
+const CURRENT_FILE = resolve(CURRENT_PATH);
+const INVOKED_FILE = resolve(process.argv[1]);
+if (CURRENT_FILE === INVOKED_FILE) {
   await main();
 }
