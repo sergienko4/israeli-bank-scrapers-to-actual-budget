@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { existsSync, readdirSync, readFileSync, unlinkSync, rmdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { LogRotatingStream } from '../../src/Logger/LogRotatingStream.js';
+import LogRotatingStream from '../../src/Logger/LogRotatingStream.js';
 
 let testDir: string;
 let openStreams: LogRotatingStream[] = [];

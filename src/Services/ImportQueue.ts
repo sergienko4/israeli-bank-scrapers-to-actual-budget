@@ -3,83 +3,106 @@
  * Processes enqueued items one at a time via the provided process callback.
  */
 
-import type { QueueCallbacks } from '../Types/Index.js';
-import { errorMessage } from '../Utils/Index.js';
 import { getLogger } from '../Logger/Index.js';
+import type { IQueueCallbacks, Procedure } from '../Types/Index.js';
+import { succeed } from '../Types/Index.js';
+import { errorMessage } from '../Utils/Index.js';
 
 /** Generic sequential job queue that processes items via a provided callback. */
-export class ImportQueue<T> {
-  private readonly items: T[] = [];
-  private active = false;
-  private readonly callbacks: QueueCallbacks<T>;
+export default class ImportQueue<T> {
+  private readonly _items: T[] = [];
+  private _active = false;
+  private readonly _callbacks: IQueueCallbacks<T>;
 
   /**
    * Creates an ImportQueue with the given processing callbacks.
    * @param callbacks - Process function and optional completion hooks.
    */
-  constructor(callbacks: QueueCallbacks<T>) {
-    this.callbacks = callbacks;
+  constructor(callbacks: IQueueCallbacks<T>) {
+    this._callbacks = callbacks;
   }
 
   /**
    * Adds a job to the queue and starts processing if idle.
    * @param job - The job to enqueue.
    */
-  enqueue(job: T): void {
-    this.items.push(job);
-    if (!this.active) void this.drain();
+  public enqueue(job: T): void {
+    this._items.push(job);
+    if (!this._active) void this.drain();
   }
 
   /**
    * Adds multiple jobs to the queue and starts processing if idle.
    * @param jobs - Array of jobs to enqueue.
    */
-  enqueueAll(jobs: T[]): void {
+  public enqueueAll(jobs: T[]): void {
     if (jobs.length === 0) return;
-    this.items.push(...jobs);
-    if (!this.active) void this.drain();
+    this._items.push(...jobs);
+    if (!this._active) void this.drain();
   }
 
   /**
    * Returns the number of jobs waiting (not including the one currently processing).
    * @returns Pending queue length.
    */
-  size(): number {
-    return this.items.length;
+  public size(): number {
+    return this._items.length;
   }
 
   /**
    * Returns whether a job is currently being processed.
    * @returns True if processing is active.
    */
-  isProcessing(): boolean {
-    return this.active;
+  public isProcessing(): boolean {
+    return this._active;
   }
 
   /**
    * Returns true if the queue has pending jobs or is actively processing.
    * @returns True if not idle.
    */
-  isBusy(): boolean {
-    return this.active || this.items.length > 0;
+  public isBusy(): boolean {
+    return this._active || this._items.length > 0;
   }
 
   /**
    * Drains the queue by processing jobs sequentially until empty.
+   * @returns Procedure indicating the queue has been drained.
    */
-  private async drain(): Promise<void> {
-    this.active = true;
-    while (this.items.length > 0) {
-      const job = this.items.shift() as T;
-      try {
-        const result = await this.callbacks.process(job);
-        this.callbacks.onJobComplete?.(job, result);
-      } catch (err: unknown) {
-        getLogger().error(`Queue job failed: ${errorMessage(err)}`);
-        this.callbacks.onJobComplete?.(job, err);
-      }
+  private async drain(): Promise<Procedure<{ status: string }>> {
+    this._active = true;
+    await this.processNextItem();
+    this._active = false;
+    this._callbacks.onQueueEmpty();
+    return succeed({ status: 'drained' });
+  }
+
+  /**
+   * Iteratively processes all items in the queue.
+   * @returns Procedure indicating all items were processed.
+   */
+  private async processNextItem(): Promise<Procedure<{ status: string }>> {
+    while (this._items.length > 0) {
+      const job = this._items.shift() as T;
+      await this.processOneJob(job);
     }
-    this.active = false;
-    this.callbacks.onQueueEmpty?.();
+    return succeed({ status: 'empty' });
+  }
+
+  /**
+   * Processes a single job, notifying the callback of success or failure.
+   * @param job - The job to process.
+   * @returns Procedure indicating the job was processed.
+   */
+  private async processOneJob(job: T): Promise<Procedure<{ status: string }>> {
+    try {
+      const result = await this._callbacks.process(job);
+      this._callbacks.onJobComplete(job, result);
+    } catch (err: unknown) {
+      getLogger().error(`Queue job failed: ${errorMessage(err)}`);
+      const jobError = err instanceof Error ? err : new Error(String(err));
+      this._callbacks.onJobComplete(job, jobError);
+    }
+    return succeed({ status: 'job-processed' });
   }
 }

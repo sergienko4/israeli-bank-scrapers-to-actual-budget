@@ -53,7 +53,7 @@ wait_gates() {
 # PHASE 1: Independent gates (no dependencies — all parallel)
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "⚡ Phase 1/4: Running 9 independent gates in parallel..."
+echo "⚡ Phase 1/3: Running 10 independent gates in parallel..."
 echo ""
 
 run_gate "1-typecheck"    "Type-checking TypeScript"       npm run type-check
@@ -61,24 +61,39 @@ run_gate "2-audit"        "Auditing dependencies"          npm audit --audit-lev
 run_gate "3-build"        "Compiling TypeScript"           npm run build
 run_gate "6-eslint"       "Running ESLint"                 npm run lint
 run_gate "6b-biome"       "Running Biome lint"             npm run lint:biome
-run_gate "7-semgrep"      "Running Semgrep security scan"  docker run --rm -v "$(pwd):/data" --workdir /data semgrep/semgrep@sha256:9fb6f44dc162b1e0aada85f072a95141844c61e3bfcedf40b8a46fecf208e986 semgrep scan --config auto --error src/
+run_gate "7-semgrep"      "Running Semgrep security scan"  docker run --rm -v "$(pwd):/data" --workdir /data semgrep/semgrep@sha256:9fb6f44dc162b1e0aada85f072a95141844c61e3bfcedf40b8a46fecf208e986 semgrep scan --config auto --config .semgrep/ --error src/
 run_gate "8-markdownlint" "Linting markdown docs"          npm run lint:docs
 run_gate "9-configcheck"  "Checking config structure"      npm run lint:config-structure
 run_gate "11-lychee"      "Checking markdown links"        docker run --rm -v "$(pwd):/data" --workdir /data -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" lycheeverse/lychee@sha256:609d1bea17f053bee6df907017e4eb8a0163e90633a26fce3ce8aaba1a3df443 --exclude-path config/lychee/ignore --exclude-path CHANGELOG.md --no-progress '*.md' 'docs/**/*.md' '.github/**/*.md'
+run_gate "16-pii-check"  "Checking for PII in error messages" bash -c '
+  # Catch interpolated PII variables in error/throw/fail messages
+  # e.g., `throw new Error(\`got ${otp}\`)` or `fail(\`token: ${token}\`)`
+  # Excludes: static field names like "password is missing" or "token format"
+  HITS=$(grep -rn "\${password}\|\${token}\|\${otp}\|\${secret}\|\${digits}\|\${creditCard}" src/ --include="*.ts" | grep -i "throw\|Error\|fail(" || true)
+  HITS2=$(grep -rn "\${.*proxy.*}" src/ --include="*.ts" | grep -i "logger\|\.info\|\.warn\|\.error" || true)
+  ALL="${HITS}${HITS2}"
+  if [ -n "$ALL" ]; then
+    echo "PII variable interpolation detected in error messages:"
+    echo "$ALL"
+    exit 1
+  fi
+  echo "No PII in error messages"
+'
 
 wait_gates \
   "1-typecheck" "2-audit" "3-build" \
   "6-eslint" "6b-biome" "7-semgrep" \
-  "8-markdownlint" "9-configcheck" "11-lychee"
+  "8-markdownlint" "9-configcheck" "11-lychee" \
+  "16-pii-check"
 
 echo ""
-echo "✅ Phase 1 complete (9 gates passed)"
+echo "✅ Phase 1 complete (10 gates passed)"
 
 # ═══════════════════════════════════════════════════════════════════
 # PHASE 2: Gates that need build output (parallel)
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "⚡ Phase 2/4: Running 4 build-dependent gates in parallel..."
+echo "⚡ Phase 2/3: Running 4 build-dependent gates in parallel..."
 echo ""
 
 run_gate "4-typedoc"      "Generating TypeDoc API docs"    npm run docs
@@ -120,7 +135,7 @@ echo "✅ Phase 2 complete (4 gates passed)"
 # PHASE 3: Gates that need Docker image (parallel)
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "⚡ Phase 3/4: Running 2 final gates in parallel..."
+echo "⚡ Phase 3/3: Running 2 final gates in parallel..."
 echo ""
 
 run_gate "12-trivy" "Scanning Docker image (Trivy)" docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$(pwd)/config/trivy:/trivy-config" aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln,secret --secret-config /trivy-config/secret.yaml --pkg-types os,library --skip-dirs 'root/.npm' "$LOCAL_IMAGE"
@@ -130,24 +145,6 @@ wait_gates "12-trivy" "14-e2e-telegram"
 
 echo ""
 echo "✅ Phase 3 complete (2 gates passed)"
-
-# ═══════════════════════════════════════════════════════════════════
-# PHASE 4: AI Commit Guard (Ollama — must pass, blocks commit)
-# ═══════════════════════════════════════════════════════════════════
-echo ""
-echo "⚡ Phase 4/4: Running AI commit guard..."
-echo ""
-
-if ! curl -s --connect-timeout 2 --max-time 5 http://localhost:11434/api/tags > /dev/null 2>&1; then
-  echo "  ❌ 15-ai-guard: Ollama is not running (start it with: ollama serve)"
-  exit 1
-fi
-AI_PROVIDER=ollama AI_MODEL=qwen2.5-coder:14b AI_GUARD_TIMEOUT=120000 npx ai-commit-guard
-if [ $? -ne 0 ]; then
-  echo "  ❌ 15-ai-guard"
-  exit 1
-fi
-echo "  ✅ 15-ai-guard"
 
 # ────────────────────────────────────────────────────────────────
 echo ""

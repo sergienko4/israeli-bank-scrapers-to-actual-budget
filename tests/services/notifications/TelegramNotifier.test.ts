@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TelegramNotifier } from '../../../src/Services/Notifications/TelegramNotifier.js';
-import type { TelegramConfig } from '../../../src/Types/Index.js';
-import { ImportSummary } from '../../../src/Services/MetricsService.js';
+import TelegramNotifier from '../../../src/Services/Notifications/TelegramNotifier.js';
+import type { ITelegramConfig } from '../../../src/Types/Index.js';
+import type { IImportSummary } from '../../../src/Services/MetricsService.js';
 import {
   fakeImportSummary, fakeAccountMetrics, fakeBankMetrics,
 } from '../../helpers/factories.js';
@@ -69,19 +69,19 @@ describe('TelegramNotifier', () => {
    * @returns configured TelegramNotifier instance
    */
   function createNotifier(
-    options?: Partial<TelegramConfig>,
+    options?: Partial<ITelegramConfig>,
     maxTransactions?: number,
   ): TelegramNotifier {
-    const config: TelegramConfig = { botToken: '123:ABC', chatId: '-100', ...options };
+    const config: ITelegramConfig = { botToken: '123:ABC', chatId: '-100', ...options };
     return new TelegramNotifier(config, maxTransactions);
   }
 
   /**
-   * Builds an ImportSummary with overridden account properties.
+   * Builds an IImportSummary with overridden account properties.
    * @param overrides - properties to spread into the first account
-   * @returns ImportSummary with the modified account
+   * @returns IImportSummary with the modified account
    */
-  function withAccountOverrides(overrides: Partial<typeof pinnedAccount>): ImportSummary {
+  function withAccountOverrides(overrides: Partial<typeof pinnedAccount>): IImportSummary {
     return fakeImportSummary({
       ...summaryWithTxns,
       banks: [fakeBankMetrics({
@@ -290,7 +290,7 @@ describe('TelegramNotifier', () => {
   });
 
   describe('truncation with HTML tags', () => {
-    function buildLongSummary(accountCount: number): ImportSummary {
+    function buildLongSummary(accountCount: number): IImportSummary {
       const txns = Array.from({ length: 25 }, (_, i) => ({
         date: '2026-02-14', description: `Transaction number ${i + 1} with long details here`, amount: -(i + 1) * 100
       }));
@@ -361,7 +361,7 @@ describe('TelegramNotifier', () => {
   });
 
   describe('bank name HTML escaping', () => {
-    const specialCharSummary: ImportSummary = {
+    const specialCharSummary: IImportSummary = {
       ...summaryWithTxns,
       banks: [{
         ...summaryWithTxns.banks[0],
@@ -493,16 +493,16 @@ describe('TelegramNotifier', () => {
     });
   });
 
-  describe('bank with undefined accounts', () => {
-    const undefinedAccountsSummary = {
+  describe('bank with empty accounts', () => {
+    const emptyAccountsSummary = {
       ...summaryWithTxns,
-      banks: [{ ...summaryWithTxns.banks[0], accounts: undefined as never }],
+      banks: [{ ...summaryWithTxns.banks[0], accounts: [] }],
     };
 
     for (const fmt of ['ledger', 'emoji', 'compact'] as const) {
-      it(`${fmt}: handles bank where accounts is undefined`, async () => {
+      it(`${fmt}: handles bank where accounts is empty`, async () => {
         const notifier = createNotifier({ messageFormat: fmt });
-        await notifier.sendSummary(undefinedAccountsSummary);
+        await notifier.sendSummary(emptyAccountsSummary);
         expect(getText(fetchMock)).toContain('Import Summary');
       });
     }
@@ -564,7 +564,7 @@ describe('TelegramNotifier', () => {
         if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
       });
-      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA reply wait timed out');
     });
 
     it('ignores reply with date before prompt was sent', async () => {
@@ -579,7 +579,7 @@ describe('TelegramNotifier', () => {
           json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -100 }, text: '111111', date: 0 } }] })
         });
       });
-      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA reply wait timed out');
     });
 
     it('ignores command messages starting with /', async () => {
@@ -595,7 +595,7 @@ describe('TelegramNotifier', () => {
           json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -100 }, text: '/scan', date: futureTime } }] })
         });
       });
-      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA reply wait timed out');
     });
 
     it('ignores messages from wrong chatId', async () => {
@@ -611,7 +611,7 @@ describe('TelegramNotifier', () => {
           json: () => Promise.resolve({ ok: true, result: [{ update_id: 1, message: { chat: { id: -999 }, text: '123456', date: futureTime } }] })
         });
       });
-      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA reply wait timed out');
     });
 
     it('uses latest offset from getLatestOffset when prior updates exist', async () => {
@@ -684,7 +684,7 @@ describe('TelegramNotifier', () => {
         if (callCount === 2) return Promise.resolve({ ok: true, text: vi.fn() });
         return Promise.resolve({ ok: false });
       });
-      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA timeout');
+      await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA reply wait timed out');
     });
 
     it('confirms the OTP update offset before returning', async () => {
@@ -836,10 +836,12 @@ describe('TelegramNotifier', () => {
       expect(names).not.toContain('INVALID');
     });
 
-    it('throws on API error', async () => {
+    it('returns failure on API error', async () => {
       fetchMock.mockResolvedValue({ ok: false, status: 400, text: vi.fn().mockResolvedValue('Bad Request') });
       const notifier = createNotifier();
-      await expect(notifier.registerCommands()).rejects.toThrow('setMyCommands failed');
+      const result = await notifier.registerCommands();
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Failed to register commands');
     });
   });
 });

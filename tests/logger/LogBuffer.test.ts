@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { LogBuffer } from '../../src/Logger/LogBuffer.js';
+import LogBuffer from '../../src/Logger/LogBuffer.js';
 
 describe('LogBuffer', () => {
   let buffer: LogBuffer;

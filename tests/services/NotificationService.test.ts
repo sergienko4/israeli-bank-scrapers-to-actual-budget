@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NotificationService } from '../../src/Services/NotificationService.js';
-import { ImportSummary } from '../../src/Services/MetricsService.js';
+import NotificationService from '../../src/Services/NotificationService.js';
+import { IImportSummary } from '../../src/Services/MetricsService.js';
 import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockSendSummary = vi.fn().mockResolvedValue(undefined);
@@ -8,14 +8,14 @@ const mockSendError = vi.fn().mockResolvedValue(undefined);
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../src/Services/Notifications/TelegramNotifier.js', () => ({
-  TelegramNotifier: vi.fn().mockImplementation(function (this: any) {
+  default: vi.fn().mockImplementation(function (this: any) {
     this.sendSummary = mockSendSummary;
     this.sendError = mockSendError;
     this.sendMessage = mockSendMessage;
   })
 }));
 
-const mockSummary: ImportSummary = {
+const mockSummary: IImportSummary = {
   totalBanks: 2,
   successfulBanks: 1,
   failedBanks: 1,
@@ -35,47 +35,59 @@ describe('NotificationService', () => {
     vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as any);
   });
 
-  it('does nothing when config is undefined', async () => {
+  it('returns succeed with sent:0 when config is undefined', async () => {
     const service = new NotificationService(undefined);
-    await service.sendSummary(mockSummary);
-    await service.sendError('test error');
+    const summaryResult = await service.sendSummary(mockSummary);
+    const errorResult = await service.sendError('test error');
+    expect(summaryResult.success).toBe(true);
+    if (summaryResult.success) expect(summaryResult.data.sent).toBe(0);
+    expect(errorResult.success).toBe(true);
+    if (errorResult.success) expect(errorResult.data.sent).toBe(0);
     expect(mockSendSummary).not.toHaveBeenCalled();
     expect(mockSendError).not.toHaveBeenCalled();
   });
 
-  it('does nothing when enabled is false', async () => {
+  it('returns succeed with sent:0 when enabled is false', async () => {
     const service = new NotificationService({ enabled: false });
-    await service.sendSummary(mockSummary);
+    const result = await service.sendSummary(mockSummary);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.sent).toBe(0);
     expect(mockSendSummary).not.toHaveBeenCalled();
   });
 
-  it('does nothing when enabled but no channels configured', async () => {
+  it('returns succeed with sent:0 when enabled but no channels configured', async () => {
     const service = new NotificationService({ enabled: true });
-    await service.sendSummary(mockSummary);
+    const result = await service.sendSummary(mockSummary);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.sent).toBe(0);
     expect(mockSendSummary).not.toHaveBeenCalled();
   });
 
-  it('delegates sendSummary to telegram notifier', async () => {
+  it('delegates sendSummary to telegram notifier and returns sent:1', async () => {
     const service = new NotificationService({
       enabled: true,
       telegram: { botToken: '123:ABC', chatId: '-100' }
     });
 
-    await service.sendSummary(mockSummary);
+    const result = await service.sendSummary(mockSummary);
     expect(mockSendSummary).toHaveBeenCalledWith(mockSummary);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.sent).toBe(1);
   });
 
-  it('delegates sendError to telegram notifier', async () => {
+  it('delegates sendError to telegram notifier and returns sent:1', async () => {
     const service = new NotificationService({
       enabled: true,
       telegram: { botToken: '123:ABC', chatId: '-100' }
     });
 
-    await service.sendError('Critical failure');
+    const result = await service.sendError('Critical failure');
     expect(mockSendError).toHaveBeenCalledWith('Critical failure');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.sent).toBe(1);
   });
 
-  it('catches notifier errors without throwing', async () => {
+  it('returns fail when all notifiers reject', async () => {
     mockSendSummary.mockRejectedValueOnce(new Error('Network error'));
     mockSendError.mockRejectedValueOnce(new Error('Network error'));
 
@@ -84,9 +96,12 @@ describe('NotificationService', () => {
       telegram: { botToken: '123:ABC', chatId: '-100' }
     });
 
-    await service.sendSummary(mockSummary);
-    await service.sendError('test');
+    const summaryResult = await service.sendSummary(mockSummary);
+    const errorResult = await service.sendError('test');
 
+    expect(summaryResult.success).toBe(false);
+    if (!summaryResult.success) expect(summaryResult.message).toBe('all notifiers failed');
+    expect(errorResult.success).toBe(false);
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.stringContaining('Notification failed')
     );
@@ -123,12 +138,14 @@ describe('NotificationService', () => {
     );
   });
 
-  it('sendMessage delegates to telegram notifier', async () => {
+  it('sendMessage delegates to telegram notifier and returns sent:1', async () => {
     const service = new NotificationService({
       enabled: true,
       telegram: { botToken: '123:ABC', chatId: '-100' }
     });
-    await service.sendMessage('hello world');
+    const result = await service.sendMessage('hello world');
     expect(mockSendMessage).toHaveBeenCalledWith('hello world');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.sent).toBe(1);
   });
 });

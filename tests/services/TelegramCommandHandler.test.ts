@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
 import type { ImportMediator } from '../../src/Services/ImportMediator.js';
-import type { AuditEntry } from '../../src/Services/AuditLogService.js';
-import { fakeAuditEntry } from '../helpers/factories.js';
+import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
+import { succeed } from '../../src/Types/Index.js';
+import { fakeIAuditEntry } from '../helpers/factories.js';
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
 
@@ -45,15 +46,15 @@ function createMockMediator(): {
  * @returns A mock audit-log compatible with TelegramCommandHandler.
  */
 function createMockAuditLog(opts: {
-  entries?: AuditEntry[];
+  entries?: IAuditEntry[];
   lastFailed?: string[];
   consecutiveFailures?: number;
 } = {}): Record<string, ReturnType<typeof vi.fn>> {
   return {
-    record: vi.fn(),
-    getRecent: vi.fn().mockReturnValue(opts.entries ?? []),
-    getLastFailedBanks: vi.fn().mockReturnValue(opts.lastFailed ?? []),
-    getConsecutiveFailures: vi.fn().mockReturnValue(opts.consecutiveFailures ?? 0),
+    record: vi.fn().mockReturnValue(succeed({ status: 'recorded' })),
+    getRecent: vi.fn().mockReturnValue(succeed(opts.entries ?? [])),
+    getLastFailedBanks: vi.fn().mockReturnValue(succeed(opts.lastFailed ?? [])),
+    getConsecutiveFailures: vi.fn().mockReturnValue(succeed(opts.consecutiveFailures ?? 0)),
   };
 }
 
@@ -469,7 +470,7 @@ describe('TelegramCommandHandler', () => {
   it('/scan failure with fresh audit log builds detailed error reply', async () => {
     setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeAuditEntry({
+      entries: [fakeIAuditEntry({
         totalBanks: 2, successfulBanks: 1, failedBanks: 1,
         totalTransactions: 3, successRate: 50,
         banks: [{ name: 'discount', status: 'failure', error: 'Auth timeout', txns: 0 }],
@@ -485,7 +486,7 @@ describe('TelegramCommandHandler', () => {
   it('/scan failure with stale audit entry shows generic error', async () => {
     setupFailedBatch(1000);
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeAuditEntry({
+      entries: [fakeIAuditEntry({
         timestamp: '2020-01-01T00:00:00.000Z',
         totalBanks: 7, successfulBanks: 5, failedBanks: 2,
         totalTransactions: 100, totalDuration: 30000, successRate: 71,
@@ -505,7 +506,7 @@ describe('TelegramCommandHandler', () => {
   it('/scan failure with fresh audit entry but zero failed banks shows generic error', async () => {
     setupFailedBatch(3000);
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeAuditEntry({
+      entries: [fakeIAuditEntry({
         successfulBanks: 1, failedBanks: 0,
         totalTransactions: 5, totalDuration: 3000, successRate: 100,
         banks: [{ name: 'discount', status: 'success', txns: 5 }],
@@ -544,12 +545,12 @@ describe('TelegramCommandHandler', () => {
     mockMediator.getLastRunTime.mockReturnValue(null);
     const mockAuditLog = createMockAuditLog({
       entries: [
-        fakeAuditEntry({
+        fakeIAuditEntry({
           timestamp: '2026-02-28T14:30:00.000Z',
           successfulBanks: 1, failedBanks: 0,
           totalTransactions: 5, totalDuration: 3000, successRate: 100,
         }),
-        fakeAuditEntry({
+        fakeIAuditEntry({
           timestamp: '2026-02-27T10:00:00.000Z',
           totalDuration: 1000,
         }),
@@ -649,7 +650,7 @@ describe('TelegramCommandHandler', () => {
   it('error reply includes advice for known scraper error code', async () => {
     setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeAuditEntry({
+      entries: [fakeIAuditEntry({
         banks: [{ name: 'discount', status: 'failure', error: 'INVALID_PASSWORD', txns: 0 }],
       })],
       lastFailed: ['discount'],
@@ -661,7 +662,7 @@ describe('TelegramCommandHandler', () => {
   it('error reply shows no advice for unknown error', async () => {
     setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeAuditEntry({
+      entries: [fakeIAuditEntry({
         banks: [{ name: 'discount', status: 'failure', error: 'SomeRandomError', txns: 0 }],
       })],
       lastFailed: ['discount'],
@@ -675,7 +676,7 @@ describe('TelegramCommandHandler', () => {
   it('shows warning when bank failed 3+ times in a row', async () => {
     setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeAuditEntry({
+      entries: [fakeIAuditEntry({
         banks: [{ name: 'discount', status: 'failure', error: 'Error', txns: 0 }],
       })],
       lastFailed: ['discount'],
@@ -688,7 +689,7 @@ describe('TelegramCommandHandler', () => {
   it('no consecutive failure warning when streak below 3', async () => {
     setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeAuditEntry({
+      entries: [fakeIAuditEntry({
         banks: [{ name: 'discount', status: 'failure', error: 'Error', txns: 0 }],
       })],
       lastFailed: ['discount'],

@@ -5,73 +5,86 @@
 
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync,readFileSync } from 'node:fs';
+
 import { CronExpressionParser } from 'cron-parser';
-import { TelegramPoller } from './Services/TelegramPoller.js';
-import { TelegramCommandHandler } from './Services/TelegramCommandHandler.js';
-import { TelegramNotifier } from './Services/Notifications/TelegramNotifier.js';
-import { ImportMediator } from './Services/ImportMediator.js';
-import type { ImporterConfig, LogConfig, TelegramConfig } from './Types/Index.js';
-import { AuditLogService } from './Services/AuditLogService.js';
-import { errorMessage } from './Utils/Index.js';
-import { createLogger, getLogger, deriveLogFormat } from './Logger/Index.js';
+
 import {
-  isEncryptedConfig, decryptConfig, getEncryptionPassword
-} from './Config/ConfigEncryption.js';
+decryptConfig, getEncryptionPassword,
+  isEncryptedConfig} from './Config/ConfigEncryption.js';
+import { ConfigLoader } from './Config/ConfigLoader.js';
+import { createLogger, deriveLogFormat,getLogger } from './Logger/Index.js';
+import { AuditLogService } from './Services/AuditLogService.js';
+import { ImportMediator } from './Services/ImportMediator.js';
+import TelegramNotifier from './Services/Notifications/TelegramNotifier.js';
+import { TelegramCommandHandler } from './Services/TelegramCommandHandler.js';
+import TelegramPoller from './Services/TelegramPoller.js';
+import type {
+  IImporterConfig, ILogConfig, IProcedureSuccess, ITelegramConfig, Procedure,
+} from './Types/Index.js';
+import { fail, isFail, succeed } from './Types/Index.js';
+import { errorMessage } from './Utils/Index.js';
 
 const DEFAULT_LOG_DIR = './logs';
 
 // Load log config early so all messages use the configured format
-const logConfig = loadLogConfig();
-createLogger(logConfig);
-const logger = getLogger();
+const LOG_CONFIG_RESULT = loadLogConfig();
+const LOG_CONFIG = LOG_CONFIG_RESULT.success ? LOG_CONFIG_RESULT.data : void 0;
+createLogger(LOG_CONFIG);
+const LOGGER = getLogger();
 
-logger.info('🚀 Israeli Bank Importer Scheduler Starting...');
-logger.info(`📅 Timezone: ${process.env.TZ || 'UTC'}`);
+LOGGER.info('🚀 Israeli Bank Importer Scheduler Starting...');
+LOGGER.info(`📅 Timezone: ${process.env.TZ || 'UTC'}`);
 
 // ─── Config helpers ───
 
 /**
- * Reads a JSON file, decrypting it first if it is an EncryptedConfig.
+ * Reads a JSON file, decrypting it first if it is an IEncryptedConfig.
  * @param filePath - Absolute path to the JSON file to read.
- * @returns Parsed object, or null if the file is absent or cannot be decrypted.
+ * @returns Procedure with parsed object, or failure if file is absent.
  */
-export function readJsonOrEncrypted(filePath: string): Record<string, unknown> | null {
-  if (!existsSync(filePath)) return null;
-  const raw = readFileSync(filePath, 'utf8');
-  const parsed: unknown = JSON.parse(raw);
-  if (!isEncryptedConfig(parsed)) return parsed as Record<string, unknown>;
-  const password = getEncryptionPassword();
-  return password
-    ? JSON.parse(decryptConfig(raw, password)) as Record<string, unknown>
-    : null;
-}
-
-/**
- * Loads and shallow-merges config.json with credentials.json at startup.
- * @returns The merged ImporterConfig, or null if config.json is absent.
- */
-export function loadFullConfig(): ImporterConfig | null {
+export function readJsonOrEncrypted(filePath: string): Procedure<Record<string, string>> {
+  if (!existsSync(filePath)) return fail(`File not found: ${filePath}`);
   try {
-    const config = readJsonOrEncrypted('/app/config.json');
-    if (!config) return null;
-    const creds = readJsonOrEncrypted('/app/credentials.json');
-    return (creds ? { ...config, ...creds } : config) as unknown as ImporterConfig;
-  } catch { return null; }
+    const raw = readFileSync(filePath, 'utf8');
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    if (!isEncryptedConfig(parsed)) return succeed(parsed);
+    const password = getEncryptionPassword();
+    if (!password) return fail('Encryption password required');
+    const decryptedJson = decryptConfig(raw, password);
+    return succeed(JSON.parse(decryptedJson) as Record<string, string>);
+  } catch (error) {
+    return fail(`Failed to read ${filePath}: ${errorMessage(error)}`);
+  }
 }
 
 /**
- * Derives the LogConfig from the full config, applying format and logDir defaults.
- * @returns LogConfig to pass to createLogger, or undefined if config cannot be loaded.
+ * Loads and deep-merges config.json with credentials.json at startup.
+ * Delegates to ConfigLoader.loadRaw() which handles proper deep-merge of nested objects.
+ * @returns Procedure with the merged IImporterConfig, or failure if absent.
  */
-export function loadLogConfig(): LogConfig | undefined {
-  const config = loadFullConfig();
-  if (!config) return undefined;
+export function loadFullConfig(): Procedure<IImporterConfig> {
+  try {
+    const loader = new ConfigLoader();
+    return loader.loadRaw();
+  } catch (error) {
+    return fail(`Failed to load config: ${errorMessage(error)}`);
+  }
+}
+
+/**
+ * Derives the ILogConfig from the full config, applying format and logDir defaults.
+ * @returns Procedure with ILogConfig, or failure if config cannot be loaded.
+ */
+export function loadLogConfig(): Procedure<ILogConfig> {
+  const configResult = loadFullConfig();
+  if (isFail(configResult)) return fail('Cannot derive log config');
+  const config = configResult.data;
   const tg = config.notifications?.telegram;
   const hasBot = tg?.listenForCommands === true;
   const format = config.logConfig?.format ?? deriveLogFormat(tg?.messageFormat, hasBot);
   const logDir = config.logConfig?.logDir ?? DEFAULT_LOG_DIR;
-  return { ...config.logConfig, format, maxBufferSize: 0, logDir };
+  return succeed({ ...config.logConfig, format, maxBufferSize: 0, logDir });
 }
 
 
@@ -85,12 +98,17 @@ export function loadLogConfig(): LogConfig | undefined {
 export function spawnImport(extraEnv: Record<string, string> = {}): Promise<number> {
   return new Promise((resolve) => {
     const startTime = new Date();
-    logger.info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
+    LOGGER.info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
     const env = Object.keys(extraEnv).length > 0 ? { ...process.env, ...extraEnv } : process.env;
     const child: ChildProcess = spawn('node', ['/app/dist/Index.js'], { stdio: 'inherit', env });
-    child.on('exit', (code) => { logImportResult(code, startTime); resolve(code ?? 0); });
+    child.on('exit', (exitCode, signal) => {
+      const code = exitCode ?? (signal ? 1 : 0);
+      if (signal) LOGGER.warn(`Import killed by signal: ${signal}`);
+      logImportResult(code, startTime);
+      resolve(code);
+    });
     child.on('error', (err) => {
-      logger.error(`❌ Failed to start import: ${err.message}`);
+      LOGGER.error(`❌ Failed to start import: ${err.message}`);
       resolve(1);
     });
   });
@@ -98,35 +116,49 @@ export function spawnImport(extraEnv: Record<string, string> = {}): Promise<numb
 
 /**
  * Logs the result of a completed import child process.
- * @param code - Exit code from the child process (null if terminated by signal).
+ * @param code - Exit code from the child process (0 if terminated by signal).
  * @param startTime - The Date when the import started, used to compute duration.
+ * @returns A successful Procedure indicating the result was logged.
  */
-export function logImportResult(code: number | null, startTime: Date): void {
+export function logImportResult(
+  code: number, startTime: Date
+): IProcedureSuccess<{ status: string }> {
   const duration = Math.round((Date.now() - startTime.getTime()) / 1000);
   const time = new Date().toISOString();
   if (code === 0) {
-    logger.info(`✅ ${time}: Import completed successfully (took ${duration}s)`);
+    LOGGER.info(`✅ ${time}: Import completed successfully (took ${String(duration)}s)`);
   } else {
-    logger.error(`❌ ${time}: Import failed with exit code ${code} (took ${duration}s)`);
+    LOGGER.error(
+      `❌ ${time}: Import failed with exit code ${String(code)} (took ${String(duration)}s)`
+    );
   }
+  return succeed({ status: 'logged' });
 }
 
 // ─── Mediator ───
 
 /**
  * Creates an ImportMediator wired to spawnImport and the current config.
- * @param notifier - Optional TelegramNotifier for batch summaries.
+ * @param notifierResult - Procedure with TelegramNotifier, or failure for none.
  * @returns A configured ImportMediator instance.
  */
-export function createMediator(notifier: TelegramNotifier | null): ImportMediator {
+export function createMediator(notifierResult: Procedure<TelegramNotifier>): ImportMediator {
+  const notifier = notifierResult.success ? notifierResult.data : void 0;
   return new ImportMediator({
     spawnImport,
     /**
      * Returns all configured bank names from the live config.
      * @returns Array of bank name strings.
      */
-    getBankNames: () => Object.keys(loadFullConfig()?.banks ?? {}),
-    notifier,
+    getBankNames: () => {
+      const r = loadFullConfig();
+      if (!r.success) {
+        LOGGER.warn(`getBankNames: config load failed — ${r.message}`);
+        return [];
+      }
+      return Object.keys(r.data.banks);
+    },
+    notifier: notifier ?? null,
   });
 }
 
@@ -135,13 +167,17 @@ export function createMediator(notifier: TelegramNotifier | null): ImportMediato
 /**
  * Logs how many bot commands will be registered including extra commands.
  * @param extras - Additional commands beyond the built-in set.
+ * @returns A successful Procedure indicating the count was logged.
  */
-export function logCommandCount(extras: Array<{ command: string; description: string }>): void {
+export function logCommandCount(
+  extras: { command: string; description: string }[]
+): IProcedureSuccess<{ status: string }> {
   const cmdNames = extras.map(c => c.command).join(', /');
-  logger.info(
-    `📋 Registering ${4 + extras.length} bot commands` +
+  LOGGER.info(
+    `📋 Registering ${String(4 + extras.length)} bot commands` +
     (extras.length ? ` (including /${cmdNames})` : '')
   );
+  return succeed({ status: 'logged' });
 }
 
 /**
@@ -151,18 +187,16 @@ export function logCommandCount(extras: Array<{ command: string; description: st
 async function runConfigValidation(): Promise<string> {
   // Use ConfigLoader.loadRaw() for correct deep-merge of config.json + credentials.json.
   // loadFullConfig() uses a shallow spread which loses nested fields like actual.init.serverURL.
-  const { ConfigLoader } = await import('./Config/ConfigLoader.js');
-  const { ConfigValidator } = await import('./Config/ConfigValidator.js');
-  const loader = new ConfigLoader();
-  let config: ImporterConfig;
-  try {
-    config = loader.loadRaw();
-  } catch (e) {
-    return `[FAIL] Cannot load config: ${errorMessage(e)}`;
+  const configLoaderModule = await import('./Config/ConfigLoader.js');
+  const configValidatorModule = await import('./Config/ConfigValidator.js');
+  const loader = new configLoaderModule.ConfigLoader();
+  const rawResult = loader.loadRaw();
+  if (isFail(rawResult)) {
+    return `[FAIL] Cannot load config: ${rawResult.message}`;
   }
-  const validator = new ConfigValidator();
-  const results = await validator.validateAll(config);
-  return validator.formatReport(results);
+  const validator = new configValidatorModule.ConfigValidator();
+  const results = await validator.validateAll(rawResult.data);
+  return configValidatorModule.ConfigValidator.formatReport(results);
 }
 
 /**
@@ -182,14 +216,21 @@ export function buildCommandHandler(
      * Returns all configured bank names from the live config.
      * @returns Array of bank name strings.
      */
-    getBankNames: () => Object.keys(loadFullConfig()?.banks ?? {}),
+    getBankNames: () => {
+      const cfg = loadFullConfig();
+      if (!cfg.success) {
+        LOGGER.warn(`getBankNames: config load failed — ${cfg.message}`);
+        return [];
+      }
+      return Object.keys(cfg.data.banks);
+    },
     /**
      * Delegates scan menu display to the notifier.
      * @param banks - Bank names for the inline keyboard.
      * @returns Promise resolving when the menu is sent.
      */
-    sendScanMenu: (banks) => notifier.sendScanMenu(banks),
-    logDir: logConfig?.logDir,
+    sendScanMenu: async (banks) => { await notifier.sendScanMenu(banks); return succeed({ status: 'menu-sent' }); },
+    logDir: LOG_CONFIG?.logDir,
   });
 }
 
@@ -200,20 +241,21 @@ export function buildCommandHandler(
  * @returns The configured ImportMediator.
  */
 async function createHandlerAndPoller(
-  telegram: TelegramConfig, config: ImporterConfig | null
+  telegram: ITelegramConfig, config: IImporterConfig
 ): Promise<ImportMediator> {
   const notifier = new TelegramNotifier(telegram);
   const extras = buildExtraCommands(config);
   logCommandCount(extras);
   await notifier.registerCommands(extras);
-  const mediator = createMediator(notifier);
+  const notifierProcedure = succeed(notifier);
+  const mediator = createMediator(notifierProcedure);
   const handler = buildCommandHandler(notifier, mediator);
   const poller = new TelegramPoller(
     telegram.botToken, telegram.chatId, (text) => handler.handle(text)
   );
   mediator.setPoller(poller);
   poller.start().catch((err: unknown) => {
-    logger.error(`Telegram command listener crashed: ${errorMessage(err)}`);
+    LOGGER.error(`Telegram command listener crashed: ${errorMessage(err)}`);
   });
   return mediator;
 }
@@ -221,17 +263,20 @@ async function createHandlerAndPoller(
 /**
  * Starts the Telegram command listener when listenForCommands is enabled in config.
  * Errors are caught and logged so the scheduler continues in cron-only mode.
- * @returns The ImportMediator if Telegram commands are enabled, or null otherwise.
+ * @returns Procedure with the ImportMediator, or failure if not enabled.
  */
-async function startTelegramCommands(): Promise<ImportMediator | null> {
-  const config = loadFullConfig();
-  const telegram = config?.notifications?.enabled ? config.notifications.telegram : null;
-  if (!telegram?.listenForCommands) return null;
+async function startTelegramCommands(): Promise<Procedure<ImportMediator>> {
+  const configResult = loadFullConfig();
+  if (isFail(configResult)) return fail('Config not loaded');
+  const config = configResult.data;
+  const tg = config.notifications?.enabled ? config.notifications.telegram : void 0;
+  if (!tg?.listenForCommands) return fail('Telegram commands not enabled');
   try {
-    return await createHandlerAndPoller(telegram, config);
-  } catch (error: unknown) {
-    logger.error(`⚠️  Failed to start Telegram commands: ${errorMessage(error)}`);
-    return null;
+    const mediator = await createHandlerAndPoller(tg, config);
+    return succeed(mediator);
+  } catch (error) {
+    LOGGER.error(`⚠️  Failed to start Telegram commands: ${errorMessage(error)}`);
+    return fail('Telegram command startup failed', { error: error as Error });
   }
 }
 
@@ -241,14 +286,15 @@ async function startTelegramCommands(): Promise<ImportMediator | null> {
  * @returns Array of extra command+description objects to register with Telegram.
  */
 export function buildExtraCommands(
-  config: ImporterConfig | null
-): Array<{ command: string; description: string }> {
-  const extras: Array<{ command: string; description: string }> = [
+  config: IImporterConfig
+): { command: string; description: string }[] {
+  const extras: { command: string; description: string }[] = [
     { command: 'retry', description: 'Re-import only last failed banks' },
     { command: 'check_config', description: 'Check configuration (offline + online)' },
     { command: 'preview', description: 'Dry run: scrape banks without importing' },
   ];
-  if ((config?.spendingWatch?.length ?? 0) > 0) {
+  const watchLen = config.spendingWatch?.length ?? 0;
+  if (watchLen > 0) {
     extras.push({ command: 'watch', description: 'Check spending watch rules' });
   }
   return extras;
@@ -260,14 +306,16 @@ export function buildExtraCommands(
  * Validates the cron schedule and logs the next scheduled run time.
  * Exits the process with code 1 if the expression is invalid.
  * @param schedule - Cron expression string to validate.
+ * @returns A successful Procedure, or exits the process on invalid schedule.
  */
-function validateSchedule(schedule: string): void {
+function validateSchedule(schedule: string): IProcedureSuccess<{ status: string }> {
   try {
     const interval = CronExpressionParser.parse(schedule, { tz: process.env.TZ || 'UTC' });
-    logger.info(`📅 Next scheduled run: ${interval.next().toString()}`);
+    LOGGER.info(`📅 Next scheduled run: ${interval.next().toString()}`);
+    return succeed({ status: 'valid' });
   } catch (err: unknown) {
-    logger.error(`❌ Invalid SCHEDULE format: ${errorMessage(err)}`);
-    logger.error('   Example: "0 */8 * * *" (every 8 hours)');
+    LOGGER.error(`❌ Invalid SCHEDULE format: ${errorMessage(err)}`);
+    LOGGER.error('   Example: "0 */8 * * *" (every 8 hours)');
     process.exit(1);
   }
 }
@@ -278,31 +326,46 @@ const MAX_TIMEOUT_MS = 2147483647;
 /**
  * Pauses for the given duration, clamping to the max safe setTimeout value.
  * @param ms - Desired sleep duration in milliseconds.
- * @returns Promise that resolves after the (clamped) delay.
+ * @returns Procedure indicating the wait completed.
  */
-export function safeSleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, Math.min(ms, MAX_TIMEOUT_MS)));
+export async function safeSleep(ms: number): Promise<IProcedureSuccess<{ status: string }>> {
+  const clampedMs = Math.min(ms, MAX_TIMEOUT_MS);
+  const { setTimeout: waitMs } = await import('node:timers/promises');
+  await waitMs(clampedMs);
+  return succeed({ status: 'waited' });
 }
 
 /**
- * Runs the cron scheduling loop, sleeping until the next scheduled time.
+ * Executes one iteration of the cron loop: wait, then request an import.
+ * @param schedule - Cron expression defining the import frequency.
+ * @param mediator - The ImportMediator used to request imports.
+ * @returns 'continue' to re-check, 'imported' when an import was requested.
+ */
+async function executeScheduleIteration(
+  schedule: string, mediator: ImportMediator
+): Promise<string> {
+  const interval = CronExpressionParser.parse(schedule, { tz: process.env.TZ || 'UTC' });
+  const nextRun = interval.next().toDate();
+  const msUntilNext = nextRun.getTime() - Date.now();
+  const minutesUntil = Math.round(msUntilNext / 1000 / 60);
+  LOGGER.info(`⏳ Waiting until ${nextRun.toISOString()} (${String(minutesUntil)} minutes)`);
+  await safeSleep(msUntilNext);
+  if (Date.now() < nextRun.getTime()) return 'continue';
+  mediator.requestImport({ source: 'cron' });
+  return 'imported';
+}
+
+/**
+ * Runs the cron scheduling loop iteratively to avoid unbounded promise chains.
  * @param schedule - Cron expression defining the import frequency.
  * @param mediator - The ImportMediator used to request imports.
  * @returns Promise that never resolves (runs forever until the process exits).
  */
 async function scheduleLoop(schedule: string, mediator: ImportMediator): Promise<never> {
-  while (true) {
-    try {
-      const interval = CronExpressionParser.parse(schedule, { tz: process.env.TZ || 'UTC' });
-      const nextRun = interval.next().toDate();
-      const msUntilNext = nextRun.getTime() - Date.now();
-      const minutesUntil = Math.round(msUntilNext / 1000 / 60);
-      logger.info(`⏳ Waiting until ${nextRun.toISOString()} (${minutesUntil} minutes)`);
-      await safeSleep(msUntilNext);
-      if (Date.now() < nextRun.getTime()) continue; // Woke early, re-check
-      mediator.requestImport({ source: 'cron' });
-    } catch (err: unknown) {
-      logger.error(`❌ Scheduler error: ${errorMessage(err)}`);
+  for (;;) {
+    try { await executeScheduleIteration(schedule, mediator); }
+    catch (err: unknown) {
+      LOGGER.error(`❌ Scheduler error: ${errorMessage(err)}`);
       await safeSleep(60000);
     }
   }
@@ -310,12 +373,15 @@ async function scheduleLoop(schedule: string, mediator: ImportMediator): Promise
 
 /**
  * Scheduler entry point: starts Telegram commands and either runs once or enters cron loop.
+ * @returns Procedure indicating the scheduler result (never returns in scheduled mode).
  */
-async function main(): Promise<void> {
-  const mediator = await startTelegramCommands() ?? createMediator(null);
+async function main(): Promise<Procedure<{ status: string }>> {
+  const tgResult = await startTelegramCommands();
+  const noTelegramNotifier = fail('telegram not configured');
+  const mediator = isFail(tgResult) ? createMediator(noTelegramNotifier) : tgResult.data;
   const schedule = process.env.SCHEDULE;
   if (!schedule) {
-    logger.info('📝 Running once (no SCHEDULE set)');
+    LOGGER.info('📝 Running once (no SCHEDULE set)');
     const batchId = mediator.requestImport({ source: 'cron' });
     if (batchId) {
       const result = await mediator.waitForBatch(batchId);
@@ -323,10 +389,11 @@ async function main(): Promise<void> {
     }
     process.exit(0);
   }
-  logger.info(`⏰ Scheduled mode enabled: ${schedule}`);
-  logger.info('💡 Import will run according to cron schedule\n');
+  LOGGER.info(`⏰ Scheduled mode enabled: ${schedule}`);
+  LOGGER.info('💡 Import will run according to cron schedule\n');
   validateSchedule(schedule);
   await scheduleLoop(schedule, mediator);
+  return succeed({ status: 'completed' });
 }
 
 // Run only when executed directly (not when imported by tests)
@@ -334,7 +401,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   try {
     await main();
   } catch (err: unknown) {
-    logger.error(`❌ Fatal error: ${errorMessage(err)}`);
+    LOGGER.error(`❌ Fatal error: ${errorMessage(err)}`);
     process.exit(1);
   }
 }

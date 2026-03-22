@@ -10,30 +10,31 @@ const DEFAULT_MAX_SIZE = 0;
 const MAX_ALLOWED_SIZE = 500;
 
 /** O(1) circular ring buffer for storing recent log entries. */
-export class LogBuffer {
-  private entries: string[];
-  private writeIndex = 0;
-  private count = 0;
-  private readonly maxSize: number;
+export default class LogBuffer {
+  private _entries: string[];
+  private _writeIndex = 0;
+  private _count = 0;
+  private readonly _maxSize: number;
 
   /**
    * Creates a LogBuffer with the given maximum capacity.
    * @param maxSize - Maximum entries to retain; 0 disables buffering.
    */
   constructor(maxSize?: number) {
-    this.maxSize = Math.max(0, Math.min(maxSize ?? DEFAULT_MAX_SIZE, MAX_ALLOWED_SIZE));
-    this.entries = this.maxSize > 0 ? new Array<string>(this.maxSize) : [];
+    const clampedSize = Math.min(maxSize ?? DEFAULT_MAX_SIZE, MAX_ALLOWED_SIZE);
+    this._maxSize = Math.max(0, clampedSize);
+    this._entries = this._maxSize > 0 ? new Array<string>(this._maxSize) : [];
   }
 
   /**
    * Appends a log line to the buffer, evicting the oldest entry when full.
    * @param line - The log line string to store.
    */
-  add(line: string): void {
-    if (this.maxSize === 0) return;
-    this.entries[this.writeIndex] = line;
-    this.writeIndex = (this.writeIndex + 1) % this.maxSize;
-    if (this.count < this.maxSize) this.count++;
+  public add(line: string): void {
+    if (this._maxSize === 0) return;
+    this._entries[this._writeIndex] = line;
+    this._writeIndex = (this._writeIndex + 1) % this._maxSize;
+    if (this._count < this._maxSize) this._count++;
   }
 
   /**
@@ -41,10 +42,10 @@ export class LogBuffer {
    * @param count - Maximum number of entries to return; defaults to all stored entries.
    * @returns Array of log line strings, oldest first.
    */
-  getRecent(count?: number): string[] {
-    const n = Math.min(count ?? this.count, this.count);
+  public getRecent(count?: number): string[] {
+    const n = Math.min(count ?? this._count, this._count);
     if (n === 0) return [];
-    const start = (this.writeIndex - n + this.maxSize) % this.maxSize;
+    const start = (this._writeIndex - n + this._maxSize) % this._maxSize;
     return this.readFromIndex(start, n);
   }
 
@@ -52,24 +53,24 @@ export class LogBuffer {
    * Returns the current number of stored entries.
    * @returns Number of entries currently in the buffer.
    */
-  size(): number {
-    return this.count;
+  public size(): number {
+    return this._count;
   }
 
   /** Resets the buffer to an empty state, discarding all stored entries. */
-  clear(): void {
-    if (this.maxSize === 0) return;
-    this.entries = new Array<string>(this.maxSize);
-    this.writeIndex = 0;
-    this.count = 0;
+  public clear(): void {
+    if (this._maxSize === 0) return;
+    this._entries = new Array<string>(this._maxSize);
+    this._writeIndex = 0;
+    this._count = 0;
   }
 
   /**
    * Indicates whether buffering is active (maxSize > 0).
    * @returns True when the buffer has a non-zero capacity.
    */
-  isEnabled(): boolean {
-    return this.maxSize > 0;
+  public isEnabled(): boolean {
+    return this._maxSize > 0;
   }
 
   /**
@@ -81,7 +82,7 @@ export class LogBuffer {
   private readFromIndex(start: number, n: number): string[] {
     const result: string[] = [];
     for (let i = 0; i < n; i++) {
-      result.push(this.entries[(start + i) % this.maxSize]);
+      result.push(this._entries[(start + i) % this._maxSize]);
     }
     return result;
   }

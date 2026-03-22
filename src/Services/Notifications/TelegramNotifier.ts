@@ -9,14 +9,16 @@
  *   "emoji"    (C) - Emoji indicators for deposits/payments
  */
 
+import { NetworkError, TimeoutError } from '../../Errors/ErrorTypes.js';
 import type {
-  TelegramConfig, MessageFormat, ShowTransactions, TelegramApiResponse
-} from '../../Types/Index.js';
+ITelegramApiResponse,
+  ITelegramConfig,MessageFormat, Procedure,ShowTransactions } from '../../Types/Index.js';
+import { fail, isFail, succeed } from '../../Types/Index.js';
 import type {
-  ImportSummary
+  IImportSummary
 } from '../MetricsService.js';
 import type { INotifier } from './INotifier.js';
-import { formatSummaryMessage, escapeHtml } from './TelegramFormatter.js';
+import { escapeHtml,formatSummaryMessage } from './TelegramFormatter.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const MAX_MESSAGE_LENGTH = 4096;
@@ -24,6 +26,12 @@ const DEFAULT_MAX_TRANSACTIONS = 5;
 const MAX_TRANSACTIONS_LIMIT = 25;
 const COMMAND_PATTERN = /^[a-z0-9_]{1,32}$/;
 const MAX_DESCRIPTION_LENGTH = 256;
+
+/** Poll result from a single getUpdates call. */
+interface IPollResult {
+  updates: ITelegramApiResponse;
+  nextOffset: number;
+}
 
 /**
  * Validates a bot command name and description against Telegram Bot API limits.
@@ -38,43 +46,45 @@ function isValidBotCommand(command: string, description: string): boolean {
 }
 
 /** Telegram notification channel — formats and sends import summaries via the Bot API. */
-export class TelegramNotifier implements INotifier {
-  private readonly botToken: string;
-  private readonly chatId: string;
-  private readonly format: MessageFormat;
-  private readonly showTransactions: ShowTransactions;
-  private readonly maxTransactions: number;
+export default class TelegramNotifier implements INotifier {
+  private readonly _botToken: string;
+  private readonly _chatId: string;
+  private readonly _format: MessageFormat;
+  private readonly _showTransactions: ShowTransactions;
+  private readonly _maxTransactions: number;
 
   /**
    * Creates a TelegramNotifier from the given config.
    * @param config - Telegram bot token, chat ID, message format, and transaction display mode.
    * @param maxTransactions - Override for the max transactions shown per account.
    */
-  constructor(config: TelegramConfig, maxTransactions?: number) {
-    this.botToken = config.botToken;
-    this.chatId = config.chatId;
-    this.format = config.messageFormat || 'summary';
-    this.showTransactions = config.showTransactions || 'new';
-    this.maxTransactions = Math.min(
-      Math.max(maxTransactions ?? DEFAULT_MAX_TRANSACTIONS, 1),
-      MAX_TRANSACTIONS_LIMIT
-    );
+  constructor(config: ITelegramConfig, maxTransactions?: number) {
+    this._botToken = config.botToken;
+    this._chatId = config.chatId;
+    this._format = config.messageFormat || 'summary';
+    this._showTransactions = config.showTransactions || 'new';
+    const clampedMin = Math.max(maxTransactions ?? DEFAULT_MAX_TRANSACTIONS, 1);
+    this._maxTransactions = Math.min(clampedMin, MAX_TRANSACTIONS_LIMIT);
   }
 
   /**
    * Formats and sends an import summary message to the configured Telegram chat.
    * @param summary - The ImportSummary to format and send.
    */
-  async sendSummary(summary: ImportSummary): Promise<void> {
-    const opts = { showTransactions: this.showTransactions, maxTransactions: this.maxTransactions };
-    await this.send(formatSummaryMessage(summary, this.format, opts));
+  public async sendSummary(summary: IImportSummary): Promise<void> {
+    const opts = {
+      showTransactions: this._showTransactions,
+      maxTransactions: this._maxTransactions,
+    };
+    const formatted = formatSummaryMessage(summary, this._format, opts);
+    await this.send(formatted);
   }
 
   /**
    * Sends a plain HTML text message to the configured Telegram chat.
    * @param text - The HTML-formatted text to send.
    */
-  async sendMessage(text: string): Promise<void> {
+  public async sendMessage(text: string): Promise<void> {
     await this.send(text);
   }
 
@@ -82,26 +92,30 @@ export class TelegramNotifier implements INotifier {
    * Sends an error notification with a fixed header to the configured Telegram chat.
    * @param error - The error message string to include.
    */
-  async sendError(error: string): Promise<void> {
-    await this.send(['🚨 <b>Import Failed</b>', '', escapeHtml(error)].join('\n'));
+  public async sendError(error: string): Promise<void> {
+    const escaped = escapeHtml(error);
+    const errorMessage = ['🚨 <b>Import Failed</b>', '', escaped].join('\n');
+    await this.send(errorMessage);
   }
 
   /**
    * Sends an inline keyboard menu with a button per bank and an "All banks" button.
    * @param banks - List of bank names to display as inline keyboard buttons.
    */
-  async sendScanMenu(banks: string[]): Promise<void> {
+  public async sendScanMenu(banks: string[]): Promise<void> {
     const allRow = [{ text: '🏦 All banks', callback_data: 'scan_all' }];
-    const bankRows: Array<Array<{ text: string; callback_data: string }>> = [];
-    for (let i = 0; i < banks.length; i += 2) {
-      bankRows.push(banks.slice(i, i + 2).map(b => ({ text: b, callback_data: `scan:${b}` })));
+    const bankRows: { text: string; callback_data: string }[][] = [];
+    for (let idx = 0; idx < banks.length; idx += 2) {
+      const slice = banks.slice(idx, idx + 2);
+      const row = slice.map(bankName => ({ text: bankName, callback_data: `scan:${bankName}` }));
+      bankRows.push(row);
     }
-    const url = `${TELEGRAM_API}/bot${this.botToken}/sendMessage`;
+    const url = `${TELEGRAM_API}/bot${this._botToken}/sendMessage`;
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: this.chatId,
+        chat_id: this._chatId,
         text: '🏦 <b>Select bank to import:</b>',
         parse_mode: 'HTML',
         reply_markup: { inline_keyboard: [allRow, ...bankRows] },
@@ -115,76 +129,112 @@ export class TelegramNotifier implements INotifier {
    * @param timeoutMs - Maximum milliseconds to wait before throwing a timeout error.
    * @returns The text content of the first valid reply message.
    */
-  async waitForReply(prompt: string, timeoutMs: number): Promise<string> {
-    let offset = await this.getLatestOffset();
+  public async waitForReply(prompt: string, timeoutMs: number): Promise<string> {
+    const offset = await this.getLatestOffset();
     await this.send(prompt);
     const sentAt = Math.floor(Date.now() / 1000);
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < timeoutMs) {
-      const result = await this.pollUpdates(offset);
-      if (!result) continue;
-      const reply = this.findReplyMessage(result.updates, sentAt);
-      offset = result.nextOffset;
-      if (!reply) continue;
-      if (!this.looksLikeOtp(reply)) {
-        await this.sendMessage('⚠️ Please send the numeric OTP code from your SMS (4–8 digits).');
-        continue;
-      }
-      await this.confirmOffset(offset);
-      return reply;
-    }
-    throw new Error('2FA timeout: no reply received');
+    const deadline = Date.now() + timeoutMs;
+    return this.pollForReply(offset, sentAt, deadline);
   }
 
   /**
    * Registers the bot's command list with Telegram via setMyCommands.
    * @param extras - Additional commands to include beyond the built-in set.
+   * @returns Procedure indicating commands were registered.
    */
-  async registerCommands(
-    extras: Array<{ command: string; description: string }> = []
-  ): Promise<void> {
+  public async registerCommands(
+    extras: { command: string; description: string }[] = []
+  ): Promise<Procedure<{ status: string }>> {
     const commands = [
       { command: 'scan', description: 'Run bank import now' },
       { command: 'status', description: 'Show last run info + history' },
-      ...extras.filter(c => isValidBotCommand(c.command, c.description)),
+      ...extras.filter(cmd => isValidBotCommand(cmd.command, cmd.description)),
       { command: 'logs', description: 'Show recent log entries' },
       { command: 'help', description: 'List available commands' },
     ];
-    await this.sendBotCommands(commands);
+    try {
+      await this.sendBotCommands(commands);
+      return succeed({ status: 'commands-registered' });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return fail(`Failed to register commands: ${msg}`);
+    }
+  }
+
+  /**
+   * Iteratively polls for an OTP reply until the deadline expires.
+   * @param offset - Current Telegram update offset.
+   * @param sentAt - Unix timestamp of when the prompt was sent.
+   * @param deadline - Absolute time in ms after which to throw TimeoutError.
+   * @returns The OTP reply text.
+   */
+  private async pollForReply(offset: number, sentAt: number, deadline: number): Promise<string> {
+    let currentOffset = offset;
+    for (;;) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new TimeoutError('2FA reply wait', 0);
+      const iterResult = await this.processOneReplyPoll(currentOffset, sentAt);
+      if (isFail(iterResult)) {
+        await new Promise<void>(r => { globalThis.setTimeout(r, 2000); });
+        continue;
+      }
+      currentOffset = iterResult.data.nextOffset;
+      if (iterResult.data.reply) return iterResult.data.reply;
+    }
+  }
+
+  /**
+   * Polls once for updates and checks for a valid OTP reply.
+   * @param offset - Current update offset for getUpdates.
+   * @param sentAt - Unix timestamp of when the prompt was sent.
+   * @returns Procedure with the next offset and optional reply text.
+   */
+  private async processOneReplyPoll(
+    offset: number, sentAt: number
+  ): Promise<Procedure<{ nextOffset: number; reply: string | false }>> {
+    const pollResult = await this.pollUpdates(offset);
+    if (isFail(pollResult)) return fail('poll failed');
+    const reply = this.findReplyMessage(pollResult.data.updates, sentAt);
+    const nextOffset = pollResult.data.nextOffset;
+    if (isFail(reply)) return succeed({ nextOffset, reply: false as const });
+    if (!TelegramNotifier.looksLikeOtp(reply.data)) {
+      await this.sendMessage('⚠️ Please send the numeric OTP code from your SMS (4–8 digits).');
+      return succeed({ nextOffset, reply: false as const });
+    }
+    await this.confirmOffset(nextOffset);
+    return succeed({ nextOffset, reply: reply.data });
   }
 
   /**
    * Fetches pending updates from Telegram starting at the given offset.
    * @param offset - The update_id offset to pass to getUpdates.
-   * @returns Object with updates and the next offset, or null on HTTP failure.
+   * @returns Procedure with updates and the next offset, or failure on HTTP error.
    */
-  private async pollUpdates(
-    offset: number
-  ): Promise<{ updates: TelegramApiResponse; nextOffset: number } | null> {
-    const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=${offset}&timeout=5`;
+  private async pollUpdates(offset: number): Promise<Procedure<IPollResult>> {
+    const url = `${TELEGRAM_API}/bot${this._botToken}` +
+      `/getUpdates?offset=${String(offset)}&timeout=5`;
     const response = await fetch(url);
-    if (!response.ok) return null;
-    const data = await response.json() as TelegramApiResponse;
+    if (!response.ok) return fail(`getUpdates failed: ${String(response.status)}`);
+    const data = await response.json() as ITelegramApiResponse;
     const last = data.result?.at(-1);
     const lastId = last ? last.update_id : offset - 1;
-    return { updates: data, nextOffset: lastId + 1 };
+    return succeed({ updates: data, nextOffset: lastId + 1 });
   }
 
   /**
    * Searches updates for the first non-command reply from the configured chat after the prompt.
-   * @param data - The TelegramApiResponse to search through.
+   * @param data - The ITelegramApiResponse to search through.
    * @param sentAt - Unix timestamp of when the prompt was sent; earlier messages are skipped.
-   * @returns The message text of the first valid reply, or null if none found.
+   * @returns Procedure with the message text, or failure if no valid reply found.
    */
-  private findReplyMessage(data: TelegramApiResponse, sentAt: number): string | null {
+  private findReplyMessage(data: ITelegramApiResponse, sentAt: number): Procedure<string> {
     for (const update of data.result ?? []) {
       const msg = update.message;
-      if (!msg?.text || String(msg.chat.id) !== this.chatId) continue;
+      if (!msg?.text || String(msg.chat.id) !== this._chatId) continue;
       if (msg.date < sentAt || msg.text.startsWith('/')) continue;
-      return msg.text;
+      return succeed(msg.text);
     }
-    return null;
+    return fail('no reply found');
   }
 
   /**
@@ -192,10 +242,10 @@ export class TelegramNotifier implements INotifier {
    * @returns The next offset (latest update_id + 1), or 0 on failure.
    */
   private async getLatestOffset(): Promise<number> {
-    const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=-1`;
+    const url = `${TELEGRAM_API}/bot${this._botToken}/getUpdates?offset=-1`;
     const response = await fetch(url);
     if (!response.ok) return 0;
-    const data = await response.json() as TelegramApiResponse;
+    const data = await response.json() as ITelegramApiResponse;
     const lastResult = data.result?.at(-1);
     return lastResult ? lastResult.update_id + 1 : 0;
   }
@@ -207,7 +257,8 @@ export class TelegramNotifier implements INotifier {
    */
   private async confirmOffset(offset: number): Promise<void> {
     try {
-      const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=${offset}&timeout=0`;
+      const url = `${TELEGRAM_API}/bot${this._botToken}` +
+        `/getUpdates?offset=${String(offset)}&timeout=0`;
       await fetch(url);
     } catch {
       // Non-critical — getLatestOffset() will still work
@@ -219,7 +270,7 @@ export class TelegramNotifier implements INotifier {
    * @param text - The Telegram reply text to test.
    * @returns True if the text looks like an OTP code.
    */
-  private looksLikeOtp(text: string): boolean {
+  private static looksLikeOtp(text: string): boolean {
     const digits = text.replaceAll(/\D/g, '');
     return digits.length >= 4 && digits.length <= 8;
   }
@@ -229,9 +280,9 @@ export class TelegramNotifier implements INotifier {
    * @param commands - Array of command+description objects to register.
    */
   private async sendBotCommands(
-    commands: Array<{ command: string; description: string }>
+    commands: { command: string; description: string }[]
   ): Promise<void> {
-    const url = `${TELEGRAM_API}/bot${this.botToken}/setMyCommands`;
+    const url = `${TELEGRAM_API}/bot${this._botToken}/setMyCommands`;
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -239,7 +290,7 @@ export class TelegramNotifier implements INotifier {
     });
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`setMyCommands failed: ${response.status} ${body}`);
+      throw new NetworkError(`setMyCommands failed: ${String(response.status)} ${body}`);
     }
   }
 
@@ -248,10 +299,12 @@ export class TelegramNotifier implements INotifier {
    * @param text - The full message text that may exceed the limit.
    * @returns Safely truncated message with all HTML tags properly closed.
    */
-  private truncateMessage(text: string): string {
+  private static truncateMessage(text: string): string {
     if (text.length <= MAX_MESSAGE_LENGTH) return text;
-    const cut = this.trimPartialTag(text.slice(0, MAX_MESSAGE_LENGTH - 30));
-    return this.closeUnclosedTags(`${cut}\n\n... (truncated)`);
+    const trimmed = text.slice(0, MAX_MESSAGE_LENGTH - 30);
+    const cut = TelegramNotifier.trimPartialTag(trimmed);
+    const withEllipsis = `${cut}\n\n... (truncated)`;
+    return TelegramNotifier.closeUnclosedTags(withEllipsis);
   }
 
   /**
@@ -259,7 +312,7 @@ export class TelegramNotifier implements INotifier {
    * @param text - The truncated string that may end mid-tag.
    * @returns String with any partial opening tag removed.
    */
-  private trimPartialTag(text: string): string {
+  private static trimPartialTag(text: string): string {
     const lastOpen = text.lastIndexOf('<');
     const lastClose = text.lastIndexOf('>');
     return lastOpen > lastClose ? text.slice(0, lastOpen) : text;
@@ -270,7 +323,7 @@ export class TelegramNotifier implements INotifier {
    * @param text - The potentially truncated HTML string to fix.
    * @returns String with all unclosed HTML tags properly closed.
    */
-  private closeUnclosedTags(text: string): string {
+  private static closeUnclosedTags(text: string): string {
     const openTags: string[] = [];
     const tagRegex = /<(\/?)(\w+)[^>]*>/g;
     let match: RegExpExecArray | null;
@@ -278,7 +331,7 @@ export class TelegramNotifier implements INotifier {
       if (match[1] === '/') { if (openTags.length > 0) openTags.pop(); }
       else { openTags.push(match[2]); }
     }
-    return text + [...openTags].reverse().map((t) => `</${t}>`).join('');
+    return text + [...openTags].reverse().map((tag) => `</${tag}>`).join('');
   }
 
   /**
@@ -286,17 +339,18 @@ export class TelegramNotifier implements INotifier {
    * @param text - HTML-formatted message text to send (will be truncated if needed).
    */
   private async send(text: string): Promise<void> {
-    const url = `${TELEGRAM_API}/bot${this.botToken}/sendMessage`;
+    const url = `${TELEGRAM_API}/bot${this._botToken}/sendMessage`;
+    const truncated = TelegramNotifier.truncateMessage(text);
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        chat_id: this.chatId, text: this.truncateMessage(text), parse_mode: 'HTML'
+        chat_id: this._chatId, text: truncated, parse_mode: 'HTML'
       })
     });
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`Telegram API error ${response.status}: ${body}`);
+      throw new NetworkError(`Telegram API error ${String(response.status)}: ${body}`);
     }
   }
 }

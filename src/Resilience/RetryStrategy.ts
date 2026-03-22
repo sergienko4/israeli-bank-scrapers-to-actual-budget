@@ -5,22 +5,24 @@
 
 import { ShutdownError } from '../Errors/ErrorTypes.js';
 import { getLogger } from '../Logger/Index.js';
+import type { Procedure } from '../Types/Index.js';
+import { succeed } from '../Types/Index.js';
 
 export interface IRetryStrategy {
   execute<T>(fn: () => Promise<T>, operationName: string): Promise<T>;
 }
 
-export interface RetryContext {
+export interface IRetryContext {
   attempt: number;
   maxAttempts: number;
   backoffMs: number;
   error: Error;
 }
 
-export interface RetryOptions {
+export interface IRetryOptions {
   maxAttempts: number;
   initialBackoffMs: number;
-  onRetry?: (ctx: RetryContext) => void;
+  onRetry?: (ctx: IRetryContext) => Procedure<{ status: string }>;
   shouldShutdown?: () => boolean;
   shouldRetry?: (error: Error) => boolean;
 }
@@ -31,7 +33,7 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
    * Creates an ExponentialBackoffRetry with the given options.
    * @param options - Retry configuration including attempts, backoff, and hooks.
    */
-  constructor(private readonly options: RetryOptions) {}
+  constructor(private readonly options: IRetryOptions) {}
 
   /**
    * Executes the given function, retrying on failure with exponential backoff.
@@ -39,24 +41,57 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
    * @param operationName - Human-readable label used in log messages.
    * @returns The resolved value from fn on success.
    */
-  async execute<T>(fn: () => Promise<T>, operationName: string): Promise<T> {
-    let lastError!: Error;
-    for (let attempt = 1; attempt <= this.options.maxAttempts; attempt++) {
-      if (this.options.shouldShutdown?.()) throw new ShutdownError('cancelled due to shutdown');
-      try {
-        getLogger().info(`  🔄 Attempt ${attempt}/${this.options.maxAttempts}...`);
-        return await fn();
-      } catch (error) {
-        lastError = error as Error;
-        if (attempt >= this.options.maxAttempts) break;
-        if (this.options.shouldRetry && !this.options.shouldRetry(lastError)) throw lastError;
-        await this.handleRetryBackoff(attempt, operationName, lastError);
+  public async execute<T>(fn: () => Promise<T>, operationName: string): Promise<T> {
+    return this.executeAttempt(fn, operationName, 1);
+  }
+
+  /**
+   * Iteratively attempts to execute the function, retrying on failure.
+   * @param fn - Async function to execute.
+   * @param operationName - Human-readable label for logs.
+   * @param startAttempt - Initial attempt number (1-based).
+   * @returns The resolved value from fn on success.
+   */
+  private async executeAttempt<T>(
+    fn: () => Promise<T>, operationName: string, startAttempt: number
+  ): Promise<T> {
+    for (let attempt = startAttempt; ; attempt++) {
+      const result = await this.tryOneAttempt(fn, operationName, attempt);
+      if (result.success) return result.data;
+      if (attempt >= this.options.maxAttempts) {
+        throw new ShutdownError(
+          `${operationName} failed after ${String(this.options.maxAttempts)} attempts. ` +
+          `Last error: ${result.error.message}`
+        );
       }
     }
-    throw new Error(
-      `${operationName} failed after ${this.options.maxAttempts} attempts. ` +
-      `Last error: ${lastError.message}`
-    );
+  }
+
+  /**
+   * Executes a single attempt and handles failure with backoff if not the last attempt.
+   * @param fn - Async function to execute.
+   * @param operationName - Label for log messages.
+   * @param attempt - Current attempt number (1-based).
+   * @returns Object with success flag, data on success, or error on failure.
+   */
+  private async tryOneAttempt<T>(
+    fn: () => Promise<T>, operationName: string, attempt: number
+  ): Promise<
+    { success: true; data: T; error?: never } |
+    { success: false; data?: never; error: Error }
+  > {
+    if (this.options.shouldShutdown?.()) throw new ShutdownError('cancelled due to shutdown');
+    try {
+      getLogger().info(`  🔄 Attempt ${String(attempt)}/${String(this.options.maxAttempts)}...`);
+      const data = await fn();
+      return { success: true, data };
+    } catch (error: unknown) {
+      const lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt >= this.options.maxAttempts) return { success: false, error: lastError };
+      if (this.options.shouldRetry && !this.options.shouldRetry(lastError)) throw lastError;
+      await this.handleRetryBackoff(attempt, operationName, lastError);
+      return { success: false, error: lastError };
+    }
   }
 
   /**
@@ -64,18 +99,20 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
    * @param attempt - Current attempt number (1-based).
    * @param operationName - Label for log messages.
    * @param error - The error from the failed attempt.
+   * @returns Procedure indicating the backoff delay has completed.
    */
   private async handleRetryBackoff(
     attempt: number, operationName: string, error: Error
-  ): Promise<void> {
+  ): Promise<Procedure<{ status: string }>> {
     const backoffMs = this.options.initialBackoffMs * 2 ** (attempt - 1);
     getLogger().warn(
       `  ⚠️  ${operationName} failed ` +
-      `(attempt ${attempt}/${this.options.maxAttempts}): ${error.message}`
+      `(attempt ${String(attempt)}/${String(this.options.maxAttempts)}): ${error.message}`
     );
-    getLogger().info(`  ⏳ Retrying in ${backoffMs / 1000}s...`);
+    getLogger().info(`  ⏳ Retrying in ${String(backoffMs / 1000)}s...`);
     this.options.onRetry?.({ attempt, maxAttempts: this.options.maxAttempts, backoffMs, error });
-    await this.sleep(backoffMs);
+    await ExponentialBackoffRetry.sleep(backoffMs);
+    return succeed({ status: 'backoff-complete' });
   }
 
   /**
@@ -83,7 +120,10 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
    * @param ms - Duration in milliseconds to wait.
    * @returns A promise that resolves after the specified delay.
    */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  private static sleep(ms: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      const timer = ms;
+      globalThis.setTimeout(resolve, timer);
+    });
   }
 }

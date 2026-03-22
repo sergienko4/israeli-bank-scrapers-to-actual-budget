@@ -3,14 +3,14 @@
  * All values are deterministic for predictable assertions.
  */
 
-import { ImportSummary, BankMetrics, AccountMetrics } from '../../../src/Services/MetricsService.js';
+import { IImportSummary, IBankMetrics, IAccountMetrics } from '../../../src/Services/MetricsService.js';
 import { TEST_CREDENTIAL } from '../../helpers/testCredentials.js';
 
 const TEST_BANK_NAME = 'e2eTestBank';
 const TEST_ACCOUNT_NUMBER = 'E2E-001';
 
-export function createTestSummary(overrides?: Partial<ImportSummary>): ImportSummary {
-  const accounts: AccountMetrics[] = [{
+export function createTestSummary(overrides?: Partial<IImportSummary>): IImportSummary {
+  const accounts: IAccountMetrics[] = [{
     accountNumber: TEST_ACCOUNT_NUMBER,
     balance: 10050,
     currency: 'ILS',
@@ -23,7 +23,7 @@ export function createTestSummary(overrides?: Partial<ImportSummary>): ImportSum
     ],
   }];
 
-  const banks: BankMetrics[] = [{
+  const banks: IBankMetrics[] = [{
     bankName: TEST_BANK_NAME,
     startTime: Date.now() - 8000,
     endTime: Date.now(),

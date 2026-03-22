@@ -6,7 +6,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-interface PinoEntry {
+interface IPinoEntry {
   time: number;
   level: number;
   msg: string;
@@ -20,7 +20,7 @@ const LEVEL_LABELS: Record<number, string> = {
 };
 
 /** Reads formatted log entries from rotating NDJSON log files. */
-export class LogFileReader {
+export default class LogFileReader {
   /**
    * Creates a LogFileReader targeting the given log directory.
    * @param logDir - Path to the directory containing rotating log files.
@@ -32,12 +32,12 @@ export class LogFileReader {
    * @param count - Maximum number of entries to return.
    * @returns Formatted log lines, oldest first.
    */
-  getRecent(count: number): string[] {
+  public getRecent(count: number): string[] {
     const files = this.sortedFiles();
     const result: string[] = [];
     for (const file of files) {
       if (result.length >= count) break;
-      const lines = this.tailFile(file, count - result.length);
+      const lines = LogFileReader.tailFile(file, count - result.length);
       result.unshift(...lines);
     }
     return result;
@@ -62,28 +62,28 @@ export class LogFileReader {
    * @param count - Maximum number of lines to read from the tail.
    * @returns Formatted log lines, skipping unparseable entries.
    */
-  private tailFile(filePath: string, count: number): string[] {
+  private static tailFile(filePath: string, count: number): string[] {
     const raw = readFileSync(filePath, 'utf8');
     return raw.split('\n')
       .filter(l => l.trim().length > 0)
       .slice(-count)
-      .map(l => this.formatLine(l))
-      .filter((l): l is string => l !== null);
+      .map(l => LogFileReader.formatLine(l))
+      .filter((l): l is string => l !== '');
   }
 
   /**
    * Parses one NDJSON line into a human-readable [HH:MM:SS] LEVEL msg string.
    * @param json - Raw NDJSON log line to parse.
-   * @returns Formatted string, or null if the line cannot be parsed.
+   * @returns Formatted string, or empty string if the line cannot be parsed.
    */
-  private formatLine(json: string): string | null {
+  private static formatLine(json: string): string {
     try {
-      const entry = JSON.parse(json) as PinoEntry;
+      const entry = JSON.parse(json) as IPinoEntry;
       const time = new Date(entry.time).toTimeString().slice(0, 8);
       const level = LEVEL_LABELS[entry.level] ?? 'INFO ';
       return `[${time}] ${level} ${entry.msg}`;
     } catch {
-      return null;
+      return '';
     }
   }
 }

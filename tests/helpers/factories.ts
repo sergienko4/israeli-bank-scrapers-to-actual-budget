@@ -7,27 +7,28 @@
 
 import { faker } from '@faker-js/faker';
 import type {
-  BankTransaction,
-  BankConfig,
-  BankTarget,
-  ImporterConfig,
-  TelegramConfig,
-  ActualAccount,
-  TransactionRecord,
-  SpendingWatchRule,
+  IBankTransaction,
+  IBankConfig,
+  IBankTarget,
+  IImporterConfig,
+  ITelegramConfig,
+  IActualAccount,
+  ITransactionRecord,
+  ISpendingWatchRule,
 } from '../../src/Types/Index.js';
 import type {
-  ImportSummary,
-  BankMetrics,
-  AccountMetrics,
+  IImportSummary,
+  IBankMetrics,
+  IAccountMetrics,
+  IAccountTransactionsRecord,
 } from '../../src/Services/MetricsService.js';
-import type { AuditEntry } from '../../src/Services/AuditLogService.js';
+import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
 
 export function fakeUuid(): string {
   return faker.string.uuid();
 }
 
-export function fakeBankTransaction(overrides?: Partial<BankTransaction>): BankTransaction {
+export function fakeBankTransaction(overrides?: Partial<IBankTransaction>): IBankTransaction {
   const amount = faker.number.float({ min: 1, max: 5000, fractionDigits: 2 });
   return {
     date: faker.date.recent({ days: 30 }).toISOString().split('T')[0],
@@ -40,12 +41,12 @@ export function fakeBankTransaction(overrides?: Partial<BankTransaction>): BankT
 
 export function fakeBankTransactions(
   count: number,
-  overrides?: Partial<BankTransaction>,
-): BankTransaction[] {
+  overrides?: Partial<IBankTransaction>,
+): IBankTransaction[] {
   return Array.from({ length: count }, () => fakeBankTransaction(overrides));
 }
 
-export function fakeTransactionRecord(overrides?: Partial<TransactionRecord>): TransactionRecord {
+export function fakeTransactionRecord(overrides?: Partial<ITransactionRecord>): ITransactionRecord {
   return {
     date: faker.date.recent({ days: 30 }).toISOString().split('T')[0],
     description: faker.company.name(),
@@ -54,7 +55,7 @@ export function fakeTransactionRecord(overrides?: Partial<TransactionRecord>): T
   };
 }
 
-export function fakeActualAccount(overrides?: Partial<ActualAccount>): ActualAccount {
+export function fakeActualAccount(overrides?: Partial<IActualAccount>): IActualAccount {
   return {
     id: fakeUuid(),
     name: faker.company.name(),
@@ -64,7 +65,7 @@ export function fakeActualAccount(overrides?: Partial<ActualAccount>): ActualAcc
   };
 }
 
-export function fakeBankTarget(overrides?: Partial<BankTarget>): BankTarget {
+export function fakeBankTarget(overrides?: Partial<IBankTarget>): IBankTarget {
   return {
     actualAccountId: fakeUuid(),
     reconcile: false,
@@ -73,7 +74,7 @@ export function fakeBankTarget(overrides?: Partial<BankTarget>): BankTarget {
   };
 }
 
-export function fakeBankConfig(overrides?: Partial<BankConfig>): BankConfig {
+export function fakeBankConfig(overrides?: Partial<IBankConfig>): IBankConfig {
   return {
     id: faker.string.numeric(9),
     password: faker.internet.password({ length: 12 }),
@@ -84,7 +85,7 @@ export function fakeBankConfig(overrides?: Partial<BankConfig>): BankConfig {
   };
 }
 
-export function fakeImporterConfig(overrides?: Partial<ImporterConfig>): ImporterConfig {
+export function fakeImporterConfig(overrides?: Partial<IImporterConfig>): IImporterConfig {
   return {
     actual: {
       init: {
@@ -102,7 +103,7 @@ export function fakeImporterConfig(overrides?: Partial<ImporterConfig>): Importe
   };
 }
 
-export function fakeTelegramConfig(overrides?: Partial<TelegramConfig>): TelegramConfig {
+export function fakeTelegramConfig(overrides?: Partial<ITelegramConfig>): ITelegramConfig {
   const botId = faker.number.int({ min: 100000000, max: 999999999 });
   const botSecret = faker.string.alphanumeric(35);
   return {
@@ -112,7 +113,7 @@ export function fakeTelegramConfig(overrides?: Partial<TelegramConfig>): Telegra
   };
 }
 
-export function fakeAccountMetrics(overrides?: Partial<AccountMetrics>): AccountMetrics {
+export function fakeAccountMetrics(overrides?: Partial<IAccountMetrics>): IAccountMetrics {
   return {
     accountNumber: faker.string.numeric(10),
     balance: faker.number.int({ min: -100000, max: 1000000 }),
@@ -123,9 +124,22 @@ export function fakeAccountMetrics(overrides?: Partial<AccountMetrics>): Account
   };
 }
 
+export function fakeAccountTransactionsRecord(
+  overrides?: Partial<IAccountTransactionsRecord>,
+): IAccountTransactionsRecord {
+  return {
+    accountNumber: faker.string.numeric(10),
+    balance: faker.number.int({ min: -100000, max: 1000000 }),
+    currency: 'ILS',
+    newTransactions: [],
+    existingTransactions: [],
+    ...overrides,
+  };
+}
+
 const BANK_NAMES = ['discount', 'leumi', 'hapoalim', 'mizrahi', 'beinleumi', 'yahav'] as const;
 
-export function fakeBankMetrics(overrides?: Partial<BankMetrics>): BankMetrics {
+export function fakeBankMetrics(overrides?: Partial<IBankMetrics>): IBankMetrics {
   const startTime = Date.now() - faker.number.int({ min: 1000, max: 30000 });
   return {
     bankName: faker.helpers.arrayElement(BANK_NAMES),
@@ -140,7 +154,7 @@ export function fakeBankMetrics(overrides?: Partial<BankMetrics>): BankMetrics {
   };
 }
 
-export function fakeImportSummary(overrides?: Partial<ImportSummary>): ImportSummary {
+export function fakeImportSummary(overrides?: Partial<IImportSummary>): IImportSummary {
   const bank = fakeBankMetrics();
   return {
     totalBanks: 1,
@@ -169,7 +183,7 @@ export function fakeActualTransaction(
   };
 }
 
-export function fakeSpendingWatchRule(overrides?: Partial<SpendingWatchRule>): SpendingWatchRule {
+export function fakeSpendingWatchRule(overrides?: Partial<ISpendingWatchRule>): ISpendingWatchRule {
   return {
     alertFromAmount: faker.number.int({ min: 10, max: 10000 }),
     numOfDayToCount: faker.number.int({ min: 1, max: 30 }),
@@ -181,9 +195,9 @@ export function fakeSpendingWatchRule(overrides?: Partial<SpendingWatchRule>): S
  * Creates a fake audit-log entry with sensible defaults.
  * Generates a fresh timestamp per call to avoid time-sensitive flakiness.
  * @param overrides - Fields to override on the default entry.
- * @returns A merged AuditEntry object.
+ * @returns A merged IAuditEntry object.
  */
-export function fakeAuditEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
+export function fakeIAuditEntry(overrides: Partial<IAuditEntry> = {}): IAuditEntry {
   return {
     timestamp: new Date().toISOString(),
     totalBanks: 1, successfulBanks: 0, failedBanks: 1,

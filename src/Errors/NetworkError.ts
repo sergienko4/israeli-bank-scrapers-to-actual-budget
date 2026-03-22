@@ -1,5 +1,5 @@
 /** Thrown when a network request fails due to connectivity issues. */
-export class NetworkError extends Error {
+export default class NetworkError extends Error {
   /**
    * Creates a NetworkError.
    * @param message - Description of the network failure.

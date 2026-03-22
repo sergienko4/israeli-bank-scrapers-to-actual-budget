@@ -5,9 +5,7 @@
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 /** SECURITY: Never pass passwords, tokens, or OTP codes in context — exposed via /logs command */
-export interface LogContext {
-  [key: string]: unknown;
-}
+export type LogContext = Record<string, string | number | boolean>;
 
 export interface ILogger {
   debug(message: string, context?: LogContext): void;

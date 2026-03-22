@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TwoFactorService } from '../../src/Services/TwoFactorService.js';
-import { TelegramNotifier } from '../../src/Services/Notifications/TelegramNotifier.js';
+import TwoFactorService from '../../src/Services/TwoFactorService.js';
+import TelegramNotifier from '../../src/Services/Notifications/TelegramNotifier.js';
 
 describe('TwoFactorService', () => {
   let mockNotifier: Pick<TelegramNotifier, 'waitForReply' | 'sendMessage' | 'sendSummary' | 'sendError'>;

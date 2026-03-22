@@ -20,13 +20,17 @@ afterEach(() => {
 describe('Audit Log E2E', () => {
   it('creates file and persists entry on record', () => {
     const summary = createTestSummary({ totalTransactions: 10 });
-    service.record(summary);
+    const recordResult = service.record(summary);
+    expect(recordResult.success).toBe(true);
 
     expect(existsSync(TEST_FILE)).toBe(true);
-    const entries = service.getRecent(1);
-    expect(entries).toHaveLength(1);
-    expect(entries[0].totalTransactions).toBe(10);
-    expect(entries[0].timestamp).toBeTruthy();
+    const recentResult = service.getRecent(1);
+    expect(recentResult.success).toBe(true);
+    if (recentResult.success) {
+      expect(recentResult.data).toHaveLength(1);
+      expect(recentResult.data[0].totalTransactions).toBe(10);
+      expect(recentResult.data[0].timestamp).toBeTruthy();
+    }
   });
 
   it('rotates entries when exceeding maxEntries', () => {
@@ -34,19 +38,25 @@ describe('Audit Log E2E', () => {
       service.record(createTestSummary({ totalTransactions: i }));
     }
 
-    const entries = service.getRecent(10);
-    expect(entries).toHaveLength(5);
-    expect(entries[0].totalTransactions).toBe(3);
-    expect(entries[4].totalTransactions).toBe(7);
+    const recentResult = service.getRecent(10);
+    expect(recentResult.success).toBe(true);
+    if (recentResult.success) {
+      expect(recentResult.data).toHaveLength(5);
+      expect(recentResult.data[0].totalTransactions).toBe(3);
+      expect(recentResult.data[4].totalTransactions).toBe(7);
+    }
   });
 
   it('recovers gracefully from corrupted file', () => {
     writeFileSync(TEST_FILE, '{ invalid json !!!');
 
-    const entries = service.getRecent(3);
-    expect(entries).toHaveLength(0);
+    const emptyResult = service.getRecent(3);
+    expect(emptyResult.success).toBe(true);
+    if (emptyResult.success) expect(emptyResult.data).toHaveLength(0);
 
     service.record(createTestSummary());
-    expect(service.getRecent(1)).toHaveLength(1);
+    const afterResult = service.getRecent(1);
+    expect(afterResult.success).toBe(true);
+    if (afterResult.success) expect(afterResult.data).toHaveLength(1);
   });
 });

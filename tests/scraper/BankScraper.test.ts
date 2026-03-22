@@ -43,12 +43,12 @@ vi.mock('../../src/Scraper/ScraperOptionsBuilder.js', () => ({
 
 // ── CredentialsBuilder mock ──────────────────────────────────────────────────
 vi.mock('../../src/Scraper/CredentialsBuilder.js', () => ({
-  buildCredentials: vi.fn(() => ({ username: 'u', password: TEST_CREDENTIAL_SHORT })),
+  default: vi.fn(() => ({ username: 'u', password: TEST_CREDENTIAL_SHORT })),
 }));
 
 // ── TwoFactorService mock ────────────────────────────────────────────────────
 vi.mock('../../src/Services/TwoFactorService.js', () => ({
-  TwoFactorService: vi.fn(() => ({
+  default: vi.fn(() => ({
     createOtpRetriever: vi.fn(() => async () => '123456'),
   })),
 }));

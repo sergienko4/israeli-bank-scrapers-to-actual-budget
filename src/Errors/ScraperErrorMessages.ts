@@ -4,7 +4,7 @@
  */
 
 /** Advice entry with a user-friendly message and a suggested action. */
-export interface ErrorAdvice {
+export interface IErrorAdvice {
   /** Short description of what happened. */
   readonly message: string;
   /** What the user should do to fix it. */
@@ -12,7 +12,7 @@ export interface ErrorAdvice {
 }
 
 /** OCP map of scraper error codes to actionable advice. */
-export const SCRAPER_ERROR_ADVICE: Record<string, ErrorAdvice> = {
+export const SCRAPER_ERROR_ADVICE: Record<string, IErrorAdvice> = {
   INVALID_PASSWORD: {
     message: 'Password incorrect',
     action: 'Verify your password on the bank website',
@@ -50,10 +50,10 @@ export const SCRAPER_ERROR_ADVICE: Record<string, ErrorAdvice> = {
 /**
  * Looks up actionable advice for a scraper error by matching known codes.
  * @param errorText - The error message or error type string from the scraper.
- * @returns Formatted advice string, or undefined if no matching code found.
+ * @returns Formatted advice string, or empty string if no matching code found.
  */
-export function getScraperErrorAdvice(errorText: string): string | undefined {
+export function getScraperErrorAdvice(errorText: string): string {
   const entry = Object.entries(SCRAPER_ERROR_ADVICE)
     .find(([code]) => errorText.includes(code));
-  return entry ? `${entry[1].message}. ${entry[1].action}.` : undefined;
+  return entry ? `${entry[1].message}. ${entry[1].action}.` : '';
 }

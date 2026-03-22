@@ -1,0 +1,27 @@
+rules:
+  - id: async-recursion
+    patterns:
+      - pattern: |
+          async $METHOD(...) {
+            ...
+            return this.$METHOD(...);
+          }
+    message: "Async recursion has no TCO in V8 — use iterative loop"
+    severity: ERROR
+    languages: [typescript]
+
+  - id: telegram-html-injection
+    patterns:
+      - pattern: |
+          `...<b>...</b>...${$VAR}...`
+      - pattern-not: |
+          `...${escapeHtml($VAR)}...`
+    message: "HTML-escape user-controlled values in Telegram HTML messages"
+    severity: ERROR
+    languages: [typescript]
+
+  - id: silent-empty-fallback
+    pattern: extractQueryData($RESULT, [])
+    message: "Don't silently fall back to [] — check query result first"
+    severity: ERROR
+    languages: [typescript]

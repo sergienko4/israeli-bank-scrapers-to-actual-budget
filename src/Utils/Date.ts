@@ -1,7 +1,7 @@
 /**
  * Date formatting utilities
  */
-import { logger } from './UtilLogger.js';
+import logger from './UtilLogger.js';
 
 // Israel is the only supported timezone — all bank transactions are in Jerusalem local time.
 // Scrapers produce UTC ISO strings (e.g. "2026-02-14T22:00:00.000Z" = Feb 15 midnight Jerusalem).

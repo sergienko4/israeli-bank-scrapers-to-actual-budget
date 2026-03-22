@@ -11,6 +11,8 @@ export interface ITimeoutWrapper {
 
 /** Races a promise against a timeout, rejecting with TimeoutError if exceeded. */
 export class TimeoutWrapper implements ITimeoutWrapper {
+  private readonly _errorFactory = TimeoutError;
+
   /**
    * Wraps a promise with a deadline, rejecting if the deadline is exceeded.
    * @param promise - The async operation to time-box.
@@ -18,14 +20,17 @@ export class TimeoutWrapper implements ITimeoutWrapper {
    * @param operationName - Label used in the TimeoutError message.
    * @returns The resolved value of the original promise if it completes in time.
    */
-  wrap<T>(promise: Promise<T>, timeoutMs: number, operationName: string): Promise<T> {
+  public wrap<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    operationName: string
+  ): Promise<T> {
     const timeoutPromise = new Promise<never>((_, reject) => {
-      const timer = setTimeout(() => {
-        reject(new TimeoutError(operationName, timeoutMs));
-      }, timeoutMs);
-
-      // Clean up timer if the original promise resolves
-      void promise.finally(() => clearTimeout(timer));
+      const delay = timeoutMs;
+      const timer = globalThis.setTimeout(() => {
+        reject(new this._errorFactory(operationName, delay));
+      }, delay);
+      void promise.finally(() => { clearTimeout(timer); });
     });
 
     return Promise.race([promise, timeoutPromise]);

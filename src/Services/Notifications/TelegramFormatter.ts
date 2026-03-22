@@ -4,11 +4,11 @@
  */
 import type { MessageFormat, ShowTransactions } from '../../Types/Index.js';
 import type {
-  ImportSummary, BankMetrics, AccountMetrics, TransactionRecord
+IAccountMetrics, IBankMetrics,   IImportSummary, ITransactionRecord
 } from '../MetricsService.js';
 
 /** Options controlling which transactions appear in the formatted message. */
-export interface FormatOpts {
+export interface IFormatOpts {
   /** Maximum transactions to display per account. */
   showTransactions: ShowTransactions;
   /** Cap on the number of transactions shown. */
@@ -16,7 +16,7 @@ export interface FormatOpts {
 }
 
 /** Combined context for rendering a single account's lines. */
-type AccountCtx = { bank: BankMetrics; account: AccountMetrics; opts: FormatOpts };
+interface IAccountCtx { bank: IBankMetrics; account: IAccountMetrics; opts: IFormatOpts }
 
 /**
  * Formats an import summary into an HTML Telegram message using the configured format.
@@ -26,9 +26,9 @@ type AccountCtx = { bank: BankMetrics; account: AccountMetrics; opts: FormatOpts
  * @returns HTML-formatted string ready to send to Telegram.
  */
 export function formatSummaryMessage(
-  summary: ImportSummary, format: MessageFormat, opts: FormatOpts
+  summary: IImportSummary, format: MessageFormat, opts: IFormatOpts
 ): string {
-  const dispatch: Record<MessageFormat, () => string> = {
+  const dispatch: Record<string, () => string> = {
     /**
      * Formats as compact style (A).
      * @returns HTML compact message.
@@ -50,7 +50,8 @@ export function formatSummaryMessage(
      */
     summary: () => formatDefault(summary),
   };
-  return (dispatch[format] ?? dispatch.summary)();
+  const formatter = dispatch[format] ?? dispatch.summary;
+  return formatter();
 }
 
 /**
@@ -72,7 +73,7 @@ export function escapeHtml(text: string): string {
  * @param summary - The ImportSummary used to choose the icon.
  * @returns HTML header string.
  */
-function buildHeader(summary: ImportSummary): string {
+function buildHeader(summary: IImportSummary): string {
   return `${summary.failedBanks === 0 ? '✅' : '⚠️'} <b>Import Summary</b>`;
 }
 
@@ -81,20 +82,22 @@ function buildHeader(summary: ImportSummary): string {
  * @param bank - The BankMetrics to check.
  * @returns '✅' for success or '❌' for failure.
  */
-function bankIcon(bank: BankMetrics): string {
+function bankIcon(bank: IBankMetrics): string {
   return bank.status === 'success' ? '✅' : '❌';
 }
 
 /**
- * Appends a bank-level footer and error line when no accounts are reported.
- * @param lines - Mutable message lines array to append to.
+ * Builds bank-level footer lines including error when no accounts are reported.
  * @param bank - The BankMetrics whose footer to build.
+ * @returns Array of footer lines to append.
  */
-function appendBankFooter(lines: string[], bank: BankMetrics): void {
-  if (!bank.accounts?.length) {
+function buildBankFooter(bank: IBankMetrics): string[] {
+  const lines: string[] = [];
+  if (bank.accounts.length === 0) {
     lines.push('', `${bankIcon(bank)} <b>${escapeHtml(bank.bankName)}</b>`);
   }
   if (bank.error) lines.push(`❌ ${escapeHtml(bank.error)}`);
+  return lines;
 }
 
 /**
@@ -102,35 +105,38 @@ function appendBankFooter(lines: string[], bank: BankMetrics): void {
  * @param summary - The ImportSummary to format.
  * @returns HTML summary string.
  */
-function formatDefault(summary: ImportSummary): string {
+function formatDefault(summary: IImportSummary): string {
   const dur = (summary.totalDuration / 1000).toFixed(1);
   const lines: string[] = [
     buildHeader(summary), '',
-    `🏦 Banks: ${summary.successfulBanks}/${summary.totalBanks} ` +
+    `🏦 Banks: ${String(summary.successfulBanks)}/${String(summary.totalBanks)} ` +
       `(${summary.successRate.toFixed(0)}%)`,
-    `📥 Transactions: ${summary.totalTransactions} imported`,
-    `🔄 Duplicates: ${summary.totalDuplicates} skipped`,
+    `📥 Transactions: ${String(summary.totalTransactions)} imported`,
+    `🔄 Duplicates: ${String(summary.totalDuplicates)} skipped`,
     `⏱ Duration: ${dur}s`,
   ];
   if (summary.banks.length > 0) {
     lines.push('');
-    summary.banks.forEach(b => { appendDefaultBank(lines, b); });
+    for (const bank of summary.banks) lines.push(...buildDefaultBankLines(bank));
   }
   return lines.join('\n');
 }
 
 /**
- * Appends a single bank line in default format.
- * @param lines - Mutable message lines array to append to.
+ * Builds lines for a single bank in default format.
  * @param bank - The BankMetrics to format.
+ * @returns Array of formatted bank lines.
  */
-function appendDefaultBank(lines: string[], bank: BankMetrics): void {
-  const d = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : '';
-  lines.push(
-    `${bankIcon(bank)} ${escapeHtml(bank.bankName)}: ${bank.transactionsImported} txns ${d}`
-  );
-  appendReconciliation(lines, bank);
+function buildDefaultBankLines(bank: IBankMetrics): string[] {
+  const dur = bank.duration ? `${(bank.duration / 1000).toFixed(1)}s` : '';
+  const txnCount = String(bank.transactionsImported);
+  const name = escapeHtml(bank.bankName);
+  const lines: string[] = [
+    `${bankIcon(bank)} ${name}: ${txnCount} txns ${dur}`,
+  ];
+  lines.push(...buildReconciliationLines(bank));
   if (bank.error) lines.push(`   ❌ ${escapeHtml(bank.error)}`);
+  return lines;
 }
 
 /**
@@ -139,39 +145,42 @@ function appendDefaultBank(lines: string[], bank: BankMetrics): void {
  * @param opts - Transaction display options.
  * @returns HTML compact string.
  */
-function formatCompact(summary: ImportSummary, opts: FormatOpts): string {
+function formatCompact(summary: IImportSummary, opts: IFormatOpts): string {
   const dur = (summary.totalDuration / 1000).toFixed(1);
   const lines: string[] = [
     buildHeader(summary),
-    `${summary.successfulBanks}/${summary.totalBanks} banks | ` +
-      `${summary.totalTransactions} txns | ${dur}s`,
+    `${String(summary.successfulBanks)}/${String(summary.totalBanks)} banks | ` +
+      `${String(summary.totalTransactions)} txns | ${dur}s`,
   ];
   for (const bank of summary.banks) {
-    for (const account of bank.accounts || []) appendCompact(lines, { bank, account, opts });
-    appendBankFooter(lines, bank);
+    for (const account of bank.accounts) {
+      lines.push(...buildCompactLines({ bank, account, opts }));
+    }
+    lines.push(...buildBankFooter(bank));
   }
   return lines.join('\n');
 }
 
 /**
- * Appends compact-format lines for one account.
- * @param lines - Mutable message lines array to append to.
+ * Builds compact-format lines for one account.
  * @param ctx - Combined bank, account, and format options context.
  * @param ctx.bank - The bank this account belongs to.
  * @param ctx.account - The account whose transactions to format.
  * @param ctx.opts - Transaction display options.
+ * @returns Array of compact-format lines.
  */
-function appendCompact(lines: string[], ctx: AccountCtx): void {
+function buildCompactLines(ctx: IAccountCtx): string[] {
   const { bank, account, opts } = ctx;
-  lines.push('',
+  const lines: string[] = ['',
     `${bankIcon(bank)} <b>${escapeHtml(bank.bankName)}</b>` +
-    ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`
-  );
+    ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`,
+  ];
   for (const txn of getTransactions(account, opts)) {
     lines.push(`${fmtDate(txn.date)}  ${escapeHtml(txn.description)}`,
       `       <b>${fmtAmount(txn.amount)}</b>`);
   }
-  appendBalance(lines, account, bank);
+  lines.push(...buildBalanceLines(account, bank));
+  return lines;
 }
 
 /**
@@ -180,50 +189,54 @@ function appendCompact(lines: string[], ctx: AccountCtx): void {
  * @param opts - Transaction display options.
  * @returns HTML ledger string.
  */
-function formatLedger(summary: ImportSummary, opts: FormatOpts): string {
+function formatLedger(summary: IImportSummary, opts: IFormatOpts): string {
   const dur = (summary.totalDuration / 1000).toFixed(1);
   const lines: string[] = [
-    buildHeader(summary), `${summary.totalTransactions} transactions · ${dur}s`,
+    buildHeader(summary), `${String(summary.totalTransactions)} transactions · ${dur}s`,
   ];
   for (const bank of summary.banks) {
-    for (const account of bank.accounts || []) appendLedger(lines, { bank, account, opts });
-    appendBankFooter(lines, bank);
+    for (const account of bank.accounts) {
+      lines.push(...buildLedgerLines({ bank, account, opts }));
+    }
+    lines.push(...buildBankFooter(bank));
   }
   return lines.join('\n');
 }
 
 /**
- * Appends ledger-format lines for one account.
- * @param lines - Mutable message lines array to append to.
+ * Builds ledger-format lines for one account.
  * @param ctx - Combined bank, account, and format options context.
  * @param ctx.bank - The bank this account belongs to.
  * @param ctx.account - The account whose transactions to format.
  * @param ctx.opts - Transaction display options.
+ * @returns Array of ledger-format lines.
  */
-function appendLedger(lines: string[], ctx: AccountCtx): void {
+function buildLedgerLines(ctx: IAccountCtx): string[] {
   const { bank, account, opts } = ctx;
-  lines.push('',
+  const lines: string[] = ['',
     `${bankIcon(bank)} <b>${escapeHtml(bank.bankName)}</b>` +
-    ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`
-  );
+    ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`,
+  ];
   const txns = getTransactions(account, opts);
-  if (txns.length > 0) appendLedgerTransactions(lines, txns);
-  appendBalance(lines, account, bank);
+  if (txns.length > 0) lines.push(...buildLedgerTransactionLines(txns));
+  lines.push(...buildBalanceLines(account, bank));
+  return lines;
 }
 
 /**
- * Appends monospace transaction rows inside a code block.
- * @param lines - Mutable message lines array to append to.
+ * Builds monospace transaction rows inside a code block.
  * @param txns - Transactions to render in table format.
+ * @returns Array of ledger transaction lines including code tags.
  */
-function appendLedgerTransactions(lines: string[], txns: TransactionRecord[]): void {
-  lines.push('<code>');
+function buildLedgerTransactionLines(txns: ITransactionRecord[]): string[] {
+  const lines: string[] = ['<code>'];
   for (const txn of txns) {
     const raw = txn.description.length > 18 ? `${txn.description.slice(0, 18)}..` : txn.description;
     lines.push(`${fmtDate(txn.date)} ${escapeHtml(raw)}`,
       `${''.padStart(6)}${fmtAmount(txn.amount).padStart(9)}`);
   }
   lines.push('</code>');
+  return lines;
 }
 
 /**
@@ -232,35 +245,37 @@ function appendLedgerTransactions(lines: string[], txns: TransactionRecord[]): v
  * @param opts - Transaction display options.
  * @returns HTML emoji string.
  */
-function formatEmoji(summary: ImportSummary, opts: FormatOpts): string {
+function formatEmoji(summary: IImportSummary, opts: IFormatOpts): string {
   const dur = (summary.totalDuration / 1000).toFixed(1);
-  const dup = summary.totalDuplicates > 0 ? ` · ${summary.totalDuplicates} dup` : '';
+  const dup = summary.totalDuplicates > 0 ? ` · ${String(summary.totalDuplicates)} dup` : '';
   const lines: string[] = [
     buildHeader(summary), '',
-    `📊 ${summary.successfulBanks}/${summary.totalBanks} banks · ` +
-      `${summary.totalTransactions} txns${dup} · ${dur}s`,
+    `📊 ${String(summary.successfulBanks)}/${String(summary.totalBanks)} banks · ` +
+      `${String(summary.totalTransactions)} txns${dup} · ${dur}s`,
   ];
   for (const bank of summary.banks) {
-    for (const account of bank.accounts || []) appendEmoji(lines, { bank, account, opts });
-    appendBankFooter(lines, bank);
+    for (const account of bank.accounts) {
+      lines.push(...buildEmojiLines({ bank, account, opts }));
+    }
+    lines.push(...buildBankFooter(bank));
   }
   return lines.join('\n');
 }
 
 /**
- * Appends emoji-format lines for one account.
- * @param lines - Mutable message lines array to append to.
+ * Builds emoji-format lines for one account.
  * @param ctx - Combined bank, account, and format options context.
  * @param ctx.bank - The bank this account belongs to.
  * @param ctx.account - The account whose transactions to format.
  * @param ctx.opts - Transaction display options.
+ * @returns Array of emoji-format lines.
  */
-function appendEmoji(lines: string[], ctx: AccountCtx): void {
+function buildEmojiLines(ctx: IAccountCtx): string[] {
   const { bank, account, opts } = ctx;
-  lines.push('',
+  const lines: string[] = ['',
     `💳 <b>${escapeHtml(bank.bankName)}</b>` +
-    ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`
-  );
+    ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`,
+  ];
   for (const txn of getTransactions(account, opts)) {
     const dir = txn.amount >= 0 ? '📥' : '📤';
     lines.push(`${dir} <b>${fmtAmount(txn.amount)}</b>  ${escapeHtml(txn.description)}`);
@@ -268,45 +283,47 @@ function appendEmoji(lines: string[], ctx: AccountCtx): void {
   if (account.balance !== undefined) {
     lines.push(`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`);
   }
-  appendReconciliation(lines, bank);
+  lines.push(...buildReconciliationLines(bank));
+  return lines;
 }
 
 /**
- * Appends balance and reconciliation lines for an account.
- * @param lines - Mutable message lines array to append to.
+ * Builds balance and reconciliation lines for an account.
  * @param account - The account whose balance to display.
  * @param bank - The bank whose reconciliation status to display.
+ * @returns Array of balance and reconciliation lines.
  */
-function appendBalance(lines: string[], account: AccountMetrics, bank: BankMetrics): void {
+function buildBalanceLines(account: IAccountMetrics, bank: IBankMetrics): string[] {
+  const lines: string[] = [];
   if (account.balance !== undefined) {
     lines.push(`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`);
   }
-  appendReconciliation(lines, bank);
+  lines.push(...buildReconciliationLines(bank));
+  return lines;
 }
 
 /**
- * Appends a reconciliation status line when one exists.
- * @param lines - Mutable message lines array to append to.
+ * Builds a reconciliation status line when one exists.
  * @param bank - The bank whose reconciliation status to check.
+ * @returns Array of reconciliation lines (empty if no reconciliation info).
  */
-function appendReconciliation(lines: string[], bank: BankMetrics): void {
+function buildReconciliationLines(bank: IBankMetrics): string[] {
   if (bank.reconciliationStatus === 'created' && bank.reconciliationAmount !== undefined) {
     const sign = bank.reconciliationAmount > 0 ? '+' : '';
-    lines.push(`🔄 Reconciled: ${sign}${(bank.reconciliationAmount / 100).toFixed(2)} ILS`);
-  } else if (bank.reconciliationStatus === 'skipped') {
-    lines.push(`✅ Balance matched`);
-  } else if (bank.reconciliationStatus === 'already-reconciled') {
-    lines.push(`✅ Already reconciled`);
+    return [`🔄 Reconciled: ${sign}${(bank.reconciliationAmount / 100).toFixed(2)} ILS`];
   }
+  if (bank.reconciliationStatus === 'skipped') return ['✅ Balance matched'];
+  if (bank.reconciliationStatus === 'already-reconciled') return ['✅ Already reconciled'];
+  return [];
 }
 
 /**
  * Returns the transactions to display for an account based on display options.
  * @param account - The account whose transactions to retrieve.
  * @param opts - Transaction display options (showTransactions, maxTransactions).
- * @returns Sliced array of TransactionRecord objects.
+ * @returns Sliced array of ITransactionRecord objects.
  */
-function getTransactions(account: AccountMetrics, opts: FormatOpts): TransactionRecord[] {
+function getTransactions(account: IAccountMetrics, opts: IFormatOpts): ITransactionRecord[] {
   if (opts.showTransactions === 'none') return [];
   const txns = opts.showTransactions === 'all'
     ? [...account.newTransactions, ...account.existingTransactions]

@@ -8,11 +8,11 @@ export interface IErrorFormatter {
 }
 
 // OCP: add new error types by adding entries — no changes to format()
-type ErrorFormatEntry = { icon: string; label: string; suffix?: string };
+interface IErrorFormatEntry { icon: string; label: string; suffix?: string }
 
 // Uses error.name instead of instanceof to avoid the Function type entirely.
 // All project error classes set this.name in their constructor.
-const errorFormats: Array<{ name: string; entry: ErrorFormatEntry }> = [
+const ERROR_FORMATS: { name: string; entry: IErrorFormatEntry }[] = [
   { name: 'TimeoutError',
     entry: { icon: '⏱️ ', label: 'Timeout Error',
       suffix: ". The bank's website may be slow or unresponsive." } },
@@ -30,8 +30,8 @@ const errorFormats: Array<{ name: string; entry: ErrorFormatEntry }> = [
 ];
 
 // Keyword-based fallback categorization (OCP map)
-type MessageCategory = { keywords: string[]; icon: string; label: string; suffix?: string };
-const messageCategories: MessageCategory[] = [
+interface IMessageCategory { keywords: string[]; icon: string; label: string; suffix?: string }
+const MESSAGE_CATEGORIES: IMessageCategory[] = [
   { keywords: ['credentials', 'login', 'authentication'],
     icon: '🔐', label: 'Authentication Error',
     suffix: '. Please verify your credentials.' },
@@ -47,23 +47,26 @@ const messageCategories: MessageCategory[] = [
 
 /** Formats Error objects into human-readable notification strings. */
 export class ErrorFormatter implements IErrorFormatter {
+  /** Error format registry used by this formatter instance. */
+  private readonly _formats = ERROR_FORMATS;
+
   /**
    * Format an error into a user-friendly message string.
    * @param error - The error to format.
    * @param context - Optional context label appended in parentheses.
    * @returns A formatted string with icon, label, and error detail.
    */
-  format(error: Error, context: string = ''): string {
+  public format(error: Error, context = ''): string {
     const ctx = context ? ` (${context})` : '';
     if (error.name === 'WafBlockError') {
       return `🛡️ WAF Blocked${ctx}: ${error.message}. Wait 1-2 hours and retry.`;
     }
-    const match = errorFormats.find(f => error.name === f.name);
+    const match = this._formats.find(f => error.name === f.name);
     if (match) {
       const suffix = match.entry.suffix || '';
       return `${match.entry.icon} ${match.entry.label}${ctx}: ${error.message}${suffix}`;
     }
-    return this.categorizeByMessage(error, ctx);
+    return ErrorFormatter.categorizeByMessage(error, ctx);
   }
 
   /**
@@ -72,9 +75,9 @@ export class ErrorFormatter implements IErrorFormatter {
    * @param ctx - Formatted context string to include in the output.
    * @returns A categorized or generic error string.
    */
-  private categorizeByMessage(error: Error, ctx: string): string {
+  private static categorizeByMessage(error: Error, ctx: string): string {
     const message = error.message || 'Unknown error';
-    const match = messageCategories.find(c => c.keywords.some(k => message.includes(k)));
+    const match = MESSAGE_CATEGORIES.find(c => c.keywords.some(k => message.includes(k)));
     if (match) {
       const detail = match.suffix ? match.suffix.slice(2) : message;
       return `${match.icon} ${match.label}${ctx}: ${detail}`;

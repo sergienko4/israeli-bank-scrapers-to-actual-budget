@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TelegramPoller } from '../../src/Services/TelegramPoller.js';
+import TelegramPoller from '../../src/Services/TelegramPoller.js';
 import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -149,18 +149,25 @@ describe('TelegramPoller', () => {
   });
 
   it('skips update when poll response.ok is false', async () => {
-    const onMessage = vi.fn();
-    const poller = new TelegramPoller('123:ABC', '999', onMessage);
-    let callCount = 0;
-    fetchMock.mockImplementation(() => {
-      callCount++;
-      if (callCount <= 1) return emptyResponse();
-      if (callCount === 2) return Promise.resolve({ ok: false });
-      poller.stop();
-      return emptyResponse();
-    });
-    await poller.start();
-    expect(onMessage).not.toHaveBeenCalled();
+    vi.useFakeTimers();
+    try {
+      const onMessage = vi.fn();
+      const poller = new TelegramPoller('123:ABC', '999', onMessage);
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) return Promise.resolve({ ok: false });
+        poller.stop();
+        return emptyResponse();
+      });
+      const startPromise = poller.start();
+      await vi.advanceTimersByTimeAsync(5001);
+      await startPromise;
+      expect(onMessage).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('handles clearOldMessages fetch exception gracefully', async () => {
@@ -363,7 +370,8 @@ describe('TelegramPoller', () => {
 
       await poller.start();
       fetchMock.mockRejectedValue(new Error('Network error'));
-      await expect(poller.stopAndFlush()).resolves.toBeUndefined();
+      const flushResult = await poller.stopAndFlush();
+      expect(flushResult.success).toBe(true);
     });
 
     it('is idempotent — calling twice does not throw', async () => {
@@ -385,7 +393,8 @@ describe('TelegramPoller', () => {
       await poller.start();
       fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve({ ok: true, result: [] }) });
       await poller.stopAndFlush();
-      await expect(poller.stopAndFlush()).resolves.toBeUndefined();
+      const secondFlush = await poller.stopAndFlush();
+      expect(secondFlush.success).toBe(true);
     });
   });
 });

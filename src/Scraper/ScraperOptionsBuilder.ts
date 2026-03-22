@@ -7,7 +7,7 @@
  * (Camoufox natively supports proxy via its LaunchOptions.proxy field).
  */
 
-import type { ProxyConfig } from '../Types/Index.js';
+import type { IProxyConfig } from '../Types/Index.js';
 
 const BASE_CHROME_ARGS = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'];
 
@@ -25,10 +25,10 @@ export function getChromeDataDir(bankName?: string): string {
 /**
  * Builds the Chrome launch argument array, optionally adding a proxy server.
  * NOTE: Camoufox ignores Chrome args; proxy is not yet forwarded in v7.9.0.
- * @param proxy - Optional ProxyConfig whose server URL is passed to --proxy-server.
+ * @param proxy - Optional IProxyConfig whose server URL is passed to --proxy-server.
  * @returns Array of Chrome CLI argument strings.
  */
-export function buildChromeArgs(proxy?: ProxyConfig): string[] {
+export function buildChromeArgs(proxy?: IProxyConfig): string[] {
   const args = [...BASE_CHROME_ARGS];
   if (proxy?.server) args.push(`--proxy-server=${proxy.server}`);
   return args;

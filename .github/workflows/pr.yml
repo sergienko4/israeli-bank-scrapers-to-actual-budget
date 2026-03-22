@@ -167,12 +167,8 @@ jobs:
           BUDGET_ID=$(ls tests/e2e/fixtures/e2e-data/ | grep "e2e-test-budget-" | head -1)
           echo "id=$BUDGET_ID" >> "$GITHUB_OUTPUT"
           echo "Budget ID: $BUDGET_ID"
-      - name: Prepare per-bank mock data
-        run: |
-          mkdir -p tests/e2e/fixtures/mock-scraper-dir
-          cp tests/e2e/fixtures/mock-scraper-result.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank.json
-          cp tests/e2e/fixtures/mock-scraper-result-bank2.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank2.json
-          chmod -R 777 tests/e2e/fixtures/e2e-data
+      - name: Fix permissions for Docker volume
+        run: chmod -R 777 tests/e2e/fixtures/e2e-data
 
       - name: Browser smoke test (verify scraper can launch browser)
         run: |

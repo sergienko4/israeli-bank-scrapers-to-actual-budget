@@ -4,14 +4,15 @@
  * When logDir is set: LogMediator fans out to PinoAdapter (stdout) + FileLogger (file).
  */
 
+import type { ILogConfig, LogFormat, MessageFormat } from '../Types/Index.js';
+import { isFail } from '../Types/Index.js';
+import FileLogger from './FileLogger.js';
 import type { ILogger } from './ILogger.js';
-import { LogBuffer } from './LogBuffer.js';
-import { PinoAdapter } from './PinoAdapter.js';
-import { createPinoInstance } from './PinoTransports.js';
-import { FileLogger } from './FileLogger.js';
-import { LogMediator } from './LogMediator.js';
-import { cleanOldLogs } from './LogCleanup.js';
-import type { LogConfig, LogFormat, MessageFormat } from '../Types/Index.js';
+import LogBuffer from './LogBuffer.js';
+import cleanOldLogs from './LogCleanup.js';
+import LogMediator from './LogMediator.js';
+import PinoAdapter from './PinoAdapter.js';
+import createPinoInstance from './PinoTransports.js';
 
 const FORMAT_MAP: Record<MessageFormat, LogFormat> = {
   summary: 'words',
@@ -44,12 +45,15 @@ let bufferInstance: LogBuffer = new LogBuffer(0);
  * @param config - Optional log configuration (format, logDir).
  * @returns The configured ILogger instance (stdout only or stdout + file).
  */
-export function createLogger(config?: LogConfig): ILogger {
+export function createLogger(config?: ILogConfig): ILogger {
   const format: LogFormat = config?.format ?? 'words';
   bufferInstance = new LogBuffer(0); // buffer deprecated; kept for backward compat
   const stdout = new PinoAdapter(createPinoInstance(format), format);
   if (config?.logDir) {
-    cleanOldLogs(config.logDir);
+    const cleanupResult = cleanOldLogs(config.logDir);
+    if (isFail(cleanupResult)) {
+      stdout.warn(`Log cleanup failed: ${cleanupResult.message}`);
+    }
     try {
       instance = new LogMediator([stdout, new FileLogger(config.logDir)]);
     } catch {
@@ -80,9 +84,9 @@ export function getLogBuffer(): LogBuffer {
   return bufferInstance;
 }
 
+export { default as FileLogger } from './FileLogger.js';
 export { ILogger, LogContext, LogLevel } from './ILogger.js';
-export { LogBuffer } from './LogBuffer.js';
-export { PinoAdapter } from './PinoAdapter.js';
-export { LogMediator } from './LogMediator.js';
-export { FileLogger } from './FileLogger.js';
-export { LogFileReader } from './LogFileReader.js';
+export { default as LogBuffer } from './LogBuffer.js';
+export { default as LogFileReader } from './LogFileReader.js';
+export { default as LogMediator } from './LogMediator.js';
+export { default as PinoAdapter } from './PinoAdapter.js';

@@ -47,7 +47,7 @@ describe.runIf(hasDockerImage())('DRY_RUN mode E2E', () => {
 
     expect(result.output).toContain('e2eTestBank');
     expect(result.output).toMatch(/Transactions:\s+\d+/);
-    expect(result.output).toContain('No changes made to Actual Budget');
+    expect(result.output).toContain('no changes made to Actual Budget');
   });
 
   it('does not log "Importing transactions" in dry-run mode', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ImportQueue } from '../../src/Services/ImportQueue.js';
+import ImportQueue from '../../src/Services/ImportQueue.js';
 
 vi.mock('../../src/Logger/Index.js', () => ({
   getLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -31,8 +31,9 @@ describe('ImportQueue', () => {
       order.push(job);
       return job;
     });
+    const onJobComplete = vi.fn();
     const onQueueEmpty = vi.fn();
-    const queue = new ImportQueue({ process, onQueueEmpty });
+    const queue = new ImportQueue({ process, onJobComplete, onQueueEmpty });
 
     queue.enqueueAll(['a', 'b', 'c']);
     await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalled());
@@ -42,7 +43,7 @@ describe('ImportQueue', () => {
 
   it('enqueueAll with empty array does nothing', () => {
     const process = vi.fn();
-    const queue = new ImportQueue({ process });
+    const queue = new ImportQueue({ process, onJobComplete: vi.fn(), onQueueEmpty: vi.fn() });
 
     queue.enqueueAll([]);
 
@@ -56,7 +57,7 @@ describe('ImportQueue', () => {
     const process = vi.fn().mockImplementation(
       () => new Promise<void>((r) => { resolveJob = r; })
     );
-    const queue = new ImportQueue({ process });
+    const queue = new ImportQueue({ process, onJobComplete: vi.fn(), onQueueEmpty: vi.fn() });
 
     expect(queue.size()).toBe(0);
     expect(queue.isProcessing()).toBe(false);
@@ -101,8 +102,9 @@ describe('ImportQueue', () => {
         () => new Promise<void>((r) => { resolveFirst = r; })
       )
       .mockResolvedValue('done');
+    const onJobComplete = vi.fn();
     const onQueueEmpty = vi.fn();
-    const queue = new ImportQueue({ process, onQueueEmpty });
+    const queue = new ImportQueue({ process, onJobComplete, onQueueEmpty });
 
     queue.enqueue('first');
     await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(1));
@@ -117,12 +119,14 @@ describe('ImportQueue', () => {
     expect(process).toHaveBeenCalledTimes(2);
   });
 
-  it('works without optional callbacks', async () => {
+  it('works with all required callbacks', async () => {
     const process = vi.fn().mockResolvedValue('ok');
-    const queue = new ImportQueue({ process });
+    const onJobComplete = vi.fn();
+    const onQueueEmpty = vi.fn();
+    const queue = new ImportQueue({ process, onJobComplete, onQueueEmpty });
 
     queue.enqueue('solo');
-    await vi.waitFor(() => expect(process).toHaveBeenCalled());
-    // No onJobComplete or onQueueEmpty — should not throw
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalled());
+    expect(onJobComplete).toHaveBeenCalledWith('solo', 'ok');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getLogger } from '../../src/Logger/Index.js';
-import { Loggable } from '../../src/Utils/Loggable.js';
+import { loggable as Loggable } from '../../src/Utils/Loggable.js';
 
 vi.mock('../../src/Logger/Index.js', () => ({
   getLogger: vi.fn(),

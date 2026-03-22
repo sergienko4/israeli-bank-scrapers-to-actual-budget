@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, writeFileSync, existsSync, readdirSync, unlinkSync, rmdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { cleanOldLogs } from '../../src/Logger/LogCleanup.js';
+import cleanOldLogs from '../../src/Logger/LogCleanup.js';
 
 let testDir: string;
 
@@ -63,8 +63,26 @@ describe('cleanOldLogs', () => {
     expect(readdirSync(testDir)).toEqual(['other.txt']);
   });
 
-  it('is a no-op when directory does not exist', () => {
-    expect(() => cleanOldLogs('/tmp/nonexistent-logclean-xyz')).not.toThrow();
+  it('returns success with no-dir status when directory does not exist', () => {
+    const result = cleanOldLogs('/tmp/nonexistent-logclean-xyz');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.status).toBe('no-dir');
+  });
+
+  it('returns failure when directory cannot be read', () => {
+    // Use a path that exists but is not a directory (a file)
+    const fakePath = join(testDir, 'not-a-dir');
+    writeFileSync(fakePath, 'data');
+    const result = cleanOldLogs(fakePath);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toContain('log cleanup failed');
+  });
+
+  it('returns cleaned status on success', () => {
+    writeLog(`app.${daysAgo(4)}.log`);
+    const result = cleanOldLogs(testDir);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.status).toBe('cleaned');
   });
 
   it('deletes old but keeps recent in mixed directory', () => {
@@ -74,5 +92,17 @@ describe('cleanOldLogs', () => {
     const remaining = readdirSync(testDir);
     expect(remaining).toHaveLength(1);
     expect(remaining[0]).toContain(daysAgo(1));
+  });
+
+  it('logs warning and continues when deletion fails with non-locked error', () => {
+    const oldFile = `app.${daysAgo(5)}.log`;
+    writeLog(oldFile);
+    // Remove file then make it a directory so unlinkSync fails with EISDIR
+    unlinkSync(join(testDir, oldFile));
+    mkdirSync(join(testDir, oldFile));
+    const result = cleanOldLogs(testDir);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.status).toBe('cleaned');
+    rmdirSync(join(testDir, oldFile));
   });
 });

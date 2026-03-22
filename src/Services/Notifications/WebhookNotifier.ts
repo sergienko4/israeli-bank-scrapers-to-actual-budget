@@ -4,29 +4,30 @@
  * OCP: add new formats by adding entries to the formatters map
  */
 
-import type { WebhookConfig, WebhookFormat } from '../../Types/Index.js';
-import type { ImportSummary, BankMetrics } from '../MetricsService.js';
+import { NetworkError } from '../../Errors/ErrorTypes.js';
+import type { IWebhookConfig, WebhookFormat } from '../../Types/Index.js';
+import type { IBankMetrics, IImportSummary } from '../MetricsService.js';
 import type { INotifier } from './INotifier.js';
 
 /** Webhook notification channel — posts import events as JSON to a configurable URL. */
-export class WebhookNotifier implements INotifier {
-  private readonly url: string;
-  private readonly format: WebhookFormat;
+export default class WebhookNotifier implements INotifier {
+  private readonly _url: string;
+  private readonly _format: WebhookFormat;
 
   /**
    * Creates a WebhookNotifier from the given webhook configuration.
    * @param config - Webhook URL and format (slack, discord, or plain).
    */
-  constructor(config: WebhookConfig) {
-    this.url = config.url;
-    this.format = config.format || 'plain';
+  constructor(config: IWebhookConfig) {
+    this._url = config.url;
+    this._format = config.format || 'plain';
   }
 
   /**
    * Formats and posts an import summary to the webhook URL.
    * @param summary - The ImportSummary to send.
    */
-  async sendSummary(summary: ImportSummary): Promise<void> {
+  public async sendSummary(summary: IImportSummary): Promise<void> {
     const body = this.formatSummary(summary);
     await this.post(body);
   }
@@ -35,7 +36,7 @@ export class WebhookNotifier implements INotifier {
    * Formats and posts an error notification to the webhook URL.
    * @param error - The error message string to include in the payload.
    */
-  async sendError(error: string): Promise<void> {
+  public async sendError(error: string): Promise<void> {
     const body = this.formatError(error);
     await this.post(body);
   }
@@ -44,7 +45,7 @@ export class WebhookNotifier implements INotifier {
    * Formats and posts a plain message to the webhook URL.
    * @param text - The message text to include in the payload.
    */
-  async sendMessage(text: string): Promise<void> {
+  public async sendMessage(text: string): Promise<void> {
     const body = this.formatMessage(text);
     await this.post(body);
   }
@@ -54,28 +55,28 @@ export class WebhookNotifier implements INotifier {
    * @param summary - The ImportSummary to format.
    * @returns JSON string ready to POST.
    */
-  private formatSummary(summary: ImportSummary): string {
-    const formatters: Record<WebhookFormat, (s: ImportSummary) => string> = {
+  private formatSummary(summary: IImportSummary): string {
+    const formatters: Record<WebhookFormat, (s: IImportSummary) => string> = {
       /**
        * Formats summary for Slack.
        * @param s - The ImportSummary.
        * @returns Slack JSON payload string.
        */
-      slack: (s) => this.slackSummary(s),
+      slack: (s) => WebhookNotifier.slackSummary(s),
       /**
        * Formats summary for Discord.
        * @param s - The ImportSummary.
        * @returns Discord JSON payload string.
        */
-      discord: (s) => this.discordSummary(s),
+      discord: (s) => WebhookNotifier.discordSummary(s),
       /**
        * Formats summary as plain JSON.
        * @param s - The ImportSummary.
        * @returns Plain JSON payload string.
        */
-      plain: (s) => this.plainSummary(s),
+      plain: (s) => WebhookNotifier.plainSummary(s),
     };
-    return formatters[this.format](summary);
+    return formatters[this._format](summary);
   }
 
   /**
@@ -104,7 +105,7 @@ export class WebhookNotifier implements INotifier {
        */
       plain: (e) => JSON.stringify({ event: 'error', message: e }),
     };
-    return formatters[this.format](error);
+    return formatters[this._format](error);
   }
 
   /**
@@ -133,7 +134,7 @@ export class WebhookNotifier implements INotifier {
        */
       plain: (t) => JSON.stringify({ event: 'message', message: t }),
     };
-    return formatters[this.format](text);
+    return formatters[this._format](text);
   }
 
   // ─── Slack format ───
@@ -143,43 +144,43 @@ export class WebhookNotifier implements INotifier {
    * @param summary - The ImportSummary to format.
    * @returns JSON string with a Slack `text` field.
    */
-  private slackSummary(summary: ImportSummary): string {
+  private static slackSummary(summary: IImportSummary): string {
     const icon = summary.failedBanks === 0 ? '✅' : '⚠️';
     const dur = (summary.totalDuration / 1000).toFixed(1);
-    const banks = summary.banks.map(b => this.slackBankLine(b)).join('\n');
+    const banks = summary.banks.map(b => WebhookNotifier.slackBankLine(b)).join('\n');
     const header = `${icon} *Import Summary*\n` +
-      `${summary.successfulBanks}/${summary.totalBanks} banks | ` +
-      `${summary.totalTransactions} txns | ${dur}s`;
+      `${String(summary.successfulBanks)}/${String(summary.totalBanks)} banks | ` +
+      `${String(summary.totalTransactions)} txns | ${dur}s`;
     const text = `${header}\n${banks}`;
     return JSON.stringify({ text });
   }
 
   /**
    * Formats a single bank result as a Slack-style text line.
-   * @param b - The BankMetrics to format.
+   * @param b - The IBankMetrics to format.
    * @returns Text line with status icon, name, transaction count, and optional error.
    */
-  private slackBankLine(b: BankMetrics): string {
+  private static slackBankLine(b: IBankMetrics): string {
     const icon = b.status === 'success' ? '✅' : '❌';
     const dur = b.duration ? `${(b.duration / 1000).toFixed(1)}s` : '';
     const errSuffix = b.error ? ` — ${b.error}` : '';
-    return `${icon} ${b.bankName}: ${b.transactionsImported} txns ${dur}${errSuffix}`;
+    return `${icon} ${b.bankName}: ${String(b.transactionsImported)} txns ${dur}${errSuffix}`;
   }
 
   // ─── Discord format ───
 
   /**
    * Formats the import summary as a Discord-style content payload.
-   * @param summary - The ImportSummary to format.
+   * @param summary - The IImportSummary to format.
    * @returns JSON string with a Discord `content` field.
    */
-  private discordSummary(summary: ImportSummary): string {
+  private static discordSummary(summary: IImportSummary): string {
     const icon = summary.failedBanks === 0 ? '✅' : '⚠️';
     const dur = (summary.totalDuration / 1000).toFixed(1);
-    const banks = summary.banks.map(b => this.slackBankLine(b)).join('\n');
+    const banks = summary.banks.map(b => WebhookNotifier.slackBankLine(b)).join('\n');
     const header = `${icon} **Import Summary**\n` +
-      `${summary.successfulBanks}/${summary.totalBanks} banks | ` +
-      `${summary.totalTransactions} txns | ${dur}s`;
+      `${String(summary.successfulBanks)}/${String(summary.totalBanks)} banks | ` +
+      `${String(summary.totalTransactions)} txns | ${dur}s`;
     const content = `${header}\n${banks}`;
     return JSON.stringify({ content });
   }
@@ -191,7 +192,7 @@ export class WebhookNotifier implements INotifier {
    * @param summary - The ImportSummary to serialize.
    * @returns JSON string with an `event: 'import_complete'` payload.
    */
-  private plainSummary(summary: ImportSummary): string {
+  private static plainSummary(summary: IImportSummary): string {
     return JSON.stringify({
       event: 'import_complete',
       totalBanks: summary.totalBanks,
@@ -215,14 +216,14 @@ export class WebhookNotifier implements INotifier {
    * @param body - Serialized JSON string to send as the request body.
    */
   private async post(body: string): Promise<void> {
-    const response = await fetch(this.url, {
+    const response = await fetch(this._url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
     });
     if (!response.ok) {
       const text = await response.text();
-      throw new Error(`Webhook error ${response.status}: ${text}`);
+      throw new NetworkError(`Webhook error ${String(response.status)}: ${text}`);
     }
   }
 }

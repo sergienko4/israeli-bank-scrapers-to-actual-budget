@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { WebhookNotifier } from '../../../src/Services/Notifications/WebhookNotifier.js';
-import { ImportSummary } from '../../../src/Services/MetricsService.js';
+import WebhookNotifier from '../../../src/Services/Notifications/WebhookNotifier.js';
+import { IImportSummary } from '../../../src/Services/MetricsService.js';
 
-const makeSummary = (overrides: Partial<ImportSummary> = {}): ImportSummary => ({
+const makeSummary = (overrides: Partial<IImportSummary> = {}): IImportSummary => ({
   totalBanks: 2, successfulBanks: 2, failedBanks: 0,
   totalTransactions: 5, totalDuplicates: 3, totalDuration: 10000,
   averageDuration: 5000, successRate: 100,
