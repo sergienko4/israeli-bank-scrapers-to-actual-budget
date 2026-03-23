@@ -102,7 +102,6 @@ export class TelegramCommandHandler {
   private async dispatchCommand(
     command: string, arg?: string
   ): Promise<Procedure<{ status: string }>> {
-    if (command === 'scan_all') return this.handleScanAll();
     if (this._receiptHandler && command.startsWith('receipt_')) {
       return this.routeReceiptCallback(command);
     }
@@ -124,6 +123,7 @@ export class TelegramCommandHandler {
     arg?: string
   ): Record<string, () => Promise<Procedure<{ status: string }>>> {
     return {
+      scan_all: this.handleScanAll.bind(this),
       '/scan': this.handleScan.bind(this, arg),
       '/import': this.handleScan.bind(this, arg),
       '/status': this.handleStatus.bind(this),
@@ -300,7 +300,7 @@ export class TelegramCommandHandler {
     }
     await this.reply('🔍 Checking spending rules...');
     try { const message = await this._runWatch(); await this.reply(message || '✅ All spending within limits.'); }
-    catch (error) { await this.reply(`❌ Watch error: ${errorMessage(error)}`); }
+    catch (error: unknown) { await this.reply(`❌ Watch error: ${errorMessage(error)}`); }
     return succeed({ status: 'watch-complete' });
   }
 
@@ -312,7 +312,7 @@ export class TelegramCommandHandler {
     if (!this._runValidate) { await this.reply('⚙️ Config validation unavailable.'); return succeed({ status: 'validate-unavailable' }); }
     await this.reply('🔍 Validating configuration...');
     try { const report = await this._runValidate(); await this.reply(`<pre>${report}</pre>`); }
-    catch (error) { await this.reply(`❌ Validation error: ${errorMessage(error)}`); }
+    catch (error: unknown) { await this.reply(`❌ Validation error: ${errorMessage(error)}`); }
     return succeed({ status: 'config-checked' });
   }
 
@@ -355,6 +355,7 @@ export class TelegramCommandHandler {
       '/scan - Run bank import now', '/retry - Re-import only last failed banks',
       '/preview - Dry run: scrape without importing', '/status - Show last run info + history',
       '/check_config - Check configuration (offline + online)', '/watch - Spending watch info (runs after each import)',
+      '/import_receipt - Import from receipt photo',
       '/logs - Show recent log entries', '/logs 100 - Show last 100 entries (max 150)', '/help - Show this message',
     ];
     const helpMessage = lines.join('\n');
@@ -369,7 +370,7 @@ export class TelegramCommandHandler {
    */
   private async reply(text: string): Promise<Procedure<{ status: string }>> {
     try { await this._notifier.sendMessage(text); return succeed({ status: 'reply-sent' }); }
-    catch (error) { getLogger().debug(`Failed to send reply: ${errorMessage(error)}`); return succeed({ status: 'reply-failed' }); }
+    catch (error: unknown) { getLogger().debug(`Failed to send reply: ${errorMessage(error)}`); return succeed({ status: 'reply-failed' }); }
   }
 
   /**
@@ -387,12 +388,13 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the callback was handled.
    */
   private async routeReceiptCallback(command: string): Promise<Procedure<{ status: string }>> {
-    if (!this._receiptHandler) return succeed({ status: 'no-handler' });
-    if (command === 'receipt_confirm') return this._receiptHandler.onConfirm();
-    if (command === 'receipt_choose') return this._receiptHandler.onChooseDifferent();
-    if (command === 'receipt_cancel') return this._receiptHandler.onCancel();
-    if (command.startsWith('receipt_acc:')) { const accountId = command.slice(12); return this._receiptHandler.onAccountSelected(accountId); }
-    if (command.startsWith('receipt_cat:')) { const categoryId = command.slice(12); return this._receiptHandler.onCategorySelected(categoryId); }
+    const handler = this._receiptHandler;
+    if (!handler) return succeed({ status: 'no-handler' });
+    if (command === 'receipt_confirm') return handler.onConfirm();
+    if (command === 'receipt_choose') return handler.onChooseDifferent();
+    if (command === 'receipt_cancel') return handler.onCancel();
+    if (command.startsWith('receipt_acc:')) { const accountId = command.slice(12); return handler.onAccountSelected(accountId); }
+    if (command.startsWith('receipt_cat:')) { const categoryId = command.slice(12); return handler.onCategorySelected(categoryId); }
     return succeed({ status: 'unknown-receipt-callback' });
   }
 }

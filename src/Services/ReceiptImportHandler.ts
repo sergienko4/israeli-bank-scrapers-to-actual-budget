@@ -8,15 +8,18 @@ import type { IReceiptData, Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import type { INotifier } from './Notifications/INotifier.js';
+import { escapeHtml } from './Notifications/TelegramFormatter.js';
 import type TelegramNotifier from './Notifications/TelegramNotifier.js';
 import ReceiptOcrService from './ReceiptOcrService.js';
 
 /** Actual Budget API surface needed by ReceiptImportHandler. */
 export interface IReceiptActualApi {
   /** Fetches all accounts from Actual Budget. */
-  getAccounts: () => Promise<unknown>;
+  getAccounts: () => Promise<{ id: string; name: string }[]>;
   /** Fetches all categories from Actual Budget. */
-  getCategories: () => Promise<unknown>;
+  getCategories: () => Promise<{ id: string; name: string }[]>;
+  /** Imports transactions into an Actual Budget account. */
+  importTransactions: (accountId: string, transactions: unknown[]) => Promise<unknown>;
   /** Builds an AQL query for the given table. */
   q: (table: string) => {
     filter: (f: unknown) => {
@@ -201,11 +204,14 @@ export class ReceiptImportHandler {
    * @returns Procedure indicating menu display result.
    */
   private async showReceiptAndMatch(receipt: IReceiptData): Promise<Procedure<{ status: string }>> {
+    const safeDate = escapeHtml(receipt.date ?? 'N/A');
+    const safeAmount = escapeHtml(receipt.amount !== undefined ? String(receipt.amount) : 'N/A');
+    const safeMerchant = escapeHtml(receipt.merchant ?? 'N/A');
     const header = [
       '📸 <b>Receipt detected:</b>',
-      `📅 Date: ${receipt.date ?? 'N/A'}`,
-      `💰 Amount: ${String(receipt.amount ?? 'N/A')}`,
-      `🏪 Payee: ${receipt.merchant ?? 'N/A'}`,
+      `📅 Date: ${safeDate}`,
+      `💰 Amount: ${safeAmount}`,
+      `🏪 Payee: ${safeMerchant}`,
     ].join('\n');
     await this.reply(header);
     this._state.phase = 'awaiting_selection';
@@ -222,7 +228,7 @@ export class ReceiptImportHandler {
   private async findPayeeMatch(merchant?: string): Promise<IPayeeMatch | false> {
     if (!merchant || !this._api) return false;
     try { return await this.queryPayeeMatch(merchant); }
-    catch { return false; }
+    catch (err: unknown) { getLogger().debug('payee match failed: ' + errorMessage(err)); return false; }
   }
 
   /**
@@ -253,8 +259,8 @@ export class ReceiptImportHandler {
     txn: { account: string; category: string }
   ): Promise<IPayeeMatch | false> {
     if (!this._api) return false;
-    const accounts = await this._api.getAccounts() as { id: string; name: string }[];
-    const categories = await this._api.getCategories() as { id: string; name: string }[];
+    const accounts = await this._api.getAccounts();
+    const categories = await this._api.getCategories();
     const acc = accounts.find(a => a.id === txn.account);
     const cat = categories.find(c => c.id === txn.category);
     if (!acc || !cat) return false;
@@ -285,11 +291,11 @@ export class ReceiptImportHandler {
   private async showAccountMenu(): Promise<Procedure<{ status: string }>> {
     if (!this._api) { this.reset(); await this.reply('❌ Actual Budget API not connected'); return fail('API not available'); }
     try {
-      const accounts = await this._api.getAccounts() as { id: string; name: string }[];
+      const accounts = await this._api.getAccounts();
       const rows = accounts.map(a => [{ text: a.name, callback_data: `receipt_acc:${a.id}` }]);
       rows.push([{ text: '❌ Cancel', callback_data: 'receipt_cancel' }]);
       return await this._telegramNotifier.sendInlineMenu('📋 <b>Select account:</b>', rows);
-    } catch { this.reset(); await this.reply('❌ Cannot reach Actual Budget'); return fail('API error'); }
+    } catch (error: unknown) { getLogger().debug(`API error: ${errorMessage(error)}`); this.reset(); await this.reply('❌ Cannot reach Actual Budget'); return fail('API error'); }
   }
 
   /**
@@ -299,11 +305,11 @@ export class ReceiptImportHandler {
   private async showCategoryMenu(): Promise<Procedure<{ status: string }>> {
     if (!this._api) { this.reset(); await this.reply('❌ Actual Budget API not connected'); return fail('API not available'); }
     try {
-      const categories = await this._api.getCategories() as { id: string; name: string }[];
+      const categories = await this._api.getCategories();
       const rows = categories.map(c => [{ text: c.name, callback_data: `receipt_cat:${c.id}` }]);
       rows.push([{ text: '❌ Cancel', callback_data: 'receipt_cancel' }]);
       return await this._telegramNotifier.sendInlineMenu('📋 <b>Select category:</b>', rows);
-    } catch { this.reset(); await this.reply('❌ Cannot fetch categories'); return fail('API error'); }
+    } catch (error: unknown) { getLogger().debug(`Category fetch error: ${errorMessage(error)}`); this.reset(); await this.reply('❌ Cannot fetch categories'); return fail('API error'); }
   }
 
   /**
@@ -334,15 +340,58 @@ export class ReceiptImportHandler {
     st: IReceiptState
   ): Promise<Procedure<{ status: string }>> {
     const fields = ReceiptImportHandler.extractFields(st);
+    await this.writeToActualBudget(st, fields);
     const accName = await this.resolveName('accounts', st.selectedAccount ?? '');
     const catName = await this.resolveName('categories', st.selectedCategory ?? '');
     getLogger().info(`Receipt import: ${fields.merchant} -> ${accName} / ${catName}`);
-    const msg = '✅ <b>Imported:</b>\n' +
-      `💰 ${fields.amountStr}\n🏪 ${fields.merchant}\n🏦 ${accName} / ${catName}\n` +
-      `📅 ${fields.dateStr} | Amount: ${String(fields.cents)} cents`;
-    await this.reply(msg);
+    await this.sendImportConfirmation(fields, accName, catName);
     this.reset();
     return succeed({ status: 'receipt-imported' });
+  }
+
+  /**
+   * Writes the receipt transaction to Actual Budget via API.
+   * @param st - Receipt state with account and category selections.
+   * @param fields - Extracted receipt fields.
+   * @param fields.dateStr - Transaction date (YYYY-MM-DD).
+   * @param fields.cents - Amount in cents (negative for expense).
+   * @param fields.merchant - Merchant/payee name.
+   */
+  private async writeToActualBudget(
+    st: IReceiptState,
+    fields: { dateStr: string; cents: number; merchant: string }
+  ): Promise<void> {
+    if (!this._api || !st.selectedAccount) return;
+    const payload = [{
+      date: fields.dateStr, amount: fields.cents,
+      payee_name: fields.merchant, imported_payee: fields.merchant,
+      category: st.selectedCategory, notes: st.receipt?.memo ?? '',
+      cleared: false,
+    }];
+    await this._api.importTransactions(st.selectedAccount, payload);
+  }
+
+  /**
+   * Sends the import confirmation message to Telegram.
+   * @param fields - Extracted receipt fields.
+   * @param fields.amountStr - Display amount string.
+   * @param fields.merchant - Merchant/payee name.
+   * @param fields.dateStr - Transaction date.
+   * @param accName - Resolved account name.
+   * @param catName - Resolved category name.
+   */
+  private async sendImportConfirmation(
+    fields: { amountStr: string; merchant: string; dateStr: string },
+    accName: string, catName: string
+  ): Promise<void> {
+    const safeAmt = escapeHtml(fields.amountStr);
+    const safeMerchant = escapeHtml(fields.merchant);
+    const safeAcc = escapeHtml(accName);
+    const safeCat = escapeHtml(catName);
+    const msg = `✅ <b>Imported:</b>\n💰 ${safeAmt}\n` +
+      `🏪 ${safeMerchant}\n🏦 ${safeAcc} / ${safeCat}\n` +
+      `📅 ${fields.dateStr}`;
+    await this.reply(msg);
   }
 
   /**
@@ -371,9 +420,9 @@ export class ReceiptImportHandler {
     if (!this._api) return 'Unknown';
     try {
       const getter = table === 'accounts' ? this._api.getAccounts : this._api.getCategories;
-      const items = await getter() as { id: string; name: string }[];
+      const items = await getter();
       return items.find(i => i.id === id)?.name ?? 'Unknown';
-    } catch { return 'Unknown'; }
+    } catch (error: unknown) { getLogger().debug(`Resolve name error: ${errorMessage(error)}`); return 'Unknown'; }
   }
 
   /**
@@ -383,7 +432,7 @@ export class ReceiptImportHandler {
    */
   private async reply(text: string): Promise<Procedure<{ status: string }>> {
     try { await this._notifier.sendMessage(text); }
-    catch { return succeed({ status: 'reply-failed' }); }
+    catch (error: unknown) { getLogger().debug(`Reply error: ${errorMessage(error)}`); return succeed({ status: 'reply-failed' }); }
     return succeed({ status: 'reply-sent' });
   }
 
@@ -397,7 +446,7 @@ export class ReceiptImportHandler {
   private startTimeout(): void {
     this._state.timeoutHandle = globalThis.setTimeout(() => {
       if (this._state.phase !== 'idle') {
-        this._state = { phase: 'idle' };
+        this.reset();
         this.reply('⏰ Receipt import timed out.').catch((_err: unknown) => { /* non-critical */ });
       }
     }, RECEIPT_TIMEOUT_MS);

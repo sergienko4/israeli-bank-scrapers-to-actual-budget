@@ -45,6 +45,7 @@ function createMockApi(): IReceiptActualApi {
       }),
     }),
     aqlQuery: vi.fn().mockResolvedValue({ data: [] }),
+    importTransactions: vi.fn().mockResolvedValue(undefined),
   };
 }
 

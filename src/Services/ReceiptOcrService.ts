@@ -78,15 +78,16 @@ export default class ReceiptOcrService {
   ): Promise<Procedure<{ text: string }>> {
     try {
       const processed = await ReceiptOcrService.preprocess(imageBuffer);
-      const worker = await createWorker(this._languages, undefined, {
-        cachePath: './data/tesseract',
-      });
-      const result = await worker.recognize(processed);
-      await worker.terminate();
-      const text = result.data.text.trim();
-      if (!text) return fail('OCR produced no text');
-      getLogger().info(`OCR extracted ${String(text.length)} characters`);
-      return succeed({ text });
+      const worker = await createWorker(this._languages, undefined, { cachePath: './data/tesseract' });
+      try {
+        const result = await worker.recognize(processed);
+        const text = result.data.text.trim();
+        if (!text) return fail('OCR produced no text');
+        getLogger().info(`OCR extracted ${String(text.length)} characters`);
+        return succeed({ text });
+      } finally {
+        await worker.terminate();
+      }
     } catch (error: unknown) {
       return fail(`OCR failed: ${errorMessage(error)}`);
     }
@@ -159,8 +160,8 @@ export default class ReceiptOcrService {
    */
   private static findLargestAmount(lines: string[]): number | false {
     let largest = 0;
-    const pattern = /(\d{1,3}(?:,\d{3})*\.\d{2})/g;
     for (const line of lines) {
+      const pattern = /(\d{1,3}(?:,\d{3})*\.\d{2})/g;
       let match = pattern.exec(line);
       while (match) {
         const cleaned = match[1].replaceAll(',', '');
