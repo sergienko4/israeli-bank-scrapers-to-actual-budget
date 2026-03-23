@@ -447,6 +447,6 @@ docker compose logs -f importer
 
 ## Additional Resources
 
-- **israeli-bank-scrapers**: https://github.com/eshaham/israeli-bank-scrapers
+- **israeli-bank-scrapers**: https://github.com/sergienko4/israeli-bank-scrapers
 - **Actual Budget**: https://actualbudget.org/docs/
 - **Actual Budget API**: https://actualbudget.org/docs/api/

@@ -17,6 +17,8 @@ import { createLogger, deriveLogFormat,getLogger } from './Logger/Index.js';
 import { AuditLogService } from './Services/AuditLogService.js';
 import { ImportMediator } from './Services/ImportMediator.js';
 import TelegramNotifier from './Services/Notifications/TelegramNotifier.js';
+import { ReceiptImportHandler } from './Services/ReceiptImportHandler.js';
+import ReceiptOcrService from './Services/ReceiptOcrService.js';
 import { TelegramCommandHandler } from './Services/TelegramCommandHandler.js';
 import TelegramPoller from './Services/TelegramPoller.js';
 import type {
@@ -200,30 +202,54 @@ async function runConfigValidation(): Promise<string> {
 }
 
 /**
- * Constructs a TelegramCommandHandler wired up to all scheduler callbacks.
+ * Creates a ReceiptImportHandler if receipt import is enabled.
+ * @param notifier - The TelegramNotifier for messaging and photo download.
+ * @param isEnabled - Whether receipt import is enabled.
+ * @returns ReceiptImportHandler or false when disabled.
+ */
+function createReceiptHandler(
+  notifier: TelegramNotifier, isEnabled: boolean
+): ReceiptImportHandler | false {
+  if (!isEnabled) return false;
+  return new ReceiptImportHandler({
+    ocr: new ReceiptOcrService(),
+    notifier,
+    telegramNotifier: notifier,
+  });
+}
+
+/**
+ * Returns all configured bank names from the live config.
+ * @returns Array of bank name strings.
+ */
+function getConfiguredBankNames(): string[] {
+  const cfg = loadFullConfig();
+  if (!cfg.success) {
+    LOGGER.warn(`getBankNames: config load failed — ${cfg.message}`);
+    return [];
+  }
+  return Object.keys(cfg.data.banks);
+}
+
+/**
+ * Constructs a TelegramCommandHandler wired to all scheduler callbacks.
  * @param notifier - The TelegramNotifier used to send responses.
  * @param mediator - The ImportMediator that handles import requests.
+ * @param enableReceipt - Whether to enable receipt import via OCR.
  * @returns A configured TelegramCommandHandler instance.
  */
 export function buildCommandHandler(
   notifier: TelegramNotifier,
-  mediator: ImportMediator
+  mediator: ImportMediator,
+  enableReceipt?: boolean
 ): TelegramCommandHandler {
+  const receiptHandlerResult = createReceiptHandler(notifier, enableReceipt === true);
+  const receiptHandler = receiptHandlerResult || void 0;
   return new TelegramCommandHandler({
     mediator, notifier, auditLog: new AuditLogService(),
     runValidate: runConfigValidation,
-    /**
-     * Returns all configured bank names from the live config.
-     * @returns Array of bank name strings.
-     */
-    getBankNames: () => {
-      const cfg = loadFullConfig();
-      if (!cfg.success) {
-        LOGGER.warn(`getBankNames: config load failed — ${cfg.message}`);
-        return [];
-      }
-      return Object.keys(cfg.data.banks);
-    },
+    receiptHandler,
+    getBankNames: getConfiguredBankNames,
     /**
      * Delegates scan menu display to the notifier.
      * @param banks - Bank names for the inline keyboard.
@@ -235,9 +261,37 @@ export function buildCommandHandler(
 }
 
 /**
+ * Creates and starts the TelegramPoller, wiring it to the handler.
+ * @param telegram - Telegram bot configuration (token, chatId, etc.).
+ * @param handler - The command handler to dispatch messages to.
+ * @param mediator - The mediator to attach the poller to.
+ * @returns Procedure indicating the poller was wired and started.
+ */
+function wireAndStartPoller(
+  telegram: ITelegramConfig,
+  handler: TelegramCommandHandler,
+  mediator: ImportMediator
+): IProcedureSuccess<{ status: string }> {
+  const poller = new TelegramPoller(
+    telegram.botToken, telegram.chatId,
+    (text) => handler.handle(text)
+  );
+  if (telegram.enableReceiptImport === true) {
+    poller.setPhotoHandler(
+      (fileId, caption) => handler.handlePhoto(fileId, caption)
+    );
+  }
+  mediator.setPoller(poller);
+  poller.start().catch((err: unknown) => {
+    LOGGER.error(`Telegram command listener crashed: ${errorMessage(err)}`);
+  });
+  return succeed({ status: 'poller-started' });
+}
+
+/**
  * Creates the mediator, handler, poller, and wires them together.
  * @param telegram - Telegram bot configuration (token, chatId, etc.).
- * @param config - Full importer config used to detect optional commands (e.g. watch).
+ * @param config - Full importer config for detecting optional features.
  * @returns The configured ImportMediator.
  */
 async function createHandlerAndPoller(
@@ -249,14 +303,11 @@ async function createHandlerAndPoller(
   await notifier.registerCommands(extras);
   const notifierProcedure = succeed(notifier);
   const mediator = createMediator(notifierProcedure);
-  const handler = buildCommandHandler(notifier, mediator);
-  const poller = new TelegramPoller(
-    telegram.botToken, telegram.chatId, (text) => handler.handle(text)
+  const isReceiptEnabled = telegram.enableReceiptImport === true;
+  const handler = buildCommandHandler(
+    notifier, mediator, isReceiptEnabled
   );
-  mediator.setPoller(poller);
-  poller.start().catch((err: unknown) => {
-    LOGGER.error(`Telegram command listener crashed: ${errorMessage(err)}`);
-  });
+  wireAndStartPoller(telegram, handler, mediator);
   return mediator;
 }
 
@@ -296,6 +347,9 @@ export function buildExtraCommands(
   const watchLen = config.spendingWatch?.length ?? 0;
   if (watchLen > 0) {
     extras.push({ command: 'watch', description: 'Check spending watch rules' });
+  }
+  if (config.notifications?.telegram?.enableReceiptImport) {
+    extras.push({ command: 'import_receipt', description: 'Import from receipt photo (OCR)' });
   }
   return extras;
 }

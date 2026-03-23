@@ -213,4 +213,31 @@ describe('AuditLogService', () => {
       rmdirSync(badPath);
     }
   });
+
+  it('record catch block handles non-Error thrown values', () => {
+    const badPath = join(tmpdir(), 'audit-test-nonexist-' + String(Date.now()), 'nested', 'file.json');
+    const badService = new AuditLogService(badPath, 5);
+    const result = badService.record(fakeImportSummary());
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toContain('audit write failed');
+  });
+
+  it('getConsecutiveFailures returns 0 when getRecent fails', () => {
+    vi.spyOn(service, 'getRecent').mockReturnValue({
+      success: false as const, status: 'error', message: 'read error',
+    });
+    const result = service.getConsecutiveFailures('discount');
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toBe(0);
+  });
+
+  it('getLastFailedBanks returns empty when getRecent fails', () => {
+    vi.spyOn(service, 'getLastFailedBanks').mockRestore();
+    vi.spyOn(service, 'getRecent').mockReturnValue({
+      success: false as const, status: 'error', message: 'read error',
+    });
+    const result = service.getLastFailedBanks();
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toEqual([]);
+  });
 });

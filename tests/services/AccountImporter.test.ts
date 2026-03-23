@@ -231,4 +231,105 @@ describe('AccountImporter.processAllAccounts', () => {
 
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Main Account'));
   });
+
+  it('logs reconciliation created message with positive diff', async () => {
+    const opts = makeOpts();
+    opts.reconciliationService.reconcile.mockResolvedValue(
+      succeed({ status: 'created', diff: 500 })
+    );
+    const importer = new AccountImporter(opts);
+    const target = fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all', reconcile: true });
+    const config = fakeBankConfig({ targets: [target] });
+    const account = { accountNumber: '123456', txns: fakeBankTransactions(1), balance: 1000 };
+
+    await importer.processAllAccounts('discount', config, makeScrapeResult([account]));
+
+    expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('+5.00 ILS'));
+  });
+
+  it('logs already-reconciled message', async () => {
+    const opts = makeOpts();
+    opts.reconciliationService.reconcile.mockResolvedValue(
+      succeed({ status: 'already-reconciled', diff: 0 })
+    );
+    const importer = new AccountImporter(opts);
+    const target = fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all', reconcile: true });
+    const config = fakeBankConfig({ targets: [target] });
+    const account = { accountNumber: '123456', txns: fakeBankTransactions(1), balance: 1000 };
+
+    await importer.processAllAccounts('discount', config, makeScrapeResult([account]));
+
+    expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Already reconciled today'));
+  });
+
+  it('returns zero counts when getOrCreateAccount fails', async () => {
+    const opts = makeOpts();
+    opts.transactionService.getOrCreateAccount.mockResolvedValue(
+      fail('Account not found')
+    );
+    const importer = new AccountImporter(opts);
+    const target = fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all', reconcile: false });
+    const config = fakeBankConfig({ targets: [target] });
+    const account = { accountNumber: '123456', txns: fakeBankTransactions(1), balance: undefined };
+
+    const result = await importer.processAllAccounts('discount', config, makeScrapeResult([account]));
+
+    expect(result).toEqual({ imported: 0, skipped: 0 });
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Account error'));
+    expect(opts.transactionService.importTransactions).not.toHaveBeenCalled();
+  });
+
+  it('returns zero counts when importTransactions fails', async () => {
+    const opts = makeOpts();
+    opts.transactionService.importTransactions.mockResolvedValue(
+      fail('Import explosion')
+    );
+    const importer = new AccountImporter(opts);
+    const target = fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all', reconcile: false });
+    const config = fakeBankConfig({ targets: [target] });
+    const account = { accountNumber: '123456', txns: fakeBankTransactions(1), balance: undefined };
+
+    const result = await importer.processAllAccounts('discount', config, makeScrapeResult([account]));
+
+    expect(result).toEqual({ imported: 0, skipped: 0 });
+    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Import error'));
+  });
+
+  it('logs reconciliation created message with negative diff (no + prefix)', async () => {
+    const opts = makeOpts();
+    opts.reconciliationService.reconcile.mockResolvedValue(
+      succeed({ status: 'created', diff: -500 })
+    );
+    const importer = new AccountImporter(opts);
+    const target = fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all', reconcile: true });
+    const config = fakeBankConfig({ targets: [target] });
+    const account = { accountNumber: '123456', txns: fakeBankTransactions(1), balance: 1000 };
+
+    await importer.processAllAccounts('discount', config, makeScrapeResult([account]));
+
+    expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('-5.00 ILS'));
+  });
+
+  it('defaults to empty accounts array when scrapeResult.accounts is undefined', async () => {
+    const opts = makeOpts();
+    const importer = new AccountImporter(opts);
+    const config = fakeBankConfig();
+    const result = await importer.processAllAccounts('discount', config, { success: true } as never);
+
+    expect(result).toEqual({ imported: 0, skipped: 0 });
+    expect(opts.transactionService.importTransactions).not.toHaveBeenCalled();
+  });
+
+  it('returns empty result for account with zero transactions after filtering', async () => {
+    const opts = makeOpts();
+    const importer = new AccountImporter(opts);
+    const target = fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all', reconcile: false });
+    const config = fakeBankConfig({ targets: [target] });
+    const account = { accountNumber: '123456', txns: [], balance: undefined };
+
+    const result = await importer.processAllAccounts('discount', config, makeScrapeResult([account]));
+
+    expect(result).toEqual({ imported: 0, skipped: 0 });
+    expect(opts.transactionService.importTransactions).not.toHaveBeenCalled();
+  });
 });

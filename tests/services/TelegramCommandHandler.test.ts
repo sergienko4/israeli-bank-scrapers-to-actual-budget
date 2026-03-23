@@ -645,6 +645,84 @@ describe('TelegramCommandHandler', () => {
     expect(msg).toContain('/retry');
   });
 
+  // ─── Receipt import routing ───
+
+  it('handlePhoto returns not-configured when no receipt handler', async () => {
+    const result = await handler.handlePhoto('file-id');
+    expect(result.data.status).toBe('receipt-not-configured');
+  });
+
+  it('handlePhoto delegates to receipt handler when configured', async () => {
+    const mockReceipt = {
+      start: vi.fn().mockResolvedValue(succeed({ status: 'awaiting-photo' })),
+      handlePhoto: vi.fn().mockResolvedValue(succeed({ status: 'processed' })),
+      onConfirm: vi.fn().mockResolvedValue(succeed({ status: 'ok' })),
+      onChooseDifferent: vi.fn().mockResolvedValue(succeed({ status: 'ok' })),
+      onCancel: vi.fn().mockResolvedValue(succeed({ status: 'ok' })),
+      onAccountSelected: vi.fn().mockResolvedValue(succeed({ status: 'ok' })),
+      onCategorySelected: vi.fn().mockResolvedValue(succeed({ status: 'ok' })),
+    };
+    const receiptHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      receiptHandler: mockReceipt as never,
+    });
+    const result = await receiptHandler.handlePhoto('file-123');
+    expect(mockReceipt.handlePhoto).toHaveBeenCalledWith('file-123');
+    expect(result.data.status).toBe('processed');
+  });
+
+  it('/import_receipt delegates to receipt handler start', async () => {
+    const mockReceipt = { start: vi.fn().mockResolvedValue(succeed({ status: 'awaiting-photo' })) };
+    const receiptHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      receiptHandler: mockReceipt as never,
+    });
+    await receiptHandler.handle('/import_receipt');
+    expect(mockReceipt.start).toHaveBeenCalled();
+  });
+
+  it('/import_receipt without handler replies not configured', async () => {
+    await handler.handle('/import_receipt');
+    expect(mockNotifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('not configured'));
+  });
+
+  it('receipt_confirm routes to onConfirm', async () => {
+    const mockReceipt = { onConfirm: vi.fn().mockResolvedValue(succeed({ status: 'ok' })) };
+    const rh = new TelegramCommandHandler({ mediator: mockMediator as unknown as ImportMediator, notifier: mockNotifier, receiptHandler: mockReceipt as never });
+    await rh.handle('receipt_confirm');
+    expect(mockReceipt.onConfirm).toHaveBeenCalled();
+  });
+
+  it('receipt_choose routes to onChooseDifferent', async () => {
+    const mockReceipt = { onChooseDifferent: vi.fn().mockResolvedValue(succeed({ status: 'ok' })) };
+    const rh = new TelegramCommandHandler({ mediator: mockMediator as unknown as ImportMediator, notifier: mockNotifier, receiptHandler: mockReceipt as never });
+    await rh.handle('receipt_choose');
+    expect(mockReceipt.onChooseDifferent).toHaveBeenCalled();
+  });
+
+  it('receipt_cancel routes to onCancel', async () => {
+    const mockReceipt = { onCancel: vi.fn().mockResolvedValue(succeed({ status: 'ok' })) };
+    const rh = new TelegramCommandHandler({ mediator: mockMediator as unknown as ImportMediator, notifier: mockNotifier, receiptHandler: mockReceipt as never });
+    await rh.handle('receipt_cancel');
+    expect(mockReceipt.onCancel).toHaveBeenCalled();
+  });
+
+  it('receipt_acc:uuid routes to onAccountSelected', async () => {
+    const mockReceipt = { onAccountSelected: vi.fn().mockResolvedValue(succeed({ status: 'ok' })) };
+    const rh = new TelegramCommandHandler({ mediator: mockMediator as unknown as ImportMediator, notifier: mockNotifier, receiptHandler: mockReceipt as never });
+    await rh.handle('receipt_acc:acc-123');
+    expect(mockReceipt.onAccountSelected).toHaveBeenCalledWith('acc-123');
+  });
+
+  it('receipt_cat:uuid routes to onCategorySelected', async () => {
+    const mockReceipt = { onCategorySelected: vi.fn().mockResolvedValue(succeed({ status: 'ok' })) };
+    const rh = new TelegramCommandHandler({ mediator: mockMediator as unknown as ImportMediator, notifier: mockNotifier, receiptHandler: mockReceipt as never });
+    await rh.handle('receipt_cat:cat-456');
+    expect(mockReceipt.onCategorySelected).toHaveBeenCalledWith('cat-456');
+  });
+
   // ─── formatBankError with advice ───
 
   it('error reply includes advice for known scraper error code', async () => {

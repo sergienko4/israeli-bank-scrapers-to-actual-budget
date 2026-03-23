@@ -95,6 +95,7 @@ export interface ITelegramConfig {
   messageFormat?: MessageFormat;       // Default: 'summary'
   showTransactions?: ShowTransactions;  // Default: 'new'
   listenForCommands?: boolean;         // Default: false
+  enableReceiptImport?: boolean;       // Default: false
 }
 
 export type WebhookFormat = 'slack' | 'discord' | 'plain';
@@ -188,10 +189,27 @@ export interface IActualAccount {
   closed?: boolean;
 }
 
+export interface ITelegramPhotoSize {
+  file_id: string;
+  file_unique_id: string;
+  width: number;
+  height: number;
+  file_size?: number;
+}
+
 export interface ITelegramMessageData {
   chat: { id: number };
   text?: string;
+  photo?: ITelegramPhotoSize[];
+  caption?: string;
   date: number;
+}
+
+export interface IReceiptData {
+  date?: string;
+  amount?: number;
+  merchant?: string;
+  memo?: string;
 }
 
 export interface ITelegramCallbackQuery {
