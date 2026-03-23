@@ -75,7 +75,11 @@ export class TelegramCommandHandler {
    */
   public async handle(text: string): Promise<Procedure<{ status: string }>> {
     const raw = text.trim().split(/\s+/);
-    const command = raw[0].toLowerCase();
+    const firstToken = raw[0];
+    const colonIdx = firstToken.indexOf(':');
+    const command = colonIdx >= 0
+      ? firstToken.slice(0, colonIdx + 1).toLowerCase() + firstToken.slice(colonIdx + 1)
+      : firstToken.toLowerCase();
     const arg = raw.slice(1).join(' ').trim() || void 0;
     return this.dispatchCommand(command, arg);
   }
@@ -110,7 +114,7 @@ export class TelegramCommandHandler {
       return this.handleScan(bankName);
     }
     const handlers = this.commandMap(arg);
-    if (command in handlers) await handlers[command]();
+    if (Object.hasOwn(handlers, command)) await handlers[command]();
     return succeed({ status: 'handled' });
   }
 
@@ -355,9 +359,11 @@ export class TelegramCommandHandler {
       '/scan - Run bank import now', '/retry - Re-import only last failed banks',
       '/preview - Dry run: scrape without importing', '/status - Show last run info + history',
       '/check_config - Check configuration (offline + online)', '/watch - Spending watch info (runs after each import)',
-      '/import_receipt - Import from receipt photo',
       '/logs - Show recent log entries', '/logs 100 - Show last 100 entries (max 150)', '/help - Show this message',
     ];
+    if (this._receiptHandler) {
+      lines.splice(-2, 0, '/import_receipt - Import from receipt photo');
+    }
     const helpMessage = lines.join('\n');
     await this.reply(helpMessage);
     return succeed({ status: 'help-sent' });

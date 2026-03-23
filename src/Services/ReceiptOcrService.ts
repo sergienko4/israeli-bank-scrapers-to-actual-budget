@@ -109,7 +109,7 @@ export default class ReceiptOcrService {
     const date = rawDate || void 0;
     const amount = rawAmount || void 0;
     const merchant = rawMerchant || void 0;
-    getLogger().info(
+    getLogger().debug(
       `Receipt parsed: date=${date ?? 'N/A'}, ` +
       `amount=${String(amount ?? 'N/A')}, merchant=${merchant ?? 'N/A'}`
     );
@@ -180,7 +180,7 @@ export default class ReceiptOcrService {
    */
   private static extractMerchant(lines: string[]): string | false {
     // First: check for "לכבוד:" (to:) — extract recipient name
-    const toLine = lines.find(l => /לכבוד\s*:/.test(l));
+    const toLine = lines.find(l => /לכבוד\s*[;:]/.test(l));
     if (toLine) {
       const name = toLine.replace(/.*לכבוד\s*[;:]?\s*/, '').replace(/[\u200F\u200E]/g, '').trim();
       const isLabel = /מספר|טלפון|כתובת|דף|מתוך/.test(name);

@@ -17,6 +17,7 @@ import { createLogger, deriveLogFormat,getLogger } from './Logger/Index.js';
 import { AuditLogService } from './Services/AuditLogService.js';
 import { ImportMediator } from './Services/ImportMediator.js';
 import TelegramNotifier from './Services/Notifications/TelegramNotifier.js';
+import createReceiptApi from './Services/ReceiptApiAdapter.js';
 import { ReceiptImportHandler } from './Services/ReceiptImportHandler.js';
 import ReceiptOcrService from './Services/ReceiptOcrService.js';
 import { TelegramCommandHandler } from './Services/TelegramCommandHandler.js';
@@ -55,7 +56,7 @@ export function readJsonOrEncrypted(filePath: string): Procedure<Record<string, 
     if (!password) return fail('Encryption password required');
     const decryptedJson = decryptConfig(raw, password);
     return succeed(JSON.parse(decryptedJson) as Record<string, string>);
-  } catch (error) {
+  } catch (error: unknown) {
     return fail(`Failed to read ${filePath}: ${errorMessage(error)}`);
   }
 }
@@ -69,7 +70,7 @@ export function loadFullConfig(): Procedure<IImporterConfig> {
   try {
     const loader = new ConfigLoader();
     return loader.loadRaw();
-  } catch (error) {
+  } catch (error: unknown) {
     return fail(`Failed to load config: ${errorMessage(error)}`);
   }
 }
@@ -215,6 +216,7 @@ function createReceiptHandler(
     ocr: new ReceiptOcrService(),
     notifier,
     telegramNotifier: notifier,
+    apiFactory: createReceiptApi,
   });
 }
 
@@ -325,9 +327,9 @@ async function startTelegramCommands(): Promise<Procedure<ImportMediator>> {
   try {
     const mediator = await createHandlerAndPoller(tg, config);
     return succeed(mediator);
-  } catch (error) {
+  } catch (error: unknown) {
     LOGGER.error(`⚠️  Failed to start Telegram commands: ${errorMessage(error)}`);
-    return fail('Telegram command startup failed', { error: error as Error });
+    return fail('Telegram command startup failed', { error: error instanceof Error ? error : new Error(String(error)) });
   }
 }
 

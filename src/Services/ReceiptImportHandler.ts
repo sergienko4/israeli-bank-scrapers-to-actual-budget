@@ -19,7 +19,10 @@ export interface IReceiptActualApi {
   /** Fetches all categories from Actual Budget. */
   getCategories: () => Promise<{ id: string; name: string }[]>;
   /** Imports transactions into an Actual Budget account. */
-  importTransactions: (accountId: string, transactions: unknown[]) => Promise<unknown>;
+  importTransactions: (
+    accountId: string,
+    transactions: { account: string; date: string; [key: string]: unknown }[]
+  ) => Promise<unknown>;
   /** Builds an AQL query for the given table. */
   q: (table: string) => {
     filter: (f: unknown) => {
@@ -42,6 +45,8 @@ export interface IReceiptHandlerOptions {
   readonly telegramNotifier: TelegramNotifier;
   /** Optional Actual Budget API (set later via setApi). */
   readonly api?: IReceiptActualApi;
+  /** Lazy API factory — connects to Actual Budget on demand. */
+  readonly apiFactory?: () => Promise<IReceiptActualApi>;
 }
 
 /** Receipt import conversation state. */
@@ -61,6 +66,7 @@ const RECEIPT_TIMEOUT_MS = 120000;
 /** Handles the multi-step receipt import conversation via Telegram. */
 export class ReceiptImportHandler {
   private _state: IReceiptState = { phase: 'idle' };
+  private readonly _apiFactory?: () => Promise<IReceiptActualApi>;
   private _api?: IReceiptActualApi;
   private readonly _ocr: ReceiptOcrService;
   private readonly _notifier: INotifier;
@@ -75,6 +81,7 @@ export class ReceiptImportHandler {
     this._notifier = opts.notifier;
     this._telegramNotifier = opts.telegramNotifier;
     this._api = opts.api;
+    this._apiFactory = opts.apiFactory;
   }
 
   /**
@@ -162,6 +169,22 @@ export class ReceiptImportHandler {
   // ─── Private ───
 
   /**
+   * Ensures the Actual Budget API is connected, using the factory if needed.
+   * @returns True if the API is available, false otherwise.
+   */
+  private async ensureApi(): Promise<boolean> {
+    if (this._api) return true;
+    if (!this._apiFactory) return false;
+    try {
+      this._api = await this._apiFactory();
+      return true;
+    } catch (error: unknown) {
+      getLogger().debug(`API connect failed: ${errorMessage(error)}`);
+      return false;
+    }
+  }
+
+  /**
    * Downloads and OCRs the photo, then shows results.
    * @param fileId - Telegram file_id to download.
    * @returns Procedure indicating processing result.
@@ -238,8 +261,9 @@ export class ReceiptImportHandler {
    */
   private async queryPayeeMatch(merchant: string): Promise<IPayeeMatch | false> {
     if (!this._api) return false;
+    const safeMerchant = merchant.replaceAll('%', '\\%').replaceAll('_', '\\_');
     const query = this._api.q('transactions')
-      .filter({ imported_payee: { $like: `%${merchant}%` }, category: { $ne: null } })
+      .filter({ imported_payee: { $like: `%${safeMerchant}%` }, category: { $ne: null } })
       .select(['account', 'category'])
       .orderBy({ date: 'desc' });
     const raw = await this._api.aqlQuery(query);
@@ -276,7 +300,7 @@ export class ReceiptImportHandler {
     this._state.selectedAccount = match.accId;
     this._state.selectedCategory = match.catId;
     const text = '🔍 <b>Found previous import:</b>\n' +
-      `Account: ${match.accName}\nCategory: ${match.catName}`;
+      `Account: ${escapeHtml(match.accName)}\nCategory: ${escapeHtml(match.catName)}`;
     const keyboard = [
       [{ text: '✅ Use these', callback_data: 'receipt_confirm' }, { text: '📋 Choose different', callback_data: 'receipt_choose' }],
       [{ text: '❌ Cancel', callback_data: 'receipt_cancel' }],
@@ -289,7 +313,8 @@ export class ReceiptImportHandler {
    * @returns Procedure indicating menu was sent.
    */
   private async showAccountMenu(): Promise<Procedure<{ status: string }>> {
-    if (!this._api) { this.reset(); await this.reply('❌ Actual Budget API not connected'); return fail('API not available'); }
+    const hasApi = await this.ensureApi();
+    if (!hasApi || !this._api) { this.reset(); await this.reply('❌ Actual Budget API not connected'); return fail('API not available'); }
     try {
       const accounts = await this._api.getAccounts();
       const rows = accounts.map(a => [{ text: a.name, callback_data: `receipt_acc:${a.id}` }]);
@@ -303,7 +328,8 @@ export class ReceiptImportHandler {
    * @returns Procedure indicating menu was sent.
    */
   private async showCategoryMenu(): Promise<Procedure<{ status: string }>> {
-    if (!this._api) { this.reset(); await this.reply('❌ Actual Budget API not connected'); return fail('API not available'); }
+    const hasApi = await this.ensureApi();
+    if (!hasApi || !this._api) { this.reset(); await this.reply('❌ Actual Budget API not connected'); return fail('API not available'); }
     try {
       const categories = await this._api.getCategories();
       const rows = categories.map(c => [{ text: c.name, callback_data: `receipt_cat:${c.id}` }]);
@@ -363,9 +389,12 @@ export class ReceiptImportHandler {
   ): Promise<void> {
     if (!this._api || !st.selectedAccount) return;
     const payload = [{
+      account: st.selectedAccount,
       date: fields.dateStr, amount: fields.cents,
-      payee_name: fields.merchant, imported_payee: fields.merchant,
-      category: st.selectedCategory, notes: st.receipt?.memo ?? '',
+      payee_name: fields.merchant,
+      imported_payee: fields.merchant,
+      category: st.selectedCategory,
+      notes: st.receipt?.memo ?? '',
       cleared: false,
     }];
     await this._api.importTransactions(st.selectedAccount, payload);
@@ -390,7 +419,7 @@ export class ReceiptImportHandler {
     const safeCat = escapeHtml(catName);
     const msg = `✅ <b>Imported:</b>\n💰 ${safeAmt}\n` +
       `🏪 ${safeMerchant}\n🏦 ${safeAcc} / ${safeCat}\n` +
-      `📅 ${fields.dateStr}`;
+      `📅 ${escapeHtml(fields.dateStr)}`;
     await this.reply(msg);
   }
 
@@ -419,8 +448,9 @@ export class ReceiptImportHandler {
   private async resolveName(table: string, id: string): Promise<string> {
     if (!this._api) return 'Unknown';
     try {
-      const getter = table === 'accounts' ? this._api.getAccounts : this._api.getCategories;
-      const items = await getter();
+      const items = table === 'accounts'
+        ? await this._api.getAccounts()
+        : await this._api.getCategories();
       return items.find(i => i.id === id)?.name ?? 'Unknown';
     } catch (error: unknown) { getLogger().debug(`Resolve name error: ${errorMessage(error)}`); return 'Unknown'; }
   }

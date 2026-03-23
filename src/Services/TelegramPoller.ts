@@ -114,7 +114,7 @@ export default class TelegramPoller {
         await TelegramPoller.sleep(5000);
       }
       return succeed({ status: 'poll-ok' });
-    } catch (error) {
+    } catch (error: unknown) {
       getLogger().error(`⚠️  Telegram poll error: ${errorMessage(error)}`);
       if (this._running) await TelegramPoller.sleep(5000);
       return succeed({ status: 'poll-error-recovered' });
@@ -134,7 +134,7 @@ export default class TelegramPoller {
       if (!response.ok) return succeed({ status: 'poll-http-error' });
       await this.applyUpdates(await response.json() as ITelegramApiResponse);
       return succeed({ status: 'poll-complete' });
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
         return succeed({ status: 'poll-aborted' });
       }
@@ -190,7 +190,7 @@ export default class TelegramPoller {
   private isValidMessage(
     message: ITelegramMessageData | undefined
   ): message is ITelegramMessageData {
-    if (!message?.text && !message?.photo) return false;
+    if (!message?.text && !message?.photo?.length) return false;
     if (String(message.chat.id) !== this.chatId) return false;
     if (message.date < this._startedAt) return false;
     return true;
@@ -218,8 +218,8 @@ export default class TelegramPoller {
   private async dispatchPhoto(
     message: ITelegramMessageData
   ): Promise<Procedure<{ status: string }>> {
-    if (!message.photo || !this._onPhoto) return succeed({ status: 'no-photo-handler' });
-    const largest = message.photo[message.photo.length - 1];
+    const largest = message.photo?.at(-1);
+    if (!largest || !this._onPhoto) return succeed({ status: 'no-photo-handler' });
     await this._onPhoto(largest.file_id, message.caption);
     return succeed({ status: 'photo-dispatched' });
   }
