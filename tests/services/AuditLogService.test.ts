@@ -232,7 +232,6 @@ describe('AuditLogService', () => {
   });
 
   it('getLastFailedBanks returns empty when getRecent fails', () => {
-    vi.spyOn(service, 'getLastFailedBanks').mockRestore();
     vi.spyOn(service, 'getRecent').mockReturnValue({
       success: false as const, status: 'error', message: 'read error',
     });

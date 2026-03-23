@@ -3,9 +3,14 @@ import { ReceiptImportHandler } from '../../src/Services/ReceiptImportHandler.js
 import type { IReceiptActualApi } from '../../src/Services/ReceiptImportHandler.js';
 import ReceiptOcrService from '../../src/Services/ReceiptOcrService.js';
 import { succeed, fail } from '../../src/Types/ProcedureHelpers.js';
-import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+vi.mock('../../src/Logger/Index.js', () => ({
+  getLogger: () => mockLogger,
+  createLogger: vi.fn(),
+  deriveLogFormat: vi.fn().mockReturnValue('words'),
+}));
 
 /** Creates a mock notifier for tests. */
 function createMockNotifier() {
@@ -59,9 +64,6 @@ describe('ReceiptImportHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(
-      mockLogger as ReturnType<typeof LoggerModule.getLogger>
-    );
     mockNotifier = createMockNotifier();
     mockTgNotifier = createMockTelegramNotifier();
     mockApi = createMockApi();

@@ -1,8 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ReceiptOcrService from '../../src/Services/ReceiptOcrService.js';
-import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+vi.mock('../../src/Logger/Index.js', () => ({
+  getLogger: () => mockLogger,
+  createLogger: vi.fn(),
+  deriveLogFormat: vi.fn().mockReturnValue('words'),
+}));
 
 vi.mock('sharp', () => {
   const pipeline = {
@@ -26,7 +31,6 @@ vi.mock('tesseract.js', () => ({
 describe('ReceiptOcrService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as ReturnType<typeof LoggerModule.getLogger>);
   });
 
   describe('recognize', () => {

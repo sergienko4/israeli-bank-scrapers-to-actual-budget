@@ -25,3 +25,19 @@ rules:
     message: "Don't silently fall back to [] — check query result first"
     severity: ERROR
     languages: [typescript]
+
+  - id: prototype-pollution-in-check
+    pattern: if ($KEY in $MAP) ...
+    message: "Use Object.hasOwn($MAP, $KEY) to prevent prototype pollution"
+    severity: ERROR
+    languages: [typescript]
+
+  - id: pii-in-info-log
+    patterns:
+      - pattern: getLogger().info(`...${$VAR}...`)
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: ".*(merchant|amount|payee|name).*"
+    message: "Don't log PII at info level — use getLogger().debug()"
+    severity: ERROR
+    languages: [typescript]

@@ -369,7 +369,8 @@ export class ReceiptImportHandler {
     await this.writeToActualBudget(st, fields);
     const accName = await this.resolveName('accounts', st.selectedAccount ?? '');
     const catName = await this.resolveName('categories', st.selectedCategory ?? '');
-    getLogger().info(`Receipt import: ${fields.merchant} -> ${accName} / ${catName}`);
+    getLogger().info('Receipt import completed');
+    getLogger().debug(`Receipt import: ${fields.merchant} -> ${accName} / ${catName}`);
     await this.sendImportConfirmation(fields, accName, catName);
     this.reset();
     return succeed({ status: 'receipt-imported' });
