@@ -21,14 +21,14 @@ const DATE_PATTERN = /(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/;
 /** Matches Hebrew "total" variants (סה"כ, סה"ג OCR misread). */
 const TOTAL_HEB = 'סה.{1,2}[כגך]';
 /** Hebrew "to pay" / "total due" patterns. */
-const PAY_HEB = 'לתשלום|יתרה\\s*לתשלום|שולם|נותר\\s*לתשלום';
+const PAY_HEB = String.raw`לתשלום|יתרה\s*לתשלום|שולם|נותר\s*לתשלום`;
 const AMOUNT_PATTERNS = [
   // לתשלום (to pay) — highest priority (final total)
-  new RegExp(`(\\d[\\d,]*(?:\\.\\d+)?)[\\s[\\]]*=?(?:${PAY_HEB})`, 'i'),
-  new RegExp(`(?:${PAY_HEB})[:?\\s]*₪?(\\d[\\d,]*(?:\\.\\d+)?)`, 'i'),
+  new RegExp(String.raw`(\d[\d,]*(?:\.\d+)?)[\s[\]]*=?(?:${PAY_HEB})`),
+  new RegExp(String.raw`(?:${PAY_HEB})[:?\s]*₪?(\d[\d,]*(?:\.\d+)?)`),
   // סה"כ (subtotal/total) — second priority
-  new RegExp(`(\\d[\\d,]*(?:\\.\\d+)?)[\\s[\\]]*(?:${TOTAL_HEB}|total|סכום)`, 'i'),
-  new RegExp(`(?:${TOTAL_HEB}|total|סכום|amount)[:?\\s]*₪?(\\d[\\d,]*(?:\\.\\d+)?)`, 'i'),
+  new RegExp(String.raw`(\d[\d,]*(?:\.\d+)?)[\s[\]]*(?:${TOTAL_HEB}|total|סכום)`, 'i'),
+  new RegExp(String.raw`(?:${TOTAL_HEB}|total|סכום|amount)[:?\s]*₪?(\d[\d,]*(?:\.\d+)?)`, 'i'),
   // Currency symbol patterns
   /₪\s*(\d[\d,]*(?:\.\d+)?)/,
   /(\d{1,3}(?:,\d{3})*\.\d{2})\s*(?:₪|ILS|ש"ח)/,
@@ -98,7 +98,7 @@ export default class ReceiptOcrService {
    * @returns Procedure with extracted IReceiptData fields.
    */
   public static parseReceipt(text: string): Procedure<IReceiptData> {
-    const cleaned = text.replace(/[\u200F\u200E\u202A-\u202E]/g, '');
+    const cleaned = text.replaceAll(/[\u200F\u200E\u202A-\u202E]/g, '');
     const lines = cleaned.split('\n').map(l => l.trim()).filter(Boolean);
     if (lines.length === 0) return fail('No text lines to parse');
     const rawDate = ReceiptOcrService.extractDate(cleaned);
@@ -194,7 +194,7 @@ export default class ReceiptOcrService {
       if (line.length < 2) continue;
       if (DATE_PATTERN.test(line)) continue;
       if (ReceiptOcrService.isSkipLine(line)) continue;
-      return line.replace(/[\u200F\u200E]/g, '').trim();
+      return line.replaceAll(/[\u200F\u200E]/g, '').trim();
     }
     return false;
   }

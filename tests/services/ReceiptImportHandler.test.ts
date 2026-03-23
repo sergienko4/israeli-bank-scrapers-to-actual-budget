@@ -1,10 +1,26 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
+import type { INotifier } from '../../src/Services/Notifications/INotifier.js';
+import type TelegramNotifier from '../../src/Services/Notifications/TelegramNotifier.js';
 import { ReceiptImportHandler } from '../../src/Services/ReceiptImportHandler.js';
 import type { IReceiptActualApi } from '../../src/Services/ReceiptImportHandler.js';
 import ReceiptOcrService from '../../src/Services/ReceiptOcrService.js';
 import { succeed, fail } from '../../src/Types/ProcedureHelpers.js';
 
+/** Partial INotifier with only the methods used in tests. */
+type MockNotifier = Pick<INotifier, 'sendMessage' | 'sendSummary' | 'sendError'>;
+/** Partial TelegramNotifier with methods used in receipt handler tests. */
+type MockTelegramNotifier = MockNotifier & Pick<TelegramNotifier, 'downloadPhoto' | 'sendInlineMenu'>;
+
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+/** Formats a date as DD/MM/YYYY for OCR test fixtures. */
+function todayDDMMYYYY(): string {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${String(d.getFullYear())}`;
+}
+const TODAY = todayDDMMYYYY();
 
 vi.mock('../../src/Logger/Index.js', () => ({
   getLogger: () => mockLogger,
@@ -71,8 +87,8 @@ describe('ReceiptImportHandler', () => {
 
     handler = new ReceiptImportHandler({
       ocr: mockOcr,
-      notifier: mockNotifier as never,
-      telegramNotifier: mockTgNotifier as never,
+      notifier: mockNotifier as MockNotifier as INotifier,
+      telegramNotifier: mockTgNotifier as MockTelegramNotifier as TelegramNotifier,
       api: mockApi,
     });
   });
@@ -108,7 +124,7 @@ describe('ReceiptImportHandler', () => {
         succeed(Buffer.from('fake-receipt-image'))
       );
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Super-Pharm\n22/03/2026\n₪125.50' })
+        succeed({ text: `Super-Pharm\n${TODAY}\n₪125.50` })
       );
       await handler.start();
       const result = await handler.handlePhoto('file-123');
@@ -150,7 +166,7 @@ describe('ReceiptImportHandler', () => {
         data: [{ account: 'acc-1', category: 'cat-1' }],
       });
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Super-Pharm\n22/03/2026\n₪50' })
+        succeed({ text: `Super-Pharm\n${TODAY}\n₪50` })
       );
       await handler.start();
       await handler.handlePhoto('file-123');
@@ -167,7 +183,7 @@ describe('ReceiptImportHandler', () => {
     it('shows account menu when no match found', async () => {
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'New Store\n22/03/2026\n₪30' })
+        succeed({ text: `New Store\n${TODAY}\n₪30` })
       );
       await handler.start();
       await handler.handlePhoto('file-123');
@@ -189,7 +205,7 @@ describe('ReceiptImportHandler', () => {
 
     it('executes import after category selection', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n22/03/2026\n₪100' })
+        succeed({ text: `Store\n${TODAY}\n₪100` })
       );
       await handler.start();
       await handler.handlePhoto('file-123');
@@ -224,7 +240,7 @@ describe('ReceiptImportHandler', () => {
   describe('onConfirm', () => {
     it('imports with pre-selected account and category', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n22/03/2026\n₪50' })
+        succeed({ text: `Store\n${TODAY}\n₪50` })
       );
       mockApi.aqlQuery.mockResolvedValue({
         data: [{ account: 'acc-1', category: 'cat-1' }],
@@ -254,8 +270,8 @@ describe('ReceiptImportHandler', () => {
     it('fails gracefully when API not set for account menu', async () => {
       const noApiHandler = new ReceiptImportHandler({
         ocr: mockOcr,
-        notifier: mockNotifier as never,
-        telegramNotifier: mockTgNotifier as never,
+        notifier: mockNotifier as MockNotifier as INotifier,
+        telegramNotifier: mockTgNotifier as MockTelegramNotifier as TelegramNotifier,
       });
       const result = await noApiHandler.onAccountSelected('acc-1');
       expect(result.success).toBe(false);
@@ -264,8 +280,8 @@ describe('ReceiptImportHandler', () => {
     it('fails gracefully when API not set for category menu', async () => {
       const noApiHandler = new ReceiptImportHandler({
         ocr: mockOcr,
-        notifier: mockNotifier as never,
-        telegramNotifier: mockTgNotifier as never,
+        notifier: mockNotifier as MockNotifier as INotifier,
+        telegramNotifier: mockTgNotifier as MockTelegramNotifier as TelegramNotifier,
       });
       const result = await noApiHandler.onCategorySelected('cat-1');
       expect(result.success).toBe(false);
@@ -294,7 +310,7 @@ describe('ReceiptImportHandler', () => {
 
     it('imports with Unknown names when API fails during resolve', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n22/03/2026\n₪50' })
+        succeed({ text: `Store\n${TODAY}\n₪50` })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();
@@ -323,7 +339,7 @@ describe('ReceiptImportHandler', () => {
     it('returns false when API query throws', async () => {
       mockApi.aqlQuery.mockRejectedValue(new Error('DB crash'));
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n22/03/2026\n₪50' })
+        succeed({ text: `Store\n${TODAY}\n₪50` })
       );
       await handler.start();
       await handler.handlePhoto('file-123');
@@ -338,7 +354,7 @@ describe('ReceiptImportHandler', () => {
   describe('executeImport error path', () => {
     it('handles error during doImport (resolveName fails)', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n22/03/2026\n₪50' })
+        succeed({ text: `Store\n${TODAY}\n₪50` })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();
@@ -352,7 +368,7 @@ describe('ReceiptImportHandler', () => {
 
     it('catches thrown error in executeImport and returns fail', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n22/03/2026\n₪50' })
+        succeed({ text: `Store\n${TODAY}\n₪50` })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();
@@ -391,8 +407,8 @@ describe('ReceiptImportHandler', () => {
     it('enables API-dependent features after construction', async () => {
       const noApiHandler = new ReceiptImportHandler({
         ocr: mockOcr,
-        notifier: mockNotifier as never,
-        telegramNotifier: mockTgNotifier as never,
+        notifier: mockNotifier as MockNotifier as INotifier,
+        telegramNotifier: mockTgNotifier as MockTelegramNotifier as TelegramNotifier,
       });
       noApiHandler.setApi(mockApi);
       const result = await noApiHandler.onChooseDifferent();
@@ -420,7 +436,7 @@ describe('ReceiptImportHandler', () => {
   describe('resolveName edge cases', () => {
     it('returns Unknown when API is removed before import', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n22/03/2026\n₪50' })
+        succeed({ text: `Store\n${TODAY}\n₪50` })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();
@@ -438,7 +454,7 @@ describe('ReceiptImportHandler', () => {
 
     it('returns Unknown when account ID not found in list', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n22/03/2026\n₪50' })
+        succeed({ text: `Store\n${TODAY}\n₪50` })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();

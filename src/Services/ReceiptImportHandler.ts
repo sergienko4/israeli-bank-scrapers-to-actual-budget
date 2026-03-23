@@ -234,21 +234,25 @@ export class ReceiptImportHandler {
    * @returns Procedure indicating menu display result.
    */
   private async showReceiptAndMatch(receipt: IReceiptData): Promise<Procedure<{ status: string }>> {
-    const safeDate = escapeHtml(receipt.date ?? 'N/A');
-    const safeAmount = escapeHtml(receipt.amount !== undefined ? String(receipt.amount) : 'N/A');
-    const safeMerchant = escapeHtml(receipt.merchant ?? 'N/A');
-    const header = [
-      '📸 <b>Receipt detected:</b>',
-      `📅 Date: ${safeDate}`,
-      `💰 Amount: ${safeAmount}`,
-      `🏪 Payee: ${safeMerchant}`,
-    ].join('\n');
+    const header = ReceiptImportHandler.buildReceiptHeader(receipt);
     await this.reply(header);
     this._state.phase = 'awaiting_selection';
     await this.ensureApi();
     const match = await this.findPayeeMatch(receipt.merchant);
     if (match) return this.showSmartMatch(match);
     return this.showAccountMenu();
+  }
+
+  /**
+   * Builds the HTML header showing extracted receipt fields.
+   * @param receipt - Parsed receipt data.
+   * @returns HTML-escaped header string.
+   */
+  private static buildReceiptHeader(receipt: IReceiptData): string {
+    const d = escapeHtml(receipt.date ?? 'N/A');
+    const a = receipt.amount === undefined ? 'N/A' : String(receipt.amount);
+    const m = escapeHtml(receipt.merchant ?? 'N/A');
+    return `📸 <b>Receipt detected:</b>\n📅 Date: ${d}\n💰 Amount: ${escapeHtml(a)}\n🏪 Payee: ${m}`;
   }
 
   /**
@@ -269,7 +273,7 @@ export class ReceiptImportHandler {
    */
   private async queryPayeeMatch(merchant: string): Promise<IPayeeMatch | false> {
     if (!this._api) return false;
-    const safeMerchant = merchant.replaceAll('%', '\\%').replaceAll('_', '\\_');
+    const safeMerchant = merchant.replaceAll('%', String.raw`\%`).replaceAll('_', String.raw`\_`);
     const query = this._api.q('transactions')
       .filter({ imported_payee: { $like: `%${safeMerchant}%` }, category: { $ne: null } })
       .select(['account', 'category'])
