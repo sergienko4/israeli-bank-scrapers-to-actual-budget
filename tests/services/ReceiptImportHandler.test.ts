@@ -224,7 +224,7 @@ describe('ReceiptImportHandler', () => {
   describe('onConfirm', () => {
     it('imports with pre-selected account and category', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n₪50' })
+        succeed({ text: 'Store\n22/03/2026\n₪50' })
       );
       mockApi.aqlQuery.mockResolvedValue({
         data: [{ account: 'acc-1', category: 'cat-1' }],
@@ -294,7 +294,7 @@ describe('ReceiptImportHandler', () => {
 
     it('imports with Unknown names when API fails during resolve', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n₪50' })
+        succeed({ text: 'Store\n22/03/2026\n₪50' })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();
@@ -323,7 +323,7 @@ describe('ReceiptImportHandler', () => {
     it('returns false when API query throws', async () => {
       mockApi.aqlQuery.mockRejectedValue(new Error('DB crash'));
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n₪50' })
+        succeed({ text: 'Store\n22/03/2026\n₪50' })
       );
       await handler.start();
       await handler.handlePhoto('file-123');
@@ -338,7 +338,7 @@ describe('ReceiptImportHandler', () => {
   describe('executeImport error path', () => {
     it('handles error during doImport (resolveName fails)', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n₪50' })
+        succeed({ text: 'Store\n22/03/2026\n₪50' })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();
@@ -352,7 +352,7 @@ describe('ReceiptImportHandler', () => {
 
     it('catches thrown error in executeImport and returns fail', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n₪50' })
+        succeed({ text: 'Store\n22/03/2026\n₪50' })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();
@@ -401,8 +401,7 @@ describe('ReceiptImportHandler', () => {
   });
 
   describe('extractFields defaults', () => {
-    it('uses default date, amount, and merchant when receipt fields are undefined', async () => {
-      // Set up handler with a receipt that has no date, amount, or merchant
+    it('rejects import when receipt has no date or amount', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
         succeed({ text: 'Random text\nwith no parseable data' })
       );
@@ -411,10 +410,9 @@ describe('ReceiptImportHandler', () => {
       await handler.handlePhoto('file-123');
       await handler.onAccountSelected('acc-1');
       const result = await handler.onCategorySelected('cat-1');
-      // extractFields defaults: date=today, amount=0, merchant='Receipt'
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Imported')
+        expect.stringContaining('missing date or amount')
       );
     });
   });
@@ -422,7 +420,7 @@ describe('ReceiptImportHandler', () => {
   describe('resolveName edge cases', () => {
     it('returns Unknown when API is removed before import', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n₪50' })
+        succeed({ text: 'Store\n22/03/2026\n₪50' })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();
@@ -440,7 +438,7 @@ describe('ReceiptImportHandler', () => {
 
     it('returns Unknown when account ID not found in list', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
-        succeed({ text: 'Store\n₪50' })
+        succeed({ text: 'Store\n22/03/2026\n₪50' })
       );
       mockApi.aqlQuery.mockResolvedValue({ data: [] });
       await handler.start();

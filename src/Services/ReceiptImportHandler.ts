@@ -52,11 +52,13 @@ export interface IReceiptHandlerOptions {
 /** Receipt import conversation state. */
 interface IReceiptState {
   phase: 'idle' | 'awaiting_photo' | 'awaiting_selection';
+  flowId: number;
   receipt?: IReceiptData;
   selectedAccount?: string;
   selectedCategory?: string;
   timeoutHandle?: ReturnType<typeof globalThis.setTimeout>;
 }
+
 
 /** Named account + category match from a previous transaction. */
 interface IPayeeMatch { accId: string; accName: string; catId: string; catName: string }
@@ -65,7 +67,8 @@ const RECEIPT_TIMEOUT_MS = 120000;
 
 /** Handles the multi-step receipt import conversation via Telegram. */
 export class ReceiptImportHandler {
-  private _state: IReceiptState = { phase: 'idle' };
+  private static _nextFlowId = 1;
+  private _state: IReceiptState = { phase: 'idle', flowId: 0 };
   private readonly _apiFactory?: () => Promise<IReceiptActualApi>;
   private _api?: IReceiptActualApi;
   private readonly _ocr: ReceiptOcrService;
@@ -96,7 +99,8 @@ export class ReceiptImportHandler {
    */
   public async start(): Promise<Procedure<{ status: string }>> {
     this.reset();
-    this._state = { phase: 'awaiting_photo' };
+    const flowId = ReceiptImportHandler._nextFlowId++;
+    this._state = { phase: 'awaiting_photo', flowId };
     this.startTimeout();
     await this.reply('📸 Send a photo of your receipt (timeout: 2 min)');
     return succeed({ status: 'awaiting-photo' });
@@ -112,7 +116,9 @@ export class ReceiptImportHandler {
       await this.reply('💡 Use /import_receipt first, then send a photo.');
       return succeed({ status: 'unexpected-photo' });
     }
+    const flowId = this._state.flowId;
     await this.reply('⏳ Processing receipt...');
+    if (this._state.flowId !== flowId) return fail('flow cancelled');
     return this.processPhoto(fileId);
   }
 
@@ -184,6 +190,7 @@ export class ReceiptImportHandler {
     }
   }
 
+
   /**
    * Downloads and OCRs the photo, then shows results.
    * @param fileId - Telegram file_id to download.
@@ -238,6 +245,7 @@ export class ReceiptImportHandler {
     ].join('\n');
     await this.reply(header);
     this._state.phase = 'awaiting_selection';
+    await this.ensureApi();
     const match = await this.findPayeeMatch(receipt.merchant);
     if (match) return this.showSmartMatch(match);
     return this.showAccountMenu();
@@ -344,10 +352,8 @@ export class ReceiptImportHandler {
    */
   private async executeImport(): Promise<Procedure<{ status: string }>> {
     const st = this._state;
-    if (!st.receipt || !st.selectedAccount || !st.selectedCategory) {
-      this.reset();
-      return fail('incomplete receipt state');
-    }
+    if (!st.receipt || !st.selectedAccount || !st.selectedCategory) { this.reset(); return fail('incomplete receipt state'); }
+    if (!st.receipt.date || st.receipt.amount === undefined) { await this.reply('❌ Receipt missing date or amount. Cannot import.'); this.reset(); return fail('receipt missing required fields'); }
     try {
       return await this.doImport(st);
     } catch (error: unknown) {
@@ -470,7 +476,7 @@ export class ReceiptImportHandler {
   /** Resets the state machine to idle. */
   private reset(): void {
     if (this._state.timeoutHandle) globalThis.clearTimeout(this._state.timeoutHandle);
-    this._state = { phase: 'idle' };
+    this._state = { phase: 'idle', flowId: 0 };
   }
 
   /** Starts the 2-minute timeout for the receipt flow. */
