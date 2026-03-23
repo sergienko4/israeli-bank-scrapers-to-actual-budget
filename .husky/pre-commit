@@ -71,7 +71,7 @@ run_gate "16-pii-check"  "Checking for PII in error messages" bash -c '
   # Excludes: static field names like "password is missing" or "token format"
   HITS=$(grep -rn "\${password}\|\${token}\|\${otp}\|\${secret}\|\${digits}\|\${creditCard}" src/ --include="*.ts" | grep -i "throw\|Error\|fail(" || true)
   HITS2=$(grep -rn "\${.*proxy.*}" src/ --include="*.ts" | grep -i "logger\|\.info\|\.warn\|\.error" || true)
-  HITS3=$(grep -rn "getLogger().info.*\${.*\.merchant\|getLogger().info.*\${.*\.amount\|getLogger().info.*\${.*\.payee" src/ --include="*.ts" || true)
+  HITS3=$(grep -rn "getLogger().info.*\${.*\.merchant\|getLogger().info.*\${.*\.amount\|getLogger().info.*\${.*\.payee\|getLogger().info.*\${.*customerName\|getLogger().info.*\${.*payeeName" src/ --include="*.ts" || true)
   ALL="${HITS}${HITS2}${HITS3}"
   if [ -n "$ALL" ]; then
     echo "PII variable interpolation detected:"

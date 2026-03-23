@@ -200,7 +200,7 @@ export class ReceiptImportHandler {
     const photoResult = await this._telegramNotifier.downloadPhoto(fileId);
     if (isFail(photoResult)) {
       this.reset();
-      await this.reply(`❌ Download failed: ${photoResult.message}`);
+      await this.reply(`❌ Download failed: ${escapeHtml(photoResult.message)}`);
       return fail(photoResult.message);
     }
     return this.ocrAndParse(photoResult.data);
@@ -215,13 +215,13 @@ export class ReceiptImportHandler {
     const ocrResult = await this._ocr.recognize(buffer);
     if (isFail(ocrResult)) {
       this.reset();
-      await this.reply(`❌ OCR failed: ${ocrResult.message}`);
+      await this.reply(`❌ OCR failed: ${escapeHtml(ocrResult.message)}`);
       return fail(ocrResult.message);
     }
     const parseResult = ReceiptOcrService.parseReceipt(ocrResult.data.text);
     if (isFail(parseResult)) {
       this.reset();
-      await this.reply(`❌ Parse failed: ${parseResult.message}`);
+      await this.reply(`❌ Parse failed: ${escapeHtml(parseResult.message)}`);
       return fail(parseResult.message);
     }
     this._state.receipt = parseResult.data;
@@ -357,7 +357,9 @@ export class ReceiptImportHandler {
     try {
       return await this.doImport(st);
     } catch (error: unknown) {
-      await this.reply(`❌ Import failed: ${errorMessage(error)}`);
+      const rawErr = errorMessage(error);
+      const safeErr = escapeHtml(rawErr);
+      await this.reply(`❌ Import failed: ${safeErr}`);
       this.reset();
       return fail(`import failed: ${errorMessage(error)}`);
     }
