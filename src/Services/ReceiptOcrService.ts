@@ -24,15 +24,14 @@ const TOTAL_HEB = 'סה.{1,2}[כגך]';
 const PAY_HEB = 'לתשלום|יתרה\\s*לתשלום|שולם|נותר\\s*לתשלום';
 const AMOUNT_PATTERNS = [
   // לתשלום (to pay) — highest priority (final total)
-  new RegExp(`(\\d[\\d,.]+)\\s*[\\[\\]]*\\s*[=]?\\s*(?:${PAY_HEB})`, 'i'),
-  new RegExp(`(?:${PAY_HEB})\\s*[:?\\s]*[₪]?\\s*(\\d[\\d,.]+)`, 'i'),
+  new RegExp(`(\\d[\\d,]*(?:\\.\\d+)?)[\\s[\\]]*=?(?:${PAY_HEB})`, 'i'),
+  new RegExp(`(?:${PAY_HEB})[:?\\s]*₪?(\\d[\\d,]*(?:\\.\\d+)?)`, 'i'),
   // סה"כ (subtotal/total) — second priority
-  new RegExp(`(\\d[\\d,.]+)\\s*[\\[\\]]*\\s*(?:${TOTAL_HEB}|total|סכום)`, 'i'),
-  new RegExp(`(?:${TOTAL_HEB}|total|סכום|amount)\\s*[:?\\s]*[₪]?\\s*(\\d[\\d,.]+)`, 'i'),
-  // מע"מ excluded — don't pick up VAT as total
+  new RegExp(`(\\d[\\d,]*(?:\\.\\d+)?)[\\s[\\]]*(?:${TOTAL_HEB}|total|סכום)`, 'i'),
+  new RegExp(`(?:${TOTAL_HEB}|total|סכום|amount)[:?\\s]*₪?(\\d[\\d,]*(?:\\.\\d+)?)`, 'i'),
   // Currency symbol patterns
-  /[₪]\s*(\d[\d,.]+)/,
-  /(\d[\d,.]*\.\d{2})\s*(?:₪|ILS|ש"ח)/,
+  /₪\s*(\d[\d,]*(?:\.\d+)?)/,
+  /(\d[\d,]*\.\d{2})\s*(?:₪|ILS|ש"ח)/,
 ];
 
 /** Lines to skip when extracting merchant name. */
@@ -45,7 +44,7 @@ const SKIP_LINE_PATTERNS = [
   /ע[.\s]*מ[.\s]|ח[.\s]*פ[.\s]/i, // entity abbreviations
   /מספר[:\s]*\d/i, // "number: NNN"
   /תאריך/i, // "date" header line
-  /טלפ[ו]?ן/i, // "phone"
+  /טלפו?ן/i, // "phone"
   /פקס/i, // "fax"
   /כתובת/i, // "address" label
   /לכבוד/i, // "to:" salutation
@@ -142,6 +141,7 @@ export default class ReceiptOcrService {
     // Priority search: labeled amounts first
     for (const pattern of AMOUNT_PATTERNS) {
       for (const line of lines) {
+        if (line.length > 200) continue;
         const match = pattern.exec(line);
         if (!match) continue;
         const cleaned = match[1].replaceAll(',', '');
@@ -161,6 +161,7 @@ export default class ReceiptOcrService {
   private static findLargestAmount(lines: string[]): number | false {
     let largest = 0;
     for (const line of lines) {
+      if (line.length > 200) continue;
       const pattern = /(\d{1,3}(?:,\d{3})*\.\d{2})/g;
       let match = pattern.exec(line);
       while (match) {

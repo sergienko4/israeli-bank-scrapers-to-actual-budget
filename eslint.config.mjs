@@ -9,6 +9,7 @@ import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import jsdoc from 'eslint-plugin-jsdoc';
+import * as regexpPlugin from 'eslint-plugin-regexp';
 
 /**
  * GLOBAL ARCHITECTURAL GUARDRAILS
@@ -143,6 +144,7 @@ export default tseslint.config(
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   prettier,
+  regexpPlugin.configs['flat/recommended'],
 
   // 3. MAIN SOURCE FILES (STRICT)
   {
@@ -581,6 +583,20 @@ export default tseslint.config(
     ],
     rules: {
       'no-await-in-loop': 'off',
+    },
+  },
+
+  // 10. PRE-EXISTING REGEX PATTERNS (warn-only until refactored)
+  {
+    files: [
+      'src/Config/ConfigLoaderValidator.ts',
+      'src/Logger/PinoAdapter.ts',
+      'src/Services/Notifications/TelegramNotifier.ts',
+    ],
+    rules: {
+      'regexp/no-super-linear-backtracking': 'warn',
+      'regexp/optimal-quantifier-concatenation': 'warn',
+      'regexp/prefer-character-class': 'warn',
     },
   },
 );
