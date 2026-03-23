@@ -47,12 +47,7 @@
     "@faker-js/faker": "^10.3.0",
     "@types/node": "^25.5.0",
     "@vitest/coverage-v8": "^4.1.0",
-<<<<<<< feat/telegram-receipt-import
-    "eslint": "^10.0.3",
-=======
-
     "eslint": "^10.1.0",
->>>>>>> main
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-check-file": "^3.3.1",
     "eslint-plugin-import-x": "^4.16.2",
