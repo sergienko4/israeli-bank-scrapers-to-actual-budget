@@ -31,7 +31,7 @@ const AMOUNT_PATTERNS = [
   new RegExp(`(?:${TOTAL_HEB}|total|סכום|amount)[:?\\s]*₪?(\\d[\\d,]*(?:\\.\\d+)?)`, 'i'),
   // Currency symbol patterns
   /₪\s*(\d[\d,]*(?:\.\d+)?)/,
-  /(\d[\d,]*\.\d{2})\s*(?:₪|ILS|ש"ח)/,
+  /(\d{1,3}(?:,\d{3})*\.\d{2})\s*(?:₪|ILS|ש"ח)/,
 ];
 
 /** Lines to skip when extracting merchant name. */
@@ -183,7 +183,9 @@ export default class ReceiptOcrService {
     // First: check for "לכבוד:" (to:) — extract recipient name
     const toLine = lines.find(l => /לכבוד\s*[;:]/.test(l));
     if (toLine) {
-      const name = toLine.replace(/.*לכבוד\s*[;:]?\s*/, '').replace(/[\u200F\u200E]/g, '').trim();
+      const idx = toLine.indexOf('לכבוד');
+      const afterLabel = toLine.slice(idx + 'לכבוד'.length);
+      const name = afterLabel.replace(/^[\s;:]*/, '').replaceAll('\u200F', '').replaceAll('\u200E', '').trim();
       const isLabel = /מספר|טלפון|כתובת|דף|מתוך/.test(name);
       if (name.length >= 3 && !isLabel) return name;
     }

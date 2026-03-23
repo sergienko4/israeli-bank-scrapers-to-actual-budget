@@ -196,6 +196,13 @@ export default tseslint.config(
       'import-x/max-dependencies': ['error', { max: 15, ignoreTypeImports: true }],
       'import-x/prefer-default-export': 'error',
 
+      // === REGEX BEST PRACTICES ===
+      "regexp/no-super-linear-backtracking": "error", // Critical for ReDoS prevention
+      "regexp/no-useless-escape": "error", // Prevents unnecessary escaping that can obfuscate regexes
+      "regexp/prefer-character-class": "warn", // Encourages character classes for better readability and performance
+      "regexp/optimal-quantifier-concatenation": "warn", // Suggests optimal quantifier patterns
+
+
       // === STYLE & RETURN TYPES ===
       'quotes': ['error', 'single', { avoidEscape: true }],
       '@typescript-eslint/explicit-member-accessibility': ['error', { accessibility: 'explicit', overrides: { constructors: 'no-public' } }],
@@ -586,17 +593,14 @@ export default tseslint.config(
     },
   },
 
-  // 10. PRE-EXISTING REGEX PATTERNS (warn-only until refactored)
+  // 10. PRE-EXISTING REGEX PATTERNS (warn until refactored)
   {
     files: [
       'src/Config/ConfigLoaderValidator.ts',
-      'src/Logger/PinoAdapter.ts',
       'src/Services/Notifications/TelegramNotifier.ts',
     ],
     rules: {
       'regexp/no-super-linear-backtracking': 'warn',
-      'regexp/optimal-quantifier-concatenation': 'warn',
-      'regexp/prefer-character-class': 'warn',
     },
   },
 );
