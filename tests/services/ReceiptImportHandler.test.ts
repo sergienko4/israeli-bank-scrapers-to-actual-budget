@@ -203,7 +203,7 @@ describe('ReceiptImportHandler', () => {
       );
     });
 
-    it('executes import after category selection', async () => {
+    it('executes import after category selection and writes to API', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
         succeed({ text: `Store\n${TODAY}\n₪100` })
       );
@@ -215,6 +215,24 @@ describe('ReceiptImportHandler', () => {
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
         expect.stringContaining('Imported')
       );
+      expect(mockApi.importTransactions).toHaveBeenCalledTimes(1);
+      expect(mockApi.importTransactions).toHaveBeenCalledWith(
+        'acc-1',
+        expect.arrayContaining([expect.objectContaining({ category: 'cat-1' })])
+      );
+    });
+
+    it('fails import when API is missing at write time', async () => {
+      vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
+        succeed({ text: `Store\n${TODAY}\n₪100` })
+      );
+      await handler.start();
+      await handler.handlePhoto('file-123');
+      await handler.onAccountSelected('acc-1');
+      handler.setApi(undefined as never);
+      const result = await handler.onCategorySelected('cat-1');
+      expect(result.success).toBe(false);
+      expect(mockApi.importTransactions).not.toHaveBeenCalled();
     });
   });
 
@@ -428,13 +446,13 @@ describe('ReceiptImportHandler', () => {
       const result = await handler.onCategorySelected('cat-1');
       expect(result.success).toBe(false);
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('missing date or amount')
+        expect.stringContaining('Missing date or amount')
       );
     });
   });
 
   describe('resolveName edge cases', () => {
-    it('returns Unknown when API is removed before import', async () => {
+    it('fails import when API is removed before write', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
         succeed({ text: `Store\n${TODAY}\n₪50` })
       );
@@ -442,13 +460,12 @@ describe('ReceiptImportHandler', () => {
       await handler.start();
       await handler.handlePhoto('file-123');
       await handler.onAccountSelected('acc-1');
-      // Remove API before import to hit resolveName's !this._api branch
       handler.setApi(undefined as never);
       const result = await handler.onCategorySelected('cat-1');
-      // resolveName returns 'Unknown' when API is missing
-      expect(result.success).toBe(true);
+      // writeToActualBudget returns fail when API is missing
+      expect(result.success).toBe(false);
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Unknown')
+        expect.stringContaining('API not connected')
       );
     });
 

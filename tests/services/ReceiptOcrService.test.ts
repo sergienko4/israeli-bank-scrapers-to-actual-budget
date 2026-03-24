@@ -82,6 +82,21 @@ describe('ReceiptOcrService', () => {
       const result = ReceiptOcrService.parseReceipt('חנות\nתאריך: 15/06/2025\nסה"כ 50.00');
       expect(result.data.date).toBe('2025-06-15');
     });
+
+    it('rejects invalid month (13)', () => {
+      const result = ReceiptOcrService.parseReceipt('Store\n22/13/2026\n₪50');
+      expect(result.data.date).toBeUndefined();
+    });
+
+    it('rejects invalid day (32)', () => {
+      const result = ReceiptOcrService.parseReceipt('Store\n32/01/2026\n₪50');
+      expect(result.data.date).toBeUndefined();
+    });
+
+    it('rejects day 0', () => {
+      const result = ReceiptOcrService.parseReceipt('Store\n00/01/2026\n₪50');
+      expect(result.data.date).toBeUndefined();
+    });
   });
 
   describe('parseReceipt — amount extraction', () => {

@@ -357,15 +357,13 @@ export class ReceiptImportHandler {
   private async executeImport(): Promise<Procedure<{ status: string }>> {
     const st = this._state;
     if (!st.receipt || !st.selectedAccount || !st.selectedCategory) { this.reset(); return fail('incomplete receipt state'); }
-    if (!st.receipt.date || st.receipt.amount === undefined) { await this.reply('❌ Receipt missing date or amount. Cannot import.'); this.reset(); return fail('receipt missing required fields'); }
+    if (!st.receipt.date || st.receipt.amount === undefined) { await this.reply('❌ Missing date or amount.'); this.reset(); return fail('missing fields'); }
     try {
       return await this.doImport(st);
     } catch (error: unknown) {
-      const rawErr = errorMessage(error);
-      const safeErr = escapeHtml(rawErr);
-      await this.reply(`❌ Import failed: ${safeErr}`);
-      this.reset();
-      return fail(`import failed: ${errorMessage(error)}`);
+      const msg = errorMessage(error);
+      await this.reply(`❌ Import failed: ${escapeHtml(msg)}`);
+      this.reset(); return fail(`import failed: ${msg}`);
     }
   }
 
@@ -378,7 +376,12 @@ export class ReceiptImportHandler {
     st: IReceiptState
   ): Promise<Procedure<{ status: string }>> {
     const fields = ReceiptImportHandler.extractFields(st);
-    await this.writeToActualBudget(st, fields);
+    const writeResult = await this.writeToActualBudget(st, fields);
+    if (isFail(writeResult)) {
+      const msg = escapeHtml(writeResult.message);
+      await this.reply(`❌ ${msg}`);
+      this.reset(); return fail(writeResult.message);
+    }
     const accName = await this.resolveName('accounts', st.selectedAccount ?? '');
     const catName = await this.resolveName('categories', st.selectedCategory ?? '');
     getLogger().info('Receipt import completed');
@@ -395,12 +398,13 @@ export class ReceiptImportHandler {
    * @param fields.dateStr - Transaction date (YYYY-MM-DD).
    * @param fields.cents - Amount in cents (negative for expense).
    * @param fields.merchant - Merchant/payee name.
+   * @returns Procedure indicating write success or failure.
    */
   private async writeToActualBudget(
     st: IReceiptState,
     fields: { dateStr: string; cents: number; merchant: string }
-  ): Promise<void> {
-    if (!this._api || !st.selectedAccount) return;
+  ): Promise<Procedure<{ status: string }>> {
+    if (!this._api || !st.selectedAccount) return fail('API not connected — cannot write to budget');
     const payload = [{
       account: st.selectedAccount,
       date: fields.dateStr, amount: fields.cents,
@@ -411,6 +415,7 @@ export class ReceiptImportHandler {
       cleared: false,
     }];
     await this._api.importTransactions(st.selectedAccount, payload);
+    return succeed({ status: 'written' });
   }
 
   /**

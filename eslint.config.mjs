@@ -9,7 +9,7 @@ import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import jsdoc from 'eslint-plugin-jsdoc';
-import * as regexpPlugin from 'eslint-plugin-regexp';
+import regexpPlugin from "eslint-plugin-regexp"
 
 /**
  * GLOBAL ARCHITECTURAL GUARDRAILS
@@ -80,7 +80,10 @@ const RESTRICTED_SYNTAX_RULES = [
     selector: "ExpressionStatement > :matches(CallExpression[callee.property.name=/^(record|printSummary|sendSummary|sendError|sendMessage|startImport|cleanOldLogs)$/], AwaitExpression > CallExpression[callee.property.name=/^(record|printSummary|sendSummary|sendError|sendMessage|startImport|cleanOldLogs)$/])",
     message: "🚫 PROCEDURE: Do not discard Procedure result. Check with isSuccess()/isFail() or assign to variable.",
   },
-
+  {
+    selector: "MethodDefinition[key.name=/^(writeTo|createNew|deleteFrom)/] ReturnStatement:not([argument])",
+    message: "🚫 RESULT PATTERN: Data-writing methods must return Procedure, not void."
+  },
   // Block: for-in loops, labeled statements, with statements
   'ForInStatement',
   'LabeledStatement',
@@ -130,6 +133,7 @@ const RESTRICTED_SYNTAX_RULES = [
     message: "🚫 Use errorMessage() utility instead of manual error.message access in catch blocks.",
   },
 
+
 ];
 
 export default tseslint.config(
@@ -155,6 +159,7 @@ export default tseslint.config(
       'check-file': checkFile,
       'n': pluginN,
       'simple-import-sort': simpleImportSort,
+      regexp: regexpPlugin,
       jsdoc,
     },
     languageOptions: {

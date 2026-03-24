@@ -41,6 +41,10 @@ const CANARIES = {
     minErrors: 1,
     description: 'discarded Procedure result ban',
   },
+  'tests/eslint-canaries/VoidSideEffect.canary.ts': {
+    minErrors: 1,
+    description: 'void return in side-effect method ban',
+  },
 };
 
 let allPassed = true;

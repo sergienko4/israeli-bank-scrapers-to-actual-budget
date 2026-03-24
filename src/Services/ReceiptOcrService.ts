@@ -123,8 +123,12 @@ export default class ReceiptOcrService {
   private static extractDate(text: string): string | false {
     const match = DATE_PATTERN.exec(text);
     if (!match) return false;
-    const day = match[1].padStart(2, '0');
-    const month = match[2].padStart(2, '0');
+    const dayNum = Number.parseInt(match[1], 10);
+    const monthNum = Number.parseInt(match[2], 10);
+    if (monthNum < 1 || monthNum > 12) return false;
+    if (dayNum < 1 || dayNum > 31) return false;
+    const day = String(dayNum).padStart(2, '0');
+    const month = String(monthNum).padStart(2, '0');
     let year = match[3];
     if (year.length === 2) year = `20${year}`;
     return `${year}-${month}-${day}`;
