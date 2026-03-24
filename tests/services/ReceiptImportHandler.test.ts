@@ -222,6 +222,25 @@ describe('ReceiptImportHandler', () => {
       );
     });
 
+    it('skips smart match and fails gracefully when API is not available', async () => {
+      vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
+        succeed({ text: `Store\n${TODAY}\n₪100` })
+      );
+      // Handler without api or apiFactory — ensureApi() returns false
+      const noApiHandler = new ReceiptImportHandler({
+        ocr: mockOcr as unknown as ReceiptOcrService,
+        notifier: mockNotifier as unknown as INotifier,
+        telegramNotifier: mockTgNotifier as unknown as TelegramNotifier,
+      });
+      await noApiHandler.start();
+      const result = await noApiHandler.handlePhoto('file-123');
+      // showReceiptAndMatch skips findPayeeMatch → showAccountMenu also fails → API not available
+      expect(result.success).toBe(false);
+      expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
+        expect.stringContaining('API not connected')
+      );
+    });
+
     it('fails import when API is missing at write time', async () => {
       vi.spyOn(mockOcr, 'recognize').mockResolvedValue(
         succeed({ text: `Store\n${TODAY}\n₪100` })

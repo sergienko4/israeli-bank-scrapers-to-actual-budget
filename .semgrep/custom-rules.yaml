@@ -34,6 +34,15 @@ rules:
     severity: ERROR
     languages: [typescript]
 
+  - id: unchecked-ensure-return
+    pattern: |
+      await this.ensure$METHOD(...);
+    pattern-not: |
+      $VAR = await this.ensure$METHOD(...);
+    message: "ensure*() returns a boolean — check the return value"
+    severity: ERROR
+    languages: [typescript]
+
   - id: pii-in-info-log
     patterns:
       - pattern: getLogger().info(`...${$VAR}...`)

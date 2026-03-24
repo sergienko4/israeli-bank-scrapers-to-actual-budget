@@ -231,7 +231,11 @@ export class ReceiptImportHandler {
     const header = ReceiptImportHandler.buildReceiptHeader(receipt);
     await this.reply(header);
     this._state.phase = 'awaiting_selection';
-    await this.ensureApi();
+    const isApiReady = await this.ensureApi();
+    if (!isApiReady) {
+      getLogger().info('Smart matching unavailable — API not connected');
+      return this.showAccountMenu();
+    }
     const match = await this.findPayeeMatch(receipt.merchant);
     if (match) return this.showSmartMatch(match);
     return this.showAccountMenu();
