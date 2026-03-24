@@ -37,17 +37,17 @@ const AMOUNT_PATTERNS = [
 /** Lines to skip when extracting merchant name. */
 const SKIP_LINE_PATTERNS = [
   /^\d{7,}/, // business reg number (7+ digits)
-  /חשבונית/i, // "invoice"
-  /קבלה\s*מס/i, // "receipt number"
-  /העתק/i, // "copy"
-  /עוסק\s*(מורשה|פטור)/i, // "authorized/exempt dealer"
-  /ע[.\s]*מ[.\s]|ח[.\s]*פ[.\s]/i, // entity abbreviations
-  /מספר[:\s]*\d/i, // "number: NNN"
-  /תאריך/i, // "date" header line
-  /טלפו?ן/i, // "phone"
-  /פקס/i, // "fax"
-  /כתובת/i, // "address" label
-  /לכבוד/i, // "to:" salutation
+  /חשבונית/, // "invoice"
+  /קבלה\s*מס/, // "receipt number"
+  /העתק/, // "copy"
+  /עוסק\s*(מורשה|פטור)/, // "authorized/exempt dealer"
+  /ע[.\s]*מ[.\s]|ח[.\s]*פ[.\s]/, // entity abbreviations
+  /מספר[:\s]*\d/, // "number: NNN"
+  /תאריך/, // "date" header line
+  /טלפו?ן/, // "phone"
+  /פקס/, // "fax"
+  /כתובת/, // "address" label
+  /לכבוד/, // "to:" salutation
   /^[-–—\s*]+$/, // separator lines
   /^\s*\d+\s*$/, // lines with only digits
   /^\d{2,3}[-\s]?\d{7}$/, // phone numbers (050-1234567)

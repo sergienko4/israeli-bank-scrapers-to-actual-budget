@@ -197,33 +197,27 @@ export class ReceiptImportHandler {
    * @returns Procedure indicating processing result.
    */
   private async processPhoto(fileId: string): Promise<Procedure<{ status: string }>> {
+    const flowId = this._state.flowId;
     const photoResult = await this._telegramNotifier.downloadPhoto(fileId);
-    if (isFail(photoResult)) {
-      this.reset();
-      await this.reply(`❌ Download failed: ${escapeHtml(photoResult.message)}`);
-      return fail(photoResult.message);
-    }
-    return this.ocrAndParse(photoResult.data);
+    if (this._state.flowId !== flowId) return fail('flow cancelled');
+    if (isFail(photoResult)) return this.failWithMessage(photoResult.message);
+    return this.ocrAndParse(photoResult.data, flowId);
   }
 
   /**
    * Runs OCR and parsing on the image buffer.
    * @param buffer - Raw image bytes.
+   * @param flowId - Flow token to check for cancellation.
    * @returns Procedure indicating parse result.
    */
-  private async ocrAndParse(buffer: Buffer): Promise<Procedure<{ status: string }>> {
+  private async ocrAndParse(
+    buffer: Buffer, flowId: number
+  ): Promise<Procedure<{ status: string }>> {
     const ocrResult = await this._ocr.recognize(buffer);
-    if (isFail(ocrResult)) {
-      this.reset();
-      await this.reply(`❌ OCR failed: ${escapeHtml(ocrResult.message)}`);
-      return fail(ocrResult.message);
-    }
+    if (this._state.flowId !== flowId) return fail('flow cancelled');
+    if (isFail(ocrResult)) return this.failWithMessage(ocrResult.message);
     const parseResult = ReceiptOcrService.parseReceipt(ocrResult.data.text);
-    if (isFail(parseResult)) {
-      this.reset();
-      await this.reply(`❌ Parse failed: ${escapeHtml(parseResult.message)}`);
-      return fail(parseResult.message);
-    }
+    if (isFail(parseResult)) return this.failWithMessage(parseResult.message);
     this._state.receipt = parseResult.data;
     return this.showReceiptAndMatch(parseResult.data);
   }
@@ -482,6 +476,15 @@ export class ReceiptImportHandler {
     try { await this._notifier.sendMessage(text); }
     catch (error: unknown) { getLogger().debug(`Reply error: ${errorMessage(error)}`); return succeed({ status: 'reply-failed' }); }
     return succeed({ status: 'reply-sent' });
+  }
+
+  /**
+   * Resets state, sends error to Telegram, returns failure.
+   * @param msg - The error message to display and return.
+   * @returns Procedure failure with the message.
+   */
+  private async failWithMessage(msg: string): Promise<Procedure<{ status: string }>> {
+    this.reset(); await this.reply(`❌ ${escapeHtml(msg)}`); return fail(msg);
   }
 
   /** Resets the state machine to idle. */

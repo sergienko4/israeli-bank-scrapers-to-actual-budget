@@ -143,7 +143,7 @@ describe('ReceiptImportHandler', () => {
       const result = await handler.handlePhoto('bad-file');
       expect(result.success).toBe(false);
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Download failed')
+        expect.stringContaining('HTTP 404')
       );
     });
 
@@ -155,7 +155,7 @@ describe('ReceiptImportHandler', () => {
       const result = await handler.handlePhoto('file-123');
       expect(result.success).toBe(false);
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
-        expect.stringContaining('OCR failed')
+        expect.stringContaining('OCR engine error')
       );
     });
   });

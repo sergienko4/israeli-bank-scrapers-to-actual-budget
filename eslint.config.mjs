@@ -9,7 +9,7 @@ import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import jsdoc from 'eslint-plugin-jsdoc';
-import regexpPlugin from "eslint-plugin-regexp"
+import regexpPlugin from 'eslint-plugin-regexp';
 
 /**
  * GLOBAL ARCHITECTURAL GUARDRAILS
