@@ -59,7 +59,6 @@ interface IReceiptState {
   timeoutHandle?: ReturnType<typeof globalThis.setTimeout>;
 }
 
-
 /** Named account + category match from a previous transaction. */
 interface IPayeeMatch { accId: string; accName: string; catId: string; catName: string }
 
@@ -189,7 +188,6 @@ export class ReceiptImportHandler {
       return false;
     }
   }
-
 
   /**
    * Downloads and OCRs the photo, then shows results.

@@ -248,7 +248,7 @@ describe('ReceiptImportHandler', () => {
       await handler.start();
       await handler.handlePhoto('file-123');
       await handler.onAccountSelected('acc-1');
-      handler.setApi(undefined as never);
+      handler.setApi(undefined as unknown as IReceiptActualApi);
       const result = await handler.onCategorySelected('cat-1');
       expect(result.success).toBe(false);
       expect(mockApi.importTransactions).not.toHaveBeenCalled();
@@ -479,7 +479,7 @@ describe('ReceiptImportHandler', () => {
       await handler.start();
       await handler.handlePhoto('file-123');
       await handler.onAccountSelected('acc-1');
-      handler.setApi(undefined as never);
+      handler.setApi(undefined as unknown as IReceiptActualApi);
       const result = await handler.onCategorySelected('cat-1');
       // writeToActualBudget returns fail when API is missing
       expect(result.success).toBe(false);
