@@ -9,6 +9,7 @@ import prettier from 'eslint-config-prettier';
 import globals from 'globals';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import jsdoc from 'eslint-plugin-jsdoc';
+import regexpPlugin from 'eslint-plugin-regexp';
 
 /**
  * GLOBAL ARCHITECTURAL GUARDRAILS
@@ -79,7 +80,10 @@ const RESTRICTED_SYNTAX_RULES = [
     selector: "ExpressionStatement > :matches(CallExpression[callee.property.name=/^(record|printSummary|sendSummary|sendError|sendMessage|startImport|cleanOldLogs)$/], AwaitExpression > CallExpression[callee.property.name=/^(record|printSummary|sendSummary|sendError|sendMessage|startImport|cleanOldLogs)$/])",
     message: "🚫 PROCEDURE: Do not discard Procedure result. Check with isSuccess()/isFail() or assign to variable.",
   },
-
+  {
+    selector: "MethodDefinition[key.name=/^(writeTo|createNew|deleteFrom)/] ReturnStatement:not([argument])",
+    message: "🚫 RESULT PATTERN: Data-writing methods must return Procedure, not void."
+  },
   // Block: for-in loops, labeled statements, with statements
   'ForInStatement',
   'LabeledStatement',
@@ -129,6 +133,7 @@ const RESTRICTED_SYNTAX_RULES = [
     message: "🚫 Use errorMessage() utility instead of manual error.message access in catch blocks.",
   },
 
+
 ];
 
 export default tseslint.config(
@@ -143,6 +148,7 @@ export default tseslint.config(
   ...tseslint.configs.strictTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   prettier,
+  regexpPlugin.configs['flat/recommended'],
 
   // 3. MAIN SOURCE FILES (STRICT)
   {
@@ -153,6 +159,7 @@ export default tseslint.config(
       'check-file': checkFile,
       'n': pluginN,
       'simple-import-sort': simpleImportSort,
+      regexp: regexpPlugin,
       jsdoc,
     },
     languageOptions: {
@@ -193,6 +200,13 @@ export default tseslint.config(
       'import-x/no-duplicates': 'error',
       'import-x/max-dependencies': ['error', { max: 15, ignoreTypeImports: true }],
       'import-x/prefer-default-export': 'error',
+
+      // === REGEX BEST PRACTICES ===
+      "regexp/no-super-linear-backtracking": "error", // Critical for ReDoS prevention
+      "regexp/no-useless-escape": "error", // Prevents unnecessary escaping that can obfuscate regexes
+      "regexp/prefer-character-class": "warn", // Encourages character classes for better readability and performance
+      "regexp/optimal-quantifier-concatenation": "warn", // Suggests optimal quantifier patterns
+
 
       // === STYLE & RETURN TYPES ===
       'quotes': ['error', 'single', { avoidEscape: true }],
@@ -581,6 +595,17 @@ export default tseslint.config(
     ],
     rules: {
       'no-await-in-loop': 'off',
+    },
+  },
+
+  // 10. PRE-EXISTING REGEX PATTERNS (warn until refactored)
+  {
+    files: [
+      'src/Config/ConfigLoaderValidator.ts',
+      'src/Services/Notifications/TelegramNotifier.ts',
+    ],
+    rules: {
+      'regexp/no-super-linear-backtracking': 'warn',
     },
   },
 );

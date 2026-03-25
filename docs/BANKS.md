@@ -319,5 +319,5 @@ Define where transactions should be imported:
 
 ## Resources
 
-- **israeli-bank-scrapers**: https://github.com/eshaham/israeli-bank-scrapers
+- **israeli-bank-scrapers**: https://github.com/sergienko4/israeli-bank-scrapers
 - **Actual Budget**: https://actualbudget.org

@@ -895,8 +895,8 @@ docker run --rm ^
 
 | Component | Version | Purpose |
 |-----------|---------|---------|
-| [israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers) | 6.7.1 | Bank scraping |
-| [@actual-app/api](https://github.com/actualbudget/actual) | 26.2.0 | Actual Budget integration |
+| [israeli-bank-scrapers](https://github.com/sergienko4/israeli-bank-scrapers) | ^8.0.0 | Bank scraping |
+| [@actual-app/api](https://github.com/actualbudget/actual) | ^26.2.0 | Actual Budget integration |
 | Node.js | 22 | Runtime |
 | Camoufox (Firefox) | Latest | Browser automation (anti-detect) |
 | Docker | - | Containerization |
@@ -970,7 +970,7 @@ See [SECURITY.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-
 
 ## Credits
 
-- **[israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers)** by [@eshaham](https://github.com/eshaham) — the core library that makes this possible
+- **[israeli-bank-scrapers](https://github.com/sergienko4/israeli-bank-scrapers)** (fork of [eshaham](https://github.com/eshaham)) — the core library that makes this possible
 - **[Actual Budget](https://github.com/actualbudget/actual)** — open-source budgeting tool
 
 ## License
@@ -979,7 +979,7 @@ MIT License — See [LICENSE](LICENSE)
 
 ## Support
 
-- **Bank scraping issues:** [israeli-bank-scrapers issues](https://github.com/eshaham/israeli-bank-scrapers/issues)
+- **Bank scraping issues:** [israeli-bank-scrapers issues](https://github.com/sergienko4/israeli-bank-scrapers/issues)
 - **Actual Budget issues:** [Actual Budget issues](https://github.com/actualbudget/actual/issues)
 - **This tool issues:** [Open an issue](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues)
 

@@ -844,4 +844,74 @@ describe('TelegramNotifier', () => {
       expect(result.message).toContain('Failed to register commands');
     });
   });
+
+  describe('downloadPhoto', () => {
+    it('downloads photo successfully', async () => {
+      const notifier = createNotifier();
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ ok: true, result: { file_path: 'photos/file.jpg' } }) })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) });
+      const result = await notifier.downloadPhoto('file-id-123');
+      expect(result.success).toBe(true);
+      expect(Buffer.isBuffer(result.data)).toBe(true);
+    });
+
+    it('returns failure when getFile fails', async () => {
+      const notifier = createNotifier();
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 404 });
+      const result = await notifier.downloadPhoto('bad-id');
+      expect(result.success).toBe(false);
+    });
+
+    it('returns failure when getFile returns no file_path', async () => {
+      const notifier = createNotifier();
+      fetchMock.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ ok: false }) });
+      const result = await notifier.downloadPhoto('bad-id');
+      expect(result.success).toBe(false);
+    });
+
+    it('returns failure when photo download HTTP fails', async () => {
+      const notifier = createNotifier();
+      fetchMock
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ ok: true, result: { file_path: 'photos/file.jpg' } }) })
+        .mockResolvedValueOnce({ ok: false, status: 500 });
+      const result = await notifier.downloadPhoto('file-id');
+      expect(result.success).toBe(false);
+    });
+
+    it('returns failure on network error', async () => {
+      const notifier = createNotifier();
+      fetchMock.mockRejectedValueOnce(new Error('network down'));
+      const result = await notifier.downloadPhoto('file-id');
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('network down');
+    });
+  });
+
+  describe('sendInlineMenu', () => {
+    it('sends inline keyboard successfully', async () => {
+      const notifier = createNotifier();
+      fetchMock.mockResolvedValueOnce({ ok: true });
+      const keyboard = [[{ text: 'Option A', callback_data: 'a' }]];
+      const result = await notifier.sendInlineMenu('Pick one:', keyboard);
+      expect(result.success).toBe(true);
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.reply_markup.inline_keyboard).toEqual(keyboard);
+    });
+
+    it('returns failure on HTTP error', async () => {
+      const notifier = createNotifier();
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 403 });
+      const result = await notifier.sendInlineMenu('text', [[{ text: 'A', callback_data: 'a' }]]);
+      expect(result.success).toBe(false);
+    });
+
+    it('returns failure on network error', async () => {
+      const notifier = createNotifier();
+      fetchMock.mockRejectedValueOnce(new Error('timeout'));
+      const result = await notifier.sendInlineMenu('text', [[{ text: 'A', callback_data: 'a' }]]);
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('timeout');
+    });
+  });
 });

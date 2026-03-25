@@ -25,3 +25,30 @@ rules:
     message: "Don't silently fall back to [] — check query result first"
     severity: ERROR
     languages: [typescript]
+
+  - id: prototype-pollution-in-check
+    patterns:
+      - pattern: if ($KEY in $MAP) ...
+      - pattern-not: if ("..." in $MAP) ...
+    message: "Use Object.hasOwn($MAP, $KEY) to prevent prototype pollution"
+    severity: ERROR
+    languages: [typescript]
+
+  - id: unchecked-ensure-return
+    pattern: |
+      await this.ensure$METHOD(...);
+    pattern-not: |
+      $VAR = await this.ensure$METHOD(...);
+    message: "ensure*() returns a boolean — check the return value"
+    severity: ERROR
+    languages: [typescript]
+
+  - id: pii-in-info-log
+    patterns:
+      - pattern: getLogger().info(`...${$VAR}...`)
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: ".*(merchant|amount|payee|customerName|payeeName).*"
+    message: "Don't log PII at info level — use getLogger().debug()"
+    severity: ERROR
+    languages: [typescript]

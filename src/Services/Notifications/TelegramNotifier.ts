@@ -162,6 +162,44 @@ export default class TelegramNotifier implements INotifier {
   }
 
   /**
+   * Downloads a photo from Telegram by its file_id.
+   * @param fileId - The Telegram file_id of the photo to download.
+   * @returns Procedure with the image Buffer, or failure.
+   */
+  public async downloadPhoto(
+    fileId: string
+  ): Promise<Procedure<Buffer>> {
+    try {
+      const filePath = await this.fetchFilePath(fileId);
+      if (!filePath) return fail('getFile returned no file_path');
+      return await this.fetchFileContent(filePath);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return fail(`Photo download error: ${msg}`);
+    }
+  }
+
+  /**
+   * Sends an inline keyboard menu to the configured chat.
+   * @param text - HTML message text above the keyboard.
+   * @param keyboard - Array of button rows for the inline keyboard.
+   * @returns Procedure indicating the menu was sent.
+   */
+  public async sendInlineMenu(
+    text: string,
+    keyboard: { text: string; callback_data: string }[][]
+  ): Promise<Procedure<{ status: string }>> {
+    try {
+      return await this.postInlineKeyboard(text, keyboard);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return fail(`sendInlineMenu error: ${msg}`);
+    }
+  }
+
+  // ─── Private ───
+
+  /**
    * Iteratively polls for an OTP reply until the deadline expires.
    * @param offset - Current Telegram update offset.
    * @param sentAt - Unix timestamp of when the prompt was sent.
@@ -352,5 +390,72 @@ export default class TelegramNotifier implements INotifier {
       const body = await response.text();
       throw new NetworkError(`Telegram API error ${String(response.status)}: ${body}`);
     }
+  }
+
+  /**
+   * Fetches the file path from Telegram for a given file_id.
+   * @param fileId - The Telegram file_id to look up.
+   * @returns The file_path string, or false if unavailable.
+   */
+  private async fetchFilePath(
+    fileId: string
+  ): Promise<string | false> {
+    const fileUrl =
+      `${TELEGRAM_API}/bot${this._botToken}/getFile?file_id=${fileId}`;
+    const fileResponse = await fetch(fileUrl);
+    if (!fileResponse.ok) {
+      return false;
+    }
+    const fileData = await fileResponse.json() as {
+      ok: boolean; result?: { file_path: string };
+    };
+    if (!fileData.ok || !fileData.result?.file_path) return false;
+    return fileData.result.file_path;
+  }
+
+  /**
+   * Downloads the file content from Telegram's file storage.
+   * @param filePath - The Telegram file_path to download from.
+   * @returns Procedure with the image Buffer, or failure.
+   */
+  private async fetchFileContent(
+    filePath: string
+  ): Promise<Procedure<Buffer>> {
+    const downloadUrl =
+      `${TELEGRAM_API}/file/bot${this._botToken}/${filePath}`;
+    const imageResponse = await fetch(downloadUrl);
+    if (!imageResponse.ok) {
+      return fail(`Photo download failed: ${String(imageResponse.status)}`);
+    }
+    const arrayBuffer = await imageResponse.arrayBuffer();
+    const imageBuffer = Buffer.from(arrayBuffer);
+    return succeed(imageBuffer);
+  }
+
+  /**
+   * Posts an inline keyboard message to the Telegram chat.
+   * @param text - HTML message text above the keyboard.
+   * @param keyboard - Array of button rows for the inline keyboard.
+   * @returns Procedure indicating the menu was sent.
+   */
+  private async postInlineKeyboard(
+    text: string,
+    keyboard: { text: string; callback_data: string }[][]
+  ): Promise<Procedure<{ status: string }>> {
+    const url = `${TELEGRAM_API}/bot${this._botToken}/sendMessage`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: this._chatId,
+        text,
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: keyboard },
+      }),
+    });
+    if (!response.ok) {
+      return fail(`sendInlineMenu failed: ${String(response.status)}`);
+    }
+    return succeed({ status: 'menu-sent' });
   }
 }

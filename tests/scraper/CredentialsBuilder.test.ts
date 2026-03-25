@@ -55,5 +55,21 @@ describe('buildCredentials', () => {
       expect(creds.otpLongTermToken).toBe('tok123');
       expect(creds.otpCodeRetriever).toBeUndefined();
     });
+
+    it('defaults email to empty string when email is undefined', () => {
+      const config = { password: TEST_CREDENTIAL, otpLongTermToken: 'tok456' } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds.otpLongTermToken).toBe('tok456');
+      expect(creds.email).toBe('');
+      expect(creds.password).toBe(TEST_CREDENTIAL);
+    });
+
+    it('defaults both email and password to empty strings when both are undefined', () => {
+      const config = { otpLongTermToken: 'tok789' } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds.otpLongTermToken).toBe('tok789');
+      expect(creds.email).toBe('');
+      expect(creds.password).toBe('');
+    });
   });
 });

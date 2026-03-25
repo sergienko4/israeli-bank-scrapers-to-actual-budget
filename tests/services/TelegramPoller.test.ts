@@ -306,6 +306,77 @@ describe('TelegramPoller', () => {
     expect(answerUrl).toContain('answerCallbackQuery');
   });
 
+  it('dispatches photo messages to onPhoto handler', async () => {
+    const onMessage = vi.fn().mockResolvedValue(undefined);
+    const onPhoto = vi.fn().mockResolvedValue(undefined);
+    const poller = new TelegramPoller('123:ABC', '999', onMessage);
+    poller.setPhotoHandler(onPhoto);
+
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      if (callCount === 2) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{
+              update_id: 200,
+              message: {
+                chat: { id: 999 },
+                date: Math.floor(Date.now() / 1000) + 10,
+                photo: [
+                  { file_id: 'small', file_unique_id: 's1', width: 90, height: 90 },
+                  { file_id: 'large', file_unique_id: 'l1', width: 800, height: 600 },
+                ],
+                caption: 'my receipt',
+              },
+            }],
+          }),
+        });
+      }
+      poller.stop();
+      return emptyResponse();
+    });
+
+    await poller.start();
+    expect(onPhoto).toHaveBeenCalledWith('large', 'my receipt');
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  it('ignores photo messages when no onPhoto handler set', async () => {
+    const onMessage = vi.fn().mockResolvedValue(undefined);
+    const poller = new TelegramPoller('123:ABC', '999', onMessage);
+
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      if (callCount === 2) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            ok: true,
+            result: [{
+              update_id: 201,
+              message: {
+                chat: { id: 999 },
+                date: Math.floor(Date.now() / 1000) + 10,
+                photo: [{ file_id: 'f1', file_unique_id: 'u1', width: 100, height: 100 }],
+              },
+            }],
+          }),
+        });
+      }
+      poller.stop();
+      return emptyResponse();
+    });
+
+    await poller.start();
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
   describe('stopAndFlush', () => {
     it('confirms processed updates with a final getUpdates call', async () => {
       const poller = new TelegramPoller('123:ABC', '999', vi.fn().mockResolvedValue(undefined));

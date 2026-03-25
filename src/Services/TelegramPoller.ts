@@ -5,7 +5,7 @@
 
 import { getLogger } from '../Logger/Index.js';
 import type {
-  ITelegramApiResponse, ITelegramCallbackQuery,
+  ITelegramApiResponse, ITelegramCallbackQuery, ITelegramMessageData,
   ITelegramUpdate, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
@@ -20,17 +20,33 @@ export default class TelegramPoller {
   private _startedAt = 0;
   private _abortController: AbortController | null = null;
 
+  private _onPhoto?: (
+    fileId: string, caption?: string
+  ) => Promise<Procedure<{ status: string }>>;
+
   /**
    * Creates a TelegramPoller for the given bot and chat.
    * @param botToken - The Telegram Bot API token.
-   * @param chatId - The chat ID to filter updates from (security boundary).
-   * @param onMessage - Async callback invoked for each incoming message or callback query text.
+   * @param chatId - The chat ID to filter from.
+   * @param onMessage - Async callback for text messages.
    */
   constructor(
     private readonly botToken: string,
     private readonly chatId: string,
-    private readonly onMessage: (text: string) => Promise<Procedure<{ status: string }>>
+    private readonly onMessage: (
+      text: string
+    ) => Promise<Procedure<{ status: string }>>
   ) {}
+
+  /**
+   * Sets an optional photo handler for receipt import.
+   * @param handler - Callback invoked with file_id on photo.
+   */
+  public setPhotoHandler(handler: (
+    fileId: string, caption?: string
+  ) => Promise<Procedure<{ status: string }>>): void {
+    this._onPhoto = handler;
+  }
 
 
   /**
@@ -98,7 +114,7 @@ export default class TelegramPoller {
         await TelegramPoller.sleep(5000);
       }
       return succeed({ status: 'poll-ok' });
-    } catch (error) {
+    } catch (error: unknown) {
       getLogger().error(`⚠️  Telegram poll error: ${errorMessage(error)}`);
       if (this._running) await TelegramPoller.sleep(5000);
       return succeed({ status: 'poll-error-recovered' });
@@ -118,7 +134,7 @@ export default class TelegramPoller {
       if (!response.ok) return succeed({ status: 'poll-http-error' });
       await this.applyUpdates(await response.json() as ITelegramApiResponse);
       return succeed({ status: 'poll-complete' });
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
         return succeed({ status: 'poll-aborted' });
       }
@@ -167,18 +183,45 @@ export default class TelegramPoller {
   }
 
   /**
-   * Dispatches a plain message update to the onMessage handler if it passes all filters.
-   * @param message - The Telegram message object from the update, or undefined.
+   * Validates a message is from the expected chat and not stale.
+   * @param message - The Telegram message data, or undefined.
+   * @returns True if the message should be processed.
+   */
+  private isValidMessage(
+    message: ITelegramMessageData | undefined
+  ): message is ITelegramMessageData {
+    if (!message?.text && !message?.photo?.length) return false;
+    if (String(message.chat.id) !== this.chatId) return false;
+    if (message.date < this._startedAt) return false;
+    return true;
+  }
+
+  /**
+   * Dispatches a message update (text or photo) to the appropriate handler.
+   * @param message - The Telegram message data, or undefined.
    * @returns Procedure indicating the message dispatch result.
    */
   private async processUpdate(
-    message: { text?: string; chat: { id: number }; date: number } | undefined
+    message: ITelegramMessageData | undefined
   ): Promise<Procedure<{ status: string }>> {
-    if (!message?.text) return succeed({ status: 'no-message' });
-    if (String(message.chat.id) !== this.chatId) return succeed({ status: 'wrong-chat' });
-    if (message.date < this._startedAt) return succeed({ status: 'stale-message' });
-    await this.onMessage(message.text);
-    return succeed({ status: 'message-dispatched' });
+    if (!this.isValidMessage(message)) return succeed({ status: 'skipped' });
+    if (message.photo && this._onPhoto) return this.dispatchPhoto(message);
+    if (message.text) await this.onMessage(message.text);
+    return succeed({ status: 'dispatched' });
+  }
+
+  /**
+   * Dispatches a photo message to the registered photo handler.
+   * @param message - The Telegram message containing a photo array.
+   * @returns Procedure indicating the photo was dispatched.
+   */
+  private async dispatchPhoto(
+    message: ITelegramMessageData
+  ): Promise<Procedure<{ status: string }>> {
+    const largest = message.photo?.at(-1);
+    if (!largest || !this._onPhoto) return succeed({ status: 'no-photo-handler' });
+    await this._onPhoto(largest.file_id, message.caption);
+    return succeed({ status: 'photo-dispatched' });
   }
 
   /**

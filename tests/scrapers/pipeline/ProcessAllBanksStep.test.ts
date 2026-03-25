@@ -145,4 +145,49 @@ describe('ProcessAllBanksStep', () => {
       expect(result.data.state).not.toBe(ctx.state);
     }
   });
+
+  it('returns fail when metricsService.startImport fails', async () => {
+    const ctx = makeCtx();
+    (ctx.services.metricsService.startImport as ReturnType<typeof vi.fn>)
+      .mockReturnValue({ success: false, message: 'init error' });
+    const step = createProcessAllBanksStep();
+
+    const result = await step(ctx);
+
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) {
+      expect(result.message).toBe('metrics init failed');
+    }
+  });
+
+  it('uses default error message when scrapeResult.errorMessage is undefined', async () => {
+    const ctx = makeCtx();
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false });
+    const step = createProcessAllBanksStep();
+
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    expect(ctx.services.metricsService.recordBankFailure).toHaveBeenCalledWith(
+      'hapoalim',
+      expect.objectContaining({ message: 'Scrape failed' })
+    );
+  });
+
+  it('defaults delayBetweenBanks to 0 when config omits it', async () => {
+    const ctx = makeCtx({
+      config: {
+        banks: { single: { credentials: { id: '1' } } },
+      } as unknown as IPipelineContext['config'],
+    });
+    const step = createProcessAllBanksStep();
+
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    if (isSuccess(result)) {
+      expect(result.data.state.banksProcessed).toBe(1);
+    }
+  });
 });
