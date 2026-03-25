@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.36.0...v1.37.0) (2026-03-25)
+
+
+### Added
+
+* add /import_receipt command for OCR receipt photo import ([#271](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/271)) ([a5cb3b1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/a5cb3b13965a5ee47f3022d3ebd5bb9548cdbcdb))
+
+
+### Refactored
+
+* Result Pattern + Pipeline architecture migration ([#263](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/263)) ([3c0360e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/3c0360e48a75a3723fffd8b04d7b9e6d6ad608b7))
+
 ## [1.36.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.35.0...v1.36.0) (2026-03-17)
 
 
