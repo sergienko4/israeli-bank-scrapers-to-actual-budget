@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.0...v1.37.1) (2026-03-26)
+
+
+### Fixed
+
+* ARM64 Docker image — fetch correct Camoufox binary per architecture ([#273](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/273)) ([bbd4f0a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/bbd4f0adfd58087e9071d74dafa29fcdc66a1ff0))
+
 ## [1.37.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.36.0...v1.37.0) (2026-03-25)
 
 
