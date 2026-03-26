@@ -113,7 +113,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             APT_CACHE_BUST=${{ github.run_id }}
-            SKIP_BROWSER_FETCH=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

@@ -57,21 +57,31 @@ RUN npm install \
     && npm update --no-save
 
 # Install Camoufox browser (Firefox-based anti-detect)
-# CI pre-downloads the binary into .camoufox-cache/ to avoid GitHub API rate limits.
-# Local/release builds fetch normally via npx.
+# CI pre-downloads the binary into .camoufox-cache/ for amd64 smoke test only.
+# Production multi-arch build (amd64+arm64) fetches fresh per-platform via npx.
+# ELF magic-byte check at the end catches architecture mismatches at build time.
 ARG SKIP_BROWSER_FETCH=false
 COPY .camoufox-cache/ /tmp/camoufox-precache/
 
-RUN if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ -f /tmp/camoufox-precache/camoufox-bin ] && [ -f /tmp/camoufox-precache/version.json ]; then \
-      echo "Using pre-cached Camoufox binary" && \
+RUN ARCH=$(uname -m) && \
+    echo "Building for architecture: $ARCH" && \
+    if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ "$ARCH" = "x86_64" ] && \
+       [ -f /tmp/camoufox-precache/camoufox-bin ] && [ -f /tmp/camoufox-precache/version.json ]; then \
+      echo "Using pre-cached Camoufox binary (x86_64)" && \
       mkdir -p /home/node/.cache/camoufox && \
       cp -r /tmp/camoufox-precache/* /home/node/.cache/camoufox/; \
     else \
+      echo "Fetching Camoufox for $ARCH..." && \
       npx @hieutran094/camoufox-js fetch && \
       mkdir -p /home/node/.cache && \
       mv /root/.cache/camoufox /home/node/.cache/camoufox; \
     fi && \
-    rm -rf /tmp/camoufox-precache
+    rm -rf /tmp/camoufox-precache && \
+    echo "Validating Camoufox binary for $ARCH..." && \
+    head -c 4 /home/node/.cache/camoufox/camoufox-bin | grep -qP '\x7fELF' || \
+      (echo "ERROR: Camoufox binary is not a valid ELF executable — wrong architecture?" && exit 1) && \
+    chmod +x /home/node/.cache/camoufox/camoufox-bin && \
+    echo "Camoufox binary validated OK"
 
 # Copy source code
 COPY src ./src
