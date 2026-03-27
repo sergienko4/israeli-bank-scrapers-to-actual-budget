@@ -143,12 +143,12 @@ describe('TelegramPoller', () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(mockLogger.error).toHaveBeenCalledWith(
+    expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Network failure')
     );
   });
 
-  it('skips update when poll response.ok is false', async () => {
+  it('logs HTTP status code on poll error and retries', async () => {
     vi.useFakeTimers();
     try {
       const onMessage = vi.fn();
@@ -157,7 +157,7 @@ describe('TelegramPoller', () => {
       fetchMock.mockImplementation(() => {
         callCount++;
         if (callCount <= 1) return emptyResponse();
-        if (callCount === 2) return Promise.resolve({ ok: false });
+        if (callCount === 2) return Promise.resolve({ ok: false, status: 500 });
         poller.stop();
         return emptyResponse();
       });
@@ -165,6 +165,66 @@ describe('TelegramPoller', () => {
       await vi.advanceTimersByTimeAsync(5001);
       await startPromise;
       expect(onMessage).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('HTTP 500')
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops poller on fatal HTTP 401 (bad token)', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      return Promise.resolve({ ok: false, status: 401 });
+    });
+    await poller.start();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('fatal error (HTTP 401)')
+    );
+  });
+
+  it('stops poller on fatal HTTP 409 (conflict)', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      return Promise.resolve({ ok: false, status: 409 });
+    });
+    await poller.start();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('fatal error (HTTP 409)')
+    );
+  });
+
+  it('resets error count after a successful poll', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) return Promise.resolve({ ok: false, status: 502 });
+        if (callCount === 3) return emptyResponse();
+        if (callCount === 4) return Promise.resolve({ ok: false, status: 502 });
+        poller.stop();
+        return emptyResponse();
+      });
+      const startPromise = poller.start();
+      await vi.advanceTimersByTimeAsync(5001);
+      await vi.advanceTimersByTimeAsync(5001);
+      await startPromise;
+      const warnCalls = mockLogger.warn.mock.calls.filter(
+        (c: string[]) => c[0].includes('HTTP 502')
+      );
+      expect(warnCalls).toHaveLength(2);
+      expect(warnCalls[0][0]).toContain('1/60');
+      expect(warnCalls[1][0]).toContain('1/60');
     } finally {
       vi.useRealTimers();
     }
