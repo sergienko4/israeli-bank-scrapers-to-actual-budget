@@ -230,6 +230,41 @@ describe('TelegramPoller', () => {
     }
   });
 
+  it('resets consecutiveErrors on restart (stop → start lifecycle)', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) return Promise.resolve({ ok: false, status: 502 });
+        poller.stop();
+        return emptyResponse();
+      });
+      const firstRun = poller.start();
+      await vi.advanceTimersByTimeAsync(5001);
+      await firstRun;
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('1/60'));
+
+      mockLogger.warn.mockClear();
+      callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) return Promise.resolve({ ok: false, status: 503 });
+        poller.stop();
+        return emptyResponse();
+      });
+      const secondRun = poller.start();
+      await vi.advanceTimersByTimeAsync(5001);
+      await secondRun;
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('1/60'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('handles clearOldMessages fetch exception gracefully', async () => {
     const poller = new TelegramPoller('123:ABC', '999', vi.fn());
     let callCount = 0;

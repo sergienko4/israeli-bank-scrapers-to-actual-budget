@@ -61,6 +61,7 @@ export default class TelegramPoller {
   public async start(): Promise<Procedure<{ status: string }>> {
     this._running = true;
     this._startedAt = Math.floor(Date.now() / 1000);
+    this._consecutiveErrors = 0;
     await this.clearOldMessages();
     getLogger().info('🤖 Telegram command listener started');
     return this.pollLoop();
