@@ -24,6 +24,7 @@ export default class TelegramPoller {
   private _abortController: AbortController | null = null;
   private _sleepController: AbortController | null = null;
   private _consecutiveErrors = 0;
+  private _runId = 0;
 
   private _onPhoto?: (
     fileId: string, caption?: string
@@ -61,11 +62,12 @@ export default class TelegramPoller {
    */
   public async start(): Promise<Procedure<{ status: string }>> {
     this._running = true;
+    this._runId++;
     this._startedAt = Math.floor(Date.now() / 1000);
     this._consecutiveErrors = 0;
     await this.clearOldMessages();
     getLogger().info('🤖 Telegram command listener started');
-    return await this.pollLoop();
+    return await this.pollLoop(this._runId);
   }
 
   /**
@@ -86,6 +88,7 @@ export default class TelegramPoller {
    * @returns Procedure indicating the flush status.
    */
   public async stopAndFlush(): Promise<Procedure<{ status: string }>> {
+    this._runId++;
     this.stop();
     if (this._offset === 0) return succeed({ status: 'nothing-to-flush' });
     try {
@@ -99,11 +102,12 @@ export default class TelegramPoller {
   }
 
   /**
-   * Iteratively runs the poll loop until the poller is stopped.
+   * Iteratively runs the poll loop until stopped or superseded by a new run.
+   * @param runId - Token captured at start() to detect stale loops.
    * @returns Procedure indicating the loop has ended.
    */
-  private async pollLoop(): Promise<Procedure<{ status: string }>> {
-    while (this._running) {
+  private async pollLoop(runId: number): Promise<Procedure<{ status: string }>> {
+    while (this._running && this._runId === runId) {
       await this.runOnePollCycle();
     }
     return succeed({ status: 'stopped' });

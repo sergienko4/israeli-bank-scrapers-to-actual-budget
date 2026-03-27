@@ -552,4 +552,49 @@ describe('TelegramPoller', () => {
       expect(secondFlush.success).toBe(true);
     });
   });
+
+  it('stop() interrupts backoff sleep immediately', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        return Promise.resolve({ ok: false, status: 500 });
+      });
+      const startPromise = poller.start();
+      await vi.advanceTimersByTimeAsync(100);
+      poller.stop();
+      await vi.advanceTimersByTimeAsync(100);
+      await startPromise;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stale poll loop exits when a new start() supersedes it', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) return emptyResponse();
+      if (callCount === 2) {
+        poller.stop();
+        return emptyResponse();
+      }
+      return emptyResponse();
+    });
+    await poller.start();
+
+    callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      poller.stop();
+      return emptyResponse();
+    });
+    const result = await poller.start();
+    expect(result.success).toBe(true);
+  });
 });
