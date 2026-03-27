@@ -63,6 +63,7 @@ RUN npm install \
 ARG SKIP_BROWSER_FETCH=false
 COPY .camoufox-cache/ /tmp/camoufox-precache/
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN ARCH=$(uname -m) && \
     echo "Building for architecture: $ARCH" && \
     if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ "$ARCH" = "x86_64" ] && \

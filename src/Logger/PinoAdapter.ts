@@ -7,7 +7,14 @@ import type pino from 'pino';
 import type { LogFormat } from '../Types/Index.js';
 import type { ILogger, LogContext } from './ILogger.js';
 
-const EMOJI_RE = /\p{Extended_Pictographic}(?:\u200D\p{Extended_Pictographic})*/gu;
+const FLAG_RE = /\p{Regional_Indicator}{2}/gu;
+const KEYCAP_RE = /[0-9#*]\uFE0F?\u20E3/gu;
+const SKIN = String.raw`[\u{1F3FB}-\u{1F3FF}]`;
+const EP = String.raw`\p{Extended_Pictographic}`;
+const PICTO_RE = new RegExp(
+  String.raw`${EP}${SKIN}?(?:\u200D${EP}${SKIN}?)*`, 'gu'
+);
+const VS16_RE = /\uFE0F/gu;
 const EMPTY: LogContext = {};
 
 /**
@@ -16,7 +23,12 @@ const EMPTY: LogContext = {};
  * @returns Clean string with emojis removed and whitespace normalised.
  */
 function stripEmojis(text: string): string {
-  return text.replaceAll(EMOJI_RE, '').replaceAll(/\s{2,}/g, ' ').trim();
+  const stripped = text
+    .replaceAll(FLAG_RE, '')
+    .replaceAll(KEYCAP_RE, '')
+    .replaceAll(PICTO_RE, '')
+    .replaceAll(VS16_RE, '');
+  return stripped.replaceAll(/\s{2,}/g, ' ').trim();
 }
 
 /** pino-backed ILogger implementation for stdout output. */
