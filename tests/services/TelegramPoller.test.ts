@@ -173,31 +173,17 @@ describe('TelegramPoller', () => {
     }
   });
 
-  it('stops poller on fatal HTTP 401 (bad token)', async () => {
+  it.each([401, 403, 409])('stops poller on fatal HTTP %i', async (status) => {
     const poller = new TelegramPoller('123:ABC', '999', vi.fn());
     let callCount = 0;
     fetchMock.mockImplementation(() => {
       callCount++;
       if (callCount <= 1) return emptyResponse();
-      return Promise.resolve({ ok: false, status: 401 });
+      return Promise.resolve({ ok: false, status });
     });
     await poller.start();
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining('fatal error (HTTP 401)')
-    );
-  });
-
-  it('stops poller on fatal HTTP 409 (conflict)', async () => {
-    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
-    let callCount = 0;
-    fetchMock.mockImplementation(() => {
-      callCount++;
-      if (callCount <= 1) return emptyResponse();
-      return Promise.resolve({ ok: false, status: 409 });
-    });
-    await poller.start();
-    expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining('fatal error (HTTP 409)')
+      expect.stringContaining(`fatal error (HTTP ${String(status)})`)
     );
   });
 

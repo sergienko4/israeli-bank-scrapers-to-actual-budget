@@ -59,7 +59,7 @@ RUN npm install \
 # Install Camoufox browser (Firefox-based anti-detect)
 # CI pre-downloads the binary into .camoufox-cache/ for amd64 smoke test only.
 # Production multi-arch build (amd64+arm64) fetches fresh per-platform via npx.
-# ELF magic-byte check at the end catches architecture mismatches at build time.
+# ELF e_machine check validates the binary matches the build architecture.
 ARG SKIP_BROWSER_FETCH=false
 COPY .camoufox-cache/ /tmp/camoufox-precache/
 
@@ -79,9 +79,14 @@ RUN ARCH=$(uname -m) && \
     rm -rf /tmp/camoufox-precache && \
     echo "Validating Camoufox binary for $ARCH..." && \
     head -c 4 /home/node/.cache/camoufox/camoufox-bin | grep -qP '\x7fELF' || \
-      (echo "ERROR: Camoufox binary is not a valid ELF executable — wrong architecture?" && exit 1) && \
+      (echo "ERROR: Camoufox binary is not a valid ELF executable" && exit 1) && \
+    EXPECTED_MACHINE=$([ "$ARCH" = "aarch64" ] && echo "b7 00" || echo "3e 00") && \
+    ACTUAL_MACHINE=$(od -An -tx1 -j18 -N2 /home/node/.cache/camoufox/camoufox-bin | tr -d ' \n') && \
+    EXPECTED_HEX=$(echo "$EXPECTED_MACHINE" | tr -d ' ') && \
+    [ "$ACTUAL_MACHINE" = "$EXPECTED_HEX" ] || \
+      (echo "ERROR: ELF e_machine mismatch — expected $EXPECTED_HEX ($ARCH) got $ACTUAL_MACHINE" && exit 1) && \
     chmod +x /home/node/.cache/camoufox/camoufox-bin && \
-    echo "Camoufox binary validated OK"
+    echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE)"
 
 # Copy source code
 COPY src ./src
