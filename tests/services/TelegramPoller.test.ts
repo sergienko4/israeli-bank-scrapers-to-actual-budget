@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import TelegramPoller from '../../src/Services/TelegramPoller.js';
-import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+vi.mock('../../src/Logger/Index.js', () => ({
+  getLogger: () => mockLogger,
+}));
 
 const emptyResponse = () => Promise.resolve({
   ok: true,
@@ -10,13 +14,12 @@ const emptyResponse = () => Promise.resolve({
 });
 
 describe('TelegramPoller', () => {
-  let fetchMock: any;
+  let fetchMock: Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as any);
   });
 
   // Call sequence: 1=clearOldMessages, 2+=poll cycles

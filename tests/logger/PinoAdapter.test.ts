@@ -74,4 +74,24 @@ describe('PinoAdapter – phone format', () => {
     expect(mockPino.debug).toHaveBeenCalledWith({}, '> detail');
     expect(mockPino.warn).toHaveBeenCalledWith({}, '> caution');
   });
+
+  it('strips keycap emoji (1️⃣)', () => {
+    adapter.info('Step 1️⃣ done');
+    expect(mockPino.info).toHaveBeenCalledWith({}, '> Step done');
+  });
+
+  it('strips skin-tone emoji (👍🏻)', () => {
+    adapter.info('OK 👍🏻');
+    expect(mockPino.info).toHaveBeenCalledWith({}, '> OK');
+  });
+
+  it('strips flag emoji (🇺🇸)', () => {
+    adapter.info('Region 🇺🇸 selected');
+    expect(mockPino.info).toHaveBeenCalledWith({}, '> Region selected');
+  });
+
+  it('strips ZWJ family emoji (👨‍👩‍👧‍👦)', () => {
+    adapter.info('Family 👨‍👩‍👧‍👦 here');
+    expect(mockPino.info).toHaveBeenCalledWith({}, '> Family here');
+  });
 });
