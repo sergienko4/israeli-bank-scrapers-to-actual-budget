@@ -134,7 +134,7 @@ export default class TelegramNotifier implements INotifier {
     await this.send(prompt);
     const sentAt = Math.floor(Date.now() / 1000);
     const deadline = Date.now() + timeoutMs;
-    return this.pollForReply(offset, sentAt, deadline);
+    return await this.pollForReply(offset, sentAt, deadline);
   }
 
   /**

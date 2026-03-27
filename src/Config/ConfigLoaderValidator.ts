@@ -413,7 +413,7 @@ function validateBankCredentials(
 function validateFieldFormats(
   bankName: string, config: IBankConfig
 ): Procedure<{ valid: true }> {
-  if (config.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.email)) {
+  if (config.email && !/^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(config.email)) {
     return fail(`Invalid email format for ${bankName}: "${config.email}"`);
   }
   const phone = config.phoneNumber?.replaceAll(/[\s-]/g, '');

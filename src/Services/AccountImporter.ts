@@ -89,7 +89,7 @@ export class AccountImporter {
     bankName: string, bankConfig: IBankConfig, scrapeResult: IScraperScrapingResult
   ): Promise<{ imported: number; skipped: number }> {
     const accounts = scrapeResult.accounts ?? [];
-    return this.processAccountsSequentially({
+    return await this.processAccountsSequentially({
       bankName, bankConfig, accounts, index: 0, imported: 0, skipped: 0,
     });
   }
@@ -142,7 +142,7 @@ export class AccountImporter {
   ): Promise<{ imported: number; skipped: number }> {
     const firstTxn = account.txns[0] as unknown as Record<string, string> | undefined;
     const currency = firstTxn?.originalCurrency || 'ILS';
-    return this.processOneAccount({ bankName, bankConfig, currency }, account);
+    return await this.processOneAccount({ bankName, bankConfig, currency }, account);
   }
 
   /**
@@ -167,7 +167,7 @@ export class AccountImporter {
       accountNumber: account.accountNumber, accountName: target?.accountName,
       balance: account.balance, currency: bankCtx.currency, txnCount: txns.length,
     });
-    return this.processAccount(bankCtx, { ...account, txns });
+    return await this.processAccount(bankCtx, { ...account, txns });
   }
 
   /**
@@ -193,7 +193,7 @@ export class AccountImporter {
       return { imported: 0, skipped: 0 };
     }
     if (this.opts.isDryRun) return this.collectDryRunAccount(bankName, account, currency);
-    return this.importLiveAccount(target, account, { bankName, currency });
+    return await this.importLiveAccount(target, account, { bankName, currency });
   }
 
   /**

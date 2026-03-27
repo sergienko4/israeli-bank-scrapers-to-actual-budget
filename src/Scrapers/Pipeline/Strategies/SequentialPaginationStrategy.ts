@@ -85,7 +85,7 @@ async function processAt<TItem, TResult>(
   if (isFail(pauseCheck)) {
     return pauseCheck;
   }
-  return processItem(state, index, results);
+  return await processItem(state, index, results);
 }
 
 /**
@@ -142,10 +142,10 @@ async function processItem<TItem, TResult>(
     state.ctx.logger.warn(
       `Item ${String(index)} failed: ${result.message}`
     );
-    return processAt(state, index + 1, results);
+    return await processAt(state, index + 1, results);
   }
 
-  return processAt(
+  return await processAt(
     state,
     index + 1,
     [...results, result.data]

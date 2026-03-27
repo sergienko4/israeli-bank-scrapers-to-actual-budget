@@ -259,7 +259,7 @@ export class ReceiptImportHandler {
   private async findPayeeMatch(merchant?: string): Promise<IPayeeMatch | false> {
     if (!merchant || !this._api) return false;
     try { return await this.queryPayeeMatch(merchant); }
-    catch (err: unknown) { getLogger().debug('payee match failed: ' + errorMessage(err)); return false; }
+    catch (err: unknown) { getLogger().debug(`payee match: ${errorMessage(err)}`); return false; }
   }
 
   /**

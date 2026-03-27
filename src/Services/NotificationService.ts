@@ -43,7 +43,7 @@ export default class NotificationService {
    * @returns Procedure with the count of notifiers that succeeded.
    */
   public async sendSummary(summary: IImportSummary): Promise<Procedure<{ sent: number }>> {
-    return this.notifyAll(async (n) => {
+    return await this.notifyAll(async (n) => {
       await n.sendSummary(summary);
       return succeed({ sent: true });
     });
@@ -55,7 +55,7 @@ export default class NotificationService {
    * @returns Procedure with the count of notifiers that succeeded.
    */
   public async sendError(error: string): Promise<Procedure<{ sent: number }>> {
-    return this.notifyAll(async (n) => {
+    return await this.notifyAll(async (n) => {
       await n.sendError(error);
       return succeed({ sent: true });
     });
@@ -67,7 +67,7 @@ export default class NotificationService {
    * @returns Procedure with the count of notifiers that succeeded.
    */
   public async sendMessage(text: string): Promise<Procedure<{ sent: number }>> {
-    return this.notifyAll(async (n) => {
+    return await this.notifyAll(async (n) => {
       await n.sendMessage(text);
       return succeed({ sent: true });
     });
