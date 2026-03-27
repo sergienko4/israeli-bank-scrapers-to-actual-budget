@@ -81,7 +81,7 @@ export class TelegramCommandHandler {
       ? firstToken.slice(0, colonIdx + 1).toLowerCase() + firstToken.slice(colonIdx + 1)
       : firstToken.toLowerCase();
     const arg = raw.slice(1).join(' ').trim() || void 0;
-    return this.dispatchCommand(command, arg);
+    return await this.dispatchCommand(command, arg);
   }
 
   /**
@@ -94,7 +94,7 @@ export class TelegramCommandHandler {
     fileId: string, _caption?: string
   ): Promise<Procedure<{ status: string }>> {
     if (!this._receiptHandler) return succeed({ status: 'receipt-not-configured' });
-    return this._receiptHandler.handlePhoto(fileId);
+    return await this._receiptHandler.handlePhoto(fileId);
   }
 
   /**
@@ -107,11 +107,11 @@ export class TelegramCommandHandler {
     command: string, arg?: string
   ): Promise<Procedure<{ status: string }>> {
     if (this._receiptHandler && command.startsWith('receipt_')) {
-      return this.routeReceiptCallback(command);
+      return await this.routeReceiptCallback(command);
     }
     if (command.startsWith('scan:')) {
       const bankName = command.slice(5);
-      return this.handleScan(bankName);
+      return await this.handleScan(bankName);
     }
     const handlers = this.commandMap(arg);
     if (Object.hasOwn(handlers, command)) await handlers[command]();
@@ -385,7 +385,7 @@ export class TelegramCommandHandler {
    */
   private async handleImportReceipt(): Promise<Procedure<{ status: string }>> {
     if (!this._receiptHandler) { await this.reply('❌ Receipt import is not configured.'); return succeed({ status: 'not-configured' }); }
-    return this._receiptHandler.start();
+    return await this._receiptHandler.start();
   }
 
   /**
@@ -396,11 +396,11 @@ export class TelegramCommandHandler {
   private async routeReceiptCallback(command: string): Promise<Procedure<{ status: string }>> {
     const handler = this._receiptHandler;
     if (!handler) return succeed({ status: 'no-handler' });
-    if (command === 'receipt_confirm') return handler.onConfirm();
-    if (command === 'receipt_choose') return handler.onChooseDifferent();
-    if (command === 'receipt_cancel') return handler.onCancel();
-    if (command.startsWith('receipt_acc:')) { const accountId = command.slice(12); return handler.onAccountSelected(accountId); }
-    if (command.startsWith('receipt_cat:')) { const categoryId = command.slice(12); return handler.onCategorySelected(categoryId); }
+    if (command === 'receipt_confirm') return await handler.onConfirm();
+    if (command === 'receipt_choose') return await handler.onChooseDifferent();
+    if (command === 'receipt_cancel') return await handler.onCancel();
+    if (command.startsWith('receipt_acc:')) { const accountId = command.slice(12); return await handler.onAccountSelected(accountId); }
+    if (command.startsWith('receipt_cat:')) { const categoryId = command.slice(12); return await handler.onCategorySelected(categoryId); }
     return succeed({ status: 'unknown-receipt-callback' });
   }
 }

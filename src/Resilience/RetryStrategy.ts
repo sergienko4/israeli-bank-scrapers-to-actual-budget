@@ -42,7 +42,7 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
    * @returns The resolved value from fn on success.
    */
   public async execute<T>(fn: () => Promise<T>, operationName: string): Promise<T> {
-    return this.executeAttempt(fn, operationName, 1);
+    return await this.executeAttempt(fn, operationName, 1);
   }
 
   /**

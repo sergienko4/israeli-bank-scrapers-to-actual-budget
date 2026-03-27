@@ -251,7 +251,7 @@ async function main(): Promise<Procedure<{ status: string }>> {
     const exitCode = (result.data.state.exitCode as number | undefined) ?? 0;
     process.exit(exitCode);
   } catch (error) {
-    return handleFatalError(error);
+    return await handleFatalError(error);
   }
 }
 

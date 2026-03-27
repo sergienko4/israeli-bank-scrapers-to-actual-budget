@@ -7,7 +7,7 @@ import type pino from 'pino';
 import type { LogFormat } from '../Types/Index.js';
 import type { ILogger, LogContext } from './ILogger.js';
 
-const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]|\u{FE00}|\u{FE0F}|\u{200D}/gu;
+const EMOJI_RE = /\p{Emoji_Presentation}|\p{Emoji}\uFE0F/gu;
 const EMPTY: LogContext = {};
 
 /**

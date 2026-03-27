@@ -64,7 +64,7 @@ export default class TelegramPoller {
     this._consecutiveErrors = 0;
     await this.clearOldMessages();
     getLogger().info('🤖 Telegram command listener started');
-    return this.pollLoop();
+    return await this.pollLoop();
   }
 
   /**
@@ -142,7 +142,7 @@ export default class TelegramPoller {
       return succeed({ status: 'poll-fatal-stopped' });
     }
     this.logRetryableError(`HTTP ${httpCode}`);
-    return this.applyBackoffOrTrip();
+    return await this.applyBackoffOrTrip();
   }
 
   /**
@@ -250,7 +250,7 @@ export default class TelegramPoller {
    */
   private async applyUpdates(data: ITelegramApiResponse): Promise<Procedure<{ status: string }>> {
     if (!data.ok || !data.result?.length) return succeed({ status: 'no-updates' });
-    return this.processUpdatesSequentially(data.result);
+    return await this.processUpdatesSequentially(data.result);
   }
 
   /**
@@ -304,7 +304,7 @@ export default class TelegramPoller {
     message: ITelegramMessageData | undefined
   ): Promise<Procedure<{ status: string }>> {
     if (!this.isValidMessage(message)) return succeed({ status: 'skipped' });
-    if (message.photo && this._onPhoto) return this.dispatchPhoto(message);
+    if (message.photo && this._onPhoto) return await this.dispatchPhoto(message);
     if (message.text) await this.onMessage(message.text);
     return succeed({ status: 'dispatched' });
   }

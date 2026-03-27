@@ -51,10 +51,10 @@ export default function createInitializeApiStep(
     const localBudgetId = envRecord.E2E_LOCAL_BUDGET_ID;
 
     if (localBudgetId) {
-      return initLocal(ctx, actualApi, localBudgetId);
+      return await initLocal(ctx, actualApi, localBudgetId);
     }
 
-    return initServer(ctx, actualApi);
+    return await initServer(ctx, actualApi);
   };
 }
 

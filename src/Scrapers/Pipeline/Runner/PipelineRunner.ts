@@ -17,7 +17,7 @@ import type { INamedStep } from '../Types/PipelineStep.js';
 export default async function execute(
   steps: readonly INamedStep[], ctx: IPipelineContext
 ): Promise<Procedure<IPipelineContext>> {
-  return executeStep(steps, ctx, 0);
+  return await executeStep(steps, ctx, 0);
 }
 
 /**
@@ -48,5 +48,5 @@ async function executeStep(
   }
 
   ctx.logger.info(`✔ Step [${step.meta.name}] complete`);
-  return executeStep(steps, result.data, index + 1);
+  return await executeStep(steps, result.data, index + 1);
 }

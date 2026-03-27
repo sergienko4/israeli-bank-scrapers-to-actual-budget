@@ -48,7 +48,7 @@ export default function createProcessAllBanksStep(): PipelineStep {
       IImportCounts
     >({ pauseMs });
 
-    return runStrategy(ctx, strategy, bankEntries);
+    return await runStrategy(ctx, strategy, bankEntries);
   };
 }
 
@@ -191,7 +191,7 @@ async function processOneBank(
   ctx.services.metricsService.startBank(entry.bankName);
   ctx.logger.info(`\nProcessing bank: ${entry.bankName}`);
 
-  return scrapeAndImport(entry, ctx);
+  return await scrapeAndImport(entry, ctx);
 }
 
 /**
@@ -213,7 +213,7 @@ async function scrapeAndImport(
     return handleScrapeFailure(entry, ctx, scrapeResult);
   }
 
-  return importAccounts(entry, ctx, scrapeResult);
+  return await importAccounts(entry, ctx, scrapeResult);
 }
 
 /**
