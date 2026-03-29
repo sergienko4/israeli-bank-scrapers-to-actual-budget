@@ -12,6 +12,9 @@ import { errorMessage } from '../Utils/Index.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const POLL_TIMEOUT = 30;
+const BASE_BACKOFF_MS = 5000;
+const MAX_BACKOFF_MS = 300_000;
+const MAX_CONSECUTIVE_ERRORS = 60;
 
 /** Long-polls the Telegram Bot API for updates and dispatches them to a handler. */
 export default class TelegramPoller {
@@ -19,6 +22,9 @@ export default class TelegramPoller {
   private _running = false;
   private _startedAt = 0;
   private _abortController: AbortController | null = null;
+  private _sleepController: AbortController | null = null;
+  private _consecutiveErrors = 0;
+  private _runId = 0;
 
   private _onPhoto?: (
     fileId: string, caption?: string
@@ -56,10 +62,13 @@ export default class TelegramPoller {
    */
   public async start(): Promise<Procedure<{ status: string }>> {
     this._running = true;
+    const runId = ++this._runId;
     this._startedAt = Math.floor(Date.now() / 1000);
+    this._consecutiveErrors = 0;
     await this.clearOldMessages();
+    if (this._runId !== runId) return succeed({ status: 'superseded' });
     getLogger().info('🤖 Telegram command listener started');
-    return this.pollLoop();
+    return await this.pollLoop(runId);
   }
 
   /**
@@ -69,6 +78,7 @@ export default class TelegramPoller {
   public stop(): Procedure<{ status: string }> {
     this._running = false;
     this._abortController?.abort();
+    this._sleepController?.abort();
     return succeed({ status: 'stopped' });
   }
 
@@ -79,6 +89,7 @@ export default class TelegramPoller {
    * @returns Procedure indicating the flush status.
    */
   public async stopAndFlush(): Promise<Procedure<{ status: string }>> {
+    this._runId++;
     this.stop();
     if (this._offset === 0) return succeed({ status: 'nothing-to-flush' });
     try {
@@ -92,33 +103,137 @@ export default class TelegramPoller {
   }
 
   /**
-   * Iteratively runs the poll loop until the poller is stopped.
+   * Iteratively runs the poll loop until stopped or superseded by a new run.
+   * @param runId - Token captured at start() to detect stale loops.
    * @returns Procedure indicating the loop has ended.
    */
-  private async pollLoop(): Promise<Procedure<{ status: string }>> {
-    while (this._running) {
+  private async pollLoop(runId: number): Promise<Procedure<{ status: string }>> {
+    while (this._running && this._runId === runId) {
       await this.runOnePollCycle();
     }
     return succeed({ status: 'stopped' });
   }
 
   /**
-   * Executes one poll cycle with error handling and backoff on failure.
+   * Executes one poll cycle with error classification and escalating backoff.
    * @returns Procedure indicating the cycle result.
    */
   private async runOnePollCycle(): Promise<Procedure<{ status: string }>> {
     try {
       const pollResult = await this.poll();
-      if (pollResult.success && pollResult.data.status === 'poll-http-error' && this._running) {
-        getLogger().warn('⚠️  Telegram poll HTTP error, backing off');
-        await TelegramPoller.sleep(5000);
-      }
+      const isHttpError = pollResult.success &&
+        pollResult.data.status.startsWith('poll-http-error');
+      if (isHttpError) return await this.handlePollHttpError(pollResult.data.status);
+      this._consecutiveErrors = 0;
       return succeed({ status: 'poll-ok' });
     } catch (error: unknown) {
-      getLogger().error(`⚠️  Telegram poll error: ${errorMessage(error)}`);
-      if (this._running) await TelegramPoller.sleep(5000);
-      return succeed({ status: 'poll-error-recovered' });
+      return await this.handlePollException(error);
     }
+  }
+
+  /**
+   * Handles an HTTP error from poll(), stopping on fatal codes or applying backoff.
+   * @param status - The poll result status containing the HTTP code.
+   * @returns Procedure indicating the error was handled.
+   */
+  private async handlePollHttpError(
+    status: string
+  ): Promise<Procedure<{ status: string }>> {
+    this._consecutiveErrors++;
+    const httpCode = status.replace('poll-http-error-', '');
+    if (TelegramPoller.isFatalHttpCode(httpCode)) {
+      getLogger().error(
+        `🛑 Telegram poll fatal error (HTTP ${httpCode}) — stopping poller`
+      );
+      this._running = false;
+      return succeed({ status: 'poll-fatal-stopped' });
+    }
+    return await this.backoffOrTrip(`HTTP ${httpCode}`);
+  }
+
+  /**
+   * Handles an exception thrown during poll(), applying backoff.
+   * @param error - The unknown error from the poll attempt.
+   * @returns Procedure indicating the error was recovered.
+   */
+  private async handlePollException(
+    error: unknown
+  ): Promise<Procedure<{ status: string }>> {
+    this._consecutiveErrors++;
+    const detail = errorMessage(error);
+    return await this.backoffOrTrip(detail);
+  }
+
+  /**
+   * Trips the circuit breaker or logs retry and sleeps with backoff.
+   * @param detail - Human-readable error detail for the log message.
+   * @returns Procedure indicating the backoff or circuit-breaker result.
+   */
+  private async backoffOrTrip(
+    detail: string
+  ): Promise<Procedure<{ status: string }>> {
+    if (this._consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+      return this.tripCircuitBreaker(detail);
+    }
+    return await this.logAndSleep(detail);
+  }
+
+  /**
+   * Stops the poller when the error threshold is reached.
+   * @param detail - Error detail for the log message.
+   * @returns Procedure with breaker status.
+   */
+  private tripCircuitBreaker(detail: string): Procedure<{ status: string }> {
+    const max = String(MAX_CONSECUTIVE_ERRORS);
+    getLogger().error(`🛑 Telegram poll ${detail} — ${max} errors, stopping`);
+    this._running = false;
+    return succeed({ status: 'poll-circuit-breaker' });
+  }
+
+  /**
+   * Logs a retryable error and sleeps with exponential backoff.
+   * @param detail - Error detail for the log message.
+   * @returns Procedure with handled status.
+   */
+  private async logAndSleep(detail: string): Promise<Procedure<{ status: string }>> {
+    const backoffSec = TelegramPoller.backoffSeconds(this._consecutiveErrors);
+    getLogger().warn(
+      `⚠️  Telegram poll ${detail}` +
+      ` (${String(this._consecutiveErrors)}/${String(MAX_CONSECUTIVE_ERRORS)})` +
+      ` — retrying in ${backoffSec}s`
+    );
+    const backoffMs = TelegramPoller.computeBackoff(this._consecutiveErrors);
+    if (this._running) await this.interruptibleSleep(backoffMs);
+    return succeed({ status: 'poll-error-handled' });
+  }
+
+  /**
+   * Returns true for HTTP codes that indicate a permanent/auth failure.
+   * @param code - HTTP status code as string.
+   * @returns True if the poller should stop permanently.
+   */
+  private static isFatalHttpCode(code: string): boolean {
+    return code === '401' || code === '403' || code === '409';
+  }
+
+  /**
+   * Computes exponential backoff capped at MAX_BACKOFF_MS.
+   * @param errorCount - Number of consecutive errors.
+   * @returns Backoff duration in milliseconds.
+   */
+  private static computeBackoff(errorCount: number): number {
+    return Math.min(BASE_BACKOFF_MS * 2 ** (errorCount - 1), MAX_BACKOFF_MS);
+  }
+
+  /**
+   * Returns the backoff duration in whole seconds as a string for logging.
+   * @param errorCount - Number of consecutive errors.
+   * @returns Backoff seconds as a string.
+   */
+  private static backoffSeconds(errorCount: number): string {
+    const ms = TelegramPoller.computeBackoff(errorCount);
+    const seconds = Math.round(ms / 1000);
+    return String(seconds);
   }
 
   /**
@@ -131,7 +246,9 @@ export default class TelegramPoller {
       `?offset=${String(this._offset)}&timeout=${String(POLL_TIMEOUT)}`;
     try {
       const response = await fetch(url, { signal: this._abortController.signal });
-      if (!response.ok) return succeed({ status: 'poll-http-error' });
+      if (!response.ok) {
+        return succeed({ status: `poll-http-error-${String(response.status)}` });
+      }
       await this.applyUpdates(await response.json() as ITelegramApiResponse);
       return succeed({ status: 'poll-complete' });
     } catch (err: unknown) {
@@ -151,7 +268,7 @@ export default class TelegramPoller {
    */
   private async applyUpdates(data: ITelegramApiResponse): Promise<Procedure<{ status: string }>> {
     if (!data.ok || !data.result?.length) return succeed({ status: 'no-updates' });
-    return this.processUpdatesSequentially(data.result);
+    return await this.processUpdatesSequentially(data.result);
   }
 
   /**
@@ -205,7 +322,7 @@ export default class TelegramPoller {
     message: ITelegramMessageData | undefined
   ): Promise<Procedure<{ status: string }>> {
     if (!this.isValidMessage(message)) return succeed({ status: 'skipped' });
-    if (message.photo && this._onPhoto) return this.dispatchPhoto(message);
+    if (message.photo && this._onPhoto) return await this.dispatchPhoto(message);
     if (message.text) await this.onMessage(message.text);
     return succeed({ status: 'dispatched' });
   }
@@ -279,13 +396,23 @@ export default class TelegramPoller {
   }
 
   /**
-   * Pauses execution for the given duration.
+   * Sleeps for the given duration, but can be interrupted by stop().
    * @param ms - Duration in milliseconds to wait.
-   * @returns Promise that resolves after the delay.
+   * @returns Promise that resolves after the delay or on abort.
    */
-  private static sleep(ms: number): Promise<void> {
-    return new Promise<void>(resolve => {
-      globalThis.setTimeout(resolve, ms);
-    });
+  private async interruptibleSleep(ms: number): Promise<void> {
+    this._sleepController = new AbortController();
+    const signal = this._sleepController.signal;
+    try {
+      await new Promise<void>((resolve) => {
+        const timer = globalThis.setTimeout(resolve, ms);
+        signal.addEventListener('abort', () => {
+          globalThis.clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      });
+    } finally {
+      this._sleepController = null;
+    }
   }
 }

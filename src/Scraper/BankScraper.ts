@@ -143,7 +143,7 @@ export class BankScraper {
     getLogger().info(`  🔍 Scraping transactions from ${bankName}...`);
     const result = await this.executeScrapeAttempt(bankName, bankConfig);
     if (!result.success && String(result.errorType) === 'INVALID_OTP') {
-      return this.retryOtpScrape(bankName, bankConfig);
+      return await this.retryOtpScrape(bankName, bankConfig);
     }
     return result;
   }
@@ -170,7 +170,7 @@ export class BankScraper {
       const scrapePromise = scraper.scrape(credentials);
       return this.opts.timeoutWrapper.wrap(scrapePromise, timeoutMs, label);
     };
-    return strategy.execute(scrapeWithTimeout, label);
+    return await strategy.execute(scrapeWithTimeout, label);
   }
 
   /**
@@ -187,7 +187,7 @@ export class BankScraper {
       `⚠️ OTP for <b>${bankName}</b> was rejected. ` +
       'A new code will be requested — please check your SMS.'
     );
-    return this.executeScrapeAttempt(bankName, bankConfig);
+    return await this.executeScrapeAttempt(bankName, bankConfig);
   }
 
   /**

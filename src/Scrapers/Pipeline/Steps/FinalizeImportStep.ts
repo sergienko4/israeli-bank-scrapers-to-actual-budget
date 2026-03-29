@@ -50,7 +50,7 @@ function buildInnerStep(
    */
   return async (ctx: IPipelineContext): ReturnType<PipelineStep> => {
     logPrintSummary(ctx);
-    return runFinalizeWithShutdown(ctx, actualApi);
+    return await runFinalizeWithShutdown(ctx, actualApi);
   };
 }
 
@@ -112,9 +112,9 @@ async function dispatchFinalize(
   _api: IActualApiShutdown
 ): ReturnType<PipelineStep> {
   if (ctx.state.isDryRun) {
-    return finalizeDryRun(ctx, _api);
+    return await finalizeDryRun(ctx, _api);
   }
-  return finalizeNormalImport(ctx);
+  return await finalizeNormalImport(ctx);
 }
 
 /**

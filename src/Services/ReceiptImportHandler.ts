@@ -118,7 +118,7 @@ export class ReceiptImportHandler {
     const flowId = this._state.flowId;
     await this.reply('⏳ Processing receipt...');
     if (this._state.flowId !== flowId) return fail('flow cancelled');
-    return this.processPhoto(fileId);
+    return await this.processPhoto(fileId);
   }
 
   /**
@@ -128,7 +128,7 @@ export class ReceiptImportHandler {
    */
   public async onAccountSelected(accountId: string): Promise<Procedure<{ status: string }>> {
     this._state.selectedAccount = accountId;
-    return this.showCategoryMenu();
+    return await this.showCategoryMenu();
   }
 
   /**
@@ -138,21 +138,23 @@ export class ReceiptImportHandler {
    */
   public async onCategorySelected(categoryId: string): Promise<Procedure<{ status: string }>> {
     this._state.selectedCategory = categoryId;
-    return this.executeImport();
+    return await this.executeImport();
   }
 
   /**
-   * Confirms the smart-matched account+category and imports.
-   * @returns Procedure indicating the import result.
+   * Confirms smart match and imports.
+   * @returns Import result Procedure.
    */
-  public async onConfirm(): Promise<Procedure<{ status: string }>> { return this.executeImport(); }
+  public async onConfirm(): Promise<Procedure<{ status: string }>> {
+    return await this.executeImport();
+  }
 
   /**
-   * Shows full account+category menus instead of smart match.
-   * @returns Procedure indicating the menu was sent.
+   * Shows full menus instead of smart match.
+   * @returns Menu result Procedure.
    */
   public async onChooseDifferent(): Promise<Procedure<{ status: string }>> {
-    return this.showAccountMenu();
+    return await this.showAccountMenu();
   }
 
   /**
@@ -198,8 +200,8 @@ export class ReceiptImportHandler {
     const flowId = this._state.flowId;
     const photoResult = await this._telegramNotifier.downloadPhoto(fileId);
     if (this._state.flowId !== flowId) return fail('flow cancelled');
-    if (isFail(photoResult)) return this.failWithMessage(photoResult.message);
-    return this.ocrAndParse(photoResult.data, flowId);
+    if (isFail(photoResult)) return await this.failWithMessage(photoResult.message);
+    return await this.ocrAndParse(photoResult.data, flowId);
   }
 
   /**
@@ -213,11 +215,11 @@ export class ReceiptImportHandler {
   ): Promise<Procedure<{ status: string }>> {
     const ocrResult = await this._ocr.recognize(buffer);
     if (this._state.flowId !== flowId) return fail('flow cancelled');
-    if (isFail(ocrResult)) return this.failWithMessage(ocrResult.message);
+    if (isFail(ocrResult)) return await this.failWithMessage(ocrResult.message);
     const parseResult = ReceiptOcrService.parseReceipt(ocrResult.data.text);
-    if (isFail(parseResult)) return this.failWithMessage(parseResult.message);
+    if (isFail(parseResult)) return await this.failWithMessage(parseResult.message);
     this._state.receipt = parseResult.data;
-    return this.showReceiptAndMatch(parseResult.data);
+    return await this.showReceiptAndMatch(parseResult.data);
   }
 
   /**
@@ -232,11 +234,11 @@ export class ReceiptImportHandler {
     const isApiReady = await this.ensureApi();
     if (!isApiReady) {
       getLogger().info('Smart matching unavailable — API not connected');
-      return this.showAccountMenu();
+      return await this.showAccountMenu();
     }
     const match = await this.findPayeeMatch(receipt.merchant);
-    if (match) return this.showSmartMatch(match);
-    return this.showAccountMenu();
+    if (match) return await this.showSmartMatch(match);
+    return await this.showAccountMenu();
   }
 
   /**
@@ -259,7 +261,7 @@ export class ReceiptImportHandler {
   private async findPayeeMatch(merchant?: string): Promise<IPayeeMatch | false> {
     if (!merchant || !this._api) return false;
     try { return await this.queryPayeeMatch(merchant); }
-    catch (err: unknown) { getLogger().debug('payee match failed: ' + errorMessage(err)); return false; }
+    catch (err: unknown) { getLogger().debug(`payee match: ${errorMessage(err)}`); return false; }
   }
 
   /**
@@ -313,7 +315,7 @@ export class ReceiptImportHandler {
       [{ text: '✅ Use these', callback_data: 'receipt_confirm' }, { text: '📋 Choose different', callback_data: 'receipt_choose' }],
       [{ text: '❌ Cancel', callback_data: 'receipt_cancel' }],
     ];
-    return this._telegramNotifier.sendInlineMenu(text, keyboard);
+    return await this._telegramNotifier.sendInlineMenu(text, keyboard);
   }
 
   /**

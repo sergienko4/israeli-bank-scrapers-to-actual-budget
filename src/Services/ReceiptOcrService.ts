@@ -234,6 +234,6 @@ export default class ReceiptOcrService {
     if (width < MIN_WIDTH_PX) {
       pipeline = pipeline.resize(MIN_WIDTH_PX);
     }
-    return pipeline.greyscale().threshold(140).png().toBuffer();
+    return await pipeline.greyscale().threshold(140).png().toBuffer();
   }
 }

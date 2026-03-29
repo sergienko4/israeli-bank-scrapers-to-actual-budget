@@ -38,7 +38,7 @@ export default function createEvaluateSpendingWatchStep(
       return skipWatch(ctx);
     }
 
-    return evaluateRules(ctx, watchService);
+    return await evaluateRules(ctx, watchService);
   };
 }
 

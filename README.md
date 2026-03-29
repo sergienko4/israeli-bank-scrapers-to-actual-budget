@@ -12,6 +12,8 @@ Powered by [**@sergienko4/israeli-bank-scrapers**](https://github.com/sergienko4
 
 ```text
 Your Bank → israeli-bank-scrapers → This Tool → Actual Budget
+                    OR
+Receipt Photo → Telegram Bot → OCR → This Tool → Actual Budget
 ```
 
 1. You provide bank credentials in a config file
@@ -97,7 +99,8 @@ Edit `config.json` with your credentials. Here is a full example showing all ava
       "chatId": "-1001234567890",
       "messageFormat": "compact",
       "showTransactions": "new",
-      "listenForCommands": true
+      "listenForCommands": true,
+      "enableReceiptImport": false
     },
     "webhook": {
       "url": "https://hooks.slack.com/services/T.../B.../...",
@@ -556,7 +559,8 @@ Get import summaries and error alerts via Telegram after each run.
     "chatId": "YOUR_CHAT_ID",
     "messageFormat": "compact",
     "showTransactions": "new",
-    "listenForCommands": true
+    "listenForCommands": true,
+    "enableReceiptImport": false
   }
 }
 ```
@@ -567,6 +571,7 @@ Get import summaries and error alerts via Telegram after each run.
 | `messageFormat` | `summary`, `compact`, `ledger`, `emoji` | `summary` | Notification style |
 | `showTransactions` | `new`, `all`, `none` | `new` | Transaction detail level |
 | `listenForCommands` | `true`, `false` | `false` | Enable bot commands |
+| `enableReceiptImport` | `true`, `false` | `false` | Enable `/import_receipt` for receipt photo OCR import |
 
 #### Message Formats
 
@@ -665,9 +670,41 @@ When `listenForCommands` is `true`, control the importer from Telegram:
 | `/watch` | Check spending watch rules now |
 | `/logs` | Show recent log entries from log files (default: 50, requires `logConfig.logDir`) |
 | `/logs N` | Show last N entries (max 150) |
+| `/import_receipt` | Import from receipt photo (OCR) — requires `enableReceiptImport: true` |
 | `/help` | List commands |
 
 The bot listens alongside the cron scheduler. If an import is already running, it waits instead of starting a duplicate. Error messages include actionable advice (e.g., "Bank requires password change — update password on bank website"). Banks that fail 3+ times in a row get escalated warnings.
+
+#### Receipt Import (OCR)
+
+Import transactions from receipt photos directly into Actual Budget.
+
+**How it works:**
+
+1. Send `/import_receipt` to the bot
+2. Take a photo of your receipt and send it
+3. The bot extracts date, amount, and merchant using OCR
+4. Smart match: if a previous transaction has the same payee, the bot suggests the same account + category
+5. Select account and category via inline buttons
+6. Transaction is imported into Actual Budget
+
+**Enable in config.json:**
+
+```json
+"telegram": {
+  "listenForCommands": true,
+  "enableReceiptImport": true
+}
+```
+
+**OCR details:**
+
+- Engine: [tesseract.js](https://github.com/naptha/tesseract.js) (Hebrew + English)
+- Preprocessing: [sharp](https://sharp.pixelplumbing.com/) (resize 1500px, greyscale, threshold)
+- Accuracy: ~81% confidence on Hebrew receipts after preprocessing
+- Priority extraction: `לתשלום` (total) > `סה"כ` (subtotal) > `₪` prefix > largest formatted number
+- No temp files: photo processed as in-memory Buffer, OCR language data cached in `./data/tesseract/`
+- 2-minute timeout auto-cancels abandoned flows
 
 ### Webhooks (Slack, Discord, Generic)
 

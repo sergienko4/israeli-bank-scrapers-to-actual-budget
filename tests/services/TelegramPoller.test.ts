@@ -1,8 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import TelegramPoller from '../../src/Services/TelegramPoller.js';
-import * as LoggerModule from '../../src/Logger/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+vi.mock('../../src/Logger/Index.js', () => ({
+  getLogger: () => mockLogger,
+}));
 
 const emptyResponse = () => Promise.resolve({
   ok: true,
@@ -10,13 +14,12 @@ const emptyResponse = () => Promise.resolve({
 });
 
 describe('TelegramPoller', () => {
-  let fetchMock: any;
+  let fetchMock: Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    vi.spyOn(LoggerModule, 'getLogger').mockReturnValue(mockLogger as any);
   });
 
   // Call sequence: 1=clearOldMessages, 2+=poll cycles
@@ -143,12 +146,12 @@ describe('TelegramPoller', () => {
     } finally {
       vi.useRealTimers();
     }
-    expect(mockLogger.error).toHaveBeenCalledWith(
+    expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Network failure')
     );
   });
 
-  it('skips update when poll response.ok is false', async () => {
+  it('logs HTTP status code on poll error and retries', async () => {
     vi.useFakeTimers();
     try {
       const onMessage = vi.fn();
@@ -157,7 +160,7 @@ describe('TelegramPoller', () => {
       fetchMock.mockImplementation(() => {
         callCount++;
         if (callCount <= 1) return emptyResponse();
-        if (callCount === 2) return Promise.resolve({ ok: false });
+        if (callCount === 2) return Promise.resolve({ ok: false, status: 500 });
         poller.stop();
         return emptyResponse();
       });
@@ -165,6 +168,87 @@ describe('TelegramPoller', () => {
       await vi.advanceTimersByTimeAsync(5001);
       await startPromise;
       expect(onMessage).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('HTTP 500')
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([401, 403, 409])('stops poller on fatal HTTP %i', async (status) => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+    let callCount = 0;
+    fetchMock.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 1) return emptyResponse();
+      return Promise.resolve({ ok: false, status });
+    });
+    await poller.start();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining(`fatal error (HTTP ${String(status)})`)
+    );
+  });
+
+  it('resets error count after a successful poll', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) return Promise.resolve({ ok: false, status: 502 });
+        if (callCount === 3) return emptyResponse();
+        if (callCount === 4) return Promise.resolve({ ok: false, status: 502 });
+        poller.stop();
+        return emptyResponse();
+      });
+      const startPromise = poller.start();
+      await vi.advanceTimersByTimeAsync(5001);
+      await vi.advanceTimersByTimeAsync(5001);
+      await startPromise;
+      const warnCalls = mockLogger.warn.mock.calls.filter(
+        (c: string[]) => c[0].includes('HTTP 502')
+      );
+      expect(warnCalls).toHaveLength(2);
+      expect(warnCalls[0][0]).toContain('1/60');
+      expect(warnCalls[1][0]).toContain('1/60');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resets consecutiveErrors on restart (stop → start lifecycle)', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) return Promise.resolve({ ok: false, status: 502 });
+        poller.stop();
+        return emptyResponse();
+      });
+      const firstRun = poller.start();
+      await vi.advanceTimersByTimeAsync(5001);
+      await firstRun;
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('1/60'));
+
+      mockLogger.warn.mockClear();
+      callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) return Promise.resolve({ ok: false, status: 503 });
+        poller.stop();
+        return emptyResponse();
+      });
+      const secondRun = poller.start();
+      await vi.advanceTimersByTimeAsync(5001);
+      await secondRun;
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('1/60'));
     } finally {
       vi.useRealTimers();
     }
@@ -467,5 +551,60 @@ describe('TelegramPoller', () => {
       const secondFlush = await poller.stopAndFlush();
       expect(secondFlush.success).toBe(true);
     });
+  });
+
+  it('stop() interrupts backoff sleep immediately', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        return Promise.resolve({ ok: false, status: 500 });
+      });
+      const startPromise = poller.start();
+      await vi.advanceTimersByTimeAsync(100);
+      poller.stop();
+      await vi.advanceTimersByTimeAsync(100);
+      await startPromise;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('new start() supersedes in-progress run (concurrent overlap)', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+
+      // First run: clearOld OK → poll returns 500 → enters backoff sleep
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return emptyResponse();
+        return Promise.resolve({ ok: false, status: 500 });
+      });
+      const firstRun = poller.start();
+      await vi.advanceTimersByTimeAsync(200);
+
+      // Second run: overlaps while first is sleeping
+      callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        poller.stop();
+        return emptyResponse();
+      });
+      const secondRun = poller.start();
+      await vi.advanceTimersByTimeAsync(200);
+
+      const firstResult = await firstRun;
+      const secondResult = await secondRun;
+      expect(firstResult.success).toBe(true);
+      expect(secondResult.success).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -35,7 +35,7 @@ export default function createInitializeCategoryResolverStep(): PipelineStep {
       return resolverReady(ctx);
     }
 
-    return attemptInit(ctx, ctx.services.categoryResolver);
+    return await attemptInit(ctx, ctx.services.categoryResolver);
   };
 }
 

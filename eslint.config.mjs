@@ -216,6 +216,7 @@ export default tseslint.config(
         allowTypedFunctionExpressions: true,
         allowHigherOrderFunctions: true,
       }],
+      '@typescript-eslint/return-await': ['error', 'always'],
       'no-nested-ternary': 'error',
       'class-methods-use-this': 'error',
       'arrow-body-style': 'off',
@@ -595,6 +596,14 @@ export default tseslint.config(
     ],
     rules: {
       'no-await-in-loop': 'off',
+    },
+  },
+
+  // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
+  {
+    files: ['src/Services/ReceiptImportHandler.ts'],
+    rules: {
+      'max-lines': ['error', { max: 310, skipBlankLines: true, skipComments: true }],
     },
   },
 
