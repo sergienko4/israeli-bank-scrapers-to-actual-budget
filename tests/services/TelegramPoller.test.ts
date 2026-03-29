@@ -573,28 +573,38 @@ describe('TelegramPoller', () => {
     }
   });
 
-  it('stale poll loop exits when a new start() supersedes it', async () => {
-    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
-    let callCount = 0;
-    fetchMock.mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) return emptyResponse();
-      if (callCount === 2) {
+  it('new start() supersedes in-progress run (concurrent overlap)', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+
+      // First run: clearOld OK → poll returns 500 → enters backoff sleep
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return emptyResponse();
+        return Promise.resolve({ ok: false, status: 500 });
+      });
+      const firstRun = poller.start();
+      await vi.advanceTimersByTimeAsync(200);
+
+      // Second run: overlaps while first is sleeping
+      callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
         poller.stop();
         return emptyResponse();
-      }
-      return emptyResponse();
-    });
-    await poller.start();
+      });
+      const secondRun = poller.start();
+      await vi.advanceTimersByTimeAsync(200);
 
-    callCount = 0;
-    fetchMock.mockImplementation(() => {
-      callCount++;
-      if (callCount <= 1) return emptyResponse();
-      poller.stop();
-      return emptyResponse();
-    });
-    const result = await poller.start();
-    expect(result.success).toBe(true);
+      const firstResult = await firstRun;
+      const secondResult = await secondRun;
+      expect(firstResult.success).toBe(true);
+      expect(secondResult.success).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

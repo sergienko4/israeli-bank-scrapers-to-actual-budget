@@ -106,7 +106,8 @@
       "chatId": "-1001234567890",
       "messageFormat": "compact",
       "showTransactions": "new",
-      "listenForCommands": true
+      "listenForCommands": true,
+      "enableReceiptImport": false
     },
     "webhook": {
       "url": "https://hooks.slack.com/services/T.../B.../...",
@@ -133,6 +134,7 @@
     "messageFormat": "summary | compact | ledger | emoji",
     "showTransactions": "new | all | none",
     "listenForCommands": "true = bot listens for /scan, /status, /logs, /help",
+    "enableReceiptImport": "false (default). true = enable /import_receipt for receipt photo OCR import. Requires listenForCommands: true",
     "webhook.url": "HTTP(S) URL for Slack, Discord, or custom webhook",
     "webhook.format": "slack | discord | plain (default: plain)",
     "maxTransactions": "1-25. Max transactions per account in notifications. Default: 5",

@@ -62,12 +62,13 @@ export default class TelegramPoller {
    */
   public async start(): Promise<Procedure<{ status: string }>> {
     this._running = true;
-    this._runId++;
+    const runId = ++this._runId;
     this._startedAt = Math.floor(Date.now() / 1000);
     this._consecutiveErrors = 0;
     await this.clearOldMessages();
+    if (this._runId !== runId) return succeed({ status: 'superseded' });
     getLogger().info('🤖 Telegram command listener started');
-    return await this.pollLoop(this._runId);
+    return await this.pollLoop(runId);
   }
 
   /**
