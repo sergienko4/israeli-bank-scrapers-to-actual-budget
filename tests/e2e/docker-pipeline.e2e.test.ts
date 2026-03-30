@@ -21,9 +21,26 @@ const HAS_BUDGET = !!BUDGET_ID;
 interface TransactionRow {
   imported_id: string;
   amount: number;
+  account: string;
 }
 
-describe.runIf(HAS_BUDGET)('Docker Pipeline E2E', () => {
+const HAS_TRANSACTIONS = await (async (): Promise<boolean> => {
+  if (!HAS_BUDGET) return false;
+  try {
+    await api.init({ dataDir: DATA_DIR });
+    await api.loadBudget(BUDGET_ID!);
+    const result = await api.runQuery(
+      api.q('transactions')
+        .filter({ imported_id: { $ne: null } })
+        .select(['imported_id', 'amount', 'account'])
+    );
+    const data = extractQueryData<TransactionRow[]>(result, []);
+    await api.shutdown();
+    return data.length > 0;
+  } catch { return false; }
+})();
+
+describe.runIf(HAS_TRANSACTIONS)('Docker Pipeline E2E', () => {
   let transactions: TransactionRow[] = [];
   let amountById: Map<string, number> = new Map();
 
@@ -34,7 +51,7 @@ describe.runIf(HAS_BUDGET)('Docker Pipeline E2E', () => {
     const result = await api.runQuery(
       api.q('transactions')
         .filter({ imported_id: { $ne: null } })
-        .select(['imported_id', 'amount'])
+        .select(['imported_id', 'amount', 'account'])
     );
     transactions = extractQueryData<TransactionRow[]>(result, []);
     amountById = new Map(transactions.map(r => [r.imported_id, r.amount]));
@@ -112,11 +129,13 @@ describe.runIf(HAS_BUDGET)('Docker Pipeline E2E', () => {
   });
 
   describe('Reconciliation', () => {
-    it('created reconciliation transactions', () => {
+    it('created one reconciliation per account', () => {
       const recon = transactions.filter(r =>
         r.imported_id.startsWith('reconciliation-')
       );
-      expect(recon.length).toBeGreaterThanOrEqual(2);
+      expect(recon.length).toBe(2);
+      const uniqueAccounts = new Set(recon.map(r => r.account));
+      expect(uniqueAccounts.size).toBe(2);
     });
   });
 

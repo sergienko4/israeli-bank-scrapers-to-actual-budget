@@ -289,12 +289,12 @@ export class TransactionService {
       .filter({ account: accountId })
       .select(['imported_id']);
     const result = await this._api.aqlQuery(query);
-    const data = (result as { data?: { imported_id: string }[] } | null)?.data;
+    const data = (result as { data?: { imported_id: string | null }[] } | null)?.data;
     if (!data) {
       getLogger().warn(`No existing imported IDs found for account ${accountId}`);
       return new Set<string>();
     }
-    const ids = data.map((t) => t.imported_id).filter(Boolean);
+    const ids = data.map((t) => t.imported_id).filter((id): id is string => id !== null);
     getLogger().debug(`     Dedup: ${String(ids.length)} existing imported IDs for ${accountId}`);
     return new Set(ids);
   }

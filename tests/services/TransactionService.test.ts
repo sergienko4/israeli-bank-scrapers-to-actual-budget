@@ -179,6 +179,26 @@ describe('TransactionService', () => {
       expect(result.data.imported).toBe(1);
     });
 
+    it('filters null imported_ids from AQL result without crashing', async () => {
+      mockApi.aqlQuery.mockResolvedValue({
+        data: [
+          { imported_id: 'discount-123456-real-1' },
+          { imported_id: null },
+          { imported_id: 'discount-123456-real-2' },
+        ],
+      });
+      mockApi.importTransactions.mockResolvedValue(undefined);
+      const txns = [
+        { date: '2026-02-14', chargedAmount: -50, description: 'New', identifier: 'new-txn' },
+      ];
+      const result = await service.importTransactions({
+        bankName: 'discount', accountNumber: '123456',
+        actualAccountId: 'acc-id', transactions: txns,
+      });
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(1);
+    });
+
     it('handles empty transactions array', async () => {
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: [] });
 
