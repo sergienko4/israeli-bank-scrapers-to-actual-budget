@@ -98,21 +98,36 @@ export class TransactionService {
   ): Promise<Procedure<IActualAccount>> {
     try {
       const accounts = await this._api.getAccounts() as IActualAccount[];
-      const byId = accounts.find((a) => a.id === accountId);
-      if (byId) return succeed(byId);
-
       const accountLabel = `${bankName} - ${accountNumber}`;
-      const byName = accounts.find((a) => a.name === accountLabel);
-      if (byName) {
-        getLogger().info(`     Found existing account by name: ${accountLabel} (${byName.id})`);
-        return succeed(byName);
-      }
+      const existing = TransactionService.findExistingAccount(accounts, accountId, accountLabel);
+      if (existing) return succeed(existing);
 
       getLogger().info(`     ➕ Creating new account: ${accountId}`);
       return await this.createNewAccount(accountId, accountLabel);
     } catch (error: unknown) {
       return fail(`Account lookup failed: ${errorMessage(error)}`, { error: error as Error });
     }
+  }
+
+  /**
+   * Finds an existing account by ID or by name (fallback).
+   * Actual Budget may assign its own UUID, ignoring the configured ID.
+   * The name fallback handles this by matching the deterministic label.
+   * @param accounts - All accounts from Actual Budget.
+   * @param accountId - Configured account UUID to match first.
+   * @param accountLabel - Deterministic label ("bankName - accountNumber").
+   * @returns The matching account, or undefined if not found.
+   */
+  private static findExistingAccount(
+    accounts: IActualAccount[], accountId: string, accountLabel: string
+  ): IActualAccount | undefined {
+    const byId = accounts.find((a) => a.id === accountId);
+    if (byId) return byId;
+    const byName = accounts.find((a) => a.name === accountLabel);
+    if (byName) {
+      getLogger().info(`     Found existing account by name: ${accountLabel} (${byName.id})`);
+    }
+    return byName;
   }
 
   /**
@@ -264,6 +279,8 @@ export class TransactionService {
 
   /**
    * Queries Actual Budget for all imported_id values already in the account.
+   * Omits AQL `$ne: null` filter because some Actual versions return empty
+   * with that filter. Nulls are removed in JS via `.filter(Boolean)`.
    * @param accountId - UUID of the Actual account to query.
    * @returns Set of imported_id strings for fast duplicate detection.
    */
