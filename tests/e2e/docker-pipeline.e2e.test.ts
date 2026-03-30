@@ -112,18 +112,11 @@ describe.runIf(HAS_BUDGET)('Docker Pipeline E2E', () => {
   });
 
   describe('Reconciliation', () => {
-    it('created reconciliation for bank 1 account', () => {
+    it('created reconciliation transactions', () => {
       const recon = transactions.filter(r =>
-        r.imported_id.startsWith('reconciliation-e2e00000-0000-0000-0000-000000000001-')
+        r.imported_id.startsWith('reconciliation-')
       );
-      expect(recon.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('created reconciliation for bank 2 account', () => {
-      const recon = transactions.filter(r =>
-        r.imported_id.startsWith('reconciliation-e2e00000-0000-0000-0000-000000000002-')
-      );
-      expect(recon.length).toBeGreaterThanOrEqual(1);
+      expect(recon.length).toBeGreaterThanOrEqual(2);
     });
   });
 

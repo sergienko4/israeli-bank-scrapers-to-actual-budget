@@ -98,11 +98,17 @@ export class TransactionService {
   ): Promise<Procedure<IActualAccount>> {
     try {
       const accounts = await this._api.getAccounts() as IActualAccount[];
-      const existing = accounts.find((a) => a.id === accountId);
-      if (existing) return succeed(existing);
+      const byId = accounts.find((a) => a.id === accountId);
+      if (byId) return succeed(byId);
+
+      const accountLabel = `${bankName} - ${accountNumber}`;
+      const byName = accounts.find((a) => a.name === accountLabel);
+      if (byName) {
+        getLogger().info(`     Found existing account by name: ${accountLabel} (${byName.id})`);
+        return succeed(byName);
+      }
 
       getLogger().info(`     ➕ Creating new account: ${accountId}`);
-      const accountLabel = `${bankName} - ${accountNumber}`;
       return await this.createNewAccount(accountId, accountLabel);
     } catch (error: unknown) {
       return fail(`Account lookup failed: ${errorMessage(error)}`, { error: error as Error });
@@ -263,7 +269,7 @@ export class TransactionService {
    */
   private async getExistingImportedIds(accountId: string): Promise<Set<string>> {
     const query = this._api.q('transactions')
-      .filter({ account: accountId, imported_id: { $ne: null } })
+      .filter({ account: accountId })
       .select(['imported_id']);
     const result = await this._api.aqlQuery(query);
     const data = (result as { data?: { imported_id: string }[] } | null)?.data;
@@ -271,7 +277,9 @@ export class TransactionService {
       getLogger().warn(`No existing imported IDs found for account ${accountId}`);
       return new Set<string>();
     }
-    return new Set(data.map((t) => t.imported_id));
+    const ids = data.map((t) => t.imported_id).filter(Boolean);
+    getLogger().debug(`     Dedup: ${String(ids.length)} existing imported IDs for ${accountId}`);
+    return new Set(ids);
   }
 
   /**

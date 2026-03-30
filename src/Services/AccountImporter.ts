@@ -220,7 +220,8 @@ export class AccountImporter {
       getLogger().error(`     ❌ Account error: ${accountResult.message}`);
       return { imported: 0, skipped: 0 };
     }
-    const result = await this.importAndReconcile(target, account, bankCtx);
+    const resolvedTarget = { ...target, actualAccountId: accountResult.data.id };
+    const result = await this.importAndReconcile(resolvedTarget, account, bankCtx);
     return { imported: result.imported, skipped: result.skipped };
   }
 

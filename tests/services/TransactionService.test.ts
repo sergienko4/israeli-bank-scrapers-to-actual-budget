@@ -255,6 +255,28 @@ describe('TransactionService', () => {
       expect(result.success).toBe(false);
       expect(result.status).toBe('account-not-found');
     });
+
+    it('finds account by name when ID does not match (Actual ignores requested ID)', async () => {
+      const actualAccount = { id: 'random-uuid-from-actual', name: 'discount - 999999' };
+      mockApi.getAccounts.mockResolvedValue([actualAccount]);
+
+      const result = await service.getOrCreateAccount('configured-id-ignored', 'discount', '999999');
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(actualAccount);
+      expect(mockApi.createAccount).not.toHaveBeenCalled();
+    });
+
+    it('logs name-based fallback when ID lookup fails but name matches', async () => {
+      const actualAccount = { id: 'actual-uuid', name: 'discount - 999999' };
+      mockApi.getAccounts.mockResolvedValue([actualAccount]);
+
+      await service.getOrCreateAccount('wrong-id', 'discount', '999999');
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Found existing account by name')
+      );
+    });
   });
 
   describe('with category resolver', () => {
