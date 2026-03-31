@@ -72,7 +72,7 @@ export class ReconciliationService {
       .filter({ account: accountId })
       .calculate({ $sum: '$amount' });
     const queryResult = await this._api.aqlQuery(query);
-    return extractQueryData<number>(queryResult, 0);
+    return extractQueryData(queryResult, 0);
   }
 
   /**

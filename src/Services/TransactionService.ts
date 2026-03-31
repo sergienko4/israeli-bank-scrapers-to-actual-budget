@@ -124,14 +124,13 @@ export class TransactionService {
     const byId = accounts.find((a) => a.id === accountId);
     if (byId) return byId;
     const byName = accounts.filter((a) => a.name === accountLabel);
+    if (byName.length === 0) return byName[0]; // undefined — no name match
     if (byName.length > 1) {
       getLogger().warn(
         `     ⚠️ ${String(byName.length)} accounts named "${accountLabel}" — using ${byName[0].id}`
       );
     }
-    if (byName.length > 0) {
-      getLogger().info(`     Found existing account by name: ${accountLabel} (${byName[0].id})`);
-    }
+    getLogger().info(`     Found existing account by name: ${accountLabel} (${byName[0].id})`);
     return byName[0];
   }
 
