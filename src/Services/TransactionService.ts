@@ -124,13 +124,14 @@ export class TransactionService {
     const byId = accounts.find((a) => a.id === accountId);
     if (byId) return byId;
     const byName = accounts.filter((a) => a.name === accountLabel);
-    if (byName.length === 0) return byName[0];
     if (byName.length > 1) {
       getLogger().warn(
         `     ⚠️ ${String(byName.length)} accounts named "${accountLabel}" — using ${byName[0].id}`
       );
     }
-    getLogger().info(`     Found existing account by name: ${accountLabel} (${byName[0].id})`);
+    if (byName.length > 0) {
+      getLogger().info(`     Found existing account by name: ${accountLabel} (${byName[0].id})`);
+    }
     return byName[0];
   }
 
@@ -284,7 +285,7 @@ export class TransactionService {
   /**
    * Queries Actual Budget for all imported_id values already in the account.
    * Omits AQL `$ne: null` filter because some Actual versions return empty
-   * with that filter. Nulls are removed in JS via `.filter(Boolean)`.
+   * with that filter. Nulls are filtered in JS via a typed predicate.
    * @param accountId - UUID of the Actual account to query.
    * @returns Set of imported_id strings for fast duplicate detection.
    */

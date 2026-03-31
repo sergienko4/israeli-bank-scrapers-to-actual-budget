@@ -34,7 +34,11 @@ const { hasData, rows } = await (async (): Promise<{ hasData: boolean; rows: Tra
   );
   const all = extractQueryData<TransactionRow[]>(result, []);
   const data = all.filter(r => r.imported_id !== null);
-  return { hasData: data.length > 0, rows: data };
+  if (data.length === 0) {
+    await api.shutdown();
+    return { hasData: false, rows: [] };
+  }
+  return { hasData: true, rows: data };
 })();
 
 describe.runIf(hasData)('Docker Pipeline E2E', () => {
