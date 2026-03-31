@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.2...v1.37.3) (2026-03-31)
+
+
+### Fixed
+
+* import deduplication — use resolved account UUID, not configured ID ([#285](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/285)) ([0ce0ac3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/0ce0ac348a2f069aa2c0452ff970721a390ebd35))
+
 ## [1.37.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.1...v1.37.2) (2026-03-29)
 
 
