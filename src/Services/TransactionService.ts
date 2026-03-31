@@ -98,15 +98,40 @@ export class TransactionService {
   ): Promise<Procedure<IActualAccount>> {
     try {
       const accounts = await this._api.getAccounts() as IActualAccount[];
-      const existing = accounts.find((a) => a.id === accountId);
+      const accountLabel = `${bankName} - ${accountNumber}`;
+      const existing = TransactionService.findExistingAccount(accounts, accountId, accountLabel);
       if (existing) return succeed(existing);
 
       getLogger().info(`     ➕ Creating new account: ${accountId}`);
-      const accountLabel = `${bankName} - ${accountNumber}`;
       return await this.createNewAccount(accountId, accountLabel);
     } catch (error: unknown) {
       return fail(`Account lookup failed: ${errorMessage(error)}`, { error: error as Error });
     }
+  }
+
+  /**
+   * Finds an existing account by ID or by name (fallback).
+   * Actual Budget may assign its own UUID, ignoring the configured ID.
+   * The name fallback handles this by matching the deterministic label.
+   * @param accounts - All accounts from Actual Budget.
+   * @param accountId - Configured account UUID to match first.
+   * @param accountLabel - Deterministic label ("bankName - accountNumber").
+   * @returns The matching account, or undefined if not found.
+   */
+  private static findExistingAccount(
+    accounts: IActualAccount[], accountId: string, accountLabel: string
+  ): IActualAccount | undefined {
+    const byId = accounts.find((a) => a.id === accountId);
+    if (byId) return byId;
+    const byName = accounts.filter((a) => a.name === accountLabel);
+    if (byName.length === 0) return byName[0]; // undefined — no name match
+    if (byName.length > 1) {
+      getLogger().warn(
+        `     ⚠️ ${String(byName.length)} accounts named "${accountLabel}" — using ${byName[0].id}`
+      );
+    }
+    getLogger().info(`     Found existing account by name: ${accountLabel} (${byName[0].id})`);
+    return byName[0];
   }
 
   /**
@@ -258,20 +283,24 @@ export class TransactionService {
 
   /**
    * Queries Actual Budget for all imported_id values already in the account.
+   * Omits AQL `$ne: null` filter because some Actual versions return empty
+   * with that filter. Nulls are filtered in JS via a typed predicate.
    * @param accountId - UUID of the Actual account to query.
    * @returns Set of imported_id strings for fast duplicate detection.
    */
   private async getExistingImportedIds(accountId: string): Promise<Set<string>> {
     const query = this._api.q('transactions')
-      .filter({ account: accountId, imported_id: { $ne: null } })
+      .filter({ account: accountId })
       .select(['imported_id']);
     const result = await this._api.aqlQuery(query);
-    const data = (result as { data?: { imported_id: string }[] } | null)?.data;
+    const data = (result as { data?: { imported_id: string | null }[] } | null)?.data;
     if (!data) {
       getLogger().warn(`No existing imported IDs found for account ${accountId}`);
       return new Set<string>();
     }
-    return new Set(data.map((t) => t.imported_id));
+    const ids = data.map((t) => t.imported_id).filter((id): id is string => id !== null);
+    getLogger().debug(`     Dedup: ${String(ids.length)} existing imported IDs for ${accountId}`);
+    return new Set(ids);
   }
 
   /**

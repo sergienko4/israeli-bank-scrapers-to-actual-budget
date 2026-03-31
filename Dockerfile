@@ -41,13 +41,16 @@ COPY tsconfig.json ./
 # each package globally at @latest, then replace npm's bundled copy.
 # Add new packages to the install line whenever Trivy flags a new npm-bundled CVE.
 RUN npm install -g npm@latest \
-    && npm install -g minimatch@latest tar@latest \
+    && npm install -g minimatch@latest tar@latest picomatch@latest \
     && rm -rf /usr/local/lib/node_modules/npm/node_modules/minimatch \
     && cp -r /usr/local/lib/node_modules/minimatch \
              /usr/local/lib/node_modules/npm/node_modules/minimatch \
     && rm -rf /usr/local/lib/node_modules/npm/node_modules/tar \
     && cp -r /usr/local/lib/node_modules/tar \
-             /usr/local/lib/node_modules/npm/node_modules/tar
+             /usr/local/lib/node_modules/npm/node_modules/tar \
+    && rm -rf /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules/picomatch \
+    && cp -r /usr/local/lib/node_modules/picomatch \
+             /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules/picomatch
 
 # Install ALL project dependencies (devDependencies included for build).
 # npm update --no-save brings every dep to its latest patch version within

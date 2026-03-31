@@ -179,6 +179,26 @@ describe('TransactionService', () => {
       expect(result.data.imported).toBe(1);
     });
 
+    it('filters null imported_ids from AQL result without crashing', async () => {
+      mockApi.aqlQuery.mockResolvedValue({
+        data: [
+          { imported_id: 'discount-123456-real-1' },
+          { imported_id: null },
+          { imported_id: 'discount-123456-real-2' },
+        ],
+      });
+      mockApi.importTransactions.mockResolvedValue(undefined);
+      const txns = [
+        { date: '2026-02-14', chargedAmount: -50, description: 'New', identifier: 'new-txn' },
+      ];
+      const result = await service.importTransactions({
+        bankName: 'discount', accountNumber: '123456',
+        actualAccountId: 'acc-id', transactions: txns,
+      });
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(1);
+    });
+
     it('handles empty transactions array', async () => {
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: [] });
 
@@ -254,6 +274,61 @@ describe('TransactionService', () => {
 
       expect(result.success).toBe(false);
       expect(result.status).toBe('account-not-found');
+    });
+
+    it('finds account by name when ID does not match (Actual ignores requested ID)', async () => {
+      const actualAccount = { id: 'random-uuid-from-actual', name: 'discount - 999999' };
+      mockApi.getAccounts.mockResolvedValue([actualAccount]);
+
+      const result = await service.getOrCreateAccount('configured-id-ignored', 'discount', '999999');
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(actualAccount);
+      expect(mockApi.createAccount).not.toHaveBeenCalled();
+    });
+
+    it('logs name-based fallback when ID lookup fails but name matches', async () => {
+      const actualAccount = { id: 'actual-uuid', name: 'discount - 999999' };
+      mockApi.getAccounts.mockResolvedValue([actualAccount]);
+
+      await service.getOrCreateAccount('wrong-id', 'discount', '999999');
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Found existing account by name')
+      );
+    });
+
+    it('warns when multiple accounts share the same name (old bug duplicates)', async () => {
+      const accounts = [
+        { id: 'uuid-1', name: 'discount - 999999' },
+        { id: 'uuid-2', name: 'discount - 999999' },
+        { id: 'uuid-3', name: 'discount - 999999' },
+      ];
+      mockApi.getAccounts.mockResolvedValue(accounts);
+
+      const result = await service.getOrCreateAccount('no-match', 'discount', '999999');
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(accounts[0]);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('3 accounts named')
+      );
+      expect(mockApi.createAccount).not.toHaveBeenCalled();
+    });
+
+    it('prefers ID match over name match even with duplicates', async () => {
+      const accounts = [
+        { id: 'uuid-1', name: 'discount - 999999' },
+        { id: 'exact-id', name: 'discount - 999999' },
+        { id: 'uuid-3', name: 'discount - 999999' },
+      ];
+      mockApi.getAccounts.mockResolvedValue(accounts);
+
+      const result = await service.getOrCreateAccount('exact-id', 'discount', '999999');
+
+      expect(result.success).toBe(true);
+      expect(result.data.id).toBe('exact-id');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
   });
 

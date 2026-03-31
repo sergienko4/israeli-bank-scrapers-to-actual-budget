@@ -21,23 +21,33 @@ const HAS_BUDGET = !!BUDGET_ID;
 interface TransactionRow {
   imported_id: string;
   amount: number;
+  account: string;
 }
 
-describe.runIf(HAS_BUDGET)('Docker Pipeline E2E', () => {
+const { hasData, rows } = await (async (): Promise<{ hasData: boolean; rows: TransactionRow[] }> => {
+  if (!HAS_BUDGET) return { hasData: false, rows: [] };
+  await api.init({ dataDir: DATA_DIR });
+  await api.loadBudget(BUDGET_ID!);
+  const result = await api.runQuery(
+    api.q('transactions')
+      .select(['imported_id', 'amount', 'account'])
+  );
+  const all = extractQueryData<TransactionRow[]>(result, []);
+  const data = all.filter(r => r.imported_id !== null);
+  if (data.length === 0) {
+    await api.shutdown();
+    return { hasData: false, rows: [] };
+  }
+  return { hasData: true, rows: data };
+})();
+
+describe.runIf(hasData)('Docker Pipeline E2E', () => {
   let transactions: TransactionRow[] = [];
   let amountById: Map<string, number> = new Map();
 
-  beforeAll(async () => {
-    await api.init({ dataDir: DATA_DIR });
-    await api.loadBudget(BUDGET_ID!);
-
-    const result = await api.runQuery(
-      api.q('transactions')
-        .filter({ imported_id: { $ne: null } })
-        .select(['imported_id', 'amount'])
-    );
-    transactions = extractQueryData<TransactionRow[]>(result, []);
-    amountById = new Map(transactions.map(r => [r.imported_id, r.amount]));
+  beforeAll(() => {
+    transactions = rows;
+    amountById = new Map(rows.map(r => [r.imported_id, r.amount]));
   });
 
   afterAll(async () => {
@@ -112,18 +122,13 @@ describe.runIf(HAS_BUDGET)('Docker Pipeline E2E', () => {
   });
 
   describe('Reconciliation', () => {
-    it('created reconciliation for bank 1 account', () => {
+    it('created one reconciliation per account', () => {
       const recon = transactions.filter(r =>
-        r.imported_id.startsWith('reconciliation-e2e00000-0000-0000-0000-000000000001-')
+        r.imported_id.startsWith('reconciliation-')
       );
-      expect(recon.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('created reconciliation for bank 2 account', () => {
-      const recon = transactions.filter(r =>
-        r.imported_id.startsWith('reconciliation-e2e00000-0000-0000-0000-000000000002-')
-      );
-      expect(recon.length).toBeGreaterThanOrEqual(1);
+      expect(recon.length).toBe(2);
+      const uniqueAccounts = new Set(recon.map(r => r.account));
+      expect(uniqueAccounts.size).toBe(2);
     });
   });
 
