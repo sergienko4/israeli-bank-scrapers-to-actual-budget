@@ -297,6 +297,39 @@ describe('TransactionService', () => {
         expect.stringContaining('Found existing account by name')
       );
     });
+
+    it('warns when multiple accounts share the same name (old bug duplicates)', async () => {
+      const accounts = [
+        { id: 'uuid-1', name: 'discount - 999999' },
+        { id: 'uuid-2', name: 'discount - 999999' },
+        { id: 'uuid-3', name: 'discount - 999999' },
+      ];
+      mockApi.getAccounts.mockResolvedValue(accounts);
+
+      const result = await service.getOrCreateAccount('no-match', 'discount', '999999');
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual(accounts[0]);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('3 accounts named')
+      );
+      expect(mockApi.createAccount).not.toHaveBeenCalled();
+    });
+
+    it('prefers ID match over name match even with duplicates', async () => {
+      const accounts = [
+        { id: 'uuid-1', name: 'discount - 999999' },
+        { id: 'exact-id', name: 'discount - 999999' },
+        { id: 'uuid-3', name: 'discount - 999999' },
+      ];
+      mockApi.getAccounts.mockResolvedValue(accounts);
+
+      const result = await service.getOrCreateAccount('exact-id', 'discount', '999999');
+
+      expect(result.success).toBe(true);
+      expect(result.data.id).toBe('exact-id');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
   });
 
   describe('with category resolver', () => {

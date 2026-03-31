@@ -26,17 +26,15 @@ interface TransactionRow {
 
 const { hasData, rows } = await (async (): Promise<{ hasData: boolean; rows: TransactionRow[] }> => {
   if (!HAS_BUDGET) return { hasData: false, rows: [] };
-  try {
-    await api.init({ dataDir: DATA_DIR });
-    await api.loadBudget(BUDGET_ID!);
-    const result = await api.runQuery(
-      api.q('transactions')
-        .filter({ imported_id: { $ne: null } })
-        .select(['imported_id', 'amount', 'account'])
-    );
-    const data = extractQueryData<TransactionRow[]>(result, []);
-    return { hasData: data.length > 0, rows: data };
-  } catch { return { hasData: false, rows: [] }; }
+  await api.init({ dataDir: DATA_DIR });
+  await api.loadBudget(BUDGET_ID!);
+  const result = await api.runQuery(
+    api.q('transactions')
+      .select(['imported_id', 'amount', 'account'])
+  );
+  const all = extractQueryData<TransactionRow[]>(result, []);
+  const data = all.filter(r => r.imported_id !== null);
+  return { hasData: data.length > 0, rows: data };
 })();
 
 describe.runIf(hasData)('Docker Pipeline E2E', () => {
