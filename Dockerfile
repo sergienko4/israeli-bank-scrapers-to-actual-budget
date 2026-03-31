@@ -48,11 +48,9 @@ RUN npm install -g npm@latest \
     && rm -rf /usr/local/lib/node_modules/npm/node_modules/tar \
     && cp -r /usr/local/lib/node_modules/tar \
              /usr/local/lib/node_modules/npm/node_modules/tar \
-    && cd /tmp && npm pack picomatch@latest --quiet \
-    && mkdir -p /tmp/pico && tar xzf picomatch-*.tgz -C /tmp/pico \
     && rm -rf /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules/picomatch \
-    && mv /tmp/pico/package /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules/picomatch \
-    && rm -rf /tmp/pico /tmp/picomatch-*.tgz
+    && cp -r /usr/local/lib/node_modules/picomatch \
+             /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules/picomatch
 
 # Install ALL project dependencies (devDependencies included for build).
 # npm update --no-save brings every dep to its latest patch version within
