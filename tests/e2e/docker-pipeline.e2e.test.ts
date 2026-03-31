@@ -24,8 +24,8 @@ interface TransactionRow {
   account: string;
 }
 
-const HAS_TRANSACTIONS = await (async (): Promise<boolean> => {
-  if (!HAS_BUDGET) return false;
+const { hasData, rows } = await (async (): Promise<{ hasData: boolean; rows: TransactionRow[] }> => {
+  if (!HAS_BUDGET) return { hasData: false, rows: [] };
   try {
     await api.init({ dataDir: DATA_DIR });
     await api.loadBudget(BUDGET_ID!);
@@ -35,26 +35,17 @@ const HAS_TRANSACTIONS = await (async (): Promise<boolean> => {
         .select(['imported_id', 'amount', 'account'])
     );
     const data = extractQueryData<TransactionRow[]>(result, []);
-    await api.shutdown();
-    return data.length > 0;
-  } catch { return false; }
+    return { hasData: data.length > 0, rows: data };
+  } catch { return { hasData: false, rows: [] }; }
 })();
 
-describe.runIf(HAS_TRANSACTIONS)('Docker Pipeline E2E', () => {
+describe.runIf(hasData)('Docker Pipeline E2E', () => {
   let transactions: TransactionRow[] = [];
   let amountById: Map<string, number> = new Map();
 
-  beforeAll(async () => {
-    await api.init({ dataDir: DATA_DIR });
-    await api.loadBudget(BUDGET_ID!);
-
-    const result = await api.runQuery(
-      api.q('transactions')
-        .filter({ imported_id: { $ne: null } })
-        .select(['imported_id', 'amount', 'account'])
-    );
-    transactions = extractQueryData<TransactionRow[]>(result, []);
-    amountById = new Map(transactions.map(r => [r.imported_id, r.amount]));
+  beforeAll(() => {
+    transactions = rows;
+    amountById = new Map(rows.map(r => [r.imported_id, r.amount]));
   });
 
   afterAll(async () => {
