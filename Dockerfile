@@ -50,15 +50,15 @@ RUN npm install -g npm@latest \
          && mkdir -p /tmp/_pkg \
          && tar xzf "${pkg}"-*.tgz -C /tmp/_pkg \
             || { echo "ERROR: tar extract failed for ${pkg}" >&2; exit 1; } \
-         && targets=$(find "$NPM_MODS" -path "*/node_modules/${pkg}" -type d) \
-         && if [ -z "$targets" ]; then \
+         && found=0 \
+         && while IFS= read -r -d '' target; do \
+              found=1 \
+              && rm -rf "$target" \
+              && cp -r /tmp/_pkg/package "$target" \
+              || { echo "ERROR: cp failed for ${pkg} → ${target}" >&2; exit 1; }; \
+            done < <(find "$NPM_MODS" -path "*/node_modules/${pkg}" -type d -print0) \
+         && if [ "$found" -eq 0 ]; then \
               echo "WARN: no bundled copies of ${pkg} found — skipping"; \
-            else \
-              for target in $targets; do \
-                rm -rf "$target" \
-                && cp -r /tmp/_pkg/package "$target" \
-                || { echo "ERROR: cp failed for ${pkg} → ${target}" >&2; exit 1; }; \
-              done; \
             fi; \
          rm -rf /tmp/_pkg /tmp/"${pkg}"-*.tgz; \
        done
