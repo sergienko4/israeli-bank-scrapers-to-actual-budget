@@ -35,22 +35,25 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Update npm to latest, then refresh ALL npm-bundled packages to @latest.
-# npm ships its own private node_modules (minimatch, tar, etc.) that are independent
-# of our project deps and can't be updated via npm update. The proven fix: install
-# each package globally at @latest, then replace npm's bundled copy.
-# Add new packages to the install line whenever Trivy flags a new npm-bundled CVE.
+# Patch npm-bundled packages that Trivy flags with CVEs.
+# npm ships its own private node_modules that can't be updated via npm update.
+# This script downloads @latest for each listed package via npm pack and
+# replaces ALL nested copies using find. Add packages here when Trivy flags them.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN npm install -g npm@latest \
-    && npm install -g minimatch@latest tar@latest picomatch@latest \
-    && rm -rf /usr/local/lib/node_modules/npm/node_modules/minimatch \
-    && cp -r /usr/local/lib/node_modules/minimatch \
-             /usr/local/lib/node_modules/npm/node_modules/minimatch \
-    && rm -rf /usr/local/lib/node_modules/npm/node_modules/tar \
-    && cp -r /usr/local/lib/node_modules/tar \
-             /usr/local/lib/node_modules/npm/node_modules/tar \
-    && rm -rf /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules/picomatch \
-    && cp -r /usr/local/lib/node_modules/picomatch \
-             /usr/local/lib/node_modules/npm/node_modules/tinyglobby/node_modules/picomatch
+    && NPM_MODS=/usr/local/lib/node_modules/npm/node_modules \
+    && for pkg in minimatch tar picomatch brace-expansion; do \
+         cd /tmp \
+         && npm pack "${pkg}@latest" --quiet 2>/dev/null \
+         && mkdir -p /tmp/_pkg \
+         && tar xzf "${pkg}"-*.tgz -C /tmp/_pkg 2>/dev/null \
+         && for target in $(find "$NPM_MODS" -maxdepth 3 -name "$pkg" -type d); do \
+              rm -rf "$target" \
+              && cp -r /tmp/_pkg/package "$target"; \
+            done; \
+         rm -rf /tmp/_pkg /tmp/"${pkg}"-*.tgz; \
+       done
+SHELL ["/bin/sh", "-c"]
 
 # Install ALL project dependencies (devDependencies included for build).
 # npm update --no-save brings every dep to its latest patch version within
