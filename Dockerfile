@@ -50,7 +50,7 @@ RUN npm install -g npm@latest \
          && mkdir -p /tmp/_pkg \
          && tar xzf "${pkg}"-*.tgz -C /tmp/_pkg \
             || { echo "ERROR: tar extract failed for ${pkg}" >&2; exit 1; } \
-         && targets=$(find "$NPM_MODS" -maxdepth 3 -name "$pkg" -type d) \
+         && targets=$(find "$NPM_MODS" -path "*/node_modules/${pkg}" -type d) \
          && if [ -z "$targets" ]; then \
               echo "WARN: no bundled copies of ${pkg} found — skipping"; \
             else \
