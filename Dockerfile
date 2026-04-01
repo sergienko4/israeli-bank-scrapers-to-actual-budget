@@ -56,7 +56,8 @@ RUN npm install -g npm@latest \
             else \
               for target in $targets; do \
                 rm -rf "$target" \
-                && cp -r /tmp/_pkg/package "$target"; \
+                && cp -r /tmp/_pkg/package "$target" \
+                || { echo "ERROR: cp failed for ${pkg} → ${target}" >&2; exit 1; }; \
               done; \
             fi; \
          rm -rf /tmp/_pkg /tmp/"${pkg}"-*.tgz; \
