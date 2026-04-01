@@ -39,18 +39,26 @@ COPY tsconfig.json ./
 # npm ships its own private node_modules that can't be updated via npm update.
 # This script downloads @latest for each listed package via npm pack and
 # replaces ALL nested copies using find. Add packages here when Trivy flags them.
+# Uses @latest intentionally — pinning defeats zero-maintenance auto-patching.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN npm install -g npm@latest \
     && NPM_MODS=/usr/local/lib/node_modules/npm/node_modules \
     && for pkg in minimatch tar picomatch brace-expansion; do \
          cd /tmp \
-         && npm pack "${pkg}@latest" --quiet 2>/dev/null \
+         && npm pack "${pkg}@latest" --quiet \
+            || { echo "ERROR: npm pack failed for ${pkg}" >&2; exit 1; } \
          && mkdir -p /tmp/_pkg \
-         && tar xzf "${pkg}"-*.tgz -C /tmp/_pkg 2>/dev/null \
-         && for target in $(find "$NPM_MODS" -maxdepth 3 -name "$pkg" -type d); do \
-              rm -rf "$target" \
-              && cp -r /tmp/_pkg/package "$target"; \
-            done; \
+         && tar xzf "${pkg}"-*.tgz -C /tmp/_pkg \
+            || { echo "ERROR: tar extract failed for ${pkg}" >&2; exit 1; } \
+         && targets=$(find "$NPM_MODS" -maxdepth 3 -name "$pkg" -type d) \
+         && if [ -z "$targets" ]; then \
+              echo "WARN: no bundled copies of ${pkg} found — skipping"; \
+            else \
+              for target in $targets; do \
+                rm -rf "$target" \
+                && cp -r /tmp/_pkg/package "$target"; \
+              done; \
+            fi; \
          rm -rf /tmp/_pkg /tmp/"${pkg}"-*.tgz; \
        done
 SHELL ["/bin/sh", "-c"]
