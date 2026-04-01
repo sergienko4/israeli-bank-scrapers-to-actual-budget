@@ -67,7 +67,8 @@ RUN npm install -g npm@latest \
     && echo "Verifying patched packages..." \
     && for pkg in $PATCH_PKGS; do \
          find "$NPM_MODS" -path "*/node_modules/${pkg}" -type d -print0 > /tmp/_verify \
-         && while IFS= read -r -d '' target; do \
+            || { echo "ERROR: verify find failed for ${pkg}" >&2; exit 1; }; \
+         while IFS= read -r -d '' target; do \
               ver=$(node -e "console.log(require('${target}/package.json').version)") \
               && echo "  OK: ${pkg} @ ${ver}" \
               || { echo "ERROR: cannot read version for ${pkg}" >&2; exit 1; }; \
