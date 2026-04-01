@@ -43,24 +43,36 @@ COPY tsconfig.json ./
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN npm install -g npm@latest \
     && NPM_MODS=/usr/local/lib/node_modules/npm/node_modules \
-    && for pkg in minimatch tar picomatch brace-expansion; do \
+    && PATCH_PKGS="minimatch tar picomatch brace-expansion" \
+    && for pkg in $PATCH_PKGS; do \
          cd /tmp \
          && npm pack "${pkg}@latest" --quiet \
             || { echo "ERROR: npm pack failed for ${pkg}" >&2; exit 1; } \
          && mkdir -p /tmp/_pkg \
          && tar xzf "${pkg}"-*.tgz -C /tmp/_pkg \
             || { echo "ERROR: tar extract failed for ${pkg}" >&2; exit 1; } \
-         && found=0 \
-         && while IFS= read -r -d '' target; do \
-              found=1 \
-              && rm -rf "$target" \
-              && cp -r /tmp/_pkg/package "$target" \
-              || { echo "ERROR: cp failed for ${pkg} → ${target}" >&2; exit 1; }; \
-            done < <(find "$NPM_MODS" -path "*/node_modules/${pkg}" -type d -print0) \
-         && if [ "$found" -eq 0 ]; then \
+         && find "$NPM_MODS" -path "*/node_modules/${pkg}" -type d -print0 > /tmp/_targets \
+            || { echo "ERROR: find failed for ${pkg}" >&2; exit 1; } \
+         && if [ ! -s /tmp/_targets ]; then \
               echo "WARN: no bundled copies of ${pkg} found — skipping"; \
+            else \
+              while IFS= read -r -d '' target; do \
+                rm -rf "$target" \
+                && cp -r /tmp/_pkg/package "$target" \
+                || { echo "ERROR: cp failed for ${pkg} → ${target}" >&2; exit 1; }; \
+              done < /tmp/_targets; \
             fi; \
-         rm -rf /tmp/_pkg /tmp/"${pkg}"-*.tgz; \
+         rm -rf /tmp/_pkg /tmp/_targets /tmp/"${pkg}"-*.tgz; \
+       done \
+    && echo "Verifying patched packages..." \
+    && for pkg in $PATCH_PKGS; do \
+         find "$NPM_MODS" -path "*/node_modules/${pkg}" -type d -print0 > /tmp/_verify \
+         && while IFS= read -r -d '' target; do \
+              ver=$(node -e "console.log(require('${target}/package.json').version)") \
+              && echo "  OK: ${pkg} @ ${ver}" \
+              || { echo "ERROR: cannot read version for ${pkg}" >&2; exit 1; }; \
+            done < /tmp/_verify; \
+         rm -f /tmp/_verify; \
        done
 SHELL ["/bin/sh", "-c"]
 
