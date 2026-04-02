@@ -102,9 +102,13 @@ run_gate "5-unittest"     "Running unit tests + coverage"  npm run test:unit
 run_gate "13-e2e-mock"    "Running mocked E2E tests"       npm run test:e2e:mock
 
 # Docker build runs in foreground — Phase 3 needs the image variable
-echo "  🐳 Building Docker image..."
+# Force clean build: remove ALL local importer images + dangling layers
 LOCAL_IMAGE="israeli-bank-importer:pre-commit"
-docker build -t "$LOCAL_IMAGE" . > "$GATE_DIR/10-docker-build.log" 2>&1
+echo "  🧹 Removing all local importer images..."
+docker rmi -f "$LOCAL_IMAGE" israeli-bank-importer-importer:latest 2>/dev/null || true
+docker image prune -f 2>/dev/null || true
+echo "  🐳 Building Docker image (no cache)..."
+docker build --no-cache -t "$LOCAL_IMAGE" . > "$GATE_DIR/10-docker-build.log" 2>&1
 if [ $? -ne 0 ]; then
   echo "  ❌ 10-docker-build"
   cat "$GATE_DIR/10-docker-build.log"
