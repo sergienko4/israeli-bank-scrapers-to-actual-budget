@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.3...v1.37.4) (2026-04-02)
+
+
+### Fixed
+
+* generic npm-bundled CVE patching + brace-expansion CVE-2026-33750 ([#287](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/287)) ([12808fa](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/12808fad975ae44555d2ae0805bda3254f487d79))
+
 ## [1.37.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.2...v1.37.3) (2026-03-31)
 
 
