@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.4...v1.37.5) (2026-04-06)
+
+
+### Fixed
+
+* **ci:** reproducible Docker builds and pipeline resilience ([#293](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/293)) ([e90b0a4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/e90b0a4f80755261d9320b4b613443b5dcf89e1c))
+
 ## [1.37.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.3...v1.37.4) (2026-04-02)
 
 
