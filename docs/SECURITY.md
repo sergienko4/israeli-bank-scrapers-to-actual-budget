@@ -313,7 +313,7 @@ Before deploying to production:
 
 - [OWASP Docker Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Docker_Security_Cheat_Sheet.html)
 - [Docker Security Best Practices](https://docs.docker.com/engine/security/)
-- [Node.js Security Best Practices](https://nodejs.org/en/docs/guides/security/)
+- [Node.js Security Best Practices](https://nodejs.org/en/learn/getting-started/security-best-practices)
 
 ---
 
