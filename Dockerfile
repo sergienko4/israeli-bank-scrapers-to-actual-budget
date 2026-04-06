@@ -78,11 +78,10 @@ RUN npm install -g npm@latest \
 SHELL ["/bin/sh", "-c"]
 
 # Install ALL project dependencies (devDependencies included for build).
-# npm update --no-save brings every dep to its latest patch version within
-# the semver ranges declared in package.json — picks up security fixes
-# without requiring a manual lock-file update in the repo.
-RUN npm install \
-    && npm update --no-save
+# npm ci installs exact versions from package-lock.json, giving reproducible
+# builds. Dependency updates are managed explicitly via dependency-check.yml
+# (daily automated PRs with full CI validation before merge).
+RUN npm ci
 
 # Install Camoufox browser (Firefox-based anti-detect)
 # CI pre-downloads the binary into .camoufox-cache/ for amd64 smoke test only.
