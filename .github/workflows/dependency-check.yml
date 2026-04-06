@@ -53,8 +53,13 @@ jobs:
         if: steps.check.outputs.has_updates == 'true'
         run: npm update @sergienko4/israeli-bank-scrapers @actual-app/api
 
-      - name: Create Pull Request
+      - name: Validate build still compiles
         if: steps.check.outputs.has_updates == 'true'
+        id: typecheck
+        run: npm run type-check
+
+      - name: Create Pull Request
+        if: steps.check.outputs.has_updates == 'true' && steps.typecheck.conclusion == 'success'
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.RELEASE_TOKEN }}

@@ -32,6 +32,7 @@ const ALLOWED_DEPENDENCY_LICENSES = [
   '(MIT OR WTFPL)',
   '(BSD-3-Clause AND Apache-2.0)',
   '(BSD-2-Clause OR MIT OR Apache-2.0)',
+  'Unlicense',
 ];
 
 /* ── Gate 1: Project license ──────────────────────────────────────── */
