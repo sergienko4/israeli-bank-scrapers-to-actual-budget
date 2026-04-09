@@ -2,9 +2,9 @@ import babel from 'vite-plugin-babel';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  oxc: false,
   plugins: [
     babel({
+      filter: /\.[jt]sx?$/,
       babelConfig: {
         plugins: [
           ['@babel/plugin-proposal-decorators', { version: '2023-11' }],
