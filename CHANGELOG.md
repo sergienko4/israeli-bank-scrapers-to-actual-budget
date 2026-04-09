@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.5...v1.37.6) (2026-04-09)
+
+
+### Fixed
+
+* upgrade to Vite 8 with OXC/Babel decorator compatibility ([#296](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/296)) ([115b1b7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/115b1b72a96c50a112d0fa61469c73a79bf89869))
+
 ## [1.37.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.4...v1.37.5) (2026-04-06)
 
 
