@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [
     babel({
-      filter: /\.[jt]sx?$/,
+      filter: /\.[jt]s$/,
       babelConfig: {
         plugins: [
           ['@babel/plugin-proposal-decorators', { version: '2023-11' }],
