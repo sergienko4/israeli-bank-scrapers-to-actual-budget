@@ -42,7 +42,7 @@
   "devDependencies": {
     "@babel/plugin-proposal-decorators": "^7.29.0",
     "@babel/plugin-transform-typescript": "^7.28.6",
-    "@biomejs/biome": "^2.4.10",
+    "@biomejs/biome": "^2.4.11",
     "@eslint/js": "^10.0.1",
     "@faker-js/faker": "^10.4.0",
     "@types/node": "^25.5.2",
