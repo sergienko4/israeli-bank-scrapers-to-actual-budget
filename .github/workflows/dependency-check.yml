@@ -56,29 +56,7 @@ jobs:
       - name: Validate build still compiles
         if: steps.check.outputs.has_updates == 'true'
         id: typecheck
-        run: |
-          set +e
-          OUTPUT=$(npx tsc --noEmit 2>&1)
-          TSC_EXIT=$?
-          set -e
-
-          if [ "$TSC_EXIT" -eq 0 ]; then
-            exit 0
-          fi
-
-          # Some upstream packages ship raw .ts source files via exports
-          # (e.g. @actual-app/core). skipLibCheck only skips .d.ts, so
-          # TypeScript follows imports into their .ts and finds strict-mode
-          # violations. Only fail if OUR code has errors.
-          SRC_ERRORS=$(echo "$OUTPUT" | grep ": error TS" | grep -v "^node_modules/" || true)
-          if [ -n "$SRC_ERRORS" ]; then
-            echo "❌ Type errors in project source:"
-            echo "$SRC_ERRORS"
-            exit 1
-          fi
-
-          UPSTREAM_COUNT=$(echo "$OUTPUT" | grep -c "^node_modules/.*: error TS" || true)
-          echo "⚠️ ${UPSTREAM_COUNT} type error(s) in node_modules/ only (upstream) — not blocking"
+        run: npm run type-check
 
       - name: Create Pull Request
         if: steps.check.outputs.has_updates == 'true' && steps.typecheck.conclusion == 'success'

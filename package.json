@@ -5,7 +5,7 @@
   "main": "dist/Index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "bash config/tsc-strict-src.sh",
     "start": "node dist/Index.js",
     "dev": "tsc && node dist/Index.js",
     "test": "vitest run --config config/vitest.config.ts",
@@ -14,7 +14,7 @@
     "test:e2e": "vitest run --config config/vitest.config.e2e.ts",
     "test:e2e:setup": "npx tsx tests/e2e/e2e-setup.ts",
     "test:e2e:mock": "npm run test:e2e:setup && npm run test:e2e",
-    "type-check": "tsc --noEmit",
+    "type-check": "bash config/tsc-strict-src.sh --noEmit",
     "validate": "npm run type-check && npm run build && npm test",
     "validate:ci": "npm run type-check && npm run test:unit && npm run lint && npm run lint:canaries",
     "validate:all": "npm run type-check && npm run test:unit && npm run test:e2e:mock && npm run lint && npm run lint:canaries && npm run lint:docs && npm run lint:config-structure",
