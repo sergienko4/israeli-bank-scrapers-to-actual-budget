@@ -61,7 +61,7 @@
     "license-compliance": "^3.0.1",
     "lint-staged": "^16.4.0",
     "markdownlint-cli2": "^0.22.0",
-    "typedoc": "^0.28.18",
+    "typedoc": "^0.28.19",
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.58.0",
     "vite": "^8.0.5",
