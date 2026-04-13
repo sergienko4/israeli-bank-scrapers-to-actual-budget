@@ -116,8 +116,9 @@ RUN ARCH=$(uname -m) && \
     chmod +x /home/node/.cache/camoufox/camoufox-bin && \
     echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE)"
 
-# Copy source code
+# Copy source code and build config
 COPY src ./src
+COPY config/tsc-strict-src.sh ./config/tsc-strict-src.sh
 
 # Build TypeScript
 RUN npm run build
