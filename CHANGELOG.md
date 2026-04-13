@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.6...v1.37.7) (2026-04-13)
+
+
+### Fixed
+
+* **ci:** systemic tsc wrapper to filter upstream node_modules type errors ([#306](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/306)) ([1662053](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1662053ef42ccb788438aa90d35e2d79fd7ecb20))
+
 ## [1.37.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.5...v1.37.6) (2026-04-09)
 
 
