@@ -1,0 +1,9 @@
+# Shell scripts must keep LF line endings so Linux Docker builds succeed
+# on Windows contributors (where core.autocrlf=true otherwise converts them).
+*.sh text eol=lf
+
+# Husky hook scripts
+.husky/* text eol=lf
+
+# Dockerfile must stay LF so RUN layers parse on Linux.
+Dockerfile text eol=lf
