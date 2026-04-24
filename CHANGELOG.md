@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.7...v1.37.8) (2026-04-24)
+
+
+### Fixed
+
+* **deps:** pin uuid ^14.0.0 and postcss ^8.5.10 via overrides ([#315](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/315)) ([b56f8c5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b56f8c50a4f6161777d6fd59bdb317368293d113))
+
 ## [1.37.7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.6...v1.37.7) (2026-04-13)
 
 
