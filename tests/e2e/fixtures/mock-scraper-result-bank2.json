@@ -6,7 +6,7 @@
       "balance": 2500,
       "txns": [
         {
-          "date": "2026-03-19T00:00:00.000Z",
+          "date": "2026-04-21T00:00:00.000Z",
           "description": "Bank2 Transfer",
           "chargedAmount": 1500,
           "originalAmount": 1500,
@@ -14,7 +14,7 @@
           "identifier": "txn-b2-001"
         },
         {
-          "date": "2026-03-18T00:00:00.000Z",
+          "date": "2026-04-20T00:00:00.000Z",
           "description": "Bank2 Electric Bill",
           "chargedAmount": -450.75,
           "originalAmount": -450.75,
