@@ -58,6 +58,7 @@ tmpclaude-*
 *.tmp.md
 *-INTERNAL.md
 tasks/
+dev/
 
 # Generated API documentation
 docs/api/

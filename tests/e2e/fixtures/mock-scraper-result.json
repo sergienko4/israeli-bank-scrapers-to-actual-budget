@@ -6,7 +6,7 @@
       "balance": 10050.5,
       "txns": [
         {
-          "date": "2026-03-19T00:00:00.000Z",
+          "date": "2026-04-21T00:00:00.000Z",
           "description": "Test Supermarket",
           "chargedAmount": -150.5,
           "originalAmount": -150.5,
@@ -14,7 +14,7 @@
           "identifier": "txn-e2e-001"
         },
         {
-          "date": "2026-03-18T00:00:00.000Z",
+          "date": "2026-04-20T00:00:00.000Z",
           "description": "Test Salary",
           "chargedAmount": 5000,
           "originalAmount": 5000,
@@ -22,7 +22,7 @@
           "identifier": "txn-e2e-002"
         },
         {
-          "date": "2026-03-17T00:00:00.000Z",
+          "date": "2026-04-19T00:00:00.000Z",
           "description": "Test Netflix",
           "chargedAmount": -49.9,
           "originalAmount": -49.9,
@@ -30,7 +30,7 @@
           "identifier": "txn-e2e-003"
         },
         {
-          "date": "2026-03-16T00:00:00.000Z",
+          "date": "2026-04-18T00:00:00.000Z",
           "description": "סופר פארם",
           "chargedAmount": -320,
           "originalAmount": -320,
@@ -38,7 +38,7 @@
           "identifier": "txn-e2e-004"
         },
         {
-          "date": "2026-03-15T00:00:00.000Z",
+          "date": "2026-04-17T00:00:00.000Z",
           "description": "Precision Edge Case",
           "chargedAmount": -0.01,
           "originalAmount": -0.01,
@@ -46,7 +46,7 @@
           "identifier": "txn-e2e-005"
         },
         {
-          "date": "2026-03-14T00:00:00.000Z",
+          "date": "2026-04-16T00:00:00.000Z",
           "description": "Large Purchase",
           "chargedAmount": -9999.99,
           "originalAmount": -9999.99,
