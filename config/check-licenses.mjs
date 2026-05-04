@@ -29,10 +29,19 @@ const ALLOWED_DEPENDENCY_LICENSES = [
   'Python-2.0',
   'MPL-2.0',
   'AGPL-3.0-or-later',
+  'GPL-3.0-only',
   '(MIT OR WTFPL)',
   '(BSD-3-Clause AND Apache-2.0)',
   '(BSD-2-Clause OR MIT OR Apache-2.0)',
   'Unlicense',
+];
+
+// Packages excluded by name. Use sparingly; document the reason for each entry.
+const EXCLUDED_PACKAGES = [
+  // absurd-sql ships under MIT per its source repo but its package.json lacks
+  // a `license` field, so license-compliance reports UNKNOWN. Pulled in via
+  // @actual-app/core. https://github.com/jlongster/absurd-sql
+  'absurd-sql',
 ];
 
 /* ── Gate 1: Project license ──────────────────────────────────────── */
@@ -51,11 +60,13 @@ console.log(`✅ Project license: ${pkg.license}`);
 /* ── Gate 2: Dependency licenses ──────────────────────────────────── */
 
 const allowArg = ALLOWED_DEPENDENCY_LICENSES.join(';');
+const excludeArg = EXCLUDED_PACKAGES.join(';');
 
 try {
-  execSync(`npx license-compliance --production --allow "${allowArg}"`, {
-    stdio: 'inherit',
-  });
+  execSync(
+    `npx license-compliance --production --allow "${allowArg}" --exclude "${excludeArg}"`,
+    { stdio: 'inherit' },
+  );
   console.log('✅ All dependency licenses are compliant');
 } catch {
   console.error('❌ Dependency license violation detected (see above)');
