@@ -10,7 +10,7 @@ updates:
     labels:
       - "dependencies"
     commit-message:
-      prefix: "chore"
+      prefix: "fix"
       include: "scope"
     ignore:
       # Critical deps handled by daily-dependency-check.yml (faster than weekly)
@@ -37,5 +37,5 @@ updates:
     labels:
       - "docker"
     commit-message:
-      prefix: "chore"
+      prefix: "fix"
       include: "scope"
