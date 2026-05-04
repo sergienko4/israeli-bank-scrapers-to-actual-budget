@@ -932,8 +932,8 @@ docker run --rm ^
 
 | Component | Version | Purpose |
 |-----------|---------|---------|
-| [israeli-bank-scrapers](https://github.com/sergienko4/israeli-bank-scrapers) | ^8.0.0 | Bank scraping |
-| [@actual-app/api](https://github.com/actualbudget/actual) | ^26.2.0 | Actual Budget integration |
+| [israeli-bank-scrapers](https://github.com/sergienko4/israeli-bank-scrapers) | ^8.2.1 | Bank scraping |
+| [@actual-app/api](https://github.com/actualbudget/actual) | ^26.5.0 | Actual Budget integration |
 | Node.js | 22 | Runtime |
 | Camoufox (Firefox) | Latest | Browser automation (anti-detect) |
 | Docker | - | Containerization |
