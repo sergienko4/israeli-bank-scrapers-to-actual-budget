@@ -17,7 +17,7 @@ export default function buildCredentials(
   const { id: bankId, password, num, username, userCode, nationalID,
     card6Digits, email, phoneNumber, otpLongTermToken } = bankConfig;
   if (otpLongTermToken) {
-    return { email: email ?? '', password: password ?? '', otpLongTermToken } as ScraperCredentials;
+    return { email: email ?? '', password: password ?? '', otpLongTermToken };
   }
   return {
     id: bankId, password, num, username, userCode, nationalID,
