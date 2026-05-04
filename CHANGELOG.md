@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.9](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.8...v1.37.9) (2026-05-04)
+
+
+### Fixed
+
+* **ci:** use fix prefix for Dependabot npm/docker bumps ([#330](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/330)) ([473aa87](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/473aa875bfcfb816fce0c7b8cf17ffd8782d0497))
+
 ## [1.37.8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.7...v1.37.8) (2026-04-24)
 
 
