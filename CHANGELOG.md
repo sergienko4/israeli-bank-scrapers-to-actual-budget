@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.10](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.9...v1.37.10) (2026-05-11)
+
+
+### Fixed
+
+* **deps-dev:** bump @biomejs/biome from 2.4.14 to 2.4.15 ([#336](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/336)) ([2bb7060](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/2bb7060f932750d9f9c3376eeca04e85aeda9f49))
+* **deps-dev:** bump @types/node from 25.6.0 to 25.6.2 ([#333](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/333)) ([491e2b2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/491e2b207c0bcd1985076fb6af7cc1216ad66001))
+* **deps-dev:** bump eslint-plugin-n from 17.24.0 to 18.0.1 ([#335](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/335)) ([b0046da](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b0046da76c9921b84f067b3f5e87a3134c2adfc3))
+* **deps-dev:** bump lint-staged from 16.4.0 to 17.0.4 ([#337](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/337)) ([1d4d293](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1d4d2937592a4f863e376bec9cbbfaff81d1ae05))
+* **deps-dev:** bump vite from 8.0.10 to 8.0.12 ([#334](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/334)) ([51873b0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/51873b0bfc7cc9b51dd049c1a16124c4c488a8d2))
+* **deps:** update critical dependencies ([#332](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/332)) ([e2db41b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/e2db41b6d46dab36cc2268774fb8062fb0ecc3e4))
+
 ## [1.37.9](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.8...v1.37.9) (2026-05-04)
 
 
