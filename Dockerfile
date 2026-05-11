@@ -1,7 +1,7 @@
 # Use Node.js 22 LTS (required by israeli-bank-scrapers)
 # Using slim variant for smaller image size
 # Pin to digest for reproducibility and security
-FROM node:22-slim@sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94
+FROM node:26-slim@sha256:424cafd2a035ed2b2d74acc3142b68b426fb62a47742c80a75e7117db02d6b30
 
 # Security labels and metadata
 LABEL maintainer="Israeli Bank Importer Contributors"
