@@ -254,7 +254,10 @@ function topoSort(gates) {
     visiting.add(g.id);
     for (const reqId of g.requires ?? []) {
       const dep = byId.get(reqId);
-      if (dep !== undefined) visit(dep);
+      if (dep === undefined) {
+        throw new Error(`Gate "${g.id}" requires "${reqId}" which is not in the selected scope`);
+      }
+      visit(dep);
     }
     visiting.delete(g.id);
     visited.add(g.id);

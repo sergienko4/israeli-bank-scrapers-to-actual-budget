@@ -198,9 +198,14 @@ async function main() {
   /** @type {ReadonlyArray<import('./gates.mjs').Gate>} */
   let gates;
   if (opts.gate !== undefined) {
-    const target = gateById(opts.gate);
-    const reqIds = transitiveRequires(target);
-    gates = [...GATES.filter((g) => reqIds.has(g.id)), target];
+    let target;
+    try {
+      target = gateById(opts.gate);
+    } catch (err) {
+      exitUsage(/** @type {Error} */ (err).message);
+    }
+    const reqIds = transitiveRequires(/** @type {import('./gates.mjs').Gate} */ (target));
+    gates = [...GATES.filter((g) => reqIds.has(g.id)), /** @type {import('./gates.mjs').Gate} */ (target)];
   } else {
     gates = gatesForScope(opts.scope);
   }
