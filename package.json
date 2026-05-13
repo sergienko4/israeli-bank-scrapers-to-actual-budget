@@ -15,7 +15,7 @@
     "test:e2e:setup": "npx tsx tests/e2e/e2e-setup.ts",
     "test:e2e:mock": "npm run test:e2e:setup && npm run test:e2e",
     "type-check": "bash config/tsc-strict-src.sh --noEmit",
-    "validate": "npm run type-check && npm run build && npm test",
+    "validate": "node scripts/ci/run-gates.mjs --scope=local --parallel",
     "validate:ci": "npm run type-check && npm run test:unit && npm run lint && npm run lint:canaries",
     "validate:all": "npm run type-check && npm run test:unit && npm run test:e2e:mock && npm run lint && npm run lint:canaries && npm run lint:docs && npm run lint:config-structure",
     "lint": "eslint src/",
