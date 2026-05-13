@@ -39,3 +39,10 @@ updates:
     commit-message:
       prefix: "fix"
       include: "scope"
+    ignore:
+      # Stay on even-numbered LTS Node majors only.
+      # Bump manually when the next LTS lands (Node 26 LTS expected Oct 2026).
+      - dependency-name: "node"
+        versions: ["23.x", "25.x", "27.x", "29.x"]
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
