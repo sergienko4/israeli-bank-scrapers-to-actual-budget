@@ -6,6 +6,13 @@ on:
   push:
     branches: [main]
 
+# Workflow-wide default: read-only. Jobs that need more (security/trivy
+# write SARIF to the Security tab) override locally with `security-events:
+# write`. Sonar comments back to PRs but the SonarCloud action authenticates
+# with its own SONAR_TOKEN, so no GITHUB_TOKEN write scope is needed here.
+permissions:
+  contents: read
+
 jobs:
   # ─── BUILD ─────────────────────────────────────────
   build:
@@ -135,90 +142,14 @@ jobs:
   e2e:
     name: E2E Tests
     needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-      - uses: ./.github/actions/ci/setup
-      - uses: actions/download-artifact@v8
-        with:
-          name: dist
-          path: dist/
-
-      - uses: ./.github/actions/docker/camoufox-cache
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: false
-          load: true
-          tags: israeli-bank-importer:e2e
-          build-args: |
-            SKIP_BROWSER_FETCH=true
-            APT_CACHE_BUST=${{ github.run_id }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Create test budget
-        run: npm run test:e2e:setup
-      - name: Extract budget ID
-        id: budget
-        run: |
-          BUDGET_ID=$(ls tests/e2e/fixtures/e2e-data/ | grep "e2e-test-budget-" | head -1)
-          echo "id=$BUDGET_ID" >> "$GITHUB_OUTPUT"
-          echo "Budget ID: $BUDGET_ID"
-      - name: Fix permissions for Docker volume
-        run: chmod -R 777 tests/e2e/fixtures/e2e-data
-
-      - name: Browser smoke test (verify scraper can launch browser)
-        run: |
-          docker run --rm --cap-add SYS_ADMIN israeli-bank-importer:e2e \
-            node --input-type=module -e "
-              import { createScraper } from '@sergienko4/israeli-bank-scrapers';
-              const s = createScraper({ companyId: 'hapoalim', startDate: new Date() });
-              await s.initialize();
-              await s.terminate(true);
-              console.log('Browser smoke test passed');
-            "
-
-      - name: "Run #1: First import (creates transactions)"
-        run: |
-          set +e
-          docker run --rm \
-            -v ${{ github.workspace }}/tests/e2e/fixtures/config.generated.json:/app/config.json:ro \
-            -v ${{ github.workspace }}/tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro \
-            -v ${{ github.workspace }}/tests/e2e/fixtures/e2e-data:/app/data \
-            -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
-            -e E2E_LOCAL_BUDGET_ID=${{ steps.budget.outputs.id }} \
-            israeli-bank-importer:e2e \
-            node dist/Index.js
-          EXIT_CODE=$?
-          echo "Run #1 exit code: $EXIT_CODE"
-          if [ $EXIT_CODE -gt 1 ]; then
-            echo "::error::Importer crashed with exit code $EXIT_CODE"
-            exit 1
-          fi
-
-      - name: "Run #2: Dedup verification (same data, no new transactions)"
-        run: |
-          set +e
-          docker run --rm \
-            -v ${{ github.workspace }}/tests/e2e/fixtures/config.generated.json:/app/config.json:ro \
-            -v ${{ github.workspace }}/tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro \
-            -v ${{ github.workspace }}/tests/e2e/fixtures/e2e-data:/app/data \
-            -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
-            -e E2E_LOCAL_BUDGET_ID=${{ steps.budget.outputs.id }} \
-            israeli-bank-importer:e2e \
-            node dist/Index.js
-          EXIT_CODE=$?
-          echo "Run #2 exit code: $EXIT_CODE"
-          if [ $EXIT_CODE -gt 1 ]; then
-            echo "::error::Importer crashed with exit code $EXIT_CODE"
-            exit 1
-          fi
-
-      - name: Verify pipeline results
-        run: npm run test:e2e
-        env:
-          E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
-          E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
+    # Reusable workflow: same pipeline as e2e-schedule.yml's weekly run.
+    # Source of truth: .github/workflows/_e2e-suite.yml
+    uses: ./.github/workflows/_e2e-suite.yml
+    with:
+      timeout-minutes: 25
+    # Explicit mapping (not `inherit`): the reusable workflow only needs
+    # these two; passing every caller secret would expose unrelated tokens
+    # (SONAR/RELEASE/GIST/Docker creds) inside the E2E job for no reason.
+    secrets:
+      E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
+      E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
