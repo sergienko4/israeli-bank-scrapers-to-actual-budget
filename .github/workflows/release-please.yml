@@ -5,12 +5,6 @@ on:
     branches:
       - main
 
-# Opt JS-action runtime into Node 24 ahead of GH's 2026-06-02 default
-# switch. Value sourced from the repo-level variable (Settings ->
-# Variables) so it flips in one place across all workflows.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 }}
-
 jobs:
   release-please:
     runs-on: ubuntu-latest
@@ -41,7 +35,7 @@ jobs:
           echo "UNIT_COUNT=$UNIT" >> $GITHUB_ENV
           echo "E2E_COUNT=$E2E" >> $GITHUB_ENV
       - name: Update unit test badge
-        uses: schneegans/dynamic-badges-action@v1.7.0
+        uses: schneegans/dynamic-badges-action@v1.8.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: 2860e2ffec3d5919e4b658fed5ce4e5e
@@ -50,7 +44,7 @@ jobs:
           message: "${{ env.UNIT_COUNT }} passed"
           color: brightgreen
       - name: Update E2E test badge
-        uses: schneegans/dynamic-badges-action@v1.7.0
+        uses: schneegans/dynamic-badges-action@v1.8.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: 2860e2ffec3d5919e4b658fed5ce4e5e

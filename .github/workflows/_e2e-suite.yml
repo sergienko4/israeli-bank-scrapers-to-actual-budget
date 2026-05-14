@@ -18,12 +18,6 @@ on:
       E2E_TELEGRAM_CHAT_ID:
         required: false
 
-# Opt JS-action runtime into Node 24 ahead of GH's 2026-06-02 default
-# switch. Value sourced from the repo-level variable (Settings ->
-# Variables) so it flips in one place across all workflows.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 }}
-
 jobs:
   e2e:
     name: E2E Tests

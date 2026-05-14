@@ -4,12 +4,6 @@ on:
   schedule:
     - cron: '0 6 * * 1'
 
-# Opt JS-action runtime into Node 24 ahead of GH's 2026-06-02 default
-# switch. Value sourced from the repo-level variable (Settings ->
-# Variables) so it flips in one place across all workflows.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 }}
-
 concurrency:
   group: e2e-tests
   cancel-in-progress: true
