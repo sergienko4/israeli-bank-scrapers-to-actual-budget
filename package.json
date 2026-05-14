@@ -15,7 +15,7 @@
     "test:e2e:setup": "npx tsx tests/e2e/e2e-setup.ts",
     "test:e2e:mock": "npm run test:e2e:setup && npm run test:e2e",
     "type-check": "bash config/tsc-strict-src.sh --noEmit",
-    "validate": "node scripts/ci/run-gates.mjs --scope=local --parallel",
+    "validate": "npm run type-check && npm run build && npm test",
     "validate:ci": "npm run type-check && npm run test:unit && npm run lint && npm run lint:canaries",
     "validate:all": "npm run type-check && npm run test:unit && npm run test:e2e:mock && npm run lint && npm run lint:canaries && npm run lint:docs && npm run lint:config-structure",
     "lint": "eslint src/",
@@ -45,7 +45,7 @@
     "@biomejs/biome": "^2.4.15",
     "@eslint/js": "^10.0.1",
     "@faker-js/faker": "^10.4.0",
-    "@types/node": "^25.7.0",
+    "@types/node": "^25.6.2",
     "@vitest/coverage-v8": "^4.1.5",
     "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",
@@ -63,10 +63,10 @@
     "markdownlint-cli2": "^0.22.1",
     "typedoc": "^0.28.19",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3",
+    "typescript-eslint": "^8.59.1",
     "vite": "^8.0.12",
     "vite-plugin-babel": "^1.6.0",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.5"
   },
   "overrides": {
     "smol-toml": ">=1.6.1",
