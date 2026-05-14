@@ -177,11 +177,16 @@ export const GATES = Object.freeze([
     run: ['npm', 'run', 'test:e2e:mock'],
   },
   {
+    // Telegram E2E credentials are loaded by Vitest from .env.e2e (locally)
+    // or injected via GitHub Secrets (CI). The runner does NOT pre-check
+    // these as needsSecrets because the gate command handles env loading
+    // itself — pre-checking would force every caller to surface .env.e2e
+    // values into process.env first, which matches neither Vitest's
+    // behavior nor the prior shell hook.
     id: 'e2e-telegram',
     name: 'E2E with Telegram delivery',
     scopes: ['local', 'release'],
     requires: ['build'],
-    needsSecrets: ['E2E_TELEGRAM_BOT_TOKEN', 'E2E_TELEGRAM_CHAT_ID'],
     run: ['npm', 'run', 'test:e2e'],
   },
 ]);

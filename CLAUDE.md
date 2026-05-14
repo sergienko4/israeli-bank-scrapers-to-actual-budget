@@ -10,7 +10,7 @@ These instructions are MANDATORY. They OVERRIDE any default behavior. NEVER viol
 - **NEVER** use `--no-verify`, `--no-gpg-sign`, or any flag that skips safety checks
 - **NEVER** commit credentials, tokens, passwords, or secrets
 - **NEVER** modify `eslint.config.mjs` unless explicitly asked by the user
-- If Docker isn't running and the hook fails at gate 9+: STOP and tell the user. Do NOT bypass.
+- If Docker isn't running and the runner exits 3 on a `needsDocker: true` gate: STOP and tell the user. Do NOT bypass.
 - If `git push` is rejected: pull and create a new commit. Do NOT force-push.
 - There are ZERO exceptions. If you think you need one, ASK the user first.
 
@@ -33,12 +33,7 @@ This is NOT optional. If you skip this checklist you WILL introduce bugs that Co
 1. Read `docs/GUIDELINES.md` + `tasks/README.md` + task file BEFORE any work
 2. Plan first → explain approach → wait for user approval
 3. Fresh branch: `git checkout main && git pull origin refs/heads/main && git checkout -b task-XX-desc`
-4. **FULL pre-commit cycle (NEVER skip):** just `git commit` — the 14-gate hook runs everything:
-   - Gates 1-8 (incl. 6b): type-check, audit, build, TypeDoc, unit tests, ESLint, Biome, markdownlint, config-structure
-   - Gate 9: Docker build + browser smoke test (`israeli-bank-importer:pre-commit`)
-   - Gates 10-11: Lychee + Trivy via Docker
-   - Gate 12: mocked E2E tests
-   - Gate 13: Telegram E2E
+4. **FULL pre-commit cycle (NEVER skip):** just `git commit` — the hook calls `node scripts/ci/run-gates.mjs --scope=local --parallel`. The canonical gate list lives in [scripts/ci/gates.mjs](scripts/ci/gates.mjs); adding/removing gates is a one-place change. Today's local-scope gates: type-check, audit, build, docs, unit, eslint, biome, lint-canaries, lint-licenses, markdownlint, config-structure, pii, semgrep, lychee, docker-image, trivy, e2e-mock, e2e-telegram.
 5. `docker build -t israeli-bank-importer:test .`
 6. Write E2E tests for every new feature — unit tests + E2E tests are BOTH required
 7. Update docs: README.md, task files, config.json.example (CHANGELOG is auto-generated)
@@ -116,7 +111,7 @@ After creating every PR:
 ## CI/CD
 
 - `pr.yml`: build+audit, validate:ci, Docker build, Trivy, CodeQL, SonarCloud, License Compliance, markdownlint+lychee, E2E
-- `.husky/pre-commit`: 14-gate hook; gate 12 runs mocked E2E (`test:e2e:mock`); CI `e2e.yml` also includes Dockerized import runs
+- `.husky/pre-commit`: calls `node scripts/ci/run-gates.mjs --scope=local --parallel` (canonical gate list in [scripts/ci/gates.mjs](scripts/ci/gates.mjs)); the `e2e-mock` gate runs `test:e2e:mock`; CI `e2e.yml` also includes Dockerized import runs
 - `release-please.yml`: on push to main → release PR + test count badge
 - `release.yml`: on tag push `v*` → multi-arch build+push → SBOM → enriched notes
 - Ruleset: squash only, required checks: Build+Test, Container Scan, CodeQL Security Scan, Docs Quality, E2E Tests, SonarCloud Analysis, License Compliance

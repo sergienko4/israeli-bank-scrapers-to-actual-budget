@@ -96,7 +96,7 @@ async function dockerAvailable() {
   return await new Promise((resolve) => {
     const child = spawn('docker', ['version', '--format', '{{.Server.Version}}'], {
       stdio: 'ignore',
-      shell: false,
+      shell: process.platform === 'win32',
     });
     child.once('error', () => resolve(false));
     child.once('exit', (code) => resolve(code === 0));
@@ -112,8 +112,12 @@ async function dockerAvailable() {
 async function runGate(gate) {
   const start = Date.now();
   const [cmd, ...args] = gate.run;
+  // Windows needs shell:true to resolve `.cmd` shims (npm.cmd, npx.cmd).
+  // Gate commands and args come from the trusted registry in gates.mjs,
+  // not from user input, so shell-quoting is not a concern here.
+  const useShell = process.platform === 'win32';
   return await new Promise((resolve) => {
-    const child = spawn(cmd, args, { stdio: 'inherit', shell: false });
+    const child = spawn(cmd, args, { stdio: 'inherit', shell: useShell });
     child.once('exit', (code) => {
       resolve({ id: gate.id, code: code ?? 1, durationMs: Date.now() - start });
     });
