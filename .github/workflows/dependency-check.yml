@@ -5,6 +5,14 @@ on:
     - cron: '0 6 * * *'  # Every day at 6 AM UTC
   workflow_dispatch:      # Manual trigger
 
+# Opt every job's JS-action runtime into Node 24 ahead of GitHub's
+# 2026-06-02 default switch. Value sourced from the repo-level variable
+# `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` (Settings -> Variables) so it can
+# be flipped in one place across all workflows. See:
+# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: ${{ vars.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 }}
+
 permissions:
   contents: write
   pull-requests: write
