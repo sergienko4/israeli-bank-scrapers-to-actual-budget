@@ -6,6 +6,13 @@ on:
   push:
     branches: [main]
 
+# Workflow-wide default: read-only. Jobs that need more (security/trivy
+# write SARIF to the Security tab) override locally with `security-events:
+# write`. Sonar comments back to PRs but the SonarCloud action authenticates
+# with its own SONAR_TOKEN, so no GITHUB_TOKEN write scope is needed here.
+permissions:
+  contents: read
+
 jobs:
   # ─── BUILD ─────────────────────────────────────────
   build:

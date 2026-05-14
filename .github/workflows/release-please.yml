@@ -5,6 +5,13 @@ on:
     branches:
       - main
 
+# release-please-action passes `secrets.RELEASE_TOKEN` explicitly and the
+# badge job uses `secrets.GIST_SECRET` for the external gist - neither
+# needs GITHUB_TOKEN write scopes. `contents: read` covers the checkout
+# step, nothing more.
+permissions:
+  contents: read
+
 jobs:
   release-please:
     runs-on: ubuntu-latest

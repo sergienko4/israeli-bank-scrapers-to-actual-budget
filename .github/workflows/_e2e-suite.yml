@@ -18,6 +18,13 @@ on:
       E2E_TELEGRAM_CHAT_ID:
         required: false
 
+# Reusable workflow runs locally only: checkout, build, docker build/run.
+# No SARIF upload, no commit/PR writes, no package pushes. Lock down to
+# the bare minimum (contents:read for checkout) regardless of what the
+# caller workflow grants.
+permissions:
+  contents: read
+
 jobs:
   e2e:
     name: E2E Tests
