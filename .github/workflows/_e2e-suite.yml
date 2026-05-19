@@ -64,15 +64,20 @@ jobs:
       - name: Fix permissions for Docker volume
         run: chmod -R 777 tests/e2e/fixtures/e2e-data
 
-      - name: Browser smoke test (verify scraper can launch browser)
+      - name: Scraper API smoke test (verify createScraper inside image)
+        # Scraper 8.3.0+ removed .initialize()/.terminate(); the new API
+        # manages the browser lifecycle inside .scrape(). This smoke just
+        # verifies the package imports and exposes the expected public
+        # surface. Full browser launch is covered by Run #1/#2 below.
         run: |
-          docker run --rm --cap-add SYS_ADMIN israeli-bank-importer:e2e \
+          docker run --rm israeli-bank-importer:e2e \
             node --input-type=module -e "
               import { createScraper } from '@sergienko4/israeli-bank-scrapers';
               const s = createScraper({ companyId: 'hapoalim', startDate: new Date() });
-              await s.initialize();
-              await s.terminate(true);
-              console.log('Browser smoke test passed');
+              if (typeof s.scrape !== 'function') {
+                throw new Error('Scraper API broken: .scrape() missing');
+              }
+              console.log('Scraper API smoke test passed');
             "
 
       - name: "Run #1: First import (creates transactions)"
