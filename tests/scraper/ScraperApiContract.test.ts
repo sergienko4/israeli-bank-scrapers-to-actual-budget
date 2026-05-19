@@ -14,23 +14,37 @@ import { CompanyTypes, createScraper } from '@sergienko4/israeli-bank-scrapers';
  * change in the dep regardless of the version tag.
  */
 
+/**
+ * Value type of any `CompanyTypes` member. Using this (instead of
+ * `as never`) keeps the test type-safe: if upstream narrows or renames
+ * `companyId`'s expected type, this entry array stops compiling and the
+ * contract test fails at build time as intended.
+ */
+type CompanyId = (typeof CompanyTypes)[keyof typeof CompanyTypes];
+
+/** Typed enumeration of every `(key, value)` in `CompanyTypes`. */
+const COMPANY_ENTRIES: ReadonlyArray<readonly [keyof typeof CompanyTypes, CompanyId]> =
+  Object.entries(CompanyTypes) as ReadonlyArray<
+    readonly [keyof typeof CompanyTypes, CompanyId]
+  >;
+
 describe('israeli-bank-scrapers public API contract', () => {
   it('exports CompanyTypes as a non-empty object', () => {
     expect(CompanyTypes).toBeTypeOf('object');
-    expect(Object.keys(CompanyTypes).length).toBeGreaterThan(0);
+    expect(COMPANY_ENTRIES.length).toBeGreaterThan(0);
   });
 
   it('every CompanyTypes value is a non-empty string', () => {
-    for (const [name, id] of Object.entries(CompanyTypes)) {
+    for (const [name, id] of COMPANY_ENTRIES) {
       expect(id, `CompanyTypes.${name}`).toBeTypeOf('string');
-      expect((id as string).length, `CompanyTypes.${name}`).toBeGreaterThan(0);
+      expect(id.length, `CompanyTypes.${name}`).toBeGreaterThan(0);
     }
   });
 
   it('createScraper accepts every CompanyTypes value and returns a usable instance', () => {
-    for (const [name, id] of Object.entries(CompanyTypes)) {
+    for (const [name, id] of COMPANY_ENTRIES) {
       const scraper = createScraper({
-        companyId: id as never,
+        companyId: id,
         startDate: new Date(),
       });
       expect(scraper, `createScraper(${name})`).toBeDefined();
@@ -47,7 +61,7 @@ describe('israeli-bank-scrapers public API contract', () => {
     // the contract that lowercasing the keys yields a stable set of
     // user-facing bank identifiers — independent of whether upstream
     // exports them in camelCase or PascalCase.
-    const lowered = new Set(Object.keys(CompanyTypes).map((k) => k.toLowerCase()));
+    const lowered = new Set(COMPANY_ENTRIES.map(([k]) => k.toLowerCase()));
     const knownCore = ['hapoalim', 'leumi', 'discount', 'max', 'isracard'];
     for (const bank of knownCore) {
       expect(lowered.has(bank), `lowercased CompanyTypes must include "${bank}"`).toBe(true);
