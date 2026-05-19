@@ -18,6 +18,10 @@ jobs:
   build:
     name: Build & Audit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # actions/upload-artifact@v4+ uses the actions namespace, not contents.
+      actions: write
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/ci/setup
@@ -35,6 +39,11 @@ jobs:
     name: Test & Lint
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Downloads `dist` artifact + uploads `coverage-report` artifact via
+      # actions/{download,upload}-artifact (actions-namespace API).
+      actions: write
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/ci/setup
@@ -122,6 +131,10 @@ jobs:
     name: SonarCloud Analysis
     needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Downloads `coverage-report` artifact published by the validate job.
+      actions: read
     steps:
       - uses: actions/checkout@v6
         with:
