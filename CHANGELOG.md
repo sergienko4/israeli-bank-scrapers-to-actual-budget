@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.12](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.11...v1.37.12) (2026-05-19)
+
+
+### Fixed
+
+* **deps-dev:** bump @types/node from 25.8.0 to 25.9.0 ([#357](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/357)) ([06a4c15](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/06a4c15a0ccf7ee5c1f43686e5bb832306e369a1))
+* **deps-dev:** bump eslint from 10.3.0 to 10.4.0 ([#359](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/359)) ([6b93aaa](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/6b93aaae1ab9ee6d7c1eca403003c2c40e8f58f6))
+* **deps-dev:** bump lint-staged from 17.0.4 to 17.0.5 ([#358](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/358)) ([2ea3fc3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/2ea3fc3e7e712b84f4b827c5d70e13276eb4bed1))
+
 ## [1.37.11](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.10...v1.37.11) (2026-05-14)
 
 
