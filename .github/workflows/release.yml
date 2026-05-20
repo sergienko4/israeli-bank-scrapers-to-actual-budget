@@ -86,10 +86,11 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scraper API smoke test (verify createScraper inside image)
-        # Scraper 8.3.0+ removed .initialize()/.terminate(); the new API
-        # manages the browser lifecycle inside .scrape(). This smoke just
-        # verifies the package imports and exposes the expected public
-        # surface. Full browser launch is covered by the E2E suite.
+        # The current scraper API manages the browser lifecycle inside
+        # .scrape() — there is no separate .initialize()/.terminate().
+        # This smoke just verifies the package imports and exposes the
+        # expected public surface; full browser launch is covered by
+        # the E2E suite.
         run: |
           docker run --rm --cap-add SYS_ADMIN ${{ env.DOCKER_IMAGE }}:smoke-test \
             node --input-type=module -e "
