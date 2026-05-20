@@ -7,7 +7,7 @@ import { CompanyTypes, createScraper } from '@sergienko4/israeli-bank-scrapers';
  * Unlike the unit tests in `BankScraper.test.ts` which mock the scraper
  * package to test our own glue code, this file imports the REAL upstream
  * exports. Its job is to fail loudly when a future bump breaks our
- * integration surface — the way the 8.3.0 minor bump silently removed
+ * integration surface — the way a previous minor bump silently removed
  * `.initialize()`/`.terminate()` and re-cased `CompanyTypes` keys.
  *
  * If this file goes red after a `npm update`, treat it as a breaking

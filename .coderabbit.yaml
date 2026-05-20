@@ -44,7 +44,7 @@ reviews:
     - path: "Dockerfile"
       instructions: |
         - Camoufox binary fetched as root must be moved to /home/node/.cache/ for runtime user
-        - Browser smoke test must pass in CI (createScraper().initialize())
+        - Scraper API smoke test must pass in CI (createScraper().scrape exists; scraper 8.3.0+ manages browser lifecycle inside .scrape())
         - Base image digest should be pinned for reproducibility
     - path: "docs/**/*.md"
       instructions: |
