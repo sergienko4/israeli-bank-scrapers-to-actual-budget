@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.13](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.12...v1.37.13) (2026-05-20)
+
+
+### Fixed
+
+* **ci:** replace stale .initialize() smoke test in release.yml ([#363](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/363)) ([487be49](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/487be49e1807a8801b71a2a93de88972716baaf3))
+
 ## [1.37.12](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.11...v1.37.12) (2026-05-19)
 
 
