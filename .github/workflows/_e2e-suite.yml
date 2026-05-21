@@ -37,6 +37,7 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
+      - uses: ./.github/actions/ci/free-disk-space
       - uses: ./.github/actions/docker/camoufox-cache
       - uses: docker/setup-buildx-action@v4
 

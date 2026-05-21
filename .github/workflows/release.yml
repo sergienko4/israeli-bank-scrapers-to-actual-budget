@@ -59,6 +59,9 @@ jobs:
             echo "::warning::No CHANGELOG entry for ${BARE}"
           fi
 
+      - name: Free disk space on runner
+        uses: ./.github/actions/ci/free-disk-space
+
       - name: Cache Camoufox browser
         uses: ./.github/actions/docker/camoufox-cache
 

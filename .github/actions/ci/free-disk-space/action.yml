@@ -1,0 +1,22 @@
+name: Free Disk Space
+description: >
+  Reclaim ~25–30 GB on ubuntu-latest by removing pre-installed toolchains
+  (Android SDK, .NET, Haskell, large apt packages, swap). The default
+  GitHub runner ships with ~14 GB free, which is not enough headroom for
+  the Camoufox Firefox layer + buildx cache + apt + node_modules during
+  a full Docker image build. Tool-cache (Node/npm) and Docker images
+  are preserved.
+
+runs:
+  using: composite
+  steps:
+    - name: Free disk space on runner
+      uses: jlumbroso/free-disk-space@v1.3.1
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: false
+        swap-storage: true
