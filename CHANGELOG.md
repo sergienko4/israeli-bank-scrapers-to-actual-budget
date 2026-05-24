@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.16](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.15...v1.37.16) (2026-05-24)
+
+
+### Fixed
+
+* **import:** correct credit-card sign + stable hash-based dedup ([#370](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/370)) ([5350abe](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5350abe53e080999657dbd97d67883749ae959d3))
+
 ## [1.37.15](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.14...v1.37.15) (2026-05-21)
 
 
