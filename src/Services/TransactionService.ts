@@ -3,6 +3,8 @@
  * Follows Single Responsibility Principle: Only handles transaction import logic
  */
 
+import { createHash } from 'node:crypto';
+
 import type api from '@actual-app/api';
 
 import { getLogger } from '../Logger/Index.js';
@@ -196,19 +198,29 @@ export class TransactionService {
     ctx: IBatchContext, startIdx: number
   ): Promise<Procedure<{ status: string }>> {
     for (let idx = startIdx; idx < ctx.txns.length; idx++) {
-      const parsed = TransactionService.parseTransaction(ctx.txns[idx]);
-      const importedId = TransactionService.buildImportedId(
-        ctx.accountKey, ctx.txns[idx], parsed
-      );
-      const target = ctx.existingIds.has(importedId)
-        ? ctx.existingTxns : ctx.newTxns;
-      await this.importSingleTransaction({
-        actualAccountId: ctx.actualAccountId, txn: ctx.txns[idx],
-        parsed, importedId, target,
-        existingTransactions: ctx.existingTxns,
-      });
+      await this.processSingleAt(ctx, idx);
     }
     return succeed({ status: 'done' });
+  }
+
+  /**
+   * Processes one transaction at index `idx`, applying dual-check dedup
+   * against both the new (hash) and legacy imported_id formats.
+   * @param ctx - Batch context with txns, account info, and accumulators.
+   * @param idx - Zero-based index of the transaction to process.
+   */
+  private async processSingleAt(ctx: IBatchContext, idx: number): Promise<void> {
+    const txn = ctx.txns[idx];
+    const parsed = TransactionService.parseTransaction(txn);
+    const importedId = TransactionService.buildImportedId(ctx.accountKey, txn, parsed);
+    const legacyId = TransactionService.buildImportedIdLegacy(ctx.accountKey, txn, parsed);
+    const isExisting = ctx.existingIds.has(importedId) || ctx.existingIds.has(legacyId);
+    const target = isExisting ? ctx.existingTxns : ctx.newTxns;
+    await this.importSingleTransaction({
+      actualAccountId: ctx.actualAccountId, txn,
+      parsed, importedId, target,
+      existingTransactions: ctx.existingTxns,
+    });
   }
 
   /**
@@ -267,13 +279,33 @@ export class TransactionService {
   }
 
   /**
-   * Builds a stable unique identifier for a transaction to detect duplicates.
+   * Builds a content-hash imported_id stable across runs.
+   * Independent of `txn.identifier` which the upstream scraper does not
+   * guarantee to be stable between scrapes — using a SHA-256 prefix over
+   * `(accountKey, date, amount, description)` makes re-runs deterministic.
    * @param accountKey - Combined bank-account string used as a namespace.
    * @param txn - The raw IBankTransaction from the scraper.
    * @param parsed - The parsed ITransactionRecord with formatted date.
-   * @returns A string imported_id for use with Actual's importTransactions API.
+   * @returns A 16-char lowercase hex string for use with Actual's importTransactions API.
    */
   private static buildImportedId(
+    accountKey: string, txn: IBankTransaction, parsed: ITransactionRecord
+  ): string {
+    const description = txn.description ?? '';
+    const seed = `${accountKey}|${parsed.date}|${String(parsed.amount)}|${description}`;
+    return createHash('sha256').update(seed).digest('hex').slice(0, 16);
+  }
+
+  /**
+   * Reproduces the pre-2026-05 imported_id formula so existing rows in
+   * Actual Budget (inserted before the hash migration) can still be
+   * recognised by the dual-check dedup. Never used for new writes.
+   * @param accountKey - Combined bank-account string used as a namespace.
+   * @param txn - The raw IBankTransaction from the scraper.
+   * @param parsed - The parsed ITransactionRecord with formatted date.
+   * @returns The legacy `${accountKey}-${identifier || fallback}` string.
+   */
+  private static buildImportedIdLegacy(
     accountKey: string, txn: IBankTransaction, parsed: ITransactionRecord
   ): string {
     const fallback =

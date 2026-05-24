@@ -44,7 +44,7 @@ describe('TransactionService', () => {
       expect(mockApi.importTransactions).toHaveBeenCalledTimes(2);
     });
 
-    it('generates correct imported_id with identifier', async () => {
+    it('generates 16-char hex imported_id from (account, date, amount, description)', async () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: '9999' }];
@@ -52,17 +52,33 @@ describe('TransactionService', () => {
 
       const callArgs = mockApi.importTransactions.mock.calls[0];
       const transaction = callArgs[1][0];
-      expect(transaction.imported_id).toBe('discount-123456-9999');
+      expect(transaction.imported_id).toMatch(/^[a-f0-9]{16}$/);
     });
 
-    it('generates imported_id from date+amount when no identifier', async () => {
+    it('produces deterministic imported_id — same content → same hash', async () => {
+      mockApi.importTransactions.mockResolvedValue(undefined);
+
+      const txns1 = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: 'a' }];
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns1 });
+      const firstId = mockApi.importTransactions.mock.calls[0][1][0].imported_id;
+
+      // Different identifier, same content
+      mockApi.importTransactions.mockClear();
+      const txns2 = [{ date: '2026-02-14', chargedAmount: -100, description: 'Test', identifier: 'b' }];
+      await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns2 });
+      const secondId = mockApi.importTransactions.mock.calls[0][1][0].imported_id;
+
+      expect(secondId).toBe(firstId);
+    });
+
+    it('uses content-hash even when identifier is missing', async () => {
       mockApi.importTransactions.mockResolvedValue(undefined);
 
       const txns = [{ date: '2026-02-14', chargedAmount: -100.50, description: 'Test' }];
       await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       const transaction = mockApi.importTransactions.mock.calls[0][1][0];
-      expect(transaction.imported_id).toBe('discount-123456-2026-02-14--100.5');
+      expect(transaction.imported_id).toMatch(/^[a-f0-9]{16}$/);
     });
 
     it('uses chargedAmount over originalAmount', async () => {
@@ -206,6 +222,65 @@ describe('TransactionService', () => {
       expect(result.data.imported).toBe(0);
       expect(result.data.skipped).toBe(0);
       expect(mockApi.importTransactions).not.toHaveBeenCalled();
+    });
+
+    it('dedupes across runs when scraper returns unstable identifier (Bug #1)', async () => {
+      // Simulates re-running the importer: same content, different identifier
+      // each scrape. Old (identifier-based) formula would create a duplicate;
+      // new (content-hash) formula must dedup.
+      mockApi.importTransactions.mockResolvedValue(undefined);
+
+      // First run: insert the txn, capture its imported_id
+      const firstRun = [{
+        date: '2026-05-19', chargedAmount: -28, description: 'Sandro Pizza',
+        identifier: 'scrape-1-row-42',
+      }];
+      await service.importTransactions({
+        bankName: 'visaCal', accountNumber: '3308',
+        actualAccountId: 'acc-id', transactions: firstRun,
+      });
+      const insertedId = mockApi.importTransactions.mock.calls[0][1][0].imported_id;
+
+      // Second run: same merchant, date, amount; scraper returns different identifier
+      mockApi.importTransactions.mockClear();
+      mockApi.aqlQuery.mockResolvedValue({ data: [{ imported_id: insertedId }] });
+
+      const secondRun = [{
+        date: '2026-05-19', chargedAmount: -28, description: 'Sandro Pizza',
+        identifier: 'scrape-2-row-17',
+      }];
+      const result = await service.importTransactions({
+        bankName: 'visaCal', accountNumber: '3308',
+        actualAccountId: 'acc-id', transactions: secondRun,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(0);
+      expect(result.data.skipped).toBe(1);
+    });
+
+    it('dual-check recognises legacy-format imported_id from existing data', async () => {
+      // Migration safety: rows already in Actual Budget were inserted with
+      // the OLD formula `${accountKey}-${identifier}`. After deploy, the
+      // first scrape must still match those existing rows so we don't
+      // create one final duplicate burst.
+      mockApi.aqlQuery.mockResolvedValue({
+        data: [{ imported_id: 'discount-123456-legacy-id-xyz' }],
+      });
+      mockApi.importTransactions.mockResolvedValue(undefined);
+
+      const txns = [{
+        date: '2026-02-14', chargedAmount: -100, description: 'Existing row',
+        identifier: 'legacy-id-xyz',
+      }];
+      const result = await service.importTransactions({
+        bankName: 'discount', accountNumber: '123456',
+        actualAccountId: 'acc-id', transactions: txns,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(0);
+      expect(result.data.skipped).toBe(1);
     });
   });
 
