@@ -259,6 +259,46 @@ describe('TransactionService', () => {
       expect(result.data.skipped).toBe(1);
     });
 
+    it('collision: same-day same-amount same-description → second txn is treated as duplicate (documented tradeoff)', async () => {
+      // The new imported_id formula deliberately hashes only
+      // (accountKey, date, amount, description) to remain robust against
+      // upstream identifier drift. As a consequence, two genuinely
+      // distinct transactions sharing exactly that tuple (e.g. two
+      // identical coffee orders at the same merchant on the same day)
+      // collapse to the same imported_id, and Actual Budget records
+      // only the first one. This mirrors the upstream library's own
+      // canonicalizeTxn at index.mjs:9572 — same tuple, same trade-off.
+      // Including txn.identifier in the seed would re-introduce Bug 1
+      // (unstable identifier causes re-imports to duplicate); including
+      // txn.memo would break dedup whenever the scraper enriches memos
+      // on some runs but not others.
+      //
+      // Simulate Actual Budget's "already exists" behaviour: first call
+      // succeeds, second call rejects with the dup error message that
+      // TransactionService.handleImportError matches on.
+      mockApi.importTransactions
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('Transaction already exists'));
+
+      const sameDayPair = [
+        { date: '2026-05-19', chargedAmount: -28, description: 'Aroma Espresso', identifier: 'a' },
+        { date: '2026-05-19', chargedAmount: -28, description: 'Aroma Espresso', identifier: 'b' },
+      ];
+      const result = await service.importTransactions({
+        bankName: 'visaCal', accountNumber: '3308',
+        actualAccountId: 'acc-id', transactions: sameDayPair,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.imported).toBe(1);
+      expect(result.data.skipped).toBe(1);
+
+      // Both insert attempts use the SAME imported_id (proves the collision)
+      const firstCall = mockApi.importTransactions.mock.calls[0][1][0];
+      const secondCall = mockApi.importTransactions.mock.calls[1][1][0];
+      expect(secondCall.imported_id).toBe(firstCall.imported_id);
+    });
+
     it('dual-check recognises legacy-format imported_id from existing data', async () => {
       // Migration safety: rows already in Actual Budget were inserted with
       // the OLD formula `${accountKey}-${identifier}`. After deploy, the
