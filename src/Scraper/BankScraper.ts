@@ -20,6 +20,7 @@ import { DEFAULT_RESILIENCE_CONFIG, fail, succeed } from '../Types/Index.js';
 import { errorMessage, filterByDateCutoff,formatDate } from '../Utils/Index.js';
 import buildCredentials from './CredentialsBuilder.js';
 import { buildChromeArgs, getChromeDataDir } from './ScraperOptionsBuilder.js';
+import normalizeCreditCardSigns from './TransactionNormalizer.js';
 
 /** Company type map used to look up the scraper ID for each bank name. */
 type CompanyType = typeof CompanyTypes[keyof typeof CompanyTypes];
@@ -139,13 +140,31 @@ export class BankScraper {
     bankName: string, bankConfig: IBankConfig
   ): Promise<IScraperScrapingResult> {
     const mockResult = BankScraper.loadMockScraperResult(bankName);
-    if (mockResult.success) return mockResult.data;
+    if (mockResult.success) return BankScraper.normalizeSigns(bankName, mockResult.data);
     getLogger().info(`  🔍 Scraping transactions from ${bankName}...`);
     const result = await this.executeScrapeAttempt(bankName, bankConfig);
     if (!result.success && String(result.errorType) === 'INVALID_OTP') {
-      return await this.retryOtpScrape(bankName, bankConfig);
+      return BankScraper.normalizeSigns(bankName, await this.retryOtpScrape(bankName, bankConfig));
     }
-    return result;
+    return BankScraper.normalizeSigns(bankName, result);
+  }
+
+  /**
+   * Applies credit-card sign normalization to each account's transactions.
+   * Returns the scrape result unchanged for non-credit-card banks.
+   * @param bankName - The bank key used to determine whether to flip signs.
+   * @param result - The scrape result whose account txns may need normalization.
+   * @returns The same shape with normalized txns; non-success results pass through.
+   */
+  private static normalizeSigns(
+    bankName: string, result: IScraperScrapingResult
+  ): IScraperScrapingResult {
+    if (!result.success || !result.accounts) return result;
+    const normalizedAccounts = result.accounts.map(account => ({
+      ...account,
+      txns: normalizeCreditCardSigns(bankName, account.txns),
+    }));
+    return { ...result, accounts: normalizedAccounts };
   }
 
   /**
