@@ -1,51 +1,119 @@
 /**
- * Bank scraping orchestration extracted from Index.ts to keep it under 300 lines.
+ * BankScraper — thin coordinator that wires Registry + Strategy + Mapper
+ * + DateRangePolicy into one orchestrated scrape per bank.
+ *
+ * Phase-2 refactor: extracted live/mock dispatch (Strategy), bank lookup
+ * (Registry), date math (DateRangePolicy), sign normalization (Mapper),
+ * env-var coupling, and direct logger access. This class now contains no
+ * provider-specific logic; it delegates and adapts the result back to
+ * IScraperScrapingResult for backward compatibility with phase-3
+ * consumers (ProcessAllBanksStep, AccountImporter).
+ *
+ * Note: filterTransactionsByDate / computeStartDate / isEmptyResultError /
+ * logScrapeFailure are intentional back-compat re-exports consumed by
+ * AccountImporter and existing tests. Phase-3 will delete the shims and
+ * migrate consumers to IDateRangePolicy + ICanonicalScrapeResult.
  */
-import { existsSync, readFileSync, rmSync } from 'node:fs';
 
-import type {
-IScraperScrapingResult,
-ScraperCredentials,   ScraperOptions} from '@sergienko4/israeli-bank-scrapers';
-import { CompanyTypes,createScraper } from '@sergienko4/israeli-bank-scrapers';
+import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
 import { getScraperErrorAdvice } from '../Errors/ScraperErrorMessages.js';
+import type { ILogger } from '../Logger/ILogger.js';
 import { getLogger } from '../Logger/Index.js';
-import type { IRetryStrategy } from '../Resilience/RetryStrategy.js';
-import type { ITimeoutWrapper } from '../Resilience/TimeoutWrapper.js';
-import type TelegramNotifier from '../Services/Notifications/TelegramNotifier.js';
-import type NotificationService from '../Services/NotificationService.js';
-import TwoFactorService from '../Services/TwoFactorService.js';
-import type { IBankConfig,IImporterConfig, IProcedureSuccess, Procedure } from '../Types/Index.js';
-import { DEFAULT_RESILIENCE_CONFIG, fail, succeed } from '../Types/Index.js';
-import { errorMessage, filterByDateCutoff,formatDate } from '../Utils/Index.js';
-import buildCredentials from './CredentialsBuilder.js';
-import { buildChromeArgs, getChromeDataDir } from './ScraperOptionsBuilder.js';
-import normalizeCreditCardSigns from './TransactionNormalizer.js';
+import type {
+  IBankConfig, IProcedureSuccess, IRawScrape, ISignPolicy,
+} from '../Types/Index.js';
+import { succeed } from '../Types/Index.js';
+import { filterByDateCutoff, formatDate } from '../Utils/Index.js';
+import type { IBankRegistry } from './BankRegistry.js';
+import type { IScrapeResultMapper } from './Mappers/IScrapeResultMapper.js';
+import type { IDateRangePolicy } from './Policies/DateRangePolicy.js';
+import type { IBankScrapeStrategy } from './Strategies/IBankScrapeStrategy.js';
 
-/** Company type map used to look up the scraper ID for each bank name. */
-type CompanyType = typeof CompanyTypes[keyof typeof CompanyTypes];
-const COMPANY_TYPE_MAP: Partial<Record<string, CompanyType>> = {
-  'hapoalim': CompanyTypes.Hapoalim, 'leumi': CompanyTypes.Leumi,
-  'discount': CompanyTypes.Discount, 'mizrahi': CompanyTypes.Mizrahi,
-  'mercantile': CompanyTypes.Mercantile, 'otsarHahayal': CompanyTypes.OtsarHahayal,
-  'otsarhahayal': CompanyTypes.OtsarHahayal, 'beinleumi': CompanyTypes.Beinleumi,
-  'massad': CompanyTypes.Massad, 'yahav': CompanyTypes.Yahav,
-  'visaCal': CompanyTypes.VisaCal, 'visacal': CompanyTypes.VisaCal,
-  'max': CompanyTypes.Max, 'isracard': CompanyTypes.Isracard,
-  'amex': CompanyTypes.Amex, 'beyahadBishvilha': CompanyTypes.BeyahadBishvilha,
-  'beyahadbishvilha': CompanyTypes.BeyahadBishvilha, 'behatsdaa': CompanyTypes.Behatsdaa,
-  'pagi': CompanyTypes.Pagi, 'oneZero': CompanyTypes.OneZero, 'onezero': CompanyTypes.OneZero,
-};
-
+export { createDateRangePolicy } from './Policies/DateRangePolicy.js';
 
 const NO_RECORDS_PATTERNS = [
   'no transactions found', 'no results found', 'לא מצאנו תנועות',
 ];
 
+/** Bank-scraper coordinator dependencies. */
+export interface IBankScraperOpts {
+  readonly registry: IBankRegistry;
+  readonly strategy: IBankScrapeStrategy;
+  readonly mapper: IScrapeResultMapper;
+  readonly datePolicy: IDateRangePolicy;
+  readonly logger: ILogger;
+}
+
+/** Coordinator: registry → strategy → mapper → legacy adapter. */
+export class BankScraper {
+  /**
+   * Creates a BankScraper coordinator with injected collaborators.
+   * @param opts - Registry + strategy + mapper + datePolicy + logger.
+   */
+  constructor(private readonly opts: IBankScraperOpts) {}
+
+  /**
+   * Orchestrates a full scrape for one bank: resolve → scrape → map → adapt.
+   * Unknown-bank handling is delegated to the strategy: the mock strategy
+   * looks up fixtures by raw bank name (no registry needed), while the live
+   * strategy fails with status="unknown-bank" when companyType is missing.
+   * @param bankName - User-facing bank alias from config.
+   * @param bankConfig - Bank configuration block.
+   * @returns Legacy IScraperScrapingResult for backward compatibility.
+   */
+  public async scrapeBankWithResilience(
+    bankName: string, bankConfig: IBankConfig,
+  ): Promise<IScraperScrapingResult> {
+    const resolved = this.opts.registry.resolve(bankName);
+    const entry = resolved.success ? resolved.data : null;
+    const startDate = this.opts.datePolicy.computeStartDate(bankConfig);
+    this.opts.logger.info(
+      `  📅 Date range: ${this.opts.datePolicy.formatDateRange(bankConfig)}`);
+    const rawResult = await this.opts.strategy.scrape({
+      bankId: entry?.bankId ?? bankName,
+      companyType: entry?.companyType,
+      bankConfig, startDate, logger: this.opts.logger,
+    });
+    if (!rawResult.success) return BankScraper.buildFailureResult(rawResult.message);
+    const signPolicy: ISignPolicy = entry?.signPolicy ?? 'preserve';
+    return this.mapAndAdapt(rawResult.data, signPolicy, startDate);
+  }
+
+  /**
+   * Maps a successful raw scrape through the canonical layer and back to legacy.
+   * @param raw - IRawScrape envelope from the chosen strategy.
+   * @param signPolicy - Sign policy resolved from the registry (or 'preserve' default).
+   * @param startDate - Effective start date for this scrape window.
+   * @returns Legacy IScraperScrapingResult.
+   */
+  private mapAndAdapt(
+    raw: IRawScrape, signPolicy: ISignPolicy, startDate: Date,
+  ): IScraperScrapingResult {
+    const canonical = this.opts.mapper.mapToCanonical({
+      raw, signPolicy, startDate, endDate: new Date(),
+    });
+    return this.opts.mapper.canonicalToLegacy(canonical, raw.raw);
+  }
+
+  /**
+   * Builds a legacy failure result from an error message.
+   * @param message - Human-readable failure description.
+   * @returns IScraperScrapingResult with success=false and the message attached.
+   */
+  private static buildFailureResult(message: string): IScraperScrapingResult {
+    return {
+      success: false, errorType: undefined,
+      errorMessage: message, accounts: [],
+    };
+  }
+}
+
 /**
  * Computes the transaction start date based on daysBack or startDate config.
- * @param bankConfig - The IBankConfig whose date settings to use.
- * @returns The computed start Date for scraping.
+ * Back-compat shim; phase-3 migrates callers to IDateRangePolicy.
+ * @param bankConfig - Bank config whose date settings to use.
+ * @returns Computed start Date for scraping.
  */
 export function computeStartDate(bankConfig: IBankConfig): Date {
   if (bankConfig.daysBack) {
@@ -57,323 +125,50 @@ export function computeStartDate(bankConfig: IBankConfig): Date {
 }
 
 /**
- * Filters transactions to only those on or after the bank's configured start date.
- * @param txns - Array of transactions to filter.
+ * Filters transactions to those on or after the bank's configured start date.
+ * Back-compat shim consumed by AccountImporter; phase-3 migrates it.
+ * @param txns - Transactions to filter; not mutated.
  * @param bankConfig - Bank config providing the cutoff date.
  * @returns Filtered array, or original if no date filter is configured.
  */
 export function filterTransactionsByDate<T extends { date: Date | string }>(
-  txns: T[], bankConfig: IBankConfig
+  txns: T[], bankConfig: IBankConfig,
 ): T[] {
   if (!bankConfig.daysBack && !bankConfig.startDate) return txns;
   const startDate = computeStartDate(bankConfig);
-  const formattedDate = formatDate(startDate);
-  return filterByDateCutoff(txns, formattedDate);
+  const cutoff = formatDate(startDate);
+  return filterByDateCutoff(txns, cutoff);
 }
 
 /**
- * Checks whether a scraper failure indicates "no transactions found" vs. a real error.
+ * Checks whether a scraper failure indicates "no transactions" vs. a real error.
  * @param result - The IScraperScrapingResult to inspect.
  * @returns True when the error message matches a known empty-result pattern.
  */
 export function isEmptyResultError(result: IScraperScrapingResult): boolean {
-  const msg = (result.errorMessage ?? '').toLowerCase();
-  /**
-   * Checks if the message contains the given pattern (case-insensitive).
-   * @param p - Pattern string to match against.
-   * @returns True if the lowered message contains the lowered pattern.
-   */
-  const matchesPattern = (p: string): boolean => {
-    const lowered = p.toLowerCase();
-    return msg.includes(lowered);
-  };
-  return NO_RECORDS_PATTERNS.some(matchesPattern);
+  const rawMessage = result.errorMessage ?? '';
+  const msg = rawMessage.toLowerCase();
+  return NO_RECORDS_PATTERNS.some(pattern => {
+    const loweredPattern = pattern.toLowerCase();
+    return msg.includes(loweredPattern);
+  });
 }
 
 /**
  * Logs a scraper failure with a user-friendly hint based on the error type.
- * @param bankName - The name of the bank that failed.
- * @param result - The failed IScraperScrapingResult containing error details.
- * @returns A successful Procedure indicating the failure was logged.
+ * Back-compat shim — uses module-level getLogger() since callers do not
+ * thread an ILogger through; phase-3 will delete and inline at call sites.
+ * @param bankName - Name of the bank that failed.
+ * @param result - Failed IScraperScrapingResult containing error details.
+ * @returns Successful Procedure indicating the failure was logged.
  */
 export function logScrapeFailure(
-  bankName: string, result: IScraperScrapingResult
+  bankName: string, result: IScraperScrapingResult,
 ): IProcedureSuccess<{ status: string }> {
   const baseMsg = result.errorMessage ?? 'Unknown error';
-  const advice = getScraperErrorAdvice(result.errorType ?? '');
+  const errorType = result.errorType ?? '';
+  const advice = getScraperErrorAdvice(errorType);
   const hint = advice ? `. ${advice}` : '';
   getLogger().error(`  ❌ Failed to scrape ${bankName}: ${baseMsg}${hint}`);
   return succeed({ status: 'logged' });
-}
-
-/** Options injected into BankScraper for all scraping operations. */
-export interface IBankScraperOpts {
-  /** Full importer configuration (needed for proxy settings). */
-  config: IImporterConfig;
-  /** Retry strategy used for normal bank scrapes. */
-  retryStrategy: IRetryStrategy;
-  /** Retry strategy used for OTP banks (no retry — code is consumed on first use). */
-  noRetryStrategy: IRetryStrategy;
-  /** Timeout wrapper applied to each scrape attempt. */
-  timeoutWrapper: ITimeoutWrapper;
-  /** Telegram notifier for OTP prompts; null when Telegram is not configured. */
-  telegramNotifier: TelegramNotifier | null;
-  /** Notification service for retry messages. */
-  notificationService: NotificationService;
-}
-
-/** Orchestrates bank scraping: session management, OTP, mock data, and retry logic. */
-export class BankScraper {
-  /**
-   * Creates a BankScraper with the given scraping dependencies.
-   * @param opts - All services and strategies needed for scraping.
-   */
-  constructor(private readonly opts: IBankScraperOpts) {}
-
-  /**
-   * Scrapes a bank: uses mock data in E2E mode, retries once on INVALID_OTP.
-   * @param bankName - The bank key to scrape.
-   * @param bankConfig - The bank's full configuration.
-   * @returns The final IScraperScrapingResult after resilience handling.
-   */
-  public async scrapeBankWithResilience(
-    bankName: string, bankConfig: IBankConfig
-  ): Promise<IScraperScrapingResult> {
-    const mockResult = BankScraper.loadMockScraperResult(bankName);
-    if (mockResult.success) return BankScraper.normalizeSigns(bankName, mockResult.data);
-    getLogger().info(`  🔍 Scraping transactions from ${bankName}...`);
-    const result = await this.executeScrapeAttempt(bankName, bankConfig);
-    if (!result.success && String(result.errorType) === 'INVALID_OTP') {
-      return BankScraper.normalizeSigns(bankName, await this.retryOtpScrape(bankName, bankConfig));
-    }
-    return BankScraper.normalizeSigns(bankName, result);
-  }
-
-  /**
-   * Applies credit-card sign normalization to each account's transactions.
-   * Returns the scrape result unchanged for non-credit-card banks.
-   * @param bankName - The bank key used to determine whether to flip signs.
-   * @param result - The scrape result whose account txns may need normalization.
-   * @returns The same shape with normalized txns; non-success results pass through.
-   */
-  private static normalizeSigns(
-    bankName: string, result: IScraperScrapingResult
-  ): IScraperScrapingResult {
-    if (!result.success || !result.accounts) return result;
-    const normalizedAccounts = result.accounts.map(account => ({
-      ...account,
-      txns: normalizeCreditCardSigns(bankName, account.txns),
-    }));
-    return { ...result, accounts: normalizedAccounts };
-  }
-
-  /**
-   * Performs a single scrape attempt, applying the appropriate retry strategy.
-   * @param bankName - The bank to scrape.
-   * @param bankConfig - The bank's configuration.
-   * @returns The IScraperScrapingResult from the attempt.
-   */
-  private async executeScrapeAttempt(
-    bankName: string, bankConfig: IBankConfig
-  ): Promise<IScraperScrapingResult> {
-    const { scraper, credentials } = this.initBankScrape(bankName, bankConfig);
-    const strategy = bankConfig.twoFactorAuth
-      ? this.opts.noRetryStrategy : this.opts.retryStrategy;
-    const label = `Scraping ${bankName}`;
-    const timeoutMs = DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs;
-    /**
-     * Scrapes and wraps the result with a timeout.
-     * @returns Promise resolving to the scraper result.
-     */
-    const scrapeWithTimeout = (): Promise<IScraperScrapingResult> => {
-      const scrapePromise = scraper.scrape(credentials);
-      return this.opts.timeoutWrapper.wrap(scrapePromise, timeoutMs, label);
-    };
-    return await strategy.execute(scrapeWithTimeout, label);
-  }
-
-  /**
-   * Notifies the user that an OTP was rejected and retries the scrape.
-   * @param bankName - The bank whose OTP was rejected.
-   * @param bankConfig - The bank's configuration for the retry.
-   * @returns The IScraperScrapingResult from the retry attempt.
-   */
-  private async retryOtpScrape(
-    bankName: string, bankConfig: IBankConfig
-  ): Promise<IScraperScrapingResult> {
-    getLogger().warn(`  ⚠️  OTP rejected — requesting a new code for ${bankName}`);
-    await this.opts.notificationService.sendMessage(
-      `⚠️ OTP for <b>${bankName}</b> was rejected. ` +
-      'A new code will be requested — please check your SMS.'
-    );
-    return await this.executeScrapeAttempt(bankName, bankConfig);
-  }
-
-  /**
-   * Looks up the company type, builds OTP retriever, creates scraper + credentials.
-   * @param bankName - The bank key used to look up CompanyTypes.
-   * @param bankConfig - The bank's full configuration.
-   * @returns Object with the initialized scraper and credentials.
-   */
-  private initBankScrape(
-    bankName: string, bankConfig: IBankConfig
-  ): { scraper: ReturnType<typeof createScraper>; credentials: ScraperCredentials } {
-    const companyType = COMPANY_TYPE_MAP[bankName.toLowerCase()];
-    if (!companyType) throw new TypeError(`Unknown bank: ${bankName}`);
-    const otpRetriever = this.buildOtpRetriever(bankName, bankConfig);
-    const options = this.buildScraperOptions(companyType, bankConfig, otpRetriever);
-    return {
-      scraper: BankScraper.prepareScraper(bankConfig, bankName, options),
-      credentials: buildCredentials(bankConfig, otpRetriever),
-    };
-  }
-
-  /**
-   * Optionally clears the bank session, logs the date range, and creates a scraper.
-   * @param bankConfig - Bank configuration for session and logging.
-   * @param bankName - The bank name used for logging.
-   * @param options - ScraperOptions to pass to createScraper.
-   * @returns The newly created scraper instance.
-   */
-  private static prepareScraper(
-    bankConfig: IBankConfig, bankName: string, options: ScraperOptions
-  ): ReturnType<typeof createScraper> {
-    if (bankConfig.clearSession) BankScraper.clearBankSession(bankName);
-    getLogger().info(`  🔧 Creating scraper for ${bankName}...`);
-    BankScraper.logDateRange(bankConfig);
-    return createScraper(options);
-  }
-
-  /**
-   * Builds ScraperOptions including start date, Chrome args, and optional OTP retriever.
-   * @param companyType - The CompanyTypes enum value for the target bank.
-   * @param bankConfig - The bank's configuration.
-   * @param otpRetriever - Optional async OTP code provider.
-   * @returns Configured ScraperOptions ready for createScraper().
-   */
-  private buildScraperOptions(
-    companyType: typeof CompanyTypes[keyof typeof CompanyTypes],
-    bankConfig: IBankConfig,
-    otpRetriever?: () => Promise<string>
-  ): ScraperOptions {
-    return {
-      companyId: companyType,
-      startDate: computeStartDate(bankConfig),
-      args: buildChromeArgs(this.opts.config.proxy),
-      defaultTimeout: bankConfig.timeout ?? 60_000,
-      ...(bankConfig.navigationRetryCount
-        ? { navigationRetryCount: bankConfig.navigationRetryCount } : {}),
-      ...(otpRetriever
-        ? {
-          /**
-           * Delegates to the injected otpRetriever, ignoring the phone hint.
-           * @param _phoneHint - Phone hint from the scraper (not used).
-           * @returns Promise resolving to the OTP code string.
-           */
-          otpCodeRetriever: (_phoneHint: string) => otpRetriever()
-        } : {}),
-    };
-  }
-
-  /**
-   * Determines whether a Telegram-based OTP retriever is needed for this bank.
-   * @param bankConfig - The IBankConfig whose twoFactorAuth flag is read.
-   * @returns True when 2FA is enabled and Telegram is configured.
-   */
-  private needsOtpRetriever(bankConfig: IBankConfig): boolean {
-    return Boolean(
-      bankConfig.twoFactorAuth
-      && !bankConfig.otpLongTermToken
-      && this.opts.telegramNotifier
-    );
-  }
-
-  /**
-   * Creates a Telegram-based OTP retriever for 2FA banks when configured.
-   * @param bankName - The bank name used in the Telegram prompt.
-   * @param bankConfig - The IBankConfig whose twoFactorAuth flag is read.
-   * @returns An async OTP retriever function, or undefined if 2FA is not needed.
-   */
-  private buildOtpRetriever(
-    bankName: string, bankConfig: IBankConfig
-  ): (() => Promise<string>) | undefined {
-    const notifier = this.opts.telegramNotifier;
-    if (!this.needsOtpRetriever(bankConfig) || !notifier) {
-      const noRetriever = void 0;
-      return noRetriever;
-    }
-    const twoFactor = new TwoFactorService(notifier, bankConfig.twoFactorTimeout);
-    getLogger().info(`  🔐 2FA enabled for ${bankName} (via Telegram)`);
-    return twoFactor.createOtpRetriever(bankName);
-  }
-
-  /**
-   * Deletes the Chrome browser session data for a bank to force a clean login.
-   * @param bankName - The bank whose Chrome data directory should be cleared.
-   */
-  private static clearBankSession(bankName: string): void {
-    const bankDir = getChromeDataDir(bankName);
-    if (!existsSync(bankDir)) return;
-    getLogger().info(`  🧹 Clearing browser session for ${bankName}`);
-    try { rmSync(bankDir, { recursive: true, force: true }); }
-    catch (error) {
-      const msg = errorMessage(error);
-      getLogger().warn(`  ⚠️  Failed to clear session for ${bankName}: ${msg}`);
-    }
-  }
-
-  /**
-   * Logs the effective date range being used for scraping.
-   * @param bankConfig - The IBankConfig whose date settings to display.
-   */
-  private static logDateRange(bankConfig: IBankConfig): void {
-    if (bankConfig.daysBack) {
-      const startDate = computeStartDate(bankConfig);
-      getLogger().info(
-        `  📅 Date range: last ${String(bankConfig.daysBack)} days ` +
-        `(from ${formatDate(startDate)})`
-      );
-    } else if (bankConfig.startDate) {
-      getLogger().info(`  📅 Date range: from ${bankConfig.startDate} to today`);
-    } else {
-      getLogger().info('  📅 Date range: using bank default (usually ~1 year)');
-    }
-  }
-
-  /**
-   * Loads a mock scraper result when E2E mock env vars are set.
-   * @param bankName - The bank whose mock data file to load.
-   * @returns Procedure with the parsed result on success, or failure if mock mode is inactive.
-   */
-  private static loadMockScraperResult(
-    bankName: string
-  ): Procedure<IScraperScrapingResult> {
-    const mockDir = process.env.E2E_MOCK_SCRAPER_DIR;
-    let mockDirFile = '';
-    if (mockDir) {
-      const bankSpecificFile = `${mockDir}/${bankName}.json`;
-      mockDirFile = existsSync(bankSpecificFile)
-        ? bankSpecificFile : `${mockDir}/default.json`;
-    }
-    const file = mockDirFile || process.env.E2E_MOCK_SCRAPER_FILE || '';
-    if (!file) return fail('Mock mode is not active');
-    getLogger().info(`  🧪 Using mock scraper data from ${file}`);
-    const parsed = BankScraper.parseMockFile(file);
-    return succeed(parsed);
-  }
-
-  /**
-   * Reads and parses a mock scraper JSON file for E2E testing.
-   * @param filePath - Absolute path to the mock JSON file.
-   * @returns Parsed IScraperScrapingResult.
-   */
-  private static parseMockFile(filePath: string): IScraperScrapingResult {
-    const raw = readFileSync(filePath, 'utf8');
-    const parsed: unknown = JSON.parse(raw);
-    const data = parsed as { success?: boolean; accounts?: unknown[] };
-    if (typeof data.success !== 'boolean' || !Array.isArray(data.accounts)) {
-      throw new TypeError('Invalid mock scraper file: missing success or accounts');
-    }
-    return data as IScraperScrapingResult;
-  }
 }
