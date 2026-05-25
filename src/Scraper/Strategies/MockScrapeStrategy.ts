@@ -13,6 +13,7 @@ import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import type { ILogger } from '../../Logger/ILogger.js';
 import type { IRawScrape, Procedure } from '../../Types/Index.js';
 import { fail, succeed } from '../../Types/Index.js';
+import { errorMessage } from '../../Utils/Index.js';
 import type {
   IBankScrapeStrategy, IBankScrapeStrategyOpts,
 } from './IBankScrapeStrategy.js';
@@ -82,8 +83,9 @@ export class MockScrapeStrategy implements IBankScrapeStrategy {
   private resolveFile(bankId: string): string {
     if (this.opts.mockDir) {
       const bankSpecific = `${this.opts.mockDir}/${bankId}.json`;
-      const hasBankFixture = existsSync(bankSpecific);
-      return hasBankFixture ? bankSpecific : `${this.opts.mockDir}/default.json`;
+      if (existsSync(bankSpecific)) return bankSpecific;
+      const fallback = `${this.opts.mockDir}/default.json`;
+      return existsSync(fallback) ? fallback : '';
     }
     return this.opts.mockFile ?? '';
   }
@@ -94,8 +96,28 @@ export class MockScrapeStrategy implements IBankScrapeStrategy {
    * @returns Procedure success with the parsed result, or failure on shape mismatch.
    */
   private static parseMockFile(filePath: string): Procedure<IScraperScrapingResult> {
-    const raw = readFileSync(filePath, 'utf8');
-    const parsed: unknown = JSON.parse(raw);
+    try {
+      const raw = readFileSync(filePath, 'utf8');
+      const parsed: unknown = JSON.parse(raw);
+      return MockScrapeStrategy.validateShape(parsed, filePath);
+    } catch (error: unknown) {
+      const msg = errorMessage(error);
+      return fail(
+        `Invalid mock scraper file (${filePath}): ${msg}`,
+        { status: 'invalid-mock' },
+      );
+    }
+  }
+
+  /**
+   * Validates the parsed JSON has the IScraperScrapingResult shape.
+   * @param parsed - Result of JSON.parse on the fixture file.
+   * @param filePath - Path used to enrich the failure message.
+   * @returns Procedure success when the shape matches, failure otherwise.
+   */
+  private static validateShape(
+    parsed: unknown, filePath: string,
+  ): Procedure<IScraperScrapingResult> {
     const data = parsed as { success?: boolean; accounts?: unknown[] };
     const hasSuccessFlag = typeof data.success === 'boolean';
     const hasValidAccounts = data.accounts === undefined || Array.isArray(data.accounts);

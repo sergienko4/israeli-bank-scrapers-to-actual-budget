@@ -71,6 +71,14 @@ describe('DefaultScrapeResultMapper.mapToCanonical', () => {
     });
     expect(canonical.accounts).toHaveLength(0);
   });
+
+  it('treats missing account.txns as empty array (no throw)', () => {
+    const raw = makeRaw('discount', [{ accountNumber: '7', balance: 10 }]);
+    const canonical = mapper.mapToCanonical({
+      raw, signPolicy: 'preserve', startDate, endDate,
+    });
+    expect(canonical.accounts[0].txns).toEqual([]);
+  });
 });
 
 describe('DefaultScrapeResultMapper.canonicalToLegacy', () => {

@@ -59,14 +59,18 @@ describe('createBankRegistry', () => {
   it('marks credit-card banks with flip-credit sign policy', () => {
     for (const id of ['visacal', 'max', 'isracard', 'amex']) {
       const result = registry.resolve(id);
-      if (result.success) expect(result.data.signPolicy).toBe('flip-credit');
+      expect(result.success).toBe(true);
+      if (!result.success) continue;
+      expect(result.data.signPolicy).toBe('flip-credit');
     }
   });
 
   it('marks regular banks with preserve sign policy', () => {
     for (const id of ['hapoalim', 'leumi', 'discount', 'mizrahi']) {
       const result = registry.resolve(id);
-      if (result.success) expect(result.data.signPolicy).toBe('preserve');
+      expect(result.success).toBe(true);
+      if (!result.success) continue;
+      expect(result.data.signPolicy).toBe('preserve');
     }
   });
 });

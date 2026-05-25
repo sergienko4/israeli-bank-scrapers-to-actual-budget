@@ -149,7 +149,7 @@ if (CONFIG.proxy?.server) LOGGER.info('🌐 Using configured proxy');
 // Wire up orchestration — select scrape strategy by env (mock vs live).
 const MOCK_DIR = process.env.E2E_MOCK_SCRAPER_DIR;
 const MOCK_FILE = process.env.E2E_MOCK_SCRAPER_FILE;
-const isMockMode = Boolean(MOCK_DIR ?? MOCK_FILE);
+const isMockMode = Boolean(MOCK_DIR || MOCK_FILE);
 const SCRAPE_STRATEGY: IBankScrapeStrategy = isMockMode
   ? new MockScrapeStrategy({ mockDir: MOCK_DIR, mockFile: MOCK_FILE, logger: LOGGER })
   : new LiveScrapeStrategy({

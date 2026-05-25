@@ -17,17 +17,55 @@ export interface IDateRangePolicy {
 }
 
 /**
+ * Checks whether bankConfig.daysBack is a usable positive integer.
+ * @param value - Raw daysBack from config; may be undefined or invalid.
+ * @returns True only for finite positive integers.
+ */
+function isValidDaysBack(value: unknown): value is number {
+  return typeof value === 'number'
+    && Number.isInteger(value)
+    && value > 0;
+}
+
+/**
+ * Checks whether bankConfig.startDate parses to a valid Date.
+ * @param value - Raw startDate from config; may be empty or invalid.
+ * @returns True only when value parses to a finite Date.
+ */
+function hasParseableStartDate(value?: string): boolean {
+  if (!value) return false;
+  const candidate = new Date(value);
+  const timestamp = candidate.getTime();
+  return !Number.isNaN(timestamp);
+}
+
+/**
  * Computes the cutoff start date for a bank scrape.
  * @param bankConfig - Bank config whose daysBack/startDate is read.
  * @returns Date representing the earliest transaction included.
  */
 function computeStartDate(bankConfig: IBankConfig): Date {
-  if (bankConfig.daysBack) {
+  if (isValidDaysBack(bankConfig.daysBack)) {
     const date = new Date();
     date.setDate(date.getDate() - (bankConfig.daysBack - 1));
     return date;
   }
-  return bankConfig.startDate ? new Date(bankConfig.startDate) : new Date();
+  if (bankConfig.startDate) {
+    const parsed = new Date(bankConfig.startDate);
+    const timestamp = parsed.getTime();
+    if (!Number.isNaN(timestamp)) return parsed;
+  }
+  return new Date();
+}
+
+/**
+ * Reports whether the config requested any date filtering at all.
+ * @param bankConfig - Bank config inspected for date constraints.
+ * @returns True when daysBack is valid or startDate parses.
+ */
+function hasDateFilter(bankConfig: IBankConfig): boolean {
+  if (isValidDaysBack(bankConfig.daysBack)) return true;
+  return hasParseableStartDate(bankConfig.startDate);
 }
 
 /**
@@ -39,7 +77,7 @@ function computeStartDate(bankConfig: IBankConfig): Date {
 function filterByDate<T extends { date: Date | string }>(
   txns: readonly T[], bankConfig: IBankConfig,
 ): readonly T[] {
-  if (!bankConfig.daysBack && !bankConfig.startDate) return txns;
+  if (!hasDateFilter(bankConfig)) return txns;
   const startDate = computeStartDate(bankConfig);
   const cutoff = formatDate(startDate);
   return filterByDateCutoff([...txns], cutoff);
@@ -51,12 +89,14 @@ function filterByDate<T extends { date: Date | string }>(
  * @returns Phrase such as "last 7 days (from 2026-05-18)".
  */
 function formatDateRange(bankConfig: IBankConfig): string {
-  if (bankConfig.daysBack) {
+  if (isValidDaysBack(bankConfig.daysBack)) {
     const startDate = computeStartDate(bankConfig);
     const startStr = formatDate(startDate);
     return `last ${String(bankConfig.daysBack)} days (from ${startStr})`;
   }
-  if (bankConfig.startDate) return `from ${bankConfig.startDate} to today`;
+  if (hasParseableStartDate(bankConfig.startDate)) {
+    return `from ${String(bankConfig.startDate)} to today`;
+  }
   return 'bank default (usually ~1 year)';
 }
 

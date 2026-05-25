@@ -72,12 +72,36 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
       `  🔍 Scraping transactions from ${scrapeOpts.bankId}...`);
     const first = await this.executeAttempt(scrapeOpts);
     if (LiveScrapeStrategy.isInvalidOtpFailure(first)) {
-      const retried = await this.retryAfterOtpReject(scrapeOpts);
-      const retryEnvelope = LiveScrapeStrategy.wrap(scrapeOpts, retried, 2);
-      return succeed(retryEnvelope);
+      return await this.handleOtpReject(scrapeOpts);
     }
-    const firstEnvelope = LiveScrapeStrategy.wrap(scrapeOpts, first, 1);
-    return succeed(firstEnvelope);
+    return LiveScrapeStrategy.wrapSucceed(scrapeOpts, first, 1);
+  }
+
+  /**
+   * Runs the OTP-rejected retry path and wraps the retried provider result.
+   * @param scrapeOpts - Per-scrape inputs reused for the retry attempt.
+   * @returns Procedure success with attemptCount=2 envelope.
+   */
+  private async handleOtpReject(
+    scrapeOpts: IBankScrapeStrategyOpts,
+  ): Promise<Procedure<IRawScrape>> {
+    const retried = await this.retryAfterOtpReject(scrapeOpts);
+    return LiveScrapeStrategy.wrapSucceed(scrapeOpts, retried, 2);
+  }
+
+  /**
+   * Wraps a provider result in an IRawScrape envelope and returns succeed().
+   * @param scrapeOpts - Per-scrape inputs.
+   * @param raw - Provider scrape result.
+   * @param attemptCount - 1 or 2 depending on retry path.
+   * @returns Procedure success carrying the wrapped envelope.
+   */
+  private static wrapSucceed(
+    scrapeOpts: IBankScrapeStrategyOpts,
+    raw: IScraperScrapingResult, attemptCount: number,
+  ): Procedure<IRawScrape> {
+    const envelope = LiveScrapeStrategy.wrap(scrapeOpts, raw, attemptCount);
+    return succeed(envelope);
   }
 
   /**
@@ -89,9 +113,33 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
     scrapeOpts: IBankScrapeStrategyOpts,
   ): Promise<IScraperScrapingResult> {
     const { scraper, credentials } = this.initScrape(scrapeOpts);
-    const isTwoFactor = scrapeOpts.bankConfig.twoFactorAuth;
-    const retryStrategy = isTwoFactor ? this.opts.noRetryStrategy : this.opts.retryStrategy;
+    const retryStrategy = this.pickRetryStrategy(scrapeOpts.bankConfig);
     const label = `Scraping ${scrapeOpts.bankId}`;
+    const wrapped = this.buildTimeoutWrappedScrape(scraper, credentials, label);
+    return retryStrategy.execute(wrapped, label);
+  }
+
+  /**
+   * Picks the retry strategy based on whether the bank uses 2FA.
+   * @param bankConfig - Bank config whose twoFactorAuth is inspected.
+   * @returns noRetryStrategy for 2FA banks, retryStrategy otherwise.
+   */
+  private pickRetryStrategy(bankConfig: IBankConfig): IRetryStrategy {
+    const isTwoFactor = bankConfig.twoFactorAuth;
+    return isTwoFactor ? this.opts.noRetryStrategy : this.opts.retryStrategy;
+  }
+
+  /**
+   * Builds a timeout-wrapped invocation of scraper.scrape(credentials).
+   * @param scraper - Created scraper instance.
+   * @param credentials - Credentials bundle passed to scraper.scrape.
+   * @param label - Diagnostic label for the timeout wrapper.
+   * @returns Zero-arg function returning the scrape result subject to timeout.
+   */
+  private buildTimeoutWrappedScrape(
+    scraper: ReturnType<typeof createScraper>,
+    credentials: ScraperCredentials, label: string,
+  ): () => Promise<IScraperScrapingResult> {
     const timeoutMs = DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs;
     const timeoutWrapper = this.opts.timeoutWrapper;
     /**
@@ -102,7 +150,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
       const scrapePromise = scraper.scrape(credentials);
       return timeoutWrapper.wrap(scrapePromise, timeoutMs, label);
     };
-    return retryStrategy.execute(wrapped, label);
+    return wrapped;
   }
 
   /**
@@ -113,17 +161,28 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
   private initScrape(
     scrapeOpts: IBankScrapeStrategyOpts,
   ): { scraper: ReturnType<typeof createScraper>; credentials: ScraperCredentials } {
-    const retriever = scrapeOpts.otpRetriever
+    const retriever = this.resolveOtpRetriever(scrapeOpts);
+    const options = this.buildScraperOptions(scrapeOpts, retriever);
+    const scraper = LiveScrapeStrategy.prepareScraper(scrapeOpts, options);
+    const credentials = buildCredentials(scrapeOpts.bankConfig, retriever);
+    return { scraper, credentials };
+  }
+
+  /**
+   * Resolves the OTP retriever: caller-provided override, or registry-built.
+   * @param scrapeOpts - Per-scrape inputs (bankId, bankConfig, logger).
+   * @returns OTP retriever, or undefined when 2FA is not needed.
+   */
+  private resolveOtpRetriever(
+    scrapeOpts: IBankScrapeStrategyOpts,
+  ): (() => Promise<string>) | undefined {
+    return scrapeOpts.otpRetriever
       ?? LiveScrapeStrategy.buildOtpRetriever({
         bankId: scrapeOpts.bankId,
         bankConfig: scrapeOpts.bankConfig,
         notifier: this.opts.telegramNotifier,
         logger: scrapeOpts.logger,
       });
-    const options = this.buildScraperOptions(scrapeOpts, retriever);
-    const scraper = LiveScrapeStrategy.prepareScraper(scrapeOpts, options);
-    const credentials = buildCredentials(scrapeOpts.bankConfig, retriever);
-    return { scraper, credentials };
   }
 
   /**
@@ -136,22 +195,33 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
     scrapeOpts: IBankScrapeStrategyOpts,
     otpRetriever: (() => Promise<string>) | undefined,
   ): ScraperOptions {
-    const navRetry = scrapeOpts.bankConfig.navigationRetryCount;
     const base: ScraperOptions = {
       companyId: scrapeOpts.companyType,
       startDate: scrapeOpts.startDate,
       args: buildChromeArgs(this.opts.config.proxy),
       defaultTimeout: scrapeOpts.bankConfig.timeout ?? 60_000,
     };
+    const navRetry = scrapeOpts.bankConfig.navigationRetryCount;
     if (navRetry) base.navigationRetryCount = navRetry;
-    if (otpRetriever) {
-      /**
-       * Adapter from the provider's otpCodeRetriever signature to our retriever.
-       * @returns Async OTP code resolved from the injected retriever.
-       */
-      base.otpCodeRetriever = (): Promise<string> => otpRetriever();
-    }
+    LiveScrapeStrategy.attachOtpRetriever(base, otpRetriever);
     return base;
+  }
+
+  /**
+   * Attaches an OTP retriever adapter to the ScraperOptions when configured.
+   * @param target - ScraperOptions object that will be mutated in place.
+   * @param otpRetriever - Optional async OTP code provider.
+   */
+  private static attachOtpRetriever(
+    target: ScraperOptions,
+    otpRetriever: (() => Promise<string>) | undefined,
+  ): void {
+    if (!otpRetriever) return;
+    /**
+     * Adapter from the provider's otpCodeRetriever signature to our retriever.
+     * @returns Async OTP code resolved from the injected retriever.
+     */
+    target.otpCodeRetriever = (): Promise<string> => otpRetriever();
   }
 
   /**
@@ -240,7 +310,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
     logger.info(`  🧹 Clearing browser session for ${bankId}`);
     try {
       rmSync(bankDir, { recursive: true, force: true });
-    } catch (error) {
+    } catch (error: unknown) {
       const msg = errorMessage(error);
       logger.warn(`  ⚠️  Failed to clear session for ${bankId}: ${msg}`);
     }

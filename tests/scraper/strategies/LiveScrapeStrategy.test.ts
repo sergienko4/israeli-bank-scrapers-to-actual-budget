@@ -121,6 +121,8 @@ describe('LiveScrapeStrategy', () => {
   it('reports attemptCount=1 when the first attempt succeeds', async () => {
     mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
     const result = await makeStrategy().scrape(makeOpts());
-    if (result.success) expect(result.data.attemptCount).toBe(1);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.attemptCount).toBe(1);
   });
 });

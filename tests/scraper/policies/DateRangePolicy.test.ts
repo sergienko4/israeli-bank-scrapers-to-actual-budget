@@ -3,10 +3,21 @@
  * inside BankScraper (computeStartDate, filter, log).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { createDateRangePolicy } from '../../../src/Scraper/Policies/DateRangePolicy.js';
 import { fakeBankConfig } from '../../helpers/factories.js';
+
+const FROZEN_NOW = new Date('2026-02-15T12:00:00.000Z');
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(FROZEN_NOW);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('createDateRangePolicy().computeStartDate', () => {
   const policy = createDateRangePolicy();
@@ -27,6 +38,24 @@ describe('createDateRangePolicy().computeStartDate', () => {
 
   it('returns today when neither is set', () => {
     const config = fakeBankConfig({ daysBack: undefined, startDate: undefined });
+    const result = policy.computeStartDate(config);
+    expect(result.toDateString()).toBe(new Date().toDateString());
+  });
+
+  it('falls back to today when daysBack is negative', () => {
+    const config = fakeBankConfig({ daysBack: -5, startDate: undefined });
+    const result = policy.computeStartDate(config);
+    expect(result.toDateString()).toBe(new Date().toDateString());
+  });
+
+  it('falls back to today when daysBack is zero', () => {
+    const config = fakeBankConfig({ daysBack: 0, startDate: undefined });
+    const result = policy.computeStartDate(config);
+    expect(result.toDateString()).toBe(new Date().toDateString());
+  });
+
+  it('falls back to today when startDate is unparseable', () => {
+    const config = fakeBankConfig({ daysBack: undefined, startDate: 'not-a-date' });
     const result = policy.computeStartDate(config);
     expect(result.toDateString()).toBe(new Date().toDateString());
   });

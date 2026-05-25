@@ -42,7 +42,10 @@ function applySignPolicy(
 function mapAccount(
   account: ProviderAccount, opts: IMapToCanonicalOpts,
 ): ICanonicalAccount {
-  const accountTxns = account.txns as readonly IBankTransaction[];
+  const hasTxns = Array.isArray(account.txns);
+  const accountTxns = hasTxns
+    ? (account.txns as readonly IBankTransaction[])
+    : ([] as readonly IBankTransaction[]);
   const txns = applySignPolicy(accountTxns, opts);
   return {
     accountNumber: account.accountNumber,

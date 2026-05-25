@@ -59,13 +59,43 @@ describe('MockScrapeStrategy', () => {
   });
 
   it('falls back to default.json when per-bank file is missing', async () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(fs.existsSync).mockImplementation(
+      (p: fs.PathLike) => String(p).endsWith('default.json'),
+    );
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
       success: true, accounts: [],
     }));
     const strategy = new MockScrapeStrategy({ mockDir: '/m', logger });
     await strategy.scrape(makeOpts('discount'));
     expect(fs.readFileSync).toHaveBeenCalledWith('/m/default.json', 'utf8');
+  });
+
+  it('returns failure when both per-bank and default.json are missing', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    const strategy = new MockScrapeStrategy({ mockDir: '/m', logger });
+    const result = await strategy.scrape(makeOpts('discount'));
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.message).toContain('Mock mode is not active');
+  });
+
+  it('returns failure (no throw) when fixture JSON cannot be parsed', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue('{not valid json');
+    const strategy = new MockScrapeStrategy({ mockFile: '/m/x.json', logger });
+    const result = await strategy.scrape(makeOpts('discount'));
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.status).toBe('invalid-mock');
+  });
+
+  it('returns failure (no throw) when readFileSync raises', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('EACCES');
+    });
+    const strategy = new MockScrapeStrategy({ mockFile: '/m/x.json', logger });
+    const result = await strategy.scrape(makeOpts('discount'));
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.status).toBe('invalid-mock');
   });
 
   it('returns failure for invalid mock file structure (no throw)', async () => {
@@ -87,9 +117,9 @@ describe('MockScrapeStrategy', () => {
     }));
     const strategy = new MockScrapeStrategy({ mockFile: '/m/x.json', logger });
     const result = await strategy.scrape(makeOpts('discount'));
-    if (result.success) {
-      expect(result.data.strategy).toBe('mock');
-      expect(result.data.attemptCount).toBe(1);
-    }
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.strategy).toBe('mock');
+    expect(result.data.attemptCount).toBe(1);
   });
 });
