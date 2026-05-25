@@ -7,6 +7,16 @@ import type { Procedure as ProcedureType } from './Procedure.js';
 export type { IProcedureFailure, IProcedureSuccess, Procedure } from './Procedure.js';
 export { fail, fromPromise, isFail,isSuccess, succeed } from './ProcedureHelpers.js';
 
+// Canonical scraping types (Phase-2 contract — see ./Scraping/Index.ts)
+export type {
+  ICanonicalAccount,
+  ICanonicalScrapeMetadata,
+  ICanonicalScrapeResult,
+  IRawScrape,
+  IScrapeStrategyKind,
+  ISignPolicy,
+} from './Scraping/Index.js';
+
 
 /** Connection and budget settings for the Actual Budget server. */
 export interface IActualConfig {
