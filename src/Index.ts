@@ -38,7 +38,7 @@ import SpendingWatchService from './Services/SpendingWatchService.js';
 import { TransactionService } from './Services/TransactionService.js';
 import TranslateCategoryResolver from './Services/TranslateCategoryResolver.js';
 import type { CategorizationMode, IImporterConfig, Procedure } from './Types/Index.js';
-import { DEFAULT_RESILIENCE_CONFIG, fail, isFail, succeed } from './Types/Index.js';
+import { DEFAULT_RESILIENCE_CONFIG, isFail, succeed } from './Types/Index.js';
 import { errorMessage } from './Utils/Index.js';
 
 // --validate mode: validate config and exit before full initialization
@@ -244,6 +244,24 @@ async function handleFatalError(error: unknown): Promise<never> {
 }
 
 /**
+ * Handles a pipeline-level failure (e.g. all-banks-failed): notifies and exits.
+ * Mirrors handleFatalError but for non-throw failures returned by steps so the
+ * Docker container shuts down the Actual API and the webhook receives the
+ * error event instead of hanging on a live API connection.
+ * @param failure - Pipeline failure carrying the user-facing message.
+ * @param failure.message - Human-readable pipeline failure message.
+ * @returns Never — always exits the process with code 1.
+ */
+async function handlePipelineFailure(
+  failure: { readonly message: string },
+): Promise<never> {
+  LOGGER.error(`Pipeline failed: ${failure.message}`);
+  await NOTIFICATION_SERVICE.sendError(failure.message);
+  try { await api.shutdown(); } catch { /* ignore shutdown error */ }
+  process.exit(1);
+}
+
+/**
  * Gracefully shuts down the Actual Budget API during process termination.
  * @returns Procedure indicating shutdown result.
  */
@@ -262,11 +280,7 @@ async function main(): Promise<Procedure<{ status: string }>> {
   try {
     SHUTDOWN_HANDLER.onShutdown(shutdownApiGracefully);
     const result = await execute(PIPELINE, PIPELINE_CONTEXT);
-    if (isFail(result)) {
-      LOGGER.error(`Pipeline failed: ${result.message}`);
-      process.exitCode = 1;
-      return fail(result.message);
-    }
+    if (isFail(result)) return await handlePipelineFailure(result);
     const exitCode = (result.data.state.exitCode as number | undefined) ?? 0;
     process.exit(exitCode);
   } catch (error) {
