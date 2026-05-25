@@ -30,16 +30,19 @@ const DEFAULT_LOG_DIR = './logs';
  * @param filePath - Absolute path to the JSON file to read.
  * @returns Procedure with parsed object, or failure if file is absent.
  */
-export function readJsonOrEncrypted(filePath: string): Procedure<Record<string, string>> {
+export function readJsonOrEncrypted(
+  filePath: string
+): Procedure<Record<string, unknown>> {
   if (!existsSync(filePath)) return fail(`File not found: ${filePath}`);
   try {
     const raw = readFileSync(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    if (!isEncryptedConfig(parsed)) return succeed(parsed);
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const guard = parsed as Record<string, string | number | boolean>;
+    if (!isEncryptedConfig(guard)) return succeed(parsed);
     const password = getEncryptionPassword();
     if (!password) return fail('Encryption password required');
     const decryptedJson = decryptConfig(raw, password);
-    return succeed(JSON.parse(decryptedJson) as Record<string, string>);
+    return succeed(JSON.parse(decryptedJson) as Record<string, unknown>);
   } catch (error: unknown) {
     return fail(`Failed to read ${filePath}: ${errorMessage(error)}`);
   }

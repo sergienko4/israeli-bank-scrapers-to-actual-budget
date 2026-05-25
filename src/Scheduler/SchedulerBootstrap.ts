@@ -76,6 +76,24 @@ function resolveMediator(tgResult: Procedure<ImportMediator>): ImportMediator {
 }
 
 /**
+ * Logs the schedule banner, validates the cron, and enters the scheduler loop.
+ *
+ * @param schedule - Cron expression string from SCHEDULE env var.
+ * @param mediator - The ImportMediator used to request imports.
+ * @returns Procedure indicating the scheduled session completed.
+ */
+async function handleScheduledImport(
+  schedule: string, mediator: ImportMediator
+): Promise<Procedure<{ status: string }>> {
+  const logger = getLogger();
+  logger.info(`⏰ Scheduled mode enabled: ${schedule}`);
+  logger.info('💡 Import will run according to cron schedule\n');
+  validateScheduleOrExit(schedule);
+  await scheduleLoop(schedule, mediator);
+  return succeed({ status: 'completed' });
+}
+
+/**
  * Scheduler entry point: starts Telegram commands and either runs once or enters cron loop.
  *
  * @returns Procedure indicating the scheduler result (never returns in scheduled mode).
@@ -86,12 +104,7 @@ export async function runScheduler(): Promise<Procedure<{ status: string }>> {
   const mediator = resolveMediator(tgResult);
   const schedule = process.env.SCHEDULE;
   if (!schedule) return await runOneShotImport(mediator);
-  const logger = getLogger();
-  logger.info(`⏰ Scheduled mode enabled: ${schedule}`);
-  logger.info('💡 Import will run according to cron schedule\n');
-  validateScheduleOrExit(schedule);
-  await scheduleLoop(schedule, mediator);
-  return succeed({ status: 'completed' });
+  return await handleScheduledImport(schedule, mediator);
 }
 
 /**

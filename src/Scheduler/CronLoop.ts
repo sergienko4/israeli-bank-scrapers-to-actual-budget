@@ -66,7 +66,11 @@ export async function executeScheduleIteration(
   getLogger().info(`⏳ Waiting until ${nextRun.toISOString()} (${String(minutesUntil)} minutes)`);
   await safeSleep(msUntilNext);
   if (Date.now() < nextRun.getTime()) return 'continue';
-  mediator.requestImport({ source: 'cron' });
+  const batchId = mediator.requestImport({ source: 'cron' });
+  if (!batchId) {
+    getLogger().warn('⏭️ Skipping scheduled run: import already in progress');
+    return 'continue';
+  }
   return 'imported';
 }
 

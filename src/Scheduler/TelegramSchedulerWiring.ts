@@ -7,6 +7,7 @@
  * command handler reuse it.
  */
 
+import ConfigurationError from '../Errors/ConfigurationError.js';
 import { getLogger } from '../Logger/Index.js';
 import { AuditLogService } from '../Services/AuditLogService.js';
 import { ImportMediator } from '../Services/ImportMediator.js';
@@ -208,6 +209,40 @@ export function wireAndStartPoller(
 }
 
 /**
+ * Registers the notifier's command list and throws if registration fails.
+ *
+ * @param notifier - The TelegramNotifier instance to register commands with.
+ * @param config - Full importer config used to derive the extra-commands list.
+ * @returns Procedure indicating commands were registered.
+ */
+async function registerNotifierCommands(
+  notifier: TelegramNotifier, config: IImporterConfig
+): Promise<IProcedureSuccess<{ status: string }>> {
+  const extras = buildExtraCommands(config);
+  logCommandCount(extras);
+  const registerResult = await notifier.registerCommands(extras);
+  if (isFail(registerResult)) throw new ConfigurationError(registerResult.message);
+  return succeed({ status: 'registered' });
+}
+
+/**
+ * Builds the TelegramCommandHandler with the receipt flag and log directory derived from config.
+ *
+ * @param notifier - The TelegramNotifier used by the handler.
+ * @param mediator - The ImportMediator the handler will request imports through.
+ * @param telegram - Telegram bot configuration (drives receipt feature flag).
+ * @returns A configured TelegramCommandHandler instance.
+ */
+function buildHandlerWithConfig(
+  notifier: TelegramNotifier, mediator: ImportMediator, telegram: ITelegramConfig
+): TelegramCommandHandler {
+  const isReceiptEnabled = telegram.enableReceiptImport === true;
+  const logConfigResult = loadLogConfig();
+  const logDir = logConfigResult.success ? logConfigResult.data.logDir : void 0;
+  return buildCommandHandler(notifier, mediator, { enableReceipt: isReceiptEnabled, logDir });
+}
+
+/**
  * Creates the mediator, handler, poller, and wires them together.
  *
  * @param telegram - Telegram bot configuration (token, chatId, etc.).
@@ -219,17 +254,10 @@ export async function createHandlerAndPoller(
   config: IImporterConfig
 ): Promise<ImportMediator> {
   const notifier = new TelegramNotifier(telegram);
-  const extras = buildExtraCommands(config);
-  logCommandCount(extras);
-  await notifier.registerCommands(extras);
+  await registerNotifierCommands(notifier, config);
   const notifierProcedure = succeed(notifier);
   const mediator = createMediator(notifierProcedure);
-  const isReceiptEnabled = telegram.enableReceiptImport === true;
-  const logConfigResult = loadLogConfig();
-  const logDir = logConfigResult.success ? logConfigResult.data.logDir : void 0;
-  const handler = buildCommandHandler(notifier, mediator, {
-    enableReceipt: isReceiptEnabled, logDir,
-  });
+  const handler = buildHandlerWithConfig(notifier, mediator, telegram);
   wireAndStartPoller(telegram, handler, mediator);
   return mediator;
 }

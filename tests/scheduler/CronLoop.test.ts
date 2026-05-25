@@ -11,7 +11,36 @@ vi.mock('../../src/Logger/Index.js', () => ({
   deriveLogFormat: vi.fn(() => 'words'),
 }));
 
-import { validateSchedule, safeSleep } from '../../src/Scheduler/CronLoop.js';
+const { mockSetTimeout } = vi.hoisted(() => ({
+  mockSetTimeout: vi.fn(async (_ms: number) => void 0),
+}));
+vi.mock('node:timers/promises', () => ({
+  setTimeout: mockSetTimeout,
+}));
+
+const { mockParse } = vi.hoisted(() => ({
+  mockParse: vi.fn(),
+}));
+vi.mock('cron-parser', async () => {
+  const actual =
+    await vi.importActual<typeof import('cron-parser')>('cron-parser');
+  return {
+    ...actual,
+    CronExpressionParser: {
+      ...actual.CronExpressionParser,
+      parse: (...args: Parameters<typeof actual.CronExpressionParser.parse>) =>
+        mockParse.getMockImplementation()
+          ? mockParse(...args)
+          : actual.CronExpressionParser.parse(...args),
+    },
+  };
+});
+
+import {
+  executeScheduleIteration,
+  safeSleep,
+  validateSchedule,
+} from '../../src/Scheduler/CronLoop.js';
 
 describe('CronLoop.validateSchedule', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -33,15 +62,64 @@ describe('CronLoop.validateSchedule', () => {
     if (!isFail(result)) return;
     expect(result.message).toContain('Invalid SCHEDULE format');
   });
+
+  it('respects TZ environment variable when parsing cron expression', () => {
+    const originalTz = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    try {
+      const result = validateSchedule('0 12 * * *');
+      expect(result.success).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.nextRunIso).toContain('T');
+    } finally {
+      process.env.TZ = originalTz;
+    }
+  });
 });
 
 describe('CronLoop.safeSleep', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSetTimeout.mockClear();
+  });
 
   it('resolves with a successful procedure for a small duration', async () => {
     const result = await safeSleep(1);
     expect(result.success).toBe(true);
     if (!isSuccess(result)) return;
     expect(result.data.status).toBe('waited');
+  });
+
+  it('clamps duration to MAX_TIMEOUT_MS for very large values', async () => {
+    const MAX_TIMEOUT_MS = 2147483647;
+    const result = await safeSleep(Number.MAX_SAFE_INTEGER);
+    expect(result.success).toBe(true);
+    expect(mockSetTimeout).toHaveBeenLastCalledWith(MAX_TIMEOUT_MS);
+  });
+});
+
+describe('CronLoop.executeScheduleIteration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSetTimeout.mockClear();
+    mockParse.mockReset();
+  });
+
+  it('returns "continue" and warns when the mediator is busy', async () => {
+    const pastRun = new Date(Date.now() - 1000);
+    mockParse.mockImplementation(() => ({
+      next: () => ({ toDate: () => pastRun }),
+    }));
+    const mediator = {
+      requestImport: vi.fn(() => false),
+    } as unknown as Parameters<typeof executeScheduleIteration>[1];
+
+    const status = await executeScheduleIteration('* * * * *', mediator);
+
+    expect(status).toBe('continue');
+    expect(mediator.requestImport).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('import already in progress')
+    );
   });
 });

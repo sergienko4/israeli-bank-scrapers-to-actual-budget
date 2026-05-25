@@ -45,6 +45,7 @@ export function spawnImport(extraEnv: Record<string, string> = {}): Promise<numb
     });
     child.on('error', (err) => {
       logger.error(`❌ Failed to start import: ${err.message}`);
+      logImportResult(1, startTime);
       resolve(1);
     });
   });
