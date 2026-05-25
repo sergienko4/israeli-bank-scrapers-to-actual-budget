@@ -66,7 +66,7 @@ describe('MetricsReducer', () => {
       expect(service.recordBankFailure).not.toHaveBeenCalled();
     });
 
-    it('short-circuits when startBank fails', () => {
+    it('short-circuits when startBank fails (stops before successes phase)', () => {
       const service = makeStubService();
       service.startBank.mockReturnValueOnce({ success: false, message: 'init err' });
       const acc = {
@@ -79,6 +79,24 @@ describe('MetricsReducer', () => {
       const result = apply(acc, service);
 
       expect(result.success).toBe(false);
+      expect(service.recordBankSuccess).not.toHaveBeenCalled();
+    });
+
+    it('does not flush later start deltas after a start failure', () => {
+      const service = makeStubService();
+      service.startBank.mockReturnValueOnce({ success: false, message: 'init err' });
+      const acc = {
+        deltas: [
+          { kind: 'start', bankName: 'a' },
+          { kind: 'start', bankName: 'b' },
+        ] satisfies IBankMetricsDelta[],
+      };
+
+      const result = apply(acc, service);
+
+      expect(result.success).toBe(false);
+      expect(service.startBank).toHaveBeenCalledTimes(1);
+      expect(service.startBank).toHaveBeenCalledWith('a');
       expect(service.recordBankSuccess).not.toHaveBeenCalled();
     });
 

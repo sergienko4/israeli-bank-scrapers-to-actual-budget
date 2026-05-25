@@ -97,6 +97,9 @@ export default function createProcessAllBanksStep(): PipelineStep {
 async function innerStep(
   ctx: IPipelineContext,
 ): ReturnType<PipelineStep> {
+  if (ctx.shutdownHandler.isShuttingDown()) {
+    return fail('Pipeline aborted: shutdown requested', { status: 'shutdown' });
+  }
   ctx.logger.info('Processing all banks...');
   const init = ctx.services.metricsService.startImport();
   if (isFail(init)) {

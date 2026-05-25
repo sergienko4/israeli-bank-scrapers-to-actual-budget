@@ -10,7 +10,7 @@
  */
 
 import type { IBankMetricsDelta, Procedure } from '../Index.js';
-import { fail, isFail, succeed } from '../Index.js';
+import { isFail, succeed } from '../Index.js';
 
 /** Minimal MetricsService surface required by apply(). */
 export interface IMetricsServiceForReduce {
@@ -64,7 +64,7 @@ function flushStart(
 ): Procedure<IFlushResult> {
   if (delta.kind !== 'start') return succeed({ flushed: 0 });
   const result = service.startBank(delta.bankName);
-  if (isFail(result)) return fail(result.message);
+  if (isFail(result)) return result;
   return succeed({ flushed: 1 });
 }
 
@@ -81,7 +81,7 @@ function flushSuccess(
   const result = service.recordBankSuccess(
     delta.bankName, delta.imported, delta.skipped,
   );
-  if (isFail(result)) return fail(result.message);
+  if (isFail(result)) return result;
   return succeed({ flushed: 1 });
 }
 
@@ -96,13 +96,24 @@ function flushFailure(
 ): Procedure<IFlushResult> {
   if (delta.kind !== 'failure') return succeed({ flushed: 0 });
   const result = service.recordBankFailure(delta.bankName, delta.error);
-  if (isFail(result)) return fail(result.message);
+  if (isFail(result)) return result;
   return succeed({ flushed: 1 });
+}
+
+/** Bundle for the recursive {@link foldFlush} helper (keeps params ≤ 3). */
+interface IFoldOpts {
+  readonly deltas: readonly IBankMetricsDelta[];
+  readonly service: IMetricsServiceForReduce;
+  readonly flusher: DeltaFlusher;
 }
 
 /**
  * Folds a per-delta flusher over the delta list with short-circuit on failure.
- * Uses Array.reduce to avoid for-loop + nested-if depth violations.
+ *
+ * Iterates via recursion (not Array.reduce) so we can guard the side-effecting
+ * `flusher(delta, service)` call BEHIND the prior-failure check — passing a
+ * named binary function to .reduce() invokes the flusher eagerly per element
+ * even after the accumulator has already failed (SonarCloud S7727).
  * @param deltas - Full delta list (filter happens per-flusher).
  * @param service - Metrics sink shared by all flushers.
  * @param flusher - Per-delta flusher (decides applies vs. skips).
@@ -114,33 +125,29 @@ function flushAll(
   flusher: DeltaFlusher,
 ): Procedure<IFlushResult> {
   const seed: Procedure<IFlushResult> = succeed({ flushed: 0 });
-  /**
-   * Per-iteration reducer combining the running flush total with the next delta's outcome.
-   * @param acc - Accumulated Procedure carrying the running flush count or first failure.
-   * @param delta - Next metrics delta to consider for flushing.
-   * @returns Procedure with updated flush count, or the first failure encountered.
-   */
-  const folder = (
-    acc: Procedure<IFlushResult>, delta: IBankMetricsDelta,
-  ): Procedure<IFlushResult> => {
-    const next = flusher(delta, service);
-    return combineFlush(acc, next);
-  };
-  return deltas.reduce<Procedure<IFlushResult>>(folder, seed);
+  const opts: IFoldOpts = { deltas, service, flusher };
+  return foldFlush(opts, 0, seed);
 }
 
 /**
- * Combines an accumulator with the next per-delta flush result.
- * @param acc - Accumulated Procedure so far.
- * @param next - Next per-delta result to fold in.
- * @returns Either the first failure encountered, or the cumulative count.
+ * Recursively folds the delta list, short-circuiting on prior failure
+ * BEFORE invoking the side-effecting flusher for the current index.
+ * @param opts - Bundle of deltas, service, and flusher (≤ 3 params rule).
+ * @param index - Current iteration index into `opts.deltas`.
+ * @param acc - Accumulated Procedure (success carries running flushed count).
+ * @returns Aggregate flushed count or first failure encountered.
  */
-function combineFlush(
-  acc: Procedure<IFlushResult>, next: Procedure<IFlushResult>,
+function foldFlush(
+  opts: IFoldOpts, index: number, acc: Procedure<IFlushResult>,
 ): Procedure<IFlushResult> {
+  if (index >= opts.deltas.length) return acc;
   if (isFail(acc)) return acc;
+  const delta = opts.deltas[index];
+  const next = opts.flusher(delta, opts.service);
   if (isFail(next)) return next;
-  return succeed({ flushed: acc.data.flushed + next.data.flushed });
+  const total = acc.data.flushed + next.data.flushed;
+  const merged = succeed({ flushed: total });
+  return foldFlush(opts, index + 1, merged);
 }
 
 /**

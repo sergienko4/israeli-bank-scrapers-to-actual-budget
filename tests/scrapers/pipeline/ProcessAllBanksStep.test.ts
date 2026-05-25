@@ -3,14 +3,10 @@ import { afterEach,beforeEach, describe, expect, it, vi } from 'vitest';
 import createProcessAllBanksStep from '../../../src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.js';
 import type { IPipelineContext } from '../../../src/Scrapers/Pipeline/Types/PipelineContext.js';
 import { isFail, isSuccess } from '../../../src/Types/ProcedureHelpers.js';
-
-const ALLOW_ALL = {
-  /**
-   * Permissive bank filter used by default in test contexts.
-   * @returns Constant true to admit every bank.
-   */
-  matches: (): boolean => true,
-};
+import {
+  ALLOW_ALL_BANK_FILTER, fakeBankConfig, fakeCanonicalScrapeResult,
+  fakePipelineConfig,
+} from '../../helpers/factories.js';
 
 function makeMockMapper() {
   return {
@@ -18,31 +14,16 @@ function makeMockMapper() {
     canonicalToLegacy: vi.fn(),
     legacyToCanonical: vi.fn().mockReturnValue({
       success: true,
-      data: {
-        bankId: 'mock', scrapedAt: new Date().toISOString(),
-        accounts: [],
-        metadata: {
-          startDate: '2026-01-01', endDate: '2026-01-31',
-          signPolicyApplied: 'preserve', strategy: 'live', attemptCount: 1,
-        },
-      },
+      data: fakeCanonicalScrapeResult({ bankId: 'mock', accounts: [] }),
     }),
   };
 }
 
 function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
-  const baseConfig = {
-    banks: {
-      hapoalim: { credentials: { id: '1' } },
-      leumi: { credentials: { id: '2' } },
-    },
-    delayBetweenBanks: 0,
-    bankFilter: ALLOW_ALL,
-  };
-  const mergedConfig = {
-    ...baseConfig,
-    ...(overrides.config ?? {}),
-  } as unknown as IPipelineContext['config'];
+  const mergedConfig = (overrides.config
+    ?? fakePipelineConfig({
+      banks: { hapoalim: fakeBankConfig(), leumi: fakeBankConfig() },
+    })) as IPipelineContext['config'];
   return {
     config: mergedConfig,
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -102,14 +83,10 @@ describe('ProcessAllBanksStep', () => {
 
   it('bankFilter restricts processing to selected banks', async () => {
     const ctx = makeCtx({
-      config: {
-        banks: {
-          hapoalim: { credentials: { id: '1' } },
-          leumi: { credentials: { id: '2' } },
-        },
-        delayBetweenBanks: 0,
+      config: fakePipelineConfig({
+        banks: { hapoalim: fakeBankConfig(), leumi: fakeBankConfig() },
         bankFilter: { matches: (name: string): boolean => name === 'leumi' },
-      } as unknown as IPipelineContext['config'],
+      }) as unknown as IPipelineContext['config'],
     });
     const step = createProcessAllBanksStep();
 
@@ -231,6 +208,7 @@ describe('ProcessAllBanksStep', () => {
     if (isFail(result)) {
       expect(result.status).toBe('shutdown');
     }
+    expect(ctx.services.metricsService.startImport).not.toHaveBeenCalled();
     expect(ctx.services.bankScraper.scrapeBankWithResilience).not.toHaveBeenCalled();
   });
 
@@ -276,12 +254,11 @@ describe('ProcessAllBanksStep', () => {
   });
 
   it('defaults delayBetweenBanks to 0 when config omits it', async () => {
-    const ctx = makeCtx({
-      config: {
-        banks: { single: { credentials: { id: '1' } } },
-        bankFilter: ALLOW_ALL,
-      } as unknown as IPipelineContext['config'],
-    });
+    const cfg = fakePipelineConfig({
+      banks: { single: fakeBankConfig() },
+    }) as unknown as IPipelineContext['config'] & { delayBetweenBanks?: number };
+    delete cfg.delayBetweenBanks;
+    const ctx = makeCtx({ config: cfg });
     const step = createProcessAllBanksStep();
 
     const result = await step(ctx);
@@ -294,10 +271,10 @@ describe('ProcessAllBanksStep', () => {
 
   it('treats empty bank list as success with totalBanks=0', async () => {
     const ctx = makeCtx({
-      config: {
+      config: fakePipelineConfig({
         banks: {},
-        bankFilter: ALLOW_ALL,
-      } as unknown as IPipelineContext['config'],
+        bankFilter: ALLOW_ALL_BANK_FILTER,
+      }) as unknown as IPipelineContext['config'],
     });
     const step = createProcessAllBanksStep();
 

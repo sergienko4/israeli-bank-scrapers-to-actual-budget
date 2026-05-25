@@ -3,7 +3,8 @@ import { AccountImporter } from '../../src/Services/AccountImporter.js';
 import { DryRunCollector } from '../../src/Services/DryRunCollector.js';
 import { succeed, fail } from '../../src/Types/Index.js';
 import {
-  fakeBankConfig, fakeBankTransactions, fakeBankTarget, fakeUuid,
+  fakeBankConfig, fakeBankTransactions, fakeBankTarget, fakeCanonicalScrapeResult,
+  fakeUuid,
 } from '../helpers/factories.js';
 
 // ── Logger mock ──────────────────────────────────────────────────────────────
@@ -66,15 +67,10 @@ function makeOpts(overrides = {}) {
 }
 
 function makeScrapeResult(accounts: unknown[] = []) {
-  return {
+  return fakeCanonicalScrapeResult({
     bankId: 'mock',
-    scrapedAt: new Date().toISOString(),
-    accounts,
-    metadata: {
-      startDate: '2026-01-01', endDate: '2026-01-31',
-      signPolicyApplied: 'preserve', strategy: 'live', attemptCount: 1,
-    },
-  } as never;
+    accounts: accounts as never,
+  }) as never;
 }
 
 // ─── processAllAccounts ───────────────────────────────────────────────────────

@@ -9,6 +9,9 @@ import {
 import type { IAuditEntry, IAuditLog } from '../../src/Services/AuditLogService.js';
 import { succeed } from '../../src/Types/ProcedureHelpers.js';
 import type { IBankResultsState } from '../../src/Types/Pipeline/Index.js';
+import {
+  fakeBankQuarantineEntry, fakeBankResult, fakeBankResultsState,
+} from '../helpers/factories.js';
 
 describe('TelegramCommandFormatters', () => {
   describe('buildErrorAnnotations', () => {
@@ -86,21 +89,20 @@ describe('TelegramCommandFormatters', () => {
   describe('formatPartialSuccess', () => {
     /**
      * Builds an IBankResultsState fixture for partial-success tests.
+     * Wraps the shared {@link fakeBankResultsState} factory with the
+     * indexed-name layout asserted in these tests (1 success + N quarantined).
      * @param quarantinedCount - Number of quarantine entries to synthesize.
-     * @returns Frozen bank results state with 1 success + N quarantined.
+     * @returns Frozen bank results state.
      */
     function makeState(quarantinedCount: number): IBankResultsState {
-      const quarantined = Array.from({ length: quarantinedCount }, (_, i) => ({
-        bankName: `bank-${String(i)}`,
-        stage: 'scrape' as const,
-        error: new Error(`error-${String(i)}`),
-        durationMs: 100,
-      }));
-      return {
-        successful: [{ bankName: 'ok-bank', imported: 5, skipped: 0, durationMs: 200 }],
-        quarantined,
+      return fakeBankResultsState({
+        successful: [fakeBankResult({
+          bankName: 'ok-bank', imported: 5, skipped: 0, durationMs: 200,
+        })],
+        quarantinedCount,
+        stage: 'scrape',
         totalBanks: 1 + quarantinedCount,
-      };
+      });
     }
 
     it('renders header with OK/total counts and duration', () => {
@@ -122,16 +124,14 @@ describe('TelegramCommandFormatters', () => {
     });
 
     it('annotates each line with stage and truncated error', () => {
-      const state: IBankResultsState = {
+      const state = fakeBankResultsState({
         successful: [],
-        quarantined: [{
-          bankName: 'leumi',
-          stage: 'import',
-          error: new Error('A'.repeat(200)),
-          durationMs: 50,
-        }],
+        quarantined: [fakeBankQuarantineEntry({
+          bankName: 'leumi', stage: 'import',
+          error: new Error('A'.repeat(200)), durationMs: 50,
+        })],
         totalBanks: 1,
-      };
+      });
       const out = formatPartialSuccess(state, '0.50');
       expect(out).toContain('leumi [import]');
       expect(out).toMatch(/A{80}(?!A)/);
@@ -144,16 +144,14 @@ describe('TelegramCommandFormatters', () => {
         getLastFailedBanks: vi.fn(),
         getConsecutiveFailures: vi.fn().mockReturnValue(succeed(5)),
       };
-      const state: IBankResultsState = {
+      const state = fakeBankResultsState({
         successful: [],
-        quarantined: [{
-          bankName: 'leumi',
-          stage: 'scrape',
-          error: new Error('boom'),
-          durationMs: 10,
-        }],
+        quarantined: [fakeBankQuarantineEntry({
+          bankName: 'leumi', stage: 'scrape',
+          error: new Error('boom'), durationMs: 10,
+        })],
         totalBanks: 1,
-      };
+      });
       const out = formatPartialSuccess(state, '0.1', auditLog);
       expect(out).toContain('5+ times');
     });
