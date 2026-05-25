@@ -4,6 +4,10 @@
  * The child entry path is configurable via IMPORT_CHILD_ENTRY (defaults to
  * the Docker container layout '/app/dist/Index.js'), so the scheduler can be
  * exercised in tests and local runs without a packaged build.
+ *
+ * The child node binary is resolved via process.execPath (absolute path) so
+ * the spawn does not rely on PATH lookup. The child still inherits PATH so
+ * downstream tools (e.g. the Camoufox browser launcher) can locate Firefox.
  */
 
 import type { ChildProcess } from 'node:child_process';
@@ -25,6 +29,43 @@ function resolveChildEntry(): string {
 }
 
 /**
+ * Builds the env object passed to the child, merging extras over process.env.
+ *
+ * @param extraEnv - Additional environment variables to inject into the child.
+ * @returns The env object to pass to spawn (reuses process.env when no extras).
+ */
+function buildChildEnv(extraEnv: Record<string, string>): NodeJS.ProcessEnv {
+  if (Object.keys(extraEnv).length === 0) return process.env;
+  return { ...process.env, ...extraEnv };
+}
+
+/**
+ * Attaches the exit and error listeners that resolve the spawn promise.
+ *
+ * @param child - The spawned child process to listen on.
+ * @param startTime - The Date when the import started (for duration logging).
+ * @param resolve - Callback invoked with the child's effective exit code.
+ * @returns Procedure indicating the listeners were attached.
+ */
+function attachChildListeners(
+  child: ChildProcess, startTime: Date, resolve: (code: number) => unknown
+): IProcedureSuccess<{ status: string }> {
+  const logger = getLogger();
+  child.on('exit', (exitCode, signal) => {
+    const code = exitCode ?? (signal ? 1 : 0);
+    if (signal) logger.warn(`Import killed by signal: ${signal}`);
+    logImportResult(code, startTime);
+    resolve(code);
+  });
+  child.on('error', (err) => {
+    logger.error(`❌ Failed to start import: ${err.message}`);
+    logImportResult(1, startTime);
+    resolve(1);
+  });
+  return succeed({ status: 'listeners-attached' });
+}
+
+/**
  * Spawns the import child process and resolves with its exit code.
  *
  * @param extraEnv - Additional environment variables to inject into the child.
@@ -32,22 +73,13 @@ function resolveChildEntry(): string {
  */
 export function spawnImport(extraEnv: Record<string, string> = {}): Promise<number> {
   return new Promise((resolve) => {
-    const logger = getLogger();
     const startTime = new Date();
-    logger.info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
-    const env = Object.keys(extraEnv).length > 0 ? { ...process.env, ...extraEnv } : process.env;
-    const child: ChildProcess = spawn('node', [resolveChildEntry()], { stdio: 'inherit', env });
-    child.on('exit', (exitCode, signal) => {
-      const code = exitCode ?? (signal ? 1 : 0);
-      if (signal) logger.warn(`Import killed by signal: ${signal}`);
-      logImportResult(code, startTime);
-      resolve(code);
-    });
-    child.on('error', (err) => {
-      logger.error(`❌ Failed to start import: ${err.message}`);
-      logImportResult(1, startTime);
-      resolve(1);
-    });
+    getLogger().info(`\n⏰ ${startTime.toISOString()}: Starting import...`);
+    const env = buildChildEnv(extraEnv);
+    const child: ChildProcess = spawn(
+      process.execPath, [resolveChildEntry()], { stdio: 'inherit', env }
+    );
+    attachChildListeners(child, startTime, resolve);
   });
 }
 

@@ -165,12 +165,12 @@ describe('loadLogConfig', () => {
 // ─── spawnImport ─────────────────────────────────────────────────────────────
 
 describe('spawnImport', () => {
-  it('spawns node /app/dist/Index.js and returns a promise', () => {
+  it('spawns the current node binary with the configured entry script', () => {
     vi.mocked(childProcess.spawn).mockReturnValue(mockChild());
     const result = spawnImport();
     expect(result).toBeInstanceOf(Promise);
     expect(childProcess.spawn).toHaveBeenCalledWith(
-      'node', ['/app/dist/Index.js'], expect.objectContaining({ stdio: 'inherit' })
+      process.execPath, ['/app/dist/Index.js'], expect.objectContaining({ stdio: 'inherit' })
     );
   });
 });
@@ -423,7 +423,7 @@ describe('spawnImport (child process lifecycle)', () => {
 
     spawnImport({ BANK_NAME: 'leumi' });
     expect(childProcess.spawn).toHaveBeenCalledWith(
-      'node', ['/app/dist/Index.js'],
+      process.execPath, ['/app/dist/Index.js'],
       expect.objectContaining({
         env: expect.objectContaining({ BANK_NAME: 'leumi' }),
       })
