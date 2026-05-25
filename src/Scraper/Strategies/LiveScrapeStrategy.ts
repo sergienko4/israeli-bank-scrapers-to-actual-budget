@@ -78,22 +78,43 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
   public async scrape(
     scrapeOpts: IBankScrapeStrategyOpts,
   ): Promise<Procedure<IRawScrape>> {
+    const resolved = LiveScrapeStrategy.resolveOpts(scrapeOpts);
+    if (!resolved.success) return resolved;
+    resolved.data.logger.info(
+      `  🔍 Scraping transactions from ${resolved.data.bankId}...`);
+    return await this.runWithOtpRetry(resolved.data);
+  }
+
+  /**
+   * Validates companyType is present and narrows opts for downstream helpers.
+   * @param scrapeOpts - Raw opts from the BankScraper coordinator.
+   * @returns Procedure success with IResolvedLiveOpts, or unknown-bank failure.
+   */
+  private static resolveOpts(
+    scrapeOpts: IBankScrapeStrategyOpts,
+  ): Procedure<IResolvedLiveOpts> {
     if (!scrapeOpts.companyType) {
       return fail(
         `Unknown bank: ${scrapeOpts.bankId}`,
         { status: 'unknown-bank' },
       );
     }
-    const resolvedOpts: IResolvedLiveOpts = {
-      ...scrapeOpts, companyType: scrapeOpts.companyType,
-    };
-    scrapeOpts.logger.info(
-      `  🔍 Scraping transactions from ${scrapeOpts.bankId}...`);
-    const first = await this.executeAttempt(resolvedOpts);
+    return succeed({ ...scrapeOpts, companyType: scrapeOpts.companyType });
+  }
+
+  /**
+   * Runs the first attempt and dispatches the OTP-retry path when needed.
+   * @param scrapeOpts - Narrowed opts produced by resolveOpts.
+   * @returns Procedure success with the wrapped IRawScrape envelope.
+   */
+  private async runWithOtpRetry(
+    scrapeOpts: IResolvedLiveOpts,
+  ): Promise<Procedure<IRawScrape>> {
+    const first = await this.executeAttempt(scrapeOpts);
     if (LiveScrapeStrategy.isInvalidOtpFailure(first)) {
-      return await this.handleOtpReject(resolvedOpts);
+      return await this.handleOtpReject(scrapeOpts);
     }
-    return LiveScrapeStrategy.wrapSucceed(resolvedOpts, first, 1);
+    return LiveScrapeStrategy.wrapSucceed(scrapeOpts, first, 1);
   }
 
   /**
@@ -214,6 +235,17 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
     scrapeOpts: IResolvedLiveOpts,
     otpRetriever: (() => Promise<string>) | undefined,
   ): ScraperOptions {
+    const base = this.buildBaseScraperOptions(scrapeOpts);
+    LiveScrapeStrategy.attachOtpRetriever(base, otpRetriever);
+    return base;
+  }
+
+  /**
+   * Builds the base ScraperOptions (companyId, startDate, args, timeouts).
+   * @param scrapeOpts - Per-scrape inputs supplying companyType + bankConfig.
+   * @returns ScraperOptions with navigationRetryCount applied when set.
+   */
+  private buildBaseScraperOptions(scrapeOpts: IResolvedLiveOpts): ScraperOptions {
     const base: ScraperOptions = {
       companyId: scrapeOpts.companyType,
       startDate: scrapeOpts.startDate,
@@ -222,7 +254,6 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
     };
     const navRetry = scrapeOpts.bankConfig.navigationRetryCount;
     if (navRetry) base.navigationRetryCount = navRetry;
-    LiveScrapeStrategy.attachOtpRetriever(base, otpRetriever);
     return base;
   }
 
