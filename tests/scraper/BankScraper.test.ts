@@ -1,14 +1,35 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'node:fs';
+/**
+ * BankScraper coordinator tests.
+ *
+ * The class is now a thin coordinator that orchestrates Registry → Strategy
+ * → Mapper. These tests exercise only that orchestration with mock
+ * collaborators; provider-specific concerns live in their own test files:
+ *   - BankRegistry.test.ts            — alias resolution
+ *   - Policies/DateRangePolicy.test.ts — date math
+ *   - Strategies/MockScrapeStrategy.test.ts
+ *   - Strategies/LiveScrapeStrategy.test.ts
+ *   - Mappers/DefaultScrapeResultMapper.test.ts
+ *
+ * The back-compat module-level functions (computeStartDate,
+ * filterTransactionsByDate, isEmptyResultError, logScrapeFailure) are
+ * also covered here to lock the public re-export surface.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import {
-  computeStartDate,
-  filterTransactionsByDate,
-  isEmptyResultError,
-  logScrapeFailure,
-  BankScraper,
+  BankScraper, computeStartDate, filterTransactionsByDate,
+  isEmptyResultError, logScrapeFailure,
 } from '../../src/Scraper/BankScraper.js';
-import { fakeBankConfig, fakeBankTransactions, fakeImporterConfig } from '../helpers/factories.js';
-import { TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
+import { createBankRegistry } from '../../src/Scraper/BankRegistry.js';
+import createScrapeResultMapper from '../../src/Scraper/Mappers/DefaultScrapeResultMapper.js';
+import { createDateRangePolicy } from '../../src/Scraper/Policies/DateRangePolicy.js';
+import type { IBankScrapeStrategy } from '../../src/Scraper/Strategies/IBankScrapeStrategy.js';
+import type { ILogger } from '../../src/Logger/ILogger.js';
+import { fail, succeed } from '../../src/Types/Index.js';
+import {
+  fakeBankConfig, fakeBankTransactions,
+} from '../helpers/factories.js';
 
 // ── Logger mock ──────────────────────────────────────────────────────────────
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -18,42 +39,120 @@ vi.mock('../../src/Logger/Index.js', () => ({
   getLogBuffer: vi.fn(),
 }));
 
-// ── fs mock ──────────────────────────────────────────────────────────────────
-vi.mock('node:fs');
+/**
+ * Builds a minimal ILogger spy for coordinator tests.
+ * @returns Fresh ILogger with vi.fn spies on info/debug/warn/error.
+ */
+function makeLogger(): ILogger {
+  return { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
+}
 
-// ── Scraper library mock ─────────────────────────────────────────────────────
-const mockScraper = { scrape: vi.fn() };
-vi.mock('@sergienko4/israeli-bank-scrapers', () => ({
-  createScraper: vi.fn(() => mockScraper),
-  CompanyTypes: {
-    Hapoalim: 'hapoalim', Leumi: 'leumi', Discount: 'discount',
-    Mizrahi: 'mizrahi', Mercantile: 'mercantile', OtsarHahayal: 'otsarHahayal',
-    Beinleumi: 'beinleumi', Massad: 'massad', Yahav: 'yahav',
-    VisaCal: 'visaCal', Max: 'max', Isracard: 'isracard',
-    Amex: 'amex', BeyahadBishvilha: 'beyahadBishvilha',
-    Behatsdaa: 'behatsdaa', Pagi: 'pagi', OneZero: 'oneZero',
-  },
-}));
+/**
+ * Constructs a BankScraper with default real collaborators plus a custom strategy.
+ * @param strategy - The IBankScrapeStrategy implementation under test.
+ * @returns Configured BankScraper ready for invocation.
+ */
+function makeScraper(strategy: IBankScrapeStrategy): BankScraper {
+  return new BankScraper({
+    registry: createBankRegistry(),
+    strategy,
+    mapper: createScrapeResultMapper(),
+    datePolicy: createDateRangePolicy(),
+    logger: makeLogger(),
+  });
+}
 
-// ── ScraperOptionsBuilder mock ───────────────────────────────────────────────
-vi.mock('../../src/Scraper/ScraperOptionsBuilder.js', () => ({
-  buildChromeArgs: vi.fn(() => []),
-  getChromeDataDir: vi.fn(() => '/mock/chrome'),
-}));
+// ─── BankScraper coordinator ─────────────────────────────────────────────────
 
-// ── CredentialsBuilder mock ──────────────────────────────────────────────────
-vi.mock('../../src/Scraper/CredentialsBuilder.js', () => ({
-  default: vi.fn(() => ({ username: 'u', password: TEST_CREDENTIAL_SHORT })),
-}));
+describe('BankScraper coordinator', () => {
+  beforeEach(() => vi.clearAllMocks());
 
-// ── TwoFactorService mock ────────────────────────────────────────────────────
-vi.mock('../../src/Services/TwoFactorService.js', () => ({
-  default: vi.fn(() => ({
-    createOtpRetriever: vi.fn(() => async () => '123456'),
-  })),
-}));
+  it('returns success result mapped through the canonical layer', async () => {
+    const strategy: IBankScrapeStrategy = {
+      scrape: vi.fn().mockResolvedValue(succeed({
+        bankId: 'discount', companyType: 'discount',
+        attemptCount: 1, strategy: 'live',
+        raw: { success: true, accounts: [{ accountNumber: '123', balance: 10, txns: [] }] },
+      })),
+    };
+    const result = await makeScraper(strategy).scrapeBankWithResilience(
+      'discount', fakeBankConfig());
+    expect(result.success).toBe(true);
+    expect(result.accounts).toHaveLength(1);
+    expect(result.accounts?.[0].accountNumber).toBe('123');
+  });
 
-// ─── computeStartDate ────────────────────────────────────────────────────────
+  it('returns failure result when registry rejects unknown bank', async () => {
+    const strategy: IBankScrapeStrategy = { scrape: vi.fn() };
+    const result = await makeScraper(strategy).scrapeBankWithResilience(
+      'unknownXYZ', fakeBankConfig());
+    expect(result.success).toBe(false);
+    expect(result.errorMessage).toContain('Unknown bank: unknownXYZ');
+    expect(strategy.scrape).not.toHaveBeenCalled();
+  });
+
+  it('returns failure result when strategy fails', async () => {
+    const strategy: IBankScrapeStrategy = {
+      scrape: vi.fn().mockResolvedValue(fail('Invalid mock scraper file: bad.json')),
+    };
+    const result = await makeScraper(strategy).scrapeBankWithResilience(
+      'discount', fakeBankConfig());
+    expect(result.success).toBe(false);
+    expect(result.errorMessage).toContain('Invalid mock');
+  });
+
+  it('passes resolved companyType + startDate to the strategy', async () => {
+    const strategy: IBankScrapeStrategy = {
+      scrape: vi.fn().mockResolvedValue(succeed({
+        bankId: 'visacal', companyType: 'visaCal',
+        attemptCount: 1, strategy: 'mock',
+        raw: { success: true, accounts: [] },
+      })),
+    };
+    await makeScraper(strategy).scrapeBankWithResilience(
+      'visaCal', fakeBankConfig({ daysBack: 7 }));
+    const callArg = (strategy.scrape as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArg.bankId).toBe('visacal');
+    expect(callArg.companyType).toBe('visaCal');
+    expect(callArg.startDate).toBeInstanceOf(Date);
+  });
+
+  it('applies sign flip via mapper for credit-card banks (visaCal)', async () => {
+    const strategy: IBankScrapeStrategy = {
+      scrape: vi.fn().mockResolvedValue(succeed({
+        bankId: 'visacal', companyType: 'visaCal',
+        attemptCount: 1, strategy: 'live',
+        raw: { success: true, accounts: [{
+          accountNumber: '9999', balance: 0,
+          txns: [{ chargedAmount: 100, originalAmount: 50, date: '2026-01-01' }],
+        }] },
+      })),
+    };
+    const result = await makeScraper(strategy).scrapeBankWithResilience(
+      'visaCal', fakeBankConfig());
+    expect(result.accounts?.[0].txns[0].chargedAmount).toBe(-100);
+    expect(result.accounts?.[0].txns[0].originalAmount).toBe(-50);
+  });
+
+  it('does NOT flip signs for non-credit-card banks (discount)', async () => {
+    const strategy: IBankScrapeStrategy = {
+      scrape: vi.fn().mockResolvedValue(succeed({
+        bankId: 'discount', companyType: 'discount',
+        attemptCount: 1, strategy: 'live',
+        raw: { success: true, accounts: [{
+          accountNumber: '9999', balance: 0,
+          txns: [{ chargedAmount: 100, originalAmount: 50, date: '2026-01-01' }],
+        }] },
+      })),
+    };
+    const result = await makeScraper(strategy).scrapeBankWithResilience(
+      'discount', fakeBankConfig());
+    expect(result.accounts?.[0].txns[0].chargedAmount).toBe(100);
+    expect(result.accounts?.[0].txns[0].originalAmount).toBe(50);
+  });
+});
+
+// ─── computeStartDate (back-compat shim) ─────────────────────────────────────
 
 describe('computeStartDate', () => {
   it('returns today minus (daysBack - 1) when daysBack is set', () => {
@@ -78,7 +177,7 @@ describe('computeStartDate', () => {
   });
 });
 
-// ─── filterTransactionsByDate ────────────────────────────────────────────────
+// ─── filterTransactionsByDate (back-compat shim) ─────────────────────────────
 
 describe('filterTransactionsByDate', () => {
   it('returns all transactions when no date config is set', () => {
@@ -101,19 +200,27 @@ describe('filterTransactionsByDate', () => {
 
 describe('isEmptyResultError', () => {
   it('returns true for "no transactions found"', () => {
-    expect(isEmptyResultError({ success: false, errorMessage: 'no transactions found', accounts: [] })).toBe(true);
+    expect(isEmptyResultError({
+      success: false, errorMessage: 'no transactions found', accounts: [],
+    })).toBe(true);
   });
 
   it('returns true for "no results found"', () => {
-    expect(isEmptyResultError({ success: false, errorMessage: 'no results found', accounts: [] })).toBe(true);
+    expect(isEmptyResultError({
+      success: false, errorMessage: 'no results found', accounts: [],
+    })).toBe(true);
   });
 
   it('returns true for Hebrew "no transactions" message', () => {
-    expect(isEmptyResultError({ success: false, errorMessage: 'לא מצאנו תנועות', accounts: [] })).toBe(true);
+    expect(isEmptyResultError({
+      success: false, errorMessage: 'לא מצאנו תנועות', accounts: [],
+    })).toBe(true);
   });
 
   it('returns false for a real error message', () => {
-    expect(isEmptyResultError({ success: false, errorMessage: 'Login failed', accounts: [] })).toBe(false);
+    expect(isEmptyResultError({
+      success: false, errorMessage: 'Login failed', accounts: [],
+    })).toBe(false);
   });
 
   it('returns false when errorMessage is undefined', () => {
@@ -127,160 +234,25 @@ describe('logScrapeFailure', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('logs the error message with WAF hint', () => {
-    logScrapeFailure('leumi', { success: false, errorType: 'WAF_BLOCKED', errorMessage: 'blocked', accounts: [] });
+    logScrapeFailure('leumi', {
+      success: false, errorType: 'WAF_BLOCKED',
+      errorMessage: 'blocked', accounts: [],
+    });
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining('Wait 1-2 hours')
-    );
+      expect.stringContaining('Wait 1-2 hours'));
   });
 
   it('logs without hint for unknown error type', () => {
-    logScrapeFailure('leumi', { success: false, errorType: 'UNKNOWN', errorMessage: 'oops', accounts: [] });
+    logScrapeFailure('leumi', {
+      success: false, errorType: 'UNKNOWN',
+      errorMessage: 'oops', accounts: [],
+    });
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('oops'));
   });
 
   it('logs "Unknown error" when errorMessage is missing', () => {
     logScrapeFailure('leumi', { success: false, accounts: [] });
-    expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('Unknown error'));
-  });
-});
-
-// ─── BankScraper class ───────────────────────────────────────────────────────
-
-describe('BankScraper', () => {
-  const VALID_MOCK_RESULT = JSON.stringify({ success: true, accounts: [] });
-  const mockRetryStrategy = {
-    execute: vi.fn(async (fn: () => Promise<unknown>) => fn()),
-  };
-  const mockTimeoutWrapper = {
-    wrap: vi.fn(async (p: Promise<unknown>) => p),
-  };
-  const mockNotificationService = { sendMessage: vi.fn(), sendSummary: vi.fn(), sendError: vi.fn() };
-
-  const makeOpts = () => ({
-    config: fakeImporterConfig(),
-    retryStrategy: mockRetryStrategy,
-    noRetryStrategy: mockRetryStrategy,
-    timeoutWrapper: mockTimeoutWrapper,
-    telegramNotifier: null,
-    notificationService: mockNotificationService,
-  });
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.unstubAllEnvs();
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('returns mock result from E2E_MOCK_SCRAPER_FILE env', async () => {
-    vi.stubEnv('E2E_MOCK_SCRAPER_FILE', '/mock/data.json');
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(VALID_MOCK_RESULT);
-
-    const scraper = new BankScraper(makeOpts());
-    const result = await scraper.scrapeBankWithResilience('discount', fakeBankConfig());
-
-    expect(result.success).toBe(true);
-    expect(mockRetryStrategy.execute).not.toHaveBeenCalled();
-  });
-
-  it('returns per-bank mock file from E2E_MOCK_SCRAPER_DIR when file exists', async () => {
-    vi.stubEnv('E2E_MOCK_SCRAPER_DIR', '/mock/dir');
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(VALID_MOCK_RESULT);
-
-    const scraper = new BankScraper(makeOpts());
-    const result = await scraper.scrapeBankWithResilience('discount', fakeBankConfig());
-
-    expect(result.success).toBe(true);
-  });
-
-  it('falls back to default.json when per-bank file does not exist in mock dir', async () => {
-    vi.stubEnv('E2E_MOCK_SCRAPER_DIR', '/mock/dir');
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    vi.mocked(fs.readFileSync).mockReturnValue(VALID_MOCK_RESULT);
-
-    const scraper = new BankScraper(makeOpts());
-    const result = await scraper.scrapeBankWithResilience('discount', fakeBankConfig());
-
-    expect(result.success).toBe(true);
-  });
-
-  it('delegates to retryStrategy.execute for a normal scrape', async () => {
-    const mockResult = { success: true, accounts: [] };
-    mockScraper.scrape.mockResolvedValue(mockResult);
-
-    const scraper = new BankScraper(makeOpts());
-    const result = await scraper.scrapeBankWithResilience(
-      'discount', fakeBankConfig({ daysBack: 7 })
-    );
-
-    expect(mockRetryStrategy.execute).toHaveBeenCalled();
-    expect(result).toEqual(mockResult);
-  });
-
-  it('retries once on INVALID_OTP', async () => {
-    const otpResult = { success: false, errorType: 'INVALID_OTP', accounts: [] };
-    const successResult = { success: true, accounts: [] };
-    mockScraper.scrape
-      .mockResolvedValueOnce(otpResult)
-      .mockResolvedValueOnce(successResult);
-
-    const scraper = new BankScraper(makeOpts());
-    const result = await scraper.scrapeBankWithResilience(
-      'discount', fakeBankConfig({ daysBack: 7 })
-    );
-
-    expect(mockNotificationService.sendMessage).toHaveBeenCalledWith(
-      expect.stringContaining('rejected')
-    );
-    expect(result).toEqual(successResult);
-  });
-
-  it('throws on unknown bank name', async () => {
-    const scraper = new BankScraper(makeOpts());
-    await expect(
-      scraper.scrapeBankWithResilience('unknownXYZ', fakeBankConfig())
-    ).rejects.toThrow('Unknown bank: unknownXYZ');
-  });
-
-  it('throws when mock file has invalid structure', async () => {
-    vi.stubEnv('E2E_MOCK_SCRAPER_FILE', '/mock/bad.json');
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ bad: true }));
-
-    const scraper = new BankScraper(makeOpts());
-    await expect(
-      scraper.scrapeBankWithResilience('discount', fakeBankConfig())
-    ).rejects.toThrow('Invalid mock scraper file');
-  });
-
-  it('clears bank session when clearSession is set', async () => {
-    const mockResult = { success: true, accounts: [] };
-    mockScraper.scrape.mockResolvedValue(mockResult);
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.rmSync).mockReturnValue(undefined);
-
-    const scraper = new BankScraper(makeOpts());
-    await scraper.scrapeBankWithResilience(
-      'discount', fakeBankConfig({ daysBack: 7, clearSession: true })
-    );
-
-    expect(fs.rmSync).toHaveBeenCalled();
-  });
-
-  it('uses noRetryStrategy for twoFactorAuth banks', async () => {
-    const noRetry = { execute: vi.fn(async (fn: () => Promise<unknown>) => fn()) };
-    const opts = { ...makeOpts(), noRetryStrategy: noRetry };
-    mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
-
-    const scraper = new BankScraper(opts);
-    await scraper.scrapeBankWithResilience(
-      'discount', fakeBankConfig({ daysBack: 7, twoFactorAuth: true })
-    );
-
-    expect(noRetry.execute).toHaveBeenCalled();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('Unknown error'));
   });
 });

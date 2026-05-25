@@ -11,7 +11,12 @@ import { createLogger, deriveLogFormat, getLogger } from './Logger/Index.js';
 import { GracefulShutdownHandler } from './Resilience/GracefulShutdown.js';
 import { ExponentialBackoffRetry } from './Resilience/RetryStrategy.js';
 import { TimeoutWrapper } from './Resilience/TimeoutWrapper.js';
-import { BankScraper } from './Scraper/BankScraper.js';
+import { createBankRegistry } from './Scraper/BankRegistry.js';
+import { BankScraper, createDateRangePolicy } from './Scraper/BankScraper.js';
+import createScrapeResultMapper from './Scraper/Mappers/DefaultScrapeResultMapper.js';
+import type { IBankScrapeStrategy } from './Scraper/Strategies/IBankScrapeStrategy.js';
+import { LiveScrapeStrategy } from './Scraper/Strategies/LiveScrapeStrategy.js';
+import { MockScrapeStrategy } from './Scraper/Strategies/MockScrapeStrategy.js';
 import createInitialContext from './Scrapers/Pipeline/ContextFactory.js';
 // Pipeline imports
 import { ChainBuilder, execute } from './Scrapers/Pipeline/Index.js';
@@ -141,14 +146,26 @@ LOGGER.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
 if (isDryRun) LOGGER.info('🔍 DRY RUN MODE — no changes will be made to Actual Budget\n');
 if (CONFIG.proxy?.server) LOGGER.info('🌐 Using configured proxy');
 
-// Wire up orchestration
+// Wire up orchestration — select scrape strategy by env (mock vs live).
+const MOCK_DIR = process.env.E2E_MOCK_SCRAPER_DIR;
+const MOCK_FILE = process.env.E2E_MOCK_SCRAPER_FILE;
+const isMockMode = Boolean(MOCK_DIR ?? MOCK_FILE);
+const SCRAPE_STRATEGY: IBankScrapeStrategy = isMockMode
+  ? new MockScrapeStrategy({ mockDir: MOCK_DIR, mockFile: MOCK_FILE, logger: LOGGER })
+  : new LiveScrapeStrategy({
+      config: CONFIG,
+      retryStrategy: RETRY_STRATEGY,
+      noRetryStrategy: NO_RETRY_STRATEGY,
+      timeoutWrapper: TIMEOUT_WRAPPER,
+      telegramNotifier: TELEGRAM_NOTIFIER,
+      notificationService: NOTIFICATION_SERVICE,
+    });
 const BANK_SCRAPER = new BankScraper({
-  config: CONFIG,
-  retryStrategy: RETRY_STRATEGY,
-  noRetryStrategy: NO_RETRY_STRATEGY,
-  timeoutWrapper: TIMEOUT_WRAPPER,
-  telegramNotifier: TELEGRAM_NOTIFIER,
-  notificationService: NOTIFICATION_SERVICE,
+  registry: createBankRegistry(),
+  strategy: SCRAPE_STRATEGY,
+  mapper: createScrapeResultMapper(),
+  datePolicy: createDateRangePolicy(),
+  logger: LOGGER,
 });
 const ACCOUNT_IMPORTER = new AccountImporter({
   transactionService: TRANSACTION_SERVICE,
