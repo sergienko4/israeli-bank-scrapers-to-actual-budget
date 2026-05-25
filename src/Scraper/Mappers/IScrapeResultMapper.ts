@@ -11,7 +11,7 @@
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
 import type {
-  ICanonicalScrapeResult, IRawScrape, ISignPolicy,
+  IBankConfig, ICanonicalScrapeResult, IRawScrape, ISignPolicy, Procedure,
 } from '../../Types/Index.js';
 
 /** Inputs to IScrapeResultMapper.mapToCanonical. */
@@ -22,10 +22,23 @@ export interface IMapToCanonicalOpts {
   readonly endDate: Date;
 }
 
+/** Inputs to IScrapeResultMapper.legacyToCanonical (phase-3 boundary). */
+export interface ILegacyToCanonicalOpts {
+  readonly legacy: IScraperScrapingResult;
+  readonly bankName: string;
+  readonly bankConfig: IBankConfig;
+}
+
 /** Mapper contract for raw → canonical → legacy conversions. */
 export interface IScrapeResultMapper {
   mapToCanonical(opts: IMapToCanonicalOpts): ICanonicalScrapeResult;
   canonicalToLegacy(
     canonical: ICanonicalScrapeResult, originalRaw: IScraperScrapingResult,
   ): IScraperScrapingResult;
+  /**
+   * Converts a legacy provider result (already sign-normalized by BankScraper)
+   * into the canonical shape consumed by phase-3 downstream importers.
+   * Returns Procedure so the pipeline can quarantine map failures.
+   */
+  legacyToCanonical(opts: ILegacyToCanonicalOpts): Procedure<ICanonicalScrapeResult>;
 }

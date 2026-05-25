@@ -160,10 +160,11 @@ const SCRAPE_STRATEGY: IBankScrapeStrategy = isMockMode
       telegramNotifier: TELEGRAM_NOTIFIER,
       notificationService: NOTIFICATION_SERVICE,
     });
+const SCRAPE_RESULT_MAPPER = createScrapeResultMapper();
 const BANK_SCRAPER = new BankScraper({
   registry: createBankRegistry(),
   strategy: SCRAPE_STRATEGY,
-  mapper: createScrapeResultMapper(),
+  mapper: SCRAPE_RESULT_MAPPER,
   datePolicy: createDateRangePolicy(),
   logger: LOGGER,
 });
@@ -192,6 +193,7 @@ const PIPELINE_CONTEXT = createInitialContext({
   notificationService: NOTIFICATION_SERVICE,
   bankScraper: BANK_SCRAPER,
   accountImporter: ACCOUNT_IMPORTER,
+  scrapeResultMapper: SCRAPE_RESULT_MAPPER,
   categoryResolver: CATEGORY_RESOLVER ?? false,
   dryRunCollector: DRY_RUN_COLLECTOR,
   isDryRun: isDryRun,

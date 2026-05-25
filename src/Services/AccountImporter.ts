@@ -1,12 +1,13 @@
 /**
  * Account import orchestration extracted from Index.ts to keep it under 300 lines.
  */
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
-
 import { getLogger } from '../Logger/Index.js';
 import type { IShutdownHandler } from '../Resilience/GracefulShutdown.js';
 import { filterTransactionsByDate } from '../Scraper/BankScraper.js';
-import type { IBankConfig, IBankTarget, IBankTransaction, Procedure } from '../Types/Index.js';
+import type {
+  IBankConfig, IBankTarget, IBankTransaction, ICanonicalAccount,
+  ICanonicalScrapeResult, Procedure,
+} from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
 import { DryRunCollector } from './DryRunCollector.js';
 import type { MetricsService } from './MetricsService.js';
@@ -46,6 +47,23 @@ interface IImportTxnCtx {
   currency: string;
 }
 
+/**
+ * Converts a canonical account (readonly, balance:null|number) into the
+ * mutable shape consumed by the per-account loop (balance: number | undefined).
+ * Module-private to keep the call site free of unbound-method concerns.
+ * @param account - Canonical account from the mapper.
+ * @returns Mutable account with balance normalized to optional number.
+ */
+function toMutableAccount(
+  account: ICanonicalAccount,
+): { accountNumber: string; balance?: number; txns: IBankTransaction[] } {
+  return {
+    accountNumber: account.accountNumber,
+    balance: account.balance ?? undefined,
+    txns: [...account.txns],
+  };
+}
+
 /** Internal context for reconciling one account. */
 interface IReconcileCtx {
   actualAccountId: string;
@@ -79,16 +97,16 @@ export class AccountImporter {
   constructor(private readonly opts: IAccountImporterOpts) {}
 
   /**
-   * Iterates all accounts in a scrape result and processes each one.
+   * Iterates all accounts in a canonical scrape result and processes each.
    * @param bankName - The bank whose accounts are being processed.
    * @param bankConfig - The bank's configuration for date filtering and targets.
-   * @param scrapeResult - The full scraper result containing all account data.
+   * @param canonicalResult - Canonical scrape result produced by Phase-2 mapper.
    * @returns Aggregated totals of imported and skipped transactions.
    */
   public async processAllAccounts(
-    bankName: string, bankConfig: IBankConfig, scrapeResult: IScraperScrapingResult
+    bankName: string, bankConfig: IBankConfig, canonicalResult: ICanonicalScrapeResult
   ): Promise<{ imported: number; skipped: number }> {
-    const accounts = scrapeResult.accounts ?? [];
+    const accounts = canonicalResult.accounts.map(toMutableAccount);
     return await this.processAccountsSequentially({
       bankName, bankConfig, accounts, index: 0, imported: 0, skipped: 0,
     });

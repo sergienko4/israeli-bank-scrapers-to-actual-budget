@@ -4,11 +4,57 @@
  */
 
 import { getScraperErrorAdvice } from '../Errors/ScraperErrorMessages.js';
-import type { IBatchResult } from '../Types/Index.js';
+import type { IBankResultsState, IBatchResult } from '../Types/Index.js';
 import type { IAuditEntry, IAuditLog } from './AuditLogService.js';
 
 const DEFAULT_LOG_COUNT = 50;
 const MAX_TELEGRAM_LENGTH = 4096;
+const PARTIAL_SUCCESS_QUARANTINE_DISPLAY_CAP = 10;
+
+/**
+ * Formats a partial-success summary for the Phase-3 quarantine model.
+ * @param bankResults - Partitioned bank outcomes from ProcessAllBanksStep.
+ * @param durationSec - Total batch duration in seconds (string, may include decimals).
+ * @param auditLog - Optional audit log for failure-streak annotation per bank.
+ * @returns Multi-line Telegram-ready string describing the partial run.
+ */
+export function formatPartialSuccess(
+  bankResults: IBankResultsState,
+  durationSec: string,
+  auditLog?: IAuditLog
+): string {
+  const okCount = bankResults.successful.length;
+  const total = bankResults.totalBanks;
+  const header = `⚠️ Partial success (${durationSec}s). ` +
+    `${String(okCount)}/${String(total)} banks OK.`;
+  const quarantined = bankResults.quarantined.slice(
+    0, PARTIAL_SUCCESS_QUARANTINE_DISPLAY_CAP,
+  );
+  const bankLines = quarantined.map(q => formatQuarantineLine(q, auditLog));
+  const overflow = bankResults.quarantined.length - quarantined.length;
+  const lines = [header, 'Quarantined:', ...bankLines];
+  if (overflow > 0) lines.push(`  ...and ${String(overflow)} more`);
+  lines.push('', 'Use /retry to re-import quarantined banks.');
+  return lines.join('\n');
+}
+
+/**
+ * Formats one quarantine entry into a bullet line with optional streak hint.
+ * @param entry - Quarantine entry for a failed bank.
+ * @param auditLog - Optional audit log for streak lookup.
+ * @returns Single bullet-point line for the quarantined bank.
+ */
+function formatQuarantineLine(
+  entry: IBankResultsState['quarantined'][number],
+  auditLog?: IAuditLog
+): string {
+  const errorMsg = entry.error.message.slice(0, 80);
+  const line = `• ${entry.bankName} [${entry.stage}]: ${errorMsg}`;
+  const advice = getScraperErrorAdvice(entry.error.message);
+  const streakResult = auditLog?.getConsecutiveFailures(entry.bankName);
+  const streak = streakResult?.success ? streakResult.data : 0;
+  return [line, ...buildErrorAnnotations(advice, streak)].join('\n');
+}
 
 /**
  * Checks whether an audit entry was recorded during or after a batch.

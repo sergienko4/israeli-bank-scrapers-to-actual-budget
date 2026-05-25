@@ -66,7 +66,15 @@ function makeOpts(overrides = {}) {
 }
 
 function makeScrapeResult(accounts: unknown[] = []) {
-  return { success: true, accounts } as never;
+  return {
+    bankId: 'mock',
+    scrapedAt: new Date().toISOString(),
+    accounts,
+    metadata: {
+      startDate: '2026-01-01', endDate: '2026-01-31',
+      signPolicyApplied: 'preserve', strategy: 'live', attemptCount: 1,
+    },
+  } as never;
 }
 
 // ─── processAllAccounts ───────────────────────────────────────────────────────
@@ -308,16 +316,6 @@ describe('AccountImporter.processAllAccounts', () => {
     await importer.processAllAccounts('discount', config, makeScrapeResult([account]));
 
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('-5.00 ILS'));
-  });
-
-  it('defaults to empty accounts array when scrapeResult.accounts is undefined', async () => {
-    const opts = makeOpts();
-    const importer = new AccountImporter(opts);
-    const config = fakeBankConfig();
-    const result = await importer.processAllAccounts('discount', config, { success: true } as never);
-
-    expect(result).toEqual({ imported: 0, skipped: 0 });
-    expect(opts.transactionService.importTransactions).not.toHaveBeenCalled();
   });
 
   it('returns empty result for account with zero transactions after filtering', async () => {
