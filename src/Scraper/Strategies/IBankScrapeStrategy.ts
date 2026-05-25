@@ -17,7 +17,12 @@ import type { IBankConfig, IRawScrape, Procedure } from '../../Types/Index.js';
 /** Options passed to every IBankScrapeStrategy.scrape call. */
 export interface IBankScrapeStrategyOpts {
   readonly bankId: string;
-  readonly companyType: CompanyTypes;
+  /**
+   * Provider CompanyType resolved from the registry, or undefined when the
+   * bank name is unknown to the registry. Mock strategies ignore it; the
+   * live strategy fails with status="unknown-bank" when missing.
+   */
+  readonly companyType?: CompanyTypes;
   readonly bankConfig: IBankConfig;
   readonly startDate: Date;
   readonly logger: ILogger;

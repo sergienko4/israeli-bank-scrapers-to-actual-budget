@@ -82,13 +82,34 @@ describe('BankScraper coordinator', () => {
     expect(result.accounts?.[0].accountNumber).toBe('123');
   });
 
-  it('returns failure result when registry rejects unknown bank', async () => {
-    const strategy: IBankScrapeStrategy = { scrape: vi.fn() };
+  it('delegates unknown banks to the strategy (e.g. mock fixtures)', async () => {
+    const strategy: IBankScrapeStrategy = {
+      scrape: vi.fn().mockResolvedValue(succeed({
+        bankId: 'e2eTestBank', companyType: undefined,
+        attemptCount: 1, strategy: 'mock',
+        raw: { success: true, accounts: [{ accountNumber: '42', balance: 0, txns: [] }] },
+      })),
+    };
+    const result = await makeScraper(strategy).scrapeBankWithResilience(
+      'e2eTestBank', fakeBankConfig());
+    expect(strategy.scrape).toHaveBeenCalledTimes(1);
+    const callArg = (strategy.scrape as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArg.bankId).toBe('e2eTestBank');
+    expect(callArg.companyType).toBeUndefined();
+    expect(result.success).toBe(true);
+    expect(result.accounts?.[0].accountNumber).toBe('42');
+  });
+
+  it('propagates strategy failure for unknown bank in live mode', async () => {
+    const strategy: IBankScrapeStrategy = {
+      scrape: vi.fn().mockResolvedValue(
+        fail('Unknown bank: unknownXYZ', { status: 'unknown-bank' })),
+    };
     const result = await makeScraper(strategy).scrapeBankWithResilience(
       'unknownXYZ', fakeBankConfig());
     expect(result.success).toBe(false);
     expect(result.errorMessage).toContain('Unknown bank: unknownXYZ');
-    expect(strategy.scrape).not.toHaveBeenCalled();
+    expect(strategy.scrape).toHaveBeenCalledTimes(1);
   });
 
   it('returns failure result when strategy fails', async () => {

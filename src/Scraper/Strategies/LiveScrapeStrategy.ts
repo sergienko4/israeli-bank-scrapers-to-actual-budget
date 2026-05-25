@@ -13,6 +13,7 @@
 import { existsSync, rmSync } from 'node:fs';
 
 import type {
+  CompanyTypes,
   IScraperScrapingResult, ScraperCredentials, ScraperOptions,
 } from '@sergienko4/israeli-bank-scrapers';
 import { createScraper } from '@sergienko4/israeli-bank-scrapers';
@@ -26,7 +27,7 @@ import TwoFactorService from '../../Services/TwoFactorService.js';
 import type {
   IBankConfig, IImporterConfig, IRawScrape, Procedure,
 } from '../../Types/Index.js';
-import { DEFAULT_RESILIENCE_CONFIG, succeed } from '../../Types/Index.js';
+import { DEFAULT_RESILIENCE_CONFIG, fail, succeed } from '../../Types/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
 import buildCredentials from '../CredentialsBuilder.js';
 import { buildChromeArgs, getChromeDataDir } from '../ScraperOptionsBuilder.js';
@@ -52,6 +53,15 @@ interface IOtpRetrieverParams {
   readonly logger: ILogger;
 }
 
+/**
+ * Internal opts after the public scrape() has verified companyType is set.
+ * Narrows companyType from optional to required so downstream helpers can
+ * use it without re-asserting on every call.
+ */
+type IResolvedLiveOpts = Omit<IBankScrapeStrategyOpts, 'companyType'> & {
+  readonly companyType: CompanyTypes;
+};
+
 /** Strategy driving the real israeli-bank-scrapers package. */
 export class LiveScrapeStrategy implements IBankScrapeStrategy {
   /**
@@ -68,13 +78,22 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
   public async scrape(
     scrapeOpts: IBankScrapeStrategyOpts,
   ): Promise<Procedure<IRawScrape>> {
+    if (!scrapeOpts.companyType) {
+      return fail(
+        `Unknown bank: ${scrapeOpts.bankId}`,
+        { status: 'unknown-bank' },
+      );
+    }
+    const resolvedOpts: IResolvedLiveOpts = {
+      ...scrapeOpts, companyType: scrapeOpts.companyType,
+    };
     scrapeOpts.logger.info(
       `  🔍 Scraping transactions from ${scrapeOpts.bankId}...`);
-    const first = await this.executeAttempt(scrapeOpts);
+    const first = await this.executeAttempt(resolvedOpts);
     if (LiveScrapeStrategy.isInvalidOtpFailure(first)) {
-      return await this.handleOtpReject(scrapeOpts);
+      return await this.handleOtpReject(resolvedOpts);
     }
-    return LiveScrapeStrategy.wrapSucceed(scrapeOpts, first, 1);
+    return LiveScrapeStrategy.wrapSucceed(resolvedOpts, first, 1);
   }
 
   /**
@@ -83,7 +102,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
    * @returns Procedure success with attemptCount=2 envelope.
    */
   private async handleOtpReject(
-    scrapeOpts: IBankScrapeStrategyOpts,
+    scrapeOpts: IResolvedLiveOpts,
   ): Promise<Procedure<IRawScrape>> {
     const retried = await this.retryAfterOtpReject(scrapeOpts);
     return LiveScrapeStrategy.wrapSucceed(scrapeOpts, retried, 2);
@@ -97,7 +116,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
    * @returns Procedure success carrying the wrapped envelope.
    */
   private static wrapSucceed(
-    scrapeOpts: IBankScrapeStrategyOpts,
+    scrapeOpts: IResolvedLiveOpts,
     raw: IScraperScrapingResult, attemptCount: number,
   ): Procedure<IRawScrape> {
     const envelope = LiveScrapeStrategy.wrap(scrapeOpts, raw, attemptCount);
@@ -110,7 +129,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
    * @returns Provider scrape result from the attempt.
    */
   private executeAttempt(
-    scrapeOpts: IBankScrapeStrategyOpts,
+    scrapeOpts: IResolvedLiveOpts,
   ): Promise<IScraperScrapingResult> {
     const { scraper, credentials } = this.initScrape(scrapeOpts);
     const retryStrategy = this.pickRetryStrategy(scrapeOpts.bankConfig);
@@ -159,7 +178,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
    * @returns Object exposing the configured scraper and credentials.
    */
   private initScrape(
-    scrapeOpts: IBankScrapeStrategyOpts,
+    scrapeOpts: IResolvedLiveOpts,
   ): { scraper: ReturnType<typeof createScraper>; credentials: ScraperCredentials } {
     const retriever = this.resolveOtpRetriever(scrapeOpts);
     const options = this.buildScraperOptions(scrapeOpts, retriever);
@@ -174,7 +193,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
    * @returns OTP retriever, or undefined when 2FA is not needed.
    */
   private resolveOtpRetriever(
-    scrapeOpts: IBankScrapeStrategyOpts,
+    scrapeOpts: IResolvedLiveOpts,
   ): (() => Promise<string>) | undefined {
     return scrapeOpts.otpRetriever
       ?? LiveScrapeStrategy.buildOtpRetriever({
@@ -192,7 +211,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
    * @returns ScraperOptions ready for createScraper().
    */
   private buildScraperOptions(
-    scrapeOpts: IBankScrapeStrategyOpts,
+    scrapeOpts: IResolvedLiveOpts,
     otpRetriever: (() => Promise<string>) | undefined,
   ): ScraperOptions {
     const base: ScraperOptions = {
@@ -230,7 +249,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
    * @returns Provider scrape result from the retry attempt.
    */
   private async retryAfterOtpReject(
-    scrapeOpts: IBankScrapeStrategyOpts,
+    scrapeOpts: IResolvedLiveOpts,
   ): Promise<IScraperScrapingResult> {
     scrapeOpts.logger.warn(
       `  ⚠️  OTP rejected — requesting a new code for ${scrapeOpts.bankId}`);
@@ -290,7 +309,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
    * @returns The newly created provider scraper instance.
    */
   private static prepareScraper(
-    scrapeOpts: IBankScrapeStrategyOpts, options: ScraperOptions,
+    scrapeOpts: IResolvedLiveOpts, options: ScraperOptions,
   ): ReturnType<typeof createScraper> {
     if (scrapeOpts.bankConfig.clearSession) {
       LiveScrapeStrategy.clearBankSession(scrapeOpts.bankId, scrapeOpts.logger);
@@ -324,7 +343,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
    * @returns Frozen IRawScrape envelope.
    */
   private static wrap(
-    scrapeOpts: IBankScrapeStrategyOpts,
+    scrapeOpts: IResolvedLiveOpts,
     raw: IScraperScrapingResult, attemptCount: number,
   ): IRawScrape {
     return {

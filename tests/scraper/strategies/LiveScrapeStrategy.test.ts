@@ -125,4 +125,19 @@ describe('LiveScrapeStrategy', () => {
     if (!result.success) return;
     expect(result.data.attemptCount).toBe(1);
   });
+
+  it('fails with status="unknown-bank" when companyType is undefined', async () => {
+    const opts: IBankScrapeStrategyOpts = {
+      bankId: 'mysteryBank',
+      bankConfig: fakeBankConfig({ daysBack: 7 }),
+      startDate: new Date(), logger,
+    };
+    const result = await makeStrategy().scrape(opts);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.message).toContain('Unknown bank: mysteryBank');
+    expect(result.status).toBe('unknown-bank');
+    expect(retryStrategy.execute).not.toHaveBeenCalled();
+    expect(noRetryStrategy.execute).not.toHaveBeenCalled();
+  });
 });

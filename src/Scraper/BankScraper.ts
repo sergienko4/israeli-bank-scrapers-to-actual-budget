@@ -21,11 +21,11 @@ import { getScraperErrorAdvice } from '../Errors/ScraperErrorMessages.js';
 import type { ILogger } from '../Logger/ILogger.js';
 import { getLogger } from '../Logger/Index.js';
 import type {
-  IBankConfig, IProcedureSuccess, IRawScrape,
+  IBankConfig, IProcedureSuccess, IRawScrape, ISignPolicy,
 } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
 import { filterByDateCutoff, formatDate } from '../Utils/Index.js';
-import type { IBankRegistry, IBankRegistryEntry } from './BankRegistry.js';
+import type { IBankRegistry } from './BankRegistry.js';
 import type { IScrapeResultMapper } from './Mappers/IScrapeResultMapper.js';
 import type { IDateRangePolicy } from './Policies/DateRangePolicy.js';
 import type { IBankScrapeStrategy } from './Strategies/IBankScrapeStrategy.js';
@@ -55,6 +55,9 @@ export class BankScraper {
 
   /**
    * Orchestrates a full scrape for one bank: resolve → scrape → map → adapt.
+   * Unknown-bank handling is delegated to the strategy: the mock strategy
+   * looks up fixtures by raw bank name (no registry needed), while the live
+   * strategy fails with status="unknown-bank" when companyType is missing.
    * @param bankName - User-facing bank alias from config.
    * @param bankConfig - Bank configuration block.
    * @returns Legacy IScraperScrapingResult for backward compatibility.
@@ -63,33 +66,32 @@ export class BankScraper {
     bankName: string, bankConfig: IBankConfig,
   ): Promise<IScraperScrapingResult> {
     const resolved = this.opts.registry.resolve(bankName);
-    if (!resolved.success) {
-      return BankScraper.buildFailureResult(`Unknown bank: ${bankName}`);
-    }
-    const entry = resolved.data;
+    const entry = resolved.success ? resolved.data : null;
     const startDate = this.opts.datePolicy.computeStartDate(bankConfig);
     this.opts.logger.info(
       `  📅 Date range: ${this.opts.datePolicy.formatDateRange(bankConfig)}`);
     const rawResult = await this.opts.strategy.scrape({
-      bankId: entry.bankId, companyType: entry.companyType,
+      bankId: entry?.bankId ?? bankName,
+      companyType: entry?.companyType,
       bankConfig, startDate, logger: this.opts.logger,
     });
     if (!rawResult.success) return BankScraper.buildFailureResult(rawResult.message);
-    return this.mapAndAdapt(rawResult.data, entry, startDate);
+    const signPolicy: ISignPolicy = entry?.signPolicy ?? 'preserve';
+    return this.mapAndAdapt(rawResult.data, signPolicy, startDate);
   }
 
   /**
    * Maps a successful raw scrape through the canonical layer and back to legacy.
    * @param raw - IRawScrape envelope from the chosen strategy.
-   * @param entry - Resolved bank registry entry supplying the sign policy.
+   * @param signPolicy - Sign policy resolved from the registry (or 'preserve' default).
    * @param startDate - Effective start date for this scrape window.
    * @returns Legacy IScraperScrapingResult.
    */
   private mapAndAdapt(
-    raw: IRawScrape, entry: IBankRegistryEntry, startDate: Date,
+    raw: IRawScrape, signPolicy: ISignPolicy, startDate: Date,
   ): IScraperScrapingResult {
     const canonical = this.opts.mapper.mapToCanonical({
-      raw, signPolicy: entry.signPolicy, startDate, endDate: new Date(),
+      raw, signPolicy, startDate, endDate: new Date(),
     });
     return this.opts.mapper.canonicalToLegacy(canonical, raw.raw);
   }

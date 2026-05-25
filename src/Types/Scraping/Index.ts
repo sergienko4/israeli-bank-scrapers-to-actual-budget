@@ -48,7 +48,8 @@ export interface ICanonicalScrapeResult {
 /** Raw scrape payload returned by a scrape strategy before mapping. */
 export interface IRawScrape {
   readonly bankId: string;
-  readonly companyType: CompanyTypes;
+  /** Optional — absent when the strategy operates on an unregistered bank (e.g. mock fixtures). */
+  readonly companyType?: CompanyTypes;
   readonly attemptCount: number;
   readonly strategy: IScrapeStrategyKind;
   readonly raw: IScraperScrapingResult;
