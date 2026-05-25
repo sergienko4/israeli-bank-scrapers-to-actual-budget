@@ -1,0 +1,68 @@
+#!/usr/bin/env sh
+
+# Husky post-commit hook — signal staleness of the understand-anything
+# knowledge graph (https://github.com/Lum1104/Understand-Anything).
+#
+# After each commit, compare HEAD against the last analyzed commit recorded
+# in .understand-anything/meta.json. If the commit touched repo source files,
+# emit a one-line reminder so the next Copilot CLI / agent session refreshes
+# the graph via `/understand --auto-update`.
+#
+# Important design notes:
+#   * This hook NEVER blocks git operations — it always exits 0, even on error.
+#   * `/understand --auto-update` is an LLM-driven agent skill (multi-phase
+#     subagent dispatch). A shell post-commit hook CANNOT drive that analysis
+#     on its own — it can only signal staleness for the next agent session.
+#   * Hook is opt-in: silently exits when .understand-anything/config.json is
+#     absent or has `"autoUpdate": false`. Contributors without the plugin
+#     installed are not affected.
+
+set +e
+
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+CONFIG="$PROJECT_ROOT/.understand-anything/config.json"
+META="$PROJECT_ROOT/.understand-anything/meta.json"
+
+# Silently skip if auto-update is not enabled for this checkout.
+[ -f "$CONFIG" ] || exit 0
+grep -q '"autoUpdate"[[:space:]]*:[[:space:]]*true' "$CONFIG" 2>/dev/null || exit 0
+[ -f "$META" ] || exit 0
+
+LAST_HASH=$(grep -oE '"gitCommitHash"[[:space:]]*:[[:space:]]*"[0-9a-fA-F]+"' "$META" \
+  | sed -E 's/.*"([0-9a-fA-F]+)".*/\1/' \
+  | head -n 1)
+HEAD_HASH=$(git rev-parse HEAD 2>/dev/null)
+
+[ -z "$LAST_HASH" ] && exit 0
+[ -z "$HEAD_HASH" ] && exit 0
+[ "$LAST_HASH" = "$HEAD_HASH" ] && exit 0
+
+# Verify the recorded hash is reachable; if not (force-push / squash from
+# upstream), still emit a reminder without trying a diff that would fail.
+if ! git cat-file -e "$LAST_HASH^{commit}" 2>/dev/null; then
+  echo ""
+  echo "📊 [understand-anything] Recorded analysis commit not found in history."
+  echo "   Run /understand --auto-update in your next Copilot CLI session to refresh."
+  echo ""
+  exit 0
+fi
+
+# What changed since the last analyzed commit? Filter out paths that never
+# affect the knowledge graph (graph state, deps, build artifacts, husky shims).
+CHANGED=$(git diff --name-only "$LAST_HASH" "$HEAD_HASH" 2>/dev/null \
+  | grep -vE '^(\.understand-anything/|node_modules/|dist/|build/|coverage/|\.husky/_/)' \
+  || true)
+
+if [ -z "$CHANGED" ]; then
+  exit 0
+fi
+
+CHANGED_COUNT=$(printf '%s\n' "$CHANGED" | grep -c .)
+SHORT_HASH=$(printf '%s' "$LAST_HASH" | cut -c1-7)
+
+echo ""
+echo "📊 [understand-anything] Knowledge graph is stale ($CHANGED_COUNT file(s) changed since $SHORT_HASH)."
+echo "   Run /understand --auto-update in your next Copilot CLI session to refresh."
+echo ""
+
+exit 0
