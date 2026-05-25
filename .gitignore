@@ -66,3 +66,7 @@ docs/api/
 # Camoufox cache (CI-injected, only .gitkeep committed)
 .camoufox-cache/*
 !.camoufox-cache/.gitkeep
+
+# understand-anything plugin local state (per-developer knowledge graph)
+# https://github.com/Lum1104/Understand-Anything
+.understand-anything/
