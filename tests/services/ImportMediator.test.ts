@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { ImportMediator } from '../../src/Services/ImportMediator.js';
+import type { INotifier } from '../../src/Services/Notifications/INotifier.js';
 import type TelegramPoller from '../../src/Services/TelegramPoller.js';
 
 vi.mock('../../src/Logger/Index.js', () => ({
@@ -10,13 +12,13 @@ vi.mock('../../src/Logger/Index.js', () => ({
 
 /**
  * Creates a mock notifier for testing.
- * @returns Mock INotifier with stub methods.
+ * @returns Mock notifier object satisfying INotifier with typed Mock methods.
  */
-function createMockNotifier(): { sendMessage: ReturnType<typeof vi.fn>; sendSummary: ReturnType<typeof vi.fn>; sendError: ReturnType<typeof vi.fn> } {
+function createMockNotifier() {
   return {
-    sendMessage: vi.fn().mockResolvedValue(undefined),
-    sendSummary: vi.fn().mockResolvedValue(undefined),
-    sendError: vi.fn().mockResolvedValue(undefined),
+    sendMessage: vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined),
+    sendSummary: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    sendError: vi.fn<(error: string) => Promise<void>>().mockResolvedValue(undefined),
   };
 }
 
@@ -33,13 +35,13 @@ function createMockPoller(): TelegramPoller {
 }
 
 describe('ImportMediator', () => {
-  let spawnImport: ReturnType<typeof vi.fn>;
-  let getBankNames: ReturnType<typeof vi.fn>;
+  let spawnImport: Mock<(extraEnv: Record<string, string>) => Promise<number>>;
+  let getBankNames: Mock<() => string[]>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    spawnImport = vi.fn().mockResolvedValue(0);
-    getBankNames = vi.fn().mockReturnValue(['discount', 'leumi']);
+    spawnImport = vi.fn<(extraEnv: Record<string, string>) => Promise<number>>().mockResolvedValue(0);
+    getBankNames = vi.fn<() => string[]>().mockReturnValue(['discount', 'leumi']);
   });
 
   it('requestImport returns a batchId when idle', () => {
@@ -76,7 +78,7 @@ describe('ImportMediator', () => {
     const batchId = mediator.requestImport({ source: 'cron' });
     expect(batchId).toBeTruthy();
 
-    const result = await mediator.waitForBatch(batchId!);
+    const result = await mediator.waitForBatch(batchId as string);
     expect(result.batchId).toBe(batchId);
     expect(result.source).toBe('cron');
     expect(result.successCount).toBe(1);
@@ -97,7 +99,7 @@ describe('ImportMediator', () => {
       spawnImport, getBankNames, notifier: null,
     });
     const batchId = mediator.requestImport({ source: 'telegram' });
-    const result = await mediator.waitForBatch(batchId!);
+    const result = await mediator.waitForBatch(batchId as string);
 
     expect(result.failureCount).toBe(1);
     expect(result.successCount).toBe(0);
@@ -109,7 +111,7 @@ describe('ImportMediator', () => {
       spawnImport, getBankNames, notifier,
     });
     const batchId = mediator.requestImport({ source: 'cron' });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
 
     expect(notifier.sendMessage).toHaveBeenCalledWith(
       expect.stringContaining('Batch complete')
@@ -124,7 +126,7 @@ describe('ImportMediator', () => {
     });
     const batchId = mediator.requestImport({ source: 'cron' });
     // Should not throw
-    const result = await mediator.waitForBatch(batchId!);
+    const result = await mediator.waitForBatch(batchId as string);
     expect(result.successCount).toBe(1);
   });
 
@@ -144,7 +146,7 @@ describe('ImportMediator', () => {
     await vi.waitFor(() => expect(mediator.isImporting()).toBe(true));
 
     resolveSpawn?.(0);
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
     // Allow drain() to finish (microtask after finalizeBatch resolves the tracker)
     await vi.waitFor(() => expect(mediator.isImporting()).toBe(false));
   });
@@ -158,7 +160,7 @@ describe('ImportMediator', () => {
     expect(mediator.getLastRunTime()).toBeNull();
 
     const batchId = mediator.requestImport({ source: 'cron' });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
 
     expect(mediator.getLastResult()).toBeTruthy();
     expect(mediator.getLastRunTime()).toBeInstanceOf(Date);
@@ -171,7 +173,7 @@ describe('ImportMediator', () => {
     const batchId = mediator.requestImport({
       source: 'telegram', banks: ['discount'],
     });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
 
     expect(spawnImport).toHaveBeenCalledWith(
       expect.objectContaining({ IMPORT_BANKS: 'discount' })
@@ -185,7 +187,7 @@ describe('ImportMediator', () => {
     const batchId = mediator.requestImport({
       source: 'telegram', extraEnv: { DRY_RUN: 'true' },
     });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
 
     expect(spawnImport).toHaveBeenCalledWith(
       expect.objectContaining({ DRY_RUN: 'true' })
@@ -200,7 +202,7 @@ describe('ImportMediator', () => {
     mediator.setPoller(poller);
 
     const batchId = mediator.requestImport({ source: 'telegram' });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
     // Allow drain() to finish so handleQueueEmpty resumes the poller
     await vi.waitFor(() => expect(poller.start).toHaveBeenCalled());
 
@@ -215,7 +217,7 @@ describe('ImportMediator', () => {
         setTimeout(() => { callOrder.push('stopAndFlush'); resolve(); }, 50);
       })
     );
-    const trackedSpawn = vi.fn().mockImplementation(async () => {
+    const trackedSpawn = vi.fn<(extraEnv: Record<string, string>) => Promise<number>>().mockImplementation(async () => {
       callOrder.push('spawnImport');
       return 0;
     });
@@ -225,7 +227,7 @@ describe('ImportMediator', () => {
     mediator.setPoller(poller);
 
     const batchId = mediator.requestImport({ source: 'telegram' });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
 
     expect(callOrder).toEqual(['stopAndFlush', 'spawnImport']);
   });
@@ -237,7 +239,7 @@ describe('ImportMediator', () => {
     // No setPoller call
     const batchId = mediator.requestImport({ source: 'cron' });
     // Should not throw
-    const result = await mediator.waitForBatch(batchId!);
+    const result = await mediator.waitForBatch(batchId as string);
     expect(result.successCount).toBe(1);
   });
 
@@ -247,7 +249,7 @@ describe('ImportMediator', () => {
       spawnImport, getBankNames, notifier: null,
     });
     const batchId = mediator.requestImport({ source: 'cron' });
-    const result = await mediator.waitForBatch(batchId!);
+    const result = await mediator.waitForBatch(batchId as string);
 
     // Error case: exitCode defaults to 1
     expect(result.failureCount).toBe(1);
@@ -259,7 +261,7 @@ describe('ImportMediator', () => {
       spawnImport, getBankNames, notifier: null,
     });
     const batchId = mediator.requestImport({ source: 'cron' });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
 
     // Should pass empty env (no IMPORT_BANKS) for 'all' label
     expect(spawnImport).toHaveBeenCalledWith({});
@@ -276,7 +278,7 @@ describe('ImportMediator', () => {
     mediator.setPoller(poller);
 
     const batchId = mediator.requestImport({ source: 'cron' });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
 
     // Should not throw — error is caught internally
     // Allow drain() to finish so handleQueueEmpty calls poller.start()
@@ -286,19 +288,19 @@ describe('ImportMediator', () => {
   it('sends warning icon in summary when batch has failures', async () => {
     const notifier = { sendMessage: vi.fn().mockResolvedValue(undefined) };
     const mediator = new ImportMediator({
-      spawnImport: vi.fn().mockResolvedValue(1),
+      spawnImport: vi.fn<(extraEnv: Record<string, string>) => Promise<number>>().mockResolvedValue(1),
       getBankNames: () => ['discount'],
       notifier: notifier as unknown as INotifier,
     });
 
     const batchId = mediator.requestImport({ source: 'telegram', banks: ['discount'] });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
 
     expect(notifier.sendMessage).toHaveBeenCalledWith(expect.stringContaining('⚠️'));
   });
 
   it('passes extraEnv to spawnImport for DRY_RUN', async () => {
-    const spawnImport = vi.fn().mockResolvedValue(0);
+    const spawnImport = vi.fn<(extraEnv: Record<string, string>) => Promise<number>>().mockResolvedValue(0);
     const mediator = new ImportMediator({
       spawnImport,
       getBankNames: () => ['discount'],
@@ -308,7 +310,7 @@ describe('ImportMediator', () => {
     const batchId = mediator.requestImport({
       source: 'telegram', banks: ['discount'], extraEnv: { DRY_RUN: 'true' },
     });
-    await mediator.waitForBatch(batchId!);
+    await mediator.waitForBatch(batchId as string);
 
     expect(spawnImport).toHaveBeenCalledWith(
       expect.objectContaining({ DRY_RUN: 'true', IMPORT_BANKS: 'discount' })

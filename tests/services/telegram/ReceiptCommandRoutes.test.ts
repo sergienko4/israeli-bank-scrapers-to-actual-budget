@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ReceiptImportHandler } from '../../../src/Services/ReceiptImportHandler.js';
 import buildReceiptCommandRoutes from '../../../src/Services/Telegram/ReceiptCommandRoutes.js';
 import { succeed } from '../../../src/Types/Index.js';
+import { assertProcedureSuccess } from '../../helpers/factories.js';
 
 /**
  * Builds a stub ReceiptImportHandler with all 5 callback handlers as spies.
@@ -80,6 +81,7 @@ describe('buildReceiptCommandRoutes', () => {
     const rh = stubReceiptHandler();
     const route = buildReceiptCommandRoutes(rh).find(r => r.pattern === 'receipt_acc:')!;
     const out = await route.handle('');
+    assertProcedureSuccess(out);
     expect(out.data.status).toBe('missing-payload');
     expect(rh.onAccountSelected).not.toHaveBeenCalled();
   });

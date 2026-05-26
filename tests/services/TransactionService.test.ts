@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TransactionService } from '../../src/Services/TransactionService.js';
 import { ICategoryResolver } from '../../src/Services/ICategoryResolver.js';
-import { fakeBankTransactions, fakeBankTransaction } from '../helpers/factories.js';
+import { assertProcedureSuccess, fakeBankTransactions, fakeBankTransaction } from '../helpers/factories.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -39,7 +39,9 @@ describe('TransactionService', () => {
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(2);
+      assertProcedureSuccess(result);
       expect(result.data.skipped).toBe(0);
       expect(mockApi.importTransactions).toHaveBeenCalledTimes(2);
     });
@@ -110,7 +112,9 @@ describe('TransactionService', () => {
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(1);
+      assertProcedureSuccess(result);
       expect(result.data.skipped).toBe(1);
     });
 
@@ -121,7 +125,9 @@ describe('TransactionService', () => {
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(0);
+      assertProcedureSuccess(result);
       expect(result.data.skipped).toBe(0);
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error importing transaction: Database error')
@@ -170,6 +176,7 @@ describe('TransactionService', () => {
       const txns = [fakeBankTransaction()];
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(0);
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('network failure')
@@ -182,7 +189,9 @@ describe('TransactionService', () => {
       const txns = [{ date: '2026-02-14', chargedAmount: -100, description: 'Update', identifier: 'preexist' }];
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(0);
+      assertProcedureSuccess(result);
       expect(result.data.skipped).toBe(1);
     });
 
@@ -192,6 +201,7 @@ describe('TransactionService', () => {
       const txns = [{ date: '2026-02-14', chargedAmount: -50, description: 'Test', identifier: 'txn-1' }];
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: txns });
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(1);
     });
 
@@ -212,6 +222,7 @@ describe('TransactionService', () => {
         actualAccountId: 'acc-id', transactions: txns,
       });
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(1);
     });
 
@@ -219,7 +230,9 @@ describe('TransactionService', () => {
       const result = await service.importTransactions({ bankName: 'discount', accountNumber: '123456', actualAccountId: 'acc-id', transactions: [] });
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(0);
+      assertProcedureSuccess(result);
       expect(result.data.skipped).toBe(0);
       expect(mockApi.importTransactions).not.toHaveBeenCalled();
     });
@@ -255,7 +268,9 @@ describe('TransactionService', () => {
       });
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(0);
+      assertProcedureSuccess(result);
       expect(result.data.skipped).toBe(1);
     });
 
@@ -290,7 +305,9 @@ describe('TransactionService', () => {
       });
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(1);
+      assertProcedureSuccess(result);
       expect(result.data.skipped).toBe(1);
 
       // Both insert attempts use the SAME imported_id (proves the collision)
@@ -319,7 +336,9 @@ describe('TransactionService', () => {
       });
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.imported).toBe(0);
+      assertProcedureSuccess(result);
       expect(result.data.skipped).toBe(1);
     });
   });
@@ -332,6 +351,7 @@ describe('TransactionService', () => {
       const result = await service.getOrCreateAccount('acc-123', 'discount', '999999');
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual(existingAccount);
       expect(mockApi.createAccount).not.toHaveBeenCalled();
     });
@@ -344,6 +364,7 @@ describe('TransactionService', () => {
       const result = await service.getOrCreateAccount('acc-new', 'discount', '999999');
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual(newAccount);
       expect(mockApi.createAccount).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -365,6 +386,7 @@ describe('TransactionService', () => {
       const result = await service.getOrCreateAccount('acc-222', 'leumi', '888888');
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual({ id: 'acc-222', name: 'Account 2' });
     });
 
@@ -376,7 +398,9 @@ describe('TransactionService', () => {
 
       expect(result.success).toBe(true);
       if (result.success) {
+        assertProcedureSuccess(result);
         expect(result.data.id).toBe('some-string-id');
+        assertProcedureSuccess(result);
         expect(result.data.name).toBe('discount - 999999');
       }
     });
@@ -398,6 +422,7 @@ describe('TransactionService', () => {
       const result = await service.getOrCreateAccount('configured-id-ignored', 'discount', '999999');
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual(actualAccount);
       expect(mockApi.createAccount).not.toHaveBeenCalled();
     });
@@ -424,6 +449,7 @@ describe('TransactionService', () => {
       const result = await service.getOrCreateAccount('no-match', 'discount', '999999');
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual(accounts[0]);
       expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.stringContaining('3 accounts named')
@@ -442,6 +468,7 @@ describe('TransactionService', () => {
       const result = await service.getOrCreateAccount('exact-id', 'discount', '999999');
 
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.id).toBe('exact-id');
       expect(mockLogger.warn).not.toHaveBeenCalled();
     });

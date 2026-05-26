@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
 import type { ImportMediator } from '../../src/Services/ImportMediator.js';
-import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
+import type { IAuditEntry, IAuditLog } from '../../src/Services/AuditLogService.js';
+import type { INotifier } from '../../src/Services/Notifications/INotifier.js';
 import { succeed, fail } from '../../src/Types/Index.js';
-import { fakeIAuditEntry } from '../helpers/factories.js';
+import { fakeIAuditEntry, assertProcedureSuccess } from '../helpers/factories.js';
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
 
@@ -14,6 +16,22 @@ vi.mock('../../src/Logger/Index.js', () => ({
   LogFileReader: vi.fn().mockImplementation(function() { return { getRecent: mockGetRecent }; }),
   deriveLogFormat: vi.fn().mockReturnValue('words'),
 }));
+
+/** Test notifier whose methods remain Vitest mocks. */
+type MockNotifier = {
+  sendMessage: Mock<INotifier['sendMessage']>;
+  sendSummary: Mock<INotifier['sendSummary']>;
+  sendError: Mock<INotifier['sendError']>;
+};
+
+/** Creates a typed mock notifier for Telegram command tests. */
+function createMockNotifier(): MockNotifier {
+  return {
+    sendMessage: vi.fn<INotifier['sendMessage']>().mockResolvedValue(undefined),
+    sendSummary: vi.fn<INotifier['sendSummary']>().mockResolvedValue(undefined),
+    sendError: vi.fn<INotifier['sendError']>().mockResolvedValue(undefined),
+  };
+}
 
 /** Creates a mock ImportMediator with default happy-path behavior. */
 function createMockMediator(): {
@@ -49,27 +67,25 @@ function createMockAuditLog(opts: {
   entries?: IAuditEntry[];
   lastFailed?: string[];
   consecutiveFailures?: number;
-} = {}): Record<string, ReturnType<typeof vi.fn>> {
+} = {}) {
   return {
-    record: vi.fn().mockReturnValue(succeed({ status: 'recorded' })),
-    getRecent: vi.fn().mockReturnValue(succeed(opts.entries ?? [])),
-    getLastFailedBanks: vi.fn().mockReturnValue(succeed(opts.lastFailed ?? [])),
-    getConsecutiveFailures: vi.fn().mockReturnValue(succeed(opts.consecutiveFailures ?? 0)),
+    record: vi.fn<IAuditLog['record']>().mockReturnValue(succeed({ status: 'recorded' as const })),
+    getRecent: vi.fn<IAuditLog['getRecent']>().mockReturnValue(succeed(opts.entries ?? [])),
+    getLastFailedBanks: vi.fn<IAuditLog['getLastFailedBanks']>()
+      .mockReturnValue(succeed(opts.lastFailed ?? [])),
+    getConsecutiveFailures: vi.fn<IAuditLog['getConsecutiveFailures']>()
+      .mockReturnValue(succeed(opts.consecutiveFailures ?? 0)),
   };
 }
 
 describe('TelegramCommandHandler', () => {
   let handler: TelegramCommandHandler;
   let mockMediator: ReturnType<typeof createMockMediator>;
-  let mockNotifier: { sendMessage: ReturnType<typeof vi.fn>; sendSummary: ReturnType<typeof vi.fn>; sendError: ReturnType<typeof vi.fn> };
+  let mockNotifier: MockNotifier;
 
   beforeEach(() => {
     mockMediator = createMockMediator();
-    mockNotifier = {
-      sendMessage: vi.fn().mockResolvedValue(undefined),
-      sendSummary: vi.fn(),
-      sendError: vi.fn()
-    };
+    mockNotifier = createMockNotifier();
     handler = new TelegramCommandHandler({
       mediator: mockMediator as unknown as ImportMediator,
       notifier: mockNotifier,
@@ -454,7 +470,7 @@ describe('TelegramCommandHandler', () => {
    * @param auditLog - The mock audit-log to attach.
    * @returns The 'Import failed' message string, or undefined.
    */
-  async function scanAndGetError(auditLog: Record<string, ReturnType<typeof vi.fn>>): Promise<string | undefined> {
+  async function scanAndGetError(auditLog: IAuditLog): Promise<string | undefined> {
     const auditHandler = new TelegramCommandHandler({
       mediator: mockMediator as unknown as ImportMediator,
       notifier: mockNotifier,
@@ -692,6 +708,7 @@ describe('TelegramCommandHandler', () => {
 
   it('handlePhoto returns not-configured when no receipt handler', async () => {
     const result = await handler.handlePhoto('file-id');
+    assertProcedureSuccess(result);
     expect(result.data.status).toBe('receipt-not-configured');
   });
 
@@ -712,6 +729,7 @@ describe('TelegramCommandHandler', () => {
     });
     const result = await receiptHandler.handlePhoto('file-123');
     expect(mockReceipt.handlePhoto).toHaveBeenCalledWith('file-123');
+    assertProcedureSuccess(result);
     expect(result.data.status).toBe('processed');
   });
 

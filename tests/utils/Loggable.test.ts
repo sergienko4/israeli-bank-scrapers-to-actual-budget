@@ -97,7 +97,7 @@ describe('loggable decorator', () => {
     class Idle {
       public noop = decorate(function (this: Idle): void { /* noop */ }, 'noop');
     }
-    const _idle = new Idle();
+    new Idle();
     expect(mockLogger.info).not.toHaveBeenCalled();
   });
 

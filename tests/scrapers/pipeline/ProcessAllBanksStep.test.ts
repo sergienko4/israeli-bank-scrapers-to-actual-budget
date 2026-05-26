@@ -45,7 +45,6 @@ function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
     } as unknown as IPipelineContext['services'],
     state: { isDryRun: false, apiInitialized: true, banksProcessed: 0 },
     ...overrides,
-    config: mergedConfig,
   } as IPipelineContext;
 }
 

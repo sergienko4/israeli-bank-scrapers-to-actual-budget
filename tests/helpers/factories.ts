@@ -6,6 +6,7 @@
  */
 
 import { faker } from '@faker-js/faker';
+import type { IProcedureSuccess, Procedure } from '../../src/Types/Index.js';
 import type {
   IBankTransaction,
   IBankConfig,
@@ -390,4 +391,15 @@ export function fakeBatchResult(
     failureCount: 0,
     ...overrides,
   };
+}
+
+/**
+ * Asserts that a Procedure result is successful, narrowing the type.
+ * Throws with the failure message if the result is a failure.
+ * @param result - The Procedure result to assert.
+ */
+export function assertProcedureSuccess<T>(
+  result: Procedure<T>,
+): asserts result is IProcedureSuccess<T> {
+  if (!result.success) throw new Error(`Expected procedure success but got failure: ${result.message}`);
 }

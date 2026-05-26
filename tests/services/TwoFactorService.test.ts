@@ -2,18 +2,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import TwoFactorService from '../../src/Services/TwoFactorService.js';
 import TelegramNotifier from '../../src/Services/Notifications/TelegramNotifier.js';
 
+function makeMockNotifier() {
+  const notifier = new TelegramNotifier({
+    botToken: 'token',
+    chatId: 'chat',
+    messageFormat: 'summary',
+  });
+  return {
+    notifier,
+    waitForReply: vi.spyOn(notifier, 'waitForReply'),
+    sendMessage: vi.spyOn(notifier, 'sendMessage').mockResolvedValue(undefined),
+    sendSummary: vi.spyOn(notifier, 'sendSummary').mockResolvedValue(undefined),
+    sendError: vi.spyOn(notifier, 'sendError').mockResolvedValue(undefined),
+  };
+}
+
 describe('TwoFactorService', () => {
-  let mockNotifier: Pick<TelegramNotifier, 'waitForReply' | 'sendMessage' | 'sendSummary' | 'sendError'>;
+  let mockNotifier: ReturnType<typeof makeMockNotifier>;
   let service: TwoFactorService;
 
   beforeEach(() => {
-    mockNotifier = {
-      waitForReply: vi.fn(),
-      sendMessage: vi.fn(),
-      sendSummary: vi.fn(),
-      sendError: vi.fn()
-    };
-    service = new TwoFactorService(mockNotifier as TelegramNotifier, 60);
+    mockNotifier = makeMockNotifier();
+    service = new TwoFactorService(mockNotifier.notifier, 60);
   });
 
   describe('createOtpRetriever', () => {
@@ -56,15 +66,11 @@ describe('TwoFactorService', () => {
     });
 
     it('two retrievers for different banks produce independent masked codes', async () => {
-      const notifier2 = {
-        waitForReply: vi.fn().mockResolvedValue('789012'),
-        sendMessage: vi.fn(),
-        sendSummary: vi.fn(),
-        sendError: vi.fn(),
-      };
+      const notifier2 = makeMockNotifier();
+      notifier2.waitForReply.mockResolvedValue('789012');
       mockNotifier.waitForReply.mockResolvedValue('123456');
 
-      const service2 = new TwoFactorService(notifier2 as TelegramNotifier, 60);
+      const service2 = new TwoFactorService(notifier2.notifier, 60);
       const retrieverB = service.createOtpRetriever('beinleumi');
       const retrieverO = service2.createOtpRetriever('oneZero');
 
@@ -138,7 +144,7 @@ describe('TwoFactorService', () => {
 
   describe('timeout configuration', () => {
     it('uses configured timeout in milliseconds', async () => {
-      const customService = new TwoFactorService(mockNotifier, 120);
+      const customService = new TwoFactorService(mockNotifier.notifier, 120);
       mockNotifier.waitForReply.mockResolvedValue('123456');
 
       const retriever = customService.createOtpRetriever('oneZero');
@@ -154,7 +160,7 @@ describe('TwoFactorService', () => {
     });
 
     it('defaults to 300 seconds when not specified', async () => {
-      const defaultService = new TwoFactorService(mockNotifier);
+      const defaultService = new TwoFactorService(mockNotifier.notifier);
       mockNotifier.waitForReply.mockResolvedValue('123456');
 
       const retriever = defaultService.createOtpRetriever('oneZero');

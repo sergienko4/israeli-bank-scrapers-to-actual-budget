@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
 import {
   BankScraper, computeStartDate, filterTransactionsByDate,
@@ -30,6 +31,9 @@ import { fail, succeed } from '../../src/Types/Index.js';
 import {
   fakeBankConfig, fakeBankTransactions,
 } from '../helpers/factories.js';
+
+const WAF_BLOCKED_ERROR_TYPE = 'WAF_BLOCKED' as unknown as IScraperScrapingResult['errorType'];
+const GENERIC_ERROR_TYPE = 'GENERIC' as unknown as IScraperScrapingResult['errorType'];
 
 // ── Logger mock ──────────────────────────────────────────────────────────────
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -256,7 +260,7 @@ describe('logScrapeFailure', () => {
 
   it('logs the error message with WAF hint', () => {
     logScrapeFailure('leumi', {
-      success: false, errorType: 'WAF_BLOCKED',
+      success: false, errorType: WAF_BLOCKED_ERROR_TYPE,
       errorMessage: 'blocked', accounts: [],
     });
     expect(mockLogger.error).toHaveBeenCalledWith(
@@ -265,7 +269,7 @@ describe('logScrapeFailure', () => {
 
   it('logs without hint for unknown error type', () => {
     logScrapeFailure('leumi', {
-      success: false, errorType: 'UNKNOWN',
+      success: false, errorType: GENERIC_ERROR_TYPE,
       errorMessage: 'oops', accounts: [],
     });
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('oops'));

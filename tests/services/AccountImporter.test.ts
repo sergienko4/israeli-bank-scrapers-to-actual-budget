@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AccountImporter } from '../../src/Services/AccountImporter.js';
 import { DryRunCollector } from '../../src/Services/DryRunCollector.js';
+import type { MetricsService } from '../../src/Services/MetricsService.js';
+import type { ReconciliationService } from '../../src/Services/ReconciliationService.js';
+import type { TransactionService } from '../../src/Services/TransactionService.js';
 import { succeed, fail } from '../../src/Types/Index.js';
 import {
   fakeBankConfig, fakeBankTransactions, fakeBankTarget, fakeCanonicalScrapeResult,
@@ -50,15 +53,20 @@ function makeMockMetrics() {
   };
 }
 
+type MockTransactionService = ReturnType<typeof makeMockTransactionService> & TransactionService;
+type MockReconciliationService = ReturnType<typeof makeMockReconciliationService>
+  & ReconciliationService;
+type MockMetricsService = ReturnType<typeof makeMockMetrics> & MetricsService;
+
 function makeDryRunCollector() {
   return new DryRunCollector();
 }
 
 function makeOpts(overrides = {}) {
   return {
-    transactionService: makeMockTransactionService(),
-    reconciliationService: makeMockReconciliationService(),
-    metrics: makeMockMetrics(),
+    transactionService: makeMockTransactionService() as unknown as MockTransactionService,
+    reconciliationService: makeMockReconciliationService() as unknown as MockReconciliationService,
+    metrics: makeMockMetrics() as unknown as MockMetricsService,
     isDryRun: false,
     dryRunCollector: makeDryRunCollector(),
     shutdownHandler: { isShuttingDown: vi.fn().mockReturnValue(false), onShutdown: vi.fn() },

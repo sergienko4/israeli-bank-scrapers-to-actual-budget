@@ -122,9 +122,10 @@ describe('TelegramPoller', () => {
 
     await poller.start();
 
-    const registerCall = fetchMock.mock.calls.find(
-      (c: [string, ...unknown[]]) => typeof c[0] === 'string' && c[0].includes('setMyCommands')
-    );
+    const registerCall = fetchMock.mock.calls.find(call => {
+      const url = call[0];
+      return typeof url === 'string' && url.includes('setMyCommands');
+    });
     expect(registerCall).toBeUndefined();
   });
 
@@ -357,7 +358,7 @@ describe('TelegramPoller', () => {
     const poller = new TelegramPoller('123:ABC', '999', onMessage);
 
     let callCount = 0;
-    fetchMock.mockImplementation((...args: unknown[]) => {
+    fetchMock.mockImplementation(() => {
       callCount++;
       if (callCount <= 1) return emptyResponse();
       if (callCount === 2) {

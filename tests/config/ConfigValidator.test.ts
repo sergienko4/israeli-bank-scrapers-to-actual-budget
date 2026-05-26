@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ConfigValidator, ValidationResult, runValidateMode } from '../../src/Config/ConfigValidator.js';
+import { ConfigValidator, IValidationResult, runValidateMode } from '../../src/Config/ConfigValidator.js';
 import { IImporterConfig } from '../../src/Types/Index.js';
 import * as fs from 'fs';
 import { fakeUuid } from '../helpers/factories.js';
@@ -37,30 +37,25 @@ function makeConfig(overrides: Record<string, unknown> = {}): IImporterConfig {
  * @param status - The status to filter by.
  * @returns Filtered results matching the given status.
  */
-function byStatus(results: ValidationResult[], status: string): ValidationResult[] {
+function byStatus(results: IValidationResult[], status: string): IValidationResult[] {
   return results.filter(r => r.status === status);
 }
 
 /** @param results - Results to filter. @returns Only passing results. */
-function pass(results: ValidationResult[]): ValidationResult[] {
+function pass(results: IValidationResult[]): IValidationResult[] {
   return byStatus(results, 'pass');
 }
 /** @param results - Results to filter. @returns Only failing results. */
-function fail(results: ValidationResult[]): ValidationResult[] {
+function fail(results: IValidationResult[]): IValidationResult[] {
   return byStatus(results, 'fail');
 }
-/** @param results - Results to filter. @returns Only warning results. */
-function warn(results: ValidationResult[]): ValidationResult[] {
-  return byStatus(results, 'warn');
-}
-
 /**
  * Asserts that a check with the given name exists with the expected status.
  * @param results - The validation results to search.
  * @param check - The check name to find.
  * @param status - Expected status: 'pass', 'fail', or 'warn'.
  */
-function expectCheck(results: ValidationResult[], check: string, status: 'pass' | 'fail' | 'warn'): void {
+function expectCheck(results: IValidationResult[], check: string, status: 'pass' | 'fail' | 'warn'): void {
   const matching = results.filter(r => r.check === check);
   expect(matching.length).toBeGreaterThan(0);
   expect(matching.every(r => r.status === status)).toBe(true);
@@ -433,7 +428,7 @@ describe('ConfigValidator', () => {
 
   describe('formatReport', () => {
     it('shows PASS/FAIL/WARN labels', () => {
-      const results: ValidationResult[] = [
+      const results: IValidationResult[] = [
         { status: 'pass', check: 'a', message: 'good' },
         { status: 'fail', check: 'b', message: 'bad' },
         { status: 'warn', check: 'c', message: 'warning' },
@@ -445,7 +440,7 @@ describe('ConfigValidator', () => {
     });
 
     it('shows "All checks passed" when no issues', () => {
-      const results: ValidationResult[] = [
+      const results: IValidationResult[] = [
         { status: 'pass', check: 'a', message: 'ok' },
       ];
       const report = ConfigValidator.formatReport(results);
@@ -453,7 +448,7 @@ describe('ConfigValidator', () => {
     });
 
     it('shows error count in summary', () => {
-      const results: ValidationResult[] = [
+      const results: IValidationResult[] = [
         { status: 'fail', check: 'a', message: 'bad1' },
         { status: 'fail', check: 'b', message: 'bad2' },
         { status: 'warn', check: 'c', message: 'w1' },
@@ -650,7 +645,7 @@ describe('ConfigValidator', () => {
 
   describe('summarizeCounts singular', () => {
     it('uses singular "error" for exactly 1 failure', () => {
-      const results: ValidationResult[] = [
+      const results: IValidationResult[] = [
         { status: 'fail', check: 'a', message: 'bad' },
       ];
       expect(ConfigValidator.formatReport(results)).toContain('1 error');
@@ -658,7 +653,7 @@ describe('ConfigValidator', () => {
     });
 
     it('uses singular "warning" for exactly 1 warning', () => {
-      const results: ValidationResult[] = [
+      const results: IValidationResult[] = [
         { status: 'warn', check: 'a', message: 'warn' },
       ];
       expect(ConfigValidator.formatReport(results)).toContain('1 warning');

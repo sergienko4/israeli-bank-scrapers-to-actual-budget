@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import CommandRouter from '../../../src/Services/Telegram/CommandRouter.js';
 import type { ICommandRoute } from '../../../src/Services/Telegram/ICommandRoute.js';
 import { succeed } from '../../../src/Types/Index.js';
+import { assertProcedureSuccess } from '../../helpers/factories.js';
 
 /**
  * Builds an exact-match route with a vi.fn() spy handler.
@@ -50,6 +51,7 @@ describe('CommandRouter', () => {
     const router = new CommandRouter([route]);
     const out = await router.dispatch('/scan');
     expect(spy).toHaveBeenCalledOnce();
+    assertProcedureSuccess(out);
     expect(out.data.status).toBe('scan-ok');
   });
 
@@ -84,6 +86,7 @@ describe('CommandRouter', () => {
   it('returns no-route silently when nothing matches', async () => {
     const router = new CommandRouter([]);
     const out = await router.dispatch('/unknown');
+    assertProcedureSuccess(out);
     expect(out.data.status).toBe('no-route');
   });
 

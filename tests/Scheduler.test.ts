@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as childProcess from 'node:child_process';
 import { succeed, fail, isFail, isSuccess } from '../src/Types/ProcedureHelpers.js';
-import type { IImporterConfig } from '../src/Types/Index.js';
+import type { IImporterConfig, Procedure } from '../src/Types/Index.js';
 import type TelegramNotifier from '../src/Services/Notifications/TelegramNotifier.js';
 
 // ── Logger mock via vi.hoisted (Scheduler.ts calls getLogger at module-load time) ─
@@ -24,10 +24,10 @@ vi.mock('node:child_process');
 
 // ── Config encryption mock (hoisted so we can change per-test) ──────────────
 const { mockIsEncrypted, mockDecrypt, mockGetPassword, mockLoadRaw } = vi.hoisted(() => ({
-  mockIsEncrypted: vi.fn(() => false),
-  mockDecrypt: vi.fn(),
-  mockGetPassword: vi.fn(() => undefined),
-  mockLoadRaw: vi.fn(() => ({ success: false, message: 'no config (test default)' })),
+  mockIsEncrypted: vi.fn<(data: Record<string, string | number | boolean>) => boolean>(() => false),
+  mockDecrypt: vi.fn<(encryptedJson: string, password: string) => string>(),
+  mockGetPassword: vi.fn<() => string>(() => ''),
+  mockLoadRaw: vi.fn<() => Procedure<unknown>>(() => fail('no config (test default)')),
 }));
 vi.mock('../src/Config/ConfigEncryption.js', () => ({
   isEncryptedConfig: mockIsEncrypted,
@@ -296,7 +296,7 @@ describe('readJsonOrEncrypted (encrypted paths)', () => {
       JSON.stringify({ encrypted: true, version: 1 })
     );
     mockIsEncrypted.mockReturnValue(true);
-    mockGetPassword.mockReturnValue(undefined);
+    mockGetPassword.mockReturnValue('');
 
     const result = readJsonOrEncrypted('/app/config.json');
     expect(result.success).toBe(false);
@@ -363,7 +363,7 @@ describe('spawnImport (child process lifecycle)', () => {
   it('resolves with exit code from child process', async () => {
     const handlers: Record<string, (...args: unknown[]) => void> = {};
     const capturingChild = mockChild({
-      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as MockChildProcess['on'],
+      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as unknown as MockChildProcess['on'],
     });
     vi.mocked(childProcess.spawn).mockReturnValue(capturingChild);
 
@@ -376,7 +376,7 @@ describe('spawnImport (child process lifecycle)', () => {
   it('resolves with 0 when exit code is null and no signal', async () => {
     const handlers: Record<string, (...args: unknown[]) => void> = {};
     const capturingChild = mockChild({
-      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as MockChildProcess['on'],
+      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as unknown as MockChildProcess['on'],
     });
     vi.mocked(childProcess.spawn).mockReturnValue(capturingChild);
 
@@ -389,7 +389,7 @@ describe('spawnImport (child process lifecycle)', () => {
   it('resolves with 1 and logs warning when killed by signal', async () => {
     const handlers: Record<string, (...args: unknown[]) => void> = {};
     const capturingChild = mockChild({
-      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as MockChildProcess['on'],
+      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as unknown as MockChildProcess['on'],
     });
     vi.mocked(childProcess.spawn).mockReturnValue(capturingChild);
 
@@ -405,7 +405,7 @@ describe('spawnImport (child process lifecycle)', () => {
   it('resolves with 1 when child process emits error', async () => {
     const handlers: Record<string, (...args: unknown[]) => void> = {};
     const capturingChild = mockChild({
-      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as MockChildProcess['on'],
+      on: vi.fn((event: string, cb: (...args: unknown[]) => void) => { handlers[event] = cb; }) as unknown as MockChildProcess['on'],
     });
     vi.mocked(childProcess.spawn).mockReturnValue(capturingChild);
 

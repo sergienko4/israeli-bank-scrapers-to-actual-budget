@@ -3,7 +3,7 @@ import TelegramNotifier from '../../../src/Services/Notifications/TelegramNotifi
 import type { ITelegramConfig } from '../../../src/Types/Index.js';
 import type { IImportSummary } from '../../../src/Services/MetricsService.js';
 import {
-  fakeImportSummary, fakeAccountMetrics, fakeBankMetrics,
+  assertProcedureSuccess, fakeImportSummary, fakeAccountMetrics, fakeBankMetrics,
 } from '../../helpers/factories.js';
 
 const pinnedAccount = fakeAccountMetrics({
@@ -841,6 +841,7 @@ describe('TelegramNotifier', () => {
       const notifier = createNotifier();
       const result = await notifier.registerCommands();
       expect(result.success).toBe(false);
+      if (result.success) throw new Error('expected failure');
       expect(result.message).toContain('Failed to register commands');
     });
   });
@@ -853,6 +854,7 @@ describe('TelegramNotifier', () => {
         .mockResolvedValueOnce({ ok: true, arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)) });
       const result = await notifier.downloadPhoto('file-id-123');
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(Buffer.isBuffer(result.data)).toBe(true);
     });
 
@@ -884,6 +886,7 @@ describe('TelegramNotifier', () => {
       fetchMock.mockRejectedValueOnce(new Error('network down'));
       const result = await notifier.downloadPhoto('file-id');
       expect(result.success).toBe(false);
+      if (result.success) throw new Error('expected failure');
       expect(result.message).toContain('network down');
     });
   });
@@ -911,6 +914,7 @@ describe('TelegramNotifier', () => {
       fetchMock.mockRejectedValueOnce(new Error('timeout'));
       const result = await notifier.sendInlineMenu('text', [[{ text: 'A', callback_data: 'a' }]]);
       expect(result.success).toBe(false);
+      if (result.success) throw new Error('expected failure');
       expect(result.message).toContain('timeout');
     });
   });

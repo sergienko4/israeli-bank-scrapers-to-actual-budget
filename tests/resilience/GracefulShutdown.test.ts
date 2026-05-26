@@ -103,7 +103,7 @@ describe('GracefulShutdownHandler', () => {
   });
 
   it('calls process.exit(0) after shutdown completes', async () => {
-    const handler = new GracefulShutdownHandler();
+    new GracefulShutdownHandler();
 
     process.emit('SIGTERM');
     await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(0));
@@ -125,7 +125,7 @@ describe('GracefulShutdownHandler', () => {
   });
 
   it('logs signal name on shutdown', async () => {
-    const handler = new GracefulShutdownHandler();
+    new GracefulShutdownHandler();
 
     process.emit('SIGTERM');
     await vi.waitFor(() => expect(mockLogger.warn).toHaveBeenCalledWith(

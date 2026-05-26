@@ -33,7 +33,7 @@ This is NOT optional. If you skip this checklist you WILL introduce bugs that Co
 1. Read `docs/GUIDELINES.md` + `tasks/README.md` + task file BEFORE any work
 2. Plan first → explain approach → wait for user approval
 3. Fresh branch: `git checkout main && git pull origin refs/heads/main && git checkout -b task-XX-desc`
-4. **FULL pre-commit cycle (NEVER skip):** just `git commit` — the 14-gate hook runs everything:
+4. **FULL pre-commit cycle (NEVER skip):** just `git commit` — the 18-gate hook runs everything:
    - Gates 1-8 (incl. 6b): type-check, audit, build, TypeDoc, unit tests, ESLint, Biome, markdownlint, config-structure
    - Gate 9: Docker build + browser smoke test (`israeli-bank-importer:pre-commit`)
    - Gates 10-11: Lychee + Trivy via Docker
@@ -116,7 +116,7 @@ After creating every PR:
 ## CI/CD
 
 - `pr.yml`: build+audit, validate:ci, Docker build, Trivy, CodeQL, SonarCloud, License Compliance, markdownlint+lychee, E2E
-- `.husky/pre-commit`: 14-gate hook; gate 12 runs mocked E2E (`test:e2e:mock`); CI `e2e.yml` also includes Dockerized import runs
+- `.husky/pre-commit`: 18-gate hook; gate 12 runs mocked E2E (`test:e2e:mock`); CI `e2e.yml` also includes Dockerized import runs
 - `release-please.yml`: on push to main → release PR + test count badge
 - `release.yml`: on tag push `v*` → multi-arch build+push → SBOM → enriched notes
 - Ruleset: squash only, required checks: Build+Test, Container Scan, CodeQL Security Scan, Docs Quality, E2E Tests, SonarCloud Analysis, License Compliance
