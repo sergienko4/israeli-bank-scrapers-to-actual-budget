@@ -7,7 +7,7 @@
 import type { ILogger } from '../Logger/ILogger.js';
 import { getLogger, LogFileReader } from '../Logger/Index.js';
 import type { IBatchResult, Procedure } from '../Types/Index.js';
-import { succeed } from '../Types/Index.js';
+import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import type { IAuditLog } from './AuditLogService.js';
 import type { ImportMediator } from './ImportMediator.js';
@@ -30,6 +30,16 @@ import { buildSlashCommandRoutes, type ISlashHandlers } from './Telegram/SlashCo
 import { parseLogCount, truncateForTelegram } from './TelegramCommandFormatters.js';
 
 const ALREADY_RUNNING = '⏳ Import already running. Please wait.';
+
+/** Internal arguments for {@link TelegramCommandHandler.runImportPipeline}. */
+interface IImportPipelineArgs {
+  /** Optional list of banks to import (omitted for scan-all / dry-run). */
+  readonly banks?: string[];
+  /** Optional extra environment overrides forwarded to the mediator. */
+  readonly extraEnv?: Record<string, string>;
+  /** User-facing start message (sent before the import is requested). */
+  readonly startMsg: string;
+}
 
 /** Options for constructing a TelegramCommandHandler. */
 export interface ICommandHandlerOptions {
@@ -117,7 +127,7 @@ export class TelegramCommandHandler {
    * receipt exact routes (and the router consults exact matches first anyway).
    * @returns Frozen array of routes.
    */
-  private buildRoutes(): readonly ICommandRoute<unknown>[] {
+  private buildRoutes(): readonly ICommandRoute[] {
     const handlers = this.boundSlashHandlers();
     const slash = buildSlashCommandRoutes(handlers);
     const receipt = buildReceiptCommandRoutes(this._receiptHandler);
@@ -150,8 +160,7 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the scan-all result.
    */
   private async handleScanAll(): Promise<Procedure<{ status: string }>> {
-    if (this._mediator.isImporting()) {
-      await this.reply(ALREADY_RUNNING);
+    if (await this.sendBusyReplyIfRunning()) {
       return succeed({ status: 'already-running' });
     }
     await this.executeImport();
@@ -166,8 +175,7 @@ export class TelegramCommandHandler {
   private async handleScan(
     bankArg?: string,
   ): Promise<Procedure<{ status: string }>> {
-    if (this._mediator.isImporting()) {
-      await this.reply(ALREADY_RUNNING);
+    if (await this.sendBusyReplyIfRunning()) {
       return succeed({ status: 'already-running' });
     }
     const wasMenuSent = await this.maybeSendScanMenu(bankArg);
@@ -238,18 +246,47 @@ export class TelegramCommandHandler {
     banks?: string[],
   ): Promise<Procedure<{ status: string }>> {
     const label = banks ? ` (${banks.join(', ')})` : '';
-    await this.reply(`⏳ Starting import...${label}`);
-    const batchId = this._mediator.requestImport({ source: 'telegram', banks });
-    if (!batchId) {
-      await this.reply(ALREADY_RUNNING);
-      return succeed({ status: 'already-running' });
-    }
-    const result = await this._mediator.waitForBatch(batchId);
-    if (result.failureCount > 0) {
-      const errorReply = this.batchErrorReply(result);
+    const piped = await this.runImportPipeline({
+      banks,
+      startMsg: `⏳ Starting import...${label}`,
+    });
+    if (!piped.success) return succeed({ status: 'already-running' });
+    if (piped.data.failureCount > 0) {
+      const errorReply = this.batchErrorReply(piped.data);
       await this.reply(errorReply);
     }
     return succeed({ status: 'import-complete' });
+  }
+
+  /**
+   * Sends the start message, requests an import, and waits for completion.
+   * Common pipeline shared by /scan, /scan_all, /retry, and /preview.
+   * @param args - Pipeline arguments (banks, optional extraEnv, start message).
+   * @returns Procedure carrying the completed batch, or fail when the mediator is busy.
+   */
+  private async runImportPipeline(
+    args: IImportPipelineArgs,
+  ): Promise<Procedure<IBatchResult>> {
+    await this.reply(args.startMsg);
+    const batchId = this._mediator.requestImport({
+      source: 'telegram', banks: args.banks, extraEnv: args.extraEnv,
+    });
+    if (!batchId) {
+      await this.reply(ALREADY_RUNNING);
+      return fail('already-running');
+    }
+    const result = await this._mediator.waitForBatch(batchId);
+    return succeed(result);
+  }
+
+  /**
+   * Replies with the already-running message when an import is in flight.
+   * @returns True when busy (caller should short-circuit), false otherwise.
+   */
+  private async sendBusyReplyIfRunning(): Promise<boolean> {
+    if (!this._mediator.isImporting()) return false;
+    await this.reply(ALREADY_RUNNING);
+    return true;
   }
 
   /**
@@ -343,18 +380,15 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the preview result.
    */
   private async handlePreview(): Promise<Procedure<{ status: string }>> {
-    if (this._mediator.isImporting()) {
-      await this.reply(ALREADY_RUNNING);
+    if (await this.sendBusyReplyIfRunning()) {
       return succeed({ status: 'already-running' });
     }
-    await this.reply('🔍 Starting dry run — no changes will be made...');
-    const batchId = this._mediator.requestImport({ source: 'telegram', extraEnv: { DRY_RUN: 'true' } });
-    if (!batchId) {
-      await this.reply(ALREADY_RUNNING);
-      return succeed({ status: 'already-running' });
-    }
-    const result = await this._mediator.waitForBatch(batchId);
-    const dur = (result.totalDurationMs / 1000).toFixed(0);
+    const piped = await this.runImportPipeline({
+      extraEnv: { DRY_RUN: 'true' },
+      startMsg: '🔍 Starting dry run — no changes will be made...',
+    });
+    if (!piped.success) return succeed({ status: 'already-running' });
+    const dur = (piped.data.totalDurationMs / 1000).toFixed(0);
     await this.reply(`✅ Dry run completed (${dur}s). See preview report above.`);
     return succeed({ status: 'preview-complete' });
   }
@@ -364,8 +398,7 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the retry result.
    */
   private async handleRetry(): Promise<Procedure<{ status: string }>> {
-    if (this._mediator.isImporting()) {
-      await this.reply(ALREADY_RUNNING);
+    if (await this.sendBusyReplyIfRunning()) {
       return succeed({ status: 'already-running' });
     }
     const failed = this._auditQuery.getLastFailedBanks();

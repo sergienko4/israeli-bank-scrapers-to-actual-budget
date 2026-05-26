@@ -20,9 +20,9 @@ const MISSING_PAYLOAD_STATUS = 'missing-payload';
  */
 export default function buildReceiptCommandRoutes(
   receiptHandler?: ReceiptImportHandler,
-): readonly ICommandRoute<unknown>[] {
-  if (!receiptHandler) return Object.freeze<ICommandRoute<unknown>[]>([]);
-  const routes: ICommandRoute<unknown>[] = [
+): readonly ICommandRoute[] {
+  if (!receiptHandler) return Object.freeze<ICommandRoute[]>([]);
+  const routes: ICommandRoute[] = [
     exact('receipt_confirm', async () => await receiptHandler.onConfirm()),
     exact('receipt_choose', async () => await receiptHandler.onChooseDifferent()),
     exact('receipt_cancel', async () => await receiptHandler.onCancel()),
@@ -41,7 +41,7 @@ export default function buildReceiptCommandRoutes(
 function exact(
   pattern: string,
   fn: () => Promise<Procedure<{ status: string }>>,
-): ICommandRoute<unknown> {
+): ICommandRoute {
   return Object.freeze({
     match: 'exact' as const,
     pattern,
@@ -62,7 +62,7 @@ function exact(
 function prefixRoute(
   prefix: string,
   fn: (id: string) => Promise<Procedure<{ status: string }>>,
-): ICommandRoute<unknown> {
+): ICommandRoute {
   return Object.freeze({
     match: 'prefix' as const,
     pattern: prefix,
@@ -78,7 +78,7 @@ function prefixRoute(
      * @param arg - Extracted id payload.
      * @returns Procedure carrying the receipt handler's status.
      */
-    handle: async (arg: string) => {
+    handle: async (arg: string): Promise<Procedure<{ status: string }>> => {
       if (arg === '') return succeed({ status: MISSING_PAYLOAD_STATUS });
       return await fn(arg);
     },

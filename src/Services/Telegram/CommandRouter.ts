@@ -18,7 +18,7 @@ export default class CommandRouter {
    * Route order matters within match kind (first match wins).
    * @param routes - Immutable list of routes to dispatch against.
    */
-  constructor(private readonly routes: readonly ICommandRoute<unknown>[]) {}
+  constructor(private readonly routes: readonly ICommandRoute[]) {}
 
   /**
    * Dispatches a raw command string to the first matching route.
@@ -30,11 +30,7 @@ export default class CommandRouter {
     const route = this.findRoute(parsed.command);
     if (!route) return succeed({ status: NO_ROUTE_STATUS });
     const arg = route.parse ? route.parse(parsed.raw) : parsed.arg;
-    return await route.handle(arg, {
-      raw: parsed.raw,
-      command: parsed.command,
-      deps: undefined,
-    });
+    return await route.handle(arg);
   }
 
   /**
@@ -46,7 +42,7 @@ export default class CommandRouter {
    */
   private findRoute(
     command: string,
-  ): ICommandRoute<unknown> | undefined {
+  ): ICommandRoute | undefined {
     const exact = this.routes.find(
       r => r.match === 'exact' && r.pattern === command,
     );

@@ -9,12 +9,10 @@
 
 import type { Procedure } from '../../Types/Index.js';
 import { extractPrefixPayload } from './CommandCallbackParser.js';
-import type { ICommandRoute } from './ICommandRoute.js';
+import type { CommandHandler, ICommandRoute } from './ICommandRoute.js';
 
 /** Handler signature returning a Procedure carrying a status string. */
-export type SlashHandler = (
-  arg: string,
-) => Promise<Procedure<{ status: string }>>;
+export type SlashHandler = CommandHandler;
 
 /** Bundle of stateful handlers bound on the TelegramCommandHandler instance. */
 export interface ISlashHandlers {
@@ -50,8 +48,8 @@ const SCAN_PREFIX = 'scan:';
  */
 export function buildSlashCommandRoutes(
   h: ISlashHandlers,
-): readonly ICommandRoute<unknown>[] {
-  const routes: ICommandRoute<unknown>[] = [
+): readonly ICommandRoute[] {
+  const routes: ICommandRoute[] = [
     exact('/scan', h.handleScan),
     exact('/import', h.handleScan),
     exact('/status', h.handleStatus),
@@ -79,7 +77,7 @@ export function buildSlashCommandRoutes(
 function exact(
   pattern: string,
   fn: SlashHandler,
-): ICommandRoute<unknown> {
+): ICommandRoute {
   return Object.freeze({
     match: 'exact' as const,
     pattern,
@@ -88,7 +86,7 @@ function exact(
      * @param arg - Command argument string ('' when none).
      * @returns Procedure result from the bound handler.
      */
-    handle: async (arg: string) => await fn(arg),
+    handle: async (arg: string): Promise<Procedure<{ status: string }>> => await fn(arg),
   });
 }
 
@@ -100,7 +98,7 @@ function exact(
  */
 function scanPrefixRoute(
   fn: SlashHandler,
-): ICommandRoute<unknown> {
+): ICommandRoute {
   return Object.freeze({
     match: 'prefix' as const,
     pattern: SCAN_PREFIX,
@@ -115,6 +113,6 @@ function scanPrefixRoute(
      * @param arg - Bank name payload ('' when missing).
      * @returns Procedure result from handleScan.
      */
-    handle: async (arg: string) => await fn(arg),
+    handle: async (arg: string): Promise<Procedure<{ status: string }>> => await fn(arg),
   });
 }

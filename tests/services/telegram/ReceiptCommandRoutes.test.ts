@@ -42,21 +42,21 @@ describe('buildReceiptCommandRoutes', () => {
   it('receipt_confirm dispatches to onConfirm', async () => {
     const rh = stubReceiptHandler();
     const route = buildReceiptCommandRoutes(rh).find(r => r.pattern === 'receipt_confirm')!;
-    await route.handle(undefined, { raw: 'receipt_confirm', command: 'receipt_confirm', deps: undefined });
+    await route.handle('');
     expect(rh.onConfirm).toHaveBeenCalledOnce();
   });
 
   it('receipt_choose dispatches to onChooseDifferent', async () => {
     const rh = stubReceiptHandler();
     const route = buildReceiptCommandRoutes(rh).find(r => r.pattern === 'receipt_choose')!;
-    await route.handle(undefined, { raw: 'receipt_choose', command: 'receipt_choose', deps: undefined });
+    await route.handle('');
     expect(rh.onChooseDifferent).toHaveBeenCalledOnce();
   });
 
   it('receipt_cancel dispatches to onCancel', async () => {
     const rh = stubReceiptHandler();
     const route = buildReceiptCommandRoutes(rh).find(r => r.pattern === 'receipt_cancel')!;
-    await route.handle(undefined, { raw: 'receipt_cancel', command: 'receipt_cancel', deps: undefined });
+    await route.handle('');
     expect(rh.onCancel).toHaveBeenCalledOnce();
   });
 
@@ -64,7 +64,7 @@ describe('buildReceiptCommandRoutes', () => {
     const rh = stubReceiptHandler();
     const route = buildReceiptCommandRoutes(rh).find(r => r.pattern === 'receipt_acc:')!;
     expect(route.parse?.('receipt_acc:abc')).toBe('abc');
-    await route.handle('abc', { raw: 'receipt_acc:abc', command: 'receipt_acc:abc', deps: undefined });
+    await route.handle('abc');
     expect(rh.onAccountSelected).toHaveBeenCalledWith('abc');
   });
 
@@ -72,14 +72,14 @@ describe('buildReceiptCommandRoutes', () => {
     const rh = stubReceiptHandler();
     const route = buildReceiptCommandRoutes(rh).find(r => r.pattern === 'receipt_cat:')!;
     expect(route.parse?.('receipt_cat:xyz')).toBe('xyz');
-    await route.handle('xyz', { raw: 'receipt_cat:xyz', command: 'receipt_cat:xyz', deps: undefined });
+    await route.handle('xyz');
     expect(rh.onCategorySelected).toHaveBeenCalledWith('xyz');
   });
 
   it('receipt_acc: with missing payload returns missing-payload status', async () => {
     const rh = stubReceiptHandler();
     const route = buildReceiptCommandRoutes(rh).find(r => r.pattern === 'receipt_acc:')!;
-    const out = await route.handle('', { raw: 'receipt_acc:', command: 'receipt_acc:', deps: undefined });
+    const out = await route.handle('');
     expect(out.data.status).toBe('missing-payload');
     expect(rh.onAccountSelected).not.toHaveBeenCalled();
   });

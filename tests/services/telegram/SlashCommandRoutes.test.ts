@@ -69,26 +69,23 @@ describe('buildSlashCommandRoutes', () => {
   it('routes /scan and /import to handleScan', async () => {
     const h = spyHandlers();
     const routes = buildSlashCommandRoutes(h);
-    const ctx = { raw: '/scan', command: '/scan', deps: undefined };
-    await routes.find(r => r.pattern === '/scan')!.handle('a', ctx);
-    await routes.find(r => r.pattern === '/import')!.handle('b', ctx);
+    await routes.find(r => r.pattern === '/scan')!.handle('a');
+    await routes.find(r => r.pattern === '/import')!.handle('b');
     expect(h.handleScan).toHaveBeenCalledTimes(2);
   });
 
   it('routes /help and /start both to handleHelp', async () => {
     const h = spyHandlers();
     const routes = buildSlashCommandRoutes(h);
-    const ctx = { raw: '/help', command: '/help', deps: undefined };
-    await routes.find(r => r.pattern === '/help')!.handle(undefined, ctx);
-    await routes.find(r => r.pattern === '/start')!.handle(undefined, ctx);
+    await routes.find(r => r.pattern === '/help')!.handle('');
+    await routes.find(r => r.pattern === '/start')!.handle('');
     expect(h.handleHelp).toHaveBeenCalledTimes(2);
   });
 
   it('routes scan_all to handleScanAll, not handleScan', async () => {
     const h = spyHandlers();
     const routes = buildSlashCommandRoutes(h);
-    const ctx = { raw: 'scan_all', command: 'scan_all', deps: undefined };
-    await routes.find(r => r.pattern === 'scan_all')!.handle(undefined, ctx);
+    await routes.find(r => r.pattern === 'scan_all')!.handle('');
     expect(h.handleScanAll).toHaveBeenCalledOnce();
     expect(h.handleScan).not.toHaveBeenCalled();
   });
@@ -104,8 +101,7 @@ describe('buildSlashCommandRoutes', () => {
   it('each individual exact handler forwards parsed arg', async () => {
     const h = spyHandlers();
     const routes = buildSlashCommandRoutes(h);
-    const ctx = { raw: '/logs 100', command: '/logs', deps: undefined };
-    await routes.find(r => r.pattern === '/logs')!.handle('100', ctx);
+    await routes.find(r => r.pattern === '/logs')!.handle('100');
     expect(h.handleLogs).toHaveBeenCalledWith('100');
   });
 });

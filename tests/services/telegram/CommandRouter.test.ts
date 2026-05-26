@@ -13,7 +13,7 @@ import { succeed } from '../../../src/Types/Index.js';
 function exactRoute(
   pattern: string,
   status: string,
-): [ICommandRoute<unknown>, ReturnType<typeof vi.fn>] {
+): [ICommandRoute, ReturnType<typeof vi.fn>] {
   const spy = vi.fn().mockResolvedValue(succeed({ status }));
   return [{ match: 'exact', pattern, handle: spy }, spy];
 }
@@ -27,7 +27,7 @@ function exactRoute(
 function prefixRoute(
   pattern: string,
   status: string,
-): [ICommandRoute<unknown>, ReturnType<typeof vi.fn>] {
+): [ICommandRoute, ReturnType<typeof vi.fn>] {
   const spy = vi.fn().mockResolvedValue(succeed({ status }));
   return [
     {
@@ -57,20 +57,14 @@ describe('CommandRouter', () => {
     const [route, spy] = exactRoute('/scan', 'ok');
     const router = new CommandRouter([route]);
     await router.dispatch('/scan discount');
-    expect(spy).toHaveBeenCalledWith(
-      'discount',
-      expect.objectContaining({ raw: '/scan discount', command: '/scan' }),
-    );
+    expect(spy).toHaveBeenCalledWith('discount');
   });
 
   it('dispatches prefix matches and forwards parsed payload', async () => {
     const [route, spy] = prefixRoute('scan:', 'prefix-ok');
     const router = new CommandRouter([route]);
     await router.dispatch('scan:cal');
-    expect(spy).toHaveBeenCalledWith(
-      'cal',
-      expect.objectContaining({ command: 'scan:cal' }),
-    );
+    expect(spy).toHaveBeenCalledWith('cal');
   });
 
   it('returns no-route silently when nothing matches', async () => {
