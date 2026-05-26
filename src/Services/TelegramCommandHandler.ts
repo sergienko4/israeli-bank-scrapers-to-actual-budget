@@ -1,8 +1,10 @@
 /**
- * TelegramCommandHandler - Handles bot commands
- * Commands: /scan, /import, /status, /watch, /logs, /help
+ * TelegramCommandHandler — thin facade over the declarative command router.
+ * Owns the stateful handler methods (mediator/notifier/receipt interactions)
+ * and delegates routing to CommandRouter via a frozen ICommandRoute table.
  */
 
+import type { ILogger } from '../Logger/ILogger.js';
 import { getLogger, LogFileReader } from '../Logger/Index.js';
 import type { IBatchResult, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
@@ -11,10 +13,21 @@ import type { IAuditLog } from './AuditLogService.js';
 import type { ImportMediator } from './ImportMediator.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import type { ReceiptImportHandler } from './ReceiptImportHandler.js';
+import type { IAuditQuery } from './Telegram/AuditQuery.js';
+import { createAuditQuery } from './Telegram/AuditQuery.js';
+import CommandRouter from './Telegram/CommandRouter.js';
+import type { ICommandRoute } from './Telegram/ICommandRoute.js';
+import buildReceiptCommandRoutes from './Telegram/ReceiptCommandRoutes.js';
 import {
-  formatAuditEntry, formatFailedBanks,
-  isFreshEntry, parseLogCount, timeSince,
-  truncateForTelegram} from './TelegramCommandFormatters.js';
+  buildBatchErrorReply,
+  buildHelpLines,
+  buildHistoryLines,
+  buildLogsFooter,
+  buildLogsHeader,
+  buildStatusLines,
+} from './Telegram/ReplyBuilders.js';
+import { buildSlashCommandRoutes, type ISlashHandlers } from './Telegram/SlashCommandRoutes.js';
+import { parseLogCount, truncateForTelegram } from './TelegramCommandFormatters.js';
 
 const ALREADY_RUNNING = '⏳ Import already running. Please wait.';
 
@@ -38,6 +51,8 @@ export interface ICommandHandlerOptions {
   readonly logDir?: string;
   /** Optional receipt import handler for photo receipt processing. */
   readonly receiptHandler?: ReceiptImportHandler;
+  /** Optional logger override (defaults to getLogger()). */
+  readonly logger?: ILogger;
 }
 
 /** Handles bot commands dispatched from TelegramPoller. */
@@ -45,27 +60,33 @@ export class TelegramCommandHandler {
   private readonly _mediator: ImportMediator;
   private readonly _notifier: INotifier;
   private readonly _auditLog?: IAuditLog;
+  private readonly _auditQuery: IAuditQuery;
   private readonly _runWatch?: () => Promise<string>;
   private readonly _runValidate?: () => Promise<string>;
   private readonly _getBankNames?: () => string[];
   private readonly _sendScanMenu?: (banks: string[]) => Promise<Procedure<{ status: string }>>;
   private readonly _logDir: string;
   private readonly _receiptHandler?: ReceiptImportHandler;
+  private readonly _logger: ILogger;
+  private readonly _router: CommandRouter;
 
   /**
-   * Creates a TelegramCommandHandler with the provided options.
-   * @param opts - Options including mediator, notifier, and features.
+   * Creates a TelegramCommandHandler wired to the declarative route registry.
+   * @param opts - Options including mediator, notifier, optional features and logger.
    */
   constructor(opts: ICommandHandlerOptions) {
     this._mediator = opts.mediator;
     this._notifier = opts.notifier;
     this._auditLog = opts.auditLog;
+    this._auditQuery = createAuditQuery(opts.auditLog);
     this._runWatch = opts.runWatch;
     this._runValidate = opts.runValidate;
     this._getBankNames = opts.getBankNames;
     this._sendScanMenu = opts.sendScanMenu;
     this._logDir = opts.logDir ?? './logs';
     this._receiptHandler = opts.receiptHandler;
+    this._logger = opts.logger ?? getLogger();
+    this._router = new CommandRouter(this.buildRoutes());
   }
 
   /**
@@ -74,14 +95,7 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the command was handled.
    */
   public async handle(text: string): Promise<Procedure<{ status: string }>> {
-    const raw = text.trim().split(/\s+/);
-    const firstToken = raw[0];
-    const colonIdx = firstToken.indexOf(':');
-    const command = colonIdx >= 0
-      ? firstToken.slice(0, colonIdx + 1).toLowerCase() + firstToken.slice(colonIdx + 1)
-      : firstToken.toLowerCase();
-    const arg = raw.slice(1).join(' ').trim() || void 0;
-    return await this.dispatchCommand(command, arg);
+    return await this._router.dispatch(text);
   }
 
   /**
@@ -91,54 +105,43 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the processing result.
    */
   public async handlePhoto(
-    fileId: string, _caption?: string
+    fileId: string, _caption?: string,
   ): Promise<Procedure<{ status: string }>> {
     if (!this._receiptHandler) return succeed({ status: 'receipt-not-configured' });
     return await this._receiptHandler.handlePhoto(fileId);
   }
 
   /**
-   * Dispatches a parsed command to its handler method.
-   * @param command - Lowercase command string to route.
-   * @param arg - Optional argument from the user's message.
-   * @returns Procedure indicating the command was handled.
+   * Assembles the immutable route table consumed by the CommandRouter.
+   * Order matters within match kind: receipt prefix routes are listed AFTER
+   * receipt exact routes (and the router consults exact matches first anyway).
+   * @returns Frozen array of routes.
    */
-  private async dispatchCommand(
-    command: string, arg?: string
-  ): Promise<Procedure<{ status: string }>> {
-    if (this._receiptHandler && command.startsWith('receipt_')) {
-      return await this.routeReceiptCallback(command);
-    }
-    if (command.startsWith('scan:')) {
-      const bankName = command.slice(5);
-      return await this.handleScan(bankName);
-    }
-    const handlers = this.commandMap(arg);
-    if (Object.hasOwn(handlers, command)) await handlers[command]();
-    return succeed({ status: 'handled' });
+  private buildRoutes(): readonly ICommandRoute<unknown>[] {
+    const handlers = this.boundSlashHandlers();
+    const slash = buildSlashCommandRoutes(handlers);
+    const receipt = buildReceiptCommandRoutes(this._receiptHandler);
+    const merged = [...slash, ...receipt];
+    return Object.freeze(merged);
   }
 
   /**
-   * Returns the slash-command dispatch map.
-   * @param arg - Optional argument from the user's message.
-   * @returns Record mapping command strings to handler functions.
+   * Returns the bound ISlashHandlers bundle for this instance.
+   * Methods are bound so `this` resolves correctly when invoked by the router.
+   * @returns Frozen handler bundle.
    */
-  private commandMap(
-    arg?: string
-  ): Record<string, () => Promise<Procedure<{ status: string }>>> {
+  private boundSlashHandlers(): ISlashHandlers {
     return {
-      scan_all: this.handleScanAll.bind(this),
-      '/scan': this.handleScan.bind(this, arg),
-      '/import': this.handleScan.bind(this, arg),
-      '/status': this.handleStatus.bind(this),
-      '/logs': this.handleLogs.bind(this, arg),
-      '/watch': this.handleWatch.bind(this),
-      '/check_config': this.handleCheckConfig.bind(this),
-      '/preview': this.handlePreview.bind(this),
-      '/help': this.handleHelp.bind(this),
-      '/retry': this.handleRetry.bind(this),
-      '/start': this.handleHelp.bind(this),
-      '/import_receipt': this.handleImportReceipt.bind(this),
+      handleScan: this.handleScan.bind(this),
+      handleScanAll: this.handleScanAll.bind(this),
+      handleStatus: this.handleStatus.bind(this),
+      handleLogs: this.handleLogs.bind(this),
+      handleWatch: this.handleWatch.bind(this),
+      handleCheckConfig: this.handleCheckConfig.bind(this),
+      handlePreview: this.handlePreview.bind(this),
+      handleHelp: this.handleHelp.bind(this),
+      handleRetry: this.handleRetry.bind(this),
+      handleImportReceipt: this.handleImportReceipt.bind(this),
     };
   }
 
@@ -147,29 +150,59 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the scan-all result.
    */
   private async handleScanAll(): Promise<Procedure<{ status: string }>> {
-    if (this._mediator.isImporting()) { await this.reply(ALREADY_RUNNING); return succeed({ status: 'already-running' }); }
+    if (this._mediator.isImporting()) {
+      await this.reply(ALREADY_RUNNING);
+      return succeed({ status: 'already-running' });
+    }
     await this.executeImport();
     return succeed({ status: 'scan-all-started' });
   }
 
   /**
    * Shows bank menu or starts a targeted import.
-   * @param bankArg - Optional bank name or comma-separated list.
+   * @param bankArg - Optional bank name or comma-separated list ('' when none).
    * @returns Procedure indicating the scan result.
    */
   private async handleScan(
-    bankArg?: string
+    bankArg?: string,
   ): Promise<Procedure<{ status: string }>> {
     if (this._mediator.isImporting()) {
       await this.reply(ALREADY_RUNNING);
       return succeed({ status: 'already-running' });
     }
-    if (!bankArg && this._sendScanMenu && this._getBankNames) {
-      const banks = this._getBankNames();
-      if (banks.length > 0) { await this._sendScanMenu(banks); return succeed({ status: 'menu-sent' }); }
+    const wasMenuSent = await this.maybeSendScanMenu(bankArg);
+    if (wasMenuSent) return succeed({ status: 'menu-sent' });
+    return await this.scanWithResolvedBanks(bankArg);
+  }
+
+  /**
+   * Sends the inline scan menu when no bank arg is supplied.
+   * @param bankArg - Original bank argument (empty/undefined triggers menu).
+   * @returns True when the menu was sent, false otherwise.
+   */
+  private async maybeSendScanMenu(
+    bankArg?: string,
+  ): Promise<boolean> {
+    if (bankArg || !this._sendScanMenu || !this._getBankNames) return false;
+    const banks = this._getBankNames();
+    if (banks.length === 0) return false;
+    await this._sendScanMenu(banks);
+    return true;
+  }
+
+  /**
+   * Resolves the bank argument and either replies with an error or imports.
+   * @param bankArg - Bank argument (possibly empty/undefined).
+   * @returns Procedure indicating the import result.
+   */
+  private async scanWithResolvedBanks(
+    bankArg?: string,
+  ): Promise<Procedure<{ status: string }>> {
+    const banks = bankArg ? this.resolveBanks(bankArg) : undefined;
+    if (typeof banks === 'string') {
+      await this.reply(banks);
+      return succeed({ status: 'error-sent' });
     }
-    const banks = bankArg ? this.resolveBanks(bankArg) : void 0;
-    if (typeof banks === 'string') { await this.reply(banks); return succeed({ status: 'error-sent' }); }
     await this.executeImport(banks);
     return succeed({ status: 'scan-started' });
   }
@@ -202,33 +235,32 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the import completion status.
    */
   private async executeImport(
-    banks?: string[]
+    banks?: string[],
   ): Promise<Procedure<{ status: string }>> {
     const label = banks ? ` (${banks.join(', ')})` : '';
     await this.reply(`⏳ Starting import...${label}`);
     const batchId = this._mediator.requestImport({ source: 'telegram', banks });
-    if (!batchId) { await this.reply(ALREADY_RUNNING); return succeed({ status: 'already-running' }); }
+    if (!batchId) {
+      await this.reply(ALREADY_RUNNING);
+      return succeed({ status: 'already-running' });
+    }
     const result = await this._mediator.waitForBatch(batchId);
     if (result.failureCount > 0) {
-      const errorReply = this.buildBatchErrorReply(result);
+      const errorReply = this.batchErrorReply(result);
       await this.reply(errorReply);
     }
     return succeed({ status: 'import-complete' });
   }
 
   /**
-   * Builds a detailed error reply from a IBatchResult.
-   * @param batch - The completed IBatchResult with failure information.
-   * @returns Multi-line error reply text with failed bank details.
+   * Builds the failure reply for a completed batch using the audit log.
+   * @param batch - Completed batch result with failureCount > 0.
+   * @returns Multi-line Telegram-ready error reply.
    */
-  private buildBatchErrorReply(batch: IBatchResult): string {
-    const dur = (batch.totalDurationMs / 1000).toFixed(0);
-    const recentResult = this._auditLog?.getRecent(1);
-    const entry = recentResult?.success ? recentResult.data[0] : void 0;
-    if (!entry || !isFreshEntry(entry, batch)) {
-      return `❌ Import failed (${dur}s). Use /logs for details.`;
-    }
-    return formatFailedBanks(entry, dur, this._auditLog);
+  private batchErrorReply(batch: IBatchResult): string {
+    const freshResult = this._auditQuery.getFreshEntryFor(batch);
+    const entry = freshResult.success ? freshResult.data : undefined;
+    return buildBatchErrorReply({ batch, entry, auditLog: this._auditLog });
   }
 
   /**
@@ -236,44 +268,16 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the status message was sent.
    */
   private async handleStatus(): Promise<Procedure<{ status: string }>> {
-    const lines = this.buildStatusLines();
-    this.appendRecentHistory(lines);
-    const statusMessage = lines.join('\n');
-    await this.reply(statusMessage);
+    const header = buildStatusLines({
+      lastTime: this._mediator.getLastRunTime(),
+      lastResult: this._mediator.getLastResult(),
+      isImporting: this._mediator.isImporting(),
+    });
+    const recent = this._auditQuery.getRecent(5);
+    const history = buildHistoryLines(recent);
+    const message = [...header, ...history].join('\n');
+    await this.reply(message);
     return succeed({ status: 'status-sent' });
-  }
-
-  /**
-   * Assembles the header and last-run lines for /status.
-   * @returns Array of message lines with status information.
-   */
-  private buildStatusLines(): string[] {
-    const lines: string[] = ['📊 <b>Status</b>', ''];
-    const lastTime = this._mediator.getLastRunTime();
-    const lastResult = this._mediator.getLastResult();
-    const resultLabel = lastResult?.failureCount === 0 ? 'success' : 'failed';
-    const label = lastResult ? ` (${resultLabel})` : '';
-    const runLine = lastTime ? `Last run: ${timeSince(lastTime)} ago${label}` : 'No imports run yet';
-    const currentLine = `Currently: ${this._mediator.isImporting() ? '⏳ importing...' : '✅ idle'}`;
-    lines.push(runLine, currentLine);
-    return lines;
-  }
-
-  /**
-   * Appends the 5 most recent audit entries to the lines array.
-   * @param lines - Mutable array of message lines to append to.
-   * @returns Procedure indicating whether history was appended.
-   */
-  private appendRecentHistory(lines: string[]): Procedure<{ status: string }> {
-    if (!this._auditLog) return succeed({ status: 'no-audit-log' });
-    const recentResult = this._auditLog.getRecent(5);
-    if (!recentResult.success || recentResult.data.length === 0) return succeed({ status: 'no-history' });
-    lines.push('', '<b>Recent imports:</b>');
-    for (const entry of [...recentResult.data].reverse()) {
-      const formatted = formatAuditEntry(entry);
-      lines.push(formatted);
-    }
-    return succeed({ status: 'history-appended' });
   }
 
   /**
@@ -285,9 +289,12 @@ export class TelegramCommandHandler {
     const reader = new LogFileReader(this._logDir);
     const logCount = parseLogCount(countArg);
     const entries = reader.getRecent(logCount);
-    if (entries.length === 0) { await this.reply('📋 No log entries yet.'); return succeed({ status: 'no-logs' }); }
-    const header = `📋 <b>Recent Logs</b> (${String(entries.length)} entries)\n\n<pre>`;
-    const footer = '</pre>';
+    if (entries.length === 0) {
+      await this.reply('📋 No log entries yet.');
+      return succeed({ status: 'no-logs' });
+    }
+    const header = buildLogsHeader(entries.length);
+    const footer = buildLogsFooter();
     const body = truncateForTelegram(entries, header.length + footer.length);
     await this.reply(header + body + footer);
     return succeed({ status: 'logs-sent' });
@@ -303,8 +310,12 @@ export class TelegramCommandHandler {
       return succeed({ status: 'watch-unavailable' });
     }
     await this.reply('🔍 Checking spending rules...');
-    try { const message = await this._runWatch(); await this.reply(message || '✅ All spending within limits.'); }
-    catch (error: unknown) { await this.reply(`❌ Watch error: ${errorMessage(error)}`); }
+    try {
+      const message = await this._runWatch();
+      await this.reply(message || '✅ All spending within limits.');
+    } catch (error: unknown) {
+      await this.reply(`❌ Watch error: ${errorMessage(error)}`);
+    }
     return succeed({ status: 'watch-complete' });
   }
 
@@ -313,10 +324,17 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the config check result.
    */
   private async handleCheckConfig(): Promise<Procedure<{ status: string }>> {
-    if (!this._runValidate) { await this.reply('⚙️ Config validation unavailable.'); return succeed({ status: 'validate-unavailable' }); }
+    if (!this._runValidate) {
+      await this.reply('⚙️ Config validation unavailable.');
+      return succeed({ status: 'validate-unavailable' });
+    }
     await this.reply('🔍 Validating configuration...');
-    try { const report = await this._runValidate(); await this.reply(`<pre>${report}</pre>`); }
-    catch (error: unknown) { await this.reply(`❌ Validation error: ${errorMessage(error)}`); }
+    try {
+      const report = await this._runValidate();
+      await this.reply(`<pre>${report}</pre>`);
+    } catch (error: unknown) {
+      await this.reply(`❌ Validation error: ${errorMessage(error)}`);
+    }
     return succeed({ status: 'config-checked' });
   }
 
@@ -325,10 +343,16 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the preview result.
    */
   private async handlePreview(): Promise<Procedure<{ status: string }>> {
-    if (this._mediator.isImporting()) { await this.reply(ALREADY_RUNNING); return succeed({ status: 'already-running' }); }
+    if (this._mediator.isImporting()) {
+      await this.reply(ALREADY_RUNNING);
+      return succeed({ status: 'already-running' });
+    }
     await this.reply('🔍 Starting dry run — no changes will be made...');
     const batchId = this._mediator.requestImport({ source: 'telegram', extraEnv: { DRY_RUN: 'true' } });
-    if (!batchId) { await this.reply(ALREADY_RUNNING); return succeed({ status: 'already-running' }); }
+    if (!batchId) {
+      await this.reply(ALREADY_RUNNING);
+      return succeed({ status: 'already-running' });
+    }
     const result = await this._mediator.waitForBatch(batchId);
     const dur = (result.totalDurationMs / 1000).toFixed(0);
     await this.reply(`✅ Dry run completed (${dur}s). See preview report above.`);
@@ -340,12 +364,17 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the retry result.
    */
   private async handleRetry(): Promise<Procedure<{ status: string }>> {
-    if (this._mediator.isImporting()) { await this.reply(ALREADY_RUNNING); return succeed({ status: 'already-running' }); }
-    const failedResult = this._auditLog?.getLastFailedBanks();
-    const failed = failedResult?.success ? failedResult.data : [];
-    if (!failed.length) { await this.reply('✅ No failed banks to retry. Last run was successful.'); return succeed({ status: 'nothing-to-retry' }); }
+    if (this._mediator.isImporting()) {
+      await this.reply(ALREADY_RUNNING);
+      return succeed({ status: 'already-running' });
+    }
+    const failed = this._auditQuery.getLastFailedBanks();
+    if (!failed.length) {
+      await this.reply('✅ No failed banks to retry. Last run was successful.');
+      return succeed({ status: 'nothing-to-retry' });
+    }
     await this.reply(`🔄 Retrying ${String(failed.length)} failed bank(s): ${failed.join(', ')}...`);
-    await this.executeImport(failed);
+    await this.executeImport([...failed]);
     return succeed({ status: 'retry-started' });
   }
 
@@ -354,18 +383,10 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the help message was sent.
    */
   private async handleHelp(): Promise<Procedure<{ status: string }>> {
-    const lines = [
-      '🤖 <b>Available Commands</b>', '',
-      '/scan - Run bank import now', '/retry - Re-import only last failed banks',
-      '/preview - Dry run: scrape without importing', '/status - Show last run info + history',
-      '/check_config - Check configuration (offline + online)', '/watch - Spending watch info (runs after each import)',
-      '/logs - Show recent log entries', '/logs 100 - Show last 100 entries (max 150)', '/help - Show this message',
-    ];
-    if (this._receiptHandler) {
-      lines.splice(-2, 0, '/import_receipt - Import from receipt photo');
-    }
-    const helpMessage = lines.join('\n');
-    await this.reply(helpMessage);
+    const hasReceipt = Boolean(this._receiptHandler);
+    const lines = buildHelpLines(hasReceipt);
+    const message = lines.join('\n');
+    await this.reply(message);
     return succeed({ status: 'help-sent' });
   }
 
@@ -375,8 +396,13 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the reply status.
    */
   private async reply(text: string): Promise<Procedure<{ status: string }>> {
-    try { await this._notifier.sendMessage(text); return succeed({ status: 'reply-sent' }); }
-    catch (error: unknown) { getLogger().debug(`Failed to send reply: ${errorMessage(error)}`); return succeed({ status: 'reply-failed' }); }
+    try {
+      await this._notifier.sendMessage(text);
+      return succeed({ status: 'reply-sent' });
+    } catch (error: unknown) {
+      this._logger.debug(`Failed to send reply: ${errorMessage(error)}`);
+      return succeed({ status: 'reply-failed' });
+    }
   }
 
   /**
@@ -384,23 +410,10 @@ export class TelegramCommandHandler {
    * @returns Procedure indicating the prompt was sent.
    */
   private async handleImportReceipt(): Promise<Procedure<{ status: string }>> {
-    if (!this._receiptHandler) { await this.reply('❌ Receipt import is not configured.'); return succeed({ status: 'not-configured' }); }
+    if (!this._receiptHandler) {
+      await this.reply('❌ Receipt import is not configured.');
+      return succeed({ status: 'not-configured' });
+    }
     return await this._receiptHandler.start();
-  }
-
-  /**
-   * Routes receipt_* callbacks to the ReceiptImportHandler.
-   * @param command - The callback_data string starting with 'receipt_'.
-   * @returns Procedure indicating the callback was handled.
-   */
-  private async routeReceiptCallback(command: string): Promise<Procedure<{ status: string }>> {
-    const handler = this._receiptHandler;
-    if (!handler) return succeed({ status: 'no-handler' });
-    if (command === 'receipt_confirm') return await handler.onConfirm();
-    if (command === 'receipt_choose') return await handler.onChooseDifferent();
-    if (command === 'receipt_cancel') return await handler.onCancel();
-    if (command.startsWith('receipt_acc:')) { const accountId = command.slice(12); return await handler.onAccountSelected(accountId); }
-    if (command.startsWith('receipt_cat:')) { const categoryId = command.slice(12); return await handler.onCategorySelected(categoryId); }
-    return succeed({ status: 'unknown-receipt-callback' });
   }
 }
