@@ -914,4 +914,51 @@ describe('TelegramNotifier', () => {
       expect(result.message).toContain('timeout');
     });
   });
+
+  describe('sendScanMenu', () => {
+    it('posts inline keyboard with scan_all + per-bank buttons and returns menu-sent', async () => {
+      const notifier = createNotifier();
+      fetchMock.mockResolvedValueOnce({ ok: true, text: vi.fn() });
+      const result = await notifier.sendScanMenu(['discount', 'visaCal', 'amex']);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.status).toBe('menu-sent');
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.reply_markup.inline_keyboard[0]).toEqual([
+        { text: '🏦 All banks', callback_data: 'scan_all' },
+      ]);
+      expect(body.reply_markup.inline_keyboard).toContainEqual([
+        { text: 'discount', callback_data: 'scan:discount' },
+        { text: 'visaCal', callback_data: 'scan:visaCal' },
+      ]);
+      const callbackData = body.reply_markup.inline_keyboard
+        .flat()
+        .map((button: { callback_data: string }) => button.callback_data);
+      expect(callbackData).toEqual(expect.arrayContaining([
+        'scan_all',
+        'scan:discount',
+        'scan:visaCal',
+        'scan:amex',
+      ]));
+    });
+
+    it('returns fail (Procedure contract) when Telegram API responds non-OK', async () => {
+      const notifier = createNotifier();
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: vi.fn().mockResolvedValue('{"ok":false,"description":"Too Many Requests"}'),
+      });
+      const result = await notifier.sendScanMenu(['discount']);
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.message).toMatch(/429/);
+    });
+
+    it('returns fail (Procedure contract) when underlying fetch rejects', async () => {
+      const notifier = createNotifier();
+      fetchMock.mockRejectedValueOnce(new Error('ECONNRESET'));
+      const result = await notifier.sendScanMenu(['discount']);
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.message).toMatch(/ECONNRESET/);
+    });
+  });
 });

@@ -165,16 +165,7 @@ export function buildCommandHandler(
     runValidate: runConfigValidation,
     receiptHandler,
     getBankNames: getConfiguredBankNames,
-    /**
-     * Delegates scan menu display to the notifier.
-     *
-     * @param banks - Bank names for the inline keyboard.
-     * @returns Procedure indicating the menu was sent.
-     */
-    sendScanMenu: async (banks) => {
-      await notifier.sendScanMenu(banks);
-      return succeed({ status: 'menu-sent' });
-    },
+    sendScanMenu: notifier.sendScanMenu.bind(notifier),
     logDir: options.logDir,
   });
 }

@@ -31,6 +31,7 @@ import type {
   IAccountTransactionsRecord,
 } from '../../src/Services/MetricsService.js';
 import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
+import type { IBatchResult } from '../../src/Types/Index.js';
 
 export function fakeUuid(): string {
   return faker.string.uuid();
@@ -369,4 +370,24 @@ export function fakeBankResultsState(
     successful, quarantined,
     totalBanks: opts.totalBanks ?? successful.length + quarantined.length,
   });
+}
+
+/**
+ * Builds a fake IBatchResult fixture (defaults to an empty, zero-count batch).
+ * Useful for Telegram router and ReplyBuilders tests.
+ * @param overrides - Pinned overrides applied last (commonly successCount/failureCount/jobs/totalDurationMs).
+ * @returns IBatchResult fixture.
+ */
+export function fakeBatchResult(
+  overrides: Partial<IBatchResult> = {},
+): IBatchResult {
+  return {
+    batchId: faker.string.uuid(),
+    source: 'telegram',
+    jobs: [],
+    totalDurationMs: faker.number.int({ min: 1000, max: 60000 }),
+    successCount: 0,
+    failureCount: 0,
+    ...overrides,
+  };
 }
