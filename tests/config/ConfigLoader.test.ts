@@ -3,7 +3,9 @@ import { ConfigLoader } from '../../src/Config/ConfigLoader.js';
 import * as fs from 'fs';
 import { faker } from '@faker-js/faker';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
-import { isSuccess, isFail } from '../../src/Types/Index.js';
+import {
+  isSuccess, isFail, type IBankConfig, type IBankTarget, type IImporterConfig,
+} from '../../src/Types/Index.js';
 
 vi.mock('fs');
 
@@ -11,7 +13,7 @@ vi.mock('fs');
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 
 /** Default target used across bank configs in tests. */
-const DEFAULT_TARGET = { actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' };
+const DEFAULT_TARGET: IBankTarget = { actualAccountId: VALID_UUID, reconcile: true, accounts: 'all' };
 
 /**
  * Environment variable names cleaned up after env-based tests.
@@ -30,7 +32,7 @@ const ENV_KEYS_TO_CLEAN = [
  * @param overrides - Partial fields to override in the generated config.
  * @returns A complete config object suitable for ConfigLoader.
  */
-function makeValidConfig(overrides: Record<string, unknown> = {}) {
+function makeValidConfig(overrides: Record<string, unknown> = {}): IImporterConfig {
   const init = (overrides.init as Record<string, unknown> | undefined) ?? {};
   const budget = (overrides.budget as Record<string, unknown> | undefined) ?? {};
   return {
@@ -47,7 +49,7 @@ function makeValidConfig(overrides: Record<string, unknown> = {}) {
         ...budget,
       },
     },
-    banks: (overrides.banks as Record<string, unknown> | undefined) ?? {
+    banks: (overrides.banks as Record<string, IBankConfig> | undefined) ?? {
       discount: {
         id: faker.string.numeric(9),
         password: faker.internet.password({ length: 12 }),
@@ -63,7 +65,7 @@ function makeValidConfig(overrides: Record<string, unknown> = {}) {
  *
  * @param config - The config object to serialize and return from readFileSync.
  */
-function mockFileConfig(config: ReturnType<typeof makeValidConfig>): void {
+function mockFileConfig(config: unknown): void {
   vi.mocked(fs.existsSync).mockReturnValue(true);
   vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(config));
 }
@@ -332,7 +334,7 @@ describe('ConfigLoader', () => {
           },
         },
       };
-      mockFileConfig(config as ReturnType<typeof makeValidConfig>);
+      mockFileConfig(config);
 
       const loader = new ConfigLoader('/test/config.json');
       const result = loader.load();
@@ -354,7 +356,7 @@ describe('ConfigLoader', () => {
           },
         },
       };
-      mockFileConfig(config as ReturnType<typeof makeValidConfig>);
+      mockFileConfig(config);
 
       const loader = new ConfigLoader('/test/config.json');
       const result = loader.load();
@@ -523,8 +525,10 @@ describe('ConfigLoader', () => {
       [{ url: 'ftp://bad.com', format: 'plain' }, 'Invalid webhook url format'],
       [{ url: 'https://example.com', format: 'invalid' }, 'Invalid webhook format'],
     ])('fails on invalid webhook config: %s', (webhook, message) => {
-      const config = makeValidConfig();
-      config.notifications = { enabled: true, webhook };
+      const config = {
+        ...makeValidConfig(),
+        notifications: { enabled: true, webhook },
+      };
       mockFileConfig(config);
       const result = new ConfigLoader('/test/config.json').load();
       expect(result.success).toBe(false);

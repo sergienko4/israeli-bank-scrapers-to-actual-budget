@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type api from '@actual-app/api';
 import HistoryCategoryResolver from '../../src/Services/HistoryCategoryResolver.js';
-import { isSuccess, isFail } from '../../src/Types/Index.js';
+import { isSuccess } from '../../src/Types/Index.js';
 
 const { mockLogger } = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },

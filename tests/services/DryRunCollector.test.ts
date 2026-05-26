@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { DryRunCollector, IAccountPreview } from '../../src/Services/DryRunCollector.js';
 import { IBankTransaction } from '../../src/Types/Index.js';
 
-const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
 
 function makeTxns(count: number): IBankTransaction[] {
   return Array.from({ length: count }, (_, i) => ({

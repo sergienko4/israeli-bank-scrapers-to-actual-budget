@@ -9,6 +9,8 @@ import * as fs from 'node:fs';
 
 import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeStrategy.js';
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
+import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
+import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
 import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
 
@@ -37,13 +39,28 @@ vi.mock('../../../src/Services/TwoFactorService.js', () => ({
 
 const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
+type RetryExecuteMock = IRetryStrategy['execute'] & ReturnType<typeof vi.fn>;
+type TimeoutWrapMock = ITimeoutWrapper['wrap'] & ReturnType<typeof vi.fn>;
+
 const retryStrategy = {
-  execute: vi.fn(async (fn: () => Promise<unknown>) => fn()),
-};
+  execute: vi.fn(async (fn: () => Promise<unknown>, operationName: string) => {
+    void operationName;
+    return await fn();
+  }) as unknown as RetryExecuteMock,
+} satisfies IRetryStrategy;
 const noRetryStrategy = {
-  execute: vi.fn(async (fn: () => Promise<unknown>) => fn()),
-};
-const timeoutWrapper = { wrap: vi.fn(async (p: Promise<unknown>) => p) };
+  execute: vi.fn(async (fn: () => Promise<unknown>, operationName: string) => {
+    void operationName;
+    return await fn();
+  }) as unknown as RetryExecuteMock,
+} satisfies IRetryStrategy;
+const timeoutWrapper = {
+  wrap: vi.fn(async (p: Promise<unknown>, timeoutMs: number, operationName: string) => {
+    void timeoutMs;
+    void operationName;
+    return await p;
+  }) as unknown as TimeoutWrapMock,
+} satisfies ITimeoutWrapper;
 const notificationService = {
   sendMessage: vi.fn(), sendSummary: vi.fn(), sendError: vi.fn(),
 };
@@ -78,10 +95,21 @@ describe('LiveScrapeStrategy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     retryStrategy.execute.mockImplementation(
-      async (fn: () => Promise<unknown>) => fn());
+      async (fn: () => Promise<unknown>, operationName: string) => {
+        void operationName;
+        return await fn();
+      });
     noRetryStrategy.execute.mockImplementation(
-      async (fn: () => Promise<unknown>) => fn());
-    timeoutWrapper.wrap.mockImplementation(async (p: Promise<unknown>) => p);
+      async (fn: () => Promise<unknown>, operationName: string) => {
+        void operationName;
+        return await fn();
+      });
+    timeoutWrapper.wrap.mockImplementation(
+      async (p: Promise<unknown>, timeoutMs: number, operationName: string) => {
+        void timeoutMs;
+        void operationName;
+        return await p;
+      });
   });
 
   it('delegates to retryStrategy.execute for a normal scrape', async () => {

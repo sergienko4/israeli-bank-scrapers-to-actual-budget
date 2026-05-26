@@ -3,7 +3,7 @@ import type api from '@actual-app/api';
 import SpendingWatchService from '../../src/Services/SpendingWatchService.js';
 import type { ISpendingWatchRule } from '../../src/Types/Index.js';
 import { formatDate } from '../../src/Utils/Date.js';
-import { fakeActualTransaction } from '../helpers/factories.js';
+import { assertProcedureSuccess, fakeActualTransaction } from '../helpers/factories.js';
 
 function createMockApi(transactions: Array<{ date: string; imported_payee: string; amount: number }> = []) {
   return {
@@ -38,6 +38,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService([], createMockApi());
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual({ noAlerts: true });
     });
 
@@ -49,6 +50,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual({ noAlerts: true });
     });
 
@@ -62,7 +64,9 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect('message' in result.data).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('Spending Watch');
       expect(msg).toContain('All payees');
@@ -80,6 +84,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('Netflix');
       expect(msg).not.toContain('Supermarket');
@@ -95,6 +100,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('NETFLIX Premium HD');
     });
@@ -110,6 +116,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('All payees');
       expect(msg).toContain('130.00');
@@ -126,6 +133,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('1 day');
       expect(msg).not.toContain('30 days');
@@ -138,6 +146,7 @@ describe('SpendingWatchService', () => {
       );
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual({ noAlerts: true });
     });
 
@@ -151,6 +160,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('Store 1');
       expect(msg).toContain('Store 5');
@@ -168,6 +178,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual({ noAlerts: true });
     });
 
@@ -180,6 +191,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, mockApi);
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual({ noAlerts: true });
     });
 
@@ -192,6 +204,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, mockApi);
       const result = await service.evaluate();
       expect(result.success).toBe(false);
+      if (result.success) throw new Error('expected failure');
       expect(result.message).toContain('API down');
     });
 
@@ -203,6 +216,7 @@ describe('SpendingWatchService', () => {
       );
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('1 day');
     });
@@ -215,6 +229,7 @@ describe('SpendingWatchService', () => {
       );
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('7 days');
     });
@@ -227,6 +242,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('Netflix, Gym');
     });
@@ -242,6 +258,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual({ noAlerts: true });
     });
 
@@ -256,6 +273,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('מגדל');
       expect(msg).toContain('4,000.00');
@@ -272,6 +290,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data).toEqual({ noAlerts: true });
     });
 
@@ -287,6 +306,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('Recent');
       expect(msg).not.toContain('Old');
@@ -302,6 +322,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('Unknown');
     });
@@ -319,6 +340,7 @@ describe('SpendingWatchService', () => {
       const service = new SpendingWatchService(rules, createMockApi(txns));
       const result = await service.evaluate();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       const msg = (result.data as { message: string }).message;
       expect(msg).toContain('All payees');
       expect(msg).toContain('Netflix');

@@ -1,15 +1,25 @@
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import type { INotifier } from '../../src/Services/Notifications/INotifier.js';
 import type TelegramNotifier from '../../src/Services/Notifications/TelegramNotifier.js';
 import { ReceiptImportHandler } from '../../src/Services/ReceiptImportHandler.js';
 import type { IReceiptActualApi } from '../../src/Services/ReceiptImportHandler.js';
 import ReceiptOcrService from '../../src/Services/ReceiptOcrService.js';
 import { succeed, fail } from '../../src/Types/ProcedureHelpers.js';
+import { assertProcedureSuccess } from '../helpers/factories.js';
 
-/** Partial INotifier with only the methods used in tests. */
-type MockNotifier = Pick<INotifier, 'sendMessage' | 'sendSummary' | 'sendError'>;
-/** Partial TelegramNotifier with methods used in receipt handler tests. */
-type MockTelegramNotifier = MockNotifier & Pick<TelegramNotifier, 'downloadPhoto' | 'sendInlineMenu'>;
+/** Mock INotifier with Vitest spy methods used in tests. */
+type MockNotifier = {
+  sendMessage: Mock<INotifier['sendMessage']>;
+  sendSummary: Mock<INotifier['sendSummary']>;
+  sendError: Mock<INotifier['sendError']>;
+};
+/** Mock TelegramNotifier methods used in receipt handler tests. */
+type MockTelegramNotifier = MockNotifier & {
+  downloadPhoto: Mock<TelegramNotifier['downloadPhoto']>;
+  sendInlineMenu: Mock<TelegramNotifier['sendInlineMenu']>;
+  sendScanMenu: Mock<TelegramNotifier['sendScanMenu']>;
+};
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -29,44 +39,48 @@ vi.mock('../../src/Logger/Index.js', () => ({
 }));
 
 /** Creates a mock notifier for tests. */
-function createMockNotifier() {
+function createMockNotifier(): MockNotifier {
   return {
-    sendMessage: vi.fn().mockResolvedValue(undefined),
-    sendSummary: vi.fn().mockResolvedValue(undefined),
-    sendError: vi.fn().mockResolvedValue(undefined),
+    sendMessage: vi.fn<INotifier['sendMessage']>().mockResolvedValue(undefined),
+    sendSummary: vi.fn<INotifier['sendSummary']>().mockResolvedValue(undefined),
+    sendError: vi.fn<INotifier['sendError']>().mockResolvedValue(undefined),
   };
 }
 
 /** Creates a mock TelegramNotifier for tests. */
-function createMockTelegramNotifier() {
+function createMockTelegramNotifier(): MockTelegramNotifier {
   return {
     ...createMockNotifier(),
-    downloadPhoto: vi.fn().mockResolvedValue(succeed(Buffer.from('fake-image'))),
-    sendInlineMenu: vi.fn().mockResolvedValue(succeed({ status: 'menu-sent' })),
-    sendScanMenu: vi.fn().mockResolvedValue(undefined),
+    downloadPhoto: vi.fn<TelegramNotifier['downloadPhoto']>()
+      .mockResolvedValue(succeed(Buffer.from('fake-image'))),
+    sendInlineMenu: vi.fn<TelegramNotifier['sendInlineMenu']>()
+      .mockResolvedValue(succeed({ status: 'menu-sent' })),
+    sendScanMenu: vi.fn<TelegramNotifier['sendScanMenu']>()
+      .mockResolvedValue(succeed({ status: 'menu-sent' })),
   };
 }
 
 /** Creates a mock Actual Budget API for tests. */
-function createMockApi(): IReceiptActualApi {
+function createMockApi() {
   return {
-    getAccounts: vi.fn().mockResolvedValue([
+    getAccounts: vi.fn<IReceiptActualApi['getAccounts']>().mockResolvedValue([
       { id: 'acc-1', name: 'Checking' },
       { id: 'acc-2', name: 'Credit Card' },
     ]),
-    getCategories: vi.fn().mockResolvedValue([
+    getCategories: vi.fn<IReceiptActualApi['getCategories']>().mockResolvedValue([
       { id: 'cat-1', name: 'Groceries' },
       { id: 'cat-2', name: 'Dining' },
     ]),
-    q: vi.fn().mockReturnValue({
-      filter: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          orderBy: vi.fn().mockReturnValue('mock-query'),
+    q: vi.fn<IReceiptActualApi['q']>().mockReturnValue({
+      filter: () => ({
+        select: () => ({
+          orderBy: () => 'mock-query',
         }),
       }),
     }),
-    aqlQuery: vi.fn().mockResolvedValue({ data: [] }),
-    importTransactions: vi.fn().mockResolvedValue(undefined),
+    aqlQuery: vi.fn<IReceiptActualApi['aqlQuery']>().mockResolvedValue({ data: [] }),
+    importTransactions: vi.fn<IReceiptActualApi['importTransactions']>()
+      .mockResolvedValue(undefined),
   };
 }
 
@@ -87,8 +101,8 @@ describe('ReceiptImportHandler', () => {
 
     handler = new ReceiptImportHandler({
       ocr: mockOcr,
-      notifier: mockNotifier as MockNotifier as INotifier,
-      telegramNotifier: mockTgNotifier as MockTelegramNotifier as TelegramNotifier,
+      notifier: mockNotifier,
+      telegramNotifier: mockTgNotifier as unknown as TelegramNotifier,
       api: mockApi,
     });
   });
@@ -101,6 +115,7 @@ describe('ReceiptImportHandler', () => {
     it('sends prompt and sets state to awaiting_photo', async () => {
       const result = await handler.start();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.status).toBe('awaiting-photo');
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
         expect.stringContaining('Send a photo')
@@ -113,6 +128,7 @@ describe('ReceiptImportHandler', () => {
     it('rejects photo when not awaiting', async () => {
       const result = await handler.handlePhoto('file-123');
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.status).toBe('unexpected-photo');
       expect(mockNotifier.sendMessage).toHaveBeenCalledWith(
         expect.stringContaining('/import_receipt first')
@@ -260,6 +276,7 @@ describe('ReceiptImportHandler', () => {
       await handler.start();
       const result = await handler.onCancel();
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.status).toBe('cancelled');
       expect(handler.isAwaitingPhoto).toBe(false);
     });
@@ -307,8 +324,8 @@ describe('ReceiptImportHandler', () => {
     it('fails gracefully when API not set for account menu', async () => {
       const noApiHandler = new ReceiptImportHandler({
         ocr: mockOcr,
-        notifier: mockNotifier as MockNotifier as INotifier,
-        telegramNotifier: mockTgNotifier as MockTelegramNotifier as TelegramNotifier,
+        notifier: mockNotifier,
+        telegramNotifier: mockTgNotifier as unknown as TelegramNotifier,
       });
       const result = await noApiHandler.onAccountSelected('acc-1');
       expect(result.success).toBe(false);
@@ -317,8 +334,8 @@ describe('ReceiptImportHandler', () => {
     it('fails gracefully when API not set for category menu', async () => {
       const noApiHandler = new ReceiptImportHandler({
         ocr: mockOcr,
-        notifier: mockNotifier as MockNotifier as INotifier,
-        telegramNotifier: mockTgNotifier as MockTelegramNotifier as TelegramNotifier,
+        notifier: mockNotifier,
+        telegramNotifier: mockTgNotifier as unknown as TelegramNotifier,
       });
       const result = await noApiHandler.onCategorySelected('cat-1');
       expect(result.success).toBe(false);
@@ -436,6 +453,7 @@ describe('ReceiptImportHandler', () => {
       // The reply catch returns succeed({ status: 'reply-failed' }) but the caller
       // proceeds normally; the outer method still returns its own result
       expect(result.success).toBe(true);
+      assertProcedureSuccess(result);
       expect(result.data.status).toBe('unexpected-photo');
     });
   });
@@ -444,8 +462,8 @@ describe('ReceiptImportHandler', () => {
     it('enables API-dependent features after construction', async () => {
       const noApiHandler = new ReceiptImportHandler({
         ocr: mockOcr,
-        notifier: mockNotifier as MockNotifier as INotifier,
-        telegramNotifier: mockTgNotifier as MockTelegramNotifier as TelegramNotifier,
+        notifier: mockNotifier,
+        telegramNotifier: mockTgNotifier as unknown as TelegramNotifier,
       });
       noApiHandler.setApi(mockApi);
       const result = await noApiHandler.onChooseDifferent();
