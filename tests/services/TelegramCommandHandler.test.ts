@@ -539,11 +539,11 @@ describe('TelegramCommandHandler', () => {
     expect(mockMediator.requestImport).toHaveBeenCalled();
   });
 
-  // ─── Canary: maybeSendScanMenu must honor sendScanMenu Procedure result ───
+  // ─── Canary: maybeSendScanMenu must read sendScanMenu's Procedure result ───
 
-  it('/scan reports menu-sent and skips import when sendScanMenu succeeds', async () => {
+  it('/scan reports menu-sent and skips import when sendScanMenu succeeds (Procedure contract)', async () => {
     const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
-    const mockSendScanMenu = vi.fn().mockResolvedValue(succeed({ status: 'sent' }));
+    const mockSendScanMenu = vi.fn().mockResolvedValue(succeed({ status: 'menu-sent' }));
     handler = new TelegramCommandHandler({
       mediator: mockMediator as unknown as ImportMediator,
       notifier: mockNotifier,
@@ -557,18 +557,18 @@ describe('TelegramCommandHandler', () => {
     if (out.success) expect(out.data.status).toBe('menu-sent');
   });
 
-  it('/scan does NOT report menu-sent when sendScanMenu fails (regression guard)', async () => {
+  it('/scan falls back to direct import when sendScanMenu returns fail (Procedure contract)', async () => {
     const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
-    const mockSendScanMenu = vi.fn().mockResolvedValue(fail('telegram-down'));
+    const mockSendScanMenu = vi.fn().mockResolvedValue(fail('Telegram API error 429'));
     handler = new TelegramCommandHandler({
       mediator: mockMediator as unknown as ImportMediator,
       notifier: mockNotifier,
       getBankNames: mockGetBankNames,
       sendScanMenu: mockSendScanMenu,
     });
-    const out = await handler.handle('/scan');
+    await handler.handle('/scan');
     expect(mockSendScanMenu).toHaveBeenCalled();
-    if (out.success) expect(out.data.status).not.toBe('menu-sent');
+    expect(mockMediator.requestImport).toHaveBeenCalled();
   });
 
   // ─── Canary: runImportPipeline must surface mediator errors via reply ───

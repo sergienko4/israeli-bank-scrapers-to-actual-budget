@@ -45,6 +45,24 @@ function isValidBotCommand(command: string, description: string): boolean {
     && description.length <= MAX_DESCRIPTION_LENGTH;
 }
 
+/**
+ * Builds the inline keyboard rows for the /scan bank picker.
+ *
+ * Layout: a single "All banks" button row followed by rows of up to two bank buttons each.
+ * @param banks - Bank names to render as buttons.
+ * @returns Inline keyboard rows ready for the Telegram sendMessage reply_markup.
+ */
+function buildScanKeyboard(banks: string[]): { text: string; callback_data: string }[][] {
+  const allRow = [{ text: '🏦 All banks', callback_data: 'scan_all' }];
+  const bankRows: { text: string; callback_data: string }[][] = [];
+  for (let idx = 0; idx < banks.length; idx += 2) {
+    const slice = banks.slice(idx, idx + 2);
+    const row = slice.map(bankName => ({ text: bankName, callback_data: `scan:${bankName}` }));
+    bankRows.push(row);
+  }
+  return [allRow, ...bankRows];
+}
+
 /** Telegram notification channel — formats and sends import summaries via the Bot API. */
 export default class TelegramNotifier implements INotifier {
   private readonly _botToken: string;
@@ -101,26 +119,16 @@ export default class TelegramNotifier implements INotifier {
   /**
    * Sends an inline keyboard menu with a button per bank and an "All banks" button.
    * @param banks - List of bank names to display as inline keyboard buttons.
+   * @returns Procedure indicating the menu was sent or describing the failure.
    */
-  public async sendScanMenu(banks: string[]): Promise<void> {
-    const allRow = [{ text: '🏦 All banks', callback_data: 'scan_all' }];
-    const bankRows: { text: string; callback_data: string }[][] = [];
-    for (let idx = 0; idx < banks.length; idx += 2) {
-      const slice = banks.slice(idx, idx + 2);
-      const row = slice.map(bankName => ({ text: bankName, callback_data: `scan:${bankName}` }));
-      bankRows.push(row);
+  public async sendScanMenu(banks: string[]): Promise<Procedure<{ status: string }>> {
+    const keyboard = buildScanKeyboard(banks);
+    try {
+      return await this.postInlineKeyboard('🏦 <b>Select bank to import:</b>', keyboard);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      return fail(`sendScanMenu error: ${msg}`);
     }
-    const url = `${TELEGRAM_API}/bot${this._botToken}/sendMessage`;
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: this._chatId,
-        text: '🏦 <b>Select bank to import:</b>',
-        parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: [allRow, ...bankRows] },
-      }),
-    });
   }
 
   /**

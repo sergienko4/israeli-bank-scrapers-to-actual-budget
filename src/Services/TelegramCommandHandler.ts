@@ -55,7 +55,7 @@ export interface ICommandHandlerOptions {
   readonly runValidate?: () => Promise<string>;
   /** Optional callback to get all configured bank names. */
   readonly getBankNames?: () => string[];
-  /** Optional callback to display the inline keyboard scan menu. */
+  /** Optional callback to display the inline keyboard scan menu. Returns a Procedure indicating whether the menu was sent. */
   readonly sendScanMenu?: (banks: string[]) => Promise<Procedure<{ status: string }>>;
   /** Directory containing log files. */
   readonly logDir?: string;
@@ -186,7 +186,7 @@ export class TelegramCommandHandler {
   /**
    * Sends the inline scan menu when no bank arg is supplied.
    * @param bankArg - Original bank argument (empty/undefined triggers menu).
-   * @returns True when the menu was actually sent, false otherwise.
+   * @returns True when the menu was actually sent, false otherwise (no callback wired, no banks configured, or send failed).
    */
   private async maybeSendScanMenu(
     bankArg?: string,

@@ -5,13 +5,12 @@
 
 import { describe, it, expect, afterAll } from 'vitest';
 import {
-  runImporterDocker, getFixturesDir, writeTempConfig,
+  runImporterDocker, writeTempConfig,
   createTempFileTracker, hasDockerImage,
 } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
-const FIXTURES = getFixturesDir();
 const temp = createTempFileTracker();
 
 afterAll(() => { temp.cleanup(); });
