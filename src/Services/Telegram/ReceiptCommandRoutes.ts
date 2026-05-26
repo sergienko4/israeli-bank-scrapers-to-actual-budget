@@ -13,6 +13,16 @@ const ACC_PREFIX = 'receipt_acc:';
 const CAT_PREFIX = 'receipt_cat:';
 const MISSING_PAYLOAD_STATUS = 'missing-payload';
 
+/** Method names on ReceiptImportHandler used by the exact routes. */
+type ReceiptExactMethod = 'onConfirm' | 'onChooseDifferent' | 'onCancel';
+
+/** Declarative map of exact callback patterns to handler method names. */
+const EXACT_RECEIPT_ROUTES: readonly (readonly [string, ReceiptExactMethod])[] = [
+  ['receipt_confirm', 'onConfirm'],
+  ['receipt_choose', 'onChooseDifferent'],
+  ['receipt_cancel', 'onCancel'],
+];
+
 /**
  * Wraps a payload-required handler so empty payloads short-circuit to
  * `missing-payload` instead of invoking the receipt handler with `''`.
@@ -37,16 +47,13 @@ export default function buildReceiptCommandRoutes(
   receiptHandler?: ReceiptImportHandler,
 ): readonly ICommandRoute[] {
   if (!receiptHandler) return Object.freeze<ICommandRoute[]>([]);
-  const accHandler = requirePayload(
-    async (id) => await receiptHandler.onAccountSelected(id),
+  const exactRoutes = EXACT_RECEIPT_ROUTES.map(([pattern, method]) =>
+    makeExactRoute(pattern, async () => await receiptHandler[method]()),
   );
-  const catHandler = requirePayload(
-    async (id) => await receiptHandler.onCategorySelected(id),
-  );
+  const accHandler = requirePayload(async (id) => await receiptHandler.onAccountSelected(id));
+  const catHandler = requirePayload(async (id) => await receiptHandler.onCategorySelected(id));
   const routes: ICommandRoute[] = [
-    makeExactRoute('receipt_confirm', async () => await receiptHandler.onConfirm()),
-    makeExactRoute('receipt_choose', async () => await receiptHandler.onChooseDifferent()),
-    makeExactRoute('receipt_cancel', async () => await receiptHandler.onCancel()),
+    ...exactRoutes,
     makePrefixRoute(ACC_PREFIX, accHandler),
     makePrefixRoute(CAT_PREFIX, catHandler),
   ];

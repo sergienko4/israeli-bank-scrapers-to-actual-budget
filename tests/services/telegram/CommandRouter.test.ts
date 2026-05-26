@@ -67,6 +67,20 @@ describe('CommandRouter', () => {
     expect(spy).toHaveBeenCalledWith('cal');
   });
 
+  it('preserves mixed-case payload while lowercasing only the prefix token', async () => {
+    const [route, spy] = prefixRoute('scan:', 'prefix-ok');
+    const router = new CommandRouter([route]);
+    await router.dispatch('SCAN:Cal');
+    expect(spy).toHaveBeenCalledWith('Cal');
+  });
+
+  it('parses payload from raw with mixed case (case-sensitive route parser sees lowercased prefix)', async () => {
+    const [route, spy] = prefixRoute('receipt_acc:', 'acc-ok');
+    const router = new CommandRouter([route]);
+    await router.dispatch('Receipt_Acc:Account-42');
+    expect(spy).toHaveBeenCalledWith('Account-42');
+  });
+
   it('returns no-route silently when nothing matches', async () => {
     const router = new CommandRouter([]);
     const out = await router.dispatch('/unknown');

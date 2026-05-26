@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { IAuditLog } from '../../../src/Services/AuditLogService.js';
 import { createAuditQuery } from '../../../src/Services/Telegram/AuditQuery.js';
@@ -21,6 +21,10 @@ function stubAuditLog(overrides: Partial<IAuditLog> = {}): IAuditLog {
 }
 
 describe('AuditQuery', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('returns empty arrays / zero when no auditLog is supplied', () => {
     const q = createAuditQuery(undefined);
     expect(q.getRecent(5)).toEqual([]);
@@ -62,7 +66,10 @@ describe('AuditQuery', () => {
   });
 
   it('getFreshEntryFor returns the entry when timestamp is inside the batch window', () => {
-    const fresh = fakeIAuditEntry({ timestamp: new Date().toISOString() });
+    const nowIso = '2025-01-01T00:00:05.000Z';
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowIso));
+    const fresh = fakeIAuditEntry({ timestamp: '2025-01-01T00:00:03.000Z' });
     const log = stubAuditLog({ getRecent: vi.fn().mockReturnValue(succeed([fresh])) });
     const q = createAuditQuery(log);
     const out = q.getFreshEntryFor(fakeBatchResult({ totalDurationMs: 5000 }));

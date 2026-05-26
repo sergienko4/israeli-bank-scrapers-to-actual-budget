@@ -32,6 +32,20 @@ export interface IBatchErrorReplyArgs {
   readonly auditLog: IAuditLog | undefined;
 }
 
+/** Static base help lines shared between /help and /start replies. */
+const HELP_LINES_BASE: readonly string[] = Object.freeze([
+  '🤖 <b>Available Commands</b>', '',
+  '/scan - Run bank import now',
+  '/retry - Re-import only last failed banks',
+  '/preview - Dry run: scrape without importing',
+  '/status - Show last run info + history',
+  '/check_config - Check configuration (offline + online)',
+  '/watch - Spending watch info (runs after each import)',
+  '/logs - Show recent log entries',
+  '/logs 100 - Show last 100 entries (max 150)',
+  '/help - Show this message',
+]);
+
 /**
  * Builds the list of help lines for /help and /start.
  * @param hasReceiptHandler - Whether /import_receipt should appear.
@@ -40,22 +54,10 @@ export interface IBatchErrorReplyArgs {
 export function buildHelpLines(
   hasReceiptHandler: boolean,
 ): readonly string[] {
-  const base = [
-    '🤖 <b>Available Commands</b>', '',
-    '/scan - Run bank import now',
-    '/retry - Re-import only last failed banks',
-    '/preview - Dry run: scrape without importing',
-    '/status - Show last run info + history',
-    '/check_config - Check configuration (offline + online)',
-    '/watch - Spending watch info (runs after each import)',
-    '/logs - Show recent log entries',
-    '/logs 100 - Show last 100 entries (max 150)',
-    '/help - Show this message',
-  ];
-  if (hasReceiptHandler) {
-    base.splice(-2, 0, '/import_receipt - Import from receipt photo');
-  }
-  return Object.freeze(base);
+  if (!hasReceiptHandler) return HELP_LINES_BASE;
+  const merged = [...HELP_LINES_BASE];
+  merged.splice(-2, 0, '/import_receipt - Import from receipt photo');
+  return Object.freeze(merged);
 }
 
 /**

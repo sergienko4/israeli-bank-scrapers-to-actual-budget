@@ -373,9 +373,9 @@ export function fakeBankResultsState(
 }
 
 /**
- * Builds a fake IBatchResult fixture (defaults to a successful, empty batch).
+ * Builds a fake IBatchResult fixture (defaults to an empty, zero-count batch).
  * Useful for Telegram router and ReplyBuilders tests.
- * @param overrides - Pinned overrides applied last (commonly failureCount/totalDurationMs).
+ * @param overrides - Pinned overrides applied last (commonly successCount/failureCount/jobs/totalDurationMs).
  * @returns IBatchResult fixture.
  */
 export function fakeBatchResult(
@@ -386,7 +386,7 @@ export function fakeBatchResult(
     source: 'telegram',
     jobs: [],
     totalDurationMs: faker.number.int({ min: 1000, max: 60000 }),
-    successCount: 1,
+    successCount: 0,
     failureCount: 0,
     ...overrides,
   };

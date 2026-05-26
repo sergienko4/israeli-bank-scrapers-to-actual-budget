@@ -29,7 +29,7 @@ export default class CommandRouter {
     const parsed = parseCommand(raw);
     const route = this.findRoute(parsed.command);
     if (!route) return succeed({ status: NO_ROUTE_STATUS });
-    const arg = route.parse ? route.parse(parsed.raw) : parsed.arg;
+    const arg = route.parse ? route.parse(parsed.command) : parsed.arg;
     return await route.handle(arg);
   }
 

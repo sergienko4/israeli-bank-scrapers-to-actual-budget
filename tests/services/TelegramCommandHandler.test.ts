@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
 import type { ImportMediator } from '../../src/Services/ImportMediator.js';
 import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
-import { succeed } from '../../src/Types/Index.js';
+import { succeed, fail } from '../../src/Types/Index.js';
 import { fakeIAuditEntry } from '../helpers/factories.js';
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
@@ -537,6 +537,49 @@ describe('TelegramCommandHandler', () => {
     });
     await handler.handle('/scan');
     expect(mockMediator.requestImport).toHaveBeenCalled();
+  });
+
+  // ─── Canary: maybeSendScanMenu must honor sendScanMenu Procedure result ───
+
+  it('/scan reports menu-sent and skips import when sendScanMenu succeeds', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
+    const mockSendScanMenu = vi.fn().mockResolvedValue(succeed({ status: 'sent' }));
+    handler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
+      sendScanMenu: mockSendScanMenu,
+    });
+    const out = await handler.handle('/scan');
+    expect(mockSendScanMenu).toHaveBeenCalledWith(['discount', 'visaCal']);
+    expect(mockMediator.requestImport).not.toHaveBeenCalled();
+    expect(out.success).toBe(true);
+    if (out.success) expect(out.data.status).toBe('menu-sent');
+  });
+
+  it('/scan does NOT report menu-sent when sendScanMenu fails (regression guard)', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
+    const mockSendScanMenu = vi.fn().mockResolvedValue(fail('telegram-down'));
+    handler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
+      sendScanMenu: mockSendScanMenu,
+    });
+    const out = await handler.handle('/scan');
+    expect(mockSendScanMenu).toHaveBeenCalled();
+    if (out.success) expect(out.data.status).not.toBe('menu-sent');
+  });
+
+  // ─── Canary: runImportPipeline must surface mediator errors via reply ───
+
+  it('/scan surfaces mediator errors as a normalized failure reply', async () => {
+    mockMediator.requestImport.mockImplementation(() => {
+      throw new Error('mediator-exploded');
+    });
+    await handler.handle('/scan ');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    expect(calls.some((m: string) => m.includes('Import failed') && m.includes('mediator-exploded'))).toBe(true);
   });
 
   // ─── appendRecentHistory with entries ───

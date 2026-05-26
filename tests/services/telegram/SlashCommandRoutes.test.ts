@@ -96,6 +96,16 @@ describe('buildSlashCommandRoutes', () => {
     const route = routes.find(r => r.pattern === 'scan:');
     expect(route?.parse?.('scan:cal')).toBe('cal');
     expect(route?.parse?.('scan:')).toBe('');
+    await route!.handle('cal');
+    expect(h.handleScan).toHaveBeenCalledWith('cal');
+  });
+
+  it('scan: prefix route forwards empty payload as empty string to handleScan', async () => {
+    const h = spyHandlers();
+    const routes = buildSlashCommandRoutes(h);
+    const route = routes.find(r => r.pattern === 'scan:');
+    await route!.handle('');
+    expect(h.handleScan).toHaveBeenCalledWith('');
   });
 
   it('each individual exact handler forwards parsed arg', async () => {

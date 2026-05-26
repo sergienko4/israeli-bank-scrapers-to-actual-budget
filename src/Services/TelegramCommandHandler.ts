@@ -186,7 +186,7 @@ export class TelegramCommandHandler {
   /**
    * Sends the inline scan menu when no bank arg is supplied.
    * @param bankArg - Original bank argument (empty/undefined triggers menu).
-   * @returns True when the menu was sent, false otherwise.
+   * @returns True when the menu was actually sent, false otherwise.
    */
   private async maybeSendScanMenu(
     bankArg?: string,
@@ -194,8 +194,8 @@ export class TelegramCommandHandler {
     if (bankArg || !this._sendScanMenu || !this._getBankNames) return false;
     const banks = this._getBankNames();
     if (banks.length === 0) return false;
-    await this._sendScanMenu(banks);
-    return true;
+    const sendResult = await this._sendScanMenu(banks);
+    return sendResult.success;
   }
 
   /**
@@ -261,22 +261,37 @@ export class TelegramCommandHandler {
   /**
    * Sends the start message, requests an import, and waits for completion.
    * Common pipeline shared by /scan, /scan_all, /retry, and /preview.
+   * Any thrown error from the mediator surfaces as a normalized failure.
    * @param args - Pipeline arguments (banks, optional extraEnv, start message).
-   * @returns Procedure carrying the completed batch, or fail when the mediator is busy.
+   * @returns Procedure carrying the completed batch, or fail when busy/error.
    */
   private async runImportPipeline(
     args: IImportPipelineArgs,
   ): Promise<Procedure<IBatchResult>> {
     await this.reply(args.startMsg);
-    const batchId = this._mediator.requestImport({
-      source: 'telegram', banks: args.banks, extraEnv: args.extraEnv,
-    });
-    if (!batchId) {
-      await this.reply(ALREADY_RUNNING);
-      return fail('already-running');
+    try {
+      const batchId = this._mediator.requestImport({
+        source: 'telegram', banks: args.banks, extraEnv: args.extraEnv,
+      });
+      if (!batchId) { await this.reply(ALREADY_RUNNING); return fail('already-running'); }
+      return succeed(await this._mediator.waitForBatch(batchId));
+    } catch (error: unknown) {
+      return await this.handleImportPipelineError(error);
     }
-    const result = await this._mediator.waitForBatch(batchId);
-    return succeed(result);
+  }
+
+  /**
+   * Replies and logs when the mediator throws inside the import pipeline.
+   * @param error - The unknown error thrown by the mediator.
+   * @returns A normalized `fail('import-error')` Procedure.
+   */
+  private async handleImportPipelineError(
+    error: unknown,
+  ): Promise<Procedure<IBatchResult>> {
+    const msg = errorMessage(error);
+    this._logger.error(`runImportPipeline failed: ${msg}`);
+    await this.reply(`❌ Import failed: ${msg}`);
+    return fail('import-error');
   }
 
   /**

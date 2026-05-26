@@ -40,6 +40,22 @@ export interface ISlashHandlers {
 /** Literal prefix recognised for inline-keyboard scan callbacks. */
 const SCAN_PREFIX = 'scan:';
 
+/** Declarative table of exact-match patterns → handler bundle keys. */
+const EXACT_ROUTE_DEFS: readonly (readonly [string, keyof ISlashHandlers])[] = [
+  ['/scan', 'handleScan'],
+  ['/import', 'handleScan'],
+  ['/status', 'handleStatus'],
+  ['/logs', 'handleLogs'],
+  ['/watch', 'handleWatch'],
+  ['/check_config', 'handleCheckConfig'],
+  ['/preview', 'handlePreview'],
+  ['/help', 'handleHelp'],
+  ['/retry', 'handleRetry'],
+  ['/start', 'handleHelp'],
+  ['/import_receipt', 'handleImportReceipt'],
+  ['scan_all', 'handleScanAll'],
+];
+
 /**
  * Builds the route table for slash commands + scan_all + the scan: prefix.
  * @param h - Bound handler bundle (closing over the handler instance state).
@@ -48,20 +64,9 @@ const SCAN_PREFIX = 'scan:';
 export function buildSlashCommandRoutes(
   h: ISlashHandlers,
 ): readonly ICommandRoute[] {
-  const routes: ICommandRoute[] = [
-    makeExactRoute('/scan', h.handleScan),
-    makeExactRoute('/import', h.handleScan),
-    makeExactRoute('/status', h.handleStatus),
-    makeExactRoute('/logs', h.handleLogs),
-    makeExactRoute('/watch', h.handleWatch),
-    makeExactRoute('/check_config', h.handleCheckConfig),
-    makeExactRoute('/preview', h.handlePreview),
-    makeExactRoute('/help', h.handleHelp),
-    makeExactRoute('/retry', h.handleRetry),
-    makeExactRoute('/start', h.handleHelp),
-    makeExactRoute('/import_receipt', h.handleImportReceipt),
-    makeExactRoute('scan_all', h.handleScanAll),
-    makePrefixRoute(SCAN_PREFIX, h.handleScan),
-  ];
+  const exactRoutes = EXACT_ROUTE_DEFS.map(([pattern, handlerKey]) =>
+    makeExactRoute(pattern, h[handlerKey]),
+  );
+  const routes: ICommandRoute[] = [...exactRoutes, makePrefixRoute(SCAN_PREFIX, h.handleScan)];
   return Object.freeze(routes);
 }
