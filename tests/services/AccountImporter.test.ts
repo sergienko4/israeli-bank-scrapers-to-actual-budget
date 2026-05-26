@@ -3,7 +3,8 @@ import { AccountImporter } from '../../src/Services/AccountImporter.js';
 import { DryRunCollector } from '../../src/Services/DryRunCollector.js';
 import { succeed, fail } from '../../src/Types/Index.js';
 import {
-  fakeBankConfig, fakeBankTransactions, fakeBankTarget, fakeUuid,
+  fakeBankConfig, fakeBankTransactions, fakeBankTarget, fakeCanonicalScrapeResult,
+  fakeUuid,
 } from '../helpers/factories.js';
 
 // ── Logger mock ──────────────────────────────────────────────────────────────
@@ -66,7 +67,10 @@ function makeOpts(overrides = {}) {
 }
 
 function makeScrapeResult(accounts: unknown[] = []) {
-  return { success: true, accounts } as never;
+  return fakeCanonicalScrapeResult({
+    bankId: 'mock',
+    accounts: accounts as never,
+  }) as never;
 }
 
 // ─── processAllAccounts ───────────────────────────────────────────────────────
@@ -308,16 +312,6 @@ describe('AccountImporter.processAllAccounts', () => {
     await importer.processAllAccounts('discount', config, makeScrapeResult([account]));
 
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('-5.00 ILS'));
-  });
-
-  it('defaults to empty accounts array when scrapeResult.accounts is undefined', async () => {
-    const opts = makeOpts();
-    const importer = new AccountImporter(opts);
-    const config = fakeBankConfig();
-    const result = await importer.processAllAccounts('discount', config, { success: true } as never);
-
-    expect(result).toEqual({ imported: 0, skipped: 0 });
-    expect(opts.transactionService.importTransactions).not.toHaveBeenCalled();
   });
 
   it('returns empty result for account with zero transactions after filtering', async () => {

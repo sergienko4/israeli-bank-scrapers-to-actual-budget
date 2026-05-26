@@ -38,7 +38,7 @@ import SpendingWatchService from './Services/SpendingWatchService.js';
 import { TransactionService } from './Services/TransactionService.js';
 import TranslateCategoryResolver from './Services/TranslateCategoryResolver.js';
 import type { CategorizationMode, IImporterConfig, Procedure } from './Types/Index.js';
-import { DEFAULT_RESILIENCE_CONFIG, fail, isFail, succeed } from './Types/Index.js';
+import { DEFAULT_RESILIENCE_CONFIG, isFail, succeed } from './Types/Index.js';
 import { errorMessage } from './Utils/Index.js';
 
 // --validate mode: validate config and exit before full initialization
@@ -160,10 +160,11 @@ const SCRAPE_STRATEGY: IBankScrapeStrategy = isMockMode
       telegramNotifier: TELEGRAM_NOTIFIER,
       notificationService: NOTIFICATION_SERVICE,
     });
+const SCRAPE_RESULT_MAPPER = createScrapeResultMapper();
 const BANK_SCRAPER = new BankScraper({
   registry: createBankRegistry(),
   strategy: SCRAPE_STRATEGY,
-  mapper: createScrapeResultMapper(),
+  mapper: SCRAPE_RESULT_MAPPER,
   datePolicy: createDateRangePolicy(),
   logger: LOGGER,
 });
@@ -192,6 +193,7 @@ const PIPELINE_CONTEXT = createInitialContext({
   notificationService: NOTIFICATION_SERVICE,
   bankScraper: BANK_SCRAPER,
   accountImporter: ACCOUNT_IMPORTER,
+  scrapeResultMapper: SCRAPE_RESULT_MAPPER,
   categoryResolver: CATEGORY_RESOLVER ?? false,
   dryRunCollector: DRY_RUN_COLLECTOR,
   isDryRun: isDryRun,
@@ -227,6 +229,22 @@ const PIPELINE = new ChainBuilder()
   .build();
 
 /**
+ * Best-effort Actual API shutdown that never throws.
+ * Catches any error, logs it via the project's `errorMessage()` utility,
+ * and returns. Used by both fatal-error and pipeline-failure paths to
+ * release the Actual API connection so the Node event loop can exit.
+ * @returns Procedure indicating whether shutdown was clean or recovered.
+ */
+async function safeShutdown(): Promise<Procedure<{ status: string }>> {
+  try { await api.shutdown(); }
+  catch (error: unknown) {
+    LOGGER.error(`Error during API shutdown: ${errorMessage(error)}`);
+    return succeed({ status: 'api-shutdown-error' });
+  }
+  return succeed({ status: 'api-shutdown' });
+}
+
+/**
  * Handles an unrecoverable error: logs it, sends a Telegram notification, and exits.
  * @param error - The unknown error caught at the top level.
  * @returns Never — always exits the process with code 1.
@@ -237,7 +255,25 @@ async function handleFatalError(error: unknown): Promise<never> {
   LOGGER.error(`\n${formattedError}`);
   if (error instanceof Error) LOGGER.error(`Stack trace: ${error.stack ?? 'N/A'}`);
   await NOTIFICATION_SERVICE.sendError(formattedError);
-  try { await api.shutdown(); } catch { /* ignore shutdown error */ }
+  await safeShutdown();
+  process.exit(1);
+}
+
+/**
+ * Handles a pipeline-level failure (e.g. all-banks-failed): notifies and exits.
+ * Mirrors handleFatalError but for non-throw failures returned by steps so the
+ * Docker container shuts down the Actual API and the webhook receives the
+ * error event instead of hanging on a live API connection.
+ * @param failure - Pipeline failure carrying the user-facing message.
+ * @param failure.message - Human-readable pipeline failure message.
+ * @returns Never — always exits the process with code 1.
+ */
+async function handlePipelineFailure(
+  failure: { readonly message: string },
+): Promise<never> {
+  LOGGER.error(`Pipeline failed: ${failure.message}`);
+  await NOTIFICATION_SERVICE.sendError(failure.message);
+  await safeShutdown();
   process.exit(1);
 }
 
@@ -247,9 +283,7 @@ async function handleFatalError(error: unknown): Promise<never> {
  */
 async function shutdownApiGracefully(): Promise<Procedure<{ status: string }>> {
   LOGGER.info('🔌 Shutting down Actual Budget API...');
-  try { await api.shutdown(); }
-  catch (e: unknown) { LOGGER.error(`Error during API shutdown: ${errorMessage(e)}`); }
-  return succeed({ status: 'api-shutdown' });
+  return await safeShutdown();
 }
 
 /**
@@ -260,11 +294,7 @@ async function main(): Promise<Procedure<{ status: string }>> {
   try {
     SHUTDOWN_HANDLER.onShutdown(shutdownApiGracefully);
     const result = await execute(PIPELINE, PIPELINE_CONTEXT);
-    if (isFail(result)) {
-      LOGGER.error(`Pipeline failed: ${result.message}`);
-      process.exitCode = 1;
-      return fail(result.message);
-    }
+    if (isFail(result)) return await handlePipelineFailure(result);
     const exitCode = (result.data.state.exitCode as number | undefined) ?? 0;
     process.exit(exitCode);
   } catch (error) {

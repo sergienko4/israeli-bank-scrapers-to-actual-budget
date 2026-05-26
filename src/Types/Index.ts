@@ -17,6 +17,16 @@ export type {
   ISignPolicy,
 } from './Scraping/Index.js';
 
+// Pipeline-specific types (Phase-3 quarantine — see ./Pipeline/Index.ts)
+export type {
+  IBankFilter,
+  IBankMetricsDelta,
+  IBankQuarantineEntry,
+  IBankQuarantineStage,
+  IBankResult,
+  IBankResultsState,
+} from './Pipeline/Index.js';
+
 
 /** Connection and budget settings for the Actual Budget server. */
 export interface IActualConfig {

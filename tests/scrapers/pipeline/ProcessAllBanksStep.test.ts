@@ -1,25 +1,39 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach,beforeEach, describe, expect, it, vi } from 'vitest';
+
 import createProcessAllBanksStep from '../../../src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.js';
-import { isSuccess, isFail } from '../../../src/Types/ProcedureHelpers.js';
 import type { IPipelineContext } from '../../../src/Scrapers/Pipeline/Types/PipelineContext.js';
+import { isFail, isSuccess } from '../../../src/Types/ProcedureHelpers.js';
+import {
+  ALLOW_ALL_BANK_FILTER, fakeBankConfig, fakeCanonicalScrapeResult,
+  fakePipelineConfig,
+} from '../../helpers/factories.js';
+
+function makeMockMapper() {
+  return {
+    mapToCanonical: vi.fn(),
+    canonicalToLegacy: vi.fn(),
+    legacyToCanonical: vi.fn().mockReturnValue({
+      success: true,
+      data: fakeCanonicalScrapeResult({ bankId: 'mock', accounts: [] }),
+    }),
+  };
+}
 
 function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
+  const mergedConfig = (overrides.config
+    ?? fakePipelineConfig({
+      banks: { hapoalim: fakeBankConfig(), leumi: fakeBankConfig() },
+    })) as IPipelineContext['config'];
   return {
-    config: {
-      banks: {
-        hapoalim: { credentials: { id: '1' } },
-        leumi: { credentials: { id: '2' } },
-      },
-      delayBetweenBanks: 0,
-    } as unknown as IPipelineContext['config'],
+    config: mergedConfig,
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     shutdownHandler: { isShuttingDown: vi.fn().mockReturnValue(false), onShutdown: vi.fn() },
     services: {
       metricsService: {
         startImport: vi.fn().mockReturnValue({ success: true, data: { status: 'started' } }),
-        startBank: vi.fn(),
-        recordBankSuccess: vi.fn(),
-        recordBankFailure: vi.fn(),
+        startBank: vi.fn().mockReturnValue({ success: true, data: { status: 'tracking' } }),
+        recordBankSuccess: vi.fn().mockReturnValue({ success: true, data: { status: 'recorded' } }),
+        recordBankFailure: vi.fn().mockReturnValue({ success: true, data: { status: 'recorded' } }),
       },
       bankScraper: {
         scrapeBankWithResilience: vi.fn().mockResolvedValue({ success: true, accounts: [] }),
@@ -27,9 +41,11 @@ function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
       accountImporter: {
         processAllAccounts: vi.fn().mockResolvedValue({ imported: 5, skipped: 2 }),
       },
+      scrapeResultMapper: makeMockMapper(),
     } as unknown as IPipelineContext['services'],
     state: { isDryRun: false, apiInitialized: true, banksProcessed: 0 },
     ...overrides,
+    config: mergedConfig,
   } as IPipelineContext;
 }
 
@@ -38,14 +54,13 @@ describe('ProcessAllBanksStep', () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env.IMPORT_BANKS;
   });
 
   afterEach(() => {
     process.env = originalEnv;
   });
 
-  it('processes all configured banks and records metrics', async () => {
+  it('processes all configured banks and emits metrics deltas via reducer', async () => {
     const ctx = makeCtx();
     const step = createProcessAllBanksStep();
 
@@ -54,7 +69,9 @@ describe('ProcessAllBanksStep', () => {
     expect(isSuccess(result)).toBe(true);
     if (isSuccess(result)) {
       expect(result.data.state.banksProcessed).toBe(2);
-      expect(result.data).not.toBe(ctx);
+      expect(result.data.state.bankResults?.successful).toHaveLength(2);
+      expect(result.data.state.bankResults?.quarantined).toHaveLength(0);
+      expect(result.data.state.bankResults?.totalBanks).toBe(2);
     }
     expect(ctx.services.metricsService.startImport).toHaveBeenCalledOnce();
     expect(ctx.services.metricsService.startBank).toHaveBeenCalledWith('hapoalim');
@@ -64,9 +81,13 @@ describe('ProcessAllBanksStep', () => {
     expect(ctx.services.accountImporter.processAllAccounts).toHaveBeenCalledTimes(2);
   });
 
-  it('IMPORT_BANKS env filters to specific banks', async () => {
-    process.env.IMPORT_BANKS = 'leumi';
-    const ctx = makeCtx();
+  it('bankFilter restricts processing to selected banks', async () => {
+    const ctx = makeCtx({
+      config: fakePipelineConfig({
+        banks: { hapoalim: fakeBankConfig(), leumi: fakeBankConfig() },
+        bankFilter: { matches: (name: string): boolean => name === 'leumi' },
+      }) as unknown as IPipelineContext['config'],
+    });
     const step = createProcessAllBanksStep();
 
     const result = await step(ctx);
@@ -74,13 +95,14 @@ describe('ProcessAllBanksStep', () => {
     expect(isSuccess(result)).toBe(true);
     if (isSuccess(result)) {
       expect(result.data.state.banksProcessed).toBe(1);
+      expect(result.data.state.bankResults?.totalBanks).toBe(1);
     }
     expect(ctx.services.metricsService.startBank).toHaveBeenCalledWith('leumi');
     expect(ctx.services.metricsService.startBank).not.toHaveBeenCalledWith('hapoalim');
   });
 
-  it('IMPORT_BANKS env supports comma-separated values with spaces', async () => {
-    process.env.IMPORT_BANKS = 'hapoalim , leumi';
+  it('does not read process.env (INV-1)', async () => {
+    process.env.IMPORT_BANKS = 'leumi';
     const ctx = makeCtx();
     const step = createProcessAllBanksStep();
 
@@ -92,7 +114,7 @@ describe('ProcessAllBanksStep', () => {
     }
   });
 
-  it('scrape failure records failure metric and continues to next bank', async () => {
+  it('scrape failure quarantines bank and continues batch (partial success)', async () => {
     const ctx = makeCtx();
     (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({ success: false, errorMessage: 'timeout' })
@@ -103,8 +125,10 @@ describe('ProcessAllBanksStep', () => {
 
     expect(isSuccess(result)).toBe(true);
     if (isSuccess(result)) {
-      // Only the successful bank's result is counted in data length
       expect(result.data.state.banksProcessed).toBe(1);
+      expect(result.data.state.bankResults?.successful).toHaveLength(1);
+      expect(result.data.state.bankResults?.quarantined).toHaveLength(1);
+      expect(result.data.state.bankResults?.quarantined[0]?.stage).toBe('scrape');
     }
     expect(ctx.services.metricsService.recordBankFailure).toHaveBeenCalledWith(
       'hapoalim',
@@ -115,7 +139,61 @@ describe('ProcessAllBanksStep', () => {
     );
   });
 
-  it('shutdown aborts before processing remaining banks', async () => {
+  it('preserves original Error reference (INV-3)', async () => {
+    const ctx = makeCtx();
+    const originalErr = new Error('boom');
+    (ctx.services.accountImporter.processAllAccounts as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(originalErr);
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    if (isSuccess(result)) {
+      const q = result.data.state.bankResults?.quarantined[0];
+      expect(q?.stage).toBe('import');
+      expect(q?.error).toBe(originalErr);
+    }
+  });
+
+  it('map-stage failure quarantines with stage=map and preserves Error (INV-3)', async () => {
+    const ctx = makeCtx();
+    const mapErr = new Error('canonicalize crashed');
+    (ctx.services.scrapeResultMapper.legacyToCanonical as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce({
+        success: false, message: 'canonicalize crashed',
+        status: 'legacy-not-successful', error: mapErr,
+      });
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    if (isSuccess(result)) {
+      const q = result.data.state.bankResults?.quarantined[0];
+      expect(q?.stage).toBe('map');
+      expect(q?.error).toBe(mapErr);
+    }
+    expect(ctx.services.metricsService.recordBankFailure).toHaveBeenCalledWith(
+      'hapoalim', mapErr
+    );
+  });
+
+  it('all banks failing returns fail with banks-failed status (INV-4)', async () => {
+    const ctx = makeCtx();
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, errorMessage: 'timeout' });
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) {
+      expect(result.status).toBe('banks-failed');
+    }
+  });
+
+  it('shutdown aborts before processing any banks', async () => {
     const ctx = makeCtx({
       shutdownHandler: {
         isShuttingDown: vi.fn().mockReturnValue(true),
@@ -128,8 +206,9 @@ describe('ProcessAllBanksStep', () => {
 
     expect(isFail(result)).toBe(true);
     if (isFail(result)) {
-      expect(result.status).toBe('banks-failed');
+      expect(result.status).toBe('shutdown');
     }
+    expect(ctx.services.metricsService.startImport).not.toHaveBeenCalled();
     expect(ctx.services.bankScraper.scrapeBankWithResilience).not.toHaveBeenCalled();
   });
 
@@ -166,9 +245,8 @@ describe('ProcessAllBanksStep', () => {
       .mockResolvedValue({ success: false });
     const step = createProcessAllBanksStep();
 
-    const result = await step(ctx);
+    await step(ctx);
 
-    expect(isSuccess(result)).toBe(true);
     expect(ctx.services.metricsService.recordBankFailure).toHaveBeenCalledWith(
       'hapoalim',
       expect.objectContaining({ message: 'Scrape failed' })
@@ -176,11 +254,11 @@ describe('ProcessAllBanksStep', () => {
   });
 
   it('defaults delayBetweenBanks to 0 when config omits it', async () => {
-    const ctx = makeCtx({
-      config: {
-        banks: { single: { credentials: { id: '1' } } },
-      } as unknown as IPipelineContext['config'],
-    });
+    const cfg = fakePipelineConfig({
+      banks: { single: fakeBankConfig() },
+    }) as unknown as IPipelineContext['config'] & { delayBetweenBanks?: number };
+    delete cfg.delayBetweenBanks;
+    const ctx = makeCtx({ config: cfg });
     const step = createProcessAllBanksStep();
 
     const result = await step(ctx);
@@ -188,6 +266,24 @@ describe('ProcessAllBanksStep', () => {
     expect(isSuccess(result)).toBe(true);
     if (isSuccess(result)) {
       expect(result.data.state.banksProcessed).toBe(1);
+    }
+  });
+
+  it('treats empty bank list as success with totalBanks=0', async () => {
+    const ctx = makeCtx({
+      config: fakePipelineConfig({
+        banks: {},
+        bankFilter: ALLOW_ALL_BANK_FILTER,
+      }) as unknown as IPipelineContext['config'],
+    });
+    const step = createProcessAllBanksStep();
+
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    if (isSuccess(result)) {
+      expect(result.data.state.banksProcessed).toBe(0);
+      expect(result.data.state.bankResults?.totalBanks).toBe(0);
     }
   });
 });

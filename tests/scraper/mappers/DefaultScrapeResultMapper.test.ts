@@ -107,3 +107,97 @@ describe('DefaultScrapeResultMapper.canonicalToLegacy', () => {
     expect(legacy.accounts?.[0].txns).toHaveLength(1);
   });
 });
+
+describe('DefaultScrapeResultMapper.legacyToCanonical', () => {
+  it('returns fail when legacy.success is false', () => {
+    const result = mapper.legacyToCanonical({
+      legacy: { success: false, errorMessage: 'timeout' } as never,
+      bankName: 'discount',
+      bankConfig: { id: '1' } as never,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.message).toBe('timeout');
+      expect(result.status).toBe('legacy-not-successful');
+    }
+  });
+
+  it('uses default error message when errorMessage is undefined', () => {
+    const result = mapper.legacyToCanonical({
+      legacy: { success: false } as never,
+      bankName: 'discount',
+      bankConfig: { id: '1' } as never,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.message).toBe('Scrape failed');
+    }
+  });
+
+  it('converts a successful legacy result into canonical shape', () => {
+    const result = mapper.legacyToCanonical({
+      legacy: {
+        success: true,
+        accounts: [{
+          accountNumber: 'A1', balance: 100,
+          txns: [{ chargedAmount: 5, originalAmount: 5, date: '2026-01-15' }],
+        }],
+      } as never,
+      bankName: 'discount',
+      bankConfig: { daysBack: 7 } as never,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.bankId).toBe('discount');
+      expect(result.data.accounts).toHaveLength(1);
+      expect(result.data.accounts[0]?.accountNumber).toBe('A1');
+      expect(result.data.accounts[0]?.balance).toBe(100);
+      expect(result.data.accounts[0]?.txns).toHaveLength(1);
+      expect(result.data.metadata.signPolicyApplied).toBe('preserve');
+      expect(result.data.metadata.strategy).toBe('live');
+      expect(result.data.metadata.attemptCount).toBe(1);
+    }
+  });
+
+  it('treats missing accounts as empty list', () => {
+    const result = mapper.legacyToCanonical({
+      legacy: { success: true } as never,
+      bankName: 'discount',
+      bankConfig: { id: '1' } as never,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.accounts).toEqual([]);
+    }
+  });
+
+  it('treats missing account.txns as empty array (no throw)', () => {
+    const result = mapper.legacyToCanonical({
+      legacy: {
+        success: true,
+        accounts: [{ accountNumber: 'A1', balance: 0 }],
+      } as never,
+      bankName: 'discount',
+      bankConfig: { id: '1' } as never,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.accounts[0]?.txns).toEqual([]);
+    }
+  });
+
+  it('coerces missing account.balance to null', () => {
+    const result = mapper.legacyToCanonical({
+      legacy: {
+        success: true,
+        accounts: [{ accountNumber: 'A1', txns: [] }],
+      } as never,
+      bankName: 'discount',
+      bankConfig: { id: '1' } as never,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.accounts[0]?.balance).toBeNull();
+    }
+  });
+});
