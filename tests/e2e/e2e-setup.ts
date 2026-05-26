@@ -20,18 +20,21 @@ async function createTestBudget(): Promise<string> {
 
   await api.init({ dataDir: DATA_DIR });
 
-  console.log('Creating test budget...');
-  await api.runImport('e2e-test-budget', async () => {});
+  try {
+    console.log('Creating test budget...');
+    await api.runImport('e2e-test-budget', async () => {});
 
-  const budgets = await api.getBudgets();
-  const budget = budgets[0];
-  if (!budget) throw new Error('No budgets found after creation');
-  const budgetId = budget.id;
-  if (!budgetId) throw new Error('Created budget has no id');
+    const budgets = await api.getBudgets();
+    const budget = budgets[0];
+    if (!budget) throw new Error('No budgets found after creation');
+    const budgetId = budget.id;
+    if (!budgetId) throw new Error('Created budget has no id');
 
-  console.log(`Budget created: ${budgetId}`);
-  await api.shutdown();
-  return budgetId;
+    console.log(`Budget created: ${budgetId}`);
+    return budgetId;
+  } finally {
+    await api.shutdown();
+  }
 }
 
 function generateConfig(): void {

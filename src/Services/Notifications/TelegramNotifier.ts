@@ -14,6 +14,7 @@ import type {
 ITelegramApiResponse,
   ITelegramConfig,MessageFormat, Procedure,ShowTransactions } from '../../Types/Index.js';
 import { fail, isFail, succeed } from '../../Types/Index.js';
+import { errorMessage } from '../../Utils/Index.js';
 import type {
   IImportSummary
 } from '../MetricsService.js';
@@ -126,8 +127,7 @@ export default class TelegramNotifier implements INotifier {
     try {
       return await this.postInlineKeyboard('🏦 <b>Select bank to import:</b>', keyboard);
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      return fail(`sendScanMenu error: ${msg}`);
+      return fail(`sendScanMenu error: ${errorMessage(error)}`);
     }
   }
 

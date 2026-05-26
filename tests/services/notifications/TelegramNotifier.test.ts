@@ -930,6 +930,15 @@ describe('TelegramNotifier', () => {
         { text: 'discount', callback_data: 'scan:discount' },
         { text: 'visaCal', callback_data: 'scan:visaCal' },
       ]);
+      const callbackData = body.reply_markup.inline_keyboard
+        .flat()
+        .map((button: { callback_data: string }) => button.callback_data);
+      expect(callbackData).toEqual(expect.arrayContaining([
+        'scan_all',
+        'scan:discount',
+        'scan:visaCal',
+        'scan:amex',
+      ]));
     });
 
     it('returns fail (Procedure contract) when Telegram API responds non-OK', async () => {
