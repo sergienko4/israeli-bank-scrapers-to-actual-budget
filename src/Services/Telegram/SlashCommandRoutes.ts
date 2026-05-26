@@ -7,9 +7,8 @@
  * parameter type annotations free of `| undefined` (forbidden by ESLint).
  */
 
-import type { Procedure } from '../../Types/Index.js';
-import { extractPrefixPayload } from './CommandCallbackParser.js';
 import type { CommandHandler, ICommandRoute } from './ICommandRoute.js';
+import { makeExactRoute, makePrefixRoute } from './ICommandRoute.js';
 
 /** Handler signature returning a Procedure carrying a status string. */
 export type SlashHandler = CommandHandler;
@@ -50,69 +49,19 @@ export function buildSlashCommandRoutes(
   h: ISlashHandlers,
 ): readonly ICommandRoute[] {
   const routes: ICommandRoute[] = [
-    exact('/scan', h.handleScan),
-    exact('/import', h.handleScan),
-    exact('/status', h.handleStatus),
-    exact('/logs', h.handleLogs),
-    exact('/watch', h.handleWatch),
-    exact('/check_config', h.handleCheckConfig),
-    exact('/preview', h.handlePreview),
-    exact('/help', h.handleHelp),
-    exact('/retry', h.handleRetry),
-    exact('/start', h.handleHelp),
-    exact('/import_receipt', h.handleImportReceipt),
-    exact('scan_all', h.handleScanAll),
-    scanPrefixRoute(h.handleScan),
+    makeExactRoute('/scan', h.handleScan),
+    makeExactRoute('/import', h.handleScan),
+    makeExactRoute('/status', h.handleStatus),
+    makeExactRoute('/logs', h.handleLogs),
+    makeExactRoute('/watch', h.handleWatch),
+    makeExactRoute('/check_config', h.handleCheckConfig),
+    makeExactRoute('/preview', h.handlePreview),
+    makeExactRoute('/help', h.handleHelp),
+    makeExactRoute('/retry', h.handleRetry),
+    makeExactRoute('/start', h.handleHelp),
+    makeExactRoute('/import_receipt', h.handleImportReceipt),
+    makeExactRoute('scan_all', h.handleScanAll),
+    makePrefixRoute(SCAN_PREFIX, h.handleScan),
   ];
   return Object.freeze(routes);
-}
-
-/**
- * Builds an exact-match route bound to the supplied handler.
- * The router forwards the parsed `arg` (whitespace remainder) to the handler.
- * @param pattern - Exact command literal (e.g. `/scan`).
- * @param fn - Bound handler function.
- * @returns Frozen ICommandRoute entry.
- */
-function exact(
-  pattern: string,
-  fn: SlashHandler,
-): ICommandRoute {
-  return Object.freeze({
-    match: 'exact' as const,
-    pattern,
-    /**
-     * Invokes the bound handler with the parsed argument.
-     * @param arg - Command argument string ('' when none).
-     * @returns Procedure result from the bound handler.
-     */
-    handle: async (arg: string): Promise<Procedure<{ status: string }>> => await fn(arg),
-  });
-}
-
-/**
- * Builds the `scan:` prefix route. Payload extraction uses
- * {@link extractPrefixPayload} so no magic numbers leak in.
- * @param fn - Bound handleScan.
- * @returns Frozen ICommandRoute entry for the `scan:` prefix.
- */
-function scanPrefixRoute(
-  fn: SlashHandler,
-): ICommandRoute {
-  return Object.freeze({
-    match: 'prefix' as const,
-    pattern: SCAN_PREFIX,
-    /**
-     * Extracts the bank name following the `scan:` prefix.
-     * @param raw - Trimmed raw command string.
-     * @returns Bank name payload, or '' when missing.
-     */
-    parse: (raw: string): string => extractPrefixPayload(raw, SCAN_PREFIX),
-    /**
-     * Invokes handleScan with the resolved bank name.
-     * @param arg - Bank name payload ('' when missing).
-     * @returns Procedure result from handleScan.
-     */
-    handle: async (arg: string): Promise<Procedure<{ status: string }>> => await fn(arg),
-  });
 }

@@ -6,12 +6,27 @@
 import type { Procedure } from '../../Types/Index.js';
 import { succeed } from '../../Types/Index.js';
 import type { ReceiptImportHandler } from '../ReceiptImportHandler.js';
-import { extractPrefixPayload } from './CommandCallbackParser.js';
-import type { ICommandRoute } from './ICommandRoute.js';
+import type { CommandHandler, ICommandRoute } from './ICommandRoute.js';
+import { makeExactRoute, makePrefixRoute } from './ICommandRoute.js';
 
 const ACC_PREFIX = 'receipt_acc:';
 const CAT_PREFIX = 'receipt_cat:';
 const MISSING_PAYLOAD_STATUS = 'missing-payload';
+
+/**
+ * Wraps a payload-required handler so empty payloads short-circuit to
+ * `missing-payload` instead of invoking the receipt handler with `''`.
+ * @param fn - Handler that requires a non-empty id payload.
+ * @returns CommandHandler that guards against empty payloads.
+ */
+function requirePayload(
+  fn: (id: string) => Promise<Procedure<{ status: string }>>,
+): CommandHandler {
+  return async (arg: string) => {
+    if (arg === '') return succeed({ status: MISSING_PAYLOAD_STATUS });
+    return await fn(arg);
+  };
+}
 
 /**
  * Builds the receipt-callback route table.
@@ -22,65 +37,18 @@ export default function buildReceiptCommandRoutes(
   receiptHandler?: ReceiptImportHandler,
 ): readonly ICommandRoute[] {
   if (!receiptHandler) return Object.freeze<ICommandRoute[]>([]);
+  const accHandler = requirePayload(
+    async (id) => await receiptHandler.onAccountSelected(id),
+  );
+  const catHandler = requirePayload(
+    async (id) => await receiptHandler.onCategorySelected(id),
+  );
   const routes: ICommandRoute[] = [
-    exact('receipt_confirm', async () => await receiptHandler.onConfirm()),
-    exact('receipt_choose', async () => await receiptHandler.onChooseDifferent()),
-    exact('receipt_cancel', async () => await receiptHandler.onCancel()),
-    prefixRoute(ACC_PREFIX, async (id) => await receiptHandler.onAccountSelected(id)),
-    prefixRoute(CAT_PREFIX, async (id) => await receiptHandler.onCategorySelected(id)),
+    makeExactRoute('receipt_confirm', async () => await receiptHandler.onConfirm()),
+    makeExactRoute('receipt_choose', async () => await receiptHandler.onChooseDifferent()),
+    makeExactRoute('receipt_cancel', async () => await receiptHandler.onCancel()),
+    makePrefixRoute(ACC_PREFIX, accHandler),
+    makePrefixRoute(CAT_PREFIX, catHandler),
   ];
   return Object.freeze(routes);
-}
-
-/**
- * Builds an exact-match receipt route.
- * @param pattern - Exact callback literal.
- * @param fn - Handler invoked when the callback matches.
- * @returns Frozen ICommandRoute entry.
- */
-function exact(
-  pattern: string,
-  fn: () => Promise<Procedure<{ status: string }>>,
-): ICommandRoute {
-  return Object.freeze({
-    match: 'exact' as const,
-    pattern,
-    /**
-     * Invokes the bound handler, ignoring arg/ctx.
-     * @returns Procedure result from the receipt handler.
-     */
-    handle: async (): Promise<Procedure<{ status: string }>> => await fn(),
-  });
-}
-
-/**
- * Builds a prefix-match receipt route with payload extraction.
- * @param prefix - Literal prefix (e.g. `receipt_acc:`).
- * @param fn - Handler invoked with the extracted id payload.
- * @returns Frozen ICommandRoute entry.
- */
-function prefixRoute(
-  prefix: string,
-  fn: (id: string) => Promise<Procedure<{ status: string }>>,
-): ICommandRoute {
-  return Object.freeze({
-    match: 'prefix' as const,
-    pattern: prefix,
-    /**
-     * Extracts the id payload after the prefix.
-     * @param raw - Trimmed raw callback string.
-     * @returns The payload, or '' when missing.
-     */
-    parse: (raw: string): string => extractPrefixPayload(raw, prefix),
-    /**
-     * Forwards the extracted id to the receipt handler.
-     * Returns `missing-payload` when the prefix was supplied without an id.
-     * @param arg - Extracted id payload.
-     * @returns Procedure carrying the receipt handler's status.
-     */
-    handle: async (arg: string): Promise<Procedure<{ status: string }>> => {
-      if (arg === '') return succeed({ status: MISSING_PAYLOAD_STATUS });
-      return await fn(arg);
-    },
-  });
 }
