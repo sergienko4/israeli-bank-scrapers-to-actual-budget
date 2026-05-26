@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.17](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.16...v1.37.17) (2026-05-26)
+
+
+### Fixed
+
+* **deps-dev:** bump @types/node from 25.9.0 to 25.9.1 ([#375](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/375)) ([83ed7d2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/83ed7d2a567d89608a7046b82bb3adfb12c849b8))
+* **deps-dev:** bump eslint-plugin-jsdoc from 62.9.0 to 63.0.0 ([#377](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/377)) ([20070c1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/20070c125c427efe7c97004977a82d64894adf13))
+* **deps-dev:** bump typescript-eslint from 8.59.3 to 8.59.4 ([#374](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/374)) ([427f6a1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/427f6a147f5fcf86f1147df04687892fba75d7c4))
+* **deps-dev:** bump vite from 8.0.13 to 8.0.14 ([#376](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/376)) ([c016279](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c016279941276ba665b6c74f70546e34afc8deae))
+* **deps-dev:** bump vitest from 4.1.6 to 4.1.7 ([#373](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/373)) ([b59af8b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b59af8b98ec73311fb7395b53f349edcdb8272e7))
+
+
+### Refactored
+
+* extract BankScraper Strategy + Mapper ([#379](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/379)) ([fe05dfa](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fe05dfaa093831328a7cdc6601ffcec118e45356))
+* phase-3 pipeline quarantine + metrics reducer (INV-1..6) ([#381](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/381)) ([c9d27ad](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c9d27ad2bdc7dc55e20710b4c3c170c5a90a44ff))
+* **telegram:** declarative ICommandRoute registry ([#382](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/382)) ([bafc4ba](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/bafc4babddbf934a82bf0fa4fd598f96c6efb74b))
+
 ## [1.37.16](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.15...v1.37.16) (2026-05-24)
 
 
