@@ -1,52 +1,94 @@
-# Israeli Bank Scrapers to Actual Budget
+# Israeli Bank Importer
 
-[![PR Pipeline](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr.yml) [![Release](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Docker Pulls](https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer)](https://hub.docker.com/r/sergienko4/israeli-bank-importer) [![Node.js](https://img.shields.io/badge/node-22%2B-brightgreen)](https://nodejs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-test-count.json)](#testing) [![E2E](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-e2e-count.json)](#e2e-tests)
+<!-- meta:badges:start -->
+[![PR Pipeline](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr.yml)
+[![Release](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Docker Pulls](https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer)](https://hub.docker.com/r/sergienko4/israeli-bank-importer)
+[![Node.js](https://img.shields.io/badge/node-22%2B-brightgreen)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
+[![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-test-count.json)](#contributing)
+[![E2E](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-e2e-count.json)](#contributing)
+<!-- meta:badges:end -->
 
 **Automatically import transactions from 18 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
 
-Powered by [**@sergienko4/israeli-bank-scrapers**](https://github.com/sergienko4/israeli-bank-scrapers) (fork of [eshaham/israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers) with Amex/Isracard WAF fix).
+Powered by [**@sergienko4/israeli-bank-scrapers**](https://github.com/sergienko4/israeli-bank-scrapers) (fork of [eshaham/israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers) with Amex/Isracard WAF fix and Camoufox stealth).
+
+📖 **Full documentation:** <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/>
 
 ---
 
-## What Does This Do?
-
-```text
-Your Bank → israeli-bank-scrapers → This Tool → Actual Budget
-                    OR
-Receipt Photo → Telegram Bot → OCR → This Tool → Actual Budget
-```
-
-1. You provide bank credentials in a config file
-2. israeli-bank-scrapers logs into your bank and fetches transactions
-3. This tool imports them into Actual Budget
-4. All your transactions appear automatically
-
-**No manual CSV downloads. Everything automated.**
-
----
-
-## Quick Start
-
-### 1. Install Docker
-
-- **Windows/Mac**: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- **Linux**: `sudo apt install docker.io docker-compose`
-
-### 2. Create config.json
+## TL;DR Quick Start
 
 ```bash
 git clone https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget.git
 cd israeli-bank-scrapers-to-actual-budget
 cp config.json.example config.json
+# edit config.json with your bank credentials + actualAccountId
+docker compose up -d actual-server   # first-time: open http://localhost:5006
+docker compose up -d                 # start the importer
+docker compose logs -f
 ```
 
-Edit `config.json` with your credentials. Here is a full example showing all available options:
+**Windows:** replace `$(pwd)` with `"C:\path\to\config.json"` in `docker run` examples.
+
+See [Quick Start guide](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/getting-started/quick-start/) for the full walk-through.
+
+---
+
+## Supported Banks
+
+<!-- meta:supported-banks:start -->
+| # | Institution | Config key | Login fields |
+|---|-------------|-----------|--------------|
+| 1 | Bank Hapoalim | `hapoalim` | userCode, password |
+| 2 | Bank Leumi | `leumi` | username, password |
+| 3 | Discount Bank | `discount` | id, password, num |
+| 4 | Mizrahi Tefahot | `mizrahi` | username, password |
+| 5 | Mercantile | `mercantile` | id, password, num |
+| 6 | Otsar Hahayal | `otsarHahayal` | username, password |
+| 7 | Union | `union` | username, password |
+| 8 | Beinleumi | `beinleumi` | username, password |
+| 9 | Massad | `massad` | username, password |
+| 10 | Yahav | `yahav` | username, nationalID, password |
+| 11 | Beyahad Bishvilha | `beyahadBishvilha` | id, password |
+| 12 | Behatsdaa | `behatsdaa` | id, password |
+| 13 | Pagi | `pagi` | username, password |
+| 14 | One Zero | `oneZero` | email, password, phoneNumber |
+| 15 | Visa Cal | `visaCal` | username, password |
+| 16 | Max | `max` | username, password, id |
+| 17 | Isracard | `isracard` | id, card6Digits, password |
+| 18 | Amex | `amex` | id, card6Digits, password |
+<!-- meta:supported-banks:end -->
+
+See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/banks/) · [docs/banks/](docs/banks/).
+
+---
+
+## Features
+
+- 🏦 18 banks and credit cards (major Israeli institutions + cards)
+- 🤖 Telegram bot: `/scan`, `/preview`, `/status`, `/logs`, `/import_receipt` (OCR)
+- 📥 Webhook delivery (Slack, Discord, generic JSON)
+- 🏷️ Auto-categorization (`history` / `translate` Hebrew → English)
+- 🚨 Spending watch with payee filters and threshold alerts
+- 🔐 Encrypted config (AES-256-GCM + PBKDF2 derivation)
+- 📤 OTP auto-forward (Android MacroDroid + iPhone Shortcuts guides)
+- ⏰ Cron-based scheduling (Docker, VM, Synology, Oracle Cloud, Kubernetes)
+- 🦊 Camoufox stealth browser (Firefox + C++-level fingerprint masking)
+- 🛡️ Read-only config mounts, non-root container, zero telemetry
+
+---
+
+<details>
+<summary><b>Minimal config example</b></summary>
 
 ```json
 {
   "actual": {
     "init": {
-      "serverURL": "http://localhost:5006",
+      "serverURL": "http://actual-server:5006",
       "password": "your_actual_password",
       "dataDir": "./data"
     },
@@ -55,9 +97,7 @@ Edit `config.json` with your credentials. Here is a full example showing all ava
       "password": null
     }
   },
-
-  "delayBetweenBanks": 5000,
-
+  "delayBetweenBanks": 0,
   "banks": {
     "discount": {
       "id": "123456789",
@@ -69,73 +109,42 @@ Edit `config.json` with your credentials. Here is a full example showing all ava
         "reconcile": true,
         "accounts": "all"
       }]
-    },
-    "oneZero": {
-      "email": "your@email.com",
-      "password": "your_password",
-      "phoneNumber": "+972501234567",
-      "twoFactorAuth": true,
-      "twoFactorTimeout": 300,
-      "otpLongTermToken": "",
-      "daysBack": 14,
-      "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
-    }
-  },
-
-  "logConfig": {
-    "format": "words",
-    "logDir": "./logs"
-  },
-
-  "categorization": {
-    "mode": "none"
-  },
-
-  "notifications": {
-    "enabled": true,
-    "maxTransactions": 5,
-    "telegram": {
-      "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
-      "chatId": "-1001234567890",
-      "messageFormat": "compact",
-      "showTransactions": "new",
-      "listenForCommands": true,
-      "enableReceiptImport": false
-    },
-    "webhook": {
-      "url": "https://hooks.slack.com/services/T.../B.../...",
-      "format": "slack"
     }
   }
 }
 ```
 
-**Where to find values:**
+Full reference: [Configuration docs](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/getting-started/configuration/).
 
-| Value | How to Find |
-|-------|-------------|
-| `serverURL` | Your Actual Budget server URL |
-| `password` | Your Actual Budget server password |
-| `syncId` | Settings → Show Advanced Settings → Sync ID |
-| `actualAccountId` | Click account in Actual Budget → copy ID from URL |
-| Bank credentials | Same as you use on bank website |
+</details>
 
-### 3. Run with Docker
+<details>
+<summary><b>Telegram bot setup (3 steps)</b></summary>
 
-**Option A: Docker Compose (recommended)**
+1. Chat with [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token.
+2. Add the bot to a group or chat with [@userinfobot](https://t.me/userinfobot) for your chat ID.
+3. Add the credentials to `config.json`:
 
-Starts **both** Actual Budget and the importer as a single stack.
-Set `"serverURL": "http://actual-server:5006"` in your `config.json`.
-
-```bash
-docker compose up -d actual-server   # First-time: start Actual Budget, open http://localhost:5006
-docker compose up -d                 # Start everything
-docker compose logs -f               # View logs
-docker compose pull && docker compose up -d   # Update
-docker compose down                  # Stop
+```json
+"notifications": {
+  "enabled": true,
+  "telegram": {
+    "botToken": "123456789:ABCDefGHijKlMnOpQrStUvWxYz",
+    "chatId": "-1001234567890",
+    "messageFormat": "compact",
+    "showTransactions": "new",
+    "listenForCommands": true,
+    "enableReceiptImport": false
+  }
+}
 ```
 
-**Option B: Pre-built image**
+Full bot setup, commands, and OCR receipt import: [Telegram docs](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/notifications/telegram/).
+
+</details>
+
+<details>
+<summary><b>Docker run (single container)</b></summary>
 
 ```bash
 docker pull sergienko4/israeli-bank-importer
@@ -146,880 +155,95 @@ docker run --rm --cap-add SYS_ADMIN \
   -v $(pwd)/cache:/app/cache \
   -v $(pwd)/chrome-data:/app/chrome-data \
   -v $(pwd)/logs:/app/logs \
+  -e TZ=Asia/Jerusalem \
+  -e SCHEDULE="0 */8 * * *" \
   sergienko4/israeli-bank-importer
 ```
 
-**Option C: Build from source**
+The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker run guide](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/deployment/docker-run/).
+
+</details>
+
+<details>
+<summary><b>Tech stack</b></summary>
+
+<!-- meta:tech-stack:start -->
+| Component | Version |
+|-----------|---------|
+| Node.js | 22+ (engines: `>=22.0.0`) |
+| TypeScript | ^6.0.3 (strict) |
+| israeli-bank-scrapers (fork) | ^8.3.0 |
+| Vitest | ^4.1.7 |
+| @actual-app/api | ^26.5.2 |
+| Camoufox | latest (Firefox + C++ stealth) |
+| Container base | node:24-slim |
+| Coverage thresholds | branches 90 %, functions 95 %, statements/lines 90 % |
+<!-- meta:tech-stack:end -->
+
+</details>
+
+<details>
+<summary><b>Docker image</b></summary>
+
+<!-- meta:docker-image:start -->
+`sergienko4/israeli-bank-importer:latest`
+<!-- meta:docker-image:end -->
+
+Multi-arch images (`linux/amd64`, `linux/arm64`) are published per release.
+See [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer).
+
+</details>
+
+<details>
+<summary><b>Local development</b></summary>
 
 ```bash
-docker build -t israeli-bank-importer:latest .
-
-docker run --rm --cap-add SYS_ADMIN \
-  -v $(pwd)/config.json:/app/config.json:ro \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/cache:/app/cache \
-  -v $(pwd)/chrome-data:/app/chrome-data \
-  -v $(pwd)/logs:/app/logs \
-  israeli-bank-importer:latest
-```
-
-**Windows users:** Replace `$(pwd)` with full path: `-v "C:\path\to\config.json:/app/config.json"`
-
-See [Releases](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/releases) for all available versions.
-
----
-
-## Supported Institutions
-
-| Institution | Config key | Login fields |
-|-------------|-----------|-------------|
-| Bank Hapoalim | `hapoalim` | userCode, password |
-| Bank Leumi | `leumi` | username, password |
-| Discount Bank | `discount` | id, password, num |
-| Mizrahi Tefahot | `mizrahi` | username, password |
-| Mercantile | `mercantile` | id, password, num |
-| Otsar Hahayal | `otsarHahayal` | username, password |
-| Union | `union` | username, password |
-| Beinleumi | `beinleumi` | username, password |
-| Massad | `massad` | username, password |
-| Yahav | `yahav` | username, nationalID, password |
-| Beyahad Bishvilha | `beyahadBishvilha` | id, password |
-| Behatsdaa | `behatsdaa` | id, password |
-| Pagi | `pagi` | username, password |
-| One Zero | `oneZero` | email, password, phoneNumber |
-| Visa Cal | `visaCal` | username, password |
-| Max | `max` | username, password, id |
-| Isracard | `isracard` | id, card6Digits, password |
-| Amex | `amex` | id, card6Digits, password |
-
-Use the **Config key** as the bank name in your `config.json`. See [BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) for per-institution config examples.
-
----
-
-## Configuration Reference
-
-### Actual Budget Connection
-
-```json
-"actual": {
-  "init": {
-    "serverURL": "http://localhost:5006",
-    "password": "your_server_password",
-    "dataDir": "./data"
-  },
-  "budget": {
-    "syncId": "uuid-from-settings",
-    "password": null
-  }
-}
-```
-
-### Bank Options (per bank)
-
-**Date range** — choose one:
-
-```json
-"daysBack": 14
-```
-
-Import last 14 days. Recalculated on every run. Range: 1-30.
-
-```json
-"startDate": "2026-02-01"
-```
-
-Fixed date. Max: 1 year back. Cannot use both on the same bank.
-
-**Targets** — map bank accounts to Actual Budget accounts:
-
-```json
-"targets": [
-  {
-    "actualAccountId": "uuid-from-actual",
-    "accountName": "Savings Account",
-    "reconcile": true,
-    "accounts": "all"
-  }
-]
-```
-
-- `actualAccountId` — UUID from Actual Budget (click account → copy ID from URL)
-- `accountName` — optional friendly label shown in logs and Telegram instead of the bank account number (e.g. `"Savings"`, `"Business Card"`)
-- `reconcile` — `true` or `false` (default). Auto-adjust balance to match bank
-- `accounts` — `"all"` or array of specific account numbers: `["8538", "7697"]`
-
-**Tip:** Run with `"accounts": "all"` first, check logs to see card/account numbers, then configure specific accounts.
-
-**Multiple cards → separate Actual accounts:**
-
-```json
-"visaCal": {
-  "username": "myusername",
-  "password": "mypassword",
-  "targets": [
-    { "actualAccountId": "card-1-uuid", "reconcile": true, "accounts": ["8538"] },
-    { "actualAccountId": "card-2-uuid", "reconcile": true, "accounts": ["7697"] }
-  ]
-}
-```
-
-### Scraper Tuning (per bank)
-
-For banks that timeout on slow connections (e.g., Oracle Cloud):
-
-```json
-"amex": {
-  "timeout": 60000,
-  "navigationRetryCount": 2,
-  ...
-}
-```
-
-- `timeout` — Navigation timeout in ms. Default: `30000`. Increase to `60000` for slow networks
-- `navigationRetryCount` — Retries on page load failure. Default: `0`. Set `1`-`3` for flaky connections
-
-### 2FA / OTP
-
-Any bank that shows an SMS verification screen supports `twoFactorAuth`. The Telegram bot asks for the OTP code:
-
-```json
-"beinleumi": {
-  "username": "...",
-  "password": "...",
-  "twoFactorAuth": true,
-  "twoFactorTimeout": 300,
-  "targets": [...]
-}
-```
-
-```json
-"oneZero": {
-  "email": "...",
-  "password": "...",
-  "phoneNumber": "+972...",
-  "twoFactorAuth": true,
-  "twoFactorTimeout": 300,
-  "targets": [...]
-}
-```
-
-Flow: login → SMS sent → bot asks "Enter OTP code" → you reply → bot confirms receipt → import completes.
-
-For oneZero only: after first login, add `"otpLongTermToken": "..."` to skip OTP on future runs.
-
-**Automatic OTP forwarding** — set up your phone to reply automatically when a bank SMS arrives.
-See [docs/OTP-AUTOFORWARD.md](docs/OTP-AUTOFORWARD.md) for Android (MacroDroid) and iPhone (iOS Shortcuts) guides.
-
-### Scheduling
-
-Set via environment variables in `docker-compose.yml` or `docker run -e`:
-
-| Schedule | Expression | When |
-|----------|-----------|------|
-| Every 8 hours | `SCHEDULE=0 */8 * * *` | Midnight, 8am, 4pm |
-| Daily at 2am | `SCHEDULE=0 2 * * *` | Once per day |
-| Twice daily | `SCHEDULE=0 6,18 * * *` | 6am and 6pm |
-| Run once | _(don't set SCHEDULE)_ | No schedule, exit after run |
-
-Set timezone: `TZ=Asia/Jerusalem`
-
-### Proxy Support
-
-> **Note:** Proxy is not yet supported with Camoufox (v7.9.0+). This config option is kept for future use.
-
-```json
-"proxy": {
-  "server": "socks5://localhost:1080"
-}
-```
-
-Or via environment: `PROXY_SERVER=socks5://localhost:1080`
-
-Supported protocols: `socks5://`, `socks4://`, `http://`, `https://`.
-
-### Anti-Detection (Built-in)
-
-Anti-detection is handled automatically by the scraper library (v7.9.0+) using **Camoufox** (Firefox with C++-level stealth). No configuration needed. Features include:
-
-- C++-level browser fingerprint masking (Camoufox)
-- Israeli locale and timezone context
-- Native Cloudflare WAF bypass (no retry backoff needed)
-
-### Logging
-
-Configure log output and file retention via `logConfig` in config.json:
-
-```json
-"logConfig": {
-  "format": "words",
-  "logDir": "./logs"
-}
-```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `format` | auto | Log format (see table below). Auto-derived from `telegram.messageFormat` when not set. |
-| `logDir` | `./logs` | Directory for rotating log files. Set to an absolute path in Docker (e.g. `/app/logs`). |
-
-**Log formats:**
-
-| Format | Output style | Best for |
-|--------|-------------|----------|
-| `words` | Emoji-rich, colorized (pino-pretty) | Development, human reading |
-| `json` | Structured NDJSON, one object per line | Docker log aggregators (Loki, ELK, CloudWatch) |
-| `table` | `[HH:MM:SS] LEVEL message` | Timestamped production logs |
-| `phone` | `> compact message` (no emojis) | Mobile viewing, minimal output |
-
-**Auto-derived format** (when `format` is not set):
-
-| `telegram.messageFormat` | Auto-selected `format` |
-|--------------------------|------------------------|
-| `summary` (default) | `words` |
-| `compact` | `table` |
-| `ledger` | `json` |
-| `emoji` | `words` |
-| `listenForCommands: true` | `phone` |
-
-**Log files** are written to `logDir` as NDJSON (raw pino format), rotated at 10 MB per file, and automatically cleaned up after 3 days. The `/logs` Telegram command reads from these files.
-
-Logs work out of the box with the `./logs` default — no config change required. In Docker, mount the directory as a volume to persist logs across container restarts:
-
-```sh
--v /host/logs:/app/logs
-```
-
-> **Note:** `maxBufferSize` is deprecated and ignored — the `/logs` command now reads from log files.
-
-### Auto-Categorization
-
-Automatically categorize imported transactions. Three modes are available:
-
-```json
-"categorization": {
-  "mode": "none"
-}
-```
-
-| Mode | Description |
-|------|-------------|
-| `none` | Default. No auto-categorization — Actual Budget's own rules handle everything |
-| `history` | Finds the most recent transaction (by date) across all accounts with the same payee that has a category, and applies it |
-| `translate` | Renames Hebrew payees to English using translation rules, so Actual Budget's English rules can match |
-
-**Mode: history** — learns from your past categorizations:
-
-```json
-"categorization": {
-  "mode": "history"
-}
-```
-
-New transaction arrives with payee "שופרסל דיזנגוף". The tool queries all accounts for the most recent transaction where the payee contains "שופרסל" and has a category. If found (e.g., "Groceries"), it sets the same category. No match leaves the transaction uncategorized.
-
-**Mode: translate** — maps Hebrew payees to English names:
-
-```json
-"categorization": {
-  "mode": "translate",
-  "translations": [
-    { "fromPayee": "סופר",   "toPayee": "Supermarket" },
-    { "fromPayee": "שופרסל", "toPayee": "Shufersal" },
-    { "fromPayee": "דלק",    "toPayee": "Gas Station" }
-  ]
-}
-```
-
-Transaction with payee "סופר כל הטעמים" matches "סופר" and is imported as "Supermarket". The original Hebrew name is preserved in `imported_payee`. Longest match wins — "שופרסל" matches before "סופר".
-
-**Important:** Actual Budget's rules always run after import. Our category is a first-pass suggestion; Actual's rules are the final word. They work together — no conflict.
-
-### Spending Watch
-
-Monitor spending patterns and get alerts when thresholds are exceeded. Define an array of rules — each watches a time window for spending over a limit.
-
-```json
-"spendingWatch": [
-  { "alertFromAmount": 500, "numOfDayToCount": 1 },
-  { "alertFromAmount": 3000, "numOfDayToCount": 7, "watchPayees": ["שופרסל", "רמי לוי"] },
-  { "alertFromAmount": 10000, "numOfDayToCount": 30, "watchPayees": ["rent", "שכירות"] }
-]
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `alertFromAmount` | Yes | Alert if total spending exceeds this amount (in currency units, e.g., ILS) |
-| `numOfDayToCount` | Yes | Time window in days to sum transactions (1 = today only, 7 = week, 30 = month) |
-| `watchPayees` | No | Only count transactions matching these payees (substring match, case-insensitive). Missing or empty = count ALL payees |
-
-**How it works:**
-
-1. After each bank import, the tool queries Actual Budget for all debit transactions in the time window
-2. If `watchPayees` is set, only transactions matching those names are counted (substring match — `"שופרסל"` matches `"שופרסל דיזנגוף סניף 123"`)
-3. If `watchPayees` is missing or empty, ALL debits are counted
-4. Amounts are summed and compared to `alertFromAmount`
-5. Triggered rules are combined into one message and sent to all configured channels (Telegram + webhook)
-
-**Example rules explained:**
-
-| Rule | What it does |
-|------|-------------|
-| `500 / 1 day / no filter` | "Alert if I spend more than 500 ILS today" |
-| `3000 / 7 days / שופרסל, רמי לוי` | "Alert if grocery spending exceeds 3,000 ILS this week" |
-| `10000 / 30 days / rent, שכירות` | "Alert if rent payments exceed 10,000 ILS this month" |
-
-**Alert output (sent to Telegram):**
-
-```text
-🔔 Spending Watch
-
-⚠️ All payees: 1,250.00 in 1 day (limit: 500)
-  -507.08  AliExpress
-  -398.21  AliExpress
-  -263.90  Netflix
-  ... and 2 more
-
-⚠️ שופרסל, רמי לוי: 3,420.00 in 7 days (limit: 3,000)
-  -1,200.00  שופרסל דיזנגוף
-  -890.00  רמי לוי תל אביב
-  -1,330.00  שופרסל דיל
-```
-
-**No `spendingWatch` config = no alerts** (fully backward compatible).
-
-Spending watch runs **automatically after each import**. The `/watch` Telegram command shows info — on-demand checking is planned for a future release.
-
-### Split Config (Optional)
-
-Separate secrets from settings using two files:
-
-- **`credentials.json`** — passwords, tokens, bank IDs (encrypt this)
-- **`config.json`** — settings like daysBack, targets, formats (safe to share)
-
-See `credentials.json.example` for the template. If `credentials.json` exists, it deep-merges with `config.json`.
-
-Single `config.json` with everything still works (backward compatible).
-
-### Encrypted Config
-
-Protect credentials by encrypting any config file:
-
-```bash
+nvm use                 # Node 22+ (.nvmrc included)
+npm ci
 npm run build
-CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/encrypt-config.js
-# Or encrypt just credentials: CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/encrypt-config.js credentials.json
+npm test                # unit tests + coverage (config/vitest.config.ts)
+npm run test:unit       # explicit unit run
+npm run test:e2e:mock   # Dockerized mocked E2E (no real banks)
+npm run docs:serve      # http://127.0.0.1:8000 — MkDocs Material preview
 ```
 
-```yaml
-# docker-compose.yml
-environment:
-  - CREDENTIALS_ENCRYPTION_PASSWORD=mypassword
-```
-
-The app auto-detects encrypted files and decrypts in memory. Supports old `CONFIG_PASSWORD` env var too.
-
-To edit: `CREDENTIALS_ENCRYPTION_PASSWORD=mypassword node scripts/decrypt-config.js`, edit, re-encrypt.
-
-### Rate Limiting
-
-Prevent bank API throttling by adding a delay between bank imports:
-
-```json
-"delayBetweenBanks": 5000
-```
-
-Waits 5 seconds between each bank. Default: 0 (no delay). Set at the top level of `config.json`, not per-bank.
-
----
-
-## Notifications
-
-### Telegram
-
-Get import summaries and error alerts via Telegram after each run.
-
-**Step 1: Create a Telegram Bot (2 minutes)**
-
-1. Open Telegram → search for **@BotFather** → start a chat
-2. Send: `/newbot`
-3. Choose a name and username (must end in `bot`)
-4. Copy the **bot token**: `123456789:ABCDefGHijKlMnOpQrStUvWxYz`
-
-**Step 2: Get Your Chat ID (1 minute)**
-
-- **Personal:** Search for **@userinfobot** → it replies with your chat ID
-- **Group:** Add bot to group → open `https://api.telegram.org/bot<TOKEN>/getUpdates` → find `"chat":{"id":-100...}`
-
-**Step 3: Add to config.json**
-
-```json
-"notifications": {
-  "enabled": true,
-  "telegram": {
-    "botToken": "YOUR_BOT_TOKEN",
-    "chatId": "YOUR_CHAT_ID",
-    "messageFormat": "compact",
-    "showTransactions": "new",
-    "listenForCommands": true,
-    "enableReceiptImport": false
-  }
-}
-```
-
-| Option | Values | Default | Description |
-|--------|--------|---------|-------------|
-| `maxTransactions` | `1`-`25` | `5` | Max transactions per account (set at `notifications` level) |
-| `messageFormat` | `summary`, `compact`, `ledger`, `emoji` | `summary` | Notification style |
-| `showTransactions` | `new`, `all`, `none` | `new` | Transaction detail level |
-| `listenForCommands` | `true`, `false` | `false` | Enable bot commands |
-| `enableReceiptImport` | `true`, `false` | `false` | Enable `/import_receipt` for receipt photo OCR import |
-
-#### Message Formats
-
-<details><summary><b>summary</b> (default) - Banks overview only</summary>
-
-```text
-✅ Import Summary
-
-🏦 Banks: 3/3 (100%)
-📥 Transactions: 47 imported
-🔄 Duplicates: 12 skipped
-⏱ Duration: 38.2s
-
-✅ discount: 18 txns 12.3s
-✅ leumi: 22 txns 15.1s
-✅ hapoalim: 7 txns 10.8s
-```
+Pre-commit runs an 18-gate hook (type-check, lint, build, audit, tests, Docker build, Trivy, mocked E2E, Telegram smoke). Plan PRs accordingly.
 
 </details>
-
-<details><summary><b>compact</b> - Transaction details with amounts</summary>
-
-```text
-✅ Import Summary
-3/3 banks | 47 txns | 38.2s
-
-✅ Discount · 0152228812
-14/02  משכורת חודשית
-       +12,500.00
-14/02  שופרסל דיזנגוף
-       -342.50
-14/02  חברת חשמל
-       -289.00
-💰 45,230.50 ILS
-✅ Balance matched
-```
-
-</details>
-
-<details><summary><b>ledger</b> - Monospace table layout</summary>
-
-```text
-✅ Import Summary
-47 transactions · 38.2s
-
-✅ Discount (0152228812)
-14/02 משכורת חודשית
-        +12,500.00
-14/02 שופרסל דיזנגוף
-           -342.50
-14/02 חברת חשמל
-           -289.00
-Balance: 45,230.50 ILS
-✅ Balance matched
-```
-
-</details>
-
-<details><summary><b>emoji</b> - Visual deposit/payment indicators</summary>
-
-```text
-✅ Import Summary
-
-📊 3/3 banks · 47 txns · 38.2s
-
-💳 Discount
-  📥 +12,500.00  משכורת חודשית
-  📤 -342.50  שופרסל דיזנגוף
-  📤 -289.00  חברת חשמל
-  💰 45,230.50 ILS
-  ✅ Balance matched
-```
-
-</details>
-
-**On failure:**
-
-```text
-🚨 Import Failed
-
-🔐 Authentication Error (discount): Invalid credentials. Please verify your password.
-```
-
-#### Bot Commands
-
-When `listenForCommands` is `true`, control the importer from Telegram:
-
-| Command | Action |
-|---------|--------|
-| `/scan` | Run bank import now |
-| `/scan bankName` | Import a single bank (e.g., `/scan discount`) |
-| `/retry` | Re-import only banks that failed in the last run |
-| `/preview` | Dry run: scrape banks and show what would be imported — see [Dry Run / Preview Mode](#dry-run--preview-mode) |
-| `/status` | Show last 5 imports with transaction counts and duration |
-| `/check_config` | Check config (offline + online) — see [Config Validation](#config-validation) |
-| `/watch` | Check spending watch rules now |
-| `/logs` | Show recent log entries from log files (default: 50, requires `logConfig.logDir`) |
-| `/logs N` | Show last N entries (max 150) |
-| `/import_receipt` | Import from receipt photo (OCR) — requires `enableReceiptImport: true` |
-| `/help` | List commands |
-
-The bot listens alongside the cron scheduler. If an import is already running, it waits instead of starting a duplicate. Error messages include actionable advice (e.g., "Bank requires password change — update password on bank website"). Banks that fail 3+ times in a row get escalated warnings.
-
-#### Receipt Import (OCR)
-
-Import transactions from receipt photos directly into Actual Budget.
-
-**How it works:**
-
-1. Send `/import_receipt` to the bot
-2. Take a photo of your receipt and send it
-3. The bot extracts date, amount, and merchant using OCR
-4. Smart match: if a previous transaction has the same payee, the bot suggests the same account + category
-5. Select account and category via inline buttons
-6. Transaction is imported into Actual Budget
-
-**Enable in config.json:**
-
-```json
-"telegram": {
-  "listenForCommands": true,
-  "enableReceiptImport": true
-}
-```
-
-**OCR details:**
-
-- Engine: [tesseract.js](https://github.com/naptha/tesseract.js) (Hebrew + English)
-- Preprocessing: [sharp](https://sharp.pixelplumbing.com/) (resize 1500px, greyscale, threshold)
-- Accuracy: ~81% confidence on Hebrew receipts after preprocessing
-- Priority extraction: `לתשלום` (total) > `סה"כ` (subtotal) > `₪` prefix > largest formatted number
-- No temp files: photo processed as in-memory Buffer, OCR language data cached in `./data/tesseract/`
-- 2-minute timeout auto-cancels abandoned flows
-
-### Webhooks (Slack, Discord, Generic)
-
-Send import summaries to any webhook URL:
-
-```json
-"notifications": {
-  "enabled": true,
-  "webhook": {
-    "url": "https://hooks.slack.com/services/T.../B.../...",
-    "format": "slack"
-  }
-}
-```
-
-| Format | Target | Payload |
-|--------|--------|---------|
-| `slack` | Slack Incoming Webhook | `{ "text": "✅ *Import Summary*..." }` |
-| `discord` | Discord Webhook | `{ "content": "✅ **Import Summary**..." }` |
-| `plain` | Any HTTP endpoint | `{ "event": "import_complete", "totalTransactions": 5, ... }` |
-
-Can be used alongside Telegram — both channels fire independently.
-
-**Disable notifications:** Set `"enabled": false` or remove the `notifications` section.
-
----
-
-## Reconciliation
-
-When `"reconcile": true`, the tool automatically reconciles your Actual Budget balance with the bank balance.
-
-**How it works:**
-
-- **Idempotent** - Creates only ONE reconciliation transaction per day per account
-- **Smart detection** - Skips if already balanced
-- **Duplicate prevention** - Running multiple times won't create duplicates
-- **Automatic adjustment** - Creates adjustment transaction if balances differ
-
-**Status messages:**
-
-```text
-✅ Already balanced             - No adjustment needed
-✅ Reconciled: +123.45 ILS      - Created adjustment transaction
-✅ Already reconciled today     - Duplicate prevented (already exists)
-```
-
-**When to use:**
-
-- `false` (default) - You review and reconcile manually in Actual Budget
-- `true` - Auto-adjust balance to match bank (for trusted accounts)
-
-**Note:** Credit card balances are negative (this is normal!)
-
----
-
-## Metrics & Monitoring
-
-After each import run, you'll see a comprehensive summary:
-
-```text
-============================================================
-📊 Import Summary
-
-  Total banks: 3
-  Successful: 3 (100.0%)
-  Failed: 0 (0.0%)
-  Total transactions: 45
-  Duplicates prevented: 12
-  Total duration: 38.2s
-  Average per bank: 12.7s
-
-🏦 Bank Performance:
-
-  ✅ discount: 12.3s (18 txns, 5 duplicates)
-     ✅ Reconciliation: balanced
-  ✅ leumi: 15.1s (22 txns, 7 duplicates)
-     🔄 Reconciliation: +123.45 ILS
-  ✅ hapoalim: 10.8s (5 txns, 0 duplicates)
-     ✅ Reconciliation: already reconciled
-============================================================
-```
-
-Import history is persisted at `/app/data/audit-log.json` (last 90 entries, includes reconciliation data per bank). View with `/status` bot command — shows the 5 most recent runs with transaction counts, bank success rates, and import duration.
-
----
-
-## Config Validation
-
-Run `--validate` to check your config before the first import — catches all issues at once
-instead of failing mid-run:
-
-```bash
-docker run --rm --cap-add SYS_ADMIN \
-  -v $(pwd)/config.json:/app/config.json:ro \
-  sergienko4/israeli-bank-importer node dist/index.js --validate
-```
-
-Sample output:
-
-```text
-Config Validation Report
-========================================
-[PASS] Actual password is set
-[PASS] syncId UUID format valid
-[PASS] Server URL format valid: http://actual_server:5006
-[PASS] Bank "discount" — known institution
-[PASS] discount: date config valid
-[PASS] discount target[0]: valid
-[FAIL] Bank "disount" — unknown institution. Did you mean "discount"?
-[WARN] leumi: no daysBack/startDate set — will fetch ~1 year of history
-[PASS] Actual server reachable: http://actual_server:5006 (200)
-[PASS] Telegram bot valid (@MyImporterBot)
-========================================
-Result: 1 error, 1 warning
-```
-
-**Offline checks** (no network required): bank names with typo suggestions, UUID format,
-date config, Telegram token format.
-
-**Online checks** (skipped if offline fails): Actual server reachability, Telegram bot token,
-webhook URL.
-
-The `/check_config` Telegram bot command runs the same checks on demand.
-
----
-
-## Dry Run / Preview Mode
-
-Test your bank credentials and preview what would be imported **without writing anything** to
-Actual Budget.
-
-**Via CLI (`DRY_RUN=true`):**
-
-```bash
-docker run --rm --cap-add SYS_ADMIN \
-  -v $(pwd)/config.json:/app/config.json:ro \
-  -v $(pwd)/data:/app/data \
-  -e DRY_RUN=true \
-  sergienko4/israeli-bank-importer
-```
-
-**Via Telegram:** Send `/preview` to your bot.
-
-**Sample output:**
-
-```text
-🔍 DRY RUN — no changes made to Actual Budget
-══════════════════════════════════════════════════
-
-📊 discount  💳 123456789
-  Balance: 5000.00 ILS
-  Transactions: 12  (2026-02-01 → 2026-02-28)
-  Recent:
-    2026-02-28  Supersal                    -120.50 ILS
-    2026-02-27  Salary                      +15000.00 ILS
-    2026-02-26  Amazon                      -89.99 USD
-
-══════════════════════════════════════════════════
-Total: 1 account, 12 transactions (0 imported — dry run)
-
-✅ No changes made to Actual Budget (dry run)
-```
-
-No transactions are created, no accounts are modified, and the audit log is not updated.
-
----
-
-## Troubleshooting
-
-### "out-of-sync-migrations"
-
-- **Cause:** Version mismatch
-- **Fix:** Ensure Actual Budget server is v26.2.0+
-
-### "Failed to launch browser"
-
-- **Cause:** Missing `SYS_ADMIN`
-- **Fix:** Add `--cap-add SYS_ADMIN` to docker run or `cap_add: [SYS_ADMIN]` to docker-compose
-
-### 2FA Required Every Time
-
-- **Cause:** Browser session not persisted (Camoufox does not persist sessions by default)
-- **Fix:** Use `otpLongTermToken` in config for banks that support it (e.g., oneZero)
-
-### Windows Volume Mount Error
-
-**PowerShell:**
-
-```powershell
-docker run --rm `
-  -v "${PWD}/config.json:/app/config.json" `
-  ...
-```
-
-**CMD:**
-
-```cmd
-docker run --rm ^
-  -v "%CD%/config.json:/app/config.json" ^
-  ...
-```
-
-### Too Many Transactions
-
-- **Fix:** Add `"daysBack": 14` or `"startDate": "2026-01-19"` to limit range
 
 ---
 
 ## Documentation
 
-| File | Description |
-|------|-------------|
-| [BANKS.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) | Per-institution config examples |
-| [DEPLOYMENT.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/DEPLOYMENT.md) | VM deployment, Docker Compose details |
-| [SECURITY.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/SECURITY.md) | Security best practices |
-| [CHANGELOG.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/CHANGELOG.md) | Version history and release notes |
-| [config.json.example](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/config.json.example) | Full example configuration |
-| [GUIDELINES.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/GUIDELINES.md) | Development guidelines for contributors |
-| [CONTRIBUTING.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md) | How to contribute |
-| [CODE_OF_CONDUCT.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CODE_OF_CONDUCT.md) | Community standards |
+| Topic | Link |
+|-------|------|
+| Quick start | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/getting-started/quick-start/> |
+| Per-bank options | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/banks/> |
+| Configuration reference | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/getting-started/configuration/> |
+| Telegram & webhooks | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/notifications/telegram/> |
+| Deployment guides | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/deployment/docker-compose/> |
+| Architecture | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/architecture/> |
+| Troubleshooting | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/troubleshooting/> |
+| Security | [docs/SECURITY.md](docs/SECURITY.md) |
+| Contributing | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) |
+| Code guidelines | [docs/GUIDELINES.md](docs/GUIDELINES.md) |
+| Roadmap | [docs/ROADMAP.md](docs/ROADMAP.md) |
+| API (TypeDoc) | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/api/> |
 
 ---
 
-## Tech Stack
+## Contributing
 
-| Component | Version | Purpose |
-|-----------|---------|---------|
-| [israeli-bank-scrapers](https://github.com/sergienko4/israeli-bank-scrapers) | ^8.2.1 | Bank scraping |
-| [@actual-app/api](https://github.com/actualbudget/actual) | ^26.5.0 | Actual Budget integration |
-| Node.js | 22 | Runtime |
-| Camoufox (Firefox) | Latest | Browser automation (anti-detect) |
-| Docker | - | Containerization |
-| [Vitest](https://vitest.dev/) | 4.x | Unit testing |
+Contributions welcome! See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) and the [Code Guidelines](docs/GUIDELINES.md). All contributors agree to the [Code of Conduct](docs/CODE_OF_CONDUCT.md).
 
 ---
-
-## Testing
-
-```bash
-npm test              # Run all tests
-npm run test:coverage # With coverage report
-npm run test:watch    # Watch mode
-npm run lint          # ESLint (max-lines, max-params, max-len, no-unused)
-npm run validate      # Build + test (validate before committing)
-```
-
-Comprehensive test suite with 80%+ line coverage and 70%+ branch coverage. Run `npm test` to see current count.
-
-### E2E Tests
-
-End-to-end tests build the Docker image and run the full import pipeline with mock bank data.
-
-**One-time setup (Telegram bot):**
-
-```bash
-cp .env.e2e.example .env.e2e
-# Edit .env.e2e with your test bot token and chat ID
-# (Create via Telegram @BotFather → /newbot)
-```
-
-**Run E2E tests:**
-
-```bash
-# 1. Create test budget + prepare mock data
-npm run test:e2e:setup
-mkdir -p tests/e2e/fixtures/mock-scraper-dir
-cp tests/e2e/fixtures/mock-scraper-result.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank.json
-cp tests/e2e/fixtures/mock-scraper-result-bank2.json tests/e2e/fixtures/mock-scraper-dir/e2eTestBank2.json
-
-# 2. Build Docker image and run import (get BUDGET_ID from setup output)
-docker build -t israeli-bank-importer:e2e .
-docker run --rm \
-  -v ./tests/e2e/fixtures/config.generated.json:/app/config.json:ro \
-  -v ./tests/e2e/fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro \
-  -v ./tests/e2e/fixtures/e2e-data:/app/data \
-  -e E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir \
-  -e E2E_LOCAL_BUDGET_ID=<budget-id> \
-  israeli-bank-importer:e2e node dist/index.js
-
-# 3. Verify results (loads .env.e2e automatically)
-npm run test:e2e
-```
-
-E2E tests run automatically on PRs that change `src/` or `Dockerfile` (see `.github/workflows/e2e.yml`). Telegram tests require `E2E_TELEGRAM_BOT_TOKEN` and `E2E_TELEGRAM_CHAT_ID` secrets in the repo.
-
----
-
-## Security
-
-- Keep `config.json` private (in `.gitignore`)
-- Use `chmod 600 config.json`
-- Mount config as read-only: `:ro`
-- Never commit credentials to git
-
-**Why SYS_ADMIN?** Required for Camoufox/Firefox browser sandboxing. Safe when running trusted code.
-
-See [SECURITY.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/SECURITY.md) for full security policy.
-
----
-
-## Credits
-
-- **[israeli-bank-scrapers](https://github.com/sergienko4/israeli-bank-scrapers)** (fork of [eshaham](https://github.com/eshaham)) — the core library that makes this possible
-- **[Actual Budget](https://github.com/actualbudget/actual)** — open-source budgeting tool
 
 ## License
 
-MIT License — See [LICENSE](LICENSE)
+[MIT](LICENSE) © Israeli Bank Importer Contributors.
 
 ## Support
 
-- **Bank scraping issues:** [israeli-bank-scrapers issues](https://github.com/sergienko4/israeli-bank-scrapers/issues)
-- **Actual Budget issues:** [Actual Budget issues](https://github.com/actualbudget/actual/issues)
-- **This tool issues:** [Open an issue](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues)
-
----
-
-If this saves you time, please star this repository!
+- 🐛 [Open an issue](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues)
+- 💬 [Issue tracker](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues)
+- 📦 [Releases](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/releases)
