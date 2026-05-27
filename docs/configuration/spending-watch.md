@@ -55,4 +55,4 @@ Monitor spending patterns and get alerts when thresholds are exceeded. Define an
 
 No `spendingWatch` config = no alerts. Fully opt-in.
 
-Spending watch runs **automatically after each import**. The `/watch` Telegram command currently shows info — on-demand checking is planned for a future release (see [Roadmap](../ROADMAP.md)).
+Spending watch runs **automatically after each import**. The `/watch` Telegram command currently shows info — on-demand checking is planned for a future release (see [Roadmap](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/ROADMAP.md)).

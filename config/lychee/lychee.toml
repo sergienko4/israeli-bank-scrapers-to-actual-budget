@@ -19,6 +19,10 @@ exclude = [
   "https://opensource\\.org/licenses/",
   "https://github\\.com/sakowicz/actual-ai",
   "https://www\\.npmjs\\.com/.*",
+  # Self-repo blob links: docs in this same repo may not yet exist on main
+  # when checked from a feature branch. They are validated post-merge.
+  "https://github\\.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/",
+  "https://github\\.com/sergienko4/israeli-bank-scrapers-to-actual-budget/tree/main/",
 ]
 
 # Files/directories to skip scanning (these are source paths, not URLs)

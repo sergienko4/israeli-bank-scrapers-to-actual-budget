@@ -49,7 +49,7 @@
 }
 ```
 
-The Telegram bot prompts for the code on each run. For automated handling, see [OTP auto-forward](../OTP-AUTOFORWARD.md).
+The Telegram bot prompts for the code on each run. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ## Known gotchas
 
@@ -57,6 +57,6 @@ If you have multiple Visa Cal cards, use `accounts: ["8538"]` (last 4 digits) on
 
 ## See also
 
-- [Bank options](../configuration/banks.md) - full schema reference
-- [Banks index](index.md) - all 18 banks
-- [Troubleshooting](../troubleshooting.md)
+- [Bank options](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md) - full schema reference
+- [Banks index](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) - all 18 banks
+- [Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md)

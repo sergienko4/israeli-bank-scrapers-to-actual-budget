@@ -152,10 +152,10 @@ kubectl create secret generic importer-config \
 ## Health and observability
 
 - Container logs → stdout (`logConfig.format: "json"` for Loki/ELK ingestion).
-- Annotate the namespace for Prometheus pod-scrape if you front the importer with a sidecar metrics exporter (not bundled — see [Roadmap](../ROADMAP.md)).
+- Annotate the namespace for Prometheus pod-scrape if you front the importer with a sidecar metrics exporter (not bundled — see [Roadmap](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/ROADMAP.md)).
 
 ## See also
 
-- [Encrypted config](../configuration/encrypted-config.md) (recommended even with k8s secrets)
-- [Scheduling](../configuration/scheduling.md)
-- [Logging](../configuration/logging.md)
+- [Encrypted config](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/encrypted-config.md) (recommended even with k8s secrets)
+- [Scheduling](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/scheduling.md)
+- [Logging](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/logging.md)

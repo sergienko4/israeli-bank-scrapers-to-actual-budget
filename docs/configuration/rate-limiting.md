@@ -20,7 +20,7 @@ The delay is applied **between** banks, not before the first bank or after the l
 
 ## Per-bank tuning
 
-Rate limiting only delays between banks. For per-bank scraper tuning (timeout, retries), see [Bank options](banks.md#scraper-tuning).
+Rate limiting only delays between banks. For per-bank scraper tuning (timeout, retries), see [Bank options](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#scraper-tuning).
 
 ## Concurrency
 

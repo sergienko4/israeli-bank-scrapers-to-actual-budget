@@ -1,10 +1,10 @@
 # Bank Options
 
-Each entry under `banks` in `config.json` is keyed by a [bank's config key](../banks/index.md) (e.g. `discount`, `hapoalim`, `oneZero`). The value is an object with credentials, date-range, targets, and optional tuning.
+Each entry under `banks` in `config.json` is keyed by a [bank's config key](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) (e.g. `discount`, `hapoalim`, `oneZero`). The value is an object with credentials, date-range, targets, and optional tuning.
 
 ## Credentials
 
-Every bank has its own login fields — see [the per-bank pages](../banks/index.md) for the exact list.
+Every bank has its own login fields — see [the per-bank pages](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) for the exact list.
 
 Common keys: `id`, `username`, `password`, `num`, `card6Digits`, `userCode`, `email`, `phoneNumber`.
 
@@ -92,7 +92,7 @@ Any bank that shows an SMS verification screen supports `twoFactorAuth`. The Tel
 | `twoFactorTimeout` | `300` | Seconds to wait for OTP reply before failing |
 | `otpLongTermToken` | — | Persistent token to skip OTP on future runs (oneZero only) |
 
-For automated handling, see [OTP auto-forward](../OTP-AUTOFORWARD.md).
+For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ## Global options
 
@@ -100,4 +100,4 @@ These live at the **top level** of `config.json`, not per bank:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `delayBetweenBanks` | `0` | Milliseconds to wait between bank imports — see [Rate limiting](rate-limiting.md) |
+| `delayBetweenBanks` | `0` | Milliseconds to wait between bank imports — see [Rate limiting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/rate-limiting.md) |

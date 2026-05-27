@@ -36,7 +36,7 @@ cap_add:
 
 **Fix:** after the first successful login, add `"otpLongTermToken"` to that bank's config block. For oneZero this is captured automatically on the first run.
 
-Better still: [auto-forward OTP codes from your phone](OTP-AUTOFORWARD.md) so no manual input is needed.
+Better still: [auto-forward OTP codes from your phone](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md) so no manual input is needed.
 
 ## Windows volume mounts don't work
 
@@ -93,13 +93,13 @@ Run with `DRY_RUN=true` first to preview what would be imported.
 }
 ```
 
-See [Oracle Cloud deployment guide](deployment/oracle-cloud.md) for details.
+See [Oracle Cloud deployment guide](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/oracle-cloud.md) for details.
 
 ## Proxy is set but ignored
 
 **Symptom:** `PROXY_SERVER` or `proxy.server` has no effect.
 
-**Fix:** proxy support is **not yet wired** to Camoufox (v7.9.0+). The config is preserved for future use. See [Proxy docs](configuration/proxy.md).
+**Fix:** proxy support is **not yet wired** to Camoufox (v7.9.0+). The config is preserved for future use. See [Proxy docs](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/proxy.md).
 
 ## Telegram bot stops responding
 
@@ -122,4 +122,4 @@ See [Oracle Cloud deployment guide](deployment/oracle-cloud.md) for details.
 
 - 🐛 [Open an issue](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues)
 - 💬 [Issue tracker](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues)
-- 📜 [Recent log entries](configuration/logging.md) via `/logs` Telegram command
+- 📜 [Recent log entries](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/logging.md) via `/logs` Telegram command

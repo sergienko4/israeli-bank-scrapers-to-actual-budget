@@ -26,7 +26,7 @@ No manual CSV downloads. Everything automated.
 
     Install Docker, drop in a `config.json`, and run.
 
-    [:octicons-arrow-right-24: Quick Start](getting-started/quick-start.md)
+    [:octicons-arrow-right-24: Quick Start](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/getting-started/quick-start.md)
 
 -   :material-bank: **Supported Banks**
 
@@ -34,7 +34,7 @@ No manual CSV downloads. Everything automated.
 
     18 Israeli banks and credit cards — Hapoalim, Leumi, Discount, OneZero, Max, Isracard, Amex, and more.
 
-    [:octicons-arrow-right-24: Bank list](banks/index.md)
+    [:octicons-arrow-right-24: Bank list](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md)
 
 -   :material-cog: **Configuration**
 
@@ -42,7 +42,7 @@ No manual CSV downloads. Everything automated.
 
     Schedule, encryption, categorization, spending watch, proxy, logging.
 
-    [:octicons-arrow-right-24: Configuration](getting-started/configuration.md)
+    [:octicons-arrow-right-24: Configuration](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/getting-started/configuration.md)
 
 -   :material-docker: **Deploy**
 
@@ -50,7 +50,7 @@ No manual CSV downloads. Everything automated.
 
     Docker Compose, single container, VM, Oracle Cloud, Synology, Kubernetes.
 
-    [:octicons-arrow-right-24: Deployment](deployment/docker-compose.md)
+    [:octicons-arrow-right-24: Deployment](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-compose.md)
 
 -   :material-bell: **Notifications**
 
@@ -58,7 +58,7 @@ No manual CSV downloads. Everything automated.
 
     Telegram bot with `/scan`, `/preview`, `/import_receipt` (OCR), plus Slack/Discord webhooks.
 
-    [:octicons-arrow-right-24: Telegram](notifications/telegram.md)
+    [:octicons-arrow-right-24: Telegram](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/notifications/telegram.md)
 
 -   :material-shield-check: **Security**
 
@@ -66,7 +66,7 @@ No manual CSV downloads. Everything automated.
 
     Encrypted config, split-credentials, no telemetry, no third-party calls.
 
-    [:octicons-arrow-right-24: Security](SECURITY.md)
+    [:octicons-arrow-right-24: Security](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/SECURITY.md)
 
 </div>
 
@@ -87,7 +87,7 @@ No manual CSV downloads. Everything automated.
 ## Project Status
 
 Released under [MIT License](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/LICENSE).
-See the [Roadmap](ROADMAP.md) for what's next.
+See the [Roadmap](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/ROADMAP.md) for what's next.
 
 [:fontawesome-brands-github: Source](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget){ .md-button }
 [:fontawesome-brands-docker: Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer){ .md-button }

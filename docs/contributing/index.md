@@ -4,11 +4,11 @@ Welcome — contributions are very welcome.
 
 | Document | Purpose |
 |----------|---------|
-| [Contributing Guide](../CONTRIBUTING.md) | How to fork, branch, and open a PR |
-| [Code Guidelines](../GUIDELINES.md) | Strict coding rules (max 10 lines/method, zero `any`, OCP maps over chains, etc.) |
-| [Code of Conduct](../CODE_OF_CONDUCT.md) | Behavioral expectations for all contributors |
-| [Roadmap](../ROADMAP.md) | What's coming next |
-| [Security Policy](../SECURITY.md) | How to report vulnerabilities responsibly |
+| [Contributing Guide](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md) | How to fork, branch, and open a PR |
+| [Code Guidelines](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/GUIDELINES.md) | Strict coding rules (max 10 lines/method, zero `any`, OCP maps over chains, etc.) |
+| [Code of Conduct](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CODE_OF_CONDUCT.md) | Behavioral expectations for all contributors |
+| [Roadmap](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/ROADMAP.md) | What's coming next |
+| [Security Policy](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/SECURITY.md) | How to report vulnerabilities responsibly |
 
 ## At a glance
 
@@ -19,7 +19,7 @@ Welcome — contributions are very welcome.
 
 ## First time?
 
-1. Read the [Contributing Guide](../CONTRIBUTING.md) and [Code Guidelines](../GUIDELINES.md).
+1. Read the [Contributing Guide](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md) and [Code Guidelines](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/GUIDELINES.md).
 2. Pick an issue tagged [`good first issue`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 3. Comment on the issue to claim it.
 4. Run `npm ci && npm run validate` locally to confirm everything works.

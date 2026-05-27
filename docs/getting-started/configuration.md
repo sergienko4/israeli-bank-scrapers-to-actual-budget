@@ -4,15 +4,15 @@ The importer reads its configuration from `config.json` at the repository root (
 
 The configuration is split into several sections — each documented on its own page:
 
-- [Actual Budget connection](../configuration/actual.md)
-- [Scheduling](../configuration/scheduling.md)
-- [Bank options](../configuration/banks.md)
-- [Logging](../configuration/logging.md)
-- [Auto-categorization](../configuration/categorization.md)
-- [Spending watch](../configuration/spending-watch.md)
-- [Encrypted config](../configuration/encrypted-config.md)
-- [Proxy](../configuration/proxy.md)
-- [Rate limiting](../configuration/rate-limiting.md)
+- [Actual Budget connection](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/actual.md)
+- [Scheduling](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/scheduling.md)
+- [Bank options](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md)
+- [Logging](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/logging.md)
+- [Auto-categorization](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/categorization.md)
+- [Spending watch](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/spending-watch.md)
+- [Encrypted config](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/encrypted-config.md)
+- [Proxy](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/proxy.md)
+- [Rate limiting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/rate-limiting.md)
 
 ## Top-level structure
 
@@ -52,4 +52,4 @@ Separate secrets from settings by creating two files:
 
 `credentials.json` is deep-merged into `config.json` at startup. A single `config.json` with everything still works (fully backward compatible).
 
-See [Encrypted config](../configuration/encrypted-config.md) for the encryption workflow.
+See [Encrypted config](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/encrypted-config.md) for the encryption workflow.

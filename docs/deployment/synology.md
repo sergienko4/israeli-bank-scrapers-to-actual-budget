@@ -21,7 +21,7 @@ In **File Station**, create:
 └── logs/
 ```
 
-Edit `config.json` with your bank credentials. See [Quick Start](../getting-started/quick-start.md) for the schema.
+Edit `config.json` with your bank credentials. See [Quick Start](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/getting-started/quick-start.md) for the schema.
 
 ## Step 2 — Pull the image
 
@@ -82,6 +82,6 @@ sudo docker rm israeli-bank-importer
 
 ## See also
 
-- [Docker run reference](docker-run.md)
-- [Scheduling](../configuration/scheduling.md)
-- [Logging](../configuration/logging.md)
+- [Docker run reference](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-run.md)
+- [Scheduling](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/scheduling.md)
+- [Logging](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/logging.md)

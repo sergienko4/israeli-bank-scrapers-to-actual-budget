@@ -55,7 +55,7 @@ This bank **requires** 2FA on every login.
 
 After the first successful login, capture the value of `otpLongTermToken` from the logs and add it back to `config.json` to skip OTP on future runs.
 
-For automated SMS forwarding, see [OTP auto-forward](../OTP-AUTOFORWARD.md).
+For automated SMS forwarding, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ## Known gotchas
 
@@ -63,6 +63,6 @@ For automated SMS forwarding, see [OTP auto-forward](../OTP-AUTOFORWARD.md).
 
 ## See also
 
-- [Bank options](../configuration/banks.md) - full schema reference
-- [Banks index](index.md) - all 18 banks
-- [Troubleshooting](../troubleshooting.md)
+- [Bank options](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md) - full schema reference
+- [Banks index](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) - all 18 banks
+- [Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md)

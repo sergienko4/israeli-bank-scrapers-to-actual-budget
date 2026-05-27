@@ -34,7 +34,7 @@ Get import summaries and error alerts via Telegram after each run. Optionally co
 | Option | Values | Default | Description |
 |--------|--------|---------|-------------|
 | `maxTransactions` | `1`–`25` | `5` | Max transactions per account in notifications (set at `notifications` level, not inside `telegram`) |
-| `messageFormat` | `summary`, `compact`, `ledger`, `emoji` | `summary` | See [Message formats](message-formats.md) |
+| `messageFormat` | `summary`, `compact`, `ledger`, `emoji` | `summary` | See [Message formats](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/notifications/message-formats.md) |
 | `showTransactions` | `new`, `all`, `none` | `new` | Transaction detail level |
 | `listenForCommands` | `true`, `false` | `false` | Enable bot commands (long-polling) |
 | `enableReceiptImport` | `true`, `false` | `false` | Enable `/import_receipt` for OCR receipt import |
@@ -96,6 +96,6 @@ Set `"enabled": false` or remove the `notifications` section entirely.
 
 ## See also
 
-- [Message formats](message-formats.md) — every layout illustrated
-- [Webhooks](webhooks.md) — Slack / Discord / generic JSON
-- [OTP auto-forward](../OTP-AUTOFORWARD.md) — automate 2FA from your phone
+- [Message formats](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/notifications/message-formats.md) — every layout illustrated
+- [Webhooks](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/notifications/webhooks.md) — Slack / Discord / generic JSON
+- [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md) — automate 2FA from your phone

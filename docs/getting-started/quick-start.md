@@ -99,7 +99,7 @@ The bundled `docker-compose.yml` starts **both** Actual Budget and the importer.
       sergienko4/israeli-bank-importer
     ```
 
-The image entrypoint is `node dist/Index.js`. See [Docker run options](../deployment/docker-run.md) for the full reference.
+The image entrypoint is `node dist/Index.js`. See [Docker run options](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-run.md) for the full reference.
 
 ## 5. Verify
 
@@ -109,8 +109,8 @@ The image entrypoint is `node dist/Index.js`. See [Docker run options](../deploy
 
 ## Next steps
 
-- [Add more banks](../banks/index.md)
-- [Set the schedule](../configuration/scheduling.md)
-- [Set up the Telegram bot](../notifications/telegram.md)
-- [Auto-forward OTP codes](../OTP-AUTOFORWARD.md)
-- [Encrypt your config](../configuration/encrypted-config.md)
+- [Add more banks](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md)
+- [Set the schedule](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/scheduling.md)
+- [Set up the Telegram bot](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/notifications/telegram.md)
+- [Auto-forward OTP codes](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md)
+- [Encrypt your config](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/encrypted-config.md)

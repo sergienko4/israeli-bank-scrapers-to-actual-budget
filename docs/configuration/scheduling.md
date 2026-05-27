@@ -61,4 +61,4 @@ Even scheduled containers benefit from `restart: unless-stopped` so they survive
 
 ## Manual scan via Telegram
 
-If the Telegram bot is enabled with `listenForCommands: true`, send `/scan` to trigger a run on demand without waiting for the next cron tick. The bot reports progress and the same summary the scheduler emits. See [Telegram docs](../notifications/telegram.md).
+If the Telegram bot is enabled with `listenForCommands: true`, send `/scan` to trigger a run on demand without waiting for the next cron tick. The bot reports progress and the same summary the scheduler emits. See [Telegram docs](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/notifications/telegram.md).

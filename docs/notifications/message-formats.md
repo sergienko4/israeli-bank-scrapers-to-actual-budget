@@ -90,6 +90,6 @@ Errors are categorized so users can self-serve fixes: authentication, captcha, r
 
 ## See also
 
-- [Telegram setup](telegram.md)
-- [Webhook payloads](webhooks.md)
-- [Logging](../configuration/logging.md) — controls log file output, separate from Telegram message format
+- [Telegram setup](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/notifications/telegram.md)
+- [Webhook payloads](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/notifications/webhooks.md)
+- [Logging](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/logging.md) — controls log file output, separate from Telegram message format

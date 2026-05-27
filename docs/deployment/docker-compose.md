@@ -75,4 +75,4 @@ docker compose top       # process tree per container
 docker compose stats     # CPU / mem / IO
 ```
 
-For long-term operations, see [VM deployment](vm.md).
+For long-term operations, see [VM deployment](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/vm.md).

@@ -95,7 +95,7 @@ docker run -d \
 
 ## See also
 
-- [Schedule cheat sheet](../configuration/scheduling.md)
-- [Docker Compose setup](docker-compose.md)
-- [Synology Container Manager](synology.md)
-- [Oracle Cloud free tier](oracle-cloud.md)
+- [Schedule cheat sheet](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/scheduling.md)
+- [Docker Compose setup](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-compose.md)
+- [Synology Container Manager](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/synology.md)
+- [Oracle Cloud free tier](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/oracle-cloud.md)

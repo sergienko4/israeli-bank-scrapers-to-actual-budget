@@ -69,6 +69,6 @@ ARM Ampere has plenty of RAM but limited single-thread performance. Camoufox is 
 
 ## See also
 
-- [Bank options — scraper tuning](../configuration/banks.md#scraper-tuning)
-- [Rate limiting](../configuration/rate-limiting.md)
-- [Troubleshooting](../troubleshooting.md)
+- [Bank options — scraper tuning](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#scraper-tuning)
+- [Rate limiting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/rate-limiting.md)
+- [Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md)

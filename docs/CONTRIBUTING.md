@@ -45,7 +45,7 @@ After each release, the docs are automatically published to GitHub Pages:
 
 ## Development Rules
 
-All contributors must follow [GUIDELINES.md](GUIDELINES.md). Key rules:
+All contributors must follow [GUIDELINES.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/GUIDELINES.md). Key rules:
 
 - **Max 10 lines per method** — extract helpers
 - **Zero `: any` types** — CI enforces this
@@ -84,16 +84,16 @@ All contributors must follow [GUIDELINES.md](GUIDELINES.md). Key rules:
 
 - **Bugs:** [Open an issue](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/new?template=bug_report.md) with steps to reproduce and sanitized logs
 - **Features:** [Request a feature](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/new?template=feature_request.md)
-- **Security vulnerabilities:** Do NOT open a public issue. See [SECURITY.md](SECURITY.md)
+- **Security vulnerabilities:** Do NOT open a public issue. See [SECURITY.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/SECURITY.md)
 
 ---
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+This project follows the [Contributor Covenant Code of Conduct](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CODE_OF_CONDUCT.md).
 
 ---
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [MIT License](../LICENSE).
+By contributing, you agree that your contributions will be licensed under the [MIT License](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/LICENSE).
