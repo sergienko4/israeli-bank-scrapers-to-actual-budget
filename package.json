@@ -29,6 +29,9 @@
     "docs": "typedoc --options config/typedoc.json",
     "docs:site": "pip install -r requirements-docs.txt && python -m mkdocs build --strict",
     "docs:serve": "python -m mkdocs serve",
+    "meta:render": "node scripts/render-readme-meta.mjs",
+    "meta:check": "node scripts/render-readme-meta.mjs --check",
+    "meta:markers": "bash scripts/check-readme-markers.sh",
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix",
     "outdated": "npm outdated",
@@ -67,7 +70,8 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.4",
     "vite": "^8.0.14",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "yaml": "^2.5.0"
   },
   "overrides": {
     "smol-toml": ">=1.6.1",
