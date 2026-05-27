@@ -1,7 +1,21 @@
-name: Deploy API Docs
+name: Deploy Docs Site
 
+# Publishes the MkDocs Material site + TypeDoc API reference to GitHub Pages.
+#
+# Triggers:
+#   - push to main: keeps the published site in sync with the trunk so README
+#     links to https://sergienko4.github.io/.../<page>/ never go stale between
+#     releases. TypeDoc tracks src/, so any source change should rebuild too.
+#   - push of a release tag `v*`: rebuilds at the released SHA.
+#   - manual workflow_dispatch: operator-triggered redeploy.
+#
+# The build runs in ~3 minutes; we deliberately do not use a `paths` filter
+# because release tags pushed by release-please touch CHANGELOG/manifest at
+# the repo root (not docs/), which would skip the deploy at release time.
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
