@@ -89,7 +89,7 @@ jobs:
 
       - name: Setup Python for MkDocs
         if: hashFiles('mkdocs.yml') != ''
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
