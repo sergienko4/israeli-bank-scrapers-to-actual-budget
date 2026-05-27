@@ -27,6 +27,8 @@
     "lint:canaries": "node config/check-eslint-canaries.mjs",
     "lint:licenses": "node config/check-licenses.mjs",
     "docs": "typedoc --options config/typedoc.json",
+    "docs:site": "pip install -r requirements-docs.txt && python -m mkdocs build --strict",
+    "docs:serve": "python -m mkdocs serve",
     "audit": "npm audit --audit-level=moderate",
     "audit:fix": "npm audit fix",
     "outdated": "npm outdated",

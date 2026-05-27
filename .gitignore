@@ -63,6 +63,9 @@ dev/
 # Generated API documentation
 docs/api/
 
+# MkDocs build output
+site/
+
 # Camoufox cache (CI-injected, only .gitkeep committed)
 .camoufox-cache/*
 !.camoufox-cache/.gitkeep

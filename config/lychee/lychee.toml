@@ -1,0 +1,35 @@
+# Lychee config — controls broken-link checks for all .md files
+# Docs: https://lychee.cli.rs/usage/config/
+
+# URL exclude patterns (regex, anchored at start)
+exclude = [
+  "https://hooks\\.slack\\.com/",
+  "https://api\\.telegram\\.org/",
+  "http://localhost",
+  "http://actual_server",
+  "https://your-",
+  "http://your-",
+  "https://your_",
+  "https://hub\\.docker\\.com/",
+  "https://github\\.com/.*/actions/workflows/.*badge\\.svg",
+  "https://www\\.contributor-covenant\\.org/",
+  "https://img\\.shields\\.io/",
+  "https://github\\.com/.*/security/advisories",
+  "https://sergienko4\\.github\\.io/israeli-bank-scrapers-to-actual-budget.*",
+  "https://opensource\\.org/licenses/",
+  "https://github\\.com/sakowicz/actual-ai",
+  "https://www\\.npmjs\\.com/.*",
+  # Self-repo blob links: docs in this same repo may not yet exist on main
+  # when checked from a feature branch. They are validated post-merge.
+  "https://github\\.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/",
+  "https://github\\.com/sergienko4/israeli-bank-scrapers-to-actual-budget/tree/main/",
+]
+
+# Files/directories to skip scanning (these are source paths, not URLs)
+exclude_path = [
+  "CHANGELOG.md",
+]
+
+# Be lenient about transient network errors
+max_retries = 2
+no_progress = true

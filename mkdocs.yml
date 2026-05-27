@@ -1,0 +1,149 @@
+site_name: Israeli Bank Importer
+site_description: Automatically import transactions from 18 Israeli banks and credit cards into Actual Budget.
+site_url: https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/
+repo_url: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget
+repo_name: sergienko4/israeli-bank-scrapers-to-actual-budget
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+
+not_in_nav: |
+  BANKS.md
+  DEPLOYMENT.md
+  PRD-TEMPLATE.md
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.indexes
+    - navigation.tracking
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+  - git-revision-date-localized:
+      enable_creation_date: true
+      fallback_to_build_date: true
+      strict: false
+  - mermaid2
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget
+    - icon: fontawesome/brands/docker
+      link: https://hub.docker.com/r/sergienko4/israeli-bank-importer
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Quick Start: getting-started/quick-start.md
+      - Configuration: getting-started/configuration.md
+  - Banks:
+      - Overview: banks/index.md
+      - Bank Hapoalim: banks/hapoalim.md
+      - Bank Leumi: banks/leumi.md
+      - Discount: banks/discount.md
+      - Mizrahi Tefahot: banks/mizrahi.md
+      - Mercantile: banks/mercantile.md
+      - Otsar Hahayal: banks/otsarHahayal.md
+      - Union: banks/union.md
+      - Beinleumi: banks/beinleumi.md
+      - Massad: banks/massad.md
+      - Yahav: banks/yahav.md
+      - Beyahad Bishvilha: banks/beyahadBishvilha.md
+      - Behatsdaa: banks/behatsdaa.md
+      - Pagi: banks/pagi.md
+      - One Zero: banks/oneZero.md
+      - Visa Cal: banks/visaCal.md
+      - Max: banks/max.md
+      - Isracard: banks/isracard.md
+      - Amex: banks/amex.md
+  - Configuration:
+      - Actual Budget: configuration/actual.md
+      - Scheduling: configuration/scheduling.md
+      - Banks: configuration/banks.md
+      - Logging: configuration/logging.md
+      - Categorization: configuration/categorization.md
+      - Spending Watch: configuration/spending-watch.md
+      - Encrypted Config: configuration/encrypted-config.md
+      - Proxy: configuration/proxy.md
+      - Rate Limiting: configuration/rate-limiting.md
+  - Deployment:
+      - Docker Compose: deployment/docker-compose.md
+      - Docker Run: deployment/docker-run.md
+      - VM: deployment/vm.md
+      - Oracle Cloud: deployment/oracle-cloud.md
+      - Synology: deployment/synology.md
+      - Kubernetes: deployment/kubernetes.md
+  - Notifications:
+      - Telegram: notifications/telegram.md
+      - Webhooks: notifications/webhooks.md
+      - Message Formats: notifications/message-formats.md
+      - OTP Auto-Forward: OTP-AUTOFORWARD.md
+  - Architecture: architecture.md
+  - Troubleshooting: troubleshooting.md
+  - Security: SECURITY.md
+  - Contributing:
+      - Overview: contributing/index.md
+      - Contributing Guide: CONTRIBUTING.md
+      - Code Guidelines: GUIDELINES.md
+      - Code of Conduct: CODE_OF_CONDUCT.md
+  - Roadmap: ROADMAP.md
