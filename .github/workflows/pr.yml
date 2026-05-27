@@ -1,15 +1,20 @@
 name: PR Pipeline
 
+# Single-source PR DAG. Job-level `name:` attributes MUST match the
+# required ruleset entries verbatim. Shared logic lives in composite
+# actions under .github/actions/* and central values in
+# .github/config/ci-config.yml. See docs/architecture/ci-pipeline.md.
+
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
 
-# Workflow-wide default: read-only. Jobs that need more (security/trivy
-# write SARIF to the Security tab) override locally with `security-events:
-# write`. Sonar comments back to PRs but the SonarCloud action authenticates
-# with its own SONAR_TOKEN, so no GITHUB_TOKEN write scope is needed here.
+# Workflow-wide default: read-only. Jobs that need more (CodeQL/Trivy
+# write SARIF, build/validate publish artifacts) override locally with
+# their own `permissions:` block. SonarCloud authenticates via its own
+# SONAR_TOKEN so no GITHUB_TOKEN write scope is needed there.
 permissions:
   contents: read
 
@@ -20,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # actions/upload-artifact@v4+ uses the actions namespace, not contents.
+      # actions/upload-artifact@v4+ uses the actions namespace.
       actions: write
     steps:
       - uses: actions/checkout@v6
@@ -41,8 +46,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Downloads `dist` artifact + uploads `coverage-report` artifact via
-      # actions/{download,upload}-artifact (actions-namespace API).
+      # Downloads `dist` artifact + uploads `coverage-report` artifact
+      # via actions/{download,upload}-artifact (actions-namespace API).
       actions: write
     steps:
       - uses: actions/checkout@v6
@@ -52,9 +57,6 @@ jobs:
           name: dist
           path: dist/
       - run: npm run validate:ci
-        env:
-          E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
-          E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -62,28 +64,44 @@ jobs:
           path: coverage/
           retention-days: 30
 
-  # ─── DOCUMENTATION ─────────────────────────────────
+  # ─── DOCUMENTATION QUALITY ─────────────────────────
   docs:
     name: Documentation Quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Set up Python
+      - uses: ./.github/actions/ci/setup
+
+      - name: Lint markdown
+        run: npm run lint:docs
+
+      - name: Check markdown links (lychee)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: '--config config/lychee/lychee.toml **/*.md'
+          fail: true
+
+      - name: Validate README marker fragments
+        if: hashFiles('scripts/render-readme-meta.mjs') != ''
+        run: |
+          npm run meta:markers
+          npm run meta:check
+
+      - name: Setup Python for MkDocs
+        if: hashFiles('mkdocs.yml') != ''
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements-docs.txt
+
       - name: Install MkDocs deps
+        if: hashFiles('mkdocs.yml') != ''
         run: pip install -r requirements-docs.txt
-      - name: Lint markdown
-        run: npx markdownlint-cli2 --config config/markdownlint/.markdownlint.jsonc "README.md" ".github/**/*.md"
-      - name: Build MkDocs site (strict)
-        run: python -m mkdocs build --strict
-      - uses: lycheeverse/lychee-action@v2
-        with:
-          args: '--config config/lychee/lychee.toml **/*.md'
-          fail: true
+
+      - name: MkDocs strict build
+        if: hashFiles('mkdocs.yml') != ''
+        run: mkdocs build --strict
 
   # ─── CODEQL ────────────────────────────────────────
   security:
@@ -110,20 +128,11 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/ci/free-disk-space
-      - uses: ./.github/actions/docker/camoufox-cache
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/build-push-action@v7
+      - uses: ./.github/actions/docker/build-image
         with:
-          context: .
-          push: false
-          load: true
-          tags: israeli-bank-importer:e2e
-          build-args: |
-            SKIP_BROWSER_FETCH=true
-            APT_CACHE_BUST=${{ github.run_id }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tag: israeli-bank-importer:e2e
+          push: 'false'
+          load: 'true'
       - uses: ./.github/actions/security/trivy-scan
         with:
           image-ref: israeli-bank-importer:e2e
@@ -138,42 +147,94 @@ jobs:
       - run: npm run lint:licenses
 
   # ─── SONARCLOUD ────────────────────────────────────
+  # Job-level `if:` cannot reference `secrets` (GitHub disallows that
+  # context in job conditionals). Instead, gate every step on a
+  # presence-check that runs first. When secrets are absent (e.g. forks
+  # or repos without SonarCloud), the job succeeds with all steps
+  # skipped; the `ci-pass` aggregator already treats `skipped` as pass.
   sonar:
     name: SonarCloud Analysis
     needs: validate
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Downloads `coverage-report` artifact published by the validate job.
+      # Downloads `coverage-report` artifact published by validate.
       actions: read
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ORG: ${{ secrets.SONAR_ORG }}
+      SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
     steps:
-      - uses: actions/checkout@v6
+      - name: Check SonarCloud credentials
+        id: creds
+        run: |
+          if [ -z "${SONAR_TOKEN:-}" ] || [ -z "${SONAR_ORG:-}" ] || [ -z "${SONAR_PROJECT_KEY:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SonarCloud credentials not configured — skipping scan."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.creds.outputs.configured == 'true'
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v8
+      - if: steps.creds.outputs.configured == 'true'
+        uses: actions/download-artifact@v8
         with:
           name: coverage-report
           path: coverage/
-      - uses: SonarSource/sonarqube-scan-action@v8
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - if: steps.creds.outputs.configured == 'true'
+        uses: SonarSource/sonarqube-scan-action@v8
         with:
           args: |
-            -Dsonar.organization=${{ secrets.SONAR_ORG }}
-            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }}
+            -Dsonar.organization=${{ env.SONAR_ORG }}
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
 
   # ─── E2E ───────────────────────────────────────────
+  # Reusable workflow: same pipeline as e2e-schedule.yml's weekly run.
+  # Source of truth: .github/workflows/_e2e-suite.yml
   e2e:
     name: E2E Tests
     needs: build
-    # Reusable workflow: same pipeline as e2e-schedule.yml's weekly run.
-    # Source of truth: .github/workflows/_e2e-suite.yml
     uses: ./.github/workflows/_e2e-suite.yml
     with:
       timeout-minutes: 25
-    # Explicit mapping (not `inherit`): the reusable workflow only needs
-    # these two; passing every caller secret would expose unrelated tokens
-    # (SONAR/RELEASE/GIST/Docker creds) inside the E2E job for no reason.
     secrets:
       E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
       E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
+
+  # ─── AGGREGATOR ────────────────────────────────────
+  # Single status that reflects the entire DAG. Not in the required
+  # ruleset (existing per-job checks already gate merges) but useful for
+  # local scripting (`gh pr checks --required` or polling automation).
+  ci-pass:
+    name: CI Pass
+    needs: [build, validate, docs, security, trivy, licenses, sonar, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all upstream jobs passed
+        env:
+          R_BUILD: ${{ needs.build.result }}
+          R_VALIDATE: ${{ needs.validate.result }}
+          R_DOCS: ${{ needs.docs.result }}
+          R_SECURITY: ${{ needs.security.result }}
+          R_TRIVY: ${{ needs.trivy.result }}
+          R_LICENSES: ${{ needs.licenses.result }}
+          R_SONAR: ${{ needs.sonar.result }}
+          R_E2E: ${{ needs.e2e.result }}
+        run: |
+          fail=0
+          for name in BUILD VALIDATE DOCS SECURITY TRIVY LICENSES SONAR E2E; do
+            var="R_${name}"
+            val="${!var}"
+            # Treat 'skipped' as success for jobs that may legitimately skip
+            # (e.g. sonar when credentials are absent).
+            if [ "$val" != "success" ] && [ "$val" != "skipped" ]; then
+              echo "::error::Job $name failed with result: $val"
+              fail=1
+            else
+              echo "✓ $name: $val"
+            fi
+          done
+          exit $fail

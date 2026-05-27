@@ -1,41 +1,89 @@
 version: 2
+# Dependabot grouped weekly updates — one PR per ecosystem instead of many
+# ungrouped daily PRs. Critical npm deps (@actual-app/api and
+# @sergienko4/israeli-bank-scrapers) are already auto-bumped daily by
+# .github/workflows/dependency-check.yml, so we IGNORE their major bumps
+# here to avoid stepping on that workflow.
+
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+  # ── npm ──────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "08:00"
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Jerusalem
     open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
+    labels: ["dependencies", "npm"]
     commit-message:
-      prefix: "fix"
-      include: "scope"
+      prefix: "chore(deps)"
+      include: scope
     ignore:
-      # Critical deps handled by daily-dependency-check.yml (faster than weekly)
-      - dependency-name: "@actual-app/*"
+      # Owned by dependency-check.yml (daily auto-bump).
+      - dependency-name: "@actual-app/api"
       - dependency-name: "@sergienko4/israeli-bank-scrapers"
+    groups:
+      eslint:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "typescript-eslint*"
+          - "eslint-plugin-*"
+          - "eslint-config-*"
+      vitest:
+        patterns:
+          - "vitest*"
+          - "@vitest/*"
+          - "vite*"
+      typescript-tooling:
+        patterns:
+          - "typescript"
+          - "typedoc*"
+          - "@biomejs/*"
+      pino:
+        patterns:
+          - "pino*"
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  # ── Docker (Dockerfile base image) ──────────────────────
+  - package-ecosystem: docker
+    directory: /
     schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 3
-    labels:
-      - "ci"
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Jerusalem
+    open-pull-requests-limit: 2
+    labels: ["dependencies", "docker"]
     commit-message:
-      prefix: "ci"
-      include: "scope"
+      prefix: "chore(docker)"
+      include: scope
 
-  - package-ecosystem: "docker"
-    directory: "/"
+  # ── GitHub Actions ──────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: "weekly"
-      day: "monday"
-    labels:
-      - "docker"
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Jerusalem
+    open-pull-requests-limit: 2
+    labels: ["dependencies", "github-actions"]
     commit-message:
-      prefix: "fix"
-      include: "scope"
+      prefix: "chore(ci)"
+      include: scope
+    groups:
+      actions-core:
+        patterns:
+          - "actions/*"
+      docker-actions:
+        patterns:
+          - "docker/*"
+      codeql:
+        patterns:
+          - "github/codeql-action/*"
+      security-actions:
+        patterns:
+          - "aquasecurity/*"
+          - "anchore/*"
+          - "SonarSource/*"

@@ -63,7 +63,7 @@ dev/
 # Generated API documentation
 docs/api/
 
-# MkDocs build output
+# MkDocs build output (docs site is published from CI, not committed)
 site/
 
 # Camoufox cache (CI-injected, only .gitkeep committed)

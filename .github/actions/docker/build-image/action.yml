@@ -1,0 +1,51 @@
+name: Build Docker Image
+description: |
+  Composite that consolidates the Docker build sequence used by pr.yml (trivy),
+  release.yml (smoke + push), and _e2e-suite.yml. Steps:
+    1. Free disk space (composite)
+    2. Restore Camoufox cache (composite)
+    3. Set up Buildx
+    4. Build (and optionally push) the image
+  Inputs are intentionally small (5 max — see plan §R6).
+
+inputs:
+  tag:
+    description: Image tag (single tag) or comma-separated list. Used as `tags:` for build-push-action.
+    required: true
+  platforms:
+    description: Target platforms (comma-separated). Default linux/amd64 for fast PR builds.
+    default: linux/amd64
+  push:
+    description: Push the image to the registry (true/false).
+    default: 'false'
+  load:
+    description: Load the image into the local docker daemon (true/false). Mutually exclusive with multi-arch push.
+    default: 'true'
+  cache-suffix:
+    description: GHA cache scope suffix (lets release vs PR use independent cache scopes).
+    default: ''
+  labels:
+    description: Optional OCI labels (multi-line string, as emitted by docker/metadata-action).
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/ci/free-disk-space
+    - uses: ./.github/actions/docker/camoufox-cache
+    - uses: docker/setup-buildx-action@v4
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        push: ${{ inputs.push }}
+        load: ${{ inputs.load }}
+        platforms: ${{ inputs.platforms }}
+        tags: ${{ inputs.tag }}
+        labels: ${{ inputs.labels }}
+        build-args: |
+          SKIP_BROWSER_FETCH=true
+          APT_CACHE_BUST=${{ github.run_id }}
+        cache-from: type=gha${{ inputs.cache-suffix && format(',scope={0}', inputs.cache-suffix) || '' }}
+        cache-to: type=gha,mode=max${{ inputs.cache-suffix && format(',scope={0}', inputs.cache-suffix) || '' }}

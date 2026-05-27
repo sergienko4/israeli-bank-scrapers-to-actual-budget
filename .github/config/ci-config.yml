@@ -1,0 +1,129 @@
+# Central CI/CD configuration — single source of truth for values referenced
+# across .github/workflows/*.yml, scripts/render-readme-meta.mjs, and any
+# other tooling that needs project metadata. Edit values here; do NOT scatter
+# constants across multiple workflow files.
+#
+# Schema is versioned. Bump `version` when making breaking changes.
+
+version: 1
+
+project:
+  name: israeli-bank-importer
+  owner: sergienko4
+  repo: israeli-bank-scrapers-to-actual-budget
+  repo_url: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget
+  dockerhub_repo: sergienko4/israeli-bank-importer
+  contact_url: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues
+  license: MIT
+
+runtime:
+  node_engines: ">=22.0.0"
+  node_ci_version: "22.x"
+  npm_engines: ">=10.0.0"
+  python_ci_version: "3.12"
+  camoufox: latest
+
+docker:
+  image: sergienko4/israeli-bank-importer
+  tag_e2e: e2e
+  tag_smoke: smoke-test
+  tag_pre_commit: pre-commit
+  platforms_release:
+    - linux/amd64
+    - linux/arm64
+  build_args_default:
+    SKIP_BROWSER_FETCH: "true"
+
+ci:
+  runner_os: ubuntu-latest
+  default_timeout_min: 25
+  e2e_pr_timeout_min: 25
+  e2e_weekly_timeout_min: 15
+  trivy_severity:
+    - CRITICAL
+    - HIGH
+
+paths:
+  trivy_secret_config: config/trivy/secret.yaml
+  release_please_config: config/release-please/config.json
+  release_please_manifest: config/release-please/manifest.json
+  markdownlint_config: config/markdownlint/.markdownlint.jsonc
+  lychee_config: config/lychee/lychee.toml
+  vitest_config_unit: config/vitest.config.ts
+  vitest_config_e2e: config/vitest.config.e2e.ts
+
+badges:
+  pr_pipeline: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/pr.yml/badge.svg
+  release: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg
+  license_url: https://opensource.org/licenses/MIT
+  docker_pulls: https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer
+  node: https://img.shields.io/badge/node-22%2B-brightgreen
+  typescript: https://img.shields.io/badge/TypeScript-6-blue
+  test_count_gist: https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-test-count.json
+  e2e_count_gist: https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-e2e-count.json
+
+actions:
+  # Single source of truth for pinned action versions. Workflows MUST use a
+  # tag from this list and MUST NOT inline a different version. Some entries
+  # are major-only (e.g. actions/checkout@v6) and some include a minor/patch
+  # (e.g. aquasecurity/trivy-action@v0.36.0) when the upstream does not ship
+  # a moving major tag. Dependabot bumps these in PRs that also update the
+  # corresponding workflow `uses:` lines. SHA pinning is deferred — see
+  # docs/architecture/ci-pipeline.md.
+  pinned_versions:
+    - actions/checkout@v6
+    - actions/setup-node@v6
+    - actions/setup-python@v5
+    - actions/cache@v5
+    - actions/upload-artifact@v7
+    - actions/download-artifact@v8
+    - actions/upload-pages-artifact@v5
+    - actions/deploy-pages@v5
+    - docker/setup-buildx-action@v4
+    - docker/login-action@v4
+    - docker/metadata-action@v6
+    - docker/build-push-action@v7
+    - github/codeql-action/init@v4
+    - github/codeql-action/analyze@v4
+    - github/codeql-action/upload-sarif@v4
+    - aquasecurity/trivy-action@v0.36.0
+    - SonarSource/sonarqube-scan-action@v8
+    - softprops/action-gh-release@v3
+    - peter-evans/dockerhub-description@v5
+    - peter-evans/create-pull-request@v8
+    - googleapis/release-please-action@v5
+    - schneegans/dynamic-badges-action@v1.8.0
+    - jlumbroso/free-disk-space@v1.3.1
+    - anchore/sbom-action@v0
+    - lycheeverse/lychee-action@v2
+    - actions/stale@v10
+
+readme:
+  # Marker fragments managed by scripts/render-readme-meta.mjs.
+  # Adding/removing markers here updates the renderer's coverage.
+  markers:
+    - badges
+    - supported-banks
+    - tech-stack
+    - docker-image
+    - dockerhub-tags
+  banks:
+    # Used to render the supported-banks table. Ordered.
+    - { id: hapoalim,         name: Bank Hapoalim,     key: hapoalim,         login: "userCode, password" }
+    - { id: leumi,            name: Bank Leumi,        key: leumi,            login: "username, password" }
+    - { id: discount,         name: Discount Bank,     key: discount,         login: "id, password, num" }
+    - { id: mizrahi,          name: Mizrahi Tefahot,   key: mizrahi,          login: "username, password" }
+    - { id: mercantile,       name: Mercantile,        key: mercantile,       login: "id, password, num" }
+    - { id: otsarHahayal,     name: Otsar Hahayal,     key: otsarHahayal,     login: "username, password" }
+    - { id: union,            name: Union,             key: union,            login: "username, password" }
+    - { id: beinleumi,        name: Beinleumi,         key: beinleumi,        login: "username, password" }
+    - { id: massad,           name: Massad,            key: massad,           login: "username, password" }
+    - { id: yahav,            name: Yahav,             key: yahav,            login: "username, nationalID, password" }
+    - { id: beyahadBishvilha, name: Beyahad Bishvilha, key: beyahadBishvilha, login: "id, password" }
+    - { id: behatsdaa,        name: Behatsdaa,         key: behatsdaa,        login: "id, password" }
+    - { id: pagi,             name: Pagi,              key: pagi,             login: "username, password" }
+    - { id: oneZero,          name: One Zero,          key: oneZero,          login: "email, password, phoneNumber" }
+    - { id: visaCal,          name: Visa Cal,          key: visaCal,          login: "username, password" }
+    - { id: max,              name: Max (Leumi Card),  key: max,              login: "username, password, id" }
+    - { id: isracard,         name: Isracard,          key: isracard,         login: "id, card6Digits, password" }
+    - { id: amex,             name: Amex,              key: amex,             login: "id, card6Digits, password" }

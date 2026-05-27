@@ -6,9 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Pulls](https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer)](https://hub.docker.com/r/sergienko4/israeli-bank-importer)
 [![Node.js](https://img.shields.io/badge/node-22%2B-brightgreen)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-test-count.json)](#contributing)
-[![E2E](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-e2e-count.json)](#contributing)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-blue)](https://www.typescriptlang.org/)
+[![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fsergienko4%2F2860e2ffec3d5919e4b658fed5ce4e5e%2Fraw%2Factual-budget-importer-test-count.json)](#contributing)
+[![E2E](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fsergienko4%2F2860e2ffec3d5919e4b658fed5ce4e5e%2Fraw%2Factual-budget-importer-e2e-count.json)](#contributing)
 <!-- meta:badges:end -->
 
 **Automatically import transactions from 18 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
@@ -57,7 +57,7 @@ See [Quick Start guide](https://sergienko4.github.io/israeli-bank-scrapers-to-ac
 | 13 | Pagi | `pagi` | username, password |
 | 14 | One Zero | `oneZero` | email, password, phoneNumber |
 | 15 | Visa Cal | `visaCal` | username, password |
-| 16 | Max | `max` | username, password, id |
+| 16 | Max (Leumi Card) | `max` | username, password, id |
 | 17 | Isracard | `isracard` | id, card6Digits, password |
 | 18 | Amex | `amex` | id, card6Digits, password |
 <!-- meta:supported-banks:end -->
@@ -168,16 +168,12 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 <summary><b>Tech stack</b></summary>
 
 <!-- meta:tech-stack:start -->
-| Component | Version |
-|-----------|---------|
-| Node.js | 22+ (engines: `>=22.0.0`) |
-| TypeScript | ^6.0.3 (strict) |
-| israeli-bank-scrapers (fork) | ^8.3.0 |
-| Vitest | ^4.1.7 |
-| @actual-app/api | ^26.5.2 |
-| Camoufox | latest (Firefox + C++ stealth) |
-| Container base | node:24-slim |
-| Coverage thresholds | branches 90 %, functions 95 %, statements/lines 90 % |
+- **Node.js** >=22.0.0 (Docker base: `node:24-slim`)
+- **TypeScript** ^6.0.3 (strict mode, ES2022)
+- **Vitest** ^4.1.7 (v8 coverage)
+- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.3.0
+- **Browser** Camoufox (Firefox + C++-level fingerprint masking)
+- **Actual Budget API** `@actual-app/api` ^26.5.2
 <!-- meta:tech-stack:end -->
 
 </details>
@@ -186,7 +182,13 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 <summary><b>Docker image</b></summary>
 
 <!-- meta:docker-image:start -->
-`sergienko4/israeli-bank-importer:latest`
+```bash
+docker pull sergienko4/israeli-bank-importer:latest
+# or pin a specific version
+docker pull sergienko4/israeli-bank-importer:v1.x.x
+```
+
+See available tags on [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer/tags).
 <!-- meta:docker-image:end -->
 
 Multi-arch images (`linux/amd64`, `linux/arm64`) are published per release.
