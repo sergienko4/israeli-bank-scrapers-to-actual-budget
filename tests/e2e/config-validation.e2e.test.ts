@@ -38,6 +38,7 @@ describe.runIf(hasDockerImage())('Config Validation E2E', () => {
         env: { E2E_LOCAL_BUDGET_ID: E2E_BUDGET },
       });
 
+      expect(result.exitCode).toBe(0);
       expect(result.output).not.toContain('ConfigurationError');
       expect(result.output).toContain('Starting Israeli Bank Importer');
     });
@@ -91,6 +92,7 @@ describe.runIf(hasDockerImage())('Config Validation E2E', () => {
         env: { E2E_LOCAL_BUDGET_ID: E2E_BUDGET },
       });
 
+      expect(result.exitCode).toBe(0);
       expect(result.output).not.toContain('ConfigurationError');
       expect(result.output).toContain('Starting Israeli Bank Importer');
     });

@@ -203,7 +203,7 @@ describe('ConfigValidator', () => {
           },
         });
         const results = ConfigValidator.validateOffline(cfg);
-        expect(fail(results).some(r => r.check === `bank.${bankId}`)).toBe(false);
+        expectCheck(results, `bank.${bankId}`, 'pass');
       },
     );
 
