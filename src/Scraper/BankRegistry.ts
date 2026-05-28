@@ -44,6 +44,8 @@ const DEFAULT_REGISTRY_ENTRIES: readonly IBankRegistryEntry[] = Object.freeze([
   entry({ bankId: 'behatsdaa',        companyType: CompanyTypes.Behatsdaa,        aliases: ['behatsdaa'],                             signPolicy: 'preserve' }),
   entry({ bankId: 'pagi',             companyType: CompanyTypes.Pagi,             aliases: ['pagi'],                                  signPolicy: 'preserve' }),
   entry({ bankId: 'onezero',          companyType: CompanyTypes.OneZero,          aliases: ['oneZero', 'onezero'],                    signPolicy: 'preserve' }),
+  entry({ bankId: 'paybox',           companyType: CompanyTypes.PayBox,           aliases: ['payBox', 'paybox'],                      signPolicy: 'preserve' }),
+  entry({ bankId: 'pepper',           companyType: CompanyTypes.Pepper,           aliases: ['pepper'],                                signPolicy: 'preserve' }),
 ]);
 
 /**

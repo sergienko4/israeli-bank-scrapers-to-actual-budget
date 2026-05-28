@@ -115,7 +115,6 @@ readme:
     - { id: mizrahi,          name: Mizrahi Tefahot,   key: mizrahi,          login: "username, password" }
     - { id: mercantile,       name: Mercantile,        key: mercantile,       login: "id, password, num" }
     - { id: otsarHahayal,     name: Otsar Hahayal,     key: otsarHahayal,     login: "username, password" }
-    - { id: union,            name: Union,             key: union,            login: "username, password" }
     - { id: beinleumi,        name: Beinleumi,         key: beinleumi,        login: "username, password" }
     - { id: massad,           name: Massad,            key: massad,           login: "username, password" }
     - { id: yahav,            name: Yahav,             key: yahav,            login: "username, nationalID, password" }
@@ -127,3 +126,5 @@ readme:
     - { id: max,              name: Max (Leumi Card),  key: max,              login: "username, password, id" }
     - { id: isracard,         name: Isracard,          key: isracard,         login: "id, card6Digits, password" }
     - { id: amex,             name: Amex,              key: amex,             login: "id, card6Digits, password" }
+    - { id: paybox,           name: PayBox (by Discount Bank), key: paybox,   login: "phoneNumber" }
+    - { id: pepper,           name: Pepper (by Bank Leumi),    key: pepper,   login: "phoneNumber, password" }

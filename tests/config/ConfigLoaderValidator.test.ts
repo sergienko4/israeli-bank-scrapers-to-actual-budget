@@ -302,4 +302,46 @@ describe('validateBank', () => {
     expect(result.success).toBe(false);
     expect(isFail(result) && result.message).toContain('Invalid email format');
   });
+
+  it('throws when PayBox is missing phoneNumber', () => {
+    const config = fakeBankConfig({
+      phoneNumber: undefined,
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('paybox', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('PayBox requires: phoneNumber');
+  });
+
+  it('does not throw for a valid PayBox config', () => {
+    const config = fakeBankConfig({
+      phoneNumber: '+972501234567',
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('paybox', config);
+    expect(result.success).toBe(true);
+  });
+
+  it('throws when Pepper is missing password', () => {
+    const config = fakeBankConfig({
+      phoneNumber: '+972501234567', password: '',
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('pepper', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('Pepper requires: phoneNumber, password');
+  });
+
+  it('does not throw for a valid Pepper config', () => {
+    const config = fakeBankConfig({
+      phoneNumber: '+972501234567', password: TEST_CREDENTIAL_SHORT,
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('pepper', config);
+    expect(result.success).toBe(true);
+  });
 });

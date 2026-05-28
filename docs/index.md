@@ -1,6 +1,6 @@
 # Israeli Bank Importer
 
-**Automatically import transactions from 18 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
+**Automatically import transactions from 19 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
 
 Powered by [@sergienko4/israeli-bank-scrapers](https://github.com/sergienko4/israeli-bank-scrapers) (fork of [eshaham/israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers) with Amex/Isracard WAF fix and Camoufox stealth).
 
@@ -32,7 +32,7 @@ No manual CSV downloads. Everything automated.
 
     ---
 
-    18 Israeli banks and credit cards — Hapoalim, Leumi, Discount, OneZero, Max, Isracard, Amex, and more.
+    19 Israeli banks and credit cards — Hapoalim, Leumi, Discount, OneZero, Max, Isracard, Amex, PayBox, Pepper, and more.
 
     [:octicons-arrow-right-24: Bank list](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md)
 
@@ -74,7 +74,7 @@ No manual CSV downloads. Everything automated.
 
 ## Highlights
 
-- **18 institutions** — major banks + credit cards
+- **19 institutions** — major banks + credit cards
 - **Telegram bot** — `/scan`, `/preview`, `/status`, `/logs`, `/import_receipt` (OCR)
 - **Auto-categorization** — `history`, `translate` (Hebrew → English), or off
 - **Spending watch** — alert on budget thresholds with payee filters

@@ -45,6 +45,7 @@ describe('buildCredentials', () => {
       const creds = buildCredentials(config) as Record<string, unknown>;
       expect(creds.otpLongTermToken).toBe('tok123');
       expect(creds.email).toBe('user@example.com');
+      expect(creds.phoneNumber).toBe('+972501234567');
       expect(creds.id).toBeUndefined();
     });
 
@@ -62,6 +63,7 @@ describe('buildCredentials', () => {
       expect(creds.otpLongTermToken).toBe('tok456');
       expect(creds.email).toBe('');
       expect(creds.password).toBe(TEST_CREDENTIAL);
+      expect(creds.phoneNumber).toBeUndefined();
     });
 
     it('defaults both email and password to empty strings when both are undefined', () => {
@@ -70,6 +72,28 @@ describe('buildCredentials', () => {
       expect(creds.otpLongTermToken).toBe('tok789');
       expect(creds.email).toBe('');
       expect(creds.password).toBe('');
+      expect(creds.phoneNumber).toBeUndefined();
+    });
+
+    it('preserves phoneNumber for payBox (phoneNumber-only API bank) with token', () => {
+      const config = {
+        phoneNumber: '+972500000000', otpLongTermToken: 'paybox-tok'
+      } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds.otpLongTermToken).toBe('paybox-tok');
+      expect(creds.phoneNumber).toBe('+972500000000');
+      expect(creds.password).toBe('');
+    });
+
+    it('preserves phoneNumber+password for pepper (phoneNumber-based API bank) with token', () => {
+      const config = {
+        phoneNumber: '+972500000001', password: TEST_CREDENTIAL,
+        otpLongTermToken: 'pepper-tok'
+      } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds.otpLongTermToken).toBe('pepper-tok');
+      expect(creds.phoneNumber).toBe('+972500000001');
+      expect(creds.password).toBe(TEST_CREDENTIAL);
     });
   });
 });

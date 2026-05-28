@@ -73,6 +73,25 @@
       "timeout": 60000,
       "navigationRetryCount": 2,
       "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
+    },
+
+    "paybox": {
+      "phoneNumber": "+972501234567",
+      "twoFactorAuth": true,
+      "twoFactorTimeout": 300,
+      "otpLongTermToken": "",
+      "daysBack": 14,
+      "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
+    },
+
+    "pepper": {
+      "phoneNumber": "+972501234567",
+      "password": "your_password",
+      "twoFactorAuth": true,
+      "twoFactorTimeout": 300,
+      "otpLongTermToken": "",
+      "daysBack": 14,
+      "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
     }
   },
 

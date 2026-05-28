@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Release](https://img.shields.io/github/v/release/sergienko4/israeli-bank-scrapers-to-actual-budget)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/releases)
 
-**Automatically import transactions from 18 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
+**Automatically import transactions from 19 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
 
 ---
 
@@ -85,7 +85,7 @@ Each tagged release ships with a Software Bill of Materials (SBOM) attached to t
 
 ## What You Get
 
-- 18 institutions (major Israeli banks + credit cards)
+- 19 institutions (major Israeli banks + credit cards)
 - Telegram bot (`/scan`, `/preview`, `/status`, `/logs`, `/import_receipt` OCR)
 - Webhook delivery (Slack, Discord, generic JSON)
 - Auto-categorization (`history` or Hebrew → English `translate`)

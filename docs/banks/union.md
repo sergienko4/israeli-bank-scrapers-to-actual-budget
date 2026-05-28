@@ -1,62 +1,14 @@
-# Union
+# Union (deprecated)
 
-| Property | Value |
-|----------|-------|
-| Config key | `union` |
-| Login fields | username, password |
-| 2FA / OTP | optional |
+> **Union is no longer supported.** Bank Igud (Union Bank) merged into Mizrahi Tefahot in 2020 and the underlying `israeli-bank-scrapers` library (v8.x) removed its `CompanyTypes.Union` entry.
+>
+> Use [`mizrahi`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/mizrahi.md) instead.
 
-## Login fields
+If you previously had a `"union"` entry in `config.json`, replace it with a `"mizrahi"` entry using your Mizrahi-Tefahot credentials.
 
-| Field | Description |
-|-------|-------------|
-| `username` | Your internet-banking username. |
-| `password` | Your internet-banking password. |
-
-## Sample config
-
-```json
-{
-  "union": {
-    "username": "your_username",
-    "password": "your_password",
-    "daysBack": 14,
-    "targets": [
-      {
-        "actualAccountId": "uuid-from-actual",
-        "reconcile": true,
-        "accounts": "all"
-      }
-    ]
-  }
-}
-```
-
-## 2FA / OTP
-
-2FA is **optional** - enable it only if your bank prompts for an SMS code:
-
-```json
-{
-  "union": {
-    "username": "your_username",
-    "password": "your_password",
-    "twoFactorAuth": true,
-    "twoFactorTimeout": 300,
-    "daysBack": 14,
-    "targets": [...]
-  }
-}
-```
-
-The Telegram bot prompts for the code on each run. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
-
-## Known gotchas
-
-Union is part of the Mizrahi group - credentials are the same as your Union internet banking login.
+This page is retained only to preserve deep links from older documentation.
 
 ## See also
 
-- [Bank options](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md) - full schema reference
-- [Banks index](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) - all 18 banks
-- [Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md)
+- [Banks index](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) - all 19 banks
+- [Mizrahi Tefahot](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/mizrahi.md)

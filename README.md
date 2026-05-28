@@ -11,7 +11,7 @@
 [![E2E](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fsergienko4%2F2860e2ffec3d5919e4b658fed5ce4e5e%2Fraw%2Factual-budget-importer-e2e-count.json)](#contributing)
 <!-- meta:badges:end -->
 
-**Automatically import transactions from 18 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
+**Automatically import transactions from 19 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
 
 Powered by [**@sergienko4/israeli-bank-scrapers**](https://github.com/sergienko4/israeli-bank-scrapers) (fork of [eshaham/israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers) with Amex/Isracard WAF fix and Camoufox stealth).
 
@@ -48,18 +48,19 @@ See [Quick Start guide](https://sergienko4.github.io/israeli-bank-scrapers-to-ac
 | 4 | Mizrahi Tefahot | `mizrahi` | username, password |
 | 5 | Mercantile | `mercantile` | id, password, num |
 | 6 | Otsar Hahayal | `otsarHahayal` | username, password |
-| 7 | Union | `union` | username, password |
-| 8 | Beinleumi | `beinleumi` | username, password |
-| 9 | Massad | `massad` | username, password |
-| 10 | Yahav | `yahav` | username, nationalID, password |
-| 11 | Beyahad Bishvilha | `beyahadBishvilha` | id, password |
-| 12 | Behatsdaa | `behatsdaa` | id, password |
-| 13 | Pagi | `pagi` | username, password |
-| 14 | One Zero | `oneZero` | email, password, phoneNumber |
-| 15 | Visa Cal | `visaCal` | username, password |
-| 16 | Max (Leumi Card) | `max` | username, password, id |
-| 17 | Isracard | `isracard` | id, card6Digits, password |
-| 18 | Amex | `amex` | id, card6Digits, password |
+| 7 | Beinleumi | `beinleumi` | username, password |
+| 8 | Massad | `massad` | username, password |
+| 9 | Yahav | `yahav` | username, nationalID, password |
+| 10 | Beyahad Bishvilha | `beyahadBishvilha` | id, password |
+| 11 | Behatsdaa | `behatsdaa` | id, password |
+| 12 | Pagi | `pagi` | username, password |
+| 13 | One Zero | `oneZero` | email, password, phoneNumber |
+| 14 | Visa Cal | `visaCal` | username, password |
+| 15 | Max (Leumi Card) | `max` | username, password, id |
+| 16 | Isracard | `isracard` | id, card6Digits, password |
+| 17 | Amex | `amex` | id, card6Digits, password |
+| 18 | PayBox (by Discount Bank) | `paybox` | phoneNumber |
+| 19 | Pepper (by Bank Leumi) | `pepper` | phoneNumber, password |
 <!-- meta:supported-banks:end -->
 
 See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/banks/) · [docs/banks/](docs/banks/).
@@ -68,7 +69,7 @@ See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scra
 
 ## Features
 
-- 🏦 18 banks and credit cards (major Israeli institutions + cards)
+- 🏦 19 banks and credit cards (major Israeli institutions + cards)
 - 🤖 Telegram bot: `/scan`, `/preview`, `/status`, `/logs`, `/import_receipt` (OCR)
 - 📥 Webhook delivery (Slack, Discord, generic JSON)
 - 🏷️ Auto-categorization (`history` / `translate` Hebrew → English)
@@ -171,7 +172,7 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 - **Node.js** >=22.0.0 (Docker base: `node:24-slim`)
 - **TypeScript** ^6.0.3 (strict mode, ES2022)
 - **Vitest** ^4.1.7 (v8 coverage)
-- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.3.0
+- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.4.0
 - **Browser** Camoufox (Firefox + C++-level fingerprint masking)
 - **Actual Budget API** `@actual-app/api` ^26.5.2
 <!-- meta:tech-stack:end -->

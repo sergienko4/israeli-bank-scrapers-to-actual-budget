@@ -20,6 +20,10 @@ const CREDENTIAL_SPECS: Record<string, ICredentialSpec> = {
     label: 'nationalID, password' },
   onezero:   { displayName: 'OneZero',       required: ['email', 'password', 'phoneNumber'],
     label: 'email, password, phoneNumber' },
+  paybox:    { displayName: 'PayBox',        required: ['phoneNumber'],
+    label: 'phoneNumber' },
+  pepper:    { displayName: 'Pepper',        required: ['phoneNumber', 'password'],
+    label: 'phoneNumber, password' },
   max:       { displayName: 'Max',           required: ['username', 'password', 'id'],
     label: 'username, password, id' },
 };

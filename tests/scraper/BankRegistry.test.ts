@@ -18,13 +18,15 @@ const ALIAS_TO_BANK_ID: Record<string, string> = {
   beyahadBishvilha: 'beyahadbishvilha', beyahadbishvilha: 'beyahadbishvilha',
   behatsdaa: 'behatsdaa', pagi: 'pagi',
   oneZero: 'onezero', onezero: 'onezero',
+  payBox: 'paybox', paybox: 'paybox',
+  pepper: 'pepper',
 };
 
 describe('createBankRegistry', () => {
   const registry = createBankRegistry();
 
-  it('exposes 17 canonical bank entries', () => {
-    expect(registry.list()).toHaveLength(17);
+  it('exposes 19 canonical bank entries', () => {
+    expect(registry.list()).toHaveLength(19);
   });
 
   it.each(Object.entries(ALIAS_TO_BANK_ID))(
@@ -66,7 +68,7 @@ describe('createBankRegistry', () => {
   });
 
   it('marks regular banks with preserve sign policy', () => {
-    for (const id of ['hapoalim', 'leumi', 'discount', 'mizrahi']) {
+    for (const id of ['hapoalim', 'leumi', 'discount', 'mizrahi', 'paybox', 'pepper']) {
       const result = registry.resolve(id);
       expect(result.success).toBe(true);
       if (!result.success) continue;

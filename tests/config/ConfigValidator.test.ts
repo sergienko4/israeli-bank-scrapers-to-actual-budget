@@ -198,6 +198,45 @@ describe('ConfigValidator', () => {
       expect(fail(results).some(r => r.check === 'bank.oneZero')).toBe(false);
     });
 
+    it('passes for paybox (new in scraper 8.4.0)', () => {
+      const cfg = makeConfig({
+        banks: {
+          paybox: {
+            phoneNumber: '+972501234567',
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expect(fail(results).some(r => r.check === 'bank.paybox')).toBe(false);
+    });
+
+    it('passes for pepper (registered alongside paybox)', () => {
+      const cfg = makeConfig({
+        banks: {
+          pepper: {
+            phoneNumber: '+972501234567', password: TEST_CREDENTIAL_SHORT,
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expect(fail(results).some(r => r.check === 'bank.pepper')).toBe(false);
+    });
+
+    it('fails for union (no longer in upstream CompanyTypes)', () => {
+      const cfg = makeConfig({
+        banks: {
+          union: {
+            username: 'u', password: TEST_CREDENTIAL_SHORT,
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expectCheck(results, 'bank.union', 'fail');
+    });
+
     it('fails for unknown bank name', () => {
       const cfg = makeConfig({
         banks: {
