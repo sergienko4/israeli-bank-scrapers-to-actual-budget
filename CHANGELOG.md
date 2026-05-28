@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.18](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.17...v1.37.18) (2026-05-27)
+
+
+### Fixed
+
+* **deps:** bump pymdown-extensions in the pip group across 1 directory ([#385](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/385)) ([53eb891](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/53eb891c3c59fb40a5d879cff0c194d7a0e09557))
+
 ## [1.37.17](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.16...v1.37.17) (2026-05-26)
 
 
