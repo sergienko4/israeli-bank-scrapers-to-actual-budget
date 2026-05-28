@@ -335,6 +335,18 @@ describe('validateBank', () => {
     expect(isFail(result) && result.message).toContain('Pepper requires: phoneNumber, password');
   });
 
+  it('throws when Pepper is missing phoneNumber', () => {
+    const config = fakeBankConfig({
+      phoneNumber: undefined,
+      password: TEST_CREDENTIAL_SHORT,
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('pepper', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('Pepper requires: phoneNumber, password');
+  });
+
   it('does not throw for a valid Pepper config', () => {
     const config = fakeBankConfig({
       phoneNumber: '+972501234567', password: TEST_CREDENTIAL_SHORT,

@@ -79,5 +79,45 @@ describe.runIf(hasDockerImage())('Config Validation E2E', () => {
       expect(result.output).toContain('requires');
       expect(result.output).toContain('Discount');
     });
+
+    it('rejects missing phoneNumber for PayBox — exits 1 with required fields', () => {
+      const config = createBaseConfig({
+        banks: {
+          paybox: {
+            daysBack: 7,
+            targets: [{ actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' }],
+          },
+        },
+      });
+      const configPath = writeTempConfig('no-creds-paybox', config);
+      temp.track(configPath);
+
+      const result = runImporterDocker({ configPath });
+
+      expect(result.exitCode).toBeGreaterThan(0);
+      expect(result.output).toContain('requires');
+      expect(result.output).toContain('PayBox');
+      expect(result.output).toContain('phoneNumber');
+    });
+
+    it('rejects missing credentials for Pepper — exits 1 with required fields', () => {
+      const config = createBaseConfig({
+        banks: {
+          pepper: {
+            phoneNumber: '+972501234567', daysBack: 7,
+            targets: [{ actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' }],
+          },
+        },
+      });
+      const configPath = writeTempConfig('no-creds-pepper', config);
+      temp.track(configPath);
+
+      const result = runImporterDocker({ configPath });
+
+      expect(result.exitCode).toBeGreaterThan(0);
+      expect(result.output).toContain('requires');
+      expect(result.output).toContain('Pepper');
+      expect(result.output).toContain('password');
+    });
   });
 });

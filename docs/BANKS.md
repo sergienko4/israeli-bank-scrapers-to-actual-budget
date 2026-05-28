@@ -19,11 +19,11 @@
 | Behatsdaa | [banks/behatsdaa.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/behatsdaa.md) |
 | Pagi | [banks/pagi.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pagi.md) |
 | One Zero | [banks/oneZero.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/oneZero.md) |
-| PayBox (by Discount Bank) | [banks/paybox.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md) |
-| Pepper (by Bank Leumi) | [banks/pepper.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md) |
 | Visa Cal | [banks/visaCal.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/visaCal.md) |
 | Max (Leumi Card) | [banks/max.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/max.md) |
 | Isracard | [banks/isracard.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/isracard.md) |
 | Amex | [banks/amex.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/amex.md) |
+| PayBox (by Discount Bank) | [banks/paybox.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md) |
+| Pepper (by Bank Leumi) | [banks/pepper.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md) |
 
 For an overview of the common bank-config shape (`twoFactorAuth`, `daysBack`, `targets`, ...), see [banks/index.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) and [configuration/banks.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md).
