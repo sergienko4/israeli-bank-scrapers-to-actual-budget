@@ -6,27 +6,9 @@ import type {
 IBankConfig, IImporterConfig, INotificationConfig, IProxyConfig,
 ISpendingWatchRule, Procedure} from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
+import { CREDENTIAL_SPECS } from './BankCredentialSpecs.js';
 
-// OCP: add new banks by adding entries — no if/else changes needed
-interface ICredentialSpec { displayName: string; required: (keyof IBankConfig)[]; label: string }
-const CREDENTIAL_SPECS: Record<string, ICredentialSpec> = {
-  discount:  { displayName: 'Discount bank', required: ['id', 'password', 'num'],
-    label: 'id, password, num' },
-  leumi:     { displayName: 'leumi',         required: ['username', 'password'],
-    label: 'username, password' },
-  hapoalim:  { displayName: 'Hapoalim',      required: ['userCode', 'password'],
-    label: 'userCode, password' },
-  yahav:     { displayName: 'Yahav',         required: ['nationalID', 'password'],
-    label: 'nationalID, password' },
-  onezero:   { displayName: 'OneZero',       required: ['email', 'password', 'phoneNumber'],
-    label: 'email, password, phoneNumber' },
-  paybox:    { displayName: 'PayBox',        required: ['phoneNumber'],
-    label: 'phoneNumber' },
-  pepper:    { displayName: 'Pepper',        required: ['phoneNumber', 'password'],
-    label: 'phoneNumber, password' },
-  max:       { displayName: 'Max',           required: ['username', 'password', 'id'],
-    label: 'username, password, id' },
-};
+export { CREDENTIAL_SPECS, type ICredentialSpec } from './BankCredentialSpecs.js';
 
 /**
  * Validates the Actual Budget section of the config (password, syncId, server URL).
