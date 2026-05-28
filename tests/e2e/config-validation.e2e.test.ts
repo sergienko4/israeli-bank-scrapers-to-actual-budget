@@ -31,6 +31,52 @@ describe.runIf(hasDockerImage())('Config Validation E2E', () => {
       expect(result.output).not.toContain('ConfigurationError');
       expect(result.output).toContain('Starting Israeli Bank Importer');
     });
+
+    it('PayBox config with phoneNumber loads without ConfigurationError', () => {
+      const config = createBaseConfig({
+        banks: {
+          paybox: {
+            phoneNumber: '+972501234567', daysBack: 7,
+            targets: [{ actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' }],
+          },
+        },
+      });
+      const configPath = writeTempConfig('valid-paybox', config);
+      temp.track(configPath);
+
+      const result = runImporterDocker({
+        configPath,
+        mockScraperFile: join(FIXTURES, 'mock-scraper-result.json'),
+        budgetId: 'e2e-test-budget-dummy',
+        env: { E2E_LOCAL_BUDGET_ID: 'e2e-test-budget-dummy' },
+      });
+
+      expect(result.output).not.toContain('ConfigurationError');
+      expect(result.output).toContain('Starting Israeli Bank Importer');
+    });
+
+    it('Pepper config with phoneNumber + password loads without ConfigurationError', () => {
+      const config = createBaseConfig({
+        banks: {
+          pepper: {
+            phoneNumber: '+972501234567', password: TEST_CREDENTIAL, daysBack: 7,
+            targets: [{ actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' }],
+          },
+        },
+      });
+      const configPath = writeTempConfig('valid-pepper', config);
+      temp.track(configPath);
+
+      const result = runImporterDocker({
+        configPath,
+        mockScraperFile: join(FIXTURES, 'mock-scraper-result.json'),
+        budgetId: 'e2e-test-budget-dummy',
+        env: { E2E_LOCAL_BUDGET_ID: 'e2e-test-budget-dummy' },
+      });
+
+      expect(result.output).not.toContain('ConfigurationError');
+      expect(result.output).toContain('Starting Israeli Bank Importer');
+    });
   });
 
   describe('error handling', () => {
