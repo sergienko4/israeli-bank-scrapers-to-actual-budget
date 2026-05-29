@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.38.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.18...v1.38.0) (2026-05-29)
+
+
+### Added
+
+* **banks:** add PayBox + Pepper, remove Union (scraper 8.4.0) ([#393](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/393)) ([d34faa0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d34faa0d80c42fec5d4f09aea395e87e0d68ada6))
+
 ## [1.37.18](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.17...v1.37.18) (2026-05-27)
 
 
