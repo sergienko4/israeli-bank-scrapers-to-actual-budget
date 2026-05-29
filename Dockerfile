@@ -6,7 +6,7 @@ FROM node:24-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4
 # Security labels and metadata
 LABEL maintainer="Israeli Bank Importer Contributors"
 LABEL org.opencontainers.image.title="Israeli Bank Importer"
-LABEL org.opencontainers.image.description="Import transactions from 18 Israeli banks into Actual Budget"
+LABEL org.opencontainers.image.description="Import transactions from 19 Israeli banks into Actual Budget"
 LABEL org.opencontainers.image.source="https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.url="https://hub.docker.com/r/sergienko4/israeli-bank-importer"

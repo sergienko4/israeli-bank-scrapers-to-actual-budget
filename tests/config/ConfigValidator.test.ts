@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConfigValidator, IValidationResult, runValidateMode } from '../../src/Config/ConfigValidator.js';
 import { IImporterConfig } from '../../src/Types/Index.js';
 import * as fs from 'fs';
-import { fakeUuid } from '../helpers/factories.js';
+import {
+  fakeUuid,
+  fakeValidBankConfigFor,
+  BANK_SPEC_CASES,
+} from '../helpers/factories.js';
 import { TEST_CREDENTIAL, TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
 vi.mock('fs');
@@ -185,18 +189,41 @@ describe('ConfigValidator', () => {
       expectCheck(results, 'bank.discount', 'pass');
     });
 
-    it('passes for camelCase alias (oneZero)', () => {
-      const cfg = makeConfig({
-        banks: {
-          oneZero: {
-            email: 'a@b.com', password: TEST_CREDENTIAL_SHORT, phoneNumber: '+1234567890',
-            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
+    // Spec-driven cross-bank coverage. Replaces hand-rolled oneZero/paybox/pepper
+    // cases — adding a bank to CREDENTIAL_SPECS automatically extends coverage.
+    it.each(BANK_SPEC_CASES)(
+      'validateOffline accepts $bankId with a valid spec-driven config',
+      ({ bankId }) => {
+        const cfg = makeConfig({
+          banks: {
+            [bankId]: {
+              ...fakeValidBankConfigFor(bankId),
+              targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
+            },
           },
-        },
-      });
-      const results = ConfigValidator.validateOffline(cfg);
-      expect(fail(results).some(r => r.check === 'bank.oneZero')).toBe(false);
-    });
+        });
+        const results = ConfigValidator.validateOffline(cfg);
+        expectCheck(results, `bank.${bankId}`, 'pass');
+      },
+    );
+
+    // Bank ids removed from upstream CompanyTypes must be rejected by KNOWN_BANKS.
+    // Parameterized so future removals only need a new entry here.
+    it.each([{ removedBank: 'union' }])(
+      'validateOffline rejects removed bank $removedBank',
+      ({ removedBank }) => {
+        const cfg = makeConfig({
+          banks: {
+            [removedBank]: {
+              username: 'u', password: TEST_CREDENTIAL_SHORT,
+              targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
+            },
+          },
+        });
+        const results = ConfigValidator.validateOffline(cfg);
+        expectCheck(results, `bank.${removedBank}`, 'fail');
+      },
+    );
 
     it('fails for unknown bank name', () => {
       const cfg = makeConfig({

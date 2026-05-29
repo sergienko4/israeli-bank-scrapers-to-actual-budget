@@ -69,7 +69,7 @@ export interface IBankConfig {
   // Hapoalim
   userCode?: string;
 
-  // Leumi, Union, etc
+  // Leumi, Mizrahi, etc
   username?: string;
 
   // Yahav
@@ -78,7 +78,7 @@ export interface IBankConfig {
   // Isracard, Amex
   card6Digits?: string;
 
-  // OneZero
+  // OneZero, PayBox, Pepper
   email?: string;
   phoneNumber?: string;
   otpLongTermToken?: string; // Persisted after first OTP login

@@ -33,6 +33,8 @@ import type {
 } from '../../src/Services/MetricsService.js';
 import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
 import type { IBatchResult } from '../../src/Types/Index.js';
+import { CREDENTIAL_SPECS, type ICredentialSpec } from '../../src/Config/ConfigLoaderValidator.js';
+import { DEFAULT_BANK_REGISTRY } from '../../src/Scraper/BankRegistry.js';
 
 export function fakeUuid(): string {
   return faker.string.uuid();
@@ -402,4 +404,98 @@ export function assertProcedureSuccess<T>(
   result: Procedure<T>,
 ): asserts result is IProcedureSuccess<T> {
   if (!result.success) throw new Error(`Expected procedure success but got failure: ${result.message}`);
+}
+
+// ── Cross-bank parameterization helpers ────────────────────────────────────
+// These drive `it.each` tests so every bank is exercised through the same
+// validation flow instead of copy-pasted per-bank cases.
+
+/** Ordered list of bank ids that have explicit credential specs. */
+export const SPEC_BANK_IDS: readonly string[] = Object.freeze(Object.keys(CREDENTIAL_SPECS));
+
+/** Every canonical bank id in the default registry (19 entries today). */
+export const ALL_REGISTRY_BANK_IDS: readonly string[] = Object.freeze(
+  DEFAULT_BANK_REGISTRY.list().map(entry => entry.bankId),
+);
+
+/** Per-spec values for parameterized credential tests. */
+export interface IBankSpecCase {
+  readonly bankId: string;
+  readonly spec: ICredentialSpec;
+}
+
+/** Iterable of [bankId, spec] pairs for `describe.each`/`it.each`. */
+export const BANK_SPEC_CASES: readonly IBankSpecCase[] = Object.freeze(
+  Object.entries(CREDENTIAL_SPECS).map(([bankId, spec]) => Object.freeze({ bankId, spec })),
+);
+
+/** Flat list of [bankId, missingField] pairs covering every required field of every spec. */
+export const BANK_MISSING_FIELD_CASES: readonly { bankId: string; field: keyof IBankConfig }[] = Object.freeze(
+  BANK_SPEC_CASES.flatMap(({ bankId, spec }) =>
+    spec.required.map(field => Object.freeze({ bankId, field })),
+  ),
+);
+
+/** Realistic credential value per IBankConfig field, used by the spec-driven factory. */
+const FIELD_VALUE_BUILDERS: Readonly<Record<string, () => string>> = Object.freeze({
+  id: () => faker.string.numeric(9),
+  password: () => faker.internet.password({ length: 12 }),
+  num: () => faker.string.alphanumeric(6).toUpperCase(),
+  username: () => faker.internet.username(),
+  userCode: () => faker.string.alphanumeric(8),
+  nationalID: () => faker.string.numeric(9),
+  email: () => faker.internet.email(),
+  phoneNumber: () => `+972${faker.string.numeric(9)}`,
+  card6Digits: () => faker.string.numeric(6),
+});
+
+/**
+ * Builds the required-field payload for a bank by drawing realistic values
+ * from {@link FIELD_VALUE_BUILDERS} for each field in the bank's spec.
+ * @param bankId - Lowercased bank id present in CREDENTIAL_SPECS.
+ * @returns Object containing exactly the fields the spec marks as required.
+ */
+function buildRequiredFieldsFor(bankId: string): Partial<IBankConfig> {
+  const spec = CREDENTIAL_SPECS[bankId];
+  if (!spec) throw new Error(`No credential spec for bankId: ${bankId}`);
+  const payload: Record<string, string> = {};
+  for (const field of spec.required) {
+    const builder = FIELD_VALUE_BUILDERS[field];
+    if (!builder) throw new Error(`No field-value builder for field: ${String(field)}`);
+    payload[field] = builder();
+  }
+  return payload as Partial<IBankConfig>;
+}
+
+/**
+ * Builds a valid IBankConfig for any bank with a credential spec, populating
+ * every required field with realistic faker data and a default daysBack/targets.
+ * @param bankId - Lowercased bank id (must exist in CREDENTIAL_SPECS).
+ * @param overrides - Pinned overrides applied last (e.g. force a specific phoneNumber).
+ * @returns IBankConfig containing all required credentials + sane defaults.
+ */
+export function fakeValidBankConfigFor(
+  bankId: string, overrides: Partial<IBankConfig> = {},
+): IBankConfig {
+  return {
+    ...buildRequiredFieldsFor(bankId),
+    daysBack: 7,
+    targets: [fakeBankTarget()],
+    ...overrides,
+  } as IBankConfig;
+}
+
+/**
+ * Builds an IBankConfig for the bank with every required field populated EXCEPT
+ * the named field, which is set to `undefined`. Used for negative-path tests.
+ * @param bankId - Lowercased bank id (must exist in CREDENTIAL_SPECS).
+ * @param field - Required field to omit (must appear in the bank's spec.required).
+ * @returns IBankConfig with the named field removed; other required fields valid.
+ */
+export function fakeBankConfigMissingField(
+  bankId: string, field: keyof IBankConfig,
+): IBankConfig {
+  const valid = fakeValidBankConfigFor(bankId);
+  const { [field]: _omitted, ...rest } = valid as Record<string, unknown>;
+  return rest as IBankConfig;
 }

@@ -1,39 +1,53 @@
 /**
  * Config Validation E2E Tests
- * - Happy path: valid config loads and starts import
- * - Error handling: bad configs produce clear errors and exit code 1
+ *
+ * Cross-cutting cases (invalid syncId, conflicting dates) stay one-off
+ * because they aren't bank-specific. All bank-specific scenarios are
+ * driven from CREDENTIAL_SPECS via `describe.each` so every spec'd bank
+ * exercises the same Docker pipeline — adding a new bank with a spec
+ * automatically extends E2E coverage.
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
 import { join } from 'path';
 import { runImporterDocker, getFixturesDir, writeTempConfig, createTempFileTracker, hasDockerImage } from './helpers/dockerRunner.js';
 import { createBaseConfig } from './helpers/testData.js';
-import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
+import {
+  fakeValidBankConfigFor,
+  fakeBankConfigMissingField,
+  BANK_SPEC_CASES,
+} from '../helpers/factories.js';
 
 const FIXTURES = getFixturesDir();
+const E2E_TARGET = { actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' as const };
+const E2E_BUDGET = 'e2e-test-budget-dummy';
 const temp = createTempFileTracker();
 
 afterAll(() => { temp.cleanup(); });
 
 describe.runIf(hasDockerImage())('Config Validation E2E', () => {
-  describe('happy path', () => {
-    it('valid config loads without ConfigurationError', () => {
+  describe('happy path — cross-cutting', () => {
+    it('default e2eTestBank config loads without ConfigurationError', () => {
       const configPath = writeTempConfig('valid', createBaseConfig());
       temp.track(configPath);
 
       const result = runImporterDocker({
         configPath,
         mockScraperFile: join(FIXTURES, 'mock-scraper-result.json'),
-        budgetId: 'e2e-test-budget-dummy',
-        env: { E2E_LOCAL_BUDGET_ID: 'e2e-test-budget-dummy' },
+        budgetId: E2E_BUDGET,
+        env: { E2E_LOCAL_BUDGET_ID: E2E_BUDGET },
       });
 
+      // Config validation is fully exercised by the "Starting" banner +
+      // absence of ConfigurationError. The downstream import legitimately
+      // exits non-zero in CI (no real Actual Budget reachable), so the
+      // exit code is intentionally not asserted here.
       expect(result.output).not.toContain('ConfigurationError');
       expect(result.output).toContain('Starting Israeli Bank Importer');
     });
   });
 
-  describe('error handling', () => {
+  describe('error handling — cross-cutting', () => {
     it('rejects invalid syncId — exits 1 with UUID format error', () => {
       const config = createBaseConfig();
       config.actual.budget.syncId = 'not-a-uuid';
@@ -60,24 +74,52 @@ describe.runIf(hasDockerImage())('Config Validation E2E', () => {
       expect(result.output).toContain('startDate');
       expect(result.output).toContain('daysBack');
     });
+  });
 
-    it('rejects missing credentials for known bank — exits 1 with required fields', () => {
+  // Spec-driven cross-bank E2E. Each iteration runs two real Docker
+  // invocations (happy + failure) so every bank's full pipeline is exercised.
+  describe.each(BANK_SPEC_CASES)('bank pipeline E2E — $bankId', ({ bankId, spec }) => {
+    it(`accepts a valid ${bankId} config end-to-end`, () => {
       const config = createBaseConfig({
         banks: {
-          discount: {
-            password: TEST_CREDENTIAL, daysBack: 7,
-            targets: [{ actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' }],
+          [bankId]: { ...fakeValidBankConfigFor(bankId, { targets: [E2E_TARGET] }) },
+        },
+      });
+      const configPath = writeTempConfig(`valid-${bankId}`, config);
+      temp.track(configPath);
+
+      const result = runImporterDocker({
+        configPath,
+        mockScraperFile: join(FIXTURES, 'mock-scraper-result.json'),
+        budgetId: E2E_BUDGET,
+        env: { E2E_LOCAL_BUDGET_ID: E2E_BUDGET },
+      });
+
+      // See note above: downstream import fails in CI without a real
+      // Actual Budget server, so we deliberately do not assert on exitCode.
+      expect(result.output).not.toContain('ConfigurationError');
+      expect(result.output).toContain('Starting Israeli Bank Importer');
+    });
+
+    it(`rejects ${bankId} when required field "${String(spec.required[0])}" is missing`, () => {
+      const missingField = spec.required[0];
+      const config = createBaseConfig({
+        banks: {
+          [bankId]: {
+            ...fakeBankConfigMissingField(bankId, missingField),
+            targets: [E2E_TARGET],
           },
         },
       });
-      const configPath = writeTempConfig('no-creds', config);
+      const configPath = writeTempConfig(`no-creds-${bankId}`, config);
       temp.track(configPath);
 
       const result = runImporterDocker({ configPath });
 
       expect(result.exitCode).toBeGreaterThan(0);
       expect(result.output).toContain('requires');
-      expect(result.output).toContain('Discount');
+      expect(result.output).toContain(spec.displayName);
+      expect(result.output).toContain(String(missingField));
     });
   });
 });

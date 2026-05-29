@@ -5,8 +5,12 @@ import type { IBankConfig } from '../Types/Index.js';
 /**
  * Builds scraper credentials for a bank.
  * When otpRetriever is provided, it is included in the credentials for
- * banks that read otpCodeRetriever from credentials (e.g. oneZero), and
- * is also passed via ScraperOptions for banks that use OtpHandler (e.g. beinleumi).
+ * banks that read otpCodeRetriever from credentials (e.g. oneZero, pepper,
+ * payBox), and is also passed via ScraperOptions for banks that use
+ * OtpHandler (e.g. beinleumi).
+ * The otpLongTermToken branch covers the API-direct banks (oneZero, pepper,
+ * payBox) and includes phoneNumber when available so pepper/payBox session
+ * resumption works.
  * @param bankConfig - The IBankConfig containing login credentials for the bank.
  * @param otpRetriever - Optional async function that returns an OTP code on demand.
  * @returns ScraperCredentials object ready for use with the israeli-bank-scrapers library.
@@ -17,7 +21,11 @@ export default function buildCredentials(
   const { id: bankId, password, num, username, userCode, nationalID,
     card6Digits, email, phoneNumber, otpLongTermToken } = bankConfig;
   if (otpLongTermToken) {
-    return { email: email ?? '', password: password ?? '', otpLongTermToken };
+    return {
+      email: email ?? '', password: password ?? '',
+      ...(phoneNumber ? { phoneNumber } : {}),
+      otpLongTermToken,
+    };
   }
   return {
     id: bankId, password, num, username, userCode, nationalID,

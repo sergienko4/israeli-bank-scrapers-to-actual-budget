@@ -236,5 +236,5 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.DOCKER_IMAGE }}
-          short-description: "Import transactions from 18 Israeli banks and credit cards into Actual Budget. Docker, TypeScript, Telegram bot."
+          short-description: "Import transactions from 19 Israeli banks and credit cards into Actual Budget. Docker, TypeScript, Telegram bot."
           readme-filepath: ./README.docker-hub.md

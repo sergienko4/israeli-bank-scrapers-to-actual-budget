@@ -12,7 +12,6 @@
 | Mizrahi Tefahot | [banks/mizrahi.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/mizrahi.md) |
 | Mercantile | [banks/mercantile.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/mercantile.md) |
 | Otsar Hahayal | [banks/otsarHahayal.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/otsarHahayal.md) |
-| Union | [banks/union.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/union.md) |
 | Beinleumi | [banks/beinleumi.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/beinleumi.md) |
 | Massad | [banks/massad.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/massad.md) |
 | Yahav | [banks/yahav.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/yahav.md) |
@@ -24,5 +23,7 @@
 | Max (Leumi Card) | [banks/max.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/max.md) |
 | Isracard | [banks/isracard.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/isracard.md) |
 | Amex | [banks/amex.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/amex.md) |
+| PayBox (by Discount Bank) | [banks/paybox.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md) |
+| Pepper (by Bank Leumi) | [banks/pepper.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md) |
 
 For an overview of the common bank-config shape (`twoFactorAuth`, `daysBack`, `targets`, ...), see [banks/index.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) and [configuration/banks.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md).

@@ -1,6 +1,6 @@
 # Supported Banks
 
-Eighteen Israeli financial institutions are supported — major banks and credit cards.
+Nineteen Israeli financial institutions are supported — major banks and credit cards.
 
 | # | Institution | Config key | Login fields | 2FA / OTP |
 |---|-------------|-----------|--------------|-----------|
@@ -10,18 +10,19 @@ Eighteen Israeli financial institutions are supported — major banks and credit
 | 4 | Mizrahi Tefahot | [`mizrahi`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/mizrahi.md) | username, password | optional |
 | 5 | Mercantile | [`mercantile`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/mercantile.md) | id, password, num | optional |
 | 6 | Otsar Hahayal | [`otsarHahayal`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/otsarHahayal.md) | username, password | optional |
-| 7 | Union | [`union`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/union.md) | username, password | optional |
-| 8 | Beinleumi | [`beinleumi`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/beinleumi.md) | username, password | optional |
-| 9 | Massad | [`massad`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/massad.md) | username, password | optional |
-| 10 | Yahav | [`yahav`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/yahav.md) | username, nationalID, password | optional |
-| 11 | Beyahad Bishvilha | [`beyahadBishvilha`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/beyahadBishvilha.md) | id, password | optional |
-| 12 | Behatsdaa | [`behatsdaa`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/behatsdaa.md) | id, password | optional |
-| 13 | Pagi | [`pagi`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pagi.md) | username, password | optional |
-| 14 | One Zero | [`oneZero`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/oneZero.md) | email, password, phoneNumber | **required** |
-| 15 | Visa Cal | [`visaCal`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/visaCal.md) | username, password | optional |
-| 16 | Max (Leumi Card) | [`max`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/max.md) | username, password, id | optional |
-| 17 | Isracard | [`isracard`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/isracard.md) | id, card6Digits, password | optional |
-| 18 | Amex | [`amex`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/amex.md) | id, card6Digits, password | optional |
+| 7 | Beinleumi | [`beinleumi`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/beinleumi.md) | username, password | optional |
+| 8 | Massad | [`massad`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/massad.md) | username, password | optional |
+| 9 | Yahav | [`yahav`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/yahav.md) | username, nationalID, password | optional |
+| 10 | Beyahad Bishvilha | [`beyahadBishvilha`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/beyahadBishvilha.md) | id, password | optional |
+| 11 | Behatsdaa | [`behatsdaa`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/behatsdaa.md) | id, password | optional |
+| 12 | Pagi | [`pagi`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pagi.md) | username, password | optional |
+| 13 | One Zero | [`oneZero`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/oneZero.md) | email, password, phoneNumber | **required** |
+| 14 | Visa Cal | [`visaCal`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/visaCal.md) | username, password | optional |
+| 15 | Max (Leumi Card) | [`max`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/max.md) | username, password, id | optional |
+| 16 | Isracard | [`isracard`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/isracard.md) | id, card6Digits, password | optional |
+| 17 | Amex | [`amex`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/amex.md) | id, card6Digits, password | optional |
+| 18 | PayBox (by Discount Bank) | [`paybox`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md) | phoneNumber | **required** |
+| 19 | Pepper (by Bank Leumi) | [`pepper`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md) | phoneNumber, password | **required** |
 
 Use the **Config key** as the bank name in your `config.json`.
 
@@ -49,7 +50,7 @@ Full reference: [Bank options](https://github.com/sergienko4/israeli-bank-scrape
 
 Any bank with an SMS verification screen supports `twoFactorAuth: true`. The Telegram bot prompts for the code. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
-**One Zero is special** — 2FA is required on every login, but you can capture an `otpLongTermToken` after the first successful run to skip it thereafter.
+**OneZero, PayBox, and Pepper are API-direct banks** — 2FA is required on every login, but you can capture an `otpLongTermToken` after the first successful run to skip it thereafter.
 
 ## Security tips
 

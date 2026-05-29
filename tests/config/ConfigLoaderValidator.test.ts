@@ -7,9 +7,19 @@ import {
   validateProxy,
   isValidUUID,
   validateBank,
+  CREDENTIAL_SPECS,
 } from '../../src/Config/ConfigLoaderValidator.js';
 import { isFail } from '../../src/Types/ProcedureHelpers.js';
-import { fakeUuid, fakeImporterConfig, fakeBankConfig, fakeBankTarget } from '../helpers/factories.js';
+import {
+  fakeUuid,
+  fakeImporterConfig,
+  fakeBankConfig,
+  fakeBankTarget,
+  fakeValidBankConfigFor,
+  fakeBankConfigMissingField,
+  BANK_SPEC_CASES,
+  BANK_MISSING_FIELD_CASES,
+} from '../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
 const VALID_UUID = fakeUuid();
@@ -230,16 +240,6 @@ describe('validateBank', () => {
     expect(isFail(result) && result.message).toContain('Invalid actualAccountId format');
   });
 
-  it('throws when required Discount credentials are missing', () => {
-    const config = fakeBankConfig({
-      id: '', num: '', daysBack: 7, startDate: undefined,
-      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
-    });
-    const result = validateBank('discount', config);
-    expect(result.success).toBe(false);
-    expect(isFail(result) && result.message).toContain('Discount bank requires');
-  });
-
   it('throws when startDate is in the future', () => {
     const future = new Date();
     future.setFullYear(future.getFullYear() + 1);
@@ -255,16 +255,6 @@ describe('validateBank', () => {
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
     expect(isFail(result) && result.message).toContain('startDate too old');
-  });
-
-  it('does not throw for a valid bank config', () => {
-    const config = fakeBankConfig({
-      id: '123', password: TEST_CREDENTIAL_SHORT, num: 'ABC',
-      daysBack: 7, startDate: undefined,
-      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
-    });
-    const result = validateBank('discount', config);
-    expect(result.success).toBe(true);
   });
 
   it('does not throw for an unknown bank (no credential spec)', () => {
@@ -302,4 +292,31 @@ describe('validateBank', () => {
     expect(result.success).toBe(false);
     expect(isFail(result) && result.message).toContain('Invalid email format');
   });
+
+  // Spec-driven cross-bank credential coverage. Replaces hand-rolled per-bank
+  // cases — adding a bank to CREDENTIAL_SPECS automatically extends coverage.
+  it.each(BANK_SPEC_CASES)(
+    'accepts a valid $bankId config built from CREDENTIAL_SPECS',
+    ({ bankId }) => {
+      const config = fakeValidBankConfigFor(bankId, {
+        targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+      });
+      const result = validateBank(bankId, config);
+      expect(result.success).toBe(true);
+    },
+  );
+
+  it.each(BANK_MISSING_FIELD_CASES)(
+    'rejects $bankId when required field $field is missing',
+    ({ bankId, field }) => {
+      const config = {
+        ...fakeBankConfigMissingField(bankId, field),
+        targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+      };
+      const result = validateBank(bankId, config);
+      expect(result.success).toBe(false);
+      const spec = CREDENTIAL_SPECS[bankId];
+      expect(isFail(result) && result.message).toContain(`${spec.displayName} requires: ${spec.label}`);
+    },
+  );
 });
