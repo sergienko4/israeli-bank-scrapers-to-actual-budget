@@ -137,10 +137,29 @@ jobs:
           load: 'false'
           cache-suffix: release
 
+      - name: Settle wait before Docker Hub push
+        # 30 s pause between back-to-back multi-arch pushes to two different
+        # registries. Gives Docker Hub's edge proxy time to reset any
+        # per-account rate-limit / abuse-detection window opened by the GHCR
+        # push above. Combined with provenance:false + sbom:false on the
+        # Docker Hub leg below, this reduces the burst pattern that
+        # triggered HAProxy 400 BadReq on v1.38.1 attempts.
+        run: sleep 30
+
       # Docker Hub is the secondary, BEST-EFFORT target. Failure here does NOT
       # fail the release — users can pull from GHCR. The second build reuses
       # the `release` GHA cache scope from the GHCR push above, so this is
       # effectively a re-push of cached layers.
+      #
+      # provenance: false + sbom: false drop the SLSA provenance and SBOM
+      # attestation manifests on this leg only. Each attestation is a
+      # separate OCI manifest + blob upload per platform; disabling both
+      # eliminates ~40% + ~10% of the HTTP transactions to Docker Hub's
+      # edge proxy, drastically reducing the burst pattern that triggered
+      # HAProxy 400 BadReq. GHCR retains full mode=max provenance + SBOM
+      # (see Push to GHCR step above). The repo-level SBOM attached to the
+      # GitHub release via anchore/sbom-action is unaffected (sourced from
+      # the GHCR image after this step).
       - name: Push to Docker Hub (best-effort)
         id: push_dockerhub
         continue-on-error: true
@@ -152,6 +171,8 @@ jobs:
           push: 'true'
           load: 'false'
           cache-suffix: release
+          provenance: 'false'
+          sbom: 'false'
 
       - name: Warn if Docker Hub push failed
         if: steps.push_dockerhub.outcome == 'failure'
