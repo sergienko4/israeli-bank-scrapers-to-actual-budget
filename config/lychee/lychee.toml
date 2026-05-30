@@ -23,6 +23,9 @@ exclude = [
   # when checked from a feature branch. They are validated post-merge.
   "https://github\\.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/",
   "https://github\\.com/sergienko4/israeli-bank-scrapers-to-actual-budget/tree/main/",
+  # GHCR package page is created lazily by GitHub the first time a release
+  # workflow pushes the image. Until then it 404s; afterwards it's stable.
+  "https://github\\.com/sergienko4/israeli-bank-scrapers-to-actual-budget/pkgs/container/",
 ]
 
 # Files/directories to skip scanning (these are source paths, not URLs)

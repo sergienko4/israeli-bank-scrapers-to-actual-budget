@@ -39,6 +39,11 @@ docker run --rm --cap-add SYS_ADMIN \
 
 The container entrypoint is `node dist/Index.js`.
 
+> **Tip:** Images are also published to GitHub Container Registry at
+> `ghcr.io/sergienko4/israeli-bank-importer`. GHCR is the primary release
+> target and is always in sync; this Docker Hub repository is a best-effort
+> mirror that may occasionally lag behind during registry incidents.
+
 ---
 
 ## Supported Tags

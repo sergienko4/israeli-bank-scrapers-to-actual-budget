@@ -14,7 +14,7 @@ const CONFIG = {
     repo: 'israeli-bank-scrapers-to-actual-budget',
     license: 'MIT',
   },
-  docker: { image: 'sergienko4/israeli-bank-importer', platforms_release: ['linux/amd64'] },
+  docker: { image: 'sergienko4/israeli-bank-importer', ghcr_image: 'ghcr.io/sergienko4/israeli-bank-importer', platforms_release: ['linux/amd64'] },
   badges: {
     pr_pipeline: 'https://example.com/pr.svg',
     release: 'https://example.com/release.svg',
@@ -121,5 +121,15 @@ describe('render-readme-meta', () => {
     expect(() => renderFile(input, ['badges', 'tech-stack'], CONFIG, PKG, 'nested.md')).toThrow(
       /nested :start marker/,
     );
+  });
+
+  it('renders docker-image marker with both GHCR (primary) and Docker Hub (mirror) pulls', () => {
+    const input = '<!-- meta:docker-image:start -->\nOLD\n<!-- meta:docker-image:end -->\n';
+    const out = renderFile(input, ['docker-image'], CONFIG, PKG, 'test.md');
+    expect(out).toContain('docker pull ghcr.io/sergienko4/israeli-bank-importer:latest');
+    expect(out).toContain('docker pull sergienko4/israeli-bank-importer:latest');
+    expect(out).toContain('GHCR (primary, always available)');
+    expect(out).toContain('Docker Hub (mirror, best-effort)');
+    expect(out).not.toContain('\nOLD\n');
   });
 });

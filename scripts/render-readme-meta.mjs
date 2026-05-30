@@ -155,15 +155,29 @@ function renderTechStack(config, pkg) {
 
 function renderDockerImage(config) {
   const image = config.docker.image;
-  return [
+  const ghcrImage = config.docker.ghcr_image;
+  const lines = [
+    'Images are published to two registries (multi-arch: `linux/amd64`, `linux/arm64`).',
+    '',
+    '**GHCR (primary, always available):**',
+    '',
+    '```bash',
+    `docker pull ${ghcrImage}:latest`,
+    '# or pin a specific version',
+    `docker pull ${ghcrImage}:v1.x.x`,
+    '```',
+    '',
+    '**Docker Hub (mirror, best-effort):**',
+    '',
     '```bash',
     `docker pull ${image}:latest`,
-    `# or pin a specific version`,
+    '# or pin a specific version',
     `docker pull ${image}:v1.x.x`,
     '```',
     '',
-    `See available tags on [Docker Hub](https://hub.docker.com/r/${image}/tags).`,
-  ].join('\n');
+    `See available tags on [GHCR](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/pkgs/container/israeli-bank-importer) or [Docker Hub](https://hub.docker.com/r/${image}/tags).`,
+  ];
+  return lines.join('\n');
 }
 
 function renderDockerHubTags(config) {
