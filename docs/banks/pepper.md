@@ -15,7 +15,7 @@ first successful run that lets you skip OTP on subsequent runs.
 
 | Field | Description |
 |-------|-------------|
-| `phoneNumber` | Phone number registered with Pepper in international form (e.g. `+972501234567`). |
+| `phoneNumber` | Phone number registered with Pepper. Both digits-only (`972501234567`) and `+`-prefixed (`+972501234567`) are accepted; the importer normalises to canonical digits-only `972XXXXXXXXX` before talking to the bank. Local `0XXXXXXXXX` form is also normalised. |
 | `password` | Your Pepper app login password. |
 
 ## Sample config
@@ -23,7 +23,7 @@ first successful run that lets you skip OTP on subsequent runs.
 ```json
 {
   "pepper": {
-    "phoneNumber": "your_phoneNumber",
+    "phoneNumber": "972501234567",
     "password": "your_password",
     "twoFactorAuth": true,
     "twoFactorTimeout": 300,
@@ -53,6 +53,8 @@ For automated SMS forwarding, see [OTP auto-forward](https://github.com/sergienk
 - `twoFactorAuth: true` is **always required** on first login.
 - Pepper uses the API-direct path — there is no browser session, so `clearSession` and Camoufox-related settings have no effect.
 - The `phoneNumber` must be the one registered with Pepper; the bank rejects unknown numbers with an authentication error.
+- Leave `otpLongTermToken` as an **empty string** on first login. Do **not** insert placeholder text — the importer treats any non-empty value as a warm-start token; if it is invalid, the upstream library falls back to a cold (OTP) login, which the importer now correctly handles by always attaching the OTP retriever.
+- Production crash signature `envelope selector miss: smsAssertionId at /data/control_flow/0/methods/*channels/?type=sms/assertion_id` indicates the auth response did **not** include the SMS channel. Two likely causes: (a) the `phoneNumber` was sent in an unsupported form (now fixed by normalisation at the credential boundary), or (b) the `password` is wrong — Pepper omits SMS from the available factors when uid/password is malformed.
 
 ## See also
 

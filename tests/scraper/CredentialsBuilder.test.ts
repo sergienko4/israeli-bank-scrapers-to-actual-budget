@@ -22,7 +22,7 @@ describe('buildCredentials', () => {
       const creds = buildCredentials(emailBank, retriever) as Record<string, unknown>;
       expect(creds.otpCodeRetriever).toBe(retriever);
       expect(creds.email).toBe('user@example.com');
-      expect(creds.phoneNumber).toBe('+972501234567');
+      expect(creds.phoneNumber).toBe('972501234567');
     });
   });
 
@@ -45,16 +45,16 @@ describe('buildCredentials', () => {
       const creds = buildCredentials(config) as Record<string, unknown>;
       expect(creds.otpLongTermToken).toBe('tok123');
       expect(creds.email).toBe('user@example.com');
-      expect(creds.phoneNumber).toBe('+972501234567');
+      expect(creds.phoneNumber).toBe('972501234567');
       expect(creds.id).toBeUndefined();
     });
 
-    it('takes precedence over otpRetriever — token path skips retriever', () => {
+    it('attaches otpCodeRetriever in warm-start branch so cold-fallback works', () => {
       const retriever = vi.fn();
       const config = { ...emailBank, otpLongTermToken: 'tok123' } as IBankConfig;
       const creds = buildCredentials(config, retriever) as Record<string, unknown>;
       expect(creds.otpLongTermToken).toBe('tok123');
-      expect(creds.otpCodeRetriever).toBeUndefined();
+      expect(creds.otpCodeRetriever).toBe(retriever);
     });
 
     it('defaults email to empty string when email is undefined', () => {
@@ -81,7 +81,7 @@ describe('buildCredentials', () => {
       } as IBankConfig;
       const creds = buildCredentials(config) as Record<string, unknown>;
       expect(creds.otpLongTermToken).toBe('paybox-tok');
-      expect(creds.phoneNumber).toBe('+972500000000');
+      expect(creds.phoneNumber).toBe('972500000000');
       expect(creds.password).toBe('');
     });
 
@@ -92,8 +92,48 @@ describe('buildCredentials', () => {
       } as IBankConfig;
       const creds = buildCredentials(config) as Record<string, unknown>;
       expect(creds.otpLongTermToken).toBe('pepper-tok');
-      expect(creds.phoneNumber).toBe('+972500000001');
+      expect(creds.phoneNumber).toBe('972500000001');
       expect(creds.password).toBe(TEST_CREDENTIAL);
+    });
+  });
+
+  describe('phoneNumber normalisation', () => {
+    it('TC-CREDS-001 — coerces +972 paybox phone to canonical', () => {
+      const config = { phoneNumber: '+972542155100' } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds.phoneNumber).toBe('972542155100');
+    });
+
+    it('TC-CREDS-002 — coerces dashed pepper phone + keeps password', () => {
+      const config = {
+        phoneNumber: '972-52-1234567', password: TEST_CREDENTIAL
+      } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds.phoneNumber).toBe('972521234567');
+      expect(creds.password).toBe(TEST_CREDENTIAL);
+    });
+
+    it('TC-CREDS-003 — leaves config without phoneNumber untouched', () => {
+      const creds = buildCredentials(idBank) as Record<string, unknown>;
+      expect(creds.phoneNumber).toBeUndefined();
+    });
+
+    it('TC-CREDS-004 — forwards stripped candidate on normalisation failure', () => {
+      const config = { id: 'paybox-x', phoneNumber: 'bogus' } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds.phoneNumber).toBe('bogus');
+    });
+
+    it('TC-CREDS-004b — strips +/dashes even on normalisation failure', () => {
+      const config = { id: 'paybox-x', phoneNumber: '+972-extra-99' } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds.phoneNumber).toBe('972extra99');
+    });
+
+    it('coerces leading-zero Israeli local form to canonical', () => {
+      const config = { phoneNumber: '0521234567' } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds.phoneNumber).toBe('972521234567');
     });
   });
 });

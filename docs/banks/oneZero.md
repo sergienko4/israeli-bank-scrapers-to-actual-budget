@@ -12,7 +12,7 @@
 |-------|-------------|
 | `email` | The email address registered with the bank. |
 | `password` | Your internet-banking password. |
-| `phoneNumber` | Phone number registered for SMS OTP (e.g. `+972501234567`). |
+| `phoneNumber` | Phone number registered for SMS OTP. Both digits-only (`972501234567`) and `+`-prefixed (`+972501234567`) are accepted; the importer normalises to canonical digits-only `972XXXXXXXXX` before talking to the bank. Local `0XXXXXXXXX` form is also normalised. |
 
 ## Sample config
 

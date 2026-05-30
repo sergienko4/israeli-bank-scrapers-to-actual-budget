@@ -11,6 +11,7 @@ import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeSt
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
+import TwoFactorService from '../../../src/Services/TwoFactorService.js';
 import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
 
@@ -32,9 +33,9 @@ vi.mock('../../../src/Scraper/CredentialsBuilder.js', () => ({
 }));
 
 vi.mock('../../../src/Services/TwoFactorService.js', () => ({
-  default: vi.fn(() => ({
-    createOtpRetriever: vi.fn(() => async () => '123456'),
-  })),
+  default: vi.fn(function TwoFactorMock() {
+    return { createOtpRetriever: vi.fn(() => async () => '123456') };
+  }),
 }));
 
 const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -167,5 +168,20 @@ describe('LiveScrapeStrategy', () => {
     expect(result.status).toBe('unknown-bank');
     expect(retryStrategy.execute).not.toHaveBeenCalled();
     expect(noRetryStrategy.execute).not.toHaveBeenCalled();
+  });
+
+  it('attaches OTP retriever even when otpLongTermToken is set (cold-fallback)', async () => {
+    mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
+    const telegramNotifier = { sendMessage: vi.fn() } as never;
+    const strategy = new LiveScrapeStrategy({
+      config: fakeImporterConfig(),
+      retryStrategy, noRetryStrategy, timeoutWrapper,
+      telegramNotifier,
+      notificationService: notificationService as never,
+    });
+    await strategy.scrape(makeOpts({
+      twoFactorAuth: true, otpLongTermToken: 'placeholder-not-a-jwt',
+    }));
+    expect(vi.mocked(TwoFactorService)).toHaveBeenCalled();
   });
 });

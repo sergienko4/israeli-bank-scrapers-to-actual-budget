@@ -321,16 +321,16 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
 
   /**
    * Determines whether a Telegram OTP retriever is needed for this bank.
+   * The retriever is attached whenever 2FA + Telegram are configured —
+   * upstream's `classifyLoginKind` owns the warm/cold decision, and the
+   * cold-path fallback requires `otpCodeRetriever` to be present even
+   * when `otpLongTermToken` is set (placeholder or stale token cases).
    * @param bankConfig - Bank configuration whose twoFactorAuth flag is read.
    * @param hasTelegram - True when a Telegram notifier is configured.
-   * @returns True when 2FA + Telegram is configured and no long-term token is stored.
+   * @returns True when 2FA + Telegram is configured.
    */
   private static needsOtpRetriever(bankConfig: IBankConfig, hasTelegram: boolean): boolean {
-    return Boolean(
-      bankConfig.twoFactorAuth
-      && !bankConfig.otpLongTermToken
-      && hasTelegram,
-    );
+    return Boolean(bankConfig.twoFactorAuth && hasTelegram);
   }
 
   /**
