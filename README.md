@@ -148,6 +148,8 @@ Full bot setup, commands, and OCR receipt import: [Telegram docs](https://sergie
 <summary><b>Docker run (single container)</b></summary>
 
 ```bash
+docker pull ghcr.io/sergienko4/israeli-bank-importer
+# or
 docker pull sergienko4/israeli-bank-importer
 
 docker run --rm --cap-add SYS_ADMIN \
@@ -158,7 +160,7 @@ docker run --rm --cap-add SYS_ADMIN \
   -v $(pwd)/logs:/app/logs \
   -e TZ=Asia/Jerusalem \
   -e SCHEDULE="0 */8 * * *" \
-  sergienko4/israeli-bank-importer
+  ghcr.io/sergienko4/israeli-bank-importer
 ```
 
 The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker run guide](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/deployment/docker-run/).
@@ -183,17 +185,29 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 <summary><b>Docker image</b></summary>
 
 <!-- meta:docker-image:start -->
+Images are published to two registries (multi-arch: `linux/amd64`, `linux/arm64`).
+
+**GHCR (primary, always available):**
+
+```bash
+docker pull ghcr.io/sergienko4/israeli-bank-importer:latest
+# or pin a specific version
+docker pull ghcr.io/sergienko4/israeli-bank-importer:v1.x.x
+```
+
+**Docker Hub (mirror, best-effort):**
+
 ```bash
 docker pull sergienko4/israeli-bank-importer:latest
 # or pin a specific version
 docker pull sergienko4/israeli-bank-importer:v1.x.x
 ```
 
-See available tags on [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer/tags).
+See available tags on [GHCR](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/pkgs/container/israeli-bank-importer) or [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer/tags).
 <!-- meta:docker-image:end -->
 
 Multi-arch images (`linux/amd64`, `linux/arm64`) are published per release.
-See [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer).
+GHCR is the primary publish target and is always in sync with releases; Docker Hub is a best-effort mirror that may occasionally lag behind during registry incidents.
 
 </details>
 

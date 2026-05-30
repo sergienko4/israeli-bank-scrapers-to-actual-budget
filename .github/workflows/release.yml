@@ -17,6 +17,7 @@ permissions:
 
 env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
+  GHCR_IMAGE: ghcr.io/sergienko4/israeli-bank-importer
 
 jobs:
   release:
@@ -26,6 +27,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
+          # For workflow_dispatch, checkout the requested tag (not the default
+          # branch) so we build the historical commit, preserving release
+          # provenance. For tag-push events, github.ref already points at the
+          # tag so leaving ref unset (default) is correct.
+          ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Determine tag
@@ -65,8 +71,22 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (GHCR)
+        id: meta_ghcr
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.GHCR_IMAGE }}
+          tags: ${{ steps.tag.outputs.version }}
+
+      - name: Extract metadata (Docker Hub)
+        id: meta_dockerhub
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.DOCKER_IMAGE }}
@@ -98,20 +118,48 @@ jobs:
               console.log('Scraper API smoke test passed');
             "
 
-      - name: Build and push Docker image
+      # GHCR is the primary, REQUIRED publish target. GitHub-internal network
+      # avoids the Docker Hub edge proxy 400 errors that have made Docker Hub
+      # pushes flaky for this image (~2.7GB, large Camoufox layer).
+      - name: Push to GHCR (primary)
+        id: push_ghcr
         uses: ./.github/actions/docker/build-image
         with:
-          tag: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tag: ${{ steps.meta_ghcr.outputs.tags }}
+          labels: ${{ steps.meta_ghcr.outputs.labels }}
           platforms: linux/amd64,linux/arm64
           push: 'true'
           load: 'false'
           cache-suffix: release
 
+      # Docker Hub is the secondary, BEST-EFFORT target. Failure here does NOT
+      # fail the release — users can pull from GHCR. The second build reuses
+      # the `release` GHA cache scope from the GHCR push above, so this is
+      # effectively a re-push of cached layers.
+      - name: Push to Docker Hub (best-effort)
+        id: push_dockerhub
+        continue-on-error: true
+        uses: ./.github/actions/docker/build-image
+        with:
+          tag: ${{ steps.meta_dockerhub.outputs.tags }}
+          labels: ${{ steps.meta_dockerhub.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          push: 'true'
+          load: 'false'
+          cache-suffix: release
+
+      - name: Warn if Docker Hub push failed
+        if: steps.push_dockerhub.outcome == 'failure'
+        run: |
+          echo "::warning::Docker Hub push failed for ${{ steps.tag.outputs.version }} — image is published only to GHCR (${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.version }})"
+
       - name: Generate SBOM
+        # Generate SBOM from the GHCR image (always available since GHCR push
+        # is required). Anchore pulls the image to scan it; using GHCR avoids
+        # any Docker Hub dependency in the SBOM path.
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.DOCKER_IMAGE }}:${{ steps.tag.outputs.version }}
+          image: ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.version }}
           output-file: sbom.spdx.json
           artifact-name: sbom-${{ steps.tag.outputs.version }}.spdx.json
 
@@ -137,6 +185,16 @@ jobs:
 
           {
             echo "## Docker"
+            echo ""
+            echo 'Multi-arch images (`linux/amd64`, `linux/arm64`) are published to two registries:'
+            echo ""
+            echo "**GHCR (primary, always available):**"
+            echo ""
+            echo '```bash'
+            echo "docker pull ghcr.io/sergienko4/israeli-bank-importer:${VERSION}"
+            echo '```'
+            echo ""
+            echo "**Docker Hub (mirror, best-effort):**"
             echo ""
             echo '```bash'
             echo "docker pull sergienko4/israeli-bank-importer:${VERSION}"
@@ -176,7 +234,7 @@ jobs:
             echo "  -v /path/to/config.json:/app/config.json:ro \\"
             echo "  -e SCHEDULE=\"0 9 * * *\" \\"
             echo "  -e TZ=Asia/Jerusalem \\"
-            echo "  sergienko4/israeli-bank-importer:${VERSION}"
+            echo "  ghcr.io/sergienko4/israeli-bank-importer:${VERSION}"
             echo '```'
             echo ""
 
@@ -185,7 +243,7 @@ jobs:
             echo '```yaml'
             echo "services:"
             echo "  israeli-bank-importer:"
-            echo "    image: sergienko4/israeli-bank-importer:${VERSION}"
+            echo "    image: ghcr.io/sergienko4/israeli-bank-importer:${VERSION}"
             echo "    restart: always"
             echo "    cap_add:"
             echo "      - SYS_ADMIN"
@@ -212,7 +270,7 @@ jobs:
             echo "---"
             echo ""
 
-            echo "**Docs:** [README](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget) | [Supported Banks](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) | [Deployment Guide](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/DEPLOYMENT.md) | [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer)"
+            echo "**Docs:** [README](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget) | [Supported Banks](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/BANKS.md) | [Deployment Guide](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/DEPLOYMENT.md) | [GHCR](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/pkgs/container/israeli-bank-importer) | [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer)"
             echo ""
 
             if [ -n "$COMPARE_URL" ]; then
@@ -231,6 +289,12 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Update Docker Hub description
+        # Only attempt when the Docker Hub push itself succeeded — if the
+        # registry is rejecting us, no point updating the description.
+        # Marked best-effort so a Docker Hub API hiccup doesn't fail a
+        # release whose images already published successfully.
+        if: steps.push_dockerhub.outcome == 'success'
+        continue-on-error: true
         uses: peter-evans/dockerhub-description@v5
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
