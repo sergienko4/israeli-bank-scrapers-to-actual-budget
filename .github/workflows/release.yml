@@ -34,6 +34,34 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
+      # When republishing an old tag via workflow_dispatch, actions/checkout
+      # above rewinds the worktree to that tag — which may pre-date changes
+      # to local composite actions in .github/actions/. The active workflow
+      # file (release.yml) is loaded from the workflow run's commit
+      # (github.sha), NOT the checked-out tag, so it can reference inputs
+      # that don't exist in the historical composite. Overlay .github/actions/
+      # from the WORKFLOW COMMIT (github.sha) so the workflow file and the
+      # composite actions it references are guaranteed to be from the same
+      # commit — deterministic even if main advances mid-run. Image content
+      # (Dockerfile, src, deps) is still from the requested tag; only the
+      # CI tooling is refreshed. Step is gated on workflow_dispatch so
+      # tag-push releases (the production path) are completely unaffected.
+      # Grep assertions fail fast if the overlay didn't deliver the expected
+      # composite schema, e.g. if a future refactor renames the inputs.
+      - name: Overlay workflow CI tooling (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TOOLING_SHA: ${{ github.sha }}
+        run: |
+          git cat-file -e "${TOOLING_SHA}^{commit}" 2>/dev/null \
+            || git fetch --depth=1 origin "${TOOLING_SHA}"
+          git checkout "${TOOLING_SHA}" -- .github/actions/
+          grep -qE '^  provenance:' .github/actions/docker/build-image/action.yml \
+            || { echo "::error::Overlay missing 'provenance' input — composite schema unexpected"; exit 1; }
+          grep -qE '^  sbom:' .github/actions/docker/build-image/action.yml \
+            || { echo "::error::Overlay missing 'sbom' input — composite schema unexpected"; exit 1; }
+          echo "::notice::Overlaid .github/actions/ from workflow commit ${TOOLING_SHA}"
+
       - name: Determine tag
         id: tag
         run: |
