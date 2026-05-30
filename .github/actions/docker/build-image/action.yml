@@ -6,7 +6,12 @@ description: |
     2. Restore Camoufox cache (composite)
     3. Set up Buildx
     4. Build (and optionally push) the image
-  Inputs are intentionally small (5 max — see plan §R6).
+  Inputs were originally capped at 5 (see plan §R6); the count grew to 6
+  (labels) and now to 8 (provenance, sbom). The two attestation knobs are
+  required for the release.yml Docker Hub leg to disable SLSA provenance +
+  SBOM attestations, halving the push burst that triggers HAProxy 400 from
+  Docker Hub's edge proxy. All defaults preserve existing call-site
+  behavior (empty string = pass-through to build-push-action@v7 default).
 
 inputs:
   tag:
@@ -27,6 +32,22 @@ inputs:
   labels:
     description: Optional OCI labels (multi-line string, as emitted by docker/metadata-action).
     default: ''
+  provenance:
+    description: |
+      SLSA provenance attestation. `false` disables; `mode=min` / `mode=max`
+      enables explicitly. Empty string keeps build-push-action@v7's default
+      (mode=max on multi-platform builds, mode=min otherwise). The release
+      workflow's Docker Hub leg sets this to `false` to reduce edge-proxy
+      push burst that triggers HAProxy 400 BadReq on this account.
+    default: ''
+  sbom:
+    description: |
+      SBOM attestation embedded in the image index. `false` disables.
+      Empty string keeps build-push-action@v7's default. The repo-level
+      SBOM attached to the GitHub release via `anchore/sbom-action` is
+      independent of this input. The release workflow's Docker Hub leg
+      sets this to `false` to reduce edge-proxy push burst.
+    default: ''
 
 runs:
   using: composite
@@ -44,6 +65,8 @@ runs:
         platforms: ${{ inputs.platforms }}
         tags: ${{ inputs.tag }}
         labels: ${{ inputs.labels }}
+        provenance: ${{ inputs.provenance }}
+        sbom: ${{ inputs.sbom }}
         build-args: |
           SKIP_BROWSER_FETCH=true
           APT_CACHE_BUST=${{ github.run_id }}
