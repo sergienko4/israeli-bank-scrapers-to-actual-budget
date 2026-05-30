@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.38.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.0...v1.38.1) (2026-05-30)
+
+
+### Fixed
+
+* **banks:** normalise phoneNumber and always attach OTP retriever ([#395](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/395)) ([4f0bb4d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/4f0bb4dc79a3dda74e57605e88bfa58e11884ae2))
+
 ## [1.38.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.37.18...v1.38.0) (2026-05-29)
 
 
