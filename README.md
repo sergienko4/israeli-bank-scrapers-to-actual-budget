@@ -207,7 +207,13 @@ See available tags on [GHCR](https://github.com/sergienko4/israeli-bank-scrapers
 <!-- meta:docker-image:end -->
 
 Multi-arch images (`linux/amd64`, `linux/arm64`) are published per release.
-See [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer).
+GHCR is the canonical publish target and is always in sync with releases; Docker Hub is a best-effort mirror that may lag during registry incidents.
+
+To never miss a release, subscribe to signals that are independent of any Docker registry:
+
+- **GitHub Releases** — [Watch → Custom → Releases](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget) for email + UI notifications.
+- **RSS feed** — [`releases.atom`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/releases.atom).
+- **Auto-updaters** (Watchtower, Diun, etc.) — track `ghcr.io/sergienko4/israeli-bank-importer` for guaranteed updates.
 
 </details>
 

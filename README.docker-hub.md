@@ -57,6 +57,24 @@ Each tagged release ships with a Software Bill of Materials (SBOM) attached to t
 
 ---
 
+## Stay up to date
+
+This Docker Hub repository is a **best-effort mirror** of the canonical GHCR release at `ghcr.io/sergienko4/israeli-bank-importer`. When a Docker Hub mirror push fails (registry incidents, edge-proxy rejects), a tag may temporarily be missing here even though the release has shipped to GHCR and GitHub.
+
+To never miss a release, subscribe to the signals that are **independent of any Docker registry**:
+
+- **GitHub Releases** — [Watch → Custom → Releases](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget) (email + UI notifications on every release).
+- **RSS feed** — [`https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/releases.atom`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/releases.atom).
+- **Auto-updaters (Watchtower, Diun, etc.)** — track `ghcr.io/sergienko4/israeli-bank-importer` for guaranteed updates; Docker Hub backfills on the next successful mirror publish.
+
+When the GitHub release exists but `docker pull sergienko4/israeli-bank-importer:<tag>` returns `manifest unknown`, pull the same tag from GHCR:
+
+```bash
+docker pull ghcr.io/sergienko4/israeli-bank-importer:<tag>
+```
+
+---
+
 ## Environment Variables
 
 | Variable | Default | Description |
