@@ -8,6 +8,7 @@ import type pino from 'pino';
 export const REDACT_PATHS = [
   'password', 'token', 'secret', 'auth', 'creditCard', 'cvv',
   'headers.authorization', '*.password', '*.token',
+  'phoneNumber', '*.phoneNumber',
 ];
 
 /**

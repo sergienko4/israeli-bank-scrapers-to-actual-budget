@@ -445,7 +445,7 @@ const FIELD_VALUE_BUILDERS: Readonly<Record<string, () => string>> = Object.free
   userCode: () => faker.string.alphanumeric(8),
   nationalID: () => faker.string.numeric(9),
   email: () => faker.internet.email(),
-  phoneNumber: () => `+972${faker.string.numeric(9)}`,
+  phoneNumber: () => `972${faker.string.numeric(9)}`,
   card6Digits: () => faker.string.numeric(6),
 });
 

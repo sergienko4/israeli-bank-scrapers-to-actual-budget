@@ -76,7 +76,7 @@
     },
 
     "paybox": {
-      "phoneNumber": "+972501234567",
+      "phoneNumber": "972501234567",
       "twoFactorAuth": true,
       "twoFactorTimeout": 300,
       "otpLongTermToken": "",
@@ -85,7 +85,7 @@
     },
 
     "pepper": {
-      "phoneNumber": "+972501234567",
+      "phoneNumber": "972501234567",
       "password": "your_password",
       "twoFactorAuth": true,
       "twoFactorTimeout": 300,
