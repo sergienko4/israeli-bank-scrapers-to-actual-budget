@@ -207,7 +207,7 @@ See available tags on [GHCR](https://github.com/sergienko4/israeli-bank-scrapers
 <!-- meta:docker-image:end -->
 
 Multi-arch images (`linux/amd64`, `linux/arm64`) are published per release.
-GHCR is the primary publish target and is always in sync with releases; Docker Hub is a best-effort mirror that may occasionally lag behind during registry incidents.
+See [Docker Hub](https://hub.docker.com/r/sergienko4/israeli-bank-importer).
 
 </details>
 

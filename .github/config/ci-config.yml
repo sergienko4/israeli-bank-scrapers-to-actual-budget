@@ -25,6 +25,7 @@ runtime:
 
 docker:
   image: sergienko4/israeli-bank-importer
+  ghcr_image: ghcr.io/sergienko4/israeli-bank-importer
   tag_e2e: e2e
   tag_smoke: smoke-test
   tag_pre_commit: pre-commit
