@@ -66,6 +66,11 @@ jobs:
           fi
 
       - name: Login to Docker Hub
+        # Best-effort: missing/invalid DOCKERHUB_* secrets must NOT fail the
+        # release. The Docker Hub push step is also continue-on-error, so the
+        # release still publishes to GHCR even when Docker Hub auth fails.
+        id: login_dockerhub
+        continue-on-error: true
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -164,6 +169,11 @@ jobs:
           artifact-name: sbom-${{ steps.tag.outputs.version }}.spdx.json
 
       - name: Build enriched release notes
+        env:
+          # Surface the Docker Hub push outcome to the bash script so the
+          # release notes only advertise the Docker Hub URL when the mirror
+          # actually published. Otherwise users get a 404 from `docker pull`.
+          DOCKERHUB_OUTCOME: ${{ steps.push_dockerhub.outcome }}
         run: |
           VERSION="${{ steps.tag.outputs.version }}"
           PREV_TAG=$(git describe --tags --abbrev=0 ${VERSION}^ 2>/dev/null || echo "")
@@ -186,19 +196,29 @@ jobs:
           {
             echo "## Docker"
             echo ""
-            echo 'Multi-arch images (`linux/amd64`, `linux/arm64`) are published to two registries:'
-            echo ""
-            echo "**GHCR (primary, always available):**"
-            echo ""
-            echo '```bash'
-            echo "docker pull ghcr.io/sergienko4/israeli-bank-importer:${VERSION}"
-            echo '```'
-            echo ""
-            echo "**Docker Hub (mirror, best-effort):**"
-            echo ""
-            echo '```bash'
-            echo "docker pull sergienko4/israeli-bank-importer:${VERSION}"
-            echo '```'
+            if [ "$DOCKERHUB_OUTCOME" = "success" ]; then
+              echo 'Multi-arch images (`linux/amd64`, `linux/arm64`) are published to two registries:'
+              echo ""
+              echo "**GHCR (primary, always available):**"
+              echo ""
+              echo '```bash'
+              echo "docker pull ghcr.io/sergienko4/israeli-bank-importer:${VERSION}"
+              echo '```'
+              echo ""
+              echo "**Docker Hub (mirror):**"
+              echo ""
+              echo '```bash'
+              echo "docker pull sergienko4/israeli-bank-importer:${VERSION}"
+              echo '```'
+            else
+              echo 'Multi-arch images (`linux/amd64`, `linux/arm64`) are published to GHCR:'
+              echo ""
+              echo '```bash'
+              echo "docker pull ghcr.io/sergienko4/israeli-bank-importer:${VERSION}"
+              echo '```'
+              echo ""
+              echo "_Docker Hub mirror push did not succeed for this release — pull from GHCR above._"
+            fi
             echo ""
 
             echo "## Commits"
