@@ -46,7 +46,7 @@
     "oneZero": {
       "email": "your@email.com",
       "password": "your_password",
-      "phoneNumber": "+972501234567",
+      "phoneNumber": "972501234567",
       "twoFactorAuth": true,
       "twoFactorTimeout": 300,
       "otpLongTermToken": "",

@@ -34,12 +34,14 @@ RUN_REAL_BANK_TESTS=true
 
 # PayBox (digits-only or +972... form — both normalised)
 PAYBOX_PHONE_NUMBER=972XXXXXXXXX
-PAYBOX_OTP_LONG_TERM=        # leave empty on first login
+# Leave empty on first login
+PAYBOX_OTP_LONG_TERM=
 
 # Pepper
 PEPPER_PHONE_NUMBER=972XXXXXXXXX
 PEPPER_PASSWORD=your-password
-PEPPER_OTP_LONG_TERM=        # leave empty on first login
+# Leave empty on first login
+PEPPER_OTP_LONG_TERM=
 
 # OneZero (regression-only — verifies the normalisation doesn't break it)
 ONEZERO_EMAIL=your@email

@@ -18,6 +18,8 @@ import { readFileSync, existsSync } from 'fs';
 
 /**
  * Loads env vars from a dotenv-style file without overriding existing keys.
+ * Strips trailing inline `#` comments (preserving `#` inside quoted values)
+ * and surrounding single/double quotes from the value.
  * @param path - Filesystem path to the env file (e.g. '.env.e2e' or '.env').
  */
 function loadEnvFile(path: string): void {
@@ -28,9 +30,27 @@ function loadEnvFile(path: string): void {
     const eqIndex = trimmed.indexOf('=');
     if (eqIndex <= 0) continue;
     const key = trimmed.slice(0, eqIndex).trim();
-    const value = trimmed.slice(eqIndex + 1).trim();
+    const value = parseEnvValue(trimmed.slice(eqIndex + 1));
     if (key && !process.env[key]) process.env[key] = value;
   }
+}
+
+/**
+ * Parses a dotenv value: strips quotes, removes trailing inline `#`
+ * comments outside quoted regions, and trims surrounding whitespace.
+ * @param raw - Raw value substring after the `=` sign.
+ * @returns Cleaned value string.
+ */
+function parseEnvValue(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return '';
+  const firstChar = trimmed[0];
+  if ((firstChar === '"' || firstChar === "'") && trimmed.endsWith(firstChar)) {
+    return trimmed.slice(1, -1);
+  }
+  const commentIdx = trimmed.indexOf(' #');
+  const sliced = commentIdx >= 0 ? trimmed.slice(0, commentIdx) : trimmed;
+  return sliced.trim();
 }
 
 loadEnvFile('.env.e2e');

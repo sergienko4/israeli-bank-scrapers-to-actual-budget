@@ -1,8 +1,8 @@
 /**
  * Masks Israeli phone numbers for log output to comply with the
- * PII rule in C:\tmp\guidelines\logging-pii-guidlines.md. Returns
- * `972***LAST3` for inputs that normalise to a canonical Israeli
- * number, or `<masked>` for empty / unparseable inputs.
+ * project PII logging guidelines. Returns `972***LAST3` for inputs
+ * that normalise to a canonical Israeli number, or `<masked>` for
+ * empty / unparseable inputs.
  */
 
 import normalisePhoneNumber from '../Scraper/PhoneNumberNormaliser.js';
