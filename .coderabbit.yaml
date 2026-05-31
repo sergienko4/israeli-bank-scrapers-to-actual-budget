@@ -1,6 +1,5 @@
 language: en-US
 early_access: false
-enable_free_tier: true
 reviews:
   profile: assertive
   request_changes_workflow: false
@@ -52,10 +51,14 @@ reviews:
         - CHANGELOG.md is auto-generated — never edit manually
   auto_review:
     enabled: true
-    auto_incremental_review: true
+    auto_incremental_review: false
     ignore_title_keywords:
       - "chore(main): release"
       - "WIP"
+      - "docs:"
+      - "ci:"
+      - "chore(deps):"
+      - "chore(deps-dev):"
     drafts: false
   finishing_touches:
     docstrings:
