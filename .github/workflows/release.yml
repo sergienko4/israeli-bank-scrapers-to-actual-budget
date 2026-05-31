@@ -165,42 +165,58 @@ jobs:
           load: 'false'
           cache-suffix: release
 
-      - name: Settle wait before Docker Hub push
-        # 30 s pause between back-to-back multi-arch pushes to two different
-        # registries. Gives Docker Hub's edge proxy time to reset any
-        # per-account rate-limit / abuse-detection window opened by the GHCR
-        # push above. Combined with provenance:false + sbom:false on the
-        # Docker Hub leg below, this reduces the burst pattern that
-        # triggered HAProxy 400 BadReq on v1.38.1 attempts.
-        run: sleep 30
-
       # Docker Hub is the secondary, BEST-EFFORT target. Failure here does NOT
-      # fail the release — users can pull from GHCR. The second build reuses
-      # the `release` GHA cache scope from the GHCR push above, so this is
-      # effectively a re-push of cached layers.
+      # fail the release — users can pull from GHCR.
       #
-      # provenance: false + sbom: false drop the SLSA provenance and SBOM
-      # attestation manifests on this leg only. Each attestation is a
-      # separate OCI manifest + blob upload per platform; disabling both
-      # eliminates ~40% + ~10% of the HTTP transactions to Docker Hub's
-      # edge proxy, drastically reducing the burst pattern that triggered
-      # HAProxy 400 BadReq. GHCR retains full mode=max provenance + SBOM
-      # (see Push to GHCR step above). The repo-level SBOM attached to the
-      # GitHub release via anchore/sbom-action is unaffected (sourced from
-      # the GHCR image after this step).
-      - name: Push to Docker Hub (best-effort)
+      # Why regctl instead of a second buildx push:
+      # Docker Hub's HAProxy edge proxy was rejecting BuildKit's multi-arch
+      # parallel layer uploads with `400 Bad request: Your browser sent an
+      # invalid request`, breaking v1.38.1 publish across 4 attempts. BuildKit
+      # finalizes blob uploads with a long `?_state=<base64 token>&digest=...`
+      # query string AND opens multiple concurrent PUT connections per
+      # platform, which together trip Docker Hub's WAF.
+      #
+      # regctl uses a plain, sequential per-blob PUT/PATCH protocol — the
+      # request shape registries have always expected — and reuses the bytes
+      # already on GHCR (no rebuild, no QEMU emulation, no Camoufox download).
+      # Both Docker logins above wrote credentials to ~/.docker/config.json,
+      # which regctl reads natively, so no extra secret plumbing is needed.
+      #
+      # Cross-registry blob mount is not supported by Docker Hub free tier, so
+      # regctl streams the bytes (~2.7 GB multi-arch) from GHCR to DH via the
+      # runner. That's fine — it costs ~2 min and only runs after a successful
+      # GHCR push, so we never burn CI minutes on a failed build.
+      - name: Install regctl
+        # Pinned by version + SHA-256 for supply-chain safety. Direct download
+        # from the official regclient/regclient release avoids depending on a
+        # third-party installer action.
+        env:
+          REGCTL_VERSION: v0.11.5
+          REGCTL_SHA256: c93aa7638749f5aaac1a8e01787321889c78f0101809bb2880343478d0ba0467
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/regctl \
+            "https://github.com/regclient/regclient/releases/download/${REGCTL_VERSION}/regctl-linux-amd64"
+          echo "${REGCTL_SHA256}  /tmp/regctl" | sha256sum -c -
+          install -m 0755 /tmp/regctl /usr/local/bin/regctl
+          rm -f /tmp/regctl
+          regctl version
+
+      - name: Promote image from GHCR to Docker Hub via regctl
         id: push_dockerhub
         continue-on-error: true
-        uses: ./.github/actions/docker/build-image
-        with:
-          tag: ${{ steps.meta_dockerhub.outputs.tags }}
-          labels: ${{ steps.meta_dockerhub.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          push: 'true'
-          load: 'false'
-          cache-suffix: release
-          provenance: 'false'
-          sbom: 'false'
+        # `regctl image copy` preserves the multi-arch manifest list, all
+        # platform manifests, and all referenced blobs. The destination tag on
+        # Docker Hub ends up byte-identical to the GHCR source.
+        run: |
+          set -euo pipefail
+          SRC="${GHCR_IMAGE}:${{ steps.tag.outputs.version }}"
+          DST="${DOCKER_IMAGE}:${{ steps.tag.outputs.version }}"
+          echo "::notice::Promoting ${SRC} → ${DST}"
+          regctl image copy --digest-tags "${SRC}" "${DST}"
+          echo "::group::Verify destination manifest"
+          regctl manifest get "${DST}"
+          echo "::endgroup::"
 
       - name: Warn if Docker Hub push failed
         if: steps.push_dockerhub.outcome == 'failure'
