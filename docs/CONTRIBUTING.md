@@ -67,6 +67,23 @@ All contributors must follow [GUIDELINES.md](https://github.com/sergienko4/israe
    - Markdown lint + link check
 3. Squash merge only
 
+---
+
+## Code Review
+
+This project uses [CodeRabbit](https://coderabbit.ai) for automated PR review. The repository is **MIT-licensed and public**, so it qualifies for the free [CodeRabbit OSS plan](https://coderabbit.ai/oss) which lifts the default free-tier rate limit (1 review per repository per hour).
+
+### Maintainer enrollment
+
+Maintainers should ensure the repository is enrolled in the OSS plan via the [CodeRabbit dashboard](https://app.coderabbit.ai/) — this is a one-time action and removes the rate limit that blocks rapid iteration when fixing review findings.
+
+### Contributor expectations
+
+- CodeRabbit posts a single review when a PR opens. Subsequent pushes do **not** auto-trigger new reviews (config: `auto_incremental_review: false`).
+- After pushing fixes, comment `@coderabbitai review` on the PR to request a re-review.
+- Reviews are skipped for PR titles starting with `chore(main): release`, `WIP`, `docs:`, `ci:`, `chore(deps):`, or `chore(deps-dev):`.
+- Address all actionable CodeRabbit findings before requesting human review. See [`CLAUDE.md`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/CLAUDE.md) for the full review workflow.
+
 ### Commit Message Format
 
 | Prefix | Version Bump | CHANGELOG Section |
