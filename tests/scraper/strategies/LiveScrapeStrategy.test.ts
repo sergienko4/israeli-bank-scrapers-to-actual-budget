@@ -11,7 +11,7 @@ import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeSt
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
-import TwoFactorService from '../../../src/Services/TwoFactorService.js';
+import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
 import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
 
@@ -30,12 +30,6 @@ vi.mock('../../../src/Scraper/ScraperOptionsBuilder.js', () => ({
 
 vi.mock('../../../src/Scraper/CredentialsBuilder.js', () => ({
   default: vi.fn(() => ({ username: 'u', password: TEST_CREDENTIAL_SHORT })),
-}));
-
-vi.mock('../../../src/Services/TwoFactorService.js', () => ({
-  default: vi.fn(function TwoFactorMock() {
-    return { createOtpRetriever: vi.fn(() => async () => '123456') };
-  }),
 }));
 
 const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -74,7 +68,7 @@ function makeStrategy(): LiveScrapeStrategy {
   return new LiveScrapeStrategy({
     config: fakeImporterConfig(),
     retryStrategy, noRetryStrategy, timeoutWrapper,
-    telegramNotifier: null,
+    twoFactorPrompter: null,
     notificationService: notificationService as never,
   });
 }
@@ -172,16 +166,17 @@ describe('LiveScrapeStrategy', () => {
 
   it('attaches OTP retriever even when otpLongTermToken is set (cold-fallback)', async () => {
     mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
-    const telegramNotifier = { sendMessage: vi.fn() } as never;
+    const createOtpRetriever = vi.fn(() => async () => '123456');
+    const twoFactorPrompter: ITwoFactorPrompter = { createOtpRetriever };
     const strategy = new LiveScrapeStrategy({
       config: fakeImporterConfig(),
       retryStrategy, noRetryStrategy, timeoutWrapper,
-      telegramNotifier,
+      twoFactorPrompter,
       notificationService: notificationService as never,
     });
     await strategy.scrape(makeOpts({
       twoFactorAuth: true, otpLongTermToken: 'placeholder-not-a-jwt',
     }));
-    expect(vi.mocked(TwoFactorService)).toHaveBeenCalled();
+    expect(createOtpRetriever).toHaveBeenCalledWith('discount', undefined);
   });
 });

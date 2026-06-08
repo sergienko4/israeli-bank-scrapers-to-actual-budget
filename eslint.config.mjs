@@ -554,6 +554,28 @@ export default tseslint.config(
     },
   },
 
+  // 6c. SCRAPER LAYER — ban `new <IntegrationService>` (PR 1: ITwoFactorPrompter seam)
+  // The Scraper (BP) layer must inject Integration Services via interfaces.
+  // Only the composition root (src/Index.ts) is allowed to instantiate them.
+  // Pipeline already enforces this via section 6's broader PascalCase-new ban.
+  {
+    files: [
+      'src/Scraper/**/*.ts',
+      // Include the canary so it triggers this exact rule:
+      'tests/eslint-canaries/ScraperCannotNewServices.canary.ts',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...RESTRICTED_SYNTAX_RULES,
+        {
+          selector: 'NewExpression[callee.name=/^(TwoFactorService|TelegramNotifier|WebhookNotifier|AccountImporter|ReceiptImportHandler|ReceiptOcrService|MetricsService|TransactionService|ImportMediator|TelegramCommandHandler|TelegramPoller|NotificationService|SpendingWatchService|ReconciliationService|AuditLogService|DryRunCollector)$/]',
+          message: '🚫 LAYER: Scraper code MUST NOT instantiate Integration Services. Inject the interface (e.g. ITwoFactorPrompter) via constructor opts; the composition root in src/Index.ts owns concrete wiring.',
+        },
+      ],
+    },
+  },
+
   // 7. CANARY TEST FILES (applies guardrail rules so canary checks work)
   {
     files: ['tests/eslint-canaries/**/*.ts'],

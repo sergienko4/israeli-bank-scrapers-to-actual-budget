@@ -30,6 +30,7 @@ import { AuditLogService } from './Services/AuditLogService.js';
 import { DryRunCollector } from './Services/DryRunCollector.js';
 import HistoryCategoryResolver from './Services/HistoryCategoryResolver.js';
 import type { ICategoryResolver } from './Services/ICategoryResolver.js';
+import type { ITwoFactorPrompter } from './Services/ITwoFactorPrompter.js';
 import { MetricsService } from './Services/MetricsService.js';
 import TelegramNotifier from './Services/Notifications/TelegramNotifier.js';
 import NotificationService from './Services/NotificationService.js';
@@ -37,6 +38,7 @@ import { ReconciliationService } from './Services/ReconciliationService.js';
 import SpendingWatchService from './Services/SpendingWatchService.js';
 import { TransactionService } from './Services/TransactionService.js';
 import TranslateCategoryResolver from './Services/TranslateCategoryResolver.js';
+import TwoFactorService from './Services/TwoFactorService.js';
 import type { CategorizationMode, IImporterConfig, Procedure } from './Types/Index.js';
 import { DEFAULT_RESILIENCE_CONFIG, isFail, succeed } from './Types/Index.js';
 import { errorMessage } from './Utils/Index.js';
@@ -141,6 +143,8 @@ const AUDIT_LOG = new AuditLogService();
 const NOTIFICATION_SERVICE = new NotificationService(CONFIG.notifications);
 const TELEGRAM_CFG = CONFIG.notifications?.telegram;
 const TELEGRAM_NOTIFIER = TELEGRAM_CFG ? new TelegramNotifier(TELEGRAM_CFG) : null;
+const TWO_FACTOR_PROMPTER: ITwoFactorPrompter | null =
+  TELEGRAM_NOTIFIER ? new TwoFactorService(TELEGRAM_NOTIFIER) : null;
 
 LOGGER.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
 if (isDryRun) LOGGER.info('🔍 DRY RUN MODE — no changes will be made to Actual Budget\n');
@@ -157,7 +161,7 @@ const SCRAPE_STRATEGY: IBankScrapeStrategy = isMockMode
       retryStrategy: RETRY_STRATEGY,
       noRetryStrategy: NO_RETRY_STRATEGY,
       timeoutWrapper: TIMEOUT_WRAPPER,
-      telegramNotifier: TELEGRAM_NOTIFIER,
+      twoFactorPrompter: TWO_FACTOR_PROMPTER,
       notificationService: NOTIFICATION_SERVICE,
     });
 const SCRAPE_RESULT_MAPPER = createScrapeResultMapper();

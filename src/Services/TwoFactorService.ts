@@ -5,32 +5,41 @@
 
 import { TwoFactorAuthError } from '../Errors/ErrorTypes.js';
 import { getLogger } from '../Logger/Index.js';
+import type { ITwoFactorPrompter } from './ITwoFactorPrompter.js';
 import type TelegramNotifier from './Notifications/TelegramNotifier.js';
 
 /** Handles 2FA OTP collection via Telegram for bank scraping. */
-export default class TwoFactorService {
-  private readonly _timeoutMs: number;
+export default class TwoFactorService implements ITwoFactorPrompter {
+  private readonly _defaultTimeoutMs: number;
 
   /**
    * Creates a TwoFactorService using the given Telegram notifier.
    * @param notifier - TelegramNotifier instance used to prompt and wait for OTP replies.
-   * @param timeoutSeconds - OTP wait timeout in seconds (default 300).
+   * @param timeoutSeconds - Default OTP wait timeout in seconds (default 300).
+   *                        Per-call timeout via createOtpRetriever overrides this.
    */
   constructor(
     private readonly notifier: TelegramNotifier,
     timeoutSeconds?: number
   ) {
-    this._timeoutMs = (timeoutSeconds ?? 300) * 1000;
+    this._defaultTimeoutMs = (timeoutSeconds ?? 300) * 1000;
   }
 
   /**
    * Returns an async function that prompts the user for an OTP code via Telegram.
    * @param bankName - Name of the bank displayed in the Telegram prompt.
+   * @param timeoutSeconds - Optional per-bank timeout override in seconds.
    * @returns Async function that blocks until an OTP is received and returns the code.
    */
-  public createOtpRetriever(bankName: string): () => Promise<string> {
+  public createOtpRetriever(
+    bankName: string,
+    timeoutSeconds?: number,
+  ): () => Promise<string> {
+    const timeoutMs = timeoutSeconds === undefined
+      ? this._defaultTimeoutMs
+      : timeoutSeconds * 1000;
     return async () => {
-      const reply = await this.waitForOtpReply(bankName);
+      const reply = await this.waitForOtpReply(bankName, timeoutMs);
       const code = TwoFactorService.extractCode(reply);
       await this.confirmCodeReceived(bankName, code);
       return code;
@@ -40,13 +49,17 @@ export default class TwoFactorService {
   /**
    * Prompts the user via Telegram and waits for an OTP reply.
    * @param bankName - Name of the bank displayed in the prompt.
+   * @param timeoutMs - Maximum wait time in milliseconds.
    * @returns The raw reply text from the user.
    */
-  private async waitForOtpReply(bankName: string): Promise<string> {
+  private async waitForOtpReply(
+    bankName: string,
+    timeoutMs: number,
+  ): Promise<string> {
     getLogger().info(`  🔐 Waiting for OTP code for ${bankName}...`);
     const reply = await this.notifier.waitForReply(
       `🔐 Enter OTP code for <b>${bankName}</b> (check SMS):`,
-      this._timeoutMs
+      timeoutMs
     );
     getLogger().info(`  ✅ OTP received for ${bankName}`);
     return reply;
