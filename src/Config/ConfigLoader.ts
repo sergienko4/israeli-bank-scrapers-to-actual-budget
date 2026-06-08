@@ -13,12 +13,12 @@ IBankConfig, IBankTarget,
   IImporterConfig, Procedure} from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import {
-decryptConfig, getEncryptionPassword,
+  decryptConfig, getEncryptionPassword,
   isEncryptedConfig} from './ConfigEncryption.js';
 import {
-  validateActualConfig, validateBank,
-validateNotifications,
-validateProxy, validateServerUrl,   validateSpendingWatch} from './ConfigLoaderValidator.js';
+validateActualConfig, validateBank,
+validateServerUrl} from './ConfigLoaderValidator.js';
+import OPTIONAL_SECTION_VALIDATORS from './Validators/OptionalSectionValidators.js';
 
 /** Type for values in nested config merge objects. */
 type ConfigValue = object | string | number | boolean | null;
@@ -292,21 +292,18 @@ export class ConfigLoader implements IConfigLoader {
 
   /**
    * Validates optional config sections (notifications, spending watch, proxy).
+   *
+   * Iterates {@link OPTIONAL_SECTION_VALIDATORS} instead of an if-chain so
+   * adding a new optional section does not modify this dispatcher.
+   *
    * @param config - The IImporterConfig whose optional sections to validate.
-   * @returns Procedure success or first validation failure.
+   * @returns Procedure success or first section failure (wrapped as config-error).
    */
   private static validateOptionalSections(config: IImporterConfig): Procedure<{ valid: true }> {
-    if (config.notifications?.enabled) {
-      const notifResult = validateNotifications(config.notifications);
-      if (isFail(notifResult)) return fail(notifResult.message, { status: 'config-error' });
-    }
-    if (config.spendingWatch) {
-      const watchResult = validateSpendingWatch(config.spendingWatch);
-      if (isFail(watchResult)) return fail(watchResult.message, { status: 'config-error' });
-    }
-    if (config.proxy) {
-      const proxyResult = validateProxy(config.proxy);
-      if (isFail(proxyResult)) return fail(proxyResult.message, { status: 'config-error' });
+    for (const section of OPTIONAL_SECTION_VALIDATORS) {
+      if (!section.applies(config)) continue;
+      const result = section.validate(config);
+      if (isFail(result)) return fail(result.message, { status: 'config-error' });
     }
     return succeed({ valid: true as const });
   }

@@ -11,8 +11,7 @@ import type { INotificationConfig, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import type { IImportSummary } from './MetricsService.js';
 import type { INotifier } from './Notifications/INotifier.js';
-import TelegramNotifier from './Notifications/TelegramNotifier.js';
-import WebhookNotifier from './Notifications/WebhookNotifier.js';
+import NOTIFIER_REGISTRY from './Notifications/NotifierRegistry.js';
 
 /** Action that calls a notifier and returns a status Procedure. */
 type NotifyAction = (n: INotifier) => Promise<Procedure<{ sent: boolean }>>;
@@ -23,17 +22,20 @@ export default class NotificationService {
 
   /**
    * Creates a NotificationService, registering notifiers for each enabled channel.
+   *
+   * Iterates {@link NOTIFIER_REGISTRY} instead of an if-chain so adding a new
+   * notifier (e.g., Slack) does not modify this constructor.
+   *
    * @param config - Optional notification configuration with channel-specific settings.
    */
   constructor(config?: INotificationConfig) {
     if (!config?.enabled) return;
-    if (config.telegram) {
-      this._notifiers.push(new TelegramNotifier(config.telegram, config.maxTransactions));
-      getLogger().info('📱 Telegram notifications enabled');
-    }
-    if (config.webhook) {
-      this._notifiers.push(new WebhookNotifier(config.webhook));
-      getLogger().info(`🔗 Webhook notifications enabled (${config.webhook.format || 'plain'})`);
+    for (const factory of NOTIFIER_REGISTRY) {
+      if (!factory.applies(config)) continue;
+      const notifier = factory.create(config);
+      const status = factory.describe(config);
+      this._notifiers.push(notifier);
+      getLogger().info(status);
     }
   }
 

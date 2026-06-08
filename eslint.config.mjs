@@ -595,6 +595,38 @@ export default tseslint.config(
     },
   },
 
+  // 7b. CONFIG OCP — ban `if (config.X)` dispatch chains (PR 2: registry pattern)
+  // The 3 dispatchers below MUST go through IBlockValidator / INotifierFactory
+  // registries. Adding a new optional section (e.g. retry) or notifier (e.g.
+  // Slack) MUST be one new registry entry — never a new `if (config.X)`
+  // branch in the dispatcher. Selector matches `if (config.<identifier>)`
+  // exactly (single MemberExpression test), mirroring the coupling-scanner
+  // regex `/if\s*\(\s*config\.[A-Za-z_][A-Za-z0-9_]*\s*\)/`.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so its
+  // `no-restricted-syntax` rule survives on the canary fixture; flat-config
+  // rule keys are replaced (not merged) by later matching blocks, so the
+  // canary file MUST be configured by the LAST block listing it.
+  {
+    files: [
+      'src/Config/ConfigLoader.ts',
+      'src/Config/ConfigLoaderValidator.ts',
+      'src/Services/NotificationService.ts',
+      // Include the canary so it triggers this exact rule:
+      'tests/eslint-canaries/ConfigNoIfChain.canary.ts',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...RESTRICTED_SYNTAX_RULES,
+        {
+          selector: "IfStatement[test.type='MemberExpression'][test.object.name='config']",
+          message: '🚫 OCP: Config dispatch MUST go through BlockValidatorRegistry / NotifierRegistry. Add a registry entry, do not add an `if (config.X)` branch here.',
+        },
+      ],
+    },
+  },
+
   // 8. ENTRY POINT EXEMPTIONS
   {
     files: ['src/index.ts', 'src/Index.ts', 'src/scheduler.ts', 'src/Scheduler.ts', 'src/**/index.ts', 'src/**/Index.ts'],
