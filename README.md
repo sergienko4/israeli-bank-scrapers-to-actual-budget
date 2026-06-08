@@ -230,7 +230,7 @@ npm run test:e2e:mock   # Dockerized mocked E2E (no real banks)
 npm run docs:serve      # http://127.0.0.1:8000 — MkDocs Material preview
 ```
 
-Pre-commit runs a 21-gate hook (type-check, lint, build, audit, tests, Docker build, Trivy, mocked E2E, Telegram smoke, ESLint canaries, madge circular-dep check, coupling regression). Plan PRs accordingly. The decoupling baseline is captured at `tests/coupling-baseline.json` and regenerated via `npm run coupling:report`; CI fails on any new file scoring >= 8 (see `scripts/coupling-scanner.cjs`).
+Pre-commit runs a 21-gate hook (type-check, lint, build, audit, tests, Docker build, Trivy, mocked E2E, Telegram smoke, ESLint canaries, runtime circular-dep check, coupling regression). Plan PRs accordingly. The decoupling baseline is captured at `tests/coupling-baseline.json` and regenerated via `npm run coupling:report`; CI fails on any new file scoring >= 8 (see `scripts/coupling-scanner.cjs`).
 
 </details>
 

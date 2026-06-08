@@ -69,7 +69,6 @@
     "husky": "^9.1.7",
     "license-compliance": "^3.0.1",
     "lint-staged": "^17.0.7",
-    "madge": "^8.0.0",
     "markdownlint-cli2": "^0.22.1",
     "typedoc": "^0.28.19",
     "typescript": "^6.0.3",
@@ -81,10 +80,7 @@
   "overrides": {
     "smol-toml": ">=1.6.1",
     "uuid": "^14.0.0",
-    "postcss": "^8.5.10",
-    "madge": {
-      "typescript": "$typescript"
-    }
+    "postcss": "^8.5.10"
   },
   "engines": {
     "node": ">=22.0.0",
