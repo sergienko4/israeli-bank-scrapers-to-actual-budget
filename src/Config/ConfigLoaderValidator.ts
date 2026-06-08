@@ -7,6 +7,8 @@ IBankConfig, IImporterConfig, INotificationConfig, IProxyConfig,
 ISpendingWatchRule, Procedure} from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import { CREDENTIAL_SPECS } from './BankCredentialSpecs.js';
+import { BANK_DATE_VALIDATORS } from './Validators/BankDateValidators.js';
+import NOTIFICATION_CHANNEL_VALIDATORS from './Validators/NotificationChannelValidators.js';
 
 export { CREDENTIAL_SPECS, type ICredentialSpec } from './BankCredentialSpecs.js';
 
@@ -50,55 +52,19 @@ export function validateServerUrl(url: string): Procedure<{ valid: true }> {
 
 /**
  * Validates notification settings (Telegram and webhook) when notifications are enabled.
+ *
+ * Iterates {@link NOTIFICATION_CHANNEL_VALIDATORS} instead of an if-chain so
+ * adding a new channel (e.g., Slack) does not modify this dispatcher.
+ *
  * @param config - The INotificationConfig block to validate.
- * @returns Procedure with valid: true on success, or failure message.
+ * @returns Procedure with valid: true on success, or first channel failure.
  */
 export function validateNotifications(config: INotificationConfig): Procedure<{ valid: true }> {
-  if (config.telegram) {
-    const telegramResult = validateTelegramConfig(config.telegram);
-    if (isFail(telegramResult)) return telegramResult;
+  for (const channel of NOTIFICATION_CHANNEL_VALIDATORS) {
+    if (!channel.applies(config)) continue;
+    const result = channel.validate(config);
+    if (isFail(result)) return result;
   }
-  if (config.webhook) {
-    const webhookResult = validateWebhookConfig(config.webhook);
-    if (isFail(webhookResult)) return webhookResult;
-  }
-  return succeed({ valid: true as const });
-}
-
-/**
- * Validates the Telegram bot token format and presence.
- * @param botToken - The bot token string to validate.
- * @returns Procedure with valid: true on success, or failure message.
- */
-function validateBotToken(botToken: string): Procedure<{ valid: true }> {
-  if (!botToken) return fail('Telegram botToken is required');
-  if (!/^\d+:.+$/.test(botToken)) {
-    return fail('Invalid botToken format. Expected: "123456789:ABCdef..."');
-  }
-  return succeed({ valid: true as const });
-}
-
-/**
- * Validates Telegram bot token, chat ID, and enum fields.
- * @param telegram - The Telegram notification config to validate.
- * @returns Procedure with valid: true on success, or failure message.
- */
-function validateTelegramConfig(
-  telegram: NonNullable<INotificationConfig['telegram']>
-): Procedure<{ valid: true }> {
-  const tokenResult = validateBotToken(telegram.botToken);
-  if (isFail(tokenResult)) return tokenResult;
-  if (!telegram.chatId) return fail('Telegram chatId is required');
-  const formatResult = validateEnumField(
-    telegram.messageFormat || false,
-    ['summary', 'compact', 'ledger', 'emoji'], 'messageFormat'
-  );
-  if (isFail(formatResult)) return formatResult;
-  const showResult = validateEnumField(
-    telegram.showTransactions || false,
-    ['new', 'all', 'none'], 'showTransactions'
-  );
-  if (isFail(showResult)) return showResult;
   return succeed({ valid: true as const });
 }
 
@@ -146,31 +112,6 @@ function validateWatchRule(rule: ISpendingWatchRule, idx: number): Procedure<{ v
 }
 
 /**
- * Validates the webhook URL and format enum.
- * @param webhook - The webhook notification config to validate.
- * @returns Procedure with valid: true on success, or failure message.
- */
-function validateWebhookConfig(
-  webhook: NonNullable<INotificationConfig['webhook']>
-): Procedure<{ valid: true }> {
-  if (!webhook.url) {
-    return fail(
-      'Webhook url is required when webhook notifications are configured'
-    );
-  }
-  if (!webhook.url.startsWith('http://') && !webhook.url.startsWith('https://')) {
-    return fail(
-      `Invalid webhook url format. Must start with http:// or https://, got: ${webhook.url}`
-    );
-  }
-  const formatResult = validateEnumField(
-    webhook.format || false, ['slack', 'discord', 'plain'], 'webhook format'
-  );
-  if (isFail(formatResult)) return formatResult;
-  return succeed({ valid: true as const });
-}
-
-/**
  * Validates the proxy configuration server URL format.
  * @param proxy - The IProxyConfig to validate.
  * @returns Procedure with valid: true on success, or failure message.
@@ -184,24 +125,6 @@ export function validateProxy(proxy: IProxyConfig): Procedure<{ valid: true }> {
     return fail(
       `Invalid proxy.server format "${proxy.server}". ` +
       'Must start with socks5://, socks4://, http://, or https://'
-    );
-  }
-  return succeed({ valid: true as const });
-}
-
-/**
- * Validates that a field value is one of the allowed enum strings.
- * @param value - The field value to check (may be undefined).
- * @param allowed - Array of permitted string values.
- * @param fieldName - Display name of the field used in error messages.
- * @returns Procedure with valid: true on success, or failure message.
- */
-function validateEnumField(
-  value: string | false, allowed: string[], fieldName: string
-): Procedure<{ valid: true }> {
-  if (value && !allowed.includes(value)) {
-    return fail(
-      `Invalid ${fieldName} "${value}". Must be one of: ${allowed.join(', ')}`
     );
   }
   return succeed({ valid: true as const });
@@ -244,61 +167,11 @@ function validateDateConfig(bankName: string, config: IBankConfig): Procedure<{ 
       `${bankName}: cannot use both "startDate" and "daysBack". Choose one.`
     );
   }
-  if (config.daysBack !== undefined) {
-    const daysResult = validateDaysBack(bankName, config.daysBack);
-    if (isFail(daysResult)) return daysResult;
-  }
-  if (config.startDate) {
-    const startResult = validateStartDate(bankName, config.startDate);
-    if (isFail(startResult)) return startResult;
-  }
-  return succeed({ valid: true as const });
-}
-
-/**
- * Validates that daysBack is an integer between 1 and 30.
- * @param bankName - Bank name used in error messages.
- * @param daysBack - The daysBack value to validate.
- * @returns Procedure with valid: true on success, or failure message.
- */
-function validateDaysBack(bankName: string, daysBack: number): Procedure<{ valid: true }> {
-  if (!Number.isInteger(daysBack) || daysBack < 1 || daysBack > 30) {
-    return fail(
-      `${bankName}: "daysBack" must be an integer between 1 and 30. Got: ${String(daysBack)}`
-    );
-  }
-  return succeed({ valid: true as const });
-}
-
-/**
- * Returns a Date representing exactly one year before today.
- * @returns Date object set to one year ago.
- */
-function getOneYearAgo(): Date {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 1);
-  return d;
-}
-
-/**
- * Validates startDate format, ensures it is not in the future, and not older than one year.
- * @param bankName - Bank name used in error messages.
- * @param startDate - The startDate string (YYYY-MM-DD) to validate.
- * @returns Procedure with valid: true on success, or failure message.
- */
-function validateStartDate(
-  bankName: string, startDate: string
-): Procedure<{ valid: true }> {
-  const date = new Date(startDate);
-  const dateTimestamp = date.getTime();
-  if (Number.isNaN(dateTimestamp)) {
-    return fail(`Invalid startDate for ${bankName}: "${startDate}". Use YYYY-MM-DD`);
-  }
-  if (date > new Date()) {
-    return fail(`startDate cannot be in the future for ${bankName}. Got: ${startDate}`);
-  }
-  if (date < getOneYearAgo()) {
-    return fail(`${bankName}: startDate too old (>1 year). Got: ${startDate}`);
+  const ctx = { bankName, config };
+  for (const validator of BANK_DATE_VALIDATORS) {
+    if (!validator.applies(ctx)) continue;
+    const result = validator.validate(ctx);
+    if (isFail(result)) return result;
   }
   return succeed({ valid: true as const });
 }

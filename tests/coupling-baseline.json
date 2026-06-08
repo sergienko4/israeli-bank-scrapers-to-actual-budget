@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-06-08",
-  "totalFiles": 106,
+  "totalFiles": 114,
   "scoreDistribution": {
     "critical8plus": 13,
-    "high5to7": 11,
-    "medium3to4": 17,
-    "low1to2": 14,
-    "clean0": 51
+    "high5to7": 10,
+    "medium3to4": 18,
+    "low1to2": 17,
+    "clean0": 56
   },
   "files": [
     {
@@ -496,34 +496,6 @@
       "score": 10
     },
     {
-      "path": "src/Config/ConfigLoader.ts",
-      "layer": "CC",
-      "lines": 315,
-      "valueImports": 7,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigurationError",
-        "IImporterConfig"
-      ],
-      "newCount": 2,
-      "ocpRisks": [
-        "if(config.X) chain x2"
-      ],
-      "score": 9
-    },
-    {
       "path": "src/Services/ImportMediator.ts",
       "layer": "IS",
       "lines": 313,
@@ -591,6 +563,32 @@
       "score": 9
     },
     {
+      "path": "src/Config/ConfigLoader.ts",
+      "layer": "CC",
+      "lines": 312,
+      "valueImports": 8,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Errors/ErrorTypes.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ConfigurationError",
+        "IImporterConfig"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 8
+    },
+    {
       "path": "src/Config/ConfigValidator.ts",
       "layer": "CC",
       "lines": 531,
@@ -651,28 +649,6 @@
       "newCount": 4,
       "ocpRisks": [],
       "score": 8
-    },
-    {
-      "path": "src/Config/ConfigLoaderValidator.ts",
-      "layer": "CC",
-      "lines": 438,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 3,
-      "ocpRisks": [
-        "if(config.X) chain x3"
-      ],
-      "score": 7
     },
     {
       "path": "src/Scraper/Strategies/LiveScrapeStrategy.ts",
@@ -782,6 +758,26 @@
       "newCount": 2,
       "ocpRisks": [],
       "score": 7
+    },
+    {
+      "path": "src/Config/ConfigLoaderValidator.ts",
+      "layer": "CC",
+      "lines": 477,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 6
     },
     {
       "path": "src/Scheduler/CronLoop.ts",
@@ -931,34 +927,6 @@
       "newCount": 2,
       "ocpRisks": [],
       "score": 6
-    },
-    {
-      "path": "src/Services/NotificationService.ts",
-      "layer": "IS",
-      "lines": 113,
-      "valueImports": 4,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "TelegramNotifier",
-        "WebhookNotifier"
-      ],
-      "newCount": 2,
-      "ocpRisks": [
-        "if(config.X) chain x2"
-      ],
-      "score": 5
     },
     {
       "path": "src/Config/ConfigEncryption.ts",
@@ -1169,6 +1137,29 @@
         "Error"
       ],
       "newCount": 5,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/NotificationService.ts",
+      "layer": "IS",
+      "lines": 113,
+      "valueImports": 3,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 4
     },
@@ -1584,6 +1575,20 @@
       "score": 2
     },
     {
+      "path": "src/Config/Validators/NotificationChannelValidators.ts",
+      "layer": "CC",
+      "lines": 45,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [
+        "if(config.X) chain x2"
+      ],
+      "score": 1
+    },
+    {
       "path": "src/Scrapers/Pipeline/Steps/FinalizeImportStep.ts",
       "layer": "BP",
       "lines": 234,
@@ -1596,11 +1601,78 @@
       "score": 1
     },
     {
+      "path": "src/Services/Notifications/INotifierFactory.ts",
+      "layer": "IS",
+      "lines": 39,
+      "valueImports": 0,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Telegram",
+        "Webhook"
+      ],
+      "newCount": 2,
+      "ocpRisks": [
+        "if(config.X) chain x2"
+      ],
+      "score": 1
+    },
+    {
+      "path": "src/Services/Notifications/NotifierRegistry.ts",
+      "layer": "IS",
+      "lines": 23,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [
+        "if(config.X) chain x2"
+      ],
+      "score": 1
+    },
+    {
       "path": "src/Config/BankCredentialSpecs.ts",
       "layer": "CC",
       "lines": 45,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Validators/BankDateValidators.ts",
+      "layer": "CC",
+      "lines": 59,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Validators/IBlockValidator.ts",
+      "layer": "CC",
+      "lines": 31,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Validators/OptionalSectionValidators.ts",
+      "layer": "CC",
+      "lines": 57,
+      "valueImports": 1,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -2076,6 +2148,34 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/TelegramNotifierFactory.ts",
+      "layer": "IS",
+      "lines": 27,
+      "valueImports": 1,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "TelegramNotifier"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/WebhookNotifierFactory.ts",
+      "layer": "IS",
+      "lines": 28,
+      "valueImports": 1,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "WebhookNotifier"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },

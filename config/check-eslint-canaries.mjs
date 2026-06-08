@@ -49,6 +49,10 @@ const CANARIES = {
     minErrors: 1,
     description: 'PR 1 — Scraper layer cannot `new` Integration Services',
   },
+  'tests/eslint-canaries/ConfigNoIfChain.canary.ts': {
+    minErrors: 2,
+    description: 'PR 2 — Config dispatch must go through registry (no `if (config.X)` chains)',
+  },
 };
 
 let allPassed = true;
