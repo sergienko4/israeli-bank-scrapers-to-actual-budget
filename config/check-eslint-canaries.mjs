@@ -53,6 +53,10 @@ const CANARIES = {
     minErrors: 2,
     description: 'PR 2 — Config dispatch must go through registry (no `if (config.X)` chains)',
   },
+  'tests/eslint-canaries/ConfigValidatorMaxLines.canary.ts': {
+    minErrors: 1,
+    description: 'PR 3 — ConfigValidator.ts capped at max-lines: 200 (this canary exceeds 200 LoC)',
+  },
 };
 
 let allPassed = true;
