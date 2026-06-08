@@ -21,9 +21,8 @@ import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 import type { ILogger } from '../../Logger/ILogger.js';
 import type { IRetryStrategy } from '../../Resilience/RetryStrategy.js';
 import type { ITimeoutWrapper } from '../../Resilience/TimeoutWrapper.js';
-import type TelegramNotifier from '../../Services/Notifications/TelegramNotifier.js';
+import type { ITwoFactorPrompter } from '../../Services/ITwoFactorPrompter.js';
 import type NotificationService from '../../Services/NotificationService.js';
-import TwoFactorService from '../../Services/TwoFactorService.js';
 import type {
   IBankConfig, IImporterConfig, IRawScrape, Procedure,
 } from '../../Types/Index.js';
@@ -41,7 +40,7 @@ export interface ILiveScrapeStrategyOpts {
   readonly retryStrategy: IRetryStrategy;
   readonly noRetryStrategy: IRetryStrategy;
   readonly timeoutWrapper: ITimeoutWrapper;
-  readonly telegramNotifier: TelegramNotifier | null;
+  readonly twoFactorPrompter: ITwoFactorPrompter | null;
   readonly notificationService: NotificationService;
 }
 
@@ -49,7 +48,7 @@ export interface ILiveScrapeStrategyOpts {
 interface IOtpRetrieverParams {
   readonly bankId: string;
   readonly bankConfig: IBankConfig;
-  readonly notifier: TelegramNotifier | null;
+  readonly prompter: ITwoFactorPrompter | null;
   readonly logger: ILogger;
 }
 
@@ -220,7 +219,7 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
       ?? LiveScrapeStrategy.buildOtpRetriever({
         bankId: scrapeOpts.bankId,
         bankConfig: scrapeOpts.bankConfig,
-        notifier: this.opts.telegramNotifier,
+        prompter: this.opts.twoFactorPrompter,
         logger: scrapeOpts.logger,
       });
   }
@@ -303,34 +302,36 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
 
   /**
    * Builds a Telegram-based OTP retriever for 2FA banks when applicable.
-   * @param params - Bank id, bank config, notifier, logger.
+   * @param params - Bank id, bank config, prompter, logger.
    * @returns Async OTP retriever, or undefined when 2FA is not needed.
    */
   private static buildOtpRetriever(
     params: IOtpRetrieverParams,
   ): (() => Promise<string>) | undefined {
     const noRetriever: (() => Promise<string>) | undefined = undefined;
-    const hasTelegram = params.notifier !== null;
+    const hasPrompter = params.prompter !== null;
     const isRetrieverNeeded =
-      LiveScrapeStrategy.needsOtpRetriever(params.bankConfig, hasTelegram);
-    if (!params.notifier || !isRetrieverNeeded) return noRetriever;
-    const twoFactor = new TwoFactorService(params.notifier, params.bankConfig.twoFactorTimeout);
+      LiveScrapeStrategy.needsOtpRetriever(params.bankConfig, hasPrompter);
+    if (!params.prompter || !isRetrieverNeeded) return noRetriever;
     params.logger.info(`  🔐 2FA enabled for ${params.bankId} (via Telegram)`);
-    return twoFactor.createOtpRetriever(params.bankId);
+    return params.prompter.createOtpRetriever(
+      params.bankId,
+      params.bankConfig.twoFactorTimeout,
+    );
   }
 
   /**
    * Determines whether a Telegram OTP retriever is needed for this bank.
-   * The retriever is attached whenever 2FA + Telegram are configured —
+   * The retriever is attached whenever 2FA + a prompter are configured —
    * upstream's `classifyLoginKind` owns the warm/cold decision, and the
    * cold-path fallback requires `otpCodeRetriever` to be present even
    * when `otpLongTermToken` is set (placeholder or stale token cases).
    * @param bankConfig - Bank configuration whose twoFactorAuth flag is read.
-   * @param hasTelegram - True when a Telegram notifier is configured.
-   * @returns True when 2FA + Telegram is configured.
+   * @param hasPrompter - True when a two-factor prompter is configured.
+   * @returns True when 2FA + a prompter is configured.
    */
-  private static needsOtpRetriever(bankConfig: IBankConfig, hasTelegram: boolean): boolean {
-    return Boolean(bankConfig.twoFactorAuth && hasTelegram);
+  private static needsOtpRetriever(bankConfig: IBankConfig, hasPrompter: boolean): boolean {
+    return Boolean(bankConfig.twoFactorAuth && hasPrompter);
   }
 
   /**

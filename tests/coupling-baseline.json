@@ -1,20 +1,20 @@
 {
   "generatedAt": "2026-06-08",
-  "totalFiles": 105,
+  "totalFiles": 106,
   "scoreDistribution": {
-    "critical8plus": 14,
-    "high5to7": 10,
+    "critical8plus": 13,
+    "high5to7": 11,
     "medium3to4": 17,
     "low1to2": 14,
-    "clean0": 50
+    "clean0": 51
   },
   "files": [
     {
       "path": "src/Index.ts",
       "layer": "EP",
-      "lines": 315,
-      "valueImports": 35,
-      "typeImports": 3,
+      "lines": 319,
+      "valueImports": 36,
+      "typeImports": 4,
       "crossLayerValueDeps": [
         {
           "to": "src/Config/ConfigLoader.ts",
@@ -162,6 +162,11 @@
           "dynamic": false
         },
         {
+          "to": "src/Services/TwoFactorService.ts",
+          "toLayer": "IS",
+          "dynamic": false
+        },
+        {
           "to": "src/Types/Index.ts",
           "toLayer": "ST",
           "dynamic": false
@@ -198,11 +203,12 @@
         "TelegramNotifier",
         "TimeoutWrapper",
         "TransactionService",
-        "TranslateCategoryResolver"
+        "TranslateCategoryResolver",
+        "TwoFactorService"
       ],
-      "newCount": 24,
+      "newCount": 25,
       "ocpRisks": [],
-      "score": 69
+      "score": 71
     },
     {
       "path": "src/Scheduler/TelegramSchedulerWiring.ts",
@@ -363,36 +369,6 @@
       ],
       "newClasses": [
         "ConfigLoader"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 10
-    },
-    {
-      "path": "src/Scraper/Strategies/LiveScrapeStrategy.ts",
-      "layer": "BP",
-      "lines": 386,
-      "valueImports": 7,
-      "typeImports": 8,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Services/TwoFactorService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "TwoFactorService"
       ],
       "newCount": 1,
       "ocpRisks": [],
@@ -696,6 +672,29 @@
       "ocpRisks": [
         "if(config.X) chain x3"
       ],
+      "score": 7
+    },
+    {
+      "path": "src/Scraper/Strategies/LiveScrapeStrategy.ts",
+      "layer": "BP",
+      "lines": 387,
+      "valueImports": 6,
+      "typeImports": 8,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
       "score": 7
     },
     {
@@ -1225,9 +1224,9 @@
     {
       "path": "src/Services/TwoFactorService.ts",
       "layer": "IS",
-      "lines": 98,
+      "lines": 111,
       "valueImports": 2,
-      "typeImports": 1,
+      "typeImports": 2,
       "crossLayerValueDeps": [
         {
           "to": "src/Errors/ErrorTypes.ts",
@@ -2050,6 +2049,18 @@
       "lines": 22,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/ITwoFactorPrompter.ts",
+      "layer": "IS",
+      "lines": 22,
+      "valueImports": 0,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,

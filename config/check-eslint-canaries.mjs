@@ -45,6 +45,10 @@ const CANARIES = {
     minErrors: 1,
     description: 'void return in side-effect method ban',
   },
+  'tests/eslint-canaries/ScraperCannotNewServices.canary.ts': {
+    minErrors: 1,
+    description: 'PR 1 — Scraper layer cannot `new` Integration Services',
+  },
 };
 
 let allPassed = true;
