@@ -19,14 +19,17 @@
     "type-check:e2e": "bash config/tsc-strict-src.sh --noEmit --project tsconfig.e2e.json",
     "type-check:test": "bash config/tsc-strict-src.sh --noEmit --project tsconfig.test.json",
     "validate": "npm run type-check && npm run build && npm test",
-    "validate:ci": "npm run type-check && npm run test:unit && npm run lint && npm run lint:canaries",
-    "validate:all": "npm run type-check && npm run test:unit && npm run test:e2e:mock && npm run lint && npm run lint:canaries && npm run lint:docs && npm run lint:config-structure",
+    "validate:ci": "npm run type-check && npm run test:unit && npm run lint && npm run lint:canaries && npm run lint:circular && npm run coupling:check",
+    "validate:all": "npm run type-check && npm run test:unit && npm run test:e2e:mock && npm run lint && npm run lint:canaries && npm run lint:circular && npm run coupling:check && npm run lint:docs && npm run lint:config-structure",
     "lint": "eslint src/",
     "lint:biome": "npx biome lint src/",
     "lint:docs": "markdownlint-cli2 --config config/markdownlint/.markdownlint.jsonc \"README.md\" \".github/**/*.md\"",
     "lint:config-structure": "node config/check-structure.mjs",
     "lint:canaries": "node config/check-eslint-canaries.mjs",
+    "lint:circular": "node scripts/check-circular.cjs",
     "lint:licenses": "node config/check-licenses.mjs",
+    "coupling:report": "node scripts/coupling-scanner.cjs",
+    "coupling:check": "node scripts/coupling-scanner.cjs --check",
     "docs": "typedoc --options config/typedoc.json",
     "docs:site": "pip install -r requirements-docs.txt && python -m mkdocs build --strict",
     "docs:serve": "python -m mkdocs serve",
@@ -66,6 +69,7 @@
     "husky": "^9.1.7",
     "license-compliance": "^3.0.1",
     "lint-staged": "^17.0.7",
+    "madge": "^8.0.0",
     "markdownlint-cli2": "^0.22.1",
     "typedoc": "^0.28.19",
     "typescript": "^6.0.3",
@@ -77,7 +81,10 @@
   "overrides": {
     "smol-toml": ">=1.6.1",
     "uuid": "^14.0.0",
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "madge": {
+      "typescript": "$typescript"
+    }
   },
   "engines": {
     "node": ">=22.0.0",
