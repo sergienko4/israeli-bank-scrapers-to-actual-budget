@@ -641,6 +641,7 @@ export default tseslint.config(
   {
     files: [
       'src/Services/TelegramPoller.ts',
+      'src/Services/TelegramUpdateDispatcher.ts',
       'src/Services/Notifications/TelegramNotifier.ts',
       'src/Services/Notifications/TelegramOtpPoller.ts',
       'src/Resilience/GracefulShutdown.ts',
@@ -722,6 +723,32 @@ export default tseslint.config(
     files: [
       'src/Services/Notifications/TelegramNotifier.ts',
       'tests/eslint-canaries/TelegramNotifierMaxLines.canary.ts',
+    ],
+    rules: {
+      'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
+  // 7f. TELEGRAM POLLER — tightened max-lines (PR 7: TelegramPoller split)
+  // After extracting `TelegramPollHttp.ts` (long-poll HTTP wrappers),
+  // `TelegramPollBackoff.ts` (pure backoff math) and
+  // `TelegramUpdateDispatcher.ts` (chat-id filtering + text/photo/callback
+  // routing), `TelegramPoller.ts` is a thin lifecycle + error-recovery
+  // orchestrator (~160 effective LoC). The default cap is `max: 300`;
+  // this rule caps it at 200 so the orchestrator cannot drift back into
+  // being a 418-LoC mixed-concern class. Adding a new update kind MUST be
+  // a new branch inside `TelegramUpdateDispatcher.ts`, not inline here.
+  // Adding a new HTTP endpoint MUST be a new function in
+  // `TelegramPollHttp.ts`, not inline here.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines: 200` rule survives on the canary fixture; flat-config rule
+  // keys are replaced (not merged) by later matching blocks, so the canary
+  // file MUST be configured by the LAST block listing it.
+  {
+    files: [
+      'src/Services/TelegramPoller.ts',
+      'tests/eslint-canaries/TelegramPollerMaxLines.canary.ts',
     ],
     rules: {
       'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
