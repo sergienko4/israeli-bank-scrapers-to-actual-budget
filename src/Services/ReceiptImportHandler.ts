@@ -10,7 +10,8 @@ import { errorMessage } from '../Utils/Index.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import { escapeHtml } from './Notifications/TelegramFormatter.js';
 import type TelegramNotifier from './Notifications/TelegramNotifier.js';
-import ReceiptOcrService from './ReceiptOcrService.js';
+import ReceiptPhotoOcrPipeline from './Receipt/ReceiptPhotoOcrPipeline.js';
+import type ReceiptOcrService from './ReceiptOcrService.js';
 
 /** Actual Budget API surface needed by ReceiptImportHandler. */
 export interface IReceiptActualApi {
@@ -70,20 +71,20 @@ export class ReceiptImportHandler {
   private _state: IReceiptState = { phase: 'idle', flowId: 0 };
   private readonly _apiFactory?: () => Promise<IReceiptActualApi>;
   private _api?: IReceiptActualApi;
-  private readonly _ocr: ReceiptOcrService;
   private readonly _notifier: INotifier;
   private readonly _telegramNotifier: TelegramNotifier;
+  private readonly _photoPipeline: ReceiptPhotoOcrPipeline;
 
   /**
    * Creates a ReceiptImportHandler.
    * @param opts - Handler options with OCR, notifier, and optional API.
    */
   constructor(opts: IReceiptHandlerOptions) {
-    this._ocr = opts.ocr;
     this._notifier = opts.notifier;
     this._telegramNotifier = opts.telegramNotifier;
     this._api = opts.api;
     this._apiFactory = opts.apiFactory;
+    this._photoPipeline = new ReceiptPhotoOcrPipeline(opts.ocr, opts.telegramNotifier);
   }
 
   /**
@@ -192,34 +193,20 @@ export class ReceiptImportHandler {
   }
 
   /**
-   * Downloads and OCRs the photo, then shows results.
+   * Downloads, OCRs, parses the photo, then continues into match/menu display.
    * @param fileId - Telegram file_id to download.
    * @returns Procedure indicating processing result.
    */
   private async processPhoto(fileId: string): Promise<Procedure<{ status: string }>> {
     const flowId = this._state.flowId;
-    const photoResult = await this._telegramNotifier.downloadPhoto(fileId);
+    const result = await this._photoPipeline.process(fileId, () => this._state.flowId !== flowId);
     if (this._state.flowId !== flowId) return fail('flow cancelled');
-    if (isFail(photoResult)) return await this.failWithMessage(photoResult.message);
-    return await this.ocrAndParse(photoResult.data, flowId);
-  }
-
-  /**
-   * Runs OCR and parsing on the image buffer.
-   * @param buffer - Raw image bytes.
-   * @param flowId - Flow token to check for cancellation.
-   * @returns Procedure indicating parse result.
-   */
-  private async ocrAndParse(
-    buffer: Buffer, flowId: number
-  ): Promise<Procedure<{ status: string }>> {
-    const ocrResult = await this._ocr.recognize(buffer);
-    if (this._state.flowId !== flowId) return fail('flow cancelled');
-    if (isFail(ocrResult)) return await this.failWithMessage(ocrResult.message);
-    const parseResult = ReceiptOcrService.parseReceipt(ocrResult.data.text);
-    if (isFail(parseResult)) return await this.failWithMessage(parseResult.message);
-    this._state.receipt = parseResult.data;
-    return await this.showReceiptAndMatch(parseResult.data);
+    if (isFail(result)) {
+      if (result.message === 'flow cancelled') return fail('flow cancelled');
+      return await this.failWithMessage(result.message);
+    }
+    this._state.receipt = result.data.receipt;
+    return await this.showReceiptAndMatch(result.data.receipt);
   }
 
   /**
@@ -228,7 +215,7 @@ export class ReceiptImportHandler {
    * @returns Procedure indicating menu display result.
    */
   private async showReceiptAndMatch(receipt: IReceiptData): Promise<Procedure<{ status: string }>> {
-    const header = ReceiptImportHandler.buildReceiptHeader(receipt);
+    const header = ReceiptPhotoOcrPipeline.buildReceiptHeader(receipt);
     await this.reply(header);
     this._state.phase = 'awaiting_selection';
     const isApiReady = await this.ensureApi();
@@ -239,18 +226,6 @@ export class ReceiptImportHandler {
     const match = await this.findPayeeMatch(receipt.merchant);
     if (match) return await this.showSmartMatch(match);
     return await this.showAccountMenu();
-  }
-
-  /**
-   * Builds the HTML header showing extracted receipt fields.
-   * @param receipt - Parsed receipt data.
-   * @returns HTML-escaped header string.
-   */
-  private static buildReceiptHeader(receipt: IReceiptData): string {
-    const d = escapeHtml(receipt.date ?? 'N/A');
-    const a = receipt.amount === undefined ? 'N/A' : String(receipt.amount);
-    const m = escapeHtml(receipt.merchant ?? 'N/A');
-    return `📸 <b>Receipt detected:</b>\n📅 Date: ${d}\n💰 Amount: ${escapeHtml(a)}\n🏪 Payee: ${m}`;
   }
 
   /**
