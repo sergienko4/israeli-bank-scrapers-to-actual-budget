@@ -10,6 +10,7 @@ import { errorMessage } from '../Utils/Index.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import { escapeHtml } from './Notifications/TelegramFormatter.js';
 import type TelegramNotifier from './Notifications/TelegramNotifier.js';
+import importReceipt from './Receipt/ReceiptImporter.js';
 import { presentAccountMenu, presentCategoryMenu, presentSmartMatch } from './Receipt/ReceiptMenuPresenter.js';
 import type { IPayeeMatch } from './Receipt/ReceiptPayeeMatcher.js';
 import findReceiptPayeeMatch from './Receipt/ReceiptPayeeMatcher.js';
@@ -252,123 +253,29 @@ export class ReceiptImportHandler {
    * Imports the receipt transaction into Actual Budget.
    * @returns Procedure indicating the import result.
    */
+  /**
+   * Imports the receipt transaction into Actual Budget.
+   * @returns Procedure indicating the import result.
+   */
   private async executeImport(): Promise<Procedure<{ status: string }>> {
     const st = this._state;
-    if (!st.receipt || !st.selectedAccount || !st.selectedCategory) { this.reset(); return fail('incomplete receipt state'); }
-    if (!st.receipt.date || st.receipt.amount === undefined) { await this.reply('❌ Missing date or amount.'); this.reset(); return fail('missing fields'); }
-    try {
-      return await this.doImport(st);
-    } catch (error: unknown) {
-      const msg = errorMessage(error);
-      await this.reply(`❌ Import failed: ${escapeHtml(msg)}`);
-      this.reset(); return fail(`import failed: ${msg}`);
+    if (!st.receipt || !st.selectedAccount || !st.selectedCategory) {
+      this.reset(); return fail('incomplete receipt state');
     }
-  }
-
-  /**
-   * Performs the actual import and sends confirmation.
-   * @param st - Current receipt state with all fields populated.
-   * @returns Procedure indicating success.
-   */
-  private async doImport(
-    st: IReceiptState
-  ): Promise<Procedure<{ status: string }>> {
-    const fields = ReceiptImportHandler.extractFields(st);
-    const writeResult = await this.writeToActualBudget(st, fields);
-    if (isFail(writeResult)) {
-      const msg = escapeHtml(writeResult.message);
-      await this.reply(`❌ ${msg}`);
-      this.reset(); return fail(writeResult.message);
+    if (!this._api) {
+      await this.reply('❌ API not connected — cannot write to budget');
+      this.reset(); return fail('API not connected — cannot write to budget');
     }
-    const accName = await this.resolveName('accounts', st.selectedAccount ?? '');
-    const catName = await this.resolveName('categories', st.selectedCategory ?? '');
-    getLogger().info('Receipt import completed');
-    getLogger().debug(`Receipt import: ${fields.merchant} -> ${accName} / ${catName}`);
-    await this.sendImportConfirmation(fields, accName, catName);
+    const result = await importReceipt(this._api, this._notifier, {
+      date: st.receipt.date,
+      amount: st.receipt.amount,
+      merchant: st.receipt.merchant,
+      memo: st.receipt.memo,
+      accountId: st.selectedAccount,
+      categoryId: st.selectedCategory,
+    });
     this.reset();
-    return succeed({ status: 'receipt-imported' });
-  }
-
-  /**
-   * Writes the receipt transaction to Actual Budget via API.
-   * @param st - Receipt state with account and category selections.
-   * @param fields - Extracted receipt fields.
-   * @param fields.dateStr - Transaction date (YYYY-MM-DD).
-   * @param fields.cents - Amount in cents (negative for expense).
-   * @param fields.merchant - Merchant/payee name.
-   * @returns Procedure indicating write success or failure.
-   */
-  private async writeToActualBudget(
-    st: IReceiptState,
-    fields: { dateStr: string; cents: number; merchant: string }
-  ): Promise<Procedure<{ status: string }>> {
-    if (!this._api || !st.selectedAccount) return fail('API not connected — cannot write to budget');
-    const payload = [{
-      account: st.selectedAccount,
-      date: fields.dateStr, amount: fields.cents,
-      payee_name: fields.merchant,
-      imported_payee: fields.merchant,
-      category: st.selectedCategory,
-      notes: st.receipt?.memo ?? '',
-      cleared: false,
-    }];
-    await this._api.importTransactions(st.selectedAccount, payload);
-    return succeed({ status: 'written' });
-  }
-
-  /**
-   * Sends the import confirmation message to Telegram.
-   * @param fields - Extracted receipt fields.
-   * @param fields.amountStr - Display amount string.
-   * @param fields.merchant - Merchant/payee name.
-   * @param fields.dateStr - Transaction date.
-   * @param accName - Resolved account name.
-   * @param catName - Resolved category name.
-   */
-  private async sendImportConfirmation(
-    fields: { amountStr: string; merchant: string; dateStr: string },
-    accName: string, catName: string
-  ): Promise<void> {
-    const safeAmt = escapeHtml(fields.amountStr);
-    const safeMerchant = escapeHtml(fields.merchant);
-    const safeAcc = escapeHtml(accName);
-    const safeCat = escapeHtml(catName);
-    const msg = `✅ <b>Imported:</b>\n💰 ${safeAmt}\n` +
-      `🏪 ${safeMerchant}\n🏦 ${safeAcc} / ${safeCat}\n` +
-      `📅 ${escapeHtml(fields.dateStr)}`;
-    await this.reply(msg);
-  }
-
-  /**
-   * Extracts and normalizes receipt fields from state.
-   * @param st - The receipt state to extract fields from.
-   * @returns Normalized receipt fields with defaults applied.
-   */
-  private static extractFields(st: IReceiptState): {
-    dateStr: string; cents: number; merchant: string; amountStr: string;
-  } {
-    const receipt = st.receipt;
-    const dateStr = receipt?.date ?? new Date().toISOString().slice(0, 10);
-    const cents = Math.round((receipt?.amount ?? 0) * -100);
-    const merchant = receipt?.merchant ?? 'Receipt';
-    const amountStr = String(receipt?.amount ?? 0);
-    return { dateStr, cents, merchant, amountStr };
-  }
-
-  /**
-   * Resolves a name from accounts or categories by ID.
-   * @param table - 'accounts' or 'categories'.
-   * @param id - UUID to look up.
-   * @returns The resolved name or 'Unknown'.
-   */
-  private async resolveName(table: string, id: string): Promise<string> {
-    if (!this._api) return 'Unknown';
-    try {
-      const items = table === 'accounts'
-        ? await this._api.getAccounts()
-        : await this._api.getCategories();
-      return items.find(i => i.id === id)?.name ?? 'Unknown';
-    } catch (error: unknown) { getLogger().debug(`Resolve name error: ${errorMessage(error)}`); return 'Unknown'; }
+    return result;
   }
 
   /**
