@@ -46,16 +46,15 @@ function checkWebhookOffline(
 }
 
 /**
- * Runs offline notification checks when notifications are enabled.
- * @param notifications - Optional notifications config block to check.
- * @returns Array of IValidationResult objects for Telegram and webhook.
+ * Aggregates results from all enabled notification channels.
+ * @param notifications - Notifications config (already verified as enabled by caller).
+ * @returns Combined IValidationResult[] from Telegram and webhook checks.
  */
-export function checkNotificationsOffline(
-  notifications?: IImporterConfig['notifications']
+function aggregateChannelResults(
+  notifications: NonNullable<IImporterConfig['notifications']>
 ): IValidationResult[] {
-  if (!notifications?.enabled) return [];
-  const results: IValidationResult[] = [];
   const { telegram, webhook } = notifications;
+  const results: IValidationResult[] = [];
   if (telegram) {
     const telegramResults = checkTelegramOffline(telegram);
     results.push(...telegramResults);
@@ -65,4 +64,16 @@ export function checkNotificationsOffline(
     results.push(webhookResult);
   }
   return results;
+}
+
+/**
+ * Runs offline notification checks when notifications are enabled.
+ * @param notifications - Optional notifications config block to check.
+ * @returns Array of IValidationResult objects for Telegram and webhook.
+ */
+export function checkNotificationsOffline(
+  notifications?: IImporterConfig['notifications']
+): IValidationResult[] {
+  if (!notifications?.enabled) return [];
+  return aggregateChannelResults(notifications);
 }

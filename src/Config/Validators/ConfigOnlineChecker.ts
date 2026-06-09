@@ -64,7 +64,7 @@ export async function checkActualServer(config: IImporterConfig): Promise<IValid
     return resp.status < 500
       ? pass('actual.server', `Actual server reachable: ${serverURL} (${String(resp.status)})`)
       : fail('actual.server', `Actual server error ${String(resp.status)}: ${serverURL}`);
-  } catch (e) {
+  } catch (e: unknown) {
     return fail('actual.server', `Cannot reach Actual server: ${errorMessage(e)}`);
   }
 }
@@ -102,7 +102,7 @@ export async function checkTelegramToken(
     return data.ok
       ? pass('telegram.token', `Telegram bot valid (@${data.result?.username ?? '?'})`)
       : fail('telegram.token', 'Invalid Telegram bot token');
-  } catch (e) {
+  } catch (e: unknown) {
     return fail('telegram.token', `Telegram check failed: ${errorMessage(e)}`);
   }
 }
@@ -118,7 +118,7 @@ export async function checkWebhookUrl(url: string): Promise<IValidationResult> {
     return resp.ok
       ? pass('webhook.url', `Webhook reachable (${String(resp.status)})`)
       : warn('webhook.url', `Webhook returned ${String(resp.status)} — may not accept HEAD`);
-  } catch (e) {
+  } catch (e: unknown) {
     return fail('webhook.url', `Cannot reach webhook: ${errorMessage(e)}`);
   }
 }

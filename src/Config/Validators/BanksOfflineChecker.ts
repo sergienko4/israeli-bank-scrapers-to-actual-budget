@@ -86,6 +86,19 @@ function checkBankDates(name: string, cfg: IBankConfig): IValidationResult[] {
 }
 
 /**
+ * Formats the human-readable summary for a valid bank target.
+ * @param target - The IBankTarget whose label, accounts and reconcile flag to render.
+ * @param idx - Zero-based target index.
+ * @returns Formatted string like `target[0] "Main": accounts=[...], reconcile=true`.
+ */
+function formatTargetSummary(target: IBankTarget, idx: number): string {
+  const label = target.accountName ?? `...${target.actualAccountId.split('-').at(-1) ?? ''}`;
+  const accts = Array.isArray(target.accounts) ? `[${target.accounts.join(', ')}]` : target.accounts;
+  const rec = String(target.reconcile);
+  return `target[${String(idx)}] "${label}": accounts=${accts}, reconcile=${rec}`;
+}
+
+/**
  * Validates a single bank target's actualAccountId format and accounts field.
  * @param name - Bank key used in result messages.
  * @param target - The IBankTarget to check.
@@ -102,11 +115,7 @@ function checkBankTarget(
     return fail(tag,
       `${name} target[${String(idx)}]: invalid actualAccountId "${idLabel}" — expected UUID`);
   }
-  const label = target.accountName ?? `...${id.split('-').at(-1) ?? ''}`;
-  const accts = Array.isArray(target.accounts) ? `[${target.accounts.join(', ')}]` : target.accounts;
-  const rec = String(target.reconcile);
-  return pass(tag,
-    `${name} target[${String(idx)}] "${label}": accounts=${accts}, reconcile=${rec}`);
+  return pass(tag, `${name} ${formatTargetSummary(target, idx)}`);
 }
 
 /**
