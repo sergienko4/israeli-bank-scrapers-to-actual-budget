@@ -675,6 +675,31 @@ export default tseslint.config(
     },
   },
 
+  // 7d. NOTIFICATION SERVICE — tightened max-lines (PR 4: NotificationService split)
+  // After extracting `Notifications/NotificationGate.ts` (config → INotifier[])
+  // and `Notifications/NotificationDispatcher.ts` (Promise.allSettled + count),
+  // `NotificationService.ts` is a thin orchestrator (~60 LoC) that only wires
+  // the gate and dispatcher together via 3 public send methods. The default
+  // cap is `max: 300`; this rule caps it at 80 so the orchestrator cannot
+  // drift back into being a god-class. Adding a new send action MUST be a
+  // 5-line delegation to `dispatchToAll(...)`. Anything heavier (rate-limit,
+  // dry-run gate, retry policy) MUST become a new module under
+  // `src/Services/Notifications/*` — never inline in this file.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines: 80` rule survives on the canary fixture; flat-config rule
+  // keys are replaced (not merged) by later matching blocks, so the canary
+  // file MUST be configured by the LAST block listing it.
+  {
+    files: [
+      'src/Services/NotificationService.ts',
+      'tests/eslint-canaries/NotificationServiceMaxLines.canary.ts',
+    ],
+    rules: {
+      'max-lines': ['error', { max: 80, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
