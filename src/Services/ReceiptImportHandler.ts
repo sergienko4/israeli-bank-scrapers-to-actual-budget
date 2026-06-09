@@ -10,6 +10,7 @@ import { errorMessage } from '../Utils/Index.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import { escapeHtml } from './Notifications/TelegramFormatter.js';
 import type TelegramNotifier from './Notifications/TelegramNotifier.js';
+import { presentAccountMenu, presentCategoryMenu, presentSmartMatch } from './Receipt/ReceiptMenuPresenter.js';
 import type { IPayeeMatch } from './Receipt/ReceiptPayeeMatcher.js';
 import findReceiptPayeeMatch from './Receipt/ReceiptPayeeMatcher.js';
 import ReceiptPhotoOcrPipeline from './Receipt/ReceiptPhotoOcrPipeline.js';
@@ -218,13 +219,7 @@ export class ReceiptImportHandler {
   private async showSmartMatch(match: IPayeeMatch): Promise<Procedure<{ status: string }>> {
     this._state.selectedAccount = match.accId;
     this._state.selectedCategory = match.catId;
-    const text = '🔍 <b>Found previous import:</b>\n' +
-      `Account: ${escapeHtml(match.accName)}\nCategory: ${escapeHtml(match.catName)}`;
-    const keyboard = [
-      [{ text: '✅ Use these', callback_data: 'receipt_confirm' }, { text: '📋 Choose different', callback_data: 'receipt_choose' }],
-      [{ text: '❌ Cancel', callback_data: 'receipt_cancel' }],
-    ];
-    return await this._telegramNotifier.sendInlineMenu(text, keyboard);
+    return await presentSmartMatch(this._telegramNotifier, match);
   }
 
   /**
@@ -236,9 +231,7 @@ export class ReceiptImportHandler {
     if (!hasApi || !this._api) { this.reset(); await this.reply('❌ Actual Budget API not connected'); return fail('API not available'); }
     try {
       const accounts = await this._api.getAccounts();
-      const rows = accounts.map(a => [{ text: a.name, callback_data: `receipt_acc:${a.id}` }]);
-      rows.push([{ text: '❌ Cancel', callback_data: 'receipt_cancel' }]);
-      return await this._telegramNotifier.sendInlineMenu('📋 <b>Select account:</b>', rows);
+      return await presentAccountMenu(this._telegramNotifier, accounts);
     } catch (error: unknown) { getLogger().debug(`API error: ${errorMessage(error)}`); this.reset(); await this.reply('❌ Cannot reach Actual Budget'); return fail('API error'); }
   }
 
@@ -251,9 +244,7 @@ export class ReceiptImportHandler {
     if (!hasApi || !this._api) { this.reset(); await this.reply('❌ Actual Budget API not connected'); return fail('API not available'); }
     try {
       const categories = await this._api.getCategories();
-      const rows = categories.map(c => [{ text: c.name, callback_data: `receipt_cat:${c.id}` }]);
-      rows.push([{ text: '❌ Cancel', callback_data: 'receipt_cancel' }]);
-      return await this._telegramNotifier.sendInlineMenu('📋 <b>Select category:</b>', rows);
+      return await presentCategoryMenu(this._telegramNotifier, categories);
     } catch (error: unknown) { getLogger().debug(`Category fetch error: ${errorMessage(error)}`); this.reset(); await this.reply('❌ Cannot fetch categories'); return fail('API error'); }
   }
 
