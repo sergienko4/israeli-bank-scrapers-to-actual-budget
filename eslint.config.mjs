@@ -642,6 +642,7 @@ export default tseslint.config(
     files: [
       'src/Services/TelegramPoller.ts',
       'src/Services/Notifications/TelegramNotifier.ts',
+      'src/Services/Notifications/TelegramOtpPoller.ts',
       'src/Resilience/GracefulShutdown.ts',
       'src/Resilience/RetryStrategy.ts',
       'src/Services/AccountImporter.ts',
@@ -697,6 +698,33 @@ export default tseslint.config(
     ],
     rules: {
       'max-lines': ['error', { max: 80, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
+  // 7e. TELEGRAM NOTIFIER — tightened max-lines (PR 5: TelegramNotifier split)
+  // After extracting `Notifications/TelegramApiClient.ts` (raw HTTP I/O),
+  // `Notifications/TelegramHtml.ts` (pure HTML/OTP utilities) and
+  // `Notifications/TelegramOtpPoller.ts` (OTP long-poll state machine),
+  // `TelegramNotifier.ts` is a thin orchestrator (~187 LoC) that wires
+  // formatting, HTML safety, and HTTP transport. The default cap is
+  // `max: 300`; this rule caps it at 200 so the orchestrator cannot drift
+  // back into being a 469-LoC god-class. Adding a new send action MUST be a
+  // short delegation to `this._client.sendHtmlMessage(...)`. Anything
+  // heavier (rate-limit, retry policy, alternative transport) MUST become
+  // a new module under `src/Services/Notifications/*` — never inline in
+  // this file.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines: 200` rule survives on the canary fixture; flat-config rule
+  // keys are replaced (not merged) by later matching blocks, so the canary
+  // file MUST be configured by the LAST block listing it.
+  {
+    files: [
+      'src/Services/Notifications/TelegramNotifier.ts',
+      'tests/eslint-canaries/TelegramNotifierMaxLines.canary.ts',
+    ],
+    rules: {
+      'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
     },
   },
 

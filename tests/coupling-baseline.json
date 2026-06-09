@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-06-09",
-  "totalFiles": 122,
+  "totalFiles": 125,
   "scoreDistribution": {
-    "critical8plus": 12,
-    "high5to7": 10,
-    "medium3to4": 20,
+    "critical8plus": 11,
+    "high5to7": 11,
+    "medium3to4": 22,
     "low1to2": 21,
-    "clean0": 59
+    "clean0": 60
   },
   "files": [
     {
@@ -399,38 +399,6 @@
       ],
       "newClasses": [],
       "newCount": 0,
-      "ocpRisks": [],
-      "score": 10
-    },
-    {
-      "path": "src/Services/Notifications/TelegramNotifier.ts",
-      "layer": "IS",
-      "lines": 470,
-      "valueImports": 4,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "NetworkError",
-        "Promise",
-        "TimeoutError"
-      ],
-      "newCount": 4,
       "ocpRisks": [],
       "score": 10
     },
@@ -851,6 +819,37 @@
       "score": 6
     },
     {
+      "path": "src/Services/Notifications/TelegramOtpPoller.ts",
+      "layer": "IS",
+      "lines": 122,
+      "valueImports": 4,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Errors/ErrorTypes.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Promise",
+        "TimeoutError"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
       "path": "src/Services/ReceiptApiAdapter.ts",
       "layer": "IS",
       "lines": 50,
@@ -1114,7 +1113,7 @@
     {
       "path": "src/Services/Notifications/NotificationDispatcher.ts",
       "layer": "IS",
-      "lines": 62,
+      "lines": 78,
       "valueImports": 2,
       "typeImports": 2,
       "crossLayerValueDeps": [
@@ -1131,6 +1130,56 @@
       ],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/Notifications/TelegramApiClient.ts",
+      "layer": "IS",
+      "lines": 190,
+      "valueImports": 2,
+      "typeImports": 0,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Errors/ErrorTypes.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "NetworkError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/Notifications/TelegramNotifier.ts",
+      "layer": "IS",
+      "lines": 187,
+      "valueImports": 6,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "TelegramApiClient"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 4
     },
@@ -2273,6 +2322,18 @@
       "lines": 13,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/TelegramHtml.ts",
+      "layer": "IS",
+      "lines": 104,
+      "valueImports": 0,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
