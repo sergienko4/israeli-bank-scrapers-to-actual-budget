@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-06-08",
-  "totalFiles": 114,
+  "totalFiles": 120,
   "scoreDistribution": {
-    "critical8plus": 13,
+    "critical8plus": 12,
     "high5to7": 10,
-    "medium3to4": 18,
-    "low1to2": 17,
-    "clean0": 56
+    "medium3to4": 20,
+    "low1to2": 19,
+    "clean0": 59
   },
   "files": [
     {
@@ -589,33 +589,6 @@
       "score": 8
     },
     {
-      "path": "src/Config/ConfigValidator.ts",
-      "layer": "CC",
-      "lines": 531,
-      "valueImports": 5,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigLoader",
-        "ConfigValidator",
-        "Set"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 8
-    },
-    {
       "path": "src/Scraper/BankScraper.ts",
       "layer": "BP",
       "lines": 175,
@@ -758,26 +731,6 @@
       "newCount": 2,
       "ocpRisks": [],
       "score": 7
-    },
-    {
-      "path": "src/Config/ConfigLoaderValidator.ts",
-      "layer": "CC",
-      "lines": 477,
-      "valueImports": 4,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 6
     },
     {
       "path": "src/Scheduler/CronLoop.ts",
@@ -927,6 +880,24 @@
       "newCount": 2,
       "ocpRisks": [],
       "score": 6
+    },
+    {
+      "path": "src/Config/ConfigLoaderValidator.ts",
+      "layer": "CC",
+      "lines": 311,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 5
     },
     {
       "path": "src/Config/ConfigEncryption.ts",
@@ -1143,7 +1114,7 @@
     {
       "path": "src/Services/NotificationService.ts",
       "layer": "IS",
-      "lines": 113,
+      "lines": 115,
       "valueImports": 3,
       "typeImports": 3,
       "crossLayerValueDeps": [
@@ -1238,6 +1209,47 @@
       "score": 4
     },
     {
+      "path": "src/Config/ConfigValidator.ts",
+      "layer": "CC",
+      "lines": 106,
+      "valueImports": 8,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ConfigLoader",
+        "ConfigValidator"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
+      "path": "src/Config/Validators/NotificationChannelValidators.ts",
+      "layer": "CC",
+      "lines": 150,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [
+        "if(config.X) chain x2"
+      ],
+      "score": 3
+    },
+    {
       "path": "src/Logger/Index.ts",
       "layer": "CC",
       "lines": 93,
@@ -1324,6 +1336,62 @@
       "newCount": 0,
       "ocpRisks": [],
       "score": 3
+    },
+    {
+      "path": "src/Config/Validators/BankDateValidators.ts",
+      "layer": "CC",
+      "lines": 127,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Config/Validators/ConfigOnlineChecker.ts",
+      "layer": "CC",
+      "lines": 125,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Config/Validators/OptionalSectionValidators.ts",
+      "layer": "CC",
+      "lines": 96,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
     },
     {
       "path": "src/Logger/LogRotatingStream.ts",
@@ -1575,20 +1643,6 @@
       "score": 2
     },
     {
-      "path": "src/Config/Validators/NotificationChannelValidators.ts",
-      "layer": "CC",
-      "lines": 45,
-      "valueImports": 1,
-      "typeImports": 2,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [
-        "if(config.X) chain x2"
-      ],
-      "score": 1
-    },
-    {
       "path": "src/Scrapers/Pipeline/Steps/FinalizeImportStep.ts",
       "layer": "BP",
       "lines": 234,
@@ -1620,7 +1674,7 @@
     {
       "path": "src/Services/Notifications/NotifierRegistry.ts",
       "layer": "IS",
-      "lines": 23,
+      "lines": 25,
       "valueImports": 2,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -1644,14 +1698,28 @@
       "score": 0
     },
     {
-      "path": "src/Config/Validators/BankDateValidators.ts",
+      "path": "src/Config/Validators/ActualOfflineChecker.ts",
       "layer": "CC",
-      "lines": 59,
+      "lines": 65,
       "valueImports": 1,
-      "typeImports": 2,
+      "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Validators/BanksOfflineChecker.ts",
+      "layer": "CC",
+      "lines": 151,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 0
     },
@@ -1668,11 +1736,35 @@
       "score": 0
     },
     {
-      "path": "src/Config/Validators/OptionalSectionValidators.ts",
+      "path": "src/Config/Validators/NotificationsOfflineChecker.ts",
       "layer": "CC",
-      "lines": 57,
+      "lines": 69,
       "valueImports": 1,
-      "typeImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Validators/ReportFormatter.ts",
+      "layer": "CC",
+      "lines": 43,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Validators/ValidationResult.ts",
+      "layer": "CC",
+      "lines": 63,
+      "valueImports": 0,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -2154,28 +2246,30 @@
     {
       "path": "src/Services/Notifications/TelegramNotifierFactory.ts",
       "layer": "IS",
-      "lines": 27,
+      "lines": 49,
       "valueImports": 1,
       "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [
-        "TelegramNotifier"
+        "TelegramNotifier",
+        "TypeError"
       ],
-      "newCount": 2,
+      "newCount": 4,
       "ocpRisks": [],
       "score": 0
     },
     {
       "path": "src/Services/Notifications/WebhookNotifierFactory.ts",
       "layer": "IS",
-      "lines": 28,
+      "lines": 50,
       "valueImports": 1,
       "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [
+        "TypeError",
         "WebhookNotifier"
       ],
-      "newCount": 2,
+      "newCount": 4,
       "ocpRisks": [],
       "score": 0
     },

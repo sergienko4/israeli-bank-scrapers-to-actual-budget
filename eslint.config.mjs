@@ -653,6 +653,28 @@ export default tseslint.config(
     },
   },
 
+  // 7c. CONFIG VALIDATOR — tightened max-lines (PR 3: ConfigValidator split)
+  // After splitting per-block checks into `src/Config/Validators/*Checker.ts`,
+  // `ConfigValidator.ts` is now a thin orchestrator (~105 LoC). The default
+  // cap is `max: 300`; this rule caps it at 200 so the orchestrator cannot
+  // drift back into being a god-class. Adding a new config block MUST be a
+  // new `*Checker.ts` module + one delegation line here — never an inline
+  // check or helper that grows the file beyond 200 LoC.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines: 200` rule survives on the canary fixture; flat-config rule
+  // keys are replaced (not merged) by later matching blocks, so the canary
+  // file MUST be configured by the LAST block listing it.
+  {
+    files: [
+      'src/Config/ConfigValidator.ts',
+      'tests/eslint-canaries/ConfigValidatorMaxLines.canary.ts',
+    ],
+    rules: {
+      'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
