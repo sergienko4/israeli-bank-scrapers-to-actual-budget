@@ -10,15 +10,18 @@ import { errorMessage } from '../Utils/Index.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import { escapeHtml } from './Notifications/TelegramFormatter.js';
 import type TelegramNotifier from './Notifications/TelegramNotifier.js';
-import importReceipt from './Receipt/ReceiptImporter.js';
-import { presentAccountMenu, presentCategoryMenu, presentSmartMatch } from './Receipt/ReceiptMenuPresenter.js';
-import type { IPayeeMatch } from './Receipt/ReceiptPayeeMatcher.js';
-import findReceiptPayeeMatch from './Receipt/ReceiptPayeeMatcher.js';
-import ReceiptPhotoOcrPipeline from './Receipt/ReceiptPhotoOcrPipeline.js';
-import type { IReceiptActualApi } from './Receipt/Types.js';
+import type { IPayeeMatch, IReceiptActualApi } from './Receipt/Index.js';
+import {
+  findReceiptPayeeMatch,
+  importReceipt,
+  presentAccountMenu,
+  presentCategoryMenu,
+  presentSmartMatch,
+  ReceiptPhotoOcrPipeline,
+} from './Receipt/Index.js';
 import type ReceiptOcrService from './ReceiptOcrService.js';
 
-export type { IReceiptActualApi } from './Receipt/Types.js';
+export type { IReceiptActualApi } from './Receipt/Index.js';
 
 /** Options for constructing a ReceiptImportHandler. */
 export interface IReceiptHandlerOptions {
