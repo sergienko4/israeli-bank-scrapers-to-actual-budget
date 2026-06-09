@@ -616,6 +616,43 @@ describe('TelegramCommandHandler', () => {
     expect(calls.some((m: string) => m.includes('Import failed') && m.includes('mediator-exploded'))).toBe(true);
   });
 
+  // ─── Regression: import pipeline failures must NOT be masked as `already-running` ───
+  // PR #419 CR cycle 1 F2: executeImport / preview previously coerced ANY pipeline
+  // failure to `succeed({ status: 'already-running' })`, hiding real mediator errors.
+  // Status now propagates the underlying message (`already-running` vs `import-error`).
+
+  it('/scan returns status=import-error when mediator throws (no longer masked as already-running)', async () => {
+    mockMediator.requestImport.mockImplementation(() => {
+      throw new Error('mediator-exploded');
+    });
+    const out = await handler.handle('/scan ');
+    expect(out.success).toBe(true);
+    if (out.success) expect(out.data.status).toBe('import-error');
+  });
+
+  it('/scan returns status=already-running when mediator refuses with no batchId', async () => {
+    mockMediator.requestImport.mockReturnValue(null as unknown as string);
+    const out = await handler.handle('/scan ');
+    expect(out.success).toBe(true);
+    if (out.success) expect(out.data.status).toBe('already-running');
+  });
+
+  it('/preview returns status=import-error when mediator throws (no longer masked as already-running)', async () => {
+    mockMediator.requestImport.mockImplementation(() => {
+      throw new Error('preview-exploded');
+    });
+    const out = await handler.handle('/preview');
+    expect(out.success).toBe(true);
+    if (out.success) expect(out.data.status).toBe('import-error');
+  });
+
+  it('/preview returns status=already-running when mediator refuses with no batchId', async () => {
+    mockMediator.requestImport.mockReturnValue(null as unknown as string);
+    const out = await handler.handle('/preview');
+    expect(out.success).toBe(true);
+    if (out.success) expect(out.data.status).toBe('already-running');
+  });
+
   // ─── appendRecentHistory with entries ───
 
   it('/status with audit entries calls formatAuditEntry for each', async () => {

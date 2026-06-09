@@ -77,14 +77,15 @@ export class TelegramImportCoordinator {
   /**
    * Imports all configured banks.
    *
-   * @returns Procedure indicating the scan-all result.
+   * @returns Procedure indicating the scan-all result. Status mirrors the
+   *   underlying import pipeline: `import-complete` on success, `already-running`
+   *   when busy, or `import-error` when the pipeline surfaced a mediator failure.
    */
   public async scanAll(): Promise<Procedure<{ status: string }>> {
     if (await this.sendBusyReplyIfRunning()) {
       return succeed({ status: 'already-running' });
     }
-    await this.executeImport();
-    return succeed({ status: 'scan-all-started' });
+    return await this.executeImport();
   }
 
   /**
@@ -106,7 +107,9 @@ export class TelegramImportCoordinator {
   /**
    * Runs a dry-run import without writing to Actual Budget.
    *
-   * @returns Procedure indicating the preview result.
+   * @returns Procedure indicating the preview result. Status is `preview-complete`
+   *   on success, `already-running` when busy, or `import-error` when the pipeline
+   *   surfaces a mediator failure (no longer masked as `already-running`).
    */
   public async preview(): Promise<Procedure<{ status: string }>> {
     if (await this.sendBusyReplyIfRunning()) {
@@ -116,7 +119,7 @@ export class TelegramImportCoordinator {
       extraEnv: { DRY_RUN: 'true' },
       startMsg: '🔍 Starting dry run — no changes will be made...',
     });
-    if (!piped.success) return succeed({ status: 'already-running' });
+    if (!piped.success) return succeed({ status: piped.message });
     const dur = (piped.data.totalDurationMs / 1000).toFixed(0);
     await this.reply(`✅ Dry run completed (${dur}s). See preview report above.`);
     return succeed({ status: 'preview-complete' });
@@ -161,7 +164,9 @@ export class TelegramImportCoordinator {
    * Resolves the bank argument and either replies with an error or imports.
    *
    * @param bankArg - Bank argument (possibly empty/undefined).
-   * @returns Procedure indicating the import result.
+   * @returns Procedure indicating the import result. On a resolved import the
+   *   status mirrors the underlying pipeline (`import-complete` / `already-running`
+   *   / `import-error`); on an unknown-bank arg the status is `error-sent`.
    */
   private async scanWithResolvedBanks(
     bankArg?: string,
@@ -171,8 +176,7 @@ export class TelegramImportCoordinator {
       await this.reply(banks);
       return succeed({ status: 'error-sent' });
     }
-    await this.executeImport(banks);
-    return succeed({ status: 'scan-started' });
+    return await this.executeImport(banks);
   }
 
   /**
@@ -197,7 +201,10 @@ export class TelegramImportCoordinator {
    * Requests an import and reports the batch result.
    *
    * @param banks - Optional list of banks to import.
-   * @returns Procedure indicating the import completion status.
+   * @returns Procedure indicating the import completion status. Status is
+   *   `import-complete` on success, `already-running` when the mediator refused
+   *   because another batch is in flight, or `import-error` when the pipeline
+   *   surfaced a mediator exception (no longer masked as `already-running`).
    */
   private async executeImport(banks?: string[]): Promise<Procedure<{ status: string }>> {
     const label = banks ? ` (${banks.join(', ')})` : '';
@@ -205,7 +212,7 @@ export class TelegramImportCoordinator {
       banks,
       startMsg: `⏳ Starting import...${label}`,
     });
-    if (!piped.success) return succeed({ status: 'already-running' });
+    if (!piped.success) return succeed({ status: piped.message });
     if (piped.data.failureCount > 0) {
       const errorReply = this.batchErrorReply(piped.data);
       await this.reply(errorReply);
