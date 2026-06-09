@@ -14,7 +14,14 @@ import type { Procedure } from '../../Types/Index.js';
 import { fail, succeed } from '../../Types/Index.js';
 import type { INotifier } from './INotifier.js';
 
-/** Action that calls a notifier and returns a status Procedure. */
+/**
+ * Action that calls a notifier and returns a status Procedure.
+ *
+ * Note: the inner `{ sent: boolean }` value is currently unused by
+ * {@link dispatchToAll} (which only inspects fulfilled/rejected), but the
+ * `Procedure<T>` wrapper is REQUIRED by the project's `no-restricted-syntax`
+ * rule that forbids `Promise<void>` returns (Procedure pattern P1).
+ */
 export type NotifyAction = (n: INotifier) => Promise<Procedure<{ sent: boolean }>>;
 
 /**
