@@ -7,6 +7,7 @@
  * independently testable.
  */
 
+import NetworkError from '../Errors/NetworkError.js';
 import type {
   ITelegramApiResponse, ITelegramCallbackQuery, ITelegramMessageData,
   ITelegramUpdate, Procedure,
@@ -119,6 +120,7 @@ export default class TelegramUpdateDispatcher {
    *
    * @param message - The Telegram message data, or undefined.
    * @returns Procedure indicating the dispatch result.
+   * @throws Error when a handler returns an unsuccessful Procedure.
    */
   private async dispatchMessage(
     message: ITelegramMessageData | undefined
@@ -127,7 +129,10 @@ export default class TelegramUpdateDispatcher {
     if (message.photo && this.config.onPhoto) {
       return await this.dispatchPhoto(message);
     }
-    if (message.text) await this.config.onText(message.text);
+    if (message.text) {
+      const textResult = await this.config.onText(message.text);
+      TelegramUpdateDispatcher.ensureSuccess(textResult);
+    }
     return succeed({ status: 'text-dispatched' });
   }
 
@@ -136,6 +141,7 @@ export default class TelegramUpdateDispatcher {
    *
    * @param message - The Telegram message containing a photo array.
    * @returns Procedure indicating the dispatch result.
+   * @throws NetworkError when the photo handler returns an unsuccessful Procedure.
    */
   private async dispatchPhoto(
     message: ITelegramMessageData
@@ -144,7 +150,8 @@ export default class TelegramUpdateDispatcher {
     if (!onPhoto) return succeed({ status: 'skip-no-handler' });
     const largest = message.photo?.at(-1);
     if (!largest) return succeed({ status: 'skip-no-photo' });
-    await onPhoto(largest.file_id, message.caption);
+    const photoResult = await onPhoto(largest.file_id, message.caption);
+    TelegramUpdateDispatcher.ensureSuccess(photoResult);
     return succeed({ status: 'photo-dispatched' });
   }
 
@@ -153,6 +160,7 @@ export default class TelegramUpdateDispatcher {
    *
    * @param query - The callback query from the update, or undefined.
    * @returns Procedure indicating the dispatch result.
+   * @throws NetworkError when ACK or text handler returns an unsuccessful Procedure.
    */
   private async dispatchCallbackQuery(
     query: ITelegramCallbackQuery | undefined
@@ -161,8 +169,29 @@ export default class TelegramUpdateDispatcher {
     if (String(query.message?.chat.id) !== this.config.chatId) {
       return succeed({ status: 'skip-wrong-chat' });
     }
-    await this.http.answerCallbackQuery(query.id);
-    await this.config.onText(query.data);
+    const ackResult = await this.http.answerCallbackQuery(query.id);
+    TelegramUpdateDispatcher.ensureSuccess(ackResult);
+    const textResult = await this.config.onText(query.data);
+    TelegramUpdateDispatcher.ensureSuccess(textResult);
     return succeed({ status: 'callback-dispatched' });
+  }
+
+  /**
+   * Throws if a handler returned an unsuccessful Procedure so the outer
+   * poll cycle applies backoff and the offset is NOT advanced (preventing
+   * silent update loss). Tolerates legacy/test handlers that resolve to
+   * undefined instead of a Procedure.
+   *
+   * @param result - The Procedure result from a handler (or undefined).
+   * @returns Nothing — throws on unsuccessful Procedure.
+   * @throws NetworkError when the result is a Procedure with success=false.
+   */
+  private static ensureSuccess(
+    result: Procedure<{ status: string }> | undefined
+  ): void {
+    if (result === undefined) return;
+    if (!result.success) {
+      throw new NetworkError('Telegram handler returned unsuccessful Procedure');
+    }
   }
 }

@@ -7,17 +7,41 @@
  * independently testable.
  */
 
+import { getLogger } from '../Logger/Index.js';
 import type { ITelegramApiResponse, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
+import { errorMessage } from '../Utils/Index.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const POLL_TIMEOUT = 30;
+const BEST_EFFORT_TIMEOUT_MS = 10_000;
 
 /** Result of a single poll() call — see TelegramPollHttp.poll. */
 export type PollOutcome =
   | { kind: 'data'; data: ITelegramApiResponse }
   | { kind: 'http-error'; statusCode: number }
   | { kind: 'aborted' };
+
+/**
+ * Issues a fetch with a bounded timeout so best-effort calls cannot hang.
+ *
+ * @param url - URL to fetch.
+ * @param init - Optional fetch init (method, headers, body).
+ * @returns The Response from fetch (timer-bounded).
+ */
+async function fetchWithTimeout(
+  url: string, init?: RequestInit
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(
+    () => { controller.abort(); }, BEST_EFFORT_TIMEOUT_MS,
+  );
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
 
 /** Wraps the Telegram Bot API getUpdates / answerCallbackQuery endpoints. */
 export default class TelegramPollHttp {
@@ -45,11 +69,11 @@ export default class TelegramPollHttp {
       }
       const data = await response.json() as ITelegramApiResponse;
       return { kind: 'data', data };
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
         return { kind: 'aborted' };
       }
-      throw err;
+      throw error;
     }
   }
 
@@ -62,12 +86,13 @@ export default class TelegramPollHttp {
   public async getInitialOffset(): Promise<Procedure<{ offset: number }>> {
     try {
       const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates?offset=-1`;
-      const response = await fetch(url);
+      const response = await fetchWithTimeout(url);
       if (!response.ok) return succeed({ offset: 0 });
       const data = await response.json() as ITelegramApiResponse;
       const lastUpdate = data.ok ? data.result?.at(-1) : undefined;
       return succeed({ offset: lastUpdate ? lastUpdate.update_id + 1 : 0 });
-    } catch {
+    } catch (error: unknown) {
+      getLogger().debug(`getInitialOffset best-effort: ${errorMessage(error)}`);
       return succeed({ offset: 0 });
     }
   }
@@ -77,15 +102,18 @@ export default class TelegramPollHttp {
    * processed updates up to the given offset.
    *
    * @param offset - The offset to acknowledge with Telegram.
-   * @returns Procedure indicating the flush completed (always succeeds).
+   * @returns Procedure with status 'flushed' on 2xx or 'flush-failed-best-effort' otherwise.
    */
   public async flushOffset(offset: number): Promise<Procedure<{ status: string }>> {
     try {
       const url = `${TELEGRAM_API}/bot${this.botToken}/getUpdates` +
         `?offset=${String(offset)}&timeout=0`;
-      await fetch(url);
-      return succeed({ status: 'flushed' });
-    } catch {
+      const response = await fetchWithTimeout(url);
+      return succeed({
+        status: response.ok ? 'flushed' : 'flush-failed-best-effort',
+      });
+    } catch (error: unknown) {
+      getLogger().debug(`flushOffset best-effort: ${errorMessage(error)}`);
       return succeed({ status: 'flush-failed-best-effort' });
     }
   }
@@ -95,7 +123,7 @@ export default class TelegramPollHttp {
    * spinner from the button. Errors are swallowed (best-effort).
    *
    * @param queryId - The callback_query_id to acknowledge.
-   * @returns Procedure indicating the ack completed (always succeeds).
+   * @returns Procedure with status 'acked' on 2xx or 'ack-failed-best-effort' otherwise.
    */
   public async answerCallbackQuery(
     queryId: string
@@ -103,13 +131,16 @@ export default class TelegramPollHttp {
     try {
       const url = `${TELEGRAM_API}/bot${this.botToken}/answerCallbackQuery`;
       const body = JSON.stringify({ callback_query_id: queryId });
-      await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,
       });
-      return succeed({ status: 'acked' });
-    } catch {
+      return succeed({
+        status: response.ok ? 'acked' : 'ack-failed-best-effort',
+      });
+    } catch (error: unknown) {
+      getLogger().debug(`answerCallbackQuery best-effort: ${errorMessage(error)}`);
       return succeed({ status: 'ack-failed-best-effort' });
     }
   }
