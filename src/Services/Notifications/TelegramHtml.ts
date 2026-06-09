@@ -6,15 +6,14 @@
  * No I/O, no class state — every export is a pure function.
  */
 
+import type { InlineKeyboard } from './TelegramApiClient.js';
+
 const MAX_MESSAGE_LENGTH = 4096;
 const TRUNCATE_RESERVE = 30;
 const MAX_DESCRIPTION_LENGTH = 256;
 const COMMAND_PATTERN = /^[a-z0-9_]{1,32}$/;
 const OTP_MIN_DIGITS = 4;
 const OTP_MAX_DIGITS = 8;
-
-/** Inline-keyboard button row used by Telegram's reply_markup. */
-export type InlineKeyboard = { text: string; callback_data: string }[][];
 
 /**
  * Truncates an HTML message to Telegram's 4096-character limit,
@@ -53,8 +52,11 @@ export function closeUnclosedTags(text: string): string {
   const openTags: string[] = [];
   const tagRegex = /<(\/?)(\w+)\b[^>]*>/g;
   for (const match of text.matchAll(tagRegex)) {
-    if (match[1] === '/') { if (openTags.length > 0) openTags.pop(); }
-    else { openTags.push(match[2]); }
+    if (match[1] === '/') {
+      if (openTags.length > 0) openTags.pop();
+    } else {
+      openTags.push(match[2]);
+    }
   }
   return text + [...openTags].reverse().map((tag) => `</${tag}>`).join('');
 }

@@ -12,7 +12,7 @@
  */
 
 import { NetworkError } from '../../Errors/ErrorTypes.js';
-import { fail, type ITelegramApiResponse, type Procedure,succeed } from '../../Types/Index.js';
+import { fail, type ITelegramApiResponse, type Procedure, succeed } from '../../Types/Index.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 
@@ -56,6 +56,7 @@ export default class TelegramApiClient {
    *
    * @param text - HTML message text (caller must pre-truncate/pre-escape).
    * @param replyMarkup - Optional inline keyboard rows.
+   * @returns Resolves when the message has been accepted by the Telegram API.
    * @throws NetworkError when the Telegram API rejects the request.
    */
   public async sendHtmlMessage(text: string, replyMarkup?: InlineKeyboard): Promise<void> {
@@ -70,6 +71,7 @@ export default class TelegramApiClient {
    * Registers the bot command list with Telegram.
    *
    * @param commands - Command list to register.
+   * @returns Resolves when the command list has been registered with Telegram.
    * @throws NetworkError when setMyCommands rejects the request.
    */
   public async setMyCommands(
@@ -115,6 +117,7 @@ export default class TelegramApiClient {
    * Confirms updates up to the given offset (best-effort, never throws).
    *
    * @param offset - The offset to confirm.
+   * @returns Resolves when the best-effort acknowledgement completes.
    */
   public async confirmOffset(offset: number): Promise<void> {
     try {
@@ -171,6 +174,7 @@ export default class TelegramApiClient {
    * @param endpoint - Endpoint name (e.g., `sendMessage`).
    * @param body - JSON-serializable request body.
    * @param errorLabel - Prefix used in {@link NetworkError} messages on failure.
+   * @returns Resolves when the request succeeds with a 2xx response.
    * @throws NetworkError when the response is not OK.
    */
   private async postJson(
