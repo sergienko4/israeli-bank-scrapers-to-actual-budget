@@ -587,6 +587,24 @@ describe('TelegramCommandHandler', () => {
     expect(mockMediator.requestImport).toHaveBeenCalled();
   });
 
+  // ─── Regression: whitespace-only bankArg must trigger the menu, not an empty import ───
+
+  it('/scan with whitespace-only argument opens the scan menu (does not run import with empty bank list)', async () => {
+    const mockGetBankNames = vi.fn().mockReturnValue(['discount', 'visaCal']);
+    const mockSendScanMenu = vi.fn().mockResolvedValue(succeed({ status: 'menu-sent' }));
+    handler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      getBankNames: mockGetBankNames,
+      sendScanMenu: mockSendScanMenu,
+    });
+    const out = await handler.handle('/scan    ');
+    expect(mockSendScanMenu).toHaveBeenCalledWith(['discount', 'visaCal']);
+    expect(mockMediator.requestImport).not.toHaveBeenCalled();
+    expect(out.success).toBe(true);
+    if (out.success) expect(out.data.status).toBe('menu-sent');
+  });
+
   // ─── Canary: runImportPipeline must surface mediator errors via reply ───
 
   it('/scan surfaces mediator errors as a normalized failure reply', async () => {

@@ -143,12 +143,14 @@ export class TelegramImportCoordinator {
 
   /**
    * Sends the inline scan menu when no bank arg is supplied.
+   * Whitespace-only `bankArg` is treated as "no argument".
    *
-   * @param bankArg - Original bank argument (empty/undefined triggers menu).
+   * @param bankArg - Original bank argument (empty/whitespace/undefined triggers menu).
    * @returns True when the menu was actually sent.
    */
   private async maybeSendScanMenu(bankArg?: string): Promise<boolean> {
-    if (bankArg || !this._sendScanMenu || !this._getBankNames) return false;
+    const normalized = bankArg?.trim();
+    if (normalized || !this._sendScanMenu || !this._getBankNames) return false;
     const banks = this._getBankNames();
     if (banks.length === 0) return false;
     const sendResult = await this._sendScanMenu(banks);

@@ -1,4 +1,4 @@
-﻿// Canary: should trigger max-lines: 200 cap on TelegramCommandHandler.ts.
+// Canary: should trigger max-lines: 200 cap on TelegramCommandHandler.ts.
 //
 // The PR 8 rule (Section 7g of eslint.config.mjs) tightens `max-lines`
 // from the default 300 down to 200 for:
