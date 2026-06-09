@@ -1,0 +1,243 @@
+﻿// Canary: should trigger max-lines: 200 cap on TelegramCommandHandler.ts.
+//
+// The PR 8 rule (Section 7g of eslint.config.mjs) tightens `max-lines`
+// from the default 300 down to 200 for:
+//   - src/Services/TelegramCommandHandler.ts
+//   - tests/eslint-canaries/TelegramCommandHandlerMaxLines.canary.ts  <- this file
+//
+// After PR 8, TelegramCommandHandler.ts is a thin orchestrator (~140
+// effective LoC) that wires two peers behind the CommandRouter:
+// TelegramImportCoordinator (scan / scanAll / preview / retry pipelines)
+// and TelegramQueryCommands (status / logs / watch / check-config / help /
+// import-receipt). Adding a new import-pipeline command MUST go to
+// TelegramImportCoordinator; adding a new read-only / informational
+// command MUST go to TelegramQueryCommands. The public `handle(text)`
+// and `handlePhoto(fileId, caption?)` API is unchanged.
+//
+// This canary exceeds 200 effective LoC so the canary harness can prove
+// the rule is alive on every commit.
+//
+// The fixture is intentionally a flat list of trivial constant
+// declarations to keep other ESLint rules quiet (no nested calls, no
+// nullable returns). It is NOT exercised at runtime.
+export const fakeConst001 = 1;
+export const fakeConst002 = 2;
+export const fakeConst003 = 3;
+export const fakeConst004 = 4;
+export const fakeConst005 = 5;
+export const fakeConst006 = 6;
+export const fakeConst007 = 7;
+export const fakeConst008 = 8;
+export const fakeConst009 = 9;
+export const fakeConst010 = 10;
+export const fakeConst011 = 11;
+export const fakeConst012 = 12;
+export const fakeConst013 = 13;
+export const fakeConst014 = 14;
+export const fakeConst015 = 15;
+export const fakeConst016 = 16;
+export const fakeConst017 = 17;
+export const fakeConst018 = 18;
+export const fakeConst019 = 19;
+export const fakeConst020 = 20;
+export const fakeConst021 = 21;
+export const fakeConst022 = 22;
+export const fakeConst023 = 23;
+export const fakeConst024 = 24;
+export const fakeConst025 = 25;
+export const fakeConst026 = 26;
+export const fakeConst027 = 27;
+export const fakeConst028 = 28;
+export const fakeConst029 = 29;
+export const fakeConst030 = 30;
+export const fakeConst031 = 31;
+export const fakeConst032 = 32;
+export const fakeConst033 = 33;
+export const fakeConst034 = 34;
+export const fakeConst035 = 35;
+export const fakeConst036 = 36;
+export const fakeConst037 = 37;
+export const fakeConst038 = 38;
+export const fakeConst039 = 39;
+export const fakeConst040 = 40;
+export const fakeConst041 = 41;
+export const fakeConst042 = 42;
+export const fakeConst043 = 43;
+export const fakeConst044 = 44;
+export const fakeConst045 = 45;
+export const fakeConst046 = 46;
+export const fakeConst047 = 47;
+export const fakeConst048 = 48;
+export const fakeConst049 = 49;
+export const fakeConst050 = 50;
+export const fakeConst051 = 51;
+export const fakeConst052 = 52;
+export const fakeConst053 = 53;
+export const fakeConst054 = 54;
+export const fakeConst055 = 55;
+export const fakeConst056 = 56;
+export const fakeConst057 = 57;
+export const fakeConst058 = 58;
+export const fakeConst059 = 59;
+export const fakeConst060 = 60;
+export const fakeConst061 = 61;
+export const fakeConst062 = 62;
+export const fakeConst063 = 63;
+export const fakeConst064 = 64;
+export const fakeConst065 = 65;
+export const fakeConst066 = 66;
+export const fakeConst067 = 67;
+export const fakeConst068 = 68;
+export const fakeConst069 = 69;
+export const fakeConst070 = 70;
+export const fakeConst071 = 71;
+export const fakeConst072 = 72;
+export const fakeConst073 = 73;
+export const fakeConst074 = 74;
+export const fakeConst075 = 75;
+export const fakeConst076 = 76;
+export const fakeConst077 = 77;
+export const fakeConst078 = 78;
+export const fakeConst079 = 79;
+export const fakeConst080 = 80;
+export const fakeConst081 = 81;
+export const fakeConst082 = 82;
+export const fakeConst083 = 83;
+export const fakeConst084 = 84;
+export const fakeConst085 = 85;
+export const fakeConst086 = 86;
+export const fakeConst087 = 87;
+export const fakeConst088 = 88;
+export const fakeConst089 = 89;
+export const fakeConst090 = 90;
+export const fakeConst091 = 91;
+export const fakeConst092 = 92;
+export const fakeConst093 = 93;
+export const fakeConst094 = 94;
+export const fakeConst095 = 95;
+export const fakeConst096 = 96;
+export const fakeConst097 = 97;
+export const fakeConst098 = 98;
+export const fakeConst099 = 99;
+export const fakeConst100 = 100;
+export const fakeConst101 = 101;
+export const fakeConst102 = 102;
+export const fakeConst103 = 103;
+export const fakeConst104 = 104;
+export const fakeConst105 = 105;
+export const fakeConst106 = 106;
+export const fakeConst107 = 107;
+export const fakeConst108 = 108;
+export const fakeConst109 = 109;
+export const fakeConst110 = 110;
+export const fakeConst111 = 111;
+export const fakeConst112 = 112;
+export const fakeConst113 = 113;
+export const fakeConst114 = 114;
+export const fakeConst115 = 115;
+export const fakeConst116 = 116;
+export const fakeConst117 = 117;
+export const fakeConst118 = 118;
+export const fakeConst119 = 119;
+export const fakeConst120 = 120;
+export const fakeConst121 = 121;
+export const fakeConst122 = 122;
+export const fakeConst123 = 123;
+export const fakeConst124 = 124;
+export const fakeConst125 = 125;
+export const fakeConst126 = 126;
+export const fakeConst127 = 127;
+export const fakeConst128 = 128;
+export const fakeConst129 = 129;
+export const fakeConst130 = 130;
+export const fakeConst131 = 131;
+export const fakeConst132 = 132;
+export const fakeConst133 = 133;
+export const fakeConst134 = 134;
+export const fakeConst135 = 135;
+export const fakeConst136 = 136;
+export const fakeConst137 = 137;
+export const fakeConst138 = 138;
+export const fakeConst139 = 139;
+export const fakeConst140 = 140;
+export const fakeConst141 = 141;
+export const fakeConst142 = 142;
+export const fakeConst143 = 143;
+export const fakeConst144 = 144;
+export const fakeConst145 = 145;
+export const fakeConst146 = 146;
+export const fakeConst147 = 147;
+export const fakeConst148 = 148;
+export const fakeConst149 = 149;
+export const fakeConst150 = 150;
+export const fakeConst151 = 151;
+export const fakeConst152 = 152;
+export const fakeConst153 = 153;
+export const fakeConst154 = 154;
+export const fakeConst155 = 155;
+export const fakeConst156 = 156;
+export const fakeConst157 = 157;
+export const fakeConst158 = 158;
+export const fakeConst159 = 159;
+export const fakeConst160 = 160;
+export const fakeConst161 = 161;
+export const fakeConst162 = 162;
+export const fakeConst163 = 163;
+export const fakeConst164 = 164;
+export const fakeConst165 = 165;
+export const fakeConst166 = 166;
+export const fakeConst167 = 167;
+export const fakeConst168 = 168;
+export const fakeConst169 = 169;
+export const fakeConst170 = 170;
+export const fakeConst171 = 171;
+export const fakeConst172 = 172;
+export const fakeConst173 = 173;
+export const fakeConst174 = 174;
+export const fakeConst175 = 175;
+export const fakeConst176 = 176;
+export const fakeConst177 = 177;
+export const fakeConst178 = 178;
+export const fakeConst179 = 179;
+export const fakeConst180 = 180;
+export const fakeConst181 = 181;
+export const fakeConst182 = 182;
+export const fakeConst183 = 183;
+export const fakeConst184 = 184;
+export const fakeConst185 = 185;
+export const fakeConst186 = 186;
+export const fakeConst187 = 187;
+export const fakeConst188 = 188;
+export const fakeConst189 = 189;
+export const fakeConst190 = 190;
+export const fakeConst191 = 191;
+export const fakeConst192 = 192;
+export const fakeConst193 = 193;
+export const fakeConst194 = 194;
+export const fakeConst195 = 195;
+export const fakeConst196 = 196;
+export const fakeConst197 = 197;
+export const fakeConst198 = 198;
+export const fakeConst199 = 199;
+export const fakeConst200 = 200;
+export const fakeConst201 = 201;
+export const fakeConst202 = 202;
+export const fakeConst203 = 203;
+export const fakeConst204 = 204;
+export const fakeConst205 = 205;
+export const fakeConst206 = 206;
+export const fakeConst207 = 207;
+export const fakeConst208 = 208;
+export const fakeConst209 = 209;
+export const fakeConst210 = 210;
+export const fakeConst211 = 211;
+export const fakeConst212 = 212;
+export const fakeConst213 = 213;
+export const fakeConst214 = 214;
+export const fakeConst215 = 215;
+export const fakeConst216 = 216;
+export const fakeConst217 = 217;
+export const fakeConst218 = 218;
+export const fakeConst219 = 219;
+export const fakeConst220 = 220;
+

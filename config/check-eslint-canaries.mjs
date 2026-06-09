@@ -69,6 +69,10 @@ const CANARIES = {
     minErrors: 1,
     description: 'PR 7 — TelegramPoller.ts capped at max-lines: 200 (this canary exceeds 200 LoC)',
   },
+  'tests/eslint-canaries/TelegramCommandHandlerMaxLines.canary.ts': {
+    minErrors: 1,
+    description: 'PR 8 — TelegramCommandHandler.ts capped at max-lines: 200 (this canary exceeds 200 LoC)',
+  },
 };
 
 let allPassed = true;
