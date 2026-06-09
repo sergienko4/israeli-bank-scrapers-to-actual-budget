@@ -54,15 +54,24 @@ export async function dispatchToAll(
 function countAndLogFailures(
   results: PromiseSettledResult<Procedure<{ sent: boolean }>>[]
 ): number {
-  let fulfilled = 0;
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      fulfilled++;
-    } else {
-      const msg = result.reason instanceof Error
-        ? result.reason.message : String(result.reason);
-      getLogger().error(`⚠️  Notification failed: ${msg}`);
-    }
-  }
-  return fulfilled;
+  return results.reduce((count, result) => {
+    if (result.status === 'fulfilled') return count + 1;
+    const msg = extractRejectionMessage(result.reason);
+    getLogger().error(`⚠️  Notification failed: ${msg}`);
+    return count;
+  }, 0);
+}
+
+/**
+ * Coerces a settled-rejection reason into a guaranteed non-empty log string.
+ *
+ * Guards against `Error.message` being empty/undefined (which would otherwise
+ * interpolate as `"undefined"` in a template literal) per CLAUDE.md hard rule.
+ *
+ * @param reason - The `PromiseSettledResult.reason` (typed as `unknown`).
+ * @returns A non-empty human-readable description of the failure.
+ */
+function extractRejectionMessage(reason: unknown): string {
+  if (reason instanceof Error) return reason.message || 'Unknown error';
+  return String(reason) || 'Unknown error';
 }
