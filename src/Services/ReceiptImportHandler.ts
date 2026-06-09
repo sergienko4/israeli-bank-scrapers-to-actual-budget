@@ -10,31 +10,13 @@ import { errorMessage } from '../Utils/Index.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import { escapeHtml } from './Notifications/TelegramFormatter.js';
 import type TelegramNotifier from './Notifications/TelegramNotifier.js';
+import type { IPayeeMatch } from './Receipt/ReceiptPayeeMatcher.js';
+import findReceiptPayeeMatch from './Receipt/ReceiptPayeeMatcher.js';
 import ReceiptPhotoOcrPipeline from './Receipt/ReceiptPhotoOcrPipeline.js';
+import type { IReceiptActualApi } from './Receipt/Types.js';
 import type ReceiptOcrService from './ReceiptOcrService.js';
 
-/** Actual Budget API surface needed by ReceiptImportHandler. */
-export interface IReceiptActualApi {
-  /** Fetches all accounts from Actual Budget. */
-  getAccounts: () => Promise<{ id: string; name: string }[]>;
-  /** Fetches all categories from Actual Budget. */
-  getCategories: () => Promise<{ id: string; name: string }[]>;
-  /** Imports transactions into an Actual Budget account. */
-  importTransactions: (
-    accountId: string,
-    transactions: { account: string; date: string; [key: string]: unknown }[]
-  ) => Promise<unknown>;
-  /** Builds an AQL query for the given table. */
-  q: (table: string) => {
-    filter: (f: unknown) => {
-      select: (s: string[]) => {
-        orderBy: (o: unknown) => unknown;
-      };
-    };
-  };
-  /** Executes an AQL query. */
-  aqlQuery: (query: unknown) => Promise<unknown>;
-}
+export type { IReceiptActualApi } from './Receipt/Types.js';
 
 /** Options for constructing a ReceiptImportHandler. */
 export interface IReceiptHandlerOptions {
@@ -59,9 +41,6 @@ interface IReceiptState {
   selectedCategory?: string;
   timeoutHandle?: ReturnType<typeof globalThis.setTimeout>;
 }
-
-/** Named account + category match from a previous transaction. */
-interface IPayeeMatch { accId: string; accName: string; catId: string; catName: string }
 
 const RECEIPT_TIMEOUT_MS = 120000;
 
@@ -223,57 +202,12 @@ export class ReceiptImportHandler {
       getLogger().info('Smart matching unavailable — API not connected');
       return await this.showAccountMenu();
     }
-    const match = await this.findPayeeMatch(receipt.merchant);
-    if (match) return await this.showSmartMatch(match);
+    const api = this._api;
+    if (api) {
+      const match = await findReceiptPayeeMatch(api, receipt.merchant);
+      if (match) return await this.showSmartMatch(match);
+    }
     return await this.showAccountMenu();
-  }
-
-  /**
-   * Queries for a previous transaction with the same payee.
-   * @param merchant - Merchant name to search for.
-   * @returns Match data or false if not found.
-   */
-  private async findPayeeMatch(merchant?: string): Promise<IPayeeMatch | false> {
-    if (!merchant || !this._api) return false;
-    try { return await this.queryPayeeMatch(merchant); }
-    catch (err: unknown) { getLogger().debug(`payee match: ${errorMessage(err)}`); return false; }
-  }
-
-  /**
-   * Executes the AQL query for a payee match.
-   * @param merchant - Merchant name to search for.
-   * @returns Match data or false if not found.
-   */
-  private async queryPayeeMatch(merchant: string): Promise<IPayeeMatch | false> {
-    if (!this._api) return false;
-    const safeMerchant = merchant.replaceAll('%', String.raw`\%`).replaceAll('_', String.raw`\_`);
-    const query = this._api.q('transactions')
-      .filter({ imported_payee: { $like: `%${safeMerchant}%` }, category: { $ne: null } })
-      .select(['account', 'category'])
-      .orderBy({ date: 'desc' });
-    const raw = await this._api.aqlQuery(query);
-    const data = (raw as { data?: { account: string; category: string }[] } | null)?.data;
-    if (!data || data.length === 0) return false;
-    return await this.resolveMatchNames(data[0]);
-  }
-
-  /**
-   * Resolves account and category names for a matched transaction.
-   * @param txn - The matched transaction with account and category IDs.
-   * @param txn.account - The Actual Budget account UUID.
-   * @param txn.category - The Actual Budget category UUID.
-   * @returns Named match or false if names cannot be resolved.
-   */
-  private async resolveMatchNames(
-    txn: { account: string; category: string }
-  ): Promise<IPayeeMatch | false> {
-    if (!this._api) return false;
-    const accounts = await this._api.getAccounts();
-    const categories = await this._api.getCategories();
-    const acc = accounts.find(a => a.id === txn.account);
-    const cat = categories.find(c => c.id === txn.category);
-    if (!acc || !cat) return false;
-    return { accId: acc.id, accName: acc.name, catId: cat.id, catName: cat.name };
   }
 
   /**
