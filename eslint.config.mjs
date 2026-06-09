@@ -755,6 +755,33 @@ export default tseslint.config(
     },
   },
 
+  // 7g. TELEGRAM COMMAND HANDLER — tightened max-lines (PR 8: split)
+  // After extracting `TelegramImportCoordinator.ts` (scan / scanAll /
+  // preview / retry pipelines + busy-state + reply helper) and
+  // `TelegramQueryCommands.ts` (status / logs / watch / check-config /
+  // help / import-receipt + reply helper), `TelegramCommandHandler.ts`
+  // is a thin router-wiring orchestrator (~140 effective LoC). The
+  // default cap is `max: 300`; this rule caps it at 200 so the
+  // orchestrator cannot drift back into being a 468-LoC mixed-concern
+  // class. Adding a new import-pipeline command MUST be a new method on
+  // `TelegramImportCoordinator`, not inline here. Adding a new
+  // read-only / informational command MUST be a new method on
+  // `TelegramQueryCommands`, not inline here.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines: 200` rule survives on the canary fixture; flat-config rule
+  // keys are replaced (not merged) by later matching blocks, so the canary
+  // file MUST be configured by the LAST block listing it.
+  {
+    files: [
+      'src/Services/TelegramCommandHandler.ts',
+      'tests/eslint-canaries/TelegramCommandHandlerMaxLines.canary.ts',
+    ],
+    rules: {
+      'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
