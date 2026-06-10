@@ -3,8 +3,6 @@
  * Follows Single Responsibility Principle: Only handles transaction import logic
  */
 
-import { createHash } from 'node:crypto';
-
 import type api from '@actual-app/api';
 
 import { getLogger } from '../Logger/Index.js';
@@ -12,8 +10,11 @@ import type {
   IActualAccount, IBankTransaction, IResolvedCategory,
   ITransactionRecord, Procedure} from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
-import { errorMessage, formatDate, toCents } from '../Utils/Index.js';
+import { errorMessage } from '../Utils/Index.js';
 import type { ICategoryResolver } from './ICategoryResolver.js';
+import {
+  buildImportedId, buildImportedIdLegacy, parseTransaction,
+} from './Transaction/ImportedIdBuilder.js';
 
 export interface IImportResult {
   imported: number;
@@ -211,9 +212,9 @@ export class TransactionService {
    */
   private async processSingleAt(ctx: IBatchContext, idx: number): Promise<void> {
     const txn = ctx.txns[idx];
-    const parsed = TransactionService.parseTransaction(txn);
-    const importedId = TransactionService.buildImportedId(ctx.accountKey, txn, parsed);
-    const legacyId = TransactionService.buildImportedIdLegacy(ctx.accountKey, txn, parsed);
+    const parsed = parseTransaction(txn);
+    const importedId = buildImportedId(ctx.accountKey, txn, parsed);
+    const legacyId = buildImportedIdLegacy(ctx.accountKey, txn, parsed);
     const isExisting = ctx.existingIds.has(importedId) || ctx.existingIds.has(legacyId);
     const target = isExisting ? ctx.existingTxns : ctx.newTxns;
     await this.importSingleTransaction({
@@ -279,41 +280,6 @@ export class TransactionService {
   }
 
   /**
-   * Builds a content-hash imported_id stable across runs.
-   * Independent of `txn.identifier` which the upstream scraper does not
-   * guarantee to be stable between scrapes — using a SHA-256 prefix over
-   * `(accountKey, date, amount, description)` makes re-runs deterministic.
-   * @param accountKey - Combined bank-account string used as a namespace.
-   * @param txn - The raw IBankTransaction from the scraper.
-   * @param parsed - The parsed ITransactionRecord with formatted date.
-   * @returns A 16-char lowercase hex string for use with Actual's importTransactions API.
-   */
-  private static buildImportedId(
-    accountKey: string, txn: IBankTransaction, parsed: ITransactionRecord
-  ): string {
-    const description = txn.description ?? '';
-    const seed = `${accountKey}|${parsed.date}|${String(parsed.amount)}|${description}`;
-    return createHash('sha256').update(seed).digest('hex').slice(0, 16);
-  }
-
-  /**
-   * Reproduces the pre-2026-05 imported_id formula so existing rows in
-   * Actual Budget (inserted before the hash migration) can still be
-   * recognised by the dual-check dedup. Never used for new writes.
-   * @param accountKey - Combined bank-account string used as a namespace.
-   * @param txn - The raw IBankTransaction from the scraper.
-   * @param parsed - The parsed ITransactionRecord with formatted date.
-   * @returns The legacy `${accountKey}-${identifier || fallback}` string.
-   */
-  private static buildImportedIdLegacy(
-    accountKey: string, txn: IBankTransaction, parsed: ITransactionRecord
-  ): string {
-    const fallback =
-      `${parsed.date}-${String(txn.chargedAmount ?? txn.originalAmount)}`;
-    return `${accountKey}-${String(txn.identifier || fallback)}`;
-  }
-
-  /**
    * Queries Actual Budget for all imported_id values already in the account.
    * Omits AQL `$ne: null` filter because some Actual versions return empty
    * with that filter. Nulls are filtered in JS via a typed predicate.
@@ -333,18 +299,5 @@ export class TransactionService {
     const ids = data.map((t) => t.imported_id).filter((id): id is string => id !== null);
     getLogger().debug(`     Dedup: ${String(ids.length)} existing imported IDs for ${accountId}`);
     return new Set(ids);
-  }
-
-  /**
-   * Converts a raw IBankTransaction from the scraper into a ITransactionRecord.
-   * @param txn - The raw IBankTransaction to convert.
-   * @returns A ITransactionRecord with formatted date and amount in cents.
-   */
-  private static parseTransaction(txn: IBankTransaction): ITransactionRecord {
-    return {
-      date: formatDate(txn.date),
-      description: txn.description ?? 'Unknown',
-      amount: toCents(txn.chargedAmount ?? txn.originalAmount ?? 0)
-    };
   }
 }
