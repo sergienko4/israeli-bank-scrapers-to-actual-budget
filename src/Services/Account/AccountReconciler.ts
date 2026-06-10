@@ -12,26 +12,32 @@ import { isFail } from '../../Types/Index.js';
 import type { MetricsService } from '../MetricsService.js';
 import type { ReconciliationService } from '../ReconciliationService.js';
 
+/**
+ * Formats a reconciliation message with the signed ILS adjustment amount.
+ * @param diff - The reconciliation diff in cents.
+ * @returns Formatted reconciliation log string.
+ */
+const FORMAT_CREATED = (diff: number): string =>
+  `     ✅ Reconciled: ${diff > 0 ? '+' : ''}${(diff / 100).toFixed(2)} ILS`;
+
+/**
+ * Returns the "already balanced" status message.
+ * @returns Log string for a balanced account.
+ */
+const FORMAT_SKIPPED = (): string => '     ✅ Already balanced';
+
+/**
+ * Returns the "already reconciled today" status message.
+ * @returns Log string for an already-reconciled account.
+ */
+const FORMAT_ALREADY_RECONCILED = (): string => '     ✅ Already reconciled today';
+
 /** Status-keyed log-message lookup for reconciliation outcomes (OCP — add without branching). */
-const RECONCILIATION_MESSAGES: Record<string, (diff: number) => string> = {
-  /**
-   * Formats a reconciliation message with the signed ILS adjustment amount.
-   * @param diff - The reconciliation diff in cents.
-   * @returns Formatted reconciliation log string.
-   */
-  created: (diff) =>
-    `     ✅ Reconciled: ${diff > 0 ? '+' : ''}${(diff / 100).toFixed(2)} ILS`,
-  /**
-   * Returns the "already balanced" status message.
-   * @returns Log string for a balanced account.
-   */
-  skipped: () => '     ✅ Already balanced',
-  /**
-   * Returns the "already reconciled today" status message.
-   * @returns Log string for an already-reconciled account.
-   */
-  ['already-reconciled']: () => '     ✅ Already reconciled today',
-};
+const RECONCILIATION_MESSAGES = new Map<string, (diff: number) => string>([
+  ['created', FORMAT_CREATED],
+  ['skipped', FORMAT_SKIPPED],
+  ['already-reconciled', FORMAT_ALREADY_RECONCILED],
+]);
 
 /** Context passed to AccountReconciler.reconcileIfConfigured. */
 export interface IReconcileCtx {
@@ -77,7 +83,21 @@ export class AccountReconciler {
       return;
     }
     this.opts.metrics.recordReconciliation(ctx.bankName, result.data.status, result.data.diff);
-    const reconciliationMessage = RECONCILIATION_MESSAGES[result.data.status](result.data.diff);
-    getLogger().info(reconciliationMessage);
+    AccountReconciler.logReconciliationOutcome(result.data.status, result.data.diff);
+  }
+
+  /**
+   * Looks up the status-specific log message and emits it; warns on unknown statuses.
+   * @param status - The reconciliation outcome status returned by ReconciliationService.
+   * @param diff - The reconciliation diff in cents (signed) used by the formatter.
+   */
+  private static logReconciliationOutcome(status: string, diff: number): void {
+    const messageBuilder = RECONCILIATION_MESSAGES.get(status);
+    if (messageBuilder === undefined) {
+      getLogger().warn(`     ⚠️  Unknown reconciliation status: ${status}`);
+      return;
+    }
+    const formattedMessage = messageBuilder(diff);
+    getLogger().info(formattedMessage);
   }
 }
