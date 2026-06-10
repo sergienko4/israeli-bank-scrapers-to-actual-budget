@@ -22,6 +22,7 @@ import {
   type IBatchTracker,
   toJobResult,
 } from './Import/BatchFactory.js';
+import BatchSummaryNotifier from './Import/BatchSummaryNotifier.js';
 import ImportQueue from './ImportQueue.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import type TelegramPoller from './TelegramPoller.js';
@@ -40,6 +41,7 @@ export interface IImportMediatorOptions {
 export class ImportMediator {
   private readonly _queue: ImportQueue<IImportJob>;
   private readonly _batches = new Map<string, IBatchTracker>();
+  private readonly _summaryNotifier: BatchSummaryNotifier;
   private _poller: TelegramPoller | null = null;
   private _pollerStopped = false;
   private _lastResult: IBatchResult | null = null;
@@ -50,6 +52,7 @@ export class ImportMediator {
    * @param opts - Dependencies including spawn function, bank names, and notifier.
    */
   constructor(private readonly opts: IImportMediatorOptions) {
+    this._summaryNotifier = new BatchSummaryNotifier(opts.notifier);
     this._queue = new ImportQueue<IImportJob>({
       process: this.processJob.bind(this),
       onJobComplete: this.handleJobComplete.bind(this),
@@ -165,29 +168,9 @@ export class ImportMediator {
     const batchResult = buildBatchResult(tracker);
     this._lastResult = batchResult;
     this._lastRunTime = new Date();
-    await this.sendAggregateSummary(batchResult);
+    await this._summaryNotifier.send(batchResult);
     tracker.resolve(batchResult);
     this._batches.delete(tracker.batchId);
-  }
-
-  /**
-   * Sends an aggregate summary notification for the completed batch.
-   * @param batch - The IBatchResult to summarize.
-   */
-  private async sendAggregateSummary(batch: IBatchResult): Promise<void> {
-    if (!this.opts.notifier) return;
-    const dur = (batch.totalDurationMs / 1000).toFixed(0);
-    const icon = batch.failureCount === 0 ? '✅' : '\u26a0\ufe0f';
-    const ok = batch.successCount;
-    const total = batch.jobs.length;
-    const msg = `${icon} Batch complete: ${String(ok)}/${String(total)} banks OK (${dur}s)`;
-    try {
-      await this.opts.notifier.sendMessage(msg);
-    } catch (err: unknown) {
-      getLogger().debug(
-        `Failed to send batch summary: ${errorMessage(err)}`
-      );
-    }
   }
 
   /** Stops the Telegram poller before processing begins. */

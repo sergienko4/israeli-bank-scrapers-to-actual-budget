@@ -1,9 +1,9 @@
 {
   "generatedAt": "2026-06-10",
-  "totalFiles": 148,
+  "totalFiles": 149,
   "scoreDistribution": {
     "critical8plus": 7,
-    "high5to7": 20,
+    "high5to7": 21,
     "medium3to4": 27,
     "low1to2": 27,
     "clean0": 67
@@ -525,8 +525,8 @@
     {
       "path": "src/Services/ImportMediator.ts",
       "layer": "IS",
-      "lines": 215,
-      "valueImports": 6,
+      "lines": 198,
+      "valueImports": 7,
       "typeImports": 3,
       "crossLayerValueDeps": [
         {
@@ -546,12 +546,13 @@
         }
       ],
       "newClasses": [
+        "BatchSummaryNotifier",
         "Date",
         "Error",
         "ImportQueue",
         "Map"
       ],
-      "newCount": 4,
+      "newCount": 5,
       "ocpRisks": [],
       "score": 7
     },
@@ -749,6 +750,34 @@
         "Map"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Services/Import/BatchSummaryNotifier.ts",
+      "layer": "IS",
+      "lines": 66,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 6
     },
