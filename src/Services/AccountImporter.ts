@@ -8,11 +8,12 @@ import type {
   IBankConfig, IBankTransaction, ICanonicalScrapeResult,
 } from '../Types/Index.js';
 import { isFail, isSuccess } from '../Types/Index.js';
+import { AccountLogPresenter } from './Account/AccountLogPresenter.js';
 import { toMutableAccount } from './Account/AccountMutator.js';
 import { AccountReconciler } from './Account/AccountReconciler.js';
 import findTargetForAccount from './Account/AccountTargetResolver.js';
 import { LiveAccountWriter } from './Account/LiveAccountWriter.js';
-import { DryRunCollector } from './DryRunCollector.js';
+import type { DryRunCollector } from './DryRunCollector.js';
 import type { MetricsService } from './MetricsService.js';
 import type { ReconciliationService } from './ReconciliationService.js';
 import type { TransactionService } from './TransactionService.js';
@@ -37,6 +38,7 @@ export interface IAccountImporterOpts {
 export class AccountImporter {
   private readonly _reconciler: AccountReconciler;
   private readonly _writer: LiveAccountWriter;
+  private readonly _presenter: AccountLogPresenter;
 
   /**
    * Creates an AccountImporter with the given service dependencies.
@@ -52,6 +54,7 @@ export class AccountImporter {
       metrics: opts.metrics,
       reconciler: this._reconciler,
     });
+    this._presenter = new AccountLogPresenter({ dryRunCollector: opts.dryRunCollector });
   }
 
   /**
@@ -140,7 +143,7 @@ export class AccountImporter {
     const targetResult = findTargetForAccount(bankCtx.bankConfig, account.accountNumber);
     const accountName = isSuccess(targetResult) ? targetResult.data.accountName : undefined;
     const txns = filterTransactionsByDate(account.txns, bankCtx.bankConfig);
-    AccountImporter.logAccountInfo({
+    AccountLogPresenter.logAccountInfo({
       accountNumber: account.accountNumber, accountName,
       balance: account.balance, currency: bankCtx.currency, txnCount: txns.length,
     });
@@ -169,51 +172,9 @@ export class AccountImporter {
       getLogger().warn('     ⚠️  No target configured for this account, skipping');
       return { imported: 0, skipped: 0 };
     }
-    if (this.opts.isDryRun) return this.collectDryRunAccount(bankName, account, currency);
+    if (this.opts.isDryRun) {
+      return this._presenter.collectDryRunAccount(bankName, account, currency);
+    }
     return await this._writer.importLiveAccount(targetResult.data, account, { bankName, currency });
-  }
-
-  /**
-   * Records an account preview in the DryRunCollector instead of importing.
-   * @param bankName - The bank this account belongs to.
-   * @param account - Account data from the scraper.
-   * @param account.accountNumber - The bank account number.
-   * @param account.balance - Optional scraped balance in currency units.
-   * @param account.txns - Transactions found by the scraper.
-   * @param currency - Currency code for the account.
-   * @returns Always {imported: 0, skipped: 0} in dry-run mode.
-   */
-  private collectDryRunAccount(
-    bankName: string,
-    account: { accountNumber: string; balance?: number; txns: IBankTransaction[] },
-    currency: string
-  ): { imported: number; skipped: number } {
-    const preview = DryRunCollector.buildPreview({
-      bankName, accountNumber: account.accountNumber,
-      balance: account.balance, currency, txns: account.txns,
-    });
-    this.opts.dryRunCollector.recordAccount(preview);
-    return { imported: 0, skipped: 0 };
-  }
-
-  /**
-   * Logs account balance and transaction count before processing.
-   * @param info - Structured account info to display.
-   * @param info.accountNumber - The bank account number.
-   * @param info.accountName - Optional account display name.
-   * @param info.balance - Optional account balance.
-   * @param info.currency - Currency code.
-   * @param info.txnCount - Number of transactions to be processed.
-   */
-  private static logAccountInfo(info: {
-    accountNumber: string; accountName?: string;
-    balance: number | undefined; currency: string; txnCount: number;
-  }): void {
-    const label = info.accountName
-      ? `${info.accountName} (${info.accountNumber})` : info.accountNumber;
-    getLogger().info(`\n  💳 Processing account: ${label}`);
-    const bal = info.balance === undefined ? 'N/A' : `${String(info.balance)} ${info.currency}`;
-    getLogger().info(`     Balance: ${bal}`);
-    getLogger().info(`     Transactions: ${String(info.txnCount)}`);
   }
 }
