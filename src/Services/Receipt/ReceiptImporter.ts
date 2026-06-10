@@ -55,7 +55,7 @@ interface IConfirmationOptions {
 export default async function importReceipt(
   api: IReceiptActualApi, notifier: IReplyNotifier, req: IReceiptImportRequest,
 ): Promise<Procedure<{ status: string }>> {
-  if (!req.date || req.amount === undefined) {
+  if (!req.date || req.date.trim() === '' || req.amount === undefined) {
     await safeReply(notifier, '❌ Missing date or amount.');
     return fail('missing fields');
   }
