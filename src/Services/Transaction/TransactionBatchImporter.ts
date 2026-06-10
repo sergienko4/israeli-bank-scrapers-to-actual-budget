@@ -166,7 +166,7 @@ export default class TransactionBatchImporter {
       await this._api.importTransactions(ctx.actualAccountId, [payload]);
       ctx.target.push(ctx.parsed);
       return succeed({ status: 'imported' });
-    } catch (error) {
+    } catch (error: unknown) {
       return TransactionBatchImporter.handleImportError(error, ctx);
     }
   }
