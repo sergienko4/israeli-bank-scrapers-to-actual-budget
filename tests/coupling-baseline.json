@@ -1,11 +1,11 @@
 {
   "generatedAt": "2026-06-10",
-  "totalFiles": 147,
+  "totalFiles": 148,
   "scoreDistribution": {
-    "critical8plus": 8,
-    "high5to7": 19,
+    "critical8plus": 7,
+    "high5to7": 20,
     "medium3to4": 27,
-    "low1to2": 26,
+    "low1to2": 27,
     "clean0": 67
   },
   "files": [
@@ -344,42 +344,6 @@
       "score": 10
     },
     {
-      "path": "src/Services/ImportMediator.ts",
-      "layer": "IS",
-      "lines": 313,
-      "valueImports": 5,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date",
-        "Error",
-        "IBatchTracker",
-        "IImportJob",
-        "ImportQueue",
-        "Map",
-        "Promise"
-      ],
-      "newCount": 7,
-      "ocpRisks": [],
-      "score": 9
-    },
-    {
       "path": "src/Services/ReceiptImportHandler.ts",
       "layer": "IS",
       "lines": 320,
@@ -555,6 +519,39 @@
         "LiveAccountWriter"
       ],
       "newCount": 3,
+      "ocpRisks": [],
+      "score": 7
+    },
+    {
+      "path": "src/Services/ImportMediator.ts",
+      "layer": "IS",
+      "lines": 215,
+      "valueImports": 6,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Date",
+        "Error",
+        "ImportQueue",
+        "Map"
+      ],
+      "newCount": 4,
       "ocpRisks": [],
       "score": 7
     },
@@ -941,7 +938,7 @@
     {
       "path": "src/Services/Transaction/AccountResolver.ts",
       "layer": "IS",
-      "lines": 105,
+      "lines": 106,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [
@@ -1897,6 +1894,28 @@
         "Date",
         "Error",
         "IAuditEntry"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Import/BatchFactory.ts",
+      "layer": "IS",
+      "lines": 150,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "IBatchTracker",
+        "IImportJob",
+        "Promise"
       ],
       "newCount": 3,
       "ocpRisks": [],

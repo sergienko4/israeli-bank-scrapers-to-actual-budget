@@ -7,11 +7,21 @@ import { randomUUID } from 'node:crypto';
 
 import { getLogger } from '../Logger/Index.js';
 import type {
-IBatchResult,
-  IImportJob, IImportJobResult,   IImportRequestOptions, ImportSource, Procedure 
+  IBatchResult,
+  IImportJob,
+  IImportJobResult,
+  IImportRequestOptions,
+  Procedure,
 } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
+import {
+  buildBatchResult,
+  createJob,
+  createTracker,
+  type IBatchTracker,
+  toJobResult,
+} from './Import/BatchFactory.js';
 import ImportQueue from './ImportQueue.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import type TelegramPoller from './TelegramPoller.js';
@@ -24,18 +34,6 @@ export interface IImportMediatorOptions {
   readonly getBankNames: () => string[];
   /** Notifier for sending aggregate batch results. */
   readonly notifier: INotifier | null;
-}
-
-/** Internal batch tracker — not exported. */
-interface IBatchTracker {
-  readonly batchId: string;
-  readonly source: ImportSource;
-  readonly startTime: number;
-  readonly totalJobs: number;
-  readonly extraEnv: Record<string, string>;
-  readonly results: IImportJobResult[];
-  resolve: (result: IBatchResult) => Procedure<{ status: string }>;
-  readonly promise: Promise<IBatchResult>;
 }
 
 /** Domain-aware orchestrator for import requests from any source. */
@@ -77,10 +75,10 @@ export class ImportMediator {
   public requestImport(opts: IImportRequestOptions): string | false {
     if (this._queue.isBusy()) return false;
     const batchId = randomUUID();
-    const tracker = ImportMediator.createTracker(batchId, opts, 1);
+    const tracker = createTracker(batchId, opts, 1);
     this._batches.set(batchId, tracker);
     const label = opts.banks?.join(',') ?? 'all';
-    const job = ImportMediator.createJob(label, batchId, opts.source);
+    const job = createJob(label, batchId, opts.source);
     this._queue.enqueue(job);
     return batchId;
   }
@@ -123,72 +121,6 @@ export class ImportMediator {
   }
 
   /**
-   * Builds a deferred promise pair for batch resolution.
-   * @returns Object with the promise and its resolve callback.
-   */
-  private static buildDeferredPromise(): {
-    promise: Promise<IBatchResult>;
-    resolve: (r: IBatchResult) => Procedure<{ status: string }>;
-  } {
-    /**
-     * Placeholder — overwritten by Promise constructor.
-     * @param r - The batch result to pass through.
-     * @returns The same batch result.
-     */
-    let doResolve: (r: IBatchResult) => IBatchResult = (r) => r;
-    const promise = new Promise<IBatchResult>((cb) => {
-      doResolve = cb as unknown as (r: IBatchResult) => IBatchResult;
-    });
-    /**
-     * Resolves the batch promise and returns a Procedure.
-     * @param result - The IBatchResult to resolve with.
-     * @returns Procedure indicating the batch was resolved.
-     */
-    const resolve = (
-      result: IBatchResult
-    ): Procedure<{ status: string }> => {
-      doResolve(result);
-      return succeed({ status: 'batch-resolved' });
-    };
-    return { promise, resolve };
-  }
-
-  /**
-   * Creates a IBatchTracker with a deferred resolve.
-   * @param batchId - Unique batch identifier.
-   * @param opts - The original import request options.
-   * @param totalJobs - Number of jobs in this batch.
-   * @returns A new IBatchTracker instance.
-   */
-  private static createTracker(
-    batchId: string,
-    opts: IImportRequestOptions,
-    totalJobs: number
-  ): IBatchTracker {
-    const deferred = ImportMediator.buildDeferredPromise();
-    return {
-      batchId, source: opts.source, startTime: Date.now(),
-      totalJobs, extraEnv: opts.extraEnv ?? {}, results: [],
-      resolve: deferred.resolve, promise: deferred.promise,
-    };
-  }
-
-  /**
-   * Creates an IImportJob for one bank.
-   * @param bankName - The bank to import.
-   * @param batchId - The batch this job belongs to.
-   * @param source - The source that triggered the import.
-   * @returns A new IImportJob instance.
-   */
-  private static createJob(
-    bankName: string,
-    batchId: string,
-    source: ImportSource
-  ): IImportJob {
-    return { id: randomUUID(), bankName, batchId, source };
-  }
-
-  /**
    * Stops the poller and spawns a child process for an import job.
    * @param job - The IImportJob to execute.
    * @returns The IImportJobResult with exit code and duration.
@@ -217,7 +149,7 @@ export class ImportMediator {
   ): Procedure<{ status: string }> {
     const tracker = this._batches.get(job.batchId);
     if (!tracker) return fail(`unknown batch: ${job.batchId}`);
-    const jobResult = ImportMediator.toJobResult(job, result);
+    const jobResult = toJobResult(job, result);
     tracker.results.push(jobResult);
     if (tracker.results.length === tracker.totalJobs) {
       void this.finalizeBatch(tracker);
@@ -226,46 +158,16 @@ export class ImportMediator {
   }
 
   /**
-   * Converts a raw result to an IImportJobResult, handling error cases.
-   * @param job - The IImportJob that produced the result.
-   * @param result - The raw result (IImportJobResult or Error).
-   * @returns A normalized IImportJobResult.
-   */
-  private static toJobResult(job: IImportJob, result: IImportJobResult | Error): IImportJobResult {
-    if (result instanceof Error) return { job, exitCode: 1, durationMs: 0 };
-    return result;
-  }
-
-  /**
    * Builds the IBatchResult, sends notification, and resolves waitForBatch.
    * @param tracker - The IBatchTracker to finalize.
    */
   private async finalizeBatch(tracker: IBatchTracker): Promise<void> {
-    const batchResult = ImportMediator.buildBatchResult(tracker);
+    const batchResult = buildBatchResult(tracker);
     this._lastResult = batchResult;
     this._lastRunTime = new Date();
     await this.sendAggregateSummary(batchResult);
     tracker.resolve(batchResult);
     this._batches.delete(tracker.batchId);
-  }
-
-  /**
-   * Builds a IBatchResult from the tracker's collected job results.
-   * @param tracker - The IBatchTracker with all job results.
-   * @returns The aggregate IBatchResult.
-   */
-  private static buildBatchResult(tracker: IBatchTracker): IBatchResult {
-    const successCount = tracker.results.filter(
-      (r) => r.exitCode === 0
-    ).length;
-    return {
-      batchId: tracker.batchId,
-      source: tracker.source,
-      jobs: tracker.results,
-      totalDurationMs: Date.now() - tracker.startTime,
-      successCount,
-      failureCount: tracker.results.length - successCount,
-    };
   }
 
   /**
