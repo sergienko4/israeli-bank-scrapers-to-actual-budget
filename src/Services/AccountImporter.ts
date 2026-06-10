@@ -9,6 +9,7 @@ import type {
 } from '../Types/Index.js';
 import { isFail, isSuccess } from '../Types/Index.js';
 import { toMutableAccount } from './Account/AccountMutator.js';
+import { AccountReconciler } from './Account/AccountReconciler.js';
 import findTargetForAccount from './Account/AccountTargetResolver.js';
 import { DryRunCollector } from './DryRunCollector.js';
 import type { MetricsService } from './MetricsService.js';
@@ -16,27 +17,6 @@ import type { ReconciliationService } from './ReconciliationService.js';
 import type {
   IImportResult, IImportTransactionsOpts,
   TransactionService} from './TransactionService.js';
-
-// Reconciliation status log messages (OCP — add entries without changing logic)
-const RECONCILIATION_MESSAGES: Record<string, (diff: number) => string> = {
-  /**
-   * Formats a reconciliation message with the signed ILS adjustment amount.
-   * @param diff - The reconciliation diff in cents.
-   * @returns Formatted reconciliation log string.
-   */
-  created: (diff) =>
-    `     ✅ Reconciled: ${diff > 0 ? '+' : ''}${(diff / 100).toFixed(2)} ILS`,
-  /**
-   * Returns the "already balanced" status message.
-   * @returns Log string for a balanced account.
-   */
-  skipped: () => '     ✅ Already balanced',
-  /**
-   * Returns the "already reconciled today" status message.
-   * @returns Log string for an already-reconciled account.
-   */
-  ['already-reconciled']: () => '     ✅ Already reconciled today',
-};
 
 /** Internal context for importing one account's transactions. */
 interface IImportTxnCtx {
@@ -46,14 +26,6 @@ interface IImportTxnCtx {
   actualAccountId: string;
   balance: number | undefined;
   currency: string;
-}
-
-/** Internal context for reconciling one account. */
-interface IReconcileCtx {
-  actualAccountId: string;
-  balance: number | undefined;
-  currency: string;
-  bankName: string;
 }
 
 /** Options injected into AccountImporter for all account-processing operations. */
@@ -74,11 +46,18 @@ export interface IAccountImporterOpts {
 
 /** Processes scraped accounts: imports transactions, reconciles balances, tracks metrics. */
 export class AccountImporter {
+  private readonly _reconciler: AccountReconciler;
+
   /**
    * Creates an AccountImporter with the given service dependencies.
    * @param opts - All services needed for account processing.
    */
-  constructor(private readonly opts: IAccountImporterOpts) {}
+  constructor(private readonly opts: IAccountImporterOpts) {
+    this._reconciler = new AccountReconciler({
+      reconciliationService: opts.reconciliationService,
+      metrics: opts.metrics,
+    });
+  }
 
   /**
    * Iterates all accounts in a canonical scrape result and processes each.
@@ -251,7 +230,7 @@ export class AccountImporter {
       balance: account.balance, currency: bankCtx.currency,
     };
     const result = await this.importAndRecordTransactions(ctx, account.txns);
-    await this.reconcileIfConfigured(target, {
+    await this._reconciler.reconcileIfConfigured(target, {
       actualAccountId: target.actualAccountId,
       balance: account.balance, currency: bankCtx.currency, bankName: bankCtx.bankName,
     });
@@ -309,26 +288,6 @@ export class AccountImporter {
       newTransactions: result.newTransactions, existingTransactions: result.existingTransactions,
     });
     return result;
-  }
-
-  /**
-   * Runs reconciliation when the target's reconcile flag is true and balance is known.
-   * @param target - The IBankTarget whose reconcile flag and account ID are used.
-   * @param ctx - Context with the actual account ID, balance, currency, and bank name.
-   */
-  private async reconcileIfConfigured(target: IBankTarget, ctx: IReconcileCtx): Promise<void> {
-    if (!target.reconcile || ctx.balance === undefined) return;
-    getLogger().info('     🔄 Reconciling account balance...');
-    const result = await this.opts.reconciliationService.reconcile(
-      ctx.actualAccountId, ctx.balance, ctx.currency
-    );
-    if (isFail(result)) {
-      getLogger().error(`     ❌ Reconciliation error: ${result.message}`);
-      return;
-    }
-    this.opts.metrics.recordReconciliation(ctx.bankName, result.data.status, result.data.diff);
-    const reconciliationMessage = RECONCILIATION_MESSAGES[result.data.status](result.data.diff);
-    getLogger().info(reconciliationMessage);
   }
 
   /**
