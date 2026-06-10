@@ -7,8 +7,9 @@ import { filterTransactionsByDate } from '../Scraper/BankScraper.js';
 import type {
   IBankConfig, IBankTarget, IBankTransaction, ICanonicalScrapeResult, Procedure,
 } from '../Types/Index.js';
-import { isFail } from '../Types/Index.js';
+import { isFail, isSuccess } from '../Types/Index.js';
 import { toMutableAccount } from './Account/AccountMutator.js';
+import findTargetForAccount from './Account/AccountTargetResolver.js';
 import { DryRunCollector } from './DryRunCollector.js';
 import type { MetricsService } from './MetricsService.js';
 import type { ReconciliationService } from './ReconciliationService.js';
@@ -162,10 +163,11 @@ export class AccountImporter {
     bankCtx: { bankName: string; bankConfig: IBankConfig; currency: string },
     account: { accountNumber: string; balance?: number; txns: IBankTransaction[] }
   ): Promise<{ imported: number; skipped: number }> {
-    const target = AccountImporter.findTargetForAccount(bankCtx.bankConfig, account.accountNumber);
+    const targetResult = findTargetForAccount(bankCtx.bankConfig, account.accountNumber);
+    const accountName = isSuccess(targetResult) ? targetResult.data.accountName : undefined;
     const txns = filterTransactionsByDate(account.txns, bankCtx.bankConfig);
     AccountImporter.logAccountInfo({
-      accountNumber: account.accountNumber, accountName: target?.accountName,
+      accountNumber: account.accountNumber, accountName,
       balance: account.balance, currency: bankCtx.currency, txnCount: txns.length,
     });
     return await this.processAccount(bankCtx, { ...account, txns });
@@ -188,13 +190,13 @@ export class AccountImporter {
     account: { accountNumber: string; balance?: number; txns: IBankTransaction[] }
   ): Promise<{ imported: number; skipped: number }> {
     const { bankName, bankConfig, currency } = bankCtx;
-    const target = AccountImporter.findTargetForAccount(bankConfig, account.accountNumber);
-    if (!target) {
+    const targetResult = findTargetForAccount(bankConfig, account.accountNumber);
+    if (isFail(targetResult)) {
       getLogger().warn('     ⚠️  No target configured for this account, skipping');
       return { imported: 0, skipped: 0 };
     }
     if (this.opts.isDryRun) return this.collectDryRunAccount(bankName, account, currency);
-    return await this.importLiveAccount(target, account, { bankName, currency });
+    return await this.importLiveAccount(targetResult.data, account, { bankName, currency });
   }
 
   /**
@@ -350,20 +352,6 @@ export class AccountImporter {
     });
     this.opts.dryRunCollector.recordAccount(preview);
     return { imported: 0, skipped: 0 };
-  }
-
-  /**
-   * Finds the IBankTarget configured for a given account number.
-   * @param bankConfig - The IBankConfig whose targets list to search.
-   * @param accountNumber - The account number to match.
-   * @returns The matching IBankTarget, or undefined if none covers this account.
-   */
-  private static findTargetForAccount(
-    bankConfig: IBankConfig, accountNumber: string
-  ): IBankTarget | undefined {
-    return bankConfig.targets?.find(t =>
-      t.accounts === 'all' || (Array.isArray(t.accounts) && t.accounts.includes(accountNumber))
-    );
   }
 
   /**
