@@ -5,28 +5,17 @@ import { getLogger } from '../Logger/Index.js';
 import type { IShutdownHandler } from '../Resilience/GracefulShutdown.js';
 import { filterTransactionsByDate } from '../Scraper/BankScraper.js';
 import type {
-  IBankConfig, IBankTarget, IBankTransaction, ICanonicalScrapeResult, Procedure,
+  IBankConfig, IBankTransaction, ICanonicalScrapeResult,
 } from '../Types/Index.js';
 import { isFail, isSuccess } from '../Types/Index.js';
 import { toMutableAccount } from './Account/AccountMutator.js';
 import { AccountReconciler } from './Account/AccountReconciler.js';
 import findTargetForAccount from './Account/AccountTargetResolver.js';
+import { LiveAccountWriter } from './Account/LiveAccountWriter.js';
 import { DryRunCollector } from './DryRunCollector.js';
 import type { MetricsService } from './MetricsService.js';
 import type { ReconciliationService } from './ReconciliationService.js';
-import type {
-  IImportResult, IImportTransactionsOpts,
-  TransactionService} from './TransactionService.js';
-
-/** Internal context for importing one account's transactions. */
-interface IImportTxnCtx {
-  bankName: string;
-  accountNumber: string;
-  accountName?: string;
-  actualAccountId: string;
-  balance: number | undefined;
-  currency: string;
-}
+import type { TransactionService } from './TransactionService.js';
 
 /** Options injected into AccountImporter for all account-processing operations. */
 export interface IAccountImporterOpts {
@@ -47,6 +36,7 @@ export interface IAccountImporterOpts {
 /** Processes scraped accounts: imports transactions, reconciles balances, tracks metrics. */
 export class AccountImporter {
   private readonly _reconciler: AccountReconciler;
+  private readonly _writer: LiveAccountWriter;
 
   /**
    * Creates an AccountImporter with the given service dependencies.
@@ -56,6 +46,11 @@ export class AccountImporter {
     this._reconciler = new AccountReconciler({
       reconciliationService: opts.reconciliationService,
       metrics: opts.metrics,
+    });
+    this._writer = new LiveAccountWriter({
+      transactionService: opts.transactionService,
+      metrics: opts.metrics,
+      reconciler: this._reconciler,
     });
   }
 
@@ -175,119 +170,7 @@ export class AccountImporter {
       return { imported: 0, skipped: 0 };
     }
     if (this.opts.isDryRun) return this.collectDryRunAccount(bankName, account, currency);
-    return await this.importLiveAccount(targetResult.data, account, { bankName, currency });
-  }
-
-  /**
-   * Imports a live account: validates the Actual account, imports, and reconciles.
-   * @param target - The IBankTarget with account ID and reconcile flag.
-   * @param account - Raw account data from the scraper.
-   * @param account.accountNumber - The bank account number.
-   * @param account.balance - Optional scraped balance in currency units.
-   * @param account.txns - Transactions to import.
-   * @param bankCtx - Bank name and currency context.
-   * @param bankCtx.bankName - The bank name for metrics and logging.
-   * @param bankCtx.currency - Currency code for the account.
-   * @returns Counts of imported and skipped transactions.
-   */
-  private async importLiveAccount(
-    target: IBankTarget,
-    account: { accountNumber: string; balance?: number; txns: IBankTransaction[] },
-    bankCtx: { bankName: string; currency: string }
-  ): Promise<{ imported: number; skipped: number }> {
-    const accountResult = await this.opts.transactionService.getOrCreateAccount(
-      target.actualAccountId, bankCtx.bankName, account.accountNumber
-    );
-    if (isFail(accountResult)) {
-      getLogger().error(`     ❌ Account error: ${accountResult.message}`);
-      return { imported: 0, skipped: 0 };
-    }
-    const resolvedTarget = { ...target, actualAccountId: accountResult.data.id };
-    const result = await this.importAndReconcile(resolvedTarget, account, bankCtx);
-    return { imported: result.imported, skipped: result.skipped };
-  }
-
-  /**
-   * Imports transactions and then reconciles the account balance if configured.
-   * @param target - The IBankTarget with account ID and reconcile flag.
-   * @param account - Account data from the scraper.
-   * @param account.accountNumber - The bank account number.
-   * @param account.balance - Optional scraped balance in currency units.
-   * @param account.txns - Transactions to import.
-   * @param bankCtx - Bank name and currency context.
-   * @param bankCtx.bankName - The bank name for metrics.
-   * @param bankCtx.currency - Currency code for reconciliation.
-   * @returns IImportResult with new/skipped counts, or null if no transactions.
-   */
-  private async importAndReconcile(
-    target: IBankTarget,
-    account: { accountNumber: string; balance?: number; txns: IBankTransaction[] },
-    bankCtx: { bankName: string; currency: string }
-  ): Promise<IImportResult> {
-    const ctx: IImportTxnCtx = {
-      bankName: bankCtx.bankName, accountNumber: account.accountNumber,
-      accountName: target.accountName, actualAccountId: target.actualAccountId,
-      balance: account.balance, currency: bankCtx.currency,
-    };
-    const result = await this.importAndRecordTransactions(ctx, account.txns);
-    await this._reconciler.reconcileIfConfigured(target, {
-      actualAccountId: target.actualAccountId,
-      balance: account.balance, currency: bankCtx.currency, bankName: bankCtx.bankName,
-    });
-    return result;
-  }
-
-  /**
-   * Imports transactions into Actual Budget and records the result in MetricsService.
-   * @param ctx - Context with bank name, account number, account ID, balance, and currency.
-   * @param txns - The IBankTransaction array to import.
-   * @returns IImportResult with new/skipped counts, or null if the array is empty.
-   */
-  private async importAndRecordTransactions(
-    ctx: IImportTxnCtx, txns: IBankTransaction[]
-  ): Promise<IImportResult> {
-    const emptyResult: IImportResult = {
-      imported: 0, skipped: 0, newTransactions: [], existingTransactions: [],
-    };
-    if (txns.length === 0) return emptyResult;
-    const procedureResult = await this.executeImport(ctx, txns);
-    if (isFail(procedureResult)) return emptyResult;
-    return this.recordImportResult(ctx, procedureResult.data);
-  }
-
-  /**
-   * Calls the transaction service to import transactions.
-   * @param ctx - Context with bank name, account number, account ID, balance, and currency.
-   * @param txns - The IBankTransaction array to import.
-   * @returns Procedure with the import result.
-   */
-  private async executeImport(
-    ctx: IImportTxnCtx, txns: IBankTransaction[]
-  ): Promise<Procedure<IImportResult>> {
-    const opts: IImportTransactionsOpts = {
-      bankName: ctx.bankName, accountNumber: ctx.accountNumber,
-      actualAccountId: ctx.actualAccountId, transactions: txns,
-    };
-    const procedureResult = await this.opts.transactionService.importTransactions(opts);
-    if (isFail(procedureResult)) {
-      getLogger().error(`     ❌ Import error: ${procedureResult.message}`);
-    }
-    return procedureResult;
-  }
-
-  /**
-   * Records account transactions in the metrics service and returns the import result.
-   * @param ctx - Context with bank name, account details, and currency.
-   * @param result - The successful IImportResult to record.
-   * @returns The same IImportResult passed in.
-   */
-  private recordImportResult(ctx: IImportTxnCtx, result: IImportResult): IImportResult {
-    this.opts.metrics.recordAccountTransactions(ctx.bankName, {
-      accountNumber: ctx.accountNumber, accountName: ctx.accountName,
-      balance: ctx.balance, currency: ctx.currency,
-      newTransactions: result.newTransactions, existingTransactions: result.existingTransactions,
-    });
-    return result;
+    return await this._writer.importLiveAccount(targetResult.data, account, { bankName, currency });
   }
 
   /**
