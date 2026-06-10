@@ -8,25 +8,22 @@ import { randomUUID } from 'node:crypto';
 import type {
   IBatchResult,
   IImportJob,
-  IImportJobResult,
   IImportRequestOptions,
   Procedure,
 } from '../Types/Index.js';
-import { fail, succeed } from '../Types/Index.js';
+import { succeed } from '../Types/Index.js';
 import {
-  buildBatchResult,
   createJob,
   createTracker,
   type IBatchTracker,
-  toJobResult,
 } from './Import/BatchFactory.js';
 import BatchSummaryNotifier from './Import/BatchSummaryNotifier.js';
+import JobProcessor from './Import/JobProcessor.js';
 import PollerLifecycle from './Import/PollerLifecycle.js';
 import ImportQueue from './ImportQueue.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import type TelegramPoller from './TelegramPoller.js';
 
-/** Dependencies injected into the ImportMediator. */
 export interface IImportMediatorOptions {
   /** Spawns a child process for one bank import. Returns exit code. */
   readonly spawnImport: (extraEnv: Record<string, string>) => Promise<number>;
@@ -42,6 +39,7 @@ export class ImportMediator {
   private readonly _batches = new Map<string, IBatchTracker>();
   private readonly _summaryNotifier: BatchSummaryNotifier;
   private readonly _pollerLifecycle: PollerLifecycle;
+  private readonly _jobProcessor: JobProcessor;
   private _lastResult: IBatchResult | null = null;
   private _lastRunTime: Date | null = null;
 
@@ -49,12 +47,19 @@ export class ImportMediator {
    * Creates an ImportMediator wired to the given dependencies.
    * @param opts - Dependencies including spawn function, bank names, and notifier.
    */
-  constructor(private readonly opts: IImportMediatorOptions) {
+  constructor(opts: IImportMediatorOptions) {
     this._summaryNotifier = new BatchSummaryNotifier(opts.notifier);
     this._pollerLifecycle = new PollerLifecycle();
+    this._jobProcessor = new JobProcessor({
+      spawnImport: opts.spawnImport,
+      pollerLifecycle: this._pollerLifecycle,
+      summaryNotifier: this._summaryNotifier,
+      trackerStore: this._batches,
+      onBatchFinalized: this.recordBatchResult.bind(this),
+    });
     this._queue = new ImportQueue<IImportJob>({
-      process: this.processJob.bind(this),
-      onJobComplete: this.handleJobComplete.bind(this),
+      process: this._jobProcessor.processJob.bind(this._jobProcessor),
+      onJobComplete: this._jobProcessor.handleJobComplete.bind(this._jobProcessor),
       onQueueEmpty: this.resumePollerAfterDrain.bind(this),
     });
   }
@@ -131,52 +136,13 @@ export class ImportMediator {
   }
 
   /**
-   * Stops the poller and spawns a child process for an import job.
-   * @param job - The IImportJob to execute.
-   * @returns The IImportJobResult with exit code and duration.
+   * Bookkeeping hook fired by JobProcessor after each batch finalizes.
+   * @param batchResult - The aggregated IBatchResult that was just produced.
+   * @returns Procedure confirming the last-result/last-run-time were updated.
    */
-  private async processJob(job: IImportJob): Promise<IImportJobResult> {
-    await this._pollerLifecycle.stop();
-    const tracker = this._batches.get(job.batchId);
-    const extra = tracker?.extraEnv ?? {};
-    const env = job.bankName === 'all'
-      ? extra
-      : { IMPORT_BANKS: job.bankName, ...extra };
-    const start = Date.now();
-    const exitCode = await this.opts.spawnImport(env);
-    return { job, exitCode, durationMs: Date.now() - start };
-  }
-
-  /**
-   * Records a job result and finalizes the batch if all jobs are done.
-   * @param job - The completed IImportJob.
-   * @param result - The result from processJob (or an Error if it threw).
-   * @returns Procedure indicating the job was recorded, or failure if the batch is unknown.
-   */
-  private handleJobComplete(
-    job: IImportJob,
-    result: IImportJobResult | Error
-  ): Procedure<{ status: string }> {
-    const tracker = this._batches.get(job.batchId);
-    if (!tracker) return fail(`unknown batch: ${job.batchId}`);
-    const jobResult = toJobResult(job, result);
-    tracker.results.push(jobResult);
-    if (tracker.results.length === tracker.totalJobs) {
-      void this.finalizeBatch(tracker);
-    }
-    return succeed({ status: 'job-recorded' });
-  }
-
-  /**
-   * Builds the IBatchResult, sends notification, and resolves waitForBatch.
-   * @param tracker - The IBatchTracker to finalize.
-   */
-  private async finalizeBatch(tracker: IBatchTracker): Promise<void> {
-    const batchResult = buildBatchResult(tracker);
+  private recordBatchResult(batchResult: IBatchResult): Procedure<{ status: string }> {
     this._lastResult = batchResult;
     this._lastRunTime = new Date();
-    await this._summaryNotifier.send(batchResult);
-    tracker.resolve(batchResult);
-    this._batches.delete(tracker.batchId);
+    return succeed({ status: 'recorded' });
   }
 }

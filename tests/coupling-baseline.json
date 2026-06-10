@@ -1,10 +1,10 @@
 {
   "generatedAt": "2026-06-10",
-  "totalFiles": 150,
+  "totalFiles": 151,
   "scoreDistribution": {
     "critical8plus": 7,
     "high5to7": 21,
-    "medium3to4": 27,
+    "medium3to4": 28,
     "low1to2": 28,
     "clean0": 67
   },
@@ -1630,6 +1630,32 @@
       "score": 3
     },
     {
+      "path": "src/Services/ImportMediator.ts",
+      "layer": "IS",
+      "lines": 149,
+      "valueImports": 7,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "BatchSummaryNotifier",
+        "Date",
+        "Error",
+        "ImportQueue",
+        "JobProcessor",
+        "Map",
+        "PollerLifecycle"
+      ],
+      "newCount": 7,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
       "path": "src/Services/Notifications/TelegramFormatter.ts",
       "layer": "IS",
       "lines": 352,
@@ -1945,10 +1971,10 @@
       "score": 2
     },
     {
-      "path": "src/Services/ImportMediator.ts",
+      "path": "src/Services/Import/JobProcessor.ts",
       "layer": "IS",
-      "lines": 183,
-      "valueImports": 6,
+      "lines": 110,
+      "valueImports": 2,
       "typeImports": 3,
       "crossLayerValueDeps": [
         {
@@ -1957,15 +1983,8 @@
           "dynamic": false
         }
       ],
-      "newClasses": [
-        "BatchSummaryNotifier",
-        "Date",
-        "Error",
-        "ImportQueue",
-        "Map",
-        "PollerLifecycle"
-      ],
-      "newCount": 6,
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 2
     },
