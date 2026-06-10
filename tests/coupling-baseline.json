@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-06-09",
-  "totalFiles": 136,
+  "generatedAt": "2026-06-10",
+  "totalFiles": 142,
   "scoreDistribution": {
-    "critical8plus": 10,
-    "high5to7": 16,
-    "medium3to4": 24,
-    "low1to2": 22,
-    "clean0": 64
+    "critical8plus": 9,
+    "high5to7": 17,
+    "medium3to4": 26,
+    "low1to2": 24,
+    "clean0": 66
   },
   "files": [
     {
@@ -344,34 +344,6 @@
       "score": 10
     },
     {
-      "path": "src/Services/AccountImporter.ts",
-      "layer": "IS",
-      "lines": 407,
-      "valueImports": 4,
-      "typeImports": 5,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scraper/BankScraper.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 10
-    },
-    {
       "path": "src/Services/ImportMediator.ts",
       "layer": "IS",
       "lines": 313,
@@ -582,6 +554,38 @@
       ],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 7
+    },
+    {
+      "path": "src/Services/AccountImporter.ts",
+      "layer": "IS",
+      "lines": 181,
+      "valueImports": 8,
+      "typeImports": 6,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Scraper/BankScraper.ts",
+          "toLayer": "BP",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "AccountLogPresenter",
+        "AccountReconciler",
+        "LiveAccountWriter"
+      ],
+      "newCount": 3,
       "ocpRisks": [],
       "score": 7
     },
@@ -1223,6 +1227,52 @@
       "score": 4
     },
     {
+      "path": "src/Services/Account/AccountReconciler.ts",
+      "layer": "IS",
+      "lines": 84,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/Account/LiveAccountWriter.ts",
+      "layer": "IS",
+      "lines": 171,
+      "valueImports": 2,
+      "typeImports": 4,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
       "path": "src/Services/Notifications/NotificationDispatcher.ts",
       "layer": "IS",
       "lines": 78,
@@ -1726,6 +1776,42 @@
       "lines": 53,
       "valueImports": 1,
       "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Account/AccountLogPresenter.ts",
+      "layer": "IS",
+      "lines": 82,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Account/AccountTargetResolver.ts",
+      "layer": "IS",
+      "lines": 32,
+      "valueImports": 1,
+      "typeImports": 1,
       "crossLayerValueDeps": [
         {
           "to": "src/Types/Index.ts",
@@ -2465,6 +2551,30 @@
       "lines": 23,
       "valueImports": 0,
       "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Account/AccountMutator.ts",
+      "layer": "IS",
+      "lines": 31,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Account/Index.ts",
+      "layer": "IS",
+      "lines": 19,
+      "valueImports": 0,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
