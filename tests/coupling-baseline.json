@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-06-10",
-  "totalFiles": 142,
+  "totalFiles": 147,
   "scoreDistribution": {
-    "critical8plus": 9,
-    "high5to7": 17,
-    "medium3to4": 26,
-    "low1to2": 24,
-    "clean0": 66
+    "critical8plus": 8,
+    "high5to7": 19,
+    "medium3to4": 27,
+    "low1to2": 26,
+    "clean0": 67
   },
   "files": [
     {
@@ -406,37 +406,6 @@
         "ReceiptPhotoOcrPipeline"
       ],
       "newCount": 1,
-      "ocpRisks": [],
-      "score": 9
-    },
-    {
-      "path": "src/Services/TransactionService.ts",
-      "layer": "IS",
-      "lines": 351,
-      "valueImports": 4,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Actual",
-        "Set"
-      ],
-      "newCount": 3,
       "ocpRisks": [],
       "score": 9
     },
@@ -970,6 +939,68 @@
       "score": 6
     },
     {
+      "path": "src/Services/Transaction/AccountResolver.ts",
+      "layer": "IS",
+      "lines": 105,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Actual"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Services/TransactionService.ts",
+      "layer": "IS",
+      "lines": 102,
+      "valueImports": 6,
+      "typeImports": 4,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "AccountResolver",
+        "DedupQuery",
+        "TransactionBatchImporter"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
       "path": "src/Config/ConfigLoaderValidator.ts",
       "layer": "CC",
       "lines": 311,
@@ -1229,7 +1260,7 @@
     {
       "path": "src/Services/Account/AccountReconciler.ts",
       "layer": "IS",
-      "lines": 84,
+      "lines": 104,
       "valueImports": 2,
       "typeImports": 3,
       "crossLayerValueDeps": [
@@ -1244,8 +1275,10 @@
           "dynamic": false
         }
       ],
-      "newClasses": [],
-      "newCount": 0,
+      "newClasses": [
+        "Map"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 4
     },
@@ -1417,6 +1450,29 @@
         "TelegramUpdateDispatcher"
       ],
       "newCount": 2,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/Transaction/TransactionBatchImporter.ts",
+      "layer": "IS",
+      "lines": 194,
+      "valueImports": 3,
+      "typeImports": 4,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 4
     },
@@ -1971,6 +2027,44 @@
         "Date"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Transaction/DedupQuery.ts",
+      "layer": "IS",
+      "lines": 50,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Transaction/ImportedIdBuilder.ts",
+      "layer": "IS",
+      "lines": 67,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 2
     },
@@ -2754,6 +2848,18 @@
         "Set"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Transaction/Index.ts",
+      "layer": "IS",
+      "lines": 23,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },
