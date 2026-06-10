@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-06-09",
-  "totalFiles": 130,
+  "totalFiles": 136,
   "scoreDistribution": {
     "critical8plus": 10,
-    "high5to7": 15,
-    "medium3to4": 23,
-    "low1to2": 21,
-    "clean0": 61
+    "high5to7": 16,
+    "medium3to4": 24,
+    "low1to2": 22,
+    "clean0": 64
   },
   "files": [
     {
@@ -372,36 +372,6 @@
       "score": 10
     },
     {
-      "path": "src/Services/ReceiptImportHandler.ts",
-      "layer": "IS",
-      "lines": 510,
-      "valueImports": 5,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 10
-    },
-    {
       "path": "src/Services/ImportMediator.ts",
       "layer": "IS",
       "lines": 313,
@@ -434,6 +404,36 @@
         "Promise"
       ],
       "newCount": 7,
+      "ocpRisks": [],
+      "score": 9
+    },
+    {
+      "path": "src/Services/ReceiptImportHandler.ts",
+      "layer": "IS",
+      "lines": 320,
+      "valueImports": 5,
+      "typeImports": 5,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ReceiptPhotoOcrPipeline"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 9
     },
@@ -672,6 +672,29 @@
       "score": 7
     },
     {
+      "path": "src/Services/TelegramImportCoordinator.ts",
+      "layer": "IS",
+      "lines": 301,
+      "valueImports": 3,
+      "typeImports": 6,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 7
+    },
+    {
       "path": "src/Scheduler/CronLoop.ts",
       "layer": "SC",
       "lines": 118,
@@ -821,6 +844,36 @@
       "score": 6
     },
     {
+      "path": "src/Services/Receipt/ReceiptImporter.ts",
+      "layer": "IS",
+      "lines": 180,
+      "valueImports": 4,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
       "path": "src/Services/ReceiptApiAdapter.ts",
       "layer": "IS",
       "lines": 50,
@@ -848,29 +901,6 @@
         "ConfigurationError"
       ],
       "newCount": 2,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/TelegramImportCoordinator.ts",
-      "layer": "IS",
-      "lines": 292,
-      "valueImports": 3,
-      "typeImports": 6,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
       "ocpRisks": [],
       "score": 6
     },
@@ -1262,6 +1292,29 @@
         "TelegramApiClient"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/Receipt/ReceiptPayeeMatcher.ts",
+      "layer": "IS",
+      "lines": 77,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 4
     },
@@ -1731,6 +1784,24 @@
       "lines": 71,
       "valueImports": 3,
       "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Receipt/ReceiptPhotoOcrPipeline.ts",
+      "layer": "IS",
+      "lines": 70,
+      "valueImports": 3,
+      "typeImports": 2,
       "crossLayerValueDeps": [
         {
           "to": "src/Types/Index.ts",
@@ -2475,6 +2546,42 @@
         "WebhookNotifier"
       ],
       "newCount": 4,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/Index.ts",
+      "layer": "IS",
+      "lines": 17,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/ReceiptMenuPresenter.ts",
+      "layer": "IS",
+      "lines": 100,
+      "valueImports": 1,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/Types.ts",
+      "layer": "IS",
+      "lines": 31,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },
