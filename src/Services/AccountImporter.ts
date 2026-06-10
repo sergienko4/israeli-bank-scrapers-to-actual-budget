@@ -5,15 +5,15 @@ import { getLogger } from '../Logger/Index.js';
 import type { IShutdownHandler } from '../Resilience/GracefulShutdown.js';
 import { filterTransactionsByDate } from '../Scraper/BankScraper.js';
 import type {
-  IBankConfig, IBankTarget, IBankTransaction, ICanonicalAccount,
-  ICanonicalScrapeResult, Procedure,
+  IBankConfig, IBankTarget, IBankTransaction, ICanonicalScrapeResult, Procedure,
 } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
+import { toMutableAccount } from './Account/AccountMutator.js';
 import { DryRunCollector } from './DryRunCollector.js';
 import type { MetricsService } from './MetricsService.js';
 import type { ReconciliationService } from './ReconciliationService.js';
 import type {
-IImportResult, IImportTransactionsOpts,
+  IImportResult, IImportTransactionsOpts,
   TransactionService} from './TransactionService.js';
 
 // Reconciliation status log messages (OCP — add entries without changing logic)
@@ -45,23 +45,6 @@ interface IImportTxnCtx {
   actualAccountId: string;
   balance: number | undefined;
   currency: string;
-}
-
-/**
- * Converts a canonical account (readonly, balance:null|number) into the
- * mutable shape consumed by the per-account loop (balance: number | undefined).
- * Module-private to keep the call site free of unbound-method concerns.
- * @param account - Canonical account from the mapper.
- * @returns Mutable account with balance normalized to optional number.
- */
-function toMutableAccount(
-  account: ICanonicalAccount,
-): { accountNumber: string; balance?: number; txns: IBankTransaction[] } {
-  return {
-    accountNumber: account.accountNumber,
-    balance: account.balance ?? undefined,
-    txns: [...account.txns],
-  };
 }
 
 /** Internal context for reconciling one account. */
