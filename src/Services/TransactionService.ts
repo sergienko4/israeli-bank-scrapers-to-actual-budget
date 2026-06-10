@@ -12,6 +12,7 @@ import type {
 import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import type { ICategoryResolver } from './ICategoryResolver.js';
+import AccountResolver from './Transaction/AccountResolver.js';
 import DedupQuery from './Transaction/DedupQuery.js';
 import {
   buildImportedId, buildImportedIdLegacy, parseTransaction,
@@ -54,6 +55,7 @@ export class TransactionService {
   private readonly _api: typeof api;
   private readonly _categoryResolver?: ICategoryResolver;
   private readonly _dedupQuery: DedupQuery;
+  private readonly _accountResolver: AccountResolver;
 
   /**
    * Creates a TransactionService with the given Actual API and optional category resolver.
@@ -64,6 +66,7 @@ export class TransactionService {
     this._api = actualApi;
     this._categoryResolver = categoryResolver;
     this._dedupQuery = new DedupQuery(actualApi);
+    this._accountResolver = new AccountResolver(actualApi);
   }
 
   /**
@@ -94,6 +97,10 @@ export class TransactionService {
 
   /**
    * Returns an existing Actual account or creates a new one with the given UUID.
+   *
+   * Delegates to {@link AccountResolver} (extracted at PR #423/c3) to keep
+   * this class focused on transaction orchestration.
+   *
    * @param accountId - UUID to look up or create.
    * @param bankName - Bank name used when creating the account label.
    * @param accountNumber - Account number used when creating the account label.
@@ -102,63 +109,7 @@ export class TransactionService {
   public async getOrCreateAccount(
     accountId: string, bankName: string, accountNumber: string
   ): Promise<Procedure<IActualAccount>> {
-    try {
-      const accounts = await this._api.getAccounts() as IActualAccount[];
-      const accountLabel = `${bankName} - ${accountNumber}`;
-      const existing = TransactionService.findExistingAccount(accounts, accountId, accountLabel);
-      if (existing) return succeed(existing);
-
-      getLogger().info(`     ➕ Creating new account: ${accountId}`);
-      return await this.createNewAccount(accountId, accountLabel);
-    } catch (error: unknown) {
-      return fail(`Account lookup failed: ${errorMessage(error)}`, { error: error as Error });
-    }
-  }
-
-  /**
-   * Finds an existing account by ID or by name (fallback).
-   * Actual Budget may assign its own UUID, ignoring the configured ID.
-   * The name fallback handles this by matching the deterministic label.
-   * @param accounts - All accounts from Actual Budget.
-   * @param accountId - Configured account UUID to match first.
-   * @param accountLabel - Deterministic label ("bankName - accountNumber").
-   * @returns The matching account, or undefined if not found.
-   */
-  private static findExistingAccount(
-    accounts: IActualAccount[], accountId: string, accountLabel: string
-  ): IActualAccount | undefined {
-    const byId = accounts.find((a) => a.id === accountId);
-    if (byId) return byId;
-    const byName = accounts.filter((a) => a.name === accountLabel);
-    if (byName.length === 0) return byName[0]; // undefined — no name match
-    if (byName.length > 1) {
-      getLogger().warn(
-        `     ⚠️ ${String(byName.length)} accounts named "${accountLabel}" — using ${byName[0].id}`
-      );
-    }
-    getLogger().info(`     Found existing account by name: ${accountLabel} (${byName[0].id})`);
-    return byName[0];
-  }
-
-  /**
-   * Creates a new Actual Budget account and returns it as a Procedure.
-   * @param accountId - UUID for the new account.
-   * @param accountLabel - Display name for the new account.
-   * @returns Procedure wrapping the created IActualAccount.
-   */
-  private async createNewAccount(
-    accountId: string, accountLabel: string
-  ): Promise<Procedure<IActualAccount>> {
-    try {
-      const created = await this._api.createAccount({
-        id: accountId, name: accountLabel, offbudget: false, closed: false,
-      } as Omit<IActualAccount, 'id'>);
-      if (!created) return fail('account creation returned empty', { status: 'account-not-found' });
-      if (typeof created === 'string') return succeed({ id: created, name: accountLabel });
-      return succeed(created as IActualAccount);
-    } catch (error: unknown) {
-      return fail(`Account creation failed: ${errorMessage(error)}`, { error: error as Error });
-    }
+    return await this._accountResolver.getOrCreateAccount(accountId, bankName, accountNumber);
   }
 
   /**
