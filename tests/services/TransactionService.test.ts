@@ -368,11 +368,13 @@ describe('TransactionService', () => {
       expect(result.data).toEqual(newAccount);
       expect(mockApi.createAccount).toHaveBeenCalledWith(
         expect.objectContaining({
-          id: 'acc-new',
           name: 'discount - 999999',
           offbudget: false,
           closed: false
         })
+      );
+      expect(mockApi.createAccount).toHaveBeenCalledWith(
+        expect.not.objectContaining({ id: expect.anything() })
       );
     });
 

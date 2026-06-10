@@ -46,8 +46,8 @@ export default class AccountResolver {
       const existing = AccountResolver.findExistingAccount(accounts, accountId, accountLabel);
       if (existing) return succeed(existing);
 
-      getLogger().info(`     ➕ Creating new account: ${accountId}`);
-      return await this.createNewAccount(accountId, accountLabel);
+      getLogger().info(`     ➕ Creating new account: ${accountLabel}`);
+      return await this.createNewAccount(accountLabel);
     } catch (error: unknown) {
       return fail(`Account lookup failed: ${errorMessage(error)}`, { error: error as Error });
     }
@@ -83,17 +83,18 @@ export default class AccountResolver {
 
   /**
    * Creates a new Actual Budget account and returns it as a Procedure.
-   * @param accountId - UUID for the new account.
+   * Actual Budget IGNORES caller-supplied `id` and assigns its own UUID
+   * (verified in PR #285 / commit 0ce0ac3); name-based fallback in
+   * findExistingAccount handles re-lookup on subsequent runs.
    * @param accountLabel - Display name for the new account.
    * @returns Procedure wrapping the created IActualAccount.
    */
   private async createNewAccount(
-    accountId: string, accountLabel: string,
+    accountLabel: string,
   ): Promise<Procedure<IActualAccount>> {
     try {
-      const created = await this._api.createAccount({
-        id: accountId, name: accountLabel, offbudget: false, closed: false,
-      } as Omit<IActualAccount, 'id'>);
+      const payload = { name: accountLabel, offbudget: false, closed: false };
+      const created = await this._api.createAccount(payload);
       if (!created) return fail('account creation returned empty', { status: 'account-not-found' });
       if (typeof created === 'string') return succeed({ id: created, name: accountLabel });
       return succeed(created as IActualAccount);
