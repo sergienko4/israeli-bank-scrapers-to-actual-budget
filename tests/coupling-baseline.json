@@ -1,11 +1,11 @@
 {
   "generatedAt": "2026-06-10",
-  "totalFiles": 149,
+  "totalFiles": 150,
   "scoreDistribution": {
     "critical8plus": 7,
     "high5to7": 21,
     "medium3to4": 27,
-    "low1to2": 27,
+    "low1to2": 28,
     "clean0": 67
   },
   "files": [
@@ -523,40 +523,6 @@
       "score": 7
     },
     {
-      "path": "src/Services/ImportMediator.ts",
-      "layer": "IS",
-      "lines": 198,
-      "valueImports": 7,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "BatchSummaryNotifier",
-        "Date",
-        "Error",
-        "ImportQueue",
-        "Map"
-      ],
-      "newCount": 5,
-      "ocpRisks": [],
-      "score": 7
-    },
-    {
       "path": "src/Services/MetricsService.ts",
       "layer": "IS",
       "lines": 331,
@@ -757,6 +723,34 @@
       "path": "src/Services/Import/BatchSummaryNotifier.ts",
       "layer": "IS",
       "lines": 66,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Services/Import/PollerLifecycle.ts",
+      "layer": "IS",
+      "lines": 75,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [
@@ -1947,6 +1941,31 @@
         "Promise"
       ],
       "newCount": 3,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/ImportMediator.ts",
+      "layer": "IS",
+      "lines": 183,
+      "valueImports": 6,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "BatchSummaryNotifier",
+        "Date",
+        "Error",
+        "ImportQueue",
+        "Map",
+        "PollerLifecycle"
+      ],
+      "newCount": 6,
       "ocpRisks": [],
       "score": 2
     },

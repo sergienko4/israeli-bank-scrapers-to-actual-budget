@@ -5,7 +5,6 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { getLogger } from '../Logger/Index.js';
 import type {
   IBatchResult,
   IImportJob,
@@ -14,7 +13,6 @@ import type {
   Procedure,
 } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
-import { errorMessage } from '../Utils/Index.js';
 import {
   buildBatchResult,
   createJob,
@@ -23,6 +21,7 @@ import {
   toJobResult,
 } from './Import/BatchFactory.js';
 import BatchSummaryNotifier from './Import/BatchSummaryNotifier.js';
+import PollerLifecycle from './Import/PollerLifecycle.js';
 import ImportQueue from './ImportQueue.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import type TelegramPoller from './TelegramPoller.js';
@@ -42,8 +41,7 @@ export class ImportMediator {
   private readonly _queue: ImportQueue<IImportJob>;
   private readonly _batches = new Map<string, IBatchTracker>();
   private readonly _summaryNotifier: BatchSummaryNotifier;
-  private _poller: TelegramPoller | null = null;
-  private _pollerStopped = false;
+  private readonly _pollerLifecycle: PollerLifecycle;
   private _lastResult: IBatchResult | null = null;
   private _lastRunTime: Date | null = null;
 
@@ -53,10 +51,11 @@ export class ImportMediator {
    */
   constructor(private readonly opts: IImportMediatorOptions) {
     this._summaryNotifier = new BatchSummaryNotifier(opts.notifier);
+    this._pollerLifecycle = new PollerLifecycle();
     this._queue = new ImportQueue<IImportJob>({
       process: this.processJob.bind(this),
       onJobComplete: this.handleJobComplete.bind(this),
-      onQueueEmpty: this.handleQueueEmpty.bind(this),
+      onQueueEmpty: this.resumePollerAfterDrain.bind(this),
     });
   }
 
@@ -66,8 +65,7 @@ export class ImportMediator {
    * @returns Procedure indicating the poller was set.
    */
   public setPoller(poller: TelegramPoller): Procedure<{ status: string }> {
-    this._poller = poller;
-    return succeed({ status: 'poller-set' });
+    return this._pollerLifecycle.setPoller(poller);
   }
 
   /**
@@ -124,12 +122,21 @@ export class ImportMediator {
   }
 
   /**
+   * Adapter for the ImportQueue onQueueEmpty callback — delegates
+   * the actual resume to the poller-lifecycle state machine.
+   * @returns Procedure indicating whether the poller was resumed.
+   */
+  private resumePollerAfterDrain(): Procedure<{ status: string }> {
+    return this._pollerLifecycle.resume();
+  }
+
+  /**
    * Stops the poller and spawns a child process for an import job.
    * @param job - The IImportJob to execute.
    * @returns The IImportJobResult with exit code and duration.
    */
   private async processJob(job: IImportJob): Promise<IImportJobResult> {
-    await this.stopPoller();
+    await this._pollerLifecycle.stop();
     const tracker = this._batches.get(job.batchId);
     const extra = tracker?.extraEnv ?? {};
     const env = job.bankName === 'all'
@@ -171,27 +178,5 @@ export class ImportMediator {
     await this._summaryNotifier.send(batchResult);
     tracker.resolve(batchResult);
     this._batches.delete(tracker.batchId);
-  }
-
-  /** Stops the Telegram poller before processing begins. */
-  private async stopPoller(): Promise<void> {
-    if (this._pollerStopped || !this._poller) return;
-    this._pollerStopped = true;
-    await this._poller.stopAndFlush();
-  }
-
-  /**
-   * Resumes the Telegram poller after the queue drains.
-   * @returns Procedure indicating whether the poller was resumed.
-   */
-  private handleQueueEmpty(): Procedure<{ status: string }> {
-    if (!this._pollerStopped || !this._poller) return succeed({ status: 'no-poller' });
-    this._pollerStopped = false;
-    this._poller.start().catch((err: unknown) => {
-      getLogger().error(
-        `Failed to resume poller: ${errorMessage(err)}`
-      );
-    });
-    return succeed({ status: 'poller-resumed' });
   }
 }
