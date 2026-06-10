@@ -12,6 +12,7 @@ import type {
 import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import type { ICategoryResolver } from './ICategoryResolver.js';
+import DedupQuery from './Transaction/DedupQuery.js';
 import {
   buildImportedId, buildImportedIdLegacy, parseTransaction,
 } from './Transaction/ImportedIdBuilder.js';
@@ -52,6 +53,7 @@ interface ISingleTxnContext {
 export class TransactionService {
   private readonly _api: typeof api;
   private readonly _categoryResolver?: ICategoryResolver;
+  private readonly _dedupQuery: DedupQuery;
 
   /**
    * Creates a TransactionService with the given Actual API and optional category resolver.
@@ -61,6 +63,7 @@ export class TransactionService {
   constructor(actualApi: typeof api, categoryResolver?: ICategoryResolver) {
     this._api = actualApi;
     this._categoryResolver = categoryResolver;
+    this._dedupQuery = new DedupQuery(actualApi);
   }
 
   /**
@@ -169,7 +172,7 @@ export class TransactionService {
     newTransactions: ITransactionRecord[];
     existingTransactions: ITransactionRecord[];
   }> {
-    const existingIds = await this.getExistingImportedIds(opts.actualAccountId);
+    const existingIds = await this._dedupQuery.getExistingImportedIds(opts.actualAccountId);
     const newTransactions: ITransactionRecord[] = [];
     const existingTransactions: ITransactionRecord[] = [];
     const batchCtx: IBatchContext = {
@@ -277,27 +280,5 @@ export class TransactionService {
     }
     getLogger().error(`     ❌ Error importing transaction: ${msg}`);
     return fail(`Import error: ${msg}`);
-  }
-
-  /**
-   * Queries Actual Budget for all imported_id values already in the account.
-   * Omits AQL `$ne: null` filter because some Actual versions return empty
-   * with that filter. Nulls are filtered in JS via a typed predicate.
-   * @param accountId - UUID of the Actual account to query.
-   * @returns Set of imported_id strings for fast duplicate detection.
-   */
-  private async getExistingImportedIds(accountId: string): Promise<Set<string>> {
-    const query = this._api.q('transactions')
-      .filter({ account: accountId })
-      .select(['imported_id']);
-    const result = await this._api.aqlQuery(query);
-    const data = (result as { data?: { imported_id: string | null }[] } | null)?.data;
-    if (!data) {
-      getLogger().warn(`No existing imported IDs found for account ${accountId}`);
-      return new Set<string>();
-    }
-    const ids = data.map((t) => t.imported_id).filter((id): id is string => id !== null);
-    getLogger().debug(`     Dedup: ${String(ids.length)} existing imported IDs for ${accountId}`);
-    return new Set(ids);
   }
 }
