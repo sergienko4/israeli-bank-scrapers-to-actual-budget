@@ -95,22 +95,37 @@ const DEFAULT_ACTUAL_HOST = 'actual_server:5006';
 const DEFAULT_ACTUAL_URL = `${DEFAULT_ACTUAL_SCHEME}://${DEFAULT_ACTUAL_HOST}`;
 
 /**
+ * Builds the `init` sub-block of `IImporterConfig['actual']` from ACTUAL_* env vars.
+ *
+ * @returns Init configuration with defaults applied for unset env vars.
+ */
+function buildActualInitFromEnv(): IImporterConfig['actual']['init'] {
+  return {
+    dataDir: process.env.ACTUAL_DATA_DIR || './data',
+    password: process.env.ACTUAL_PASSWORD || '',
+    serverURL: process.env.ACTUAL_SERVER_URL || DEFAULT_ACTUAL_URL,
+  };
+}
+
+/**
+ * Builds the `budget` sub-block of `IImporterConfig['actual']` from ACTUAL_* env vars.
+ *
+ * @returns Budget configuration with defaults applied for unset env vars.
+ */
+function buildActualBudgetFromEnv(): IImporterConfig['actual']['budget'] {
+  return {
+    syncId: process.env.ACTUAL_BUDGET_SYNC_ID || '',
+    password: process.env.ACTUAL_BUDGET_PASSWORD || null,
+  };
+}
+
+/**
  * Builds the `actual` block of IImporterConfig from ACTUAL_* env vars.
  *
  * @returns The actual sub-object with defaults applied for unset env vars.
  */
 function buildActualFromEnv(): IImporterConfig['actual'] {
-  return {
-    init: {
-      dataDir: process.env.ACTUAL_DATA_DIR || './data',
-      password: process.env.ACTUAL_PASSWORD || '',
-      serverURL: process.env.ACTUAL_SERVER_URL || DEFAULT_ACTUAL_URL
-    },
-    budget: {
-      syncId: process.env.ACTUAL_BUDGET_SYNC_ID || '',
-      password: process.env.ACTUAL_BUDGET_PASSWORD || null
-    }
-  };
+  return { init: buildActualInitFromEnv(), budget: buildActualBudgetFromEnv() };
 }
 
 /**
