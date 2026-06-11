@@ -1,10 +1,11 @@
 /**
  * Factory for the optional ReceiptImportHandler.
  *
- * Isolated from HandlerFactory so the receipt feature's
- * service-layer dependencies (ReceiptImportHandler, ReceiptOcrService,
- * ReceiptApiAdapter) only enter the module graph when receipt import
- * is enabled at the configuration boundary.
+ * Isolated from HandlerFactory so the receipt feature's service-layer
+ * dependencies (ReceiptImportHandler, ReceiptOcrService,
+ * ReceiptApiAdapter) only enter HandlerFactory's direct import surface
+ * via this sub-module. They still load eagerly with the rest of the
+ * Telegram cluster; full lazy-loading would require dynamic import.
  */
 
 import type TelegramNotifier from '../../Services/Notifications/TelegramNotifier.js';
