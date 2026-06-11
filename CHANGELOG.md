@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.38.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.2...v1.38.3) (2026-06-11)
+
+
+### Fixed
+
+* **svc:** propagate import pipeline failure status ([#420](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/420)) ([407193c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/407193c0b9d809da1e64f451561f2ed8435eae68)), closes [#419](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/419)
+
+
+### Refactored
+
+* **config:** replace OCP if-chains with registry pattern ([#414](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/414)) ([e46401c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/e46401c2e8d82daf0fa586c3968b70443650836c))
+* **config:** split ConfigLoader into Loaders/ sub-modules ([#427](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/427)) ([7cee4a0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7cee4a0e45f25ea99bbdd113998ff152a637781b))
+* **config:** split ConfigValidator into per-block checker modules ([#415](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/415)) ([a6894bb](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/a6894bbcbbb7d33b187b0cace0535f8238c55a29))
+* **notif:** extract Dispatcher + Gate from NotificationService ([#416](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/416)) ([00d279a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/00d279a540a2ebc6820f334c9693e29f5a12aee3))
+* **notif:** split TelegramNotifier into 4 ([#417](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/417)) ([b45bd0c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b45bd0cc7cb929e740219ef8d8a982ffbbe02e64))
+* **scheduler:** split HandlerFactory.ts into Receipt + Mediator factories ([#426](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/426)) ([37b0f7e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/37b0f7e8cc24f63dedf30a4cc63f46313f4b5833))
+* **scheduler:** split TelegramSchedulerWiring into 4 modules + barrel ([#425](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/425)) ([3224b4b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/3224b4bfd68374bc1b3303be2a90efd64376e089))
+* **scraper:** inject ITwoFactorPrompter into LiveScrapeStrategy ([#412](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/412)) ([f1d0f8b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/f1d0f8b8ca0982420b83786448cf62f3e105a029))
+* **scraper:** split BankScraper.ts into 4 focused modules ([#428](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/428)) ([59c4cb1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/59c4cb127d0caa3f9c298a81214ccff34299e540))
+* **svc:** split AccountImporter into 5 modules + Procedure pattern ([#422](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/422)) ([c9df21e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c9df21e01deaaafa29b4a599c1115cc46f549bae))
+* **svc:** split ImportMediator into 5 modules + Procedure pattern ([#424](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/424)) ([2eec9c4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/2eec9c4c0d58025bef82927ccb19438ffe7854fe))
+* **svc:** split ReceiptImportHandler into 5 modules ([#421](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/421)) ([5f8d6ef](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5f8d6ef306aa22aa8a355b6c9fb26d55242ec036))
+* **svc:** split TelegramCommandHandler into 3 modules ([#419](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/419)) ([73c064e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/73c064ec481d2117742a766e81280bbf30cd9d31))
+* **svc:** split TelegramPoller into 4 modules ([#418](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/418)) ([20ebc98](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/20ebc98933d41b5232b62939b8963ad445fc3fec))
+* **svc:** split TransactionService into 4 modules + Procedure pattern ([#423](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/423)) ([131a219](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/131a219031da8cca31c3b4eb17eec4843620e829))
+
 ## [1.38.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.1...v1.38.2) (2026-06-02)
 
 
