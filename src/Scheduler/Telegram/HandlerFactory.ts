@@ -1,23 +1,25 @@
 /**
  * Factory module for the Telegram side of the import pipeline.
  *
- * Constructs the ImportMediator, the optional ReceiptImportHandler, and the
- * TelegramCommandHandler that wires them together. Kept in its own module
- * so the composition root (TelegramSchedulerWiring) only orchestrates and
- * does not contain construction details.
+ * Constructs the ImportMediator and the TelegramCommandHandler that wires
+ * the receipt and bank-import paths together. The optional receipt handler
+ * is built in `./ReceiptHandlerFactory.ts` so its OCR/Receipt-API
+ * dependencies stay isolated. Kept in its own module so the composition
+ * root (TelegramSchedulerWiring) only orchestrates and does not contain
+ * construction details.
  */
 
 import { AuditLogService } from '../../Services/AuditLogService.js';
 import { ImportMediator } from '../../Services/ImportMediator.js';
 import type TelegramNotifier from '../../Services/Notifications/TelegramNotifier.js';
-import createReceiptApi from '../../Services/ReceiptApiAdapter.js';
-import { ReceiptImportHandler } from '../../Services/ReceiptImportHandler.js';
-import ReceiptOcrService from '../../Services/ReceiptOcrService.js';
 import { TelegramCommandHandler } from '../../Services/TelegramCommandHandler.js';
 import type { ITelegramConfig, Procedure } from '../../Types/Index.js';
 import { loadLogConfig } from '../ConfigBootstrap.js';
 import { spawnImport } from '../ImportProcessRunner.js';
 import { getConfiguredBankNames, runConfigValidation } from './ConfigHelpers.js';
+import createReceiptHandler from './ReceiptHandlerFactory.js';
+
+export { default as createReceiptHandler } from './ReceiptHandlerFactory.js';
 
 /** Options bag for buildCommandHandler to stay within the max-params limit. */
 export interface ICommandHandlerOptions {
@@ -39,25 +41,6 @@ export function createMediator(notifierResult: Procedure<TelegramNotifier>): Imp
     spawnImport,
     getBankNames: getConfiguredBankNames,
     notifier: notifier ?? null,
-  });
-}
-
-/**
- * Creates a ReceiptImportHandler if receipt import is enabled.
- *
- * @param notifier - The TelegramNotifier for messaging and photo download.
- * @param isEnabled - Whether receipt import is enabled.
- * @returns ReceiptImportHandler or false when disabled.
- */
-export function createReceiptHandler(
-  notifier: TelegramNotifier, isEnabled: boolean
-): ReceiptImportHandler | false {
-  if (!isEnabled) return false;
-  return new ReceiptImportHandler({
-    ocr: new ReceiptOcrService(),
-    notifier,
-    telegramNotifier: notifier,
-    apiFactory: createReceiptApi,
   });
 }
 
