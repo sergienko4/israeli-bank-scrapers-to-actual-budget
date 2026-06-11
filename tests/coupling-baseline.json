@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-06-11",
-  "totalFiles": 159,
+  "totalFiles": 162,
   "scoreDistribution": {
-    "critical8plus": 9,
-    "high5to7": 23,
+    "critical8plus": 8,
+    "high5to7": 24,
     "medium3to4": 29,
-    "low1to2": 29,
-    "clean0": 69
+    "low1to2": 31,
+    "clean0": 70
   },
   "files": [
     {
@@ -281,32 +281,6 @@
       "score": 9
     },
     {
-      "path": "src/Config/ConfigLoader.ts",
-      "layer": "CC",
-      "lines": 312,
-      "valueImports": 8,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigurationError",
-        "IImporterConfig"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 8
-    },
-    {
       "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
       "layer": "SC",
       "lines": 65,
@@ -377,7 +351,7 @@
     {
       "path": "src/Scheduler/TelegramSchedulerWiring.ts",
       "layer": "SC",
-      "lines": 75,
+      "lines": 76,
       "valueImports": 6,
       "typeImports": 2,
       "crossLayerValueDeps": [
@@ -643,6 +617,29 @@
       "score": 7
     },
     {
+      "path": "src/Config/ConfigLoader.ts",
+      "layer": "CC",
+      "lines": 168,
+      "valueImports": 10,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Errors/ErrorTypes.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
       "path": "src/Scheduler/CronLoop.ts",
       "layer": "SC",
       "lines": 118,
@@ -733,7 +730,7 @@
     {
       "path": "src/Scheduler/Telegram/ReceiptHandlerFactory.ts",
       "layer": "SC",
-      "lines": 34,
+      "lines": 35,
       "valueImports": 3,
       "typeImports": 1,
       "crossLayerValueDeps": [
@@ -1798,6 +1795,44 @@
       "score": 3
     },
     {
+      "path": "src/Config/Loaders/EnvLoader.ts",
+      "layer": "CC",
+      "lines": 125,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Config/Loaders/JsonFileReader.ts",
+      "layer": "CC",
+      "lines": 52,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Errors/ErrorTypes.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
       "path": "src/Config/Validators/BankDateValidators.ts",
       "layer": "CC",
       "lines": 127,
@@ -2342,6 +2377,20 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Loaders/ConfigMerger.ts",
+      "layer": "CC",
+      "lines": 55,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "IImporterConfig"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 0
     },
