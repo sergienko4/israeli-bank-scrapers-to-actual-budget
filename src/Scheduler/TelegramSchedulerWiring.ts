@@ -24,24 +24,10 @@ import { errorMessage } from '../Utils/Index.js';
 import { loadFullConfig, loadLogConfig } from './ConfigBootstrap.js';
 import { spawnImport } from './ImportProcessRunner.js';
 import { registerNotifierCommands } from './Telegram/CommandRegistry.js';
+import { getConfiguredBankNames, runConfigValidation } from './Telegram/ConfigHelpers.js';
 
 export { buildExtraCommands, logCommandCount } from './Telegram/CommandRegistry.js';
-
-/**
- * Returns all configured bank names from the live config.
- *
- * Single source of truth used by both the mediator and the command handler.
- *
- * @returns Array of bank name strings (empty array if config cannot be loaded).
- */
-export function getConfiguredBankNames(): string[] {
-  const cfg = loadFullConfig();
-  if (!cfg.success) {
-    getLogger().warn(`getBankNames: config load failed — ${cfg.message}`);
-    return [];
-  }
-  return Object.keys(cfg.data.banks);
-}
+export { getConfiguredBankNames, runConfigValidation } from './Telegram/ConfigHelpers.js';
 
 /**
  * Creates an ImportMediator wired to spawnImport and the current config.
@@ -58,27 +44,6 @@ export function createMediator(notifierResult: Procedure<TelegramNotifier>): Imp
   });
 }
 
-
-/**
- * Lazily imports ConfigLoader and ConfigValidator and runs all validation checks.
- *
- * The lazy import is preserved from the original implementation to minimise the
- * blast radius of this refactor; there is no circular dependency today.
- *
- * @returns Formatted validation report string for display in Telegram.
- */
-export async function runConfigValidation(): Promise<string> {
-  const configLoaderModule = await import('../Config/ConfigLoader.js');
-  const configValidatorModule = await import('../Config/ConfigValidator.js');
-  const loader = new configLoaderModule.ConfigLoader();
-  const rawResult = loader.loadRaw();
-  if (isFail(rawResult)) {
-    return `[FAIL] Cannot load config: ${rawResult.message}`;
-  }
-  const validator = new configValidatorModule.ConfigValidator();
-  const results = await validator.validateAll(rawResult.data);
-  return configValidatorModule.ConfigValidator.formatReport(results);
-}
 
 /**
  * Creates a ReceiptImportHandler if receipt import is enabled.

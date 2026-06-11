@@ -1,9 +1,9 @@
 {
   "generatedAt": "2026-06-11",
-  "totalFiles": 152,
+  "totalFiles": 154,
   "scoreDistribution": {
-    "critical8plus": 7,
-    "high5to7": 21,
+    "critical8plus": 8,
+    "high5to7": 22,
     "medium3to4": 28,
     "low1to2": 28,
     "clean0": 68
@@ -213,15 +213,10 @@
     {
       "path": "src/Scheduler/TelegramSchedulerWiring.ts",
       "layer": "SC",
-      "lines": 279,
-      "valueImports": 16,
+      "lines": 189,
+      "valueImports": 15,
       "typeImports": 1,
       "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ConfigurationError.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
         {
           "to": "src/Logger/Index.ts",
           "toLayer": "CC",
@@ -276,21 +271,10 @@
           "to": "src/Utils/Index.ts",
           "toLayer": "ST",
           "dynamic": false
-        },
-        {
-          "to": "src/Config/ConfigLoader.ts",
-          "toLayer": "CC",
-          "dynamic": true
-        },
-        {
-          "to": "src/Config/ConfigValidator.ts",
-          "toLayer": "CC",
-          "dynamic": true
         }
       ],
       "newClasses": [
         "AuditLogService",
-        "ConfigurationError",
         "Error",
         "ImportMediator",
         "ReceiptImportHandler",
@@ -299,9 +283,9 @@
         "TelegramNotifier",
         "TelegramPoller"
       ],
-      "newCount": 9,
+      "newCount": 8,
       "ocpRisks": [],
-      "score": 32
+      "score": 24
     },
     {
       "path": "src/Scheduler/ConfigBootstrap.ts",
@@ -396,6 +380,39 @@
         "IImporterConfig"
       ],
       "newCount": 2,
+      "ocpRisks": [],
+      "score": 8
+    },
+    {
+      "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
+      "layer": "SC",
+      "lines": 50,
+      "valueImports": 5,
+      "typeImports": 0,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Config/ConfigLoader.ts",
+          "toLayer": "CC",
+          "dynamic": true
+        },
+        {
+          "to": "src/Config/ConfigValidator.ts",
+          "toLayer": "CC",
+          "dynamic": true
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 8
     },
@@ -686,6 +703,36 @@
       ],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Scheduler/Telegram/CommandRegistry.ts",
+      "layer": "SC",
+      "lines": 72,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Errors/ConfigurationError.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 6
     },
@@ -1632,7 +1679,7 @@
     {
       "path": "src/Services/ImportMediator.ts",
       "layer": "IS",
-      "lines": 149,
+      "lines": 168,
       "valueImports": 7,
       "typeImports": 3,
       "crossLayerValueDeps": [
@@ -1973,7 +2020,7 @@
     {
       "path": "src/Services/Import/JobProcessor.ts",
       "layer": "IS",
-      "lines": 110,
+      "lines": 111,
       "valueImports": 2,
       "typeImports": 3,
       "crossLayerValueDeps": [
