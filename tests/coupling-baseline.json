@@ -1,8 +1,8 @@
 {
   "generatedAt": "2026-06-11",
-  "totalFiles": 154,
+  "totalFiles": 155,
   "scoreDistribution": {
-    "critical8plus": 8,
+    "critical8plus": 9,
     "high5to7": 22,
     "medium3to4": 28,
     "low1to2": 28,
@@ -211,17 +211,12 @@
       "score": 71
     },
     {
-      "path": "src/Scheduler/TelegramSchedulerWiring.ts",
+      "path": "src/Scheduler/Telegram/HandlerFactory.ts",
       "layer": "SC",
-      "lines": 189,
-      "valueImports": 15,
-      "typeImports": 1,
+      "lines": 105,
+      "valueImports": 9,
+      "typeImports": 2,
       "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
         {
           "to": "src/Services/AuditLogService.ts",
           "toLayer": "IS",
@@ -229,11 +224,6 @@
         },
         {
           "to": "src/Services/ImportMediator.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/Notifications/TelegramNotifier.ts",
           "toLayer": "IS",
           "dynamic": false
         },
@@ -256,6 +246,35 @@
           "to": "src/Services/TelegramCommandHandler.ts",
           "toLayer": "IS",
           "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "AuditLogService",
+        "ImportMediator",
+        "ReceiptImportHandler",
+        "ReceiptOcrService",
+        "TelegramCommandHandler"
+      ],
+      "newCount": 5,
+      "ocpRisks": [],
+      "score": 13
+    },
+    {
+      "path": "src/Scheduler/TelegramSchedulerWiring.ts",
+      "layer": "SC",
+      "lines": 108,
+      "valueImports": 8,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Services/Notifications/TelegramNotifier.ts",
+          "toLayer": "IS",
+          "dynamic": false
         },
         {
           "to": "src/Services/TelegramPoller.ts",
@@ -274,18 +293,13 @@
         }
       ],
       "newClasses": [
-        "AuditLogService",
         "Error",
-        "ImportMediator",
-        "ReceiptImportHandler",
-        "ReceiptOcrService",
-        "TelegramCommandHandler",
         "TelegramNotifier",
         "TelegramPoller"
       ],
-      "newCount": 8,
+      "newCount": 3,
       "ocpRisks": [],
-      "score": 24
+      "score": 11
     },
     {
       "path": "src/Scheduler/ConfigBootstrap.ts",

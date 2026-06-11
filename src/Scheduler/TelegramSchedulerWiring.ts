@@ -1,101 +1,37 @@
 /**
- * Telegram bot wiring for the scheduler.
+ * Telegram bot composition root for the scheduler.
  *
- * Constructs the import mediator, the command handler, and the long-poller,
- * then connects them. The single source of truth for the configured bank
- * names lives here (getConfiguredBankNames) — both the mediator and the
- * command handler reuse it.
+ * Orchestrates startup of the Telegram-driven import path:
+ * - Loads config and resolves the Telegram bot section
+ * - Constructs notifier / mediator / handler via HandlerFactory
+ * - Wires the long-poller to the mediator
+ *
+ * All construction details live in dedicated sibling modules under
+ * ./Telegram/. This file only composes them.
  */
 
 import { getLogger } from '../Logger/Index.js';
-import { AuditLogService } from '../Services/AuditLogService.js';
-import { ImportMediator } from '../Services/ImportMediator.js';
+import type { ImportMediator } from '../Services/ImportMediator.js';
 import TelegramNotifier from '../Services/Notifications/TelegramNotifier.js';
-import createReceiptApi from '../Services/ReceiptApiAdapter.js';
-import { ReceiptImportHandler } from '../Services/ReceiptImportHandler.js';
-import ReceiptOcrService from '../Services/ReceiptOcrService.js';
-import { TelegramCommandHandler } from '../Services/TelegramCommandHandler.js';
+import type { TelegramCommandHandler } from '../Services/TelegramCommandHandler.js';
 import TelegramPoller from '../Services/TelegramPoller.js';
 import type {
   IImporterConfig, IProcedureSuccess, ITelegramConfig, Procedure,
 } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
-import { loadFullConfig, loadLogConfig } from './ConfigBootstrap.js';
-import { spawnImport } from './ImportProcessRunner.js';
+import { loadFullConfig } from './ConfigBootstrap.js';
 import { registerNotifierCommands } from './Telegram/CommandRegistry.js';
-import { getConfiguredBankNames, runConfigValidation } from './Telegram/ConfigHelpers.js';
+import {
+  buildHandlerWithConfig, createMediator,
+} from './Telegram/HandlerFactory.js';
 
 export { buildExtraCommands, logCommandCount } from './Telegram/CommandRegistry.js';
 export { getConfiguredBankNames, runConfigValidation } from './Telegram/ConfigHelpers.js';
-
-/**
- * Creates an ImportMediator wired to spawnImport and the current config.
- *
- * @param notifierResult - Procedure with TelegramNotifier, or failure for none.
- * @returns A configured ImportMediator instance.
- */
-export function createMediator(notifierResult: Procedure<TelegramNotifier>): ImportMediator {
-  const notifier = notifierResult.success ? notifierResult.data : void 0;
-  return new ImportMediator({
-    spawnImport,
-    getBankNames: getConfiguredBankNames,
-    notifier: notifier ?? null,
-  });
-}
-
-
-/**
- * Creates a ReceiptImportHandler if receipt import is enabled.
- *
- * @param notifier - The TelegramNotifier for messaging and photo download.
- * @param isEnabled - Whether receipt import is enabled.
- * @returns ReceiptImportHandler or false when disabled.
- */
-export function createReceiptHandler(
-  notifier: TelegramNotifier, isEnabled: boolean
-): ReceiptImportHandler | false {
-  if (!isEnabled) return false;
-  return new ReceiptImportHandler({
-    ocr: new ReceiptOcrService(),
-    notifier,
-    telegramNotifier: notifier,
-    apiFactory: createReceiptApi,
-  });
-}
-
-/** Options bag for buildCommandHandler to stay within the max-params limit. */
-export interface ICommandHandlerOptions {
-  /** Whether to enable receipt import via OCR. */
-  enableReceipt?: boolean;
-  /** Optional log directory exposed to the command handler. */
-  logDir?: string;
-}
-
-/**
- * Constructs a TelegramCommandHandler wired to all scheduler callbacks.
- *
- * @param notifier - The TelegramNotifier used to send responses.
- * @param mediator - The ImportMediator that handles import requests.
- * @param options - Optional command-handler options (receipt flag, log dir).
- * @returns A configured TelegramCommandHandler instance.
- */
-export function buildCommandHandler(
-  notifier: TelegramNotifier,
-  mediator: ImportMediator,
-  options: ICommandHandlerOptions = {}
-): TelegramCommandHandler {
-  const receiptHandlerResult = createReceiptHandler(notifier, options.enableReceipt === true);
-  const receiptHandler = receiptHandlerResult || void 0;
-  return new TelegramCommandHandler({
-    mediator, notifier, auditLog: new AuditLogService(),
-    runValidate: runConfigValidation,
-    receiptHandler,
-    getBankNames: getConfiguredBankNames,
-    sendScanMenu: notifier.sendScanMenu.bind(notifier),
-    logDir: options.logDir,
-  });
-}
+export {
+  buildCommandHandler, createMediator, createReceiptHandler,
+  type ICommandHandlerOptions,
+} from './Telegram/HandlerFactory.js';
 
 /**
  * Creates and starts the TelegramPoller, wiring it to the handler.
@@ -127,23 +63,6 @@ export function wireAndStartPoller(
 }
 
 /**
- * Builds the TelegramCommandHandler with the receipt flag and log directory derived from config.
- *
- * @param notifier - The TelegramNotifier used by the handler.
- * @param mediator - The ImportMediator the handler will request imports through.
- * @param telegram - Telegram bot configuration (drives receipt feature flag).
- * @returns A configured TelegramCommandHandler instance.
- */
-function buildHandlerWithConfig(
-  notifier: TelegramNotifier, mediator: ImportMediator, telegram: ITelegramConfig
-): TelegramCommandHandler {
-  const isReceiptEnabled = telegram.enableReceiptImport === true;
-  const logConfigResult = loadLogConfig();
-  const logDir = logConfigResult.success ? logConfigResult.data.logDir : void 0;
-  return buildCommandHandler(notifier, mediator, { enableReceipt: isReceiptEnabled, logDir });
-}
-
-/**
  * Creates the mediator, handler, poller, and wires them together.
  *
  * @param telegram - Telegram bot configuration (token, chatId, etc.).
@@ -156,7 +75,7 @@ export async function createHandlerAndPoller(
 ): Promise<ImportMediator> {
   const notifier = new TelegramNotifier(telegram);
   await registerNotifierCommands(notifier, config);
-  const notifierProcedure = succeed(notifier);
+  const notifierProcedure: Procedure<TelegramNotifier> = succeed(notifier);
   const mediator = createMediator(notifierProcedure);
   const handler = buildHandlerWithConfig(notifier, mediator, telegram);
   wireAndStartPoller(telegram, handler, mediator);
