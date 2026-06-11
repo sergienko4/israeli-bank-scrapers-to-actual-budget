@@ -20,13 +20,10 @@
 
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
-import { getScraperErrorAdvice } from '../Errors/ScraperErrorMessages.js';
 import type { ILogger } from '../Logger/ILogger.js';
-import { getLogger } from '../Logger/Index.js';
 import type {
-  IBankConfig, IProcedureSuccess, IRawScrape, ISignPolicy,
+  IBankConfig, IRawScrape, ISignPolicy,
 } from '../Types/Index.js';
-import { succeed } from '../Types/Index.js';
 import type { IBankRegistry } from './BankRegistry.js';
 import isEmptyResult from './EmptyResultDetector.js';
 import type { IScrapeResultMapper } from './Mappers/IScrapeResultMapper.js';
@@ -34,6 +31,7 @@ import type { IDateRangePolicy } from './Policies/DateRangePolicy.js';
 import type { IBankScrapeStrategy } from './Strategies/IBankScrapeStrategy.js';
 
 export { computeStartDate, filterTransactionsByDate } from './DateRangeShims.js';
+export { default as logScrapeFailure } from './FailureLogShim.js';
 export { createDateRangePolicy } from './Policies/DateRangePolicy.js';
 
 /** Bank-scraper coordinator dependencies. */
@@ -120,23 +118,4 @@ export class BankScraper {
  */
 export function isEmptyResultError(result: IScraperScrapingResult): boolean {
   return isEmptyResult(result);
-}
-
-/**
- * Logs a scraper failure with a user-friendly hint based on the error type.
- * Back-compat shim — uses module-level getLogger() since callers do not
- * thread an ILogger through; phase-3 will delete and inline at call sites.
- * @param bankName - Name of the bank that failed.
- * @param result - Failed IScraperScrapingResult containing error details.
- * @returns Successful Procedure indicating the failure was logged.
- */
-export function logScrapeFailure(
-  bankName: string, result: IScraperScrapingResult,
-): IProcedureSuccess<{ status: string }> {
-  const baseMsg = result.errorMessage ?? 'Unknown error';
-  const errorType = result.errorType ?? '';
-  const advice = getScraperErrorAdvice(errorType);
-  const hint = advice ? `. ${advice}` : '';
-  getLogger().error(`  ❌ Failed to scrape ${bankName}: ${baseMsg}${hint}`);
-  return succeed({ status: 'logged' });
 }
