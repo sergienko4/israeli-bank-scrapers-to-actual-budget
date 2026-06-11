@@ -2,11 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type TelegramNotifier from '../../../src/Services/Notifications/TelegramNotifier.js';
 import type { ITelegramConfig } from '../../../src/Types/Index.js';
-import { succeed } from '../../../src/Types/ProcedureHelpers.js';
+import { fail, succeed } from '../../../src/Types/ProcedureHelpers.js';
 
-const { commandHandlerCtor } = vi.hoisted(() => ({
+const { mediatorCtor, commandHandlerCtor } = vi.hoisted(() => ({
+  mediatorCtor: vi.fn(),
   commandHandlerCtor: vi.fn(),
 }));
+
+vi.mock('../../../src/Services/ImportMediator.js', () => {
+  class MockImportMediator {
+    setPoller = vi.fn();
+    constructor(opts: unknown) { mediatorCtor(opts); }
+  }
+  return { ImportMediator: MockImportMediator };
+});
 
 vi.mock('../../../src/Services/TelegramCommandHandler.js', () => {
   class MockTelegramCommandHandler {
@@ -43,8 +52,12 @@ vi.mock('../../../src/Scheduler/ConfigBootstrap.js', () => ({
   loadLogConfig: vi.fn(() => succeed({ logDir: '/var/log/import' })),
 }));
 
+vi.mock('../../../src/Scheduler/ImportProcessRunner.js', () => ({
+  spawnImport: vi.fn(),
+}));
+
 import {
-  buildCommandHandler, buildHandlerWithConfig,
+  buildCommandHandler, buildHandlerWithConfig, createMediator, createReceiptHandler,
 } from '../../../src/Scheduler/Telegram/HandlerFactory.js';
 
 const fakeNotifier = {
@@ -54,6 +67,25 @@ const fakeNotifier = {
 
 describe('HandlerFactory edge cases', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('createMediator passes null notifier when the procedure failed', () => {
+    createMediator(fail('no notifier'));
+    expect(mediatorCtor).toHaveBeenCalledWith(
+      expect.objectContaining({ notifier: null })
+    );
+  });
+
+  it('createMediator forwards the notifier on success', () => {
+    createMediator(succeed(fakeNotifier));
+    expect(mediatorCtor).toHaveBeenCalledWith(
+      expect.objectContaining({ notifier: fakeNotifier })
+    );
+  });
+
+  it('createReceiptHandler builds the handler when enabled', () => {
+    const result = createReceiptHandler(fakeNotifier, true);
+    expect(result).not.toBe(false);
+  });
 
   it('buildCommandHandler with default options passes undefined logDir + no receipt handler', () => {
     const fakeMediator = { setPoller: vi.fn() } as never;

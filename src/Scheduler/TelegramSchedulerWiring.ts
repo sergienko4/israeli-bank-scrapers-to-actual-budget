@@ -3,8 +3,7 @@
  *
  * Orchestrates startup of the Telegram-driven import path:
  * - Loads config and resolves the Telegram bot section
- * - Constructs notifier / mediator / handler via the Telegram
- *   factory modules (see ./Telegram/Index.js)
+ * - Constructs notifier / mediator / handler via HandlerFactory
  * - Wires the long-poller to the mediator via PollerWiring
  *
  * All construction details live in dedicated sibling modules under
