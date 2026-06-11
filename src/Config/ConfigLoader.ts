@@ -17,14 +17,9 @@ import {
 import {
 validateActualConfig, validateBank,
 validateServerUrl} from './ConfigLoaderValidator.js';
+import deepMerge from './Loaders/ConfigMerger.js';
 import loadFromEnvironment from './Loaders/EnvLoader.js';
 import OPTIONAL_SECTION_VALIDATORS from './Validators/OptionalSectionValidators.js';
-
-/** Type for values in nested config merge objects. */
-type ConfigValue = object | string | number | boolean | null;
-
-/** Type alias for nested config merge objects. */
-type ConfigRecord = Record<string, ConfigValue>;
 
 export interface IConfigLoader {
   load(): Procedure<IImporterConfig>;
@@ -89,7 +84,7 @@ export class ConfigLoader implements IConfigLoader {
       const config = ConfigLoader.readJsonFile(this._configPath);
       const credResult = this.loadCredentials();
       const merged = credResult.success
-        ? this.deepMerge(config, credResult.data) : config;
+        ? deepMerge(config, credResult.data) : config;
       return succeed(merged);
     } catch (error: unknown) {
       if (error instanceof ConfigurationError) {
@@ -143,37 +138,6 @@ export class ConfigLoader implements IConfigLoader {
     getLogger().info(`🔐 Decrypting ${filePath}...`);
     const decrypted = decryptConfig(raw, password);
     return JSON.parse(decrypted) as IImporterConfig;
-  }
-
-  /**
-   * Deep-merges source into target, returning a new merged IImporterConfig.
-   * @param target - Base config to merge into.
-   * @param source - Partial config whose values override or extend the target.
-   * @returns A new IImporterConfig with source values merged on top of target.
-   */
-  private deepMerge(target: IImporterConfig, source: Partial<IImporterConfig>): IImporterConfig {
-    const result: ConfigRecord = { ...target };
-    for (const [key, srcVal] of Object.entries(source)) {
-      const tgtVal = result[key];
-      result[key] = this.mergeValue(tgtVal, srcVal);
-    }
-    return result as unknown as IImporterConfig;
-  }
-
-  /**
-   * Recursively merges a single source value into a target value.
-   * @param target - The existing value from the base config.
-   * @param source - The incoming value from the credentials/override config.
-   * @returns The merged value (source wins for primitives; deep-merge for objects).
-   */
-  private mergeValue(target: ConfigValue, source: ConfigValue): ConfigValue {
-    if (!source || typeof source !== 'object' || Array.isArray(source)) return source;
-    if (!target || typeof target !== 'object' || Array.isArray(target)) return source;
-    const merged: ConfigRecord = { ...(target as ConfigRecord) };
-    for (const [k, v] of Object.entries(source as ConfigRecord)) {
-      merged[k] = this.mergeValue(merged[k], v);
-    }
-    return merged;
   }
 
   // ─── Validation ───
