@@ -3,7 +3,7 @@
  * Follows Single Responsibility Principle: Only handles configuration loading
  */
 
-import { existsSync,readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { ConfigurationError } from '../Errors/ErrorTypes.js';
@@ -12,13 +12,11 @@ import type {
   IImporterConfig, Procedure} from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import {
-  decryptConfig, getEncryptionPassword,
-  isEncryptedConfig} from './ConfigEncryption.js';
-import {
 validateActualConfig, validateBank,
 validateServerUrl} from './ConfigLoaderValidator.js';
 import deepMerge from './Loaders/ConfigMerger.js';
 import loadFromEnvironment from './Loaders/EnvLoader.js';
+import readJsonFile from './Loaders/JsonFileReader.js';
 import OPTIONAL_SECTION_VALIDATORS from './Validators/OptionalSectionValidators.js';
 
 export interface IConfigLoader {
@@ -81,7 +79,7 @@ export class ConfigLoader implements IConfigLoader {
     }
     try {
       getLogger().info('📄 Loading configuration from config.json');
-      const config = ConfigLoader.readJsonFile(this._configPath);
+      const config = readJsonFile(this._configPath);
       const credResult = this.loadCredentials();
       const merged = credResult.success
         ? deepMerge(config, credResult.data) : config;
@@ -106,38 +104,8 @@ export class ConfigLoader implements IConfigLoader {
       return fail('credentials.json not found');
     }
     getLogger().info('🔑 Loading credentials from credentials.json');
-    const credentials = ConfigLoader.readJsonFile(credPath);
+    const credentials = readJsonFile(credPath);
     return succeed(credentials);
-  }
-
-  /**
-   * Reads and parses a JSON file, decrypting it first if it is an IEncryptedConfig.
-   * @param filePath - Absolute path to the JSON file to read.
-   * @returns The parsed IImporterConfig object.
-   */
-  private static readJsonFile(filePath: string): IImporterConfig {
-    const raw = readFileSync(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, string | number | boolean>;
-    if (!isEncryptedConfig(parsed)) return parsed as unknown as IImporterConfig;
-    return ConfigLoader.decryptFile(raw, filePath);
-  }
-
-  /**
-   * Decrypts an encrypted config file using the environment password.
-   * @param raw - Raw JSON string of the encrypted payload.
-   * @param filePath - File path used in error messages.
-   * @returns The decrypted IImporterConfig object.
-   */
-  private static decryptFile(raw: string, filePath: string): IImporterConfig {
-    const password = getEncryptionPassword();
-    if (!password) {
-      throw new ConfigurationError(
-        `🔐 ${filePath} is encrypted. Set CREDENTIALS_ENCRYPTION_PASSWORD env var.`
-      );
-    }
-    getLogger().info(`🔐 Decrypting ${filePath}...`);
-    const decrypted = decryptConfig(raw, password);
-    return JSON.parse(decrypted) as IImporterConfig;
   }
 
   // ─── Validation ───
