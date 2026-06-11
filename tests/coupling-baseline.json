@@ -1,11 +1,11 @@
 {
   "generatedAt": "2026-06-11",
-  "totalFiles": 157,
+  "totalFiles": 159,
   "scoreDistribution": {
-    "critical8plus": 10,
-    "high5to7": 22,
-    "medium3to4": 28,
-    "low1to2": 28,
+    "critical8plus": 9,
+    "high5to7": 23,
+    "medium3to4": 29,
+    "low1to2": 29,
     "clean0": 69
   },
   "files": [
@@ -211,55 +211,6 @@
       "score": 71
     },
     {
-      "path": "src/Scheduler/Telegram/HandlerFactory.ts",
-      "layer": "SC",
-      "lines": 105,
-      "valueImports": 9,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Services/AuditLogService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/ImportMediator.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/ReceiptApiAdapter.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/ReceiptImportHandler.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/ReceiptOcrService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/TelegramCommandHandler.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "AuditLogService",
-        "ImportMediator",
-        "ReceiptImportHandler",
-        "ReceiptOcrService",
-        "TelegramCommandHandler"
-      ],
-      "newCount": 5,
-      "ocpRisks": [],
-      "score": 13
-    },
-    {
       "path": "src/Scheduler/ConfigBootstrap.ts",
       "layer": "SC",
       "lines": 83,
@@ -358,9 +309,9 @@
     {
       "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
       "layer": "SC",
-      "lines": 50,
+      "lines": 65,
       "valueImports": 5,
-      "typeImports": 0,
+      "typeImports": 2,
       "crossLayerValueDeps": [
         {
           "to": "src/Logger/Index.ts",
@@ -752,7 +703,7 @@
     {
       "path": "src/Scheduler/Telegram/CommandRegistry.ts",
       "layer": "SC",
-      "lines": 72,
+      "lines": 77,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [
@@ -776,6 +727,37 @@
         "ConfigurationError"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Scheduler/Telegram/ReceiptHandlerFactory.ts",
+      "layer": "SC",
+      "lines": 34,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Services/ReceiptApiAdapter.ts",
+          "toLayer": "IS",
+          "dynamic": false
+        },
+        {
+          "to": "src/Services/ReceiptImportHandler.ts",
+          "toLayer": "IS",
+          "dynamic": false
+        },
+        {
+          "to": "src/Services/ReceiptOcrService.ts",
+          "toLayer": "IS",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ReceiptImportHandler",
+        "ReceiptOcrService"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 6
     },
@@ -1279,6 +1261,32 @@
         "Promise"
       ],
       "newCount": 3,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Scheduler/Telegram/HandlerFactory.ts",
+      "layer": "SC",
+      "lines": 74,
+      "valueImports": 5,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Services/AuditLogService.ts",
+          "toLayer": "IS",
+          "dynamic": false
+        },
+        {
+          "to": "src/Services/TelegramCommandHandler.ts",
+          "toLayer": "IS",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "AuditLogService",
+        "TelegramCommandHandler"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 4
     },
@@ -1898,6 +1906,26 @@
       ],
       "newClasses": [
         "Promise"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Scheduler/Telegram/MediatorFactory.ts",
+      "layer": "SC",
+      "lines": 33,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Services/ImportMediator.ts",
+          "toLayer": "IS",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ImportMediator"
       ],
       "newCount": 1,
       "ocpRisks": [],

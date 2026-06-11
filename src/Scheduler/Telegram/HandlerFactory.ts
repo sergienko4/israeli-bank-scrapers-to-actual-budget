@@ -1,23 +1,26 @@
 /**
  * Factory module for the Telegram side of the import pipeline.
  *
- * Constructs the ImportMediator, the optional ReceiptImportHandler, and the
- * TelegramCommandHandler that wires them together. Kept in its own module
- * so the composition root (TelegramSchedulerWiring) only orchestrates and
- * does not contain construction details.
+ * Constructs the TelegramCommandHandler that wires the receipt and
+ * bank-import paths together. The ImportMediator is built in
+ * `./MediatorFactory.ts` and the optional receipt handler is built in
+ * `./ReceiptHandlerFactory.ts`, so each sub-module owns one construction
+ * concern. Kept in its own module so the composition root
+ * (TelegramSchedulerWiring) only orchestrates and does not contain
+ * construction details.
  */
 
 import { AuditLogService } from '../../Services/AuditLogService.js';
-import { ImportMediator } from '../../Services/ImportMediator.js';
+import type { ImportMediator } from '../../Services/ImportMediator.js';
 import type TelegramNotifier from '../../Services/Notifications/TelegramNotifier.js';
-import createReceiptApi from '../../Services/ReceiptApiAdapter.js';
-import { ReceiptImportHandler } from '../../Services/ReceiptImportHandler.js';
-import ReceiptOcrService from '../../Services/ReceiptOcrService.js';
 import { TelegramCommandHandler } from '../../Services/TelegramCommandHandler.js';
-import type { ITelegramConfig, Procedure } from '../../Types/Index.js';
+import type { ITelegramConfig } from '../../Types/Index.js';
 import { loadLogConfig } from '../ConfigBootstrap.js';
-import { spawnImport } from '../ImportProcessRunner.js';
 import { getConfiguredBankNames, runConfigValidation } from './ConfigHelpers.js';
+import createReceiptHandler from './ReceiptHandlerFactory.js';
+
+export { default as createMediator } from './MediatorFactory.js';
+export { default as createReceiptHandler } from './ReceiptHandlerFactory.js';
 
 /** Options bag for buildCommandHandler to stay within the max-params limit. */
 export interface ICommandHandlerOptions {
@@ -25,40 +28,6 @@ export interface ICommandHandlerOptions {
   enableReceipt?: boolean;
   /** Optional log directory exposed to the command handler. */
   logDir?: string;
-}
-
-/**
- * Creates an ImportMediator wired to spawnImport and the current config.
- *
- * @param notifierResult - Procedure with TelegramNotifier, or failure for none.
- * @returns A configured ImportMediator instance.
- */
-export function createMediator(notifierResult: Procedure<TelegramNotifier>): ImportMediator {
-  const notifier = notifierResult.success ? notifierResult.data : void 0;
-  return new ImportMediator({
-    spawnImport,
-    getBankNames: getConfiguredBankNames,
-    notifier: notifier ?? null,
-  });
-}
-
-/**
- * Creates a ReceiptImportHandler if receipt import is enabled.
- *
- * @param notifier - The TelegramNotifier for messaging and photo download.
- * @param isEnabled - Whether receipt import is enabled.
- * @returns ReceiptImportHandler or false when disabled.
- */
-export function createReceiptHandler(
-  notifier: TelegramNotifier, isEnabled: boolean
-): ReceiptImportHandler | false {
-  if (!isEnabled) return false;
-  return new ReceiptImportHandler({
-    ocr: new ReceiptOcrService(),
-    notifier,
-    telegramNotifier: notifier,
-    apiFactory: createReceiptApi,
-  });
 }
 
 /**
