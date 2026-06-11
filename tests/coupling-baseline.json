@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-06-10",
-  "totalFiles": 151,
+  "generatedAt": "2026-06-11",
+  "totalFiles": 152,
   "scoreDistribution": {
     "critical8plus": 7,
     "high5to7": 21,
     "medium3to4": 28,
     "low1to2": 28,
-    "clean0": 67
+    "clean0": 68
   },
   "files": [
     {
@@ -2767,6 +2767,18 @@
       "lines": 22,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Import/Index.ts",
+      "layer": "IS",
+      "lines": 29,
+      "valueImports": 0,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
