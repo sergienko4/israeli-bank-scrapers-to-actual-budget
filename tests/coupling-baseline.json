@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-06-10",
-  "totalFiles": 147,
+  "generatedAt": "2026-06-11",
+  "totalFiles": 152,
   "scoreDistribution": {
-    "critical8plus": 8,
-    "high5to7": 19,
-    "medium3to4": 27,
-    "low1to2": 26,
-    "clean0": 67
+    "critical8plus": 7,
+    "high5to7": 21,
+    "medium3to4": 28,
+    "low1to2": 28,
+    "clean0": 68
   },
   "files": [
     {
@@ -342,42 +342,6 @@
       "newCount": 1,
       "ocpRisks": [],
       "score": 10
-    },
-    {
-      "path": "src/Services/ImportMediator.ts",
-      "layer": "IS",
-      "lines": 313,
-      "valueImports": 5,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date",
-        "Error",
-        "IBatchTracker",
-        "IImportJob",
-        "ImportQueue",
-        "Map",
-        "Promise"
-      ],
-      "newCount": 7,
-      "ocpRisks": [],
-      "score": 9
     },
     {
       "path": "src/Services/ReceiptImportHandler.ts",
@@ -756,6 +720,62 @@
       "score": 6
     },
     {
+      "path": "src/Services/Import/BatchSummaryNotifier.ts",
+      "layer": "IS",
+      "lines": 66,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Services/Import/PollerLifecycle.ts",
+      "layer": "IS",
+      "lines": 75,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
       "path": "src/Services/ImportQueue.ts",
       "layer": "IS",
       "lines": 109,
@@ -941,7 +961,7 @@
     {
       "path": "src/Services/Transaction/AccountResolver.ts",
       "layer": "IS",
-      "lines": 105,
+      "lines": 106,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [
@@ -1610,6 +1630,32 @@
       "score": 3
     },
     {
+      "path": "src/Services/ImportMediator.ts",
+      "layer": "IS",
+      "lines": 149,
+      "valueImports": 7,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "BatchSummaryNotifier",
+        "Date",
+        "Error",
+        "ImportQueue",
+        "JobProcessor",
+        "Map",
+        "PollerLifecycle"
+      ],
+      "newCount": 7,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
       "path": "src/Services/Notifications/TelegramFormatter.ts",
       "layer": "IS",
       "lines": 352,
@@ -1899,6 +1945,46 @@
         "IAuditEntry"
       ],
       "newCount": 3,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Import/BatchFactory.ts",
+      "layer": "IS",
+      "lines": 150,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "IBatchTracker",
+        "IImportJob",
+        "Promise"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Import/JobProcessor.ts",
+      "layer": "IS",
+      "lines": 110,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 2
     },
@@ -2681,6 +2767,18 @@
       "lines": 22,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Import/Index.ts",
+      "layer": "IS",
+      "lines": 29,
+      "valueImports": 0,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
