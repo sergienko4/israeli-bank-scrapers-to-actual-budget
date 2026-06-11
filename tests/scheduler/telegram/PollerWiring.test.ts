@@ -69,11 +69,13 @@ describe('PollerWiring edge cases', () => {
   });
 
   it('logs an error when poller.start() rejects', async () => {
-    mockStart.mockRejectedValueOnce(new Error('telegram boom'));
+    const startError = new Error('telegram boom');
+    const startPromise = Promise.reject(startError);
+    mockStart.mockReturnValueOnce(startPromise);
     const mediator = { setPoller: vi.fn() } as never;
     const tg = { botToken: 't', chatId: 'c' } as ITelegramConfig;
     wireAndStartPoller(tg, fakeHandler, mediator);
-    await new Promise((r) => setTimeout(r, 5));
+    await startPromise.catch(() => undefined);
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.stringContaining('telegram boom')
     );

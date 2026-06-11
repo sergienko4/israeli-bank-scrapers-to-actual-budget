@@ -7,6 +7,8 @@
  * the rest of the Telegram orchestration surface.
  */
 
+import type * as ConfigLoaderModule from '../../Config/ConfigLoader.js';
+import type * as ConfigValidatorModule from '../../Config/ConfigValidator.js';
 import { getLogger } from '../../Logger/Index.js';
 import { isFail } from '../../Types/Index.js';
 import { loadFullConfig } from '../ConfigBootstrap.js';
@@ -28,6 +30,20 @@ export function getConfiguredBankNames(): string[] {
 }
 
 /**
+ * Lazily loads ConfigLoader and ConfigValidator modules.
+ *
+ * @returns The two module namespaces needed by runConfigValidation.
+ */
+async function loadValidationDeps(): Promise<{
+  configLoaderModule: typeof ConfigLoaderModule;
+  configValidatorModule: typeof ConfigValidatorModule;
+}> {
+  const configLoaderModule = await import('../../Config/ConfigLoader.js');
+  const configValidatorModule = await import('../../Config/ConfigValidator.js');
+  return { configLoaderModule, configValidatorModule };
+}
+
+/**
  * Lazily imports ConfigLoader and ConfigValidator and runs all validation checks.
  *
  * The lazy import is preserved from the original implementation to minimise
@@ -36,8 +52,7 @@ export function getConfiguredBankNames(): string[] {
  * @returns Formatted validation report string for display in Telegram.
  */
 export async function runConfigValidation(): Promise<string> {
-  const configLoaderModule = await import('../../Config/ConfigLoader.js');
-  const configValidatorModule = await import('../../Config/ConfigValidator.js');
+  const { configLoaderModule, configValidatorModule } = await loadValidationDeps();
   const loader = new configLoaderModule.ConfigLoader();
   const rawResult = loader.loadRaw();
   if (isFail(rawResult)) {

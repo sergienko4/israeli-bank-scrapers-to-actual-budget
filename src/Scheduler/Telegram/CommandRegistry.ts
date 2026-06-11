@@ -29,27 +29,32 @@ export function logCommandCount(
   return succeed({ status: 'logged' });
 }
 
+export interface IBotCommand { command: string; description: string }
+
+const BASE_EXTRA_COMMANDS: readonly IBotCommand[] = [
+  { command: 'retry', description: 'Re-import only last failed banks' },
+  { command: 'check_config', description: 'Check configuration (offline + online)' },
+  { command: 'preview', description: 'Dry run: scrape banks without importing' },
+];
+
+const WATCH_COMMAND: IBotCommand = {
+  command: 'watch', description: 'Check spending watch rules',
+};
+
+const RECEIPT_COMMAND: IBotCommand = {
+  command: 'import_receipt', description: 'Import from receipt photo (OCR)',
+};
+
 /**
  * Builds the list of extra bot commands beyond the built-in set based on config features.
  *
  * @param config - Full importer config used to detect enabled optional features.
  * @returns Array of extra command+description objects to register with Telegram.
  */
-export function buildExtraCommands(
-  config: IImporterConfig
-): { command: string; description: string }[] {
-  const extras: { command: string; description: string }[] = [
-    { command: 'retry', description: 'Re-import only last failed banks' },
-    { command: 'check_config', description: 'Check configuration (offline + online)' },
-    { command: 'preview', description: 'Dry run: scrape banks without importing' },
-  ];
-  const watchLen = config.spendingWatch?.length ?? 0;
-  if (watchLen > 0) {
-    extras.push({ command: 'watch', description: 'Check spending watch rules' });
-  }
-  if (config.notifications?.telegram?.enableReceiptImport) {
-    extras.push({ command: 'import_receipt', description: 'Import from receipt photo (OCR)' });
-  }
+export function buildExtraCommands(config: IImporterConfig): IBotCommand[] {
+  const extras: IBotCommand[] = [...BASE_EXTRA_COMMANDS];
+  if ((config.spendingWatch?.length ?? 0) > 0) extras.push(WATCH_COMMAND);
+  if (config.notifications?.telegram?.enableReceiptImport) extras.push(RECEIPT_COMMAND);
   return extras;
 }
 
