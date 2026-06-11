@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-06-11",
-  "totalFiles": 152,
+  "totalFiles": 157,
   "scoreDistribution": {
-    "critical8plus": 7,
-    "high5to7": 21,
+    "critical8plus": 10,
+    "high5to7": 22,
     "medium3to4": 28,
     "low1to2": 28,
-    "clean0": 68
+    "clean0": 69
   },
   "files": [
     {
@@ -211,22 +211,12 @@
       "score": 71
     },
     {
-      "path": "src/Scheduler/TelegramSchedulerWiring.ts",
+      "path": "src/Scheduler/Telegram/HandlerFactory.ts",
       "layer": "SC",
-      "lines": 279,
-      "valueImports": 16,
-      "typeImports": 1,
+      "lines": 105,
+      "valueImports": 9,
+      "typeImports": 2,
       "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ConfigurationError.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
         {
           "to": "src/Services/AuditLogService.ts",
           "toLayer": "IS",
@@ -234,11 +224,6 @@
         },
         {
           "to": "src/Services/ImportMediator.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/Notifications/TelegramNotifier.ts",
           "toLayer": "IS",
           "dynamic": false
         },
@@ -261,47 +246,18 @@
           "to": "src/Services/TelegramCommandHandler.ts",
           "toLayer": "IS",
           "dynamic": false
-        },
-        {
-          "to": "src/Services/TelegramPoller.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Config/ConfigLoader.ts",
-          "toLayer": "CC",
-          "dynamic": true
-        },
-        {
-          "to": "src/Config/ConfigValidator.ts",
-          "toLayer": "CC",
-          "dynamic": true
         }
       ],
       "newClasses": [
         "AuditLogService",
-        "ConfigurationError",
-        "Error",
         "ImportMediator",
         "ReceiptImportHandler",
         "ReceiptOcrService",
-        "TelegramCommandHandler",
-        "TelegramNotifier",
-        "TelegramPoller"
+        "TelegramCommandHandler"
       ],
-      "newCount": 9,
+      "newCount": 5,
       "ocpRisks": [],
-      "score": 32
+      "score": 13
     },
     {
       "path": "src/Scheduler/ConfigBootstrap.ts",
@@ -394,6 +350,110 @@
       "newClasses": [
         "ConfigurationError",
         "IImporterConfig"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 8
+    },
+    {
+      "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
+      "layer": "SC",
+      "lines": 50,
+      "valueImports": 5,
+      "typeImports": 0,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Config/ConfigLoader.ts",
+          "toLayer": "CC",
+          "dynamic": true
+        },
+        {
+          "to": "src/Config/ConfigValidator.ts",
+          "toLayer": "CC",
+          "dynamic": true
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 8
+    },
+    {
+      "path": "src/Scheduler/Telegram/PollerWiring.ts",
+      "layer": "SC",
+      "lines": 46,
+      "valueImports": 4,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Services/TelegramPoller.ts",
+          "toLayer": "IS",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "TelegramPoller"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 8
+    },
+    {
+      "path": "src/Scheduler/TelegramSchedulerWiring.ts",
+      "layer": "SC",
+      "lines": 75,
+      "valueImports": 6,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Services/Notifications/TelegramNotifier.ts",
+          "toLayer": "IS",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Error",
+        "TelegramNotifier"
       ],
       "newCount": 2,
       "ocpRisks": [],
@@ -686,6 +746,36 @@
       ],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Scheduler/Telegram/CommandRegistry.ts",
+      "layer": "SC",
+      "lines": 72,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Errors/ConfigurationError.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 6
     },
@@ -1632,7 +1722,7 @@
     {
       "path": "src/Services/ImportMediator.ts",
       "layer": "IS",
-      "lines": 149,
+      "lines": 168,
       "valueImports": 7,
       "typeImports": 3,
       "crossLayerValueDeps": [
@@ -1973,7 +2063,7 @@
     {
       "path": "src/Services/Import/JobProcessor.ts",
       "layer": "IS",
-      "lines": 110,
+      "lines": 111,
       "valueImports": 2,
       "typeImports": 3,
       "crossLayerValueDeps": [
@@ -2530,6 +2620,18 @@
       "layer": "(none)",
       "lines": 34,
       "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scheduler/Telegram/Index.ts",
+      "layer": "SC",
+      "lines": 20,
+      "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
