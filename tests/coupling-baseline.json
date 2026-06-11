@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-06-11",
-  "totalFiles": 162,
+  "totalFiles": 165,
   "scoreDistribution": {
-    "critical8plus": 8,
-    "high5to7": 24,
+    "critical8plus": 7,
+    "high5to7": 25,
     "medium3to4": 29,
-    "low1to2": 31,
-    "clean0": 70
+    "low1to2": 32,
+    "clean0": 72
   },
   "files": [
     {
@@ -385,41 +385,6 @@
       "score": 8
     },
     {
-      "path": "src/Scraper/BankScraper.ts",
-      "layer": "BP",
-      "lines": 175,
-      "valueImports": 4,
-      "typeImports": 7,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ScraperErrorMessages.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 4,
-      "ocpRisks": [],
-      "score": 8
-    },
-    {
       "path": "src/Services/TelegramPoller.ts",
       "layer": "IS",
       "lines": 294,
@@ -755,6 +720,34 @@
         "ReceiptOcrService"
       ],
       "newCount": 2,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Scraper/FailureLogShim.ts",
+      "layer": "BP",
+      "lines": 40,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Errors/ScraperErrorMessages.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 6
     },
@@ -1797,7 +1790,7 @@
     {
       "path": "src/Config/Loaders/EnvLoader.ts",
       "layer": "CC",
-      "lines": 125,
+      "lines": 158,
       "valueImports": 1,
       "typeImports": 1,
       "crossLayerValueDeps": [
@@ -1984,6 +1977,26 @@
         "Map"
       ],
       "newCount": 2,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Scraper/DateRangeShims.ts",
+      "layer": "BP",
+      "lines": 54,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 3,
       "ocpRisks": [],
       "score": 2
     },
@@ -2710,6 +2723,32 @@
       "lines": 20,
       "valueImports": 0,
       "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/BankScraper.ts",
+      "layer": "BP",
+      "lines": 122,
+      "valueImports": 1,
+      "typeImports": 7,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/EmptyResultDetector.ts",
+      "layer": "BP",
+      "lines": 37,
+      "valueImports": 0,
+      "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,

@@ -11,30 +11,28 @@
  *
  * Note: filterTransactionsByDate / computeStartDate / isEmptyResultError /
  * logScrapeFailure are intentional back-compat re-exports consumed by
- * AccountImporter and existing tests. Phase-3 will delete the shims and
+ * AccountImporter and existing tests. The actual implementations now live
+ * in dedicated sibling modules (`./DateRangeShims.js`,
+ * `./EmptyResultDetector.js`) — this file only re-surfaces them to keep
+ * the public import path stable. Phase-3 will delete the re-exports and
  * migrate consumers to IDateRangePolicy + ICanonicalScrapeResult.
  */
 
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
-import { getScraperErrorAdvice } from '../Errors/ScraperErrorMessages.js';
 import type { ILogger } from '../Logger/ILogger.js';
-import { getLogger } from '../Logger/Index.js';
 import type {
-  IBankConfig, IProcedureSuccess, IRawScrape, ISignPolicy,
+  IBankConfig, IRawScrape, ISignPolicy,
 } from '../Types/Index.js';
-import { succeed } from '../Types/Index.js';
-import { filterByDateCutoff, formatDate } from '../Utils/Index.js';
 import type { IBankRegistry } from './BankRegistry.js';
+import isEmptyResult from './EmptyResultDetector.js';
 import type { IScrapeResultMapper } from './Mappers/IScrapeResultMapper.js';
 import type { IDateRangePolicy } from './Policies/DateRangePolicy.js';
 import type { IBankScrapeStrategy } from './Strategies/IBankScrapeStrategy.js';
 
+export { computeStartDate, filterTransactionsByDate } from './DateRangeShims.js';
+export { default as logScrapeFailure } from './FailureLogShim.js';
 export { createDateRangePolicy } from './Policies/DateRangePolicy.js';
-
-const NO_RECORDS_PATTERNS = [
-  'no transactions found', 'no results found', 'לא מצאנו תנועות',
-];
 
 /** Bank-scraper coordinator dependencies. */
 export interface IBankScraperOpts {
@@ -110,65 +108,14 @@ export class BankScraper {
 }
 
 /**
- * Computes the transaction start date based on daysBack or startDate config.
- * Back-compat shim; phase-3 migrates callers to IDateRangePolicy.
- * @param bankConfig - Bank config whose date settings to use.
- * @returns Computed start Date for scraping.
- */
-export function computeStartDate(bankConfig: IBankConfig): Date {
-  if (bankConfig.daysBack) {
-    const date = new Date();
-    date.setDate(date.getDate() - (bankConfig.daysBack - 1));
-    return date;
-  }
-  return bankConfig.startDate ? new Date(bankConfig.startDate) : new Date();
-}
-
-/**
- * Filters transactions to those on or after the bank's configured start date.
- * Back-compat shim consumed by AccountImporter; phase-3 migrates it.
- * @param txns - Transactions to filter; not mutated.
- * @param bankConfig - Bank config providing the cutoff date.
- * @returns Filtered array, or original if no date filter is configured.
- */
-export function filterTransactionsByDate<T extends { date: Date | string }>(
-  txns: T[], bankConfig: IBankConfig,
-): T[] {
-  if (!bankConfig.daysBack && !bankConfig.startDate) return txns;
-  const startDate = computeStartDate(bankConfig);
-  const cutoff = formatDate(startDate);
-  return filterByDateCutoff(txns, cutoff);
-}
-
-/**
  * Checks whether a scraper failure indicates "no transactions" vs. a real error.
+ *
+ * Back-compat shim — delegates to {@link isEmptyResult} from the dedicated
+ * EmptyResultDetector module. New callers should import from
+ * `./EmptyResultDetector.js` directly.
  * @param result - The IScraperScrapingResult to inspect.
  * @returns True when the error message matches a known empty-result pattern.
  */
 export function isEmptyResultError(result: IScraperScrapingResult): boolean {
-  const rawMessage = result.errorMessage ?? '';
-  const msg = rawMessage.toLowerCase();
-  return NO_RECORDS_PATTERNS.some(pattern => {
-    const loweredPattern = pattern.toLowerCase();
-    return msg.includes(loweredPattern);
-  });
-}
-
-/**
- * Logs a scraper failure with a user-friendly hint based on the error type.
- * Back-compat shim — uses module-level getLogger() since callers do not
- * thread an ILogger through; phase-3 will delete and inline at call sites.
- * @param bankName - Name of the bank that failed.
- * @param result - Failed IScraperScrapingResult containing error details.
- * @returns Successful Procedure indicating the failure was logged.
- */
-export function logScrapeFailure(
-  bankName: string, result: IScraperScrapingResult,
-): IProcedureSuccess<{ status: string }> {
-  const baseMsg = result.errorMessage ?? 'Unknown error';
-  const errorType = result.errorType ?? '';
-  const advice = getScraperErrorAdvice(errorType);
-  const hint = advice ? `. ${advice}` : '';
-  getLogger().error(`  ❌ Failed to scrape ${bankName}: ${baseMsg}${hint}`);
-  return succeed({ status: 'logged' });
+  return isEmptyResult(result);
 }
