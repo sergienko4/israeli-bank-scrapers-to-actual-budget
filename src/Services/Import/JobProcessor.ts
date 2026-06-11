@@ -106,4 +106,5 @@ export default class JobProcessor {
     await this.opts.summaryNotifier.send(batchResult);
     tracker.resolve(batchResult);
     this.opts.trackerStore.delete(tracker.batchId);
-  }}
+  }
+}

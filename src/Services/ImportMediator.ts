@@ -50,18 +50,8 @@ export class ImportMediator {
   constructor(opts: IImportMediatorOptions) {
     this._summaryNotifier = new BatchSummaryNotifier(opts.notifier);
     this._pollerLifecycle = new PollerLifecycle();
-    this._jobProcessor = new JobProcessor({
-      spawnImport: opts.spawnImport,
-      pollerLifecycle: this._pollerLifecycle,
-      summaryNotifier: this._summaryNotifier,
-      trackerStore: this._batches,
-      onBatchFinalized: this.recordBatchResult.bind(this),
-    });
-    this._queue = new ImportQueue<IImportJob>({
-      process: this._jobProcessor.processJob.bind(this._jobProcessor),
-      onJobComplete: this._jobProcessor.handleJobComplete.bind(this._jobProcessor),
-      onQueueEmpty: this.resumePollerAfterDrain.bind(this),
-    });
+    this._jobProcessor = this.createJobProcessor(opts.spawnImport);
+    this._queue = this.createQueue();
   }
 
   /**
@@ -144,5 +134,34 @@ export class ImportMediator {
     this._lastResult = batchResult;
     this._lastRunTime = new Date();
     return succeed({ status: 'recorded' });
+  }
+
+  /**
+   * Builds the JobProcessor wired to its collaborators.
+   * @param spawnImport - Function that spawns a child process for one bank.
+   * @returns A configured JobProcessor.
+   */
+  private createJobProcessor(
+    spawnImport: IImportMediatorOptions['spawnImport'],
+  ): JobProcessor {
+    return new JobProcessor({
+      spawnImport,
+      pollerLifecycle: this._pollerLifecycle,
+      summaryNotifier: this._summaryNotifier,
+      trackerStore: this._batches,
+      onBatchFinalized: this.recordBatchResult.bind(this),
+    });
+  }
+
+  /**
+   * Builds the ImportQueue and binds its callbacks to the JobProcessor.
+   * @returns A configured ImportQueue ready to accept jobs.
+   */
+  private createQueue(): ImportQueue<IImportJob> {
+    return new ImportQueue<IImportJob>({
+      process: this._jobProcessor.processJob.bind(this._jobProcessor),
+      onJobComplete: this._jobProcessor.handleJobComplete.bind(this._jobProcessor),
+      onQueueEmpty: this.resumePollerAfterDrain.bind(this),
+    });
   }
 }
