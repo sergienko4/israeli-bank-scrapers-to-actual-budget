@@ -26,15 +26,12 @@ import type {
 import { succeed } from '../Types/Index.js';
 import { filterByDateCutoff, formatDate } from '../Utils/Index.js';
 import type { IBankRegistry } from './BankRegistry.js';
+import isEmptyResult from './EmptyResultDetector.js';
 import type { IScrapeResultMapper } from './Mappers/IScrapeResultMapper.js';
 import type { IDateRangePolicy } from './Policies/DateRangePolicy.js';
 import type { IBankScrapeStrategy } from './Strategies/IBankScrapeStrategy.js';
 
 export { createDateRangePolicy } from './Policies/DateRangePolicy.js';
-
-const NO_RECORDS_PATTERNS = [
-  'no transactions found', 'no results found', 'לא מצאנו תנועות',
-];
 
 /** Bank-scraper coordinator dependencies. */
 export interface IBankScraperOpts {
@@ -142,16 +139,15 @@ export function filterTransactionsByDate<T extends { date: Date | string }>(
 
 /**
  * Checks whether a scraper failure indicates "no transactions" vs. a real error.
+ *
+ * Back-compat shim — delegates to {@link isEmptyResult} from the dedicated
+ * EmptyResultDetector module. New callers should import from
+ * `./EmptyResultDetector.js` directly.
  * @param result - The IScraperScrapingResult to inspect.
  * @returns True when the error message matches a known empty-result pattern.
  */
 export function isEmptyResultError(result: IScraperScrapingResult): boolean {
-  const rawMessage = result.errorMessage ?? '';
-  const msg = rawMessage.toLowerCase();
-  return NO_RECORDS_PATTERNS.some(pattern => {
-    const loweredPattern = pattern.toLowerCase();
-    return msg.includes(loweredPattern);
-  });
+  return isEmptyResult(result);
 }
 
 /**
