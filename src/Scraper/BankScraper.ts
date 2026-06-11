@@ -11,7 +11,10 @@
  *
  * Note: filterTransactionsByDate / computeStartDate / isEmptyResultError /
  * logScrapeFailure are intentional back-compat re-exports consumed by
- * AccountImporter and existing tests. Phase-3 will delete the shims and
+ * AccountImporter and existing tests. The actual implementations now live
+ * in dedicated sibling modules (`./DateRangeShims.js`,
+ * `./EmptyResultDetector.js`) — this file only re-surfaces them to keep
+ * the public import path stable. Phase-3 will delete the re-exports and
  * migrate consumers to IDateRangePolicy + ICanonicalScrapeResult.
  */
 
@@ -24,13 +27,13 @@ import type {
   IBankConfig, IProcedureSuccess, IRawScrape, ISignPolicy,
 } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
-import { filterByDateCutoff, formatDate } from '../Utils/Index.js';
 import type { IBankRegistry } from './BankRegistry.js';
 import isEmptyResult from './EmptyResultDetector.js';
 import type { IScrapeResultMapper } from './Mappers/IScrapeResultMapper.js';
 import type { IDateRangePolicy } from './Policies/DateRangePolicy.js';
 import type { IBankScrapeStrategy } from './Strategies/IBankScrapeStrategy.js';
 
+export { computeStartDate, filterTransactionsByDate } from './DateRangeShims.js';
 export { createDateRangePolicy } from './Policies/DateRangePolicy.js';
 
 /** Bank-scraper coordinator dependencies. */
@@ -104,37 +107,6 @@ export class BankScraper {
       errorMessage: message, accounts: [],
     };
   }
-}
-
-/**
- * Computes the transaction start date based on daysBack or startDate config.
- * Back-compat shim; phase-3 migrates callers to IDateRangePolicy.
- * @param bankConfig - Bank config whose date settings to use.
- * @returns Computed start Date for scraping.
- */
-export function computeStartDate(bankConfig: IBankConfig): Date {
-  if (bankConfig.daysBack) {
-    const date = new Date();
-    date.setDate(date.getDate() - (bankConfig.daysBack - 1));
-    return date;
-  }
-  return bankConfig.startDate ? new Date(bankConfig.startDate) : new Date();
-}
-
-/**
- * Filters transactions to those on or after the bank's configured start date.
- * Back-compat shim consumed by AccountImporter; phase-3 migrates it.
- * @param txns - Transactions to filter; not mutated.
- * @param bankConfig - Bank config providing the cutoff date.
- * @returns Filtered array, or original if no date filter is configured.
- */
-export function filterTransactionsByDate<T extends { date: Date | string }>(
-  txns: T[], bankConfig: IBankConfig,
-): T[] {
-  if (!bankConfig.daysBack && !bankConfig.startDate) return txns;
-  const startDate = computeStartDate(bankConfig);
-  const cutoff = formatDate(startDate);
-  return filterByDateCutoff(txns, cutoff);
 }
 
 /**
