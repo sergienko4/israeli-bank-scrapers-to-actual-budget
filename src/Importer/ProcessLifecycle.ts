@@ -100,7 +100,11 @@ async function handleFatalErrorImpl(
   const formattedError = deps.errorFormatter.format(err);
   deps.logger.error(`\n${formattedError}`);
   if (error instanceof Error) deps.logger.error(`Stack trace: ${error.stack ?? 'N/A'}`);
-  await deps.notificationService.sendError(formattedError);
+  try {
+    await deps.notificationService.sendError(formattedError);
+  } catch (notifyError: unknown) {
+    deps.logger.error(`Failed to send error notification: ${errorMessage(notifyError)}`);
+  }
   await safeShutdownImpl(deps);
   process.exit(1);
 }
@@ -118,7 +122,11 @@ async function handlePipelineFailureImpl(
   deps: IResolvedDeps,
 ): Promise<never> {
   deps.logger.error(`Pipeline failed: ${failure.message}`);
-  await deps.notificationService.sendError(failure.message);
+  try {
+    await deps.notificationService.sendError(failure.message);
+  } catch (notifyError: unknown) {
+    deps.logger.error(`Failed to send error notification: ${errorMessage(notifyError)}`);
+  }
   await safeShutdownImpl(deps);
   process.exit(1);
 }

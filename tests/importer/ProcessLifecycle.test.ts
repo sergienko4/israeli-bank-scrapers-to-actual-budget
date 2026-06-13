@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { buildProcessLifecycle } from '../../src/Importer/ProcessLifecycle.js';
 import type { IProcessLifecycleDeps, IShutdownableApi } from '../../src/Importer/ProcessLifecycle.js';
@@ -43,6 +43,10 @@ describe('ProcessLifecycle', () => {
     exitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`process.exit(${code as number})`);
     });
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
   });
 
   describe('safeShutdown', () => {

@@ -29,7 +29,7 @@ export { buildResilienceComponents } from './Importer/ResilienceWiring.js';
 const CURRENT_PATH = fileURLToPath(import.meta.url);
 const CURRENT_FILE = resolve(CURRENT_PATH);
 const INVOKED_ARG = process.argv[1];
-const INVOKED_FILE = resolve(INVOKED_ARG);
-if (CURRENT_FILE === INVOKED_FILE) {
+const INVOKED_FILE = INVOKED_ARG ? resolve(INVOKED_ARG) : undefined;
+if (INVOKED_FILE && CURRENT_FILE === INVOKED_FILE) {
   await bootImporter();
 }

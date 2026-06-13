@@ -84,7 +84,7 @@ async function resolvePipelineExitCode(handle: IImporterBootHandle): Promise<num
   let result: Awaited<ReturnType<typeof execute>>;
   try {
     result = await execute(handle.wiring.pipeline, handle.wiring.pipelineContext);
-  } catch (error) {
+  } catch (error: unknown) {
     return await handle.lifecycle.handleFatalError(error);
   }
   if (isFail(result)) return await handle.lifecycle.handlePipelineFailure(result);
