@@ -4,6 +4,8 @@
  * (and coupling score) for the ReceiptImportHandler orchestrator.
  */
 
+export { default as preprocessForOcr } from './OcrImagePreprocess.js';
+export { default as parseReceipt } from './OcrParsing.js';
 export { default as importReceipt } from './ReceiptImporter.js';
 export {
   presentAccountMenu,
