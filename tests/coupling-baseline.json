@@ -1,10 +1,10 @@
 {
   "generatedAt": "2026-06-13",
-  "totalFiles": 174,
+  "totalFiles": 175,
   "scoreDistribution": {
     "critical8plus": 5,
-    "high5to7": 27,
-    "medium3to4": 29,
+    "high5to7": 26,
+    "medium3to4": 31,
     "low1to2": 37,
     "clean0": 76
   },
@@ -366,7 +366,7 @@
     {
       "path": "src/Scheduler/Config/ConfigFileReader.ts",
       "layer": "SC",
-      "lines": 43,
+      "lines": 89,
       "valueImports": 4,
       "typeImports": 1,
       "crossLayerValueDeps": [
@@ -394,7 +394,7 @@
     {
       "path": "src/Scheduler/ConfigBootstrap.ts",
       "layer": "SC",
-      "lines": 57,
+      "lines": 58,
       "valueImports": 4,
       "typeImports": 1,
       "crossLayerValueDeps": [
@@ -446,34 +446,6 @@
         "Promise"
       ],
       "newCount": 1,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Scheduler/SchedulerBootstrap.ts",
-      "layer": "SC",
-      "lines": 126,
-      "valueImports": 6,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
       "ocpRisks": [],
       "score": 6
     },
@@ -1066,6 +1038,52 @@
         "Promise"
       ],
       "newCount": 3,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Scheduler/Process/SchedulerProcessLifecycle.ts",
+      "layer": "SC",
+      "lines": 164,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Scheduler/SchedulerBootstrap.ts",
+      "layer": "SC",
+      "lines": 141,
+      "valueImports": 6,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 4
     },
