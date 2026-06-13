@@ -5,12 +5,9 @@
 
 import api from '@actual-app/api';
 
-import { ErrorFormatter } from './Errors/ErrorFormatter.js';
 import { bootConfigAndLogger, handleValidateMode } from './Importer/ConfigBootstrap.js';
+import { buildResilienceComponents } from './Importer/ResilienceWiring.js';
 import { getLogger } from './Logger/Index.js';
-import { GracefulShutdownHandler } from './Resilience/GracefulShutdown.js';
-import { ExponentialBackoffRetry } from './Resilience/RetryStrategy.js';
-import { TimeoutWrapper } from './Resilience/TimeoutWrapper.js';
 import { createBankRegistry } from './Scraper/BankRegistry.js';
 import { BankScraper, createDateRangePolicy } from './Scraper/BankScraper.js';
 import createScrapeResultMapper from './Scraper/Mappers/DefaultScrapeResultMapper.js';
@@ -40,7 +37,7 @@ import { TransactionService } from './Services/TransactionService.js';
 import TranslateCategoryResolver from './Services/TranslateCategoryResolver.js';
 import TwoFactorService from './Services/TwoFactorService.js';
 import type { CategorizationMode, IImporterConfig, Procedure } from './Types/Index.js';
-import { DEFAULT_RESILIENCE_CONFIG, isFail, succeed } from './Types/Index.js';
+import { isFail, succeed } from './Types/Index.js';
 import { errorMessage } from './Utils/Index.js';
 
 // --validate mode: validate config and exit before full initialization
@@ -51,33 +48,13 @@ const CONFIG: IImporterConfig = bootConfigAndLogger();
 const LOGGER = getLogger();
 
 // Initialize resilience components
-const SHUTDOWN_HANDLER = new GracefulShutdownHandler();
-const RETRY_STRATEGY = new ExponentialBackoffRetry({
-  maxAttempts: DEFAULT_RESILIENCE_CONFIG.maxRetryAttempts,
-  initialBackoffMs: DEFAULT_RESILIENCE_CONFIG.initialBackoffMs,
-  /**
-   * Returns whether the shutdown handler is active.
-   * @returns True once a shutdown signal has been received.
-   */
-  shouldShutdown: (): boolean => SHUTDOWN_HANDLER.isShuttingDown(),
-  /**
-   * Returns false for WAF block errors so they are not retried.
-   * @param error - The error from the failed attempt.
-   * @returns True to retry, false for WAF blocks.
-   */
-  shouldRetry: (error: Error): boolean => error.name !== 'WafBlockError',
-});
-const NO_RETRY_STRATEGY = new ExponentialBackoffRetry({
-  maxAttempts: 1,
-  initialBackoffMs: 0,
-  /**
-   * Returns whether the shutdown handler is active.
-   * @returns True once a shutdown signal has been received.
-   */
-  shouldShutdown: (): boolean => SHUTDOWN_HANDLER.isShuttingDown(),
-});
-const TIMEOUT_WRAPPER = new TimeoutWrapper();
-const ERROR_FORMATTER = new ErrorFormatter();
+const {
+  shutdownHandler: SHUTDOWN_HANDLER,
+  retryStrategy: RETRY_STRATEGY,
+  noRetryStrategy: NO_RETRY_STRATEGY,
+  timeoutWrapper: TIMEOUT_WRAPPER,
+  errorFormatter: ERROR_FORMATTER,
+} = buildResilienceComponents();
 
 // ─── Category resolver (OCP dispatch) ───
 const RESOLVER_FACTORIES: Record<
