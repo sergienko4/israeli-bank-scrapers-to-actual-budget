@@ -80,7 +80,7 @@ async function runWorker(languages: string, processed: Buffer): Promise<OcrTextR
   try {
     return await readWorkerText(worker, processed);
   } finally {
-    await worker.terminate();
+    await safeTerminate(worker);
   }
 }
 
@@ -91,6 +91,25 @@ async function runWorker(languages: string, processed: Buffer): Promise<OcrTextR
  */
 async function createOcrWorker(languages: string): Promise<OcrWorker> {
   return await createWorker(languages, undefined, { cachePath: TESSERACT_CACHE });
+}
+
+/**
+ * Terminates a tesseract worker, swallowing any cleanup error.
+ *
+ * Prevents `worker.terminate()` rejection from masking a successful
+ * OCR result (or the original failure) in `runWorker()`'s finally
+ * block. The cleanup error is warn-logged for observability but does
+ * not propagate.
+ * @param worker - Tesseract worker to terminate.
+ * @returns True once the termination attempt completed.
+ */
+async function safeTerminate(worker: OcrWorker): Promise<boolean> {
+  try {
+    await worker.terminate();
+  } catch (error: unknown) {
+    getLogger().warn(`Failed to terminate OCR worker: ${errorMessage(error)}`);
+  }
+  return true;
 }
 
 /**

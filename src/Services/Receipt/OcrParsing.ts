@@ -111,40 +111,64 @@ function logParsed(fields: IReceiptData): boolean {
 
 /**
  * Extracts a date from receipt text using common date patterns.
+ *
+ * Validates the full year/month/day tuple via Date round-trip so
+ * impossible calendar dates (31/02, 29/02 in non-leap years, etc.)
+ * are rejected instead of being formatted into a misleading ISO
+ * string that would leak downstream as a "valid" transaction date.
  * @param text - Raw OCR text to search.
  * @returns Formatted YYYY-MM-DD date string or `false` if not found.
  */
 function extractDate(text: string): string | false {
   const match = DATE_PATTERN.exec(text);
   if (!match) return false;
-  const dayNum = Number.parseInt(match[1], 10);
-  const monthNum = Number.parseInt(match[2], 10);
-  if (!isValidDayMonth(dayNum, monthNum)) return false;
-  return formatDate(dayNum, monthNum, match[3]);
+  const day = Number.parseInt(match[1], 10);
+  const month = Number.parseInt(match[2], 10);
+  const year = normalizeYear(match[3]);
+  if (!isValidCalendarDate(day, month, year)) return false;
+  return formatDate(day, month, year);
 }
 
 /**
- * Validates day-of-month + month-of-year boundaries.
- * @param day - Day (1-31).
- * @param month - Month (1-12).
- * @returns true when both values are inside the calendar window.
+ * Normalizes a 2-digit or 4-digit OCR year fragment into a 4-digit year.
+ * Assumes the 21st century for 2-digit values (matches the existing
+ * `20${rawYear}` convention).
+ * @param rawYear - Year string from the OCR match (2 or 4 digits).
+ * @returns 4-digit year as a number.
  */
-function isValidDayMonth(day: number, month: number): boolean {
-  return month >= 1 && month <= 12 && day >= 1 && day <= 31;
+function normalizeYear(rawYear: string): number {
+  const normalized = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+  return Number.parseInt(normalized, 10);
 }
 
 /**
- * Formats a numeric day / month plus a raw year fragment as YYYY-MM-DD.
+ * Validates a full year/month/day tuple via Date round-trip.
+ *
+ * Constructs a Date and verifies it preserves all three fields,
+ * which rejects impossible calendar dates like 31/02 or 29/02/2025
+ * that pass range-only validation.
+ * @param day - Day-of-month integer.
+ * @param month - Month-of-year integer (1-12).
+ * @param year - 4-digit year integer.
+ * @returns true when the tuple represents an actual calendar date.
+ */
+function isValidCalendarDate(day: number, month: number, year: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const c = new Date(year, month - 1, day);
+  return c.getFullYear() === year && c.getMonth() === month - 1 && c.getDate() === day;
+}
+
+/**
+ * Formats a numeric day / month / year tuple as YYYY-MM-DD.
  * @param day - Day-of-month integer.
  * @param month - Month-of-year integer.
- * @param rawYear - 2-digit or 4-digit year string from the OCR match.
+ * @param year - 4-digit year integer.
  * @returns The ISO-style YYYY-MM-DD date string.
  */
-function formatDate(day: number, month: number, rawYear: string): string {
+function formatDate(day: number, month: number, year: number): string {
   const dayPart = String(day).padStart(2, '0');
   const monthPart = String(month).padStart(2, '0');
-  const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
-  return `${year}-${monthPart}-${dayPart}`;
+  return `${String(year)}-${monthPart}-${dayPart}`;
 }
 
 /**

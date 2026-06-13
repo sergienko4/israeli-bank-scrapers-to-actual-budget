@@ -16,13 +16,19 @@ const BINARY_THRESHOLD = 140;
 
 /**
  * Preprocesses an image buffer for receipt OCR.
+ *
+ * Applies EXIF orientation rotation FIRST so phone-sideways receipts
+ * (which carry an EXIF orientation tag instead of being physically
+ * rotated) are uprighted before any pixel-aware step. Skipping this
+ * leaves sideways text in the OCR pipeline and tanks tesseract.js
+ * accuracy on Hebrew.
  * @param imageBuffer - Raw image bytes (JPEG/PNG).
  * @returns Preprocessed PNG buffer ready for tesseract.js.
  */
 export default async function preprocessForOcr(imageBuffer: Buffer): Promise<Buffer> {
   const metadata = await sharp(imageBuffer).metadata();
   const width = metadata.width || 0;
-  let pipeline = sharp(imageBuffer);
+  let pipeline = sharp(imageBuffer).rotate();
   if (width < MIN_WIDTH_PX) pipeline = pipeline.resize(MIN_WIDTH_PX);
   return await pipeline.greyscale().threshold(BINARY_THRESHOLD).png().toBuffer();
 }
