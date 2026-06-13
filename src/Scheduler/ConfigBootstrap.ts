@@ -5,14 +5,6 @@
  * for the merged importer config and the derived log config.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-
-import {
-  decryptConfig,
-  getEncryptionPassword,
-  isEncryptedConfig,
-} from '../Config/ConfigEncryption.js';
-import { ConfigLoader } from '../Config/ConfigLoader.js';
 import { deriveLogFormat } from '../Logger/Index.js';
 import type {
   IImporterConfig,
@@ -21,45 +13,28 @@ import type {
 } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
+import loadRawConfig from './Config/ConfigLoaderFactory.js';
+
+export { default as readJsonOrEncrypted } from './Config/ConfigFileReader.js';
 
 const DEFAULT_LOG_DIR = './logs';
 
 /**
- * Reads a JSON file, decrypting it first if it is an IEncryptedConfig.
- *
- * @param filePath - Absolute path to the JSON file to read.
- * @returns Procedure with parsed object, or failure if file is absent.
- */
-export function readJsonOrEncrypted(
-  filePath: string
-): Procedure<Record<string, unknown>> {
-  if (!existsSync(filePath)) return fail(`File not found: ${filePath}`);
-  try {
-    const raw = readFileSync(filePath, 'utf8');
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const guard = parsed as Record<string, string | number | boolean>;
-    if (!isEncryptedConfig(guard)) return succeed(parsed);
-    const password = getEncryptionPassword();
-    if (!password) return fail('Encryption password required');
-    const decryptedJson = decryptConfig(raw, password);
-    return succeed(JSON.parse(decryptedJson) as Record<string, unknown>);
-  } catch (error: unknown) {
-    return fail(`Failed to read ${filePath}: ${errorMessage(error)}`);
-  }
-}
-
-/**
  * Loads and deep-merges config.json with credentials.json at startup.
  *
- * Delegates to ConfigLoader.loadRaw() which handles proper deep-merge of
- * nested objects.
+ * Delegates to a pluggable loader (default = the production ConfigLoader-
+ * backed factory exported by `./Config/ConfigLoaderFactory.js`) so tests
+ * can swap the implementation without touching the public surface.
  *
+ * @param load - Optional loader override used by unit tests; defaults to
+ *   the production ConfigLoader-backed implementation.
  * @returns Procedure with the merged IImporterConfig, or failure if absent.
  */
-export function loadFullConfig(): Procedure<IImporterConfig> {
+export function loadFullConfig(
+  load: () => Procedure<IImporterConfig> = loadRawConfig
+): Procedure<IImporterConfig> {
   try {
-    const loader = new ConfigLoader();
-    return loader.loadRaw();
+    return load();
   } catch (error: unknown) {
     return fail(`Failed to load config: ${errorMessage(error)}`);
   }

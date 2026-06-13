@@ -1,255 +1,14 @@
 {
-  "generatedAt": "2026-06-11",
-  "totalFiles": 165,
+  "generatedAt": "2026-06-13",
+  "totalFiles": 174,
   "scoreDistribution": {
-    "critical8plus": 7,
-    "high5to7": 25,
+    "critical8plus": 5,
+    "high5to7": 27,
     "medium3to4": 29,
-    "low1to2": 32,
-    "clean0": 72
+    "low1to2": 37,
+    "clean0": 76
   },
   "files": [
-    {
-      "path": "src/Index.ts",
-      "layer": "EP",
-      "lines": 319,
-      "valueImports": 36,
-      "typeImports": 4,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Config/ConfigLoader.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Errors/ErrorFormatter.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Resilience/GracefulShutdown.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Resilience/RetryStrategy.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Resilience/TimeoutWrapper.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scraper/BankRegistry.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scraper/BankScraper.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scraper/Mappers/DefaultScrapeResultMapper.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scraper/Strategies/LiveScrapeStrategy.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scraper/Strategies/MockScrapeStrategy.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scrapers/Pipeline/ContextFactory.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scrapers/Pipeline/Index.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scrapers/Pipeline/Steps/EvaluateSpendingWatchStep.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scrapers/Pipeline/Steps/FinalizeImportStep.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scrapers/Pipeline/Steps/InitializeApiStep.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scrapers/Pipeline/Steps/InitializeCategoryResolverStep.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/AccountImporter.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/AuditLogService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/DryRunCollector.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/HistoryCategoryResolver.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/MetricsService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/Notifications/TelegramNotifier.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/NotificationService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/ReconciliationService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/SpendingWatchService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/TransactionService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/TranslateCategoryResolver.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/TwoFactorService.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Config/ConfigValidator.ts",
-          "toLayer": "CC",
-          "dynamic": true
-        }
-      ],
-      "newClasses": [
-        "AccountImporter",
-        "AuditLogService",
-        "BankScraper",
-        "ChainBuilder",
-        "ConfigLoader",
-        "DryRunCollector",
-        "Error",
-        "ErrorFormatter",
-        "ExponentialBackoffRetry",
-        "GracefulShutdownHandler",
-        "HistoryCategoryResolver",
-        "LiveScrapeStrategy",
-        "MetricsService",
-        "MockScrapeStrategy",
-        "NotificationService",
-        "ReconciliationService",
-        "SpendingWatchService",
-        "TelegramNotifier",
-        "TimeoutWrapper",
-        "TransactionService",
-        "TranslateCategoryResolver",
-        "TwoFactorService"
-      ],
-      "newCount": 25,
-      "ocpRisks": [],
-      "score": 71
-    },
-    {
-      "path": "src/Scheduler/ConfigBootstrap.ts",
-      "layer": "SC",
-      "lines": 83,
-      "valueImports": 6,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Config/ConfigEncryption.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Config/ConfigLoader.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigLoader"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 10
-    },
     {
       "path": "src/Services/ReceiptImportHandler.ts",
       "layer": "IS",
@@ -595,6 +354,62 @@
         },
         {
           "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Scheduler/Config/ConfigFileReader.ts",
+      "layer": "SC",
+      "lines": 43,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Config/ConfigEncryption.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Scheduler/ConfigBootstrap.ts",
+      "layer": "SC",
+      "lines": 57,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
           "toLayer": "ST",
           "dynamic": false
         }
@@ -1882,6 +1697,47 @@
       "score": 2
     },
     {
+      "path": "src/Importer/CoreServicesWiring.ts",
+      "layer": "(none)",
+      "lines": 128,
+      "valueImports": 13,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AccountImporter",
+        "AuditLogService",
+        "DryRunCollector",
+        "HistoryCategoryResolver",
+        "MetricsService",
+        "NotificationService",
+        "ReconciliationService",
+        "TelegramNotifier",
+        "TransactionService",
+        "TranslateCategoryResolver",
+        "TwoFactorService"
+      ],
+      "newCount": 13,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Importer/PipelineComposition.ts",
+      "layer": "(none)",
+      "lines": 125,
+      "valueImports": 11,
+      "typeImports": 6,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ChainBuilder",
+        "LiveScrapeStrategy",
+        "MockScrapeStrategy",
+        "SpendingWatchService"
+      ],
+      "newCount": 4,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
       "path": "src/Logger/LogRotatingStream.ts",
       "layer": "CC",
       "lines": 95,
@@ -1936,6 +1792,26 @@
         "Promise"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Scheduler/Config/ConfigLoaderFactory.ts",
+      "layer": "SC",
+      "lines": 20,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Config/ConfigLoader.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ConfigLoader"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 2
     },
@@ -2339,6 +2215,32 @@
       "score": 2
     },
     {
+      "path": "src/Importer/ImporterBootstrap.ts",
+      "layer": "(none)",
+      "lines": 122,
+      "valueImports": 7,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Importer/ProcessLifecycle.ts",
+      "layer": "(none)",
+      "lines": 216,
+      "valueImports": 3,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Error"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
       "path": "src/Scrapers/Pipeline/Steps/FinalizeImportStep.ts",
       "layer": "BP",
       "lines": 234,
@@ -2594,6 +2496,63 @@
       "layer": "ST",
       "lines": 12,
       "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Importer/ConfigBootstrap.ts",
+      "layer": "(none)",
+      "lines": 64,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigLoader"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Importer/ImporterWiring.ts",
+      "layer": "(none)",
+      "lines": 193,
+      "valueImports": 6,
+      "typeImports": 10,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "BankScraper"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Importer/ResilienceWiring.ts",
+      "layer": "(none)",
+      "lines": 104,
+      "valueImports": 5,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ErrorFormatter",
+        "ExponentialBackoffRetry",
+        "GracefulShutdownHandler",
+        "TimeoutWrapper"
+      ],
+      "newCount": 5,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Index.ts",
+      "layer": "EP",
+      "lines": 35,
+      "valueImports": 3,
       "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
