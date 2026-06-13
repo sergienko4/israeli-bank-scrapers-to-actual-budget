@@ -5,9 +5,9 @@
 
 import api from '@actual-app/api';
 
-import { ConfigLoader } from './Config/ConfigLoader.js';
 import { ErrorFormatter } from './Errors/ErrorFormatter.js';
-import { createLogger, deriveLogFormat, getLogger } from './Logger/Index.js';
+import { bootConfigAndLogger, handleValidateMode } from './Importer/ConfigBootstrap.js';
+import { getLogger } from './Logger/Index.js';
 import { GracefulShutdownHandler } from './Resilience/GracefulShutdown.js';
 import { ExponentialBackoffRetry } from './Resilience/RetryStrategy.js';
 import { TimeoutWrapper } from './Resilience/TimeoutWrapper.js';
@@ -44,26 +44,10 @@ import { DEFAULT_RESILIENCE_CONFIG, isFail, succeed } from './Types/Index.js';
 import { errorMessage } from './Utils/Index.js';
 
 // --validate mode: validate config and exit before full initialization
-if (process.argv.includes('--validate')) {
-  const { runValidateMode } = await import('./Config/ConfigValidator.js');
-  process.exit(await runValidateMode());
-}
+await handleValidateMode();
 
 // Load configuration and initialize logger
-const CONFIG_LOADER = new ConfigLoader();
-const CONFIG_RESULT = CONFIG_LOADER.load();
-if (isFail(CONFIG_RESULT)) {
-  process.stderr.write(`Fatal: ${CONFIG_RESULT.message}\n`);
-  process.exit(1);
-}
-const CONFIG: IImporterConfig = CONFIG_RESULT.data;
-const TG = CONFIG.notifications?.telegram;
-const DERIVED_FORMAT = deriveLogFormat(TG?.messageFormat, TG?.listenForCommands);
-createLogger({
-  ...CONFIG.logConfig,
-  format: CONFIG.logConfig?.format ?? DERIVED_FORMAT,
-  logDir: CONFIG.logConfig?.logDir ?? './logs',
-});
+const CONFIG: IImporterConfig = bootConfigAndLogger();
 const LOGGER = getLogger();
 
 // Initialize resilience components
