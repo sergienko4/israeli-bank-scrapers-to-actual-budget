@@ -782,6 +782,32 @@ export default tseslint.config(
     },
   },
 
+  // 7h. IMPORTER BARREL — tightened max-lines (PR 21: Index.ts composition-root split)
+  // After extracting `Importer/ConfigBootstrap.ts`, `Importer/ResilienceWiring.ts`,
+  // `Importer/CoreServicesWiring.ts`, `Importer/PipelineComposition.ts`,
+  // `Importer/ImporterWiring.ts`, `Importer/ProcessLifecycle.ts` and
+  // `Importer/ImporterBootstrap.ts`, `src/Index.ts` is a thin barrel (~13
+  // effective LoC) that only re-exports the public Importer surface and
+  // calls `bootImporter()` when executed directly — identical in shape to
+  // `src/Scheduler.ts`. The default cap is `max: 300`; this rule caps it
+  // at 50 so the barrel cannot drift back into being the 319-LoC
+  // composition root it used to be. Any new boot-time orchestration MUST
+  // land in a new module under `src/Importer/*`, not inline here.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines: 50` rule survives on the canary fixture; flat-config rule
+  // keys are replaced (not merged) by later matching blocks, so the canary
+  // file MUST be configured by the LAST block listing it.
+  {
+    files: [
+      'src/Index.ts',
+      'tests/eslint-canaries/IndexBarrelMaxLines.canary.ts',
+    ],
+    rules: {
+      'max-lines': ['error', { max: 50, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
