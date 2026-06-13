@@ -51,7 +51,7 @@ reviews:
         - CHANGELOG.md is auto-generated — never edit manually
   auto_review:
     enabled: true
-    auto_incremental_review: false
+    auto_incremental_review: true
     ignore_title_keywords:
       - "chore(main): release"
       - "WIP"
