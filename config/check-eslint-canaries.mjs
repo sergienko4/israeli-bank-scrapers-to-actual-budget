@@ -77,6 +77,11 @@ const CANARIES = {
     minErrors: 1,
     description: 'PR 21 — src/Index.ts capped at max-lines: 50 (this canary exceeds 50 LoC)',
   },
+  'tests/eslint-canaries/SchedulerConfigMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 433 — src/Scheduler/Config/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
 };
 
 let allPassed = true;
