@@ -847,6 +847,49 @@ export default tseslint.config(
     },
   },
 
+  // 7j. SCHEDULER PROCESS — tightened max-lines-per-function (PR 20b: SchedulerProcessLifecycle decouple)
+  // Extends the §7i pattern (PR #433) to the new
+  // `src/Scheduler/Process/**` sub-tree introduced when
+  // `process.exit` orchestration was extracted from
+  // `SchedulerBootstrap.ts` into `SchedulerProcessLifecycle.ts`.
+  //
+  // Per `eslint-rules-guidlines.md` §1 PRECEDENT every newly-decoupled
+  // sub-tree ships at the CLAUDE.md aspirational cap of
+  // `max-lines-per-function: 10`. The current
+  // `src/Scheduler/Process/**` source has zero violations at this cap
+  // — every helper is <= 10 effective LoC by construction (each exit
+  // path is a single SRP function with JSDoc-only "filler" lines).
+  //
+  // Any NEW function added here MUST stay <= 10 effective LoC.
+  // Reach 11+ ⇒ split into helpers in the same commit. This rule
+  // protects the lifecycle seam from drifting back into a 20-LoC
+  // composite over time.
+  //
+  // Global tightening still tracked in
+  // `hardening_todos.eslint-max-lines-per-function-tighten-10`.
+  // Per §3 GRANDFATHER we never use `eslint-disable`; the wider
+  // tightening will reuse this `files: [...]` override mechanism.
+  //
+  // Backed by canary fixture
+  // `tests/eslint-canaries/SchedulerProcessMaxLinesPerFunction.canary.ts`
+  // (12-LoC function body) per §2 CANARY. The harness at
+  // `config/check-eslint-canaries.mjs` asserts the rule fires.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines-per-function: 10` rule survives on the canary fixture;
+  // flat-config rule keys are replaced (not merged) by later matching
+  // blocks, so the canary file MUST be configured by the LAST block
+  // listing it.
+  {
+    files: [
+      'src/Scheduler/Process/**/*.ts',
+      'tests/eslint-canaries/SchedulerProcessMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
