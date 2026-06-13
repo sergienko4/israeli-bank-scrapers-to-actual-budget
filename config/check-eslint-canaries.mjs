@@ -87,6 +87,11 @@ const CANARIES = {
     description:
       'PR 20b — src/Scheduler/Process/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
   },
+  'tests/eslint-canaries/ReceiptMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 14 — src/Services/Receipt/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
 };
 
 let allPassed = true;
