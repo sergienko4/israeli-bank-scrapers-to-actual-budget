@@ -66,7 +66,7 @@ function validateScheduleOrExit(
   lifecycle: ISchedulerProcessLifecycle,
 ): IProcedureSuccess<{ status: string }> {
   const validation = validateSchedule(schedule);
-  if (isFail(validation)) lifecycle.exitOnInvalidSchedule(validation.message);
+  if (isFail(validation)) return lifecycle.exitOnInvalidSchedule(validation.message);
   return succeed({ status: 'valid' });
 }
 
