@@ -3,6 +3,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { buildProcessLifecycle } from '../../src/Importer/ProcessLifecycle.js';
 import type { IProcessLifecycleDeps, IShutdownableApi } from '../../src/Importer/ProcessLifecycle.js';
 import { ErrorFormatter } from '../../src/Errors/ErrorFormatter.js';
+import { TimeoutError } from '../../src/Errors/ErrorTypes.js';
+import type { ITimeoutWrapper } from '../../src/Resilience/TimeoutWrapper.js';
+import { TimeoutWrapper } from '../../src/Resilience/TimeoutWrapper.js';
 import { isSuccess } from '../../src/Types/ProcedureHelpers.js';
 import type NotificationService from '../../src/Services/NotificationService.js';
 
@@ -26,11 +29,25 @@ function makeNotifier() {
   } as unknown as NotificationService;
 }
 
+/**
+ * Fake timeout wrapper that immediately rejects with TimeoutError, simulating
+ * a notification transport that hangs past the deadline. Avoids fake-timer +
+ * never-resolving-promise unhandled-rejection noise.
+ */
+function makeTimingOutWrapper(): ITimeoutWrapper {
+  return {
+    wrap: vi.fn().mockImplementation(<T>(_p: Promise<T>, _ms: number, op: string) =>
+      Promise.reject(new TimeoutError(op, 5_000)),
+    ),
+  };
+}
+
 function makeDeps(overrides: Partial<IProcessLifecycleDeps> = {}): IProcessLifecycleDeps {
   return {
     logger: makeLogger(),
     notificationService: makeNotifier(),
     errorFormatter: new ErrorFormatter(),
+    timeoutWrapper: new TimeoutWrapper(),
     api: makeApi(),
     ...overrides,
   };
@@ -116,6 +133,44 @@ describe('ProcessLifecycle', () => {
 
       expect(logger.error).toHaveBeenCalledWith('Pipeline failed: all banks failed');
       expect(notifier.sendError).toHaveBeenCalledWith('all banks failed');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('sendError timeout safety (CR cycle 2 #1)', () => {
+    it('handleFatalError continues to shutdown + exit when timeout wrapper rejects (transport hang)', async () => {
+      const logger = makeLogger();
+      const notifier = makeNotifier();
+      const api = makeApi();
+      const lc = buildProcessLifecycle(
+        makeDeps({ logger, notificationService: notifier, api, timeoutWrapper: makeTimingOutWrapper() }),
+      );
+
+      await expect(lc.handleFatalError(new Error('boom'))).rejects.toThrow('process.exit(1)');
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to send error notification'),
+      );
+      expect(api.shutdown).toHaveBeenCalledOnce();
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('handlePipelineFailure continues to shutdown + exit when timeout wrapper rejects (transport hang)', async () => {
+      const logger = makeLogger();
+      const notifier = makeNotifier();
+      const api = makeApi();
+      const lc = buildProcessLifecycle(
+        makeDeps({ logger, notificationService: notifier, api, timeoutWrapper: makeTimingOutWrapper() }),
+      );
+
+      await expect(
+        lc.handlePipelineFailure({ message: 'all banks failed' }),
+      ).rejects.toThrow('process.exit(1)');
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to send error notification'),
+      );
+      expect(api.shutdown).toHaveBeenCalledOnce();
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
   });

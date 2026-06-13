@@ -15,6 +15,7 @@ import api from '@actual-app/api';
 
 import type { ErrorFormatter } from '../Errors/ErrorFormatter.js';
 import type { ILogger } from '../Logger/ILogger.js';
+import type { ITimeoutWrapper } from '../Resilience/TimeoutWrapper.js';
 import type NotificationService from '../Services/NotificationService.js';
 import type { Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
@@ -37,6 +38,7 @@ export interface IProcessLifecycleDeps {
   readonly logger: ILogger;
   readonly notificationService: NotificationService;
   readonly errorFormatter: ErrorFormatter;
+  readonly timeoutWrapper: ITimeoutWrapper;
   /**
    * Actual Budget API handle. Optional: defaults to the live `@actual-app/api`
    * import so production callers can omit it. Tests inject a fake.
@@ -66,7 +68,40 @@ interface IResolvedDeps {
   readonly logger: ILogger;
   readonly notificationService: NotificationService;
   readonly errorFormatter: ErrorFormatter;
+  readonly timeoutWrapper: ITimeoutWrapper;
   readonly api: IShutdownableApi;
+}
+
+/**
+ * Hard cap on time spent waiting for the error-notification transport
+ * (e.g. Telegram). A dying process must not hang on a transport that
+ * neither resolves nor rejects (network stall, half-open TCP).
+ * Per CR cycle 2 finding #1.
+ */
+const NOTIFY_TIMEOUT_MS = 5_000;
+
+/**
+ * Sends an error notification with a hard timeout. Always returns —
+ * rejections AND timeouts are logged and swallowed so the caller can
+ * proceed to shutdown unconditionally. Uses the project's TimeoutWrapper
+ * (no homegrown setTimeout per the no-restricted-syntax rule).
+ *
+ * @param deps - The resolved lifecycle dependencies.
+ * @param message - Pre-formatted error message to send.
+ * @returns Procedure indicating whether notification was sent or failed.
+ */
+async function sendErrorWithTimeout(
+  deps: IResolvedDeps,
+  message: string,
+): Promise<Procedure<{ status: string }>> {
+  try {
+    const sendPromise = deps.notificationService.sendError(message);
+    await deps.timeoutWrapper.wrap(sendPromise, NOTIFY_TIMEOUT_MS, 'sendError');
+    return succeed({ status: 'notification-sent' });
+  } catch (notifyError: unknown) {
+    deps.logger.error(`Failed to send error notification: ${errorMessage(notifyError)}`);
+    return succeed({ status: 'notification-failed' });
+  }
 }
 
 /**
@@ -100,11 +135,7 @@ async function handleFatalErrorImpl(
   const formattedError = deps.errorFormatter.format(err);
   deps.logger.error(`\n${formattedError}`);
   if (error instanceof Error) deps.logger.error(`Stack trace: ${error.stack ?? 'N/A'}`);
-  try {
-    await deps.notificationService.sendError(formattedError);
-  } catch (notifyError: unknown) {
-    deps.logger.error(`Failed to send error notification: ${errorMessage(notifyError)}`);
-  }
+  await sendErrorWithTimeout(deps, formattedError);
   await safeShutdownImpl(deps);
   process.exit(1);
 }
@@ -122,11 +153,7 @@ async function handlePipelineFailureImpl(
   deps: IResolvedDeps,
 ): Promise<never> {
   deps.logger.error(`Pipeline failed: ${failure.message}`);
-  try {
-    await deps.notificationService.sendError(failure.message);
-  } catch (notifyError: unknown) {
-    deps.logger.error(`Failed to send error notification: ${errorMessage(notifyError)}`);
-  }
+  await sendErrorWithTimeout(deps, failure.message);
   await safeShutdownImpl(deps);
   process.exit(1);
 }
@@ -156,6 +183,7 @@ export function buildProcessLifecycle(deps: IProcessLifecycleDeps): IProcessLife
     logger: deps.logger,
     notificationService: deps.notificationService,
     errorFormatter: deps.errorFormatter,
+    timeoutWrapper: deps.timeoutWrapper,
     api: deps.api ?? api,
   };
   return Object.freeze({

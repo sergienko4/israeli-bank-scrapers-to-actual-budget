@@ -64,6 +64,7 @@ export function buildImporterBootHandle(): IImporterBootHandle {
     logger,
     notificationService: wiring.notificationService,
     errorFormatter: resilience.errorFormatter,
+    timeoutWrapper: resilience.timeoutWrapper,
   });
   return Object.freeze({ config, resilience, wiring, lifecycle });
 }
