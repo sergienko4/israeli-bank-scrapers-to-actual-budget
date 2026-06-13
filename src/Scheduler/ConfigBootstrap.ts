@@ -5,7 +5,6 @@
  * for the merged importer config and the derived log config.
  */
 
-import { ConfigLoader } from '../Config/ConfigLoader.js';
 import { deriveLogFormat } from '../Logger/Index.js';
 import type {
   IImporterConfig,
@@ -14,6 +13,7 @@ import type {
 } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
+import loadRawConfig from './Config/ConfigLoaderFactory.js';
 
 export { default as readJsonOrEncrypted } from './Config/ConfigFileReader.js';
 
@@ -22,15 +22,19 @@ const DEFAULT_LOG_DIR = './logs';
 /**
  * Loads and deep-merges config.json with credentials.json at startup.
  *
- * Delegates to ConfigLoader.loadRaw() which handles proper deep-merge of
- * nested objects.
+ * Delegates to a pluggable loader (default = the production ConfigLoader-
+ * backed factory exported by `./Config/ConfigLoaderFactory.js`) so tests
+ * can swap the implementation without touching the public surface.
  *
+ * @param load - Optional loader override used by unit tests; defaults to
+ *   the production ConfigLoader-backed implementation.
  * @returns Procedure with the merged IImporterConfig, or failure if absent.
  */
-export function loadFullConfig(): Procedure<IImporterConfig> {
+export function loadFullConfig(
+  load: () => Procedure<IImporterConfig> = loadRawConfig
+): Procedure<IImporterConfig> {
   try {
-    const loader = new ConfigLoader();
-    return loader.loadRaw();
+    return load();
   } catch (error: unknown) {
     return fail(`Failed to load config: ${errorMessage(error)}`);
   }

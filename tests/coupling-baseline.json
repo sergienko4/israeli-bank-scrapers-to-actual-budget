@@ -1,11 +1,11 @@
 {
   "generatedAt": "2026-06-13",
-  "totalFiles": 173,
+  "totalFiles": 174,
   "scoreDistribution": {
-    "critical8plus": 6,
-    "high5to7": 26,
+    "critical8plus": 5,
+    "high5to7": 27,
     "medium3to4": 29,
-    "low1to2": 36,
+    "low1to2": 37,
     "clean0": 76
   },
   "files": [
@@ -38,41 +38,6 @@
       "newCount": 1,
       "ocpRisks": [],
       "score": 9
-    },
-    {
-      "path": "src/Scheduler/ConfigBootstrap.ts",
-      "layer": "SC",
-      "lines": 54,
-      "valueImports": 4,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Config/ConfigLoader.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigLoader"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 8
     },
     {
       "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
@@ -407,6 +372,34 @@
       "crossLayerValueDeps": [
         {
           "to": "src/Config/ConfigEncryption.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Scheduler/ConfigBootstrap.ts",
+      "layer": "SC",
+      "lines": 57,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
           "toLayer": "CC",
           "dynamic": false
         },
@@ -1799,6 +1792,26 @@
         "Promise"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Scheduler/Config/ConfigLoaderFactory.ts",
+      "layer": "SC",
+      "lines": 20,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Config/ConfigLoader.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ConfigLoader"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 2
     },
