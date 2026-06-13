@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.38.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.3...v1.38.4) (2026-06-13)
+
+
+### Refactored
+
+* **importer:** split Index.ts into Importer/* modules ([#430](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/430)) ([2f175a3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/2f175a3de43b70e1eefc9e9cb7cd2ed94770c804))
+* **scheduler:** ConfigBootstrap decouple via ConfigFileReader + ConfigLoaderFactory ([#433](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/433)) ([ea25847](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ea25847f684d4d235e4c92fc861e4f18ce1fda85))
+
 ## [1.38.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.2...v1.38.3) (2026-06-11)
 
 
