@@ -67,7 +67,7 @@ export function buildBaseScraperOptions(deps: LiveDeps, scrapeOpts: LiveOpts): S
     defaultTimeout: scrapeOpts.bankConfig.timeout ?? 60_000,
   };
   const navRetry = scrapeOpts.bankConfig.navigationRetryCount;
-  if (navRetry) options.navigationRetryCount = navRetry;
+  if (navRetry !== undefined) options.navigationRetryCount = navRetry;
   return options;
 }
 

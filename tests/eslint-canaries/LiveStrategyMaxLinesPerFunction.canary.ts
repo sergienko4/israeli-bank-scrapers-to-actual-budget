@@ -14,9 +14,9 @@
  * harness fails CI.
  *
  * NOTE: blank lines + comments are not counted (skipBlankLines +
- * skipComments are both true in Section 7o). The body below is 12
- * effective LoC. This file MUST fail max-lines-per-function:10 to prove
- * the rule fires.
+ * skipComments are both true in Section 7o). The body below is 13
+ * effective LoC (11 const declarations + 1 if guard + 1 return). This
+ * file MUST fail max-lines-per-function:10 to prove the rule fires.
  * @internal
  */
 
