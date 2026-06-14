@@ -9,7 +9,6 @@ import { formatCompact } from './CompactFormat.js';
 import { formatDefault } from './DefaultFormat.js';
 import { formatEmoji } from './EmojiFormat.js';
 import { formatLedger } from './LedgerFormat.js';
-import { escapeHtml } from './Shared.js';
 import type { IFormatOpts } from './Types.js';
 
 export type { IFormatOpts } from './Types.js';
@@ -62,4 +61,4 @@ export function formatSummaryMessage(
   return formatter();
 }
 
-export { escapeHtml };
+export { escapeHtml } from './Shared.js';

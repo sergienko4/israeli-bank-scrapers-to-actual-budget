@@ -46,8 +46,7 @@ export function buildEmojiLines(ctx: IAccountCtx): string[] {
   const header = `💳 <b>${escapeHtml(bank.bankName)}</b>` +
     ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`;
   const lines = ['', header, ...buildEmojiTxnLines(account, opts)];
-  lines.push(...buildEmojiBalanceLine(account));
-  lines.push(...buildReconciliationLines(bank));
+  lines.push(...buildEmojiBalanceLine(account), ...buildReconciliationLines(bank));
   return lines;
 }
 
