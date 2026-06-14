@@ -3,16 +3,13 @@
  * canonical ICanonicalScrapeResult shape consumed by phase-3 importers.
  */
 
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
-
 import type {
   IBankTransaction, ICanonicalAccount, ICanonicalScrapeResult,
 } from '../../Types/Index.js';
 import { formatDate } from '../../Utils/Index.js';
 import type { IMapToCanonicalOpts } from './IScrapeResultMapper.js';
 import applySignPolicy from './Sign.js';
-
-type ProviderAccount = NonNullable<IScraperScrapingResult['accounts']>[number];
+import type { ProviderAccount } from './Types.js';
 
 /**
  * Extracts a frozen txn list from a provider account, defaulting empty.

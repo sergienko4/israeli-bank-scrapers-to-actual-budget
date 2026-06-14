@@ -1023,6 +1023,7 @@ export default tseslint.config(
       'src/Scraper/Mappers/ToCanonical.ts',
       'src/Scraper/Mappers/FromLegacy.ts',
       'src/Scraper/Mappers/ToLegacy.ts',
+      'src/Scraper/Mappers/Types.ts',
       'src/Scraper/Mappers/Index.ts',
       'tests/eslint-canaries/MappersMaxLinesPerFunction.canary.ts',
     ],

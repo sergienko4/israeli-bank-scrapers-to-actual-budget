@@ -4,8 +4,6 @@
  * scrape-window metadata derived from the bank config.
  */
 
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
-
 import type {
   IBankConfig, IBankTransaction, ICanonicalAccount, ICanonicalScrapeResult, Procedure,
 } from '../../Types/Index.js';
@@ -13,8 +11,7 @@ import { fail, succeed } from '../../Types/Index.js';
 import { formatDate } from '../../Utils/Index.js';
 import { computeStartDate } from '../BankScraper.js';
 import type { ILegacyToCanonicalOpts } from './IScrapeResultMapper.js';
-
-type ProviderAccount = NonNullable<IScraperScrapingResult['accounts']>[number];
+import type { ProviderAccount } from './Types.js';
 
 /**
  * Extracts a frozen txn list from a legacy provider account.
@@ -23,8 +20,8 @@ type ProviderAccount = NonNullable<IScraperScrapingResult['accounts']>[number];
  */
 function extractLegacyTxns(account: ProviderAccount): readonly IBankTransaction[] {
   const hasTxns = Array.isArray(account.txns);
-  if (!hasTxns) return [] as readonly IBankTransaction[];
-  return [...(account.txns as readonly IBankTransaction[])] as readonly IBankTransaction[];
+  if (!hasTxns) return [];
+  return [...account.txns] as readonly IBankTransaction[];
 }
 
 /**

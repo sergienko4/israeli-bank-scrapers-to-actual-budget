@@ -8,8 +8,7 @@
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
 import type { ICanonicalAccount, ICanonicalScrapeResult } from '../../Types/Index.js';
-
-type ProviderAccount = NonNullable<IScraperScrapingResult['accounts']>[number];
+import type { ProviderAccount } from './Types.js';
 
 /**
  * Maps a single canonical account into the legacy provider account shape.
