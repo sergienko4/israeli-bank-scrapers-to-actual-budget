@@ -27,6 +27,7 @@ export interface ILegacyToCanonicalOpts {
   readonly legacy: IScraperScrapingResult;
   readonly bankName: string;
   readonly bankConfig: IBankConfig;
+  readonly signPolicy: ISignPolicy;
 }
 
 /** Mapper contract for raw → canonical → legacy conversions. */

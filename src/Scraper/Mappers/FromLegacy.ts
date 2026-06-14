@@ -5,7 +5,7 @@
  */
 
 import type {
-  IBankConfig, IBankTransaction, ICanonicalAccount, ICanonicalScrapeResult, Procedure,
+  IBankConfig, IBankTransaction, ICanonicalAccount, ICanonicalScrapeResult, ISignPolicy, Procedure,
 } from '../../Types/Index.js';
 import { fail, succeed } from '../../Types/Index.js';
 import { formatDate } from '../../Utils/Index.js';
@@ -49,13 +49,16 @@ function formatScrapeWindow(bankConfig: IBankConfig): { startDate: string; endDa
 /**
  * Builds the synthetic canonical metadata block for legacy adaptation.
  * @param bankConfig - Bank config used to derive the scrape start date.
+ * @param signPolicy - Sign policy applied upstream by BankScraper.
  * @returns Frozen ICanonicalScrapeMetadata for the current run.
  */
-function buildLegacyMetadata(bankConfig: IBankConfig): ICanonicalScrapeResult['metadata'] {
+function buildLegacyMetadata(
+  bankConfig: IBankConfig, signPolicy: ISignPolicy,
+): ICanonicalScrapeResult['metadata'] {
   const window = formatScrapeWindow(bankConfig);
   return {
     startDate: window.startDate, endDate: window.endDate,
-    signPolicyApplied: 'preserve', strategy: 'live', attemptCount: 1,
+    signPolicyApplied: signPolicy, strategy: 'live', attemptCount: 1,
   };
 }
 
@@ -67,7 +70,7 @@ function buildLegacyMetadata(bankConfig: IBankConfig): ICanonicalScrapeResult['m
 function buildLegacyCanonical(opts: ILegacyToCanonicalOpts): ICanonicalScrapeResult {
   const rawAccounts = opts.legacy.accounts ?? [];
   const accounts = rawAccounts.map(legacyAccountToCanonical);
-  const metadata = buildLegacyMetadata(opts.bankConfig);
+  const metadata = buildLegacyMetadata(opts.bankConfig, opts.signPolicy);
   return {
     bankId: opts.bankName, scrapedAt: new Date().toISOString(), accounts, metadata,
   };
