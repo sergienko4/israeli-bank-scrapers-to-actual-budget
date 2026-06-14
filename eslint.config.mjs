@@ -1122,6 +1122,17 @@ export default tseslint.config(
     },
   },
 
+  // ─── Section 7q: DryRun cluster max-fn-lines: 10 ───
+  // Placed AFTER Section 7p (parallel-OODA sibling).
+  {
+    files: [
+      'src/Services/DryRun/**/*.ts',
+      'tests/eslint-canaries/DryRunMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
