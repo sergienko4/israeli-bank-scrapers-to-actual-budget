@@ -34,6 +34,12 @@ export function parseSample(tx: IBankTransaction): IAccountPreview['samples'][nu
   const description = tx.description ?? tx.memo ?? '';
   return { date, description, amount: tx.chargedAmount ?? 0 };
 }
+/** Builds a date-range label.
+ * @param account preview.
+ * @returns date-range text. */
+export function formatDateRange(account: IAccountPreview): string {
+  return `${account.dateRange.from} → ${account.dateRange.to}`;
+}
 /** Gets comparable time.
  * @param tx source transaction.
  * @returns epoch milliseconds. */

@@ -1,3 +1,4 @@
+import { formatDateRange } from './PreviewBuilder.js';
 import type { IAccountPreview } from './Types.js';
 
 const TEXT_TITLE = '\n🔍 DRY RUN — no changes made to Actual Budget';
@@ -47,7 +48,7 @@ function accountHeader(account: IAccountPreview): string[] {
   return [
     `\n📊 ${account.bankName}  💳 ${account.accountNumber}`,
     `  Balance: ${formatBalance(account.balance, account.currency)}`,
-    `  Transactions: ${String(account.transactionCount)}  (${dateRangeText(account)})`,
+    `  Transactions: ${String(account.transactionCount)}  (${formatDateRange(account)})`,
   ];
 }
 /** Builds one sample line.
@@ -58,10 +59,4 @@ function sampleTextLine(sample: AccountSample, currency: string): string {
   const description = sample.description.slice(0, 28).padEnd(28);
   const amount = formatAmount(sample.amount, currency);
   return `    ${sample.date}  ${description}  ${amount}`;
-}
-/** Builds a date-range label.
- * @param account preview.
- * @returns date-range text. */
-function dateRangeText(account: IAccountPreview): string {
-  return `${account.dateRange.from} → ${account.dateRange.to}`;
 }

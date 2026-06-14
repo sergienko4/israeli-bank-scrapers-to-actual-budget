@@ -1,3 +1,4 @@
+import { formatDateRange } from './PreviewBuilder.js';
 import { formatBalance, formatSampleLines } from './TextFormatter.js';
 import type { IAccountPreview } from './Types.js';
 
@@ -18,14 +19,8 @@ export function accountTelegramLines(account: IAccountPreview): string[] {
   const count = String(account.transactionCount);
   return [
     `💳 <b>${account.bankName}</b> · ${account.accountNumber}`,
-    `Balance: ${balance} · ${count} txns (${dateRangeText(account)})`,
+    `Balance: ${balance} · ${count} txns (${formatDateRange(account)})`,
     ...formatSampleLines(account.samples, account.currency),
     '',
   ];
-}
-/** Builds a date-range label.
- * @param account preview.
- * @returns date-range text. */
-function dateRangeText(account: IAccountPreview): string {
-  return `${account.dateRange.from} → ${account.dateRange.to}`;
 }
