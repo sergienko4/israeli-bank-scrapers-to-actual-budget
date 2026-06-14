@@ -102,6 +102,11 @@ const CANARIES = {
     description:
       'PR 16 — src/Scraper/Mappers/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
   },
+  'tests/eslint-canaries/LiveStrategyMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 19 — src/Scraper/Strategies/Live/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
 };
 
 let allPassed = true;
