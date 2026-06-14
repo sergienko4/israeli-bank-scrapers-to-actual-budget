@@ -7,50 +7,27 @@
  *   INV-3  Original Error objects propagate end-to-end.
  *   INV-4  All-banks-fail → fail; partial → succeed.
  *   INV-5  state.banksProcessed === state.bankResults.successful.length.
+ *
+ * The 3 stages (scrape → map → import) live in `./Bank/` after the
+ * PR 15 split; this file owns the orchestrator + bank-entry iteration
+ * + run-result assembly.
  */
-
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
 import type {
   IBankConfig, IBankMetricsDelta, IBankQuarantineEntry,
-  IBankQuarantineStage, IBankResult, IBankResultsState,
-  ICanonicalScrapeResult, IPipelineContext, IProcedureFailure,
+  IBankResult, IBankResultsState,
+  IPipelineContext, IProcedureFailure,
   IProcedureSuccess, PipelineStep, Procedure,
 } from '../Index.js';
-import { fail, fromPromise, isFail, succeed } from '../Index.js';
+import { fail, isFail, succeed } from '../Index.js';
 import type { IMetricsAcc } from '../Reducers/MetricsReducer.js';
 import * as MetricsReducer from '../Reducers/MetricsReducer.js';
 import type { IPaginationStrategy } from '../Strategies/IPaginationStrategy.js';
 import createSequentialStrategy from '../Strategies/SequentialPaginationStrategy.js';
-
-const STAGE_SCRAPE: IBankQuarantineStage = 'scrape';
-const STAGE_MAP: IBankQuarantineStage = 'map';
-const STAGE_IMPORT: IBankQuarantineStage = 'import';
-
-const STAGE_LOOKUP: Record<string, IBankQuarantineStage> = {
-  scrape: STAGE_SCRAPE,
-  map: STAGE_MAP,
-  import: STAGE_IMPORT,
-};
-
-/** Bank entry pulled from config after filter. */
-interface IBankEntry {
-  readonly bankName: string;
-  readonly bankConfig: IBankConfig;
-}
-
-/** Shared per-bank opts threaded through scrape→map→import. */
-interface IBankOpts {
-  readonly entry: IBankEntry;
-  readonly ctx: IPipelineContext;
-  readonly start: number;
-}
-
-/** Imported counts from AccountImporter for one bank. */
-interface IImportCounts {
-  readonly imported: number;
-  readonly skipped: number;
-}
+import type { IBankEntry, IBankOpts } from './Bank/Index.js';
+import {
+  importStage, mapStage, scrapeStage, stageFromStatus,
+} from './Bank/Index.js';
 
 /** Closure mutator holding the run's mutable state. */
 interface IRunMutator {
@@ -321,15 +298,6 @@ function recordQuarantine(
 }
 
 /**
- * Maps a failure status string to a quarantine stage label.
- * @param status - Status carried on the failed Procedure.
- * @returns Canonical IBankQuarantineStage (defaults to 'import').
- */
-function stageFromStatus(status: string): IBankQuarantineStage {
-  return STAGE_LOOKUP[status] ?? STAGE_IMPORT;
-}
-
-/**
  * Builds the IRunResult from mutator state + successful results.
  * @param mutator - Run mutator carrying quarantine + metrics deltas.
  * @param successful - Successful per-bank results.
@@ -374,97 +342,6 @@ async function runScrapeMapImport(
   const canonical = mapStage(opts, scrape.data);
   if (isFail(canonical)) return canonical;
   return await importStage(opts, canonical.data);
-}
-
-/**
- * Scrapes via resilience-wrapped call and adapts errors to Procedure.
- * @param opts - Per-bank opts.
- * @returns Procedure&lt;IScraperScrapingResult&gt; stamped STAGE_SCRAPE on fail.
- */
-async function scrapeStage(
-  opts: IBankOpts,
-): Promise<Procedure<IScraperScrapingResult>> {
-  const scrapePromise = opts.ctx.services.bankScraper
-    .scrapeBankWithResilience(opts.entry.bankName, opts.entry.bankConfig);
-  const wrapped = await fromPromise(scrapePromise, 'Scrape failed');
-  if (isFail(wrapped)) {
-    const error = wrapped.error ?? new Error(wrapped.message);
-    return fail(wrapped.message, { status: STAGE_SCRAPE, error });
-  }
-  return checkScrapeSuccess(wrapped.data);
-}
-
-/**
- * Promotes provider `.success` boolean into a Procedure outcome.
- * @param result - Legacy IScraperScrapingResult from the scraper.
- * @returns succeed on success, fail STAGE_SCRAPE otherwise.
- */
-function checkScrapeSuccess(
-  result: IScraperScrapingResult,
-): Procedure<IScraperScrapingResult> {
-  if (result.success) return succeed(result);
-  const message = result.errorMessage ?? 'Scrape failed';
-  return fail(message, {
-    status: STAGE_SCRAPE, error: new Error(message),
-  });
-}
-
-/**
- * Canonicalizes the legacy scrape result via the mapper.
- * @param opts - Per-bank opts.
- * @param scrape - Legacy provider result.
- * @returns Procedure&lt;ICanonicalScrapeResult&gt; stamped STAGE_MAP on fail.
- */
-function mapStage(
-  opts: IBankOpts, scrape: IScraperScrapingResult,
-): Procedure<ICanonicalScrapeResult> {
-  const result = opts.ctx.services.scrapeResultMapper.legacyToCanonical({
-    legacy: scrape,
-    bankName: opts.entry.bankName,
-    bankConfig: opts.entry.bankConfig,
-  });
-  if (isFail(result)) {
-    const error = result.error ?? new Error(result.message);
-    return fail(result.message, { status: STAGE_MAP, error });
-  }
-  return result;
-}
-
-/**
- * Imports canonicalized data via AccountImporter and builds the IBankResult.
- * @param opts - Per-bank opts.
- * @param canonical - Canonical scrape result from mapStage.
- * @returns Procedure&lt;IBankResult&gt; stamped STAGE_IMPORT on fail.
- */
-async function importStage(
-  opts: IBankOpts, canonical: ICanonicalScrapeResult,
-): Promise<Procedure<IBankResult>> {
-  const importPromise = opts.ctx.services.accountImporter
-    .processAllAccounts(opts.entry.bankName, opts.entry.bankConfig, canonical);
-  const imported = await fromPromise(importPromise, 'Import failed');
-  if (isFail(imported)) {
-    const error = imported.error ?? new Error(imported.message);
-    return fail(imported.message, { status: STAGE_IMPORT, error });
-  }
-  const bankResult = buildBankResult(opts, imported.data);
-  return succeed(bankResult);
-}
-
-/**
- * Builds the IBankResult for a successfully imported bank.
- * @param opts - Per-bank opts.
- * @param counts - Imported and skipped counts.
- * @returns Frozen IBankResult.
- */
-function buildBankResult(
-  opts: IBankOpts, counts: IImportCounts,
-): IBankResult {
-  return Object.freeze({
-    bankName: opts.entry.bankName,
-    imported: counts.imported,
-    skipped: counts.skipped,
-    durationMs: Date.now() - opts.start,
-  });
 }
 
 /**
