@@ -21,7 +21,9 @@ export default class DryRunCollector {
 
   /** Sums collected transaction counts.
    * @returns total transaction count. */
-  public totalTransactions(): number { return this._accounts.reduce(sumTransactions, 0); }
+  public totalTransactions(): number {
+    return this._accounts.reduce((sum, account) => sumTransactions(sum, account), 0);
+  }
 
   /** Formats previews for CLI output.
    * @returns multi-line dry-run text summary. */

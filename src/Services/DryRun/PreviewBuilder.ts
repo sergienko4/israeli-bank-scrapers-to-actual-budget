@@ -23,7 +23,7 @@ export function computeDateRange(txns: IBankTransaction[]): DateRange {
   const dates = txns.map(transactionTimestamp).filter(isValidTimestamp);
   if (dates.length === 0) return { from: 'N/A', to: 'N/A' };
   const initial = initialRange(dates[0]);
-  const range = dates.reduce(mergeTimestampRange, initial);
+  const range = dates.reduce((acc, value) => mergeTimestampRange(acc, value), initial);
   return { from: formatTimestamp(range.min), to: formatTimestamp(range.max) };
 }
 /** Extracts a compact transaction sample.
