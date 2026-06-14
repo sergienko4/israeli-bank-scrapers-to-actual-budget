@@ -1133,6 +1133,25 @@ export default tseslint.config(
       'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
     },
   },
+
+  // ─── Section 7r: Telegram formatter cluster max-fn-lines: 10 ───
+  // Placed AFTER Section 7q (parallel-OODA sibling).
+  // Scope: src/Services/Notifications/Telegram/**/*.ts (7 new files:
+  //   Types / Shared / DefaultFormat / CompactFormat / LedgerFormat /
+  //   EmojiFormat / Index) carved out of TelegramFormatter.ts (330 LoC).
+  // Backed by canary fixture
+  // `tests/eslint-canaries/TelegramFormatterMaxLinesPerFunction.canary.ts`
+  // per §2 CANARY. The harness at `config/check-eslint-canaries.mjs`
+  // asserts the rule fires.
+  {
+    files: [
+      'src/Services/Notifications/Telegram/**/*.ts',
+      'tests/eslint-canaries/TelegramFormatterMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
