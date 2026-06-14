@@ -52,7 +52,7 @@ function countByStatus(banks: IBankMetrics[], status: IBankMetrics['status']): n
  * @returns summary totals. */
 function computeTotals(banks: IBankMetrics[]): ISummaryTotals {
   const initialTotals = zeroTotals();
-  return banks.reduce(addBankTotals, initialTotals);
+  return banks.reduce((totals, bank) => addBankTotals(totals, bank), initialTotals);
 }
 /** Adds bank totals.
  * @param totals prior totals.
