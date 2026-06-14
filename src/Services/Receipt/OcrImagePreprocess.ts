@@ -22,12 +22,21 @@ const BINARY_THRESHOLD = 140;
  * rotated) are uprighted before any pixel-aware step. Skipping this
  * leaves sideways text in the OCR pipeline and tanks tesseract.js
  * accuracy on Hebrew.
+ *
+ * Width is computed from the POST-rotation pixel dimensions: EXIF
+ * orientations 5/6/7/8 swap width and height during `.rotate()`, so
+ * a phone-portrait photo (EXIF=6, raw 1800x900) presents itself as
+ * 900x1800 to the OCR pipeline and must be upscaled accordingly.
+ * Checking pre-rotation `metadata.width` would skip the upscale and
+ * silently degrade OCR quality on the dominant phone-photo case.
  * @param imageBuffer - Raw image bytes (JPEG/PNG).
  * @returns Preprocessed PNG buffer ready for tesseract.js.
  */
 export default async function preprocessForOcr(imageBuffer: Buffer): Promise<Buffer> {
   const metadata = await sharp(imageBuffer).metadata();
-  const width = metadata.width || 0;
+  const orientation = metadata.orientation ?? 1;
+  const willSwapAxes = orientation >= 5 && orientation <= 8;
+  const width = (willSwapAxes ? metadata.height : metadata.width) || 0;
   let pipeline = sharp(imageBuffer).rotate();
   if (width < MIN_WIDTH_PX) pipeline = pipeline.resize(MIN_WIDTH_PX);
   return await pipeline.greyscale().threshold(BINARY_THRESHOLD).png().toBuffer();

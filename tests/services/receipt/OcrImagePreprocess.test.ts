@@ -23,6 +23,12 @@ const SMALL_HEIGHT = 100;
 const LARGE_WIDTH = 1800;
 const LARGE_HEIGHT = 900;
 const MIN_OUTPUT_WIDTH = 1500;
+// Dims chosen so both width AND height exceed MIN_OUTPUT_WIDTH (1500),
+// which keeps the F1 rotate-regression test free of any resize side
+// effects — the ONLY transformation that should affect output dims is
+// the .rotate() call swapping axes for EXIF orientation 6.
+const ORIENTED_WIDTH = 2000;
+const ORIENTED_HEIGHT = 1800;
 
 async function buildSyntheticImage(width: number, height: number): Promise<Buffer> {
   return await sharp({
@@ -34,6 +40,22 @@ async function buildSyntheticImage(width: number, height: number): Promise<Buffe
     },
   })
     .png()
+    .toBuffer();
+}
+
+async function buildOrientedJpeg(width: number, height: number, orientation: number): Promise<Buffer> {
+  // EXIF tags are only persisted by sharp in JPEG output; PNG loses
+  // the orientation tag and would defeat the purpose of this fixture.
+  return await sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: { r: 240, g: 240, b: 240 },
+    },
+  })
+    .withMetadata({ orientation })
+    .jpeg()
     .toBuffer();
 }
 
@@ -59,17 +81,16 @@ describe('OcrImagePreprocess — preprocessForOcr', () => {
     expect(meta.format).toBe('png');
   });
 
-  it('passes the buffer through .rotate() so EXIF orientation is applied', async () => {
-    const input = await buildSyntheticImage(LARGE_WIDTH, LARGE_HEIGHT);
-    // .rotate() with no args uses EXIF orientation; the output here
-    // should still be the same dimensions because our synthetic image
-    // has no orientation tag. The assertion locks the call by proxy:
-    // any future regression that drops .rotate() would leave the
-    // sharp pipeline unable to upright phone-sideways receipts.
+  it('applies EXIF .rotate() so orientation=6 photos have axes swapped', async () => {
+    // Orientation 6 = "rotate 90° CW" — raw pixel dims 2000x1800 must
+    // become 1800x2000 after .rotate(). If a future regression drops
+    // .rotate() from the pipeline, this assertion fails because the
+    // output dims would remain 2000x1800 (unswapped).
+    const input = await buildOrientedJpeg(ORIENTED_WIDTH, ORIENTED_HEIGHT, 6);
     const output = await preprocessForOcr(input);
     const meta = await sharp(output).metadata();
-    expect(meta.width).toBe(LARGE_WIDTH);
-    expect(meta.height).toBe(LARGE_HEIGHT);
+    expect(meta.width).toBe(ORIENTED_HEIGHT);
+    expect(meta.height).toBe(ORIENTED_WIDTH);
   });
 
   it('returns a non-empty PNG buffer for a small input', async () => {

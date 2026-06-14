@@ -12,7 +12,7 @@ import type { IReceiptData, Procedure } from '../../Types/Index.js';
 import { fail, succeed } from '../../Types/Index.js';
 
 /** Regex patterns for Israeli receipt parsing. */
-const DATE_PATTERN = /(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/;
+const DATE_PATTERN = /(\d{1,2})[./-](\d{1,2})[./-](\d{4}|\d{2})/;
 /** Matches Hebrew "total" variants (סה"כ, סה"ג OCR misread). */
 const TOTAL_HEB = 'סה.{1,2}[כגך]';
 /** Hebrew "to pay" / "total due" patterns. */
@@ -125,20 +125,26 @@ function extractDate(text: string): string | false {
   const day = Number.parseInt(match[1], 10);
   const month = Number.parseInt(match[2], 10);
   const year = normalizeYear(match[3]);
+  if (year === false) return false;
   if (!isValidCalendarDate(day, month, year)) return false;
   return formatDate(day, month, year);
 }
 
 /**
  * Normalizes a 2-digit or 4-digit OCR year fragment into a 4-digit year.
- * Assumes the 21st century for 2-digit values (matches the existing
- * `20${rawYear}` convention).
+ *
+ * Returns `false` for any other length so callers (and downstream date
+ * validation) cannot silently coerce a 3-digit OCR misread like "202"
+ * into a misleading year. Matches the DATE_PATTERN year capture group
+ * which only accepts `{4}|{2}` digit forms. Uses `false` (not `null`)
+ * to match the repo's no-nullable-return architecture rule.
  * @param rawYear - Year string from the OCR match (2 or 4 digits).
- * @returns 4-digit year as a number.
+ * @returns 4-digit year as a number, or `false` for unexpected lengths.
  */
-function normalizeYear(rawYear: string): number {
-  const normalized = rawYear.length === 2 ? `20${rawYear}` : rawYear;
-  return Number.parseInt(normalized, 10);
+function normalizeYear(rawYear: string): number | false {
+  if (rawYear.length === 2) return Number.parseInt(`20${rawYear}`, 10);
+  if (rawYear.length === 4) return Number.parseInt(rawYear, 10);
+  return false;
 }
 
 /**
