@@ -22,6 +22,18 @@
 // so other ESLint rules stay quiet — only `max-lines-per-function`
 // fires. The function is NOT exercised at runtime.
 
+/**
+ * Canary fixture body — intentionally exceeds Section 7l's 10-LoC cap.
+ *
+ * Contains 12 effective body lines so that ESLint's
+ * `max-lines-per-function: 10` rule MUST report >= 1 error when the
+ * canary is linted. The function is never executed at runtime; it
+ * exists solely to keep the guardrail honest per
+ * `eslint-rules-guidlines.md` §2 CANARY.
+ * @returns Sum of the 11 const declarations (55), as a sanity-check
+ *   integer. Not consumed by any caller — present only so the body
+ *   has a meaningful return statement.
+ */
 export default function oversizedBankStageSample(): number {
   const a = 1;
   const b = 2;
