@@ -17,21 +17,36 @@ import type { ILegacyToCanonicalOpts } from './IScrapeResultMapper.js';
 type ProviderAccount = NonNullable<IScraperScrapingResult['accounts']>[number];
 
 /**
+ * Extracts a frozen txn list from a legacy provider account.
+ * @param account - Legacy provider account record.
+ * @returns Frozen txn list typed as readonly IBankTransaction[].
+ */
+function extractLegacyTxns(account: ProviderAccount): readonly IBankTransaction[] {
+  const hasTxns = Array.isArray(account.txns);
+  if (!hasTxns) return [] as readonly IBankTransaction[];
+  return [...(account.txns as readonly IBankTransaction[])] as readonly IBankTransaction[];
+}
+
+/**
  * Maps a single legacy provider account into a canonical account.
  * Sign normalization is assumed already applied by BankScraper.
  * @param account - Legacy provider account record.
  * @returns ICanonicalAccount with frozen txn list.
  */
 function legacyAccountToCanonical(account: ProviderAccount): ICanonicalAccount {
-  const hasTxns = Array.isArray(account.txns);
-  const txns = hasTxns
-    ? ([...(account.txns as readonly IBankTransaction[])] as readonly IBankTransaction[])
-    : ([] as readonly IBankTransaction[]);
-  return {
-    accountNumber: account.accountNumber,
-    balance: account.balance ?? null,
-    txns,
-  };
+  const txns = extractLegacyTxns(account);
+  return { accountNumber: account.accountNumber, balance: account.balance ?? null, txns };
+}
+
+/**
+ * Formats the scrape window for legacy adaptation as ISO date strings.
+ * @param bankConfig - Bank config used to derive the scrape start date.
+ * @returns Object containing formatted startDate and endDate strings.
+ */
+function formatScrapeWindow(bankConfig: IBankConfig): { startDate: string; endDate: string } {
+  const startDate = computeStartDate(bankConfig);
+  const endDate = new Date();
+  return { startDate: formatDate(startDate), endDate: formatDate(endDate) };
 }
 
 /**
@@ -40,14 +55,24 @@ function legacyAccountToCanonical(account: ProviderAccount): ICanonicalAccount {
  * @returns Frozen ICanonicalScrapeMetadata for the current run.
  */
 function buildLegacyMetadata(bankConfig: IBankConfig): ICanonicalScrapeResult['metadata'] {
-  const startDate = computeStartDate(bankConfig);
-  const endDate = new Date();
+  const window = formatScrapeWindow(bankConfig);
   return {
-    startDate: formatDate(startDate),
-    endDate: formatDate(endDate),
-    signPolicyApplied: 'preserve',
-    strategy: 'live',
-    attemptCount: 1,
+    startDate: window.startDate, endDate: window.endDate,
+    signPolicyApplied: 'preserve', strategy: 'live', attemptCount: 1,
+  };
+}
+
+/**
+ * Wraps mapped legacy accounts into a canonical scrape envelope.
+ * @param opts - Legacy result + bank name + bank config.
+ * @returns Frozen canonical scrape result.
+ */
+function buildLegacyCanonical(opts: ILegacyToCanonicalOpts): ICanonicalScrapeResult {
+  const rawAccounts = opts.legacy.accounts ?? [];
+  const accounts = rawAccounts.map(legacyAccountToCanonical);
+  const metadata = buildLegacyMetadata(opts.bankConfig);
+  return {
+    bankId: opts.bankName, scrapedAt: new Date().toISOString(), accounts, metadata,
   };
 }
 
@@ -65,12 +90,6 @@ export default function legacyToCanonical(
     const message = opts.legacy.errorMessage ?? 'Scrape failed';
     return fail(message, { status: 'legacy-not-successful' });
   }
-  const rawAccounts = opts.legacy.accounts ?? [];
-  const accounts = rawAccounts.map(legacyAccountToCanonical);
-  return succeed({
-    bankId: opts.bankName,
-    scrapedAt: new Date().toISOString(),
-    accounts,
-    metadata: buildLegacyMetadata(opts.bankConfig),
-  });
+  const canonical = buildLegacyCanonical(opts);
+  return succeed(canonical);
 }

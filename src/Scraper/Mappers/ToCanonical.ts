@@ -15,6 +15,17 @@ import applySignPolicy from './Sign.js';
 type ProviderAccount = NonNullable<IScraperScrapingResult['accounts']>[number];
 
 /**
+ * Extracts a frozen txn list from a provider account, defaulting empty.
+ * @param account - Provider account record.
+ * @returns Frozen txn list typed as readonly IBankTransaction[].
+ */
+function extractAccountTxns(account: ProviderAccount): readonly IBankTransaction[] {
+  const hasTxns = Array.isArray(account.txns);
+  if (!hasTxns) return [];
+  return account.txns;
+}
+
+/**
  * Maps a single provider account record into a canonical account.
  * @param account - Provider account record.
  * @param opts - Surrounding mapper opts providing sign policy + bankId.
@@ -23,16 +34,19 @@ type ProviderAccount = NonNullable<IScraperScrapingResult['accounts']>[number];
 function mapAccount(
   account: ProviderAccount, opts: IMapToCanonicalOpts,
 ): ICanonicalAccount {
-  const hasTxns = Array.isArray(account.txns);
-  const accountTxns = hasTxns
-    ? (account.txns as readonly IBankTransaction[])
-    : ([] as readonly IBankTransaction[]);
+  const accountTxns = extractAccountTxns(account);
   const txns = applySignPolicy(accountTxns, opts);
-  return {
-    accountNumber: account.accountNumber,
-    balance: account.balance ?? null,
-    txns,
-  };
+  return { accountNumber: account.accountNumber, balance: account.balance ?? null, txns };
+}
+
+/**
+ * Picks the raw provider accounts from an IRawScrape envelope, defaulting empty.
+ * @param opts - Raw scrape envelope.
+ * @returns Provider account list, or empty when raw scrape failed.
+ */
+function pickRawAccounts(opts: IMapToCanonicalOpts): readonly ProviderAccount[] {
+  if (!opts.raw.raw.success) return [];
+  return opts.raw.raw.accounts ?? [];
 }
 
 /**
@@ -56,13 +70,10 @@ function buildMetadata(opts: IMapToCanonicalOpts): ICanonicalScrapeResult['metad
  * @returns ICanonicalScrapeResult with normalized accounts + metadata.
  */
 export default function mapToCanonical(opts: IMapToCanonicalOpts): ICanonicalScrapeResult {
-  const rawAccounts = opts.raw.raw.success && opts.raw.raw.accounts
-    ? opts.raw.raw.accounts : [];
+  const rawAccounts = pickRawAccounts(opts);
   const accounts = rawAccounts.map(account => mapAccount(account, opts));
+  const metadata = buildMetadata(opts);
   return {
-    bankId: opts.raw.bankId,
-    scrapedAt: new Date().toISOString(),
-    accounts,
-    metadata: buildMetadata(opts),
+    bankId: opts.raw.bankId, scrapedAt: new Date().toISOString(), accounts, metadata,
   };
 }
