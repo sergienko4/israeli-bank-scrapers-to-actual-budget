@@ -1032,6 +1032,46 @@ export default tseslint.config(
     },
   },
 
+  // 7o. PR 19 — `max-lines-per-function: 10` for the new Live/ strategy
+  // 6-module cluster carved out of `LiveScrapeStrategy.ts`. PRECEDENT
+  // mirrors Section 7m (PR 16) + 7l (PR 15) + 7k (PR 14): every newly
+  // decoupled cluster ships at the CLAUDE.md aspirational cap of 10
+  // effective LoC per function so the seam never drifts back toward a
+  // 386-LoC monolith.
+  //
+  // Scope:
+  //   - `src/Scraper/Strategies/Live/**/*.ts` (the 6 new files:
+  //     Types / ResultEnvelope / OtpRetriever / ScraperSetup /
+  //     AttemptRunner / Index).
+  //   - `tests/eslint-canaries/LiveStrategyMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, 12-LoC fn body).
+  //
+  // SCOPE NOTE (per §3 GRANDFATHER): the orchestrator
+  // `LiveScrapeStrategy.ts` shrank to a thin facade and ships at the
+  // strict 10-LoC cap by inspection. No grandfather override needed.
+  //
+  // Any NEW function added to the listed Live/ files MUST stay <= 10
+  // effective LoC. Reach 11+ ⇒ split into SRP helpers in the same
+  // commit.
+  //
+  // Backed by canary fixture
+  // `tests/eslint-canaries/LiveStrategyMaxLinesPerFunction.canary.ts`
+  // (12-LoC function body) per §2 CANARY. The harness at
+  // `config/check-eslint-canaries.mjs` asserts the rule fires.
+  //
+  // Placed AFTER Section 7 + 7k + 7l + 7m so the canary file is
+  // configured by the LAST matching block (flat-config rule keys are
+  // replaced, not merged).
+  {
+    files: [
+      'src/Scraper/Strategies/Live/**/*.ts',
+      'tests/eslint-canaries/LiveStrategyMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
