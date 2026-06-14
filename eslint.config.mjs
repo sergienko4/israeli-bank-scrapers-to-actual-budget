@@ -1110,6 +1110,18 @@ export default tseslint.config(
     },
   },
 
+  // ─── Section 7p: SpendingWatch cluster max-fn-lines: 10 ───
+  // Placed AFTER Section 7n + 7o (parallel-OODA cousin).
+  {
+    files: [
+      'src/Services/SpendingWatch/**/*.ts',
+      'tests/eslint-canaries/SpendingWatchMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
