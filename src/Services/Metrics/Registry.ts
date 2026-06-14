@@ -34,7 +34,8 @@ export default class MetricsService {
     bankName: string, record: IAccountTransactionsRecord
   ): Procedure<{ status: 'recorded' }> {
     const metrics = this._banks.get(bankName);
-    if (metrics) metrics.accounts.push({ ...record });
+    if (!metrics) return fail('bank not found');
+    metrics.accounts.push({ ...record });
     return succeed({ status: 'recorded' as const });
   }
   /** Records bank success.
@@ -46,7 +47,8 @@ export default class MetricsService {
     bankName: string, transactionsImported: number, transactionsSkipped: number
   ): Procedure<{ status: 'recorded' }> {
     const metrics = this._banks.get(bankName);
-    if (metrics) MetricsService.success(metrics, transactionsImported, transactionsSkipped);
+    if (!metrics) return fail('bank not found');
+    MetricsService.success(metrics, transactionsImported, transactionsSkipped);
     return succeed({ status: 'recorded' as const });
   }
   /** Records bank failure.
@@ -55,7 +57,8 @@ export default class MetricsService {
    * @returns recorded status. */
   public recordBankFailure(bankName: string, error: Error): Procedure<{ status: 'recorded' }> {
     const metrics = this._banks.get(bankName);
-    if (metrics) MetricsService.completeFailure(metrics, error);
+    if (!metrics) return fail('bank not found');
+    MetricsService.completeFailure(metrics, error);
     return succeed({ status: 'recorded' as const });
   }
   /** Records reconciliation status.
@@ -67,10 +70,9 @@ export default class MetricsService {
     bankName: string, status: NonNullable<IBankMetrics['reconciliationStatus']>, amount?: number
   ): Procedure<{ status: 'recorded' }> {
     const metrics = this._banks.get(bankName);
-    if (metrics) {
-      metrics.reconciliationStatus = status;
-      metrics.reconciliationAmount = amount;
-    }
+    if (!metrics) return fail('bank not found');
+    metrics.reconciliationStatus = status;
+    metrics.reconciliationAmount = amount;
     return succeed({ status: 'recorded' as const });
   }
   /** Returns import summary.
@@ -85,7 +87,7 @@ export default class MetricsService {
    * @returns printed status. */
   public printSummary(): Procedure<{ status: 'printed' }> {
     const summaryResult = this.getSummary();
-    if (!summaryResult.success) return succeed({ status: 'printed' as const });
+    if (!summaryResult.success) return fail(summaryResult.message);
     const importDuration = Date.now() - this._importStartTime;
     printImportSummary(summaryResult.data, importDuration);
     return succeed({ status: 'printed' as const });
@@ -134,8 +136,20 @@ export default class MetricsService {
    * @returns completed metrics. */
   private static completeFailure(metrics: IBankMetrics, error: Error): IBankMetrics {
     MetricsService.finishMetrics(metrics, 'failure');
-    metrics.error = error.message ? `${error.name}: ${error.message}` : error.name;
+    const safeMsg = error.message ? MetricsService.redactSensitive(error.message) : '';
+    metrics.error = safeMsg ? `${error.name}: ${safeMsg}` : error.name;
     return metrics;
+  }
+  /** Redacts sensitive credential patterns from a free-text string.
+   * Matches `key=value` / `key: value` where key is a known sensitive
+   * keyword; replaces value with `[REDACTED]`. Does not redact bare
+   * keyword occurrences (e.g. `AuthenticationError` is preserved) per
+   * `logging-pii-guidlines.md` §1 preventive-masking rule.
+   * @param text input string to redact.
+   * @returns redacted string. */
+  private static redactSensitive(text: string): string {
+    const re = /\b(password|token|secret|auth(?:orization)?|creditcard|cvv)\s*[=:]\s*\S+/gi;
+    return text.replace(re, (_match, key: string) => `${key}=[REDACTED]`);
   }
   /** Marks metrics complete.
    * @param metrics bank metrics.
