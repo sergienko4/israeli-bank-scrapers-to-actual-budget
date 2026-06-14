@@ -7,9 +7,9 @@ import type { IAccountMetrics, IBankMetrics } from '../../MetricsService.js';
 
 /** Options controlling which transactions appear in the formatted message. */
 export interface IFormatOpts {
-  /** Maximum transactions to display per account. */
+  /** Which transactions to display: 'new', 'all', or 'none'. */
   showTransactions: ShowTransactions;
-  /** Cap on the number of transactions shown. */
+  /** Maximum number of transactions to display per account. */
   maxTransactions: number;
 }
 

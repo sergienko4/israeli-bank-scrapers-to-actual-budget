@@ -32,7 +32,7 @@ function buildCompactTxnLines(account: IAccountMetrics, opts: IFormatOpts): stri
 export function buildCompactLines(ctx: IAccountCtx): string[] {
   const { bank, account, opts } = ctx;
   const bankLine = `${bankIcon(bank)} <b>${escapeHtml(bank.bankName)}</b>` +
-    ` · ${escapeHtml(account.accountName ?? account.accountNumber)}`;
+    ` Â· ${escapeHtml(account.accountName ?? account.accountNumber)}`;
   const lines = ['', bankLine, ...buildCompactTxnLines(account, opts)];
   lines.push(...buildBalanceLines(account, bank));
   return lines;

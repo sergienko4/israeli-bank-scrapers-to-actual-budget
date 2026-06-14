@@ -78,7 +78,7 @@ export function buildReconciliationLines(bank: IBankMetrics): string[] {
 export function buildBalanceLines(account: IAccountMetrics, bank: IBankMetrics): string[] {
   const lines: string[] = [];
   if (account.balance !== undefined) {
-    lines.push(`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`);
+    lines.push(`💰 ${account.balance.toLocaleString()} ${escapeHtml(account.currency || 'ILS')}`);
   }
   lines.push(...buildReconciliationLines(bank));
   return lines;
@@ -110,9 +110,13 @@ export function fmtAmount(cents: number): string {
 /**
  * Formats a YYYY-MM-DD date string to DD/MM for compact display.
  * @param date - YYYY-MM-DD formatted date string.
- * @returns Two-part date string like "15/03".
+ * @returns Two-part date string like "15/03"; returns the input unchanged
+ *   when it is not a three-part `-`-separated date (avoids "undefined/undefined").
  */
 export function fmtDate(date: string): string {
   const parts = date.split('-');
+  if (parts.length !== 3) {
+    return date;
+  }
   return `${parts[2]}/${parts[1]}`;
 }

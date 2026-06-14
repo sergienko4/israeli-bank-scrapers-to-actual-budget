@@ -31,7 +31,7 @@ function buildEmojiTxnLines(account: IAccountMetrics, opts: IFormatOpts): string
  */
 function buildEmojiBalanceLine(account: IAccountMetrics): string[] {
   if (account.balance !== undefined) {
-    return [`💰 ${account.balance.toLocaleString()} ${account.currency || 'ILS'}`];
+    return [`💰 ${account.balance.toLocaleString()} ${escapeHtml(account.currency || 'ILS')}`];
   }
   return [];
 }
