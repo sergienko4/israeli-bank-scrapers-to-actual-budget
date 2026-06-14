@@ -13,6 +13,7 @@ vi.mock('../../src/Logger/Index.js', () => ({
 const { mockSharpPipeline } = vi.hoisted(() => ({
   mockSharpPipeline: {
     metadata: vi.fn().mockResolvedValue({ width: 800 }),
+    rotate: vi.fn().mockReturnThis(),
     resize: vi.fn().mockReturnThis(),
     greyscale: vi.fn().mockReturnThis(),
     threshold: vi.fn().mockReturnThis(),

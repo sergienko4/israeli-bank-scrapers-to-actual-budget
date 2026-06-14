@@ -890,6 +890,60 @@ export default tseslint.config(
     },
   },
 
+  // 7k. SERVICES/RECEIPT (PR 14 cluster) — tightened max-lines-per-function (PR 14: ReceiptOcrService decouple)
+  // Extends the §7i/§7j pattern (PR #433 / PR #434) to the
+  // PR-14 decoupled cluster only: the new `OcrParsing.ts` +
+  // `OcrImagePreprocess.ts` sub-modules and the trimmed
+  // `ReceiptOcrService.ts` orchestrator.
+  //
+  // Per `eslint-rules-guidlines.md` §1 PRECEDENT every newly-decoupled
+  // file ships at the CLAUDE.md aspirational cap of
+  // `max-lines-per-function: 10`. The 3 listed source files have
+  // zero violations at this cap — every helper is <= 10 effective
+  // LoC by construction. CodeRabbit PR #429 flagged
+  // `readJsonOrEncrypted` for breaching the same rule because the
+  // global cap was 20; we lock the boundary at 10 for every new
+  // decoupled cluster to prevent that drift class entirely.
+  //
+  // SCOPE NOTE (per §3 GRANDFATHER): the wider
+  // `src/Services/Receipt/**` tree contains 7 pre-existing
+  // 11-15-LoC violations in `ReceiptImporter.ts`,
+  // `ReceiptMenuPresenter.ts`, and `ReceiptPayeeMatcher.ts` (all
+  // landed in earlier rows of the master plan). They are NOT in
+  // PR 14's scope. Tightening for the remaining Receipt cluster
+  // is tracked in
+  // `hardening_todos.eslint-max-lines-per-function-tighten-10`.
+  // Per §3 we never use `eslint-disable`; we keep the cap loose
+  // (global 20) for those files via the absence of an override
+  // here, and tighten file-by-file in dedicated PRs.
+  //
+  // Any NEW function added to the 3 listed files MUST stay <= 10
+  // effective LoC. Reach 11+ ⇒ split into helpers in the same
+  // commit. This rule protects the parsing seam from drifting back
+  // into a 240-LoC monolith over time.
+  //
+  // Backed by canary fixture
+  // `tests/eslint-canaries/ReceiptMaxLinesPerFunction.canary.ts`
+  // (12-LoC function body) per §2 CANARY. The harness at
+  // `config/check-eslint-canaries.mjs` asserts the rule fires.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines-per-function: 10` rule survives on the canary fixture;
+  // flat-config rule keys are replaced (not merged) by later matching
+  // blocks, so the canary file MUST be configured by the LAST block
+  // listing it.
+  {
+    files: [
+      'src/Services/Receipt/OcrParsing.ts',
+      'src/Services/Receipt/OcrImagePreprocess.ts',
+      'src/Services/ReceiptOcrService.ts',
+      'tests/eslint-canaries/ReceiptMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
