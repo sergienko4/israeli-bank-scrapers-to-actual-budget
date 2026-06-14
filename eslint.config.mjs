@@ -1072,6 +1072,44 @@ export default tseslint.config(
     },
   },
 
+  // 7n. PR 18 — `max-lines-per-function: 10` for the new Metrics/ 4-module
+  // cluster carved out of `MetricsService.ts`. PRECEDENT mirrors Section 7m
+  // (PR 16) + 7l (PR 15) + 7k (PR 14): every newly-decoupled cluster ships
+  // at the CLAUDE.md aspirational cap of 10 effective LoC per function so
+  // the seam never drifts back toward a 330-LoC monolith.
+  //
+  // Scope:
+  //   - `src/Services/Metrics/**/*.ts` (the 5 new files: Types / Registry /
+  //     Summary / Serializer / Index).
+  //   - `tests/eslint-canaries/MetricsMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, 12-LoC fn body).
+  //
+  // SCOPE NOTE: the orchestrator `MetricsService.ts` shrank to a 17-LoC
+  // re-export facade (compat shim for 12 prod + 8 test consumers). The
+  // shim contains no function bodies, so the strict 10-LoC cap is
+  // non-binding there.
+  //
+  // Any NEW function added to the listed Metrics/ files MUST stay <= 10
+  // effective LoC. Reach 11+ ⇒ split into SRP helpers in the same commit.
+  //
+  // Backed by canary fixture
+  // `tests/eslint-canaries/MetricsMaxLinesPerFunction.canary.ts` (12-LoC
+  // function body) per §2 CANARY. The harness at
+  // `config/check-eslint-canaries.mjs` asserts the rule fires.
+  //
+  // Placed AFTER Section 7 + 7k + 7l + 7m + 7o so the canary file is
+  // configured by the LAST matching block (flat-config rule keys are
+  // replaced, not merged).
+  {
+    files: [
+      'src/Services/Metrics/**/*.ts',
+      'tests/eslint-canaries/MetricsMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
