@@ -7,7 +7,8 @@
  * orchestrator. Keeps the cluster acyclic.
  */
 
-import type { IBankConfig, IBankQuarantineStage, IPipelineContext } from '../../Index.js';
+import type { IBankConfig, IBankQuarantineStage, IPipelineContext, IProcedureFailure, Procedure } from '../../Index.js';
+import { fail } from '../../Index.js';
 
 /** Stage label for the scrape step (used as Procedure.status on fail). */
 export const STAGE_SCRAPE: IBankQuarantineStage = 'scrape';
@@ -33,6 +34,25 @@ const STAGE_LOOKUP: Record<string, IBankQuarantineStage> = {
  */
 export function stageFromStatus(status: string): IBankQuarantineStage {
   return STAGE_LOOKUP[status] ?? STAGE_IMPORT;
+}
+
+/**
+ * Adapts an upstream Procedure failure into one stamped with the
+ * cluster's quarantine stage label.
+ *
+ * Preserves the original Error reference (INV-3) by falling back to
+ * `new Error(message)` only when the upstream failure carries no
+ * `.error`. Shared by all 3 stages so the adapter shape stays
+ * identical across scrape/map/import.
+ * @param p - Upstream Procedure failure to adapt.
+ * @param stage - Stage label to stamp on the new failure.
+ * @returns Procedure&lt;T&gt; failure with stamped stage + carried error.
+ */
+export function adaptFail<T>(
+  p: IProcedureFailure, stage: IBankQuarantineStage,
+): Procedure<T> {
+  const error = p.error ?? new Error(p.message);
+  return fail(p.message, { status: stage, error });
 }
 
 /** Bank entry pulled from config after filter (also used by orchestrator). */

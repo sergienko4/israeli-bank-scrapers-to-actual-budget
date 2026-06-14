@@ -10,9 +10,16 @@
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
 import type { ICanonicalScrapeResult, Procedure } from '../../Index.js';
-import { fail, isFail } from '../../Index.js';
+import { isFail } from '../../Index.js';
 import type { IBankOpts } from './Shared.js';
-import { STAGE_MAP } from './Shared.js';
+import { adaptFail, STAGE_MAP } from './Shared.js';
+
+/** Args passed to the mapper service's `legacyToCanonical`. */
+interface IMapArgs {
+  readonly legacy: IScraperScrapingResult;
+  readonly bankName: string;
+  readonly bankConfig: IBankOpts['entry']['bankConfig'];
+}
 
 /**
  * Canonicalizes the legacy scrape result via the mapper.
@@ -23,14 +30,25 @@ import { STAGE_MAP } from './Shared.js';
 export default function mapStage(
   opts: IBankOpts, scrape: IScraperScrapingResult,
 ): Procedure<ICanonicalScrapeResult> {
-  const result = opts.ctx.services.scrapeResultMapper.legacyToCanonical({
+  const args = buildMapArgs(opts, scrape);
+  const result = opts.ctx.services.scrapeResultMapper
+    .legacyToCanonical(args);
+  if (isFail(result)) return adaptFail(result, STAGE_MAP);
+  return result;
+}
+
+/**
+ * Builds the mapper args object for legacyToCanonical.
+ * @param opts - Per-bank opts (provides bankName + bankConfig).
+ * @param scrape - Legacy provider result threaded as `legacy`.
+ * @returns Frozen IMapArgs ready for the mapper service.
+ */
+function buildMapArgs(
+  opts: IBankOpts, scrape: IScraperScrapingResult,
+): IMapArgs {
+  return Object.freeze({
     legacy: scrape,
     bankName: opts.entry.bankName,
     bankConfig: opts.entry.bankConfig,
   });
-  if (isFail(result)) {
-    const error = result.error ?? new Error(result.message);
-    return fail(result.message, { status: STAGE_MAP, error });
-  }
-  return result;
 }

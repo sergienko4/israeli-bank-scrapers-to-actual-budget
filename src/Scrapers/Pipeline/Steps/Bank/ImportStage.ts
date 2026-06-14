@@ -7,9 +7,9 @@
  */
 
 import type { IBankResult, ICanonicalScrapeResult, Procedure } from '../../Index.js';
-import { fail, fromPromise, isFail, succeed } from '../../Index.js';
+import { fromPromise, isFail, succeed } from '../../Index.js';
 import type { IBankOpts } from './Shared.js';
-import { STAGE_IMPORT } from './Shared.js';
+import { adaptFail, STAGE_IMPORT } from './Shared.js';
 
 /** Imported counts from AccountImporter for one bank. */
 interface IImportCounts {
@@ -29,10 +29,7 @@ export default async function importStage(
   const importPromise = opts.ctx.services.accountImporter
     .processAllAccounts(opts.entry.bankName, opts.entry.bankConfig, canonical);
   const imported = await fromPromise(importPromise, 'Import failed');
-  if (isFail(imported)) {
-    const error = imported.error ?? new Error(imported.message);
-    return fail(imported.message, { status: STAGE_IMPORT, error });
-  }
+  if (isFail(imported)) return adaptFail(imported, STAGE_IMPORT);
   const bankResult = buildBankResult(opts, imported.data);
   return succeed(bankResult);
 }

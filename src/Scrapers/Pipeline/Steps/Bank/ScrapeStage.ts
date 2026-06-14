@@ -11,7 +11,7 @@ import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import type { Procedure } from '../../Index.js';
 import { fail, fromPromise, isFail, succeed } from '../../Index.js';
 import type { IBankOpts } from './Shared.js';
-import { STAGE_SCRAPE } from './Shared.js';
+import { adaptFail, STAGE_SCRAPE } from './Shared.js';
 
 /**
  * Scrapes via resilience-wrapped call and adapts errors to Procedure.
@@ -24,10 +24,7 @@ export default async function scrapeStage(
   const scrapePromise = opts.ctx.services.bankScraper
     .scrapeBankWithResilience(opts.entry.bankName, opts.entry.bankConfig);
   const wrapped = await fromPromise(scrapePromise, 'Scrape failed');
-  if (isFail(wrapped)) {
-    const error = wrapped.error ?? new Error(wrapped.message);
-    return fail(wrapped.message, { status: STAGE_SCRAPE, error });
-  }
+  if (isFail(wrapped)) return adaptFail(wrapped, STAGE_SCRAPE);
   return checkScrapeSuccess(wrapped.data);
 }
 

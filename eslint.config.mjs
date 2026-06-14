@@ -944,6 +944,49 @@ export default tseslint.config(
     },
   },
 
+  // 7l. PR 15 — `max-lines-per-function: 10` for the new Bank/ 3-stage
+  // cluster carved out of `ProcessAllBanksStep.ts`. PRECEDENT mirrors
+  // Section 7k (PR 14): every newly-decoupled cluster ships at the
+  // CLAUDE.md aspirational cap of 10 effective LoC per function so
+  // the seam never drifts back into a 500-LoC monolith.
+  //
+  // Scope:
+  //   - `src/Scrapers/Pipeline/Steps/Bank/**/*.ts` (the 5 new files:
+  //     ScrapeStage / MapStage / ImportStage / Shared / Index).
+  //   - `tests/eslint-canaries/ProcessAllBanksBankMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, 12 LoC).
+  //
+  // SCOPE NOTE (per §3 GRANDFATHER): the orchestrator
+  // `ProcessAllBanksStep.ts` (379 LoC, 22 functions) is NOT in PR 15's
+  // narrow scope — every helper there is already <= 10 effective LoC
+  // by inspection (verified during the extraction), so the global cap
+  // of 20 is non-binding today. A follow-up PR can flip the
+  // orchestrator to the strict cap once the broader Steps/ cluster
+  // is audited; tracked in
+  // `hardening_todos.eslint-max-lines-per-function-tighten-10`.
+  //
+  // Any NEW function added to the 5 listed Bank/ files MUST stay <= 10
+  // effective LoC. Reach 11+ ⇒ split into SRP helpers in the same
+  // commit.
+  //
+  // Backed by canary fixture
+  // `tests/eslint-canaries/ProcessAllBanksBankMaxLinesPerFunction.canary.ts`
+  // (12-LoC function body) per §2 CANARY. The harness at
+  // `config/check-eslint-canaries.mjs` asserts the rule fires.
+  //
+  // Placed AFTER Section 7 + Section 7k so the canary file is
+  // configured by the LAST matching block (flat-config rule keys are
+  // replaced, not merged).
+  {
+    files: [
+      'src/Scrapers/Pipeline/Steps/Bank/**/*.ts',
+      'tests/eslint-canaries/ProcessAllBanksBankMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],

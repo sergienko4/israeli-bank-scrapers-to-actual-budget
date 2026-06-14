@@ -92,6 +92,11 @@ const CANARIES = {
     description:
       'PR 14 — src/Services/Receipt/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
   },
+  'tests/eslint-canaries/ProcessAllBanksBankMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 15 — src/Scrapers/Pipeline/Steps/Bank/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
 };
 
 let allPassed = true;
