@@ -1,5 +1,6 @@
 import { afterEach,beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_BANK_REGISTRY } from '../../../src/Scraper/BankRegistry.js';
 import createProcessAllBanksStep from '../../../src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.js';
 import type { IPipelineContext } from '../../../src/Scrapers/Pipeline/Types/PipelineContext.js';
 import { isFail, isSuccess } from '../../../src/Types/ProcedureHelpers.js';
@@ -38,6 +39,7 @@ function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
       bankScraper: {
         scrapeBankWithResilience: vi.fn().mockResolvedValue({ success: true, accounts: [] }),
       },
+      bankRegistry: DEFAULT_BANK_REGISTRY,
       accountImporter: {
         processAllAccounts: vi.fn().mockResolvedValue({ imported: 5, skipped: 2 }),
       },
@@ -284,5 +286,42 @@ describe('ProcessAllBanksStep', () => {
       expect(result.data.state.banksProcessed).toBe(0);
       expect(result.data.state.bankResults?.totalBanks).toBe(0);
     }
+  });
+
+  it('mapStage resolves signPolicy from registry per bank name', async () => {
+    const ctx = makeCtx({
+      config: fakePipelineConfig({
+        banks: { hapoalim: fakeBankConfig(), visacal: fakeBankConfig() },
+      }) as unknown as IPipelineContext['config'],
+    });
+    const step = createProcessAllBanksStep();
+
+    await step(ctx);
+
+    const legacyMockFn = ctx.services.scrapeResultMapper.legacyToCanonical;
+    const mockFn = legacyMockFn as unknown as ReturnType<typeof vi.fn>;
+    const byBank: Record<string, string> = {};
+    for (const call of mockFn.mock.calls) {
+      const arg = call[0] as { bankName: string; signPolicy: string };
+      byBank[arg.bankName] = arg.signPolicy;
+    }
+    expect(byBank.hapoalim).toBe('preserve');
+    expect(byBank.visacal).toBe('flip-credit');
+  });
+
+  it('mapStage falls back to preserve for unknown bank names', async () => {
+    const ctx = makeCtx({
+      config: fakePipelineConfig({
+        banks: { 'not-a-real-bank': fakeBankConfig() },
+      }) as unknown as IPipelineContext['config'],
+    });
+    const step = createProcessAllBanksStep();
+
+    await step(ctx);
+
+    const legacyMockFn = ctx.services.scrapeResultMapper.legacyToCanonical;
+    const mockFn = legacyMockFn as unknown as ReturnType<typeof vi.fn>;
+    const arg = mockFn.mock.calls[0]?.[0] as { signPolicy: string };
+    expect(arg.signPolicy).toBe('preserve');
   });
 });

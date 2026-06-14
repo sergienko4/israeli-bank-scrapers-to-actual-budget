@@ -13,6 +13,7 @@
  */
 
 import type { ILogger } from '../Logger/ILogger.js';
+import type { IBankRegistry } from '../Scraper/BankRegistry.js';
 import { createBankRegistry } from '../Scraper/BankRegistry.js';
 import { BankScraper, createDateRangePolicy } from '../Scraper/BankScraper.js';
 import createScrapeResultMapper from '../Scraper/Mappers/DefaultScrapeResultMapper.js';
@@ -57,6 +58,7 @@ interface IWiringInputs {
  */
 interface IPipelineDeps {
   readonly bankScraper: BankScraper;
+  readonly bankRegistry: IBankRegistry;
   readonly accountImporter: AccountImporter;
   readonly scrapeResultMapper: ReturnType<typeof createScrapeResultMapper>;
 }
@@ -67,20 +69,18 @@ interface IPipelineDeps {
  * @param strategy - The scrape strategy (mock or live) selected by env.
  * @param mapper - The default scrape-result mapper.
  * @param logger - The shared logger.
- * @returns A fully wired BankScraper.
+ * @returns A tuple of the wired BankScraper and the registry it owns.
  */
 function buildBankScraper(
   strategy: IBankScrapeStrategy,
   mapper: ReturnType<typeof createScrapeResultMapper>,
   logger: ILogger,
-): BankScraper {
-  return new BankScraper({
-    registry: createBankRegistry(),
-    strategy,
-    mapper,
-    datePolicy: createDateRangePolicy(),
-    logger,
+): { scraper: BankScraper; registry: IBankRegistry } {
+  const registry = createBankRegistry();
+  const scraper = new BankScraper({
+    registry, strategy, mapper, datePolicy: createDateRangePolicy(), logger,
   });
+  return { scraper, registry };
 }
 
 /**
@@ -92,9 +92,12 @@ function buildBankScraper(
 function buildPipelineDeps(inputs: IWiringInputs): IPipelineDeps {
   const strategy = buildScrapeStrategy(inputs);
   const scrapeResultMapper = createScrapeResultMapper();
-  const bankScraper = buildBankScraper(strategy, scrapeResultMapper, inputs.logger);
+  const built = buildBankScraper(strategy, scrapeResultMapper, inputs.logger);
   const accountImporter = buildAccountImporter(inputs.services, inputs.resilience);
-  return { bankScraper, accountImporter, scrapeResultMapper };
+  return {
+    bankScraper: built.scraper, bankRegistry: built.registry,
+    accountImporter, scrapeResultMapper,
+  };
 }
 
 /**

@@ -9,8 +9,8 @@
 
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
-import type { ICanonicalScrapeResult, Procedure } from '../../Index.js';
-import { isFail } from '../../Index.js';
+import type { ICanonicalScrapeResult, ISignPolicy, Procedure } from '../../Index.js';
+import { isFail, isSuccess } from '../../Index.js';
 import type { IBankOpts } from './Shared.js';
 import { adaptFail, STAGE_MAP } from './Shared.js';
 
@@ -19,6 +19,20 @@ interface IMapArgs {
   readonly legacy: IScraperScrapingResult;
   readonly bankName: string;
   readonly bankConfig: IBankOpts['entry']['bankConfig'];
+  readonly signPolicy: ISignPolicy;
+}
+
+/**
+ * Resolves the sign policy for a bank via the injected registry,
+ * falling back to 'preserve' for unknown banks (matches
+ * BankScraper.mapAndAdapt's forward-path fallback).
+ * @param opts - Per-bank opts (provides ctx.services.bankRegistry + entry).
+ * @returns Resolved ISignPolicy or 'preserve' default.
+ */
+function resolveSignPolicy(opts: IBankOpts): ISignPolicy {
+  const resolved = opts.ctx.services.bankRegistry.resolve(opts.entry.bankName);
+  if (isSuccess(resolved)) return resolved.data.signPolicy;
+  return 'preserve';
 }
 
 /**
@@ -39,7 +53,7 @@ export default function mapStage(
 
 /**
  * Builds the mapper args object for legacyToCanonical.
- * @param opts - Per-bank opts (provides bankName + bankConfig).
+ * @param opts - Per-bank opts (provides bankName + bankConfig + registry).
  * @param scrape - Legacy provider result threaded as `legacy`.
  * @returns Frozen IMapArgs ready for the mapper service.
  */
@@ -50,5 +64,6 @@ function buildMapArgs(
     legacy: scrape,
     bankName: opts.entry.bankName,
     bankConfig: opts.entry.bankConfig,
+    signPolicy: resolveSignPolicy(opts),
   });
 }

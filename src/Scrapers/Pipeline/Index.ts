@@ -13,7 +13,7 @@ export type { IProcedureFailure,IProcedureSuccess, Procedure } from '../../Types
 export { fail, fromPromise, isFail,isSuccess, succeed } from '../../Types/Index.js';
 
 // Re-export shared domain + pipeline types used by Steps/Reducers
-export type { IBankConfig, ICanonicalScrapeResult } from '../../Types/Index.js';
+export type { IBankConfig, ICanonicalScrapeResult, ISignPolicy } from '../../Types/Index.js';
 export type {
   IBankFilter, IBankMetricsDelta, IBankQuarantineEntry,
   IBankQuarantineStage, IBankResult, IBankResultsState,

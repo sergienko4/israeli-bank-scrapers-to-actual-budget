@@ -114,6 +114,7 @@ describe('DefaultScrapeResultMapper.legacyToCanonical', () => {
       legacy: { success: false, errorMessage: 'timeout' } as never,
       bankName: 'discount',
       bankConfig: { id: '1' } as never,
+      signPolicy: 'preserve',
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -127,6 +128,7 @@ describe('DefaultScrapeResultMapper.legacyToCanonical', () => {
       legacy: { success: false } as never,
       bankName: 'discount',
       bankConfig: { id: '1' } as never,
+      signPolicy: 'preserve',
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -145,6 +147,7 @@ describe('DefaultScrapeResultMapper.legacyToCanonical', () => {
       } as never,
       bankName: 'discount',
       bankConfig: { daysBack: 7 } as never,
+      signPolicy: 'preserve',
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -159,11 +162,28 @@ describe('DefaultScrapeResultMapper.legacyToCanonical', () => {
     }
   });
 
+  it('propagates flip-credit signPolicy into metadata (credit-card banks)', () => {
+    const result = mapper.legacyToCanonical({
+      legacy: {
+        success: true,
+        accounts: [{ accountNumber: 'C1', balance: 0, txns: [] }],
+      } as never,
+      bankName: 'visacal',
+      bankConfig: { daysBack: 30 } as never,
+      signPolicy: 'flip-credit',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.metadata.signPolicyApplied).toBe('flip-credit');
+    }
+  });
+
   it('treats missing accounts as empty list', () => {
     const result = mapper.legacyToCanonical({
       legacy: { success: true } as never,
       bankName: 'discount',
       bankConfig: { id: '1' } as never,
+      signPolicy: 'preserve',
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -179,6 +199,7 @@ describe('DefaultScrapeResultMapper.legacyToCanonical', () => {
       } as never,
       bankName: 'discount',
       bankConfig: { id: '1' } as never,
+      signPolicy: 'preserve',
     });
     expect(result.success).toBe(true);
     if (result.success) {
@@ -194,6 +215,7 @@ describe('DefaultScrapeResultMapper.legacyToCanonical', () => {
       } as never,
       bankName: 'discount',
       bankConfig: { id: '1' } as never,
+      signPolicy: 'preserve',
     });
     expect(result.success).toBe(true);
     if (result.success) {

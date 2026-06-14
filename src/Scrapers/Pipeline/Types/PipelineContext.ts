@@ -5,6 +5,7 @@
 
 import type { ILogger } from '../../../Logger/ILogger.js';
 import type { IShutdownHandler } from '../../../Resilience/GracefulShutdown.js';
+import type { IBankRegistry } from '../../../Scraper/BankRegistry.js';
 import type { BankScraper } from '../../../Scraper/BankScraper.js';
 import type { IScrapeResultMapper } from '../../../Scraper/Mappers/IScrapeResultMapper.js';
 import type { AccountImporter } from '../../../Services/AccountImporter.js';
@@ -34,6 +35,7 @@ export interface IServiceContainer {
   readonly auditLogService: IAuditLog;
   readonly notificationService: NotificationService;
   readonly bankScraper: BankScraper;
+  readonly bankRegistry: IBankRegistry;
   readonly accountImporter: AccountImporter;
   readonly scrapeResultMapper: IScrapeResultMapper;
   readonly categoryResolver: ICategoryResolver | false;
