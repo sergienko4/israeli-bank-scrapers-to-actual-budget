@@ -1238,10 +1238,43 @@ export default tseslint.config(
       'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
     },
   },
+  // ─── Section 7v: ReceiptImportHandler + Receipt/ReceiptImportFlow max-lines: 200 ───
+  //
+  // WHY: ReceiptImportHandler.ts (320 LoC, coupling score 9) mixed the
+  // Telegram conversation state machine with Actual Budget API access,
+  // inline-menu rendering, smart-match, the photo OCR pipeline, and
+  // transaction import. The engine was carved into
+  // `src/Services/Receipt/ReceiptImportFlow.ts` so the handler is a thin
+  // conversation adapter (state machine + public callbacks) and the flow
+  // concentrates the API/menu/import orchestration.
+  //
+  // PRECEDENT (eslint-rules-guidlines.md §1): the prior split left a
+  // `max-lines: 310` grandfather LOOSENING (> global 300) on the handler
+  // with NO canary. Splitting the handler now, we REMOVE that grandfather
+  // and replace it with ONE combined tightened section at `max-lines: 200`
+  // (the same cap every Telegram/Webhook split cluster locks at), covering
+  // BOTH the slimmed handler AND the new flow so neither can drift back
+  // toward a god-class. New caps are ~20-40 % above today's largest
+  // effective measurement (flow ≈ 150 eff LoC).
+  //
+  // Scope:
+  //   - `src/Services/ReceiptImportHandler.ts` (thin adapter).
+  //   - `src/Services/Receipt/ReceiptImportFlow.ts` (the new engine).
+  //   - `tests/eslint-canaries/ReceiptImportHandlerMaxLines.canary.ts`
+  //     (canary fixture, > 200-LoC body).
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines: 200` rule survives on the canary fixture; flat-config rule
+  // keys are replaced (not merged) by later matching blocks, so the canary
+  // is configured by THIS last matching block.
   {
-    files: ['src/Services/ReceiptImportHandler.ts'],
+    files: [
+      'src/Services/ReceiptImportHandler.ts',
+      'src/Services/Receipt/ReceiptImportFlow.ts',
+      'tests/eslint-canaries/ReceiptImportHandlerMaxLines.canary.ts',
+    ],
     rules: {
-      'max-lines': ['error', { max: 310, skipBlankLines: true, skipComments: true }],
+      'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
     },
   },
 
