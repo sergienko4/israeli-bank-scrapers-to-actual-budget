@@ -144,16 +144,14 @@ export class ReceiptImportFlow {
       await this.reply('❌ API not connected — cannot write to budget');
       this._ctx.reset(); return fail('API not connected — cannot write to budget');
     }
-    const result = await importReceipt(this._api, this._notifier, {
-      date: st.receipt.date,
-      amount: st.receipt.amount,
-      merchant: st.receipt.merchant,
-      memo: st.receipt.memo,
-      accountId: st.selectedAccount,
-      categoryId: st.selectedCategory,
-    });
-    this._ctx.reset();
-    return result;
+    try {
+      const result = await importReceipt(this._api, this._notifier, {
+        date: st.receipt.date, amount: st.receipt.amount, merchant: st.receipt.merchant,
+        memo: st.receipt.memo, accountId: st.selectedAccount, categoryId: st.selectedCategory,
+      });
+      this._ctx.reset();
+      return result;
+    } catch (error: unknown) { getLogger().debug(`Import error: ${errorMessage(error)}`); this._ctx.reset(); await this.reply('❌ Failed to import receipt'); return fail('import error'); }
   }
 
   // ─── Private ───
