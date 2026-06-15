@@ -142,6 +142,11 @@ const CANARIES = {
     description:
       'PR 26 — src/Services/Notifications/Webhook/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
   },
+  'tests/eslint-canaries/ReceiptImportHandlerMaxLines.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 27 — ReceiptImportHandler.ts + Receipt/ReceiptImportFlow.ts capped at max-lines: 200 (this canary exceeds 200 LoC)',
+  },
 };
 
 let allPassed = true;

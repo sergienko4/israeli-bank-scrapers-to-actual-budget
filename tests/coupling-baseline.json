@@ -1,44 +1,14 @@
 {
-  "generatedAt": "2026-06-13",
-  "totalFiles": 175,
+  "generatedAt": "2026-06-15",
+  "totalFiles": 237,
   "scoreDistribution": {
-    "critical8plus": 5,
+    "critical8plus": 4,
     "high5to7": 26,
-    "medium3to4": 31,
-    "low1to2": 37,
-    "clean0": 76
+    "medium3to4": 27,
+    "low1to2": 49,
+    "clean0": 131
   },
   "files": [
-    {
-      "path": "src/Services/ReceiptImportHandler.ts",
-      "layer": "IS",
-      "lines": 320,
-      "valueImports": 5,
-      "typeImports": 5,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ReceiptPhotoOcrPipeline"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 9
-    },
     {
       "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
       "layer": "SC",
@@ -177,29 +147,6 @@
       "score": 8
     },
     {
-      "path": "src/Scraper/Strategies/LiveScrapeStrategy.ts",
-      "layer": "BP",
-      "lines": 387,
-      "valueImports": 6,
-      "typeImports": 8,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 7
-    },
-    {
       "path": "src/Services/AccountImporter.ts",
       "layer": "IS",
       "lines": 181,
@@ -232,11 +179,11 @@
       "score": 7
     },
     {
-      "path": "src/Services/MetricsService.ts",
+      "path": "src/Services/Receipt/ReceiptImportFlow.ts",
       "layer": "IS",
-      "lines": 331,
-      "valueImports": 2,
-      "typeImports": 1,
+      "lines": 219,
+      "valueImports": 5,
+      "typeImports": 6,
       "crossLayerValueDeps": [
         {
           "to": "src/Logger/Index.ts",
@@ -247,73 +194,17 @@
           "to": "src/Types/Index.ts",
           "toLayer": "ST",
           "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
         }
       ],
       "newClasses": [
-        "Map"
+        "ReceiptPhotoOcrPipeline"
       ],
       "newCount": 1,
-      "ocpRisks": [],
-      "score": 7
-    },
-    {
-      "path": "src/Services/ReceiptOcrService.ts",
-      "layer": "IS",
-      "lines": 240,
-      "valueImports": 5,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "RegExp"
-      ],
-      "newCount": 4,
-      "ocpRisks": [],
-      "score": 7
-    },
-    {
-      "path": "src/Services/SpendingWatchService.ts",
-      "layer": "IS",
-      "lines": 213,
-      "valueImports": 4,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date",
-        "Error"
-      ],
-      "newCount": 2,
       "ocpRisks": [],
       "score": 7
     },
@@ -747,6 +638,64 @@
       "score": 6
     },
     {
+      "path": "src/Services/ReceiptOcrService.ts",
+      "layer": "IS",
+      "lines": 138,
+      "valueImports": 6,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
+      "path": "src/Services/SpendingWatchService.ts",
+      "layer": "IS",
+      "lines": 37,
+      "valueImports": 4,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Error"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 6
+    },
+    {
       "path": "src/Services/TelegramPollHttp.ts",
       "layer": "IS",
       "lines": 159,
@@ -876,6 +825,29 @@
       "valueImports": 4,
       "typeImports": 1,
       "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 5
+    },
+    {
+      "path": "src/Services/Receipt/Ocr/Index.ts",
+      "layer": "IS",
+      "lines": 66,
+      "valueImports": 7,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
         {
           "to": "src/Types/Index.ts",
           "toLayer": "ST",
@@ -1044,7 +1016,7 @@
     {
       "path": "src/Scheduler/Process/SchedulerProcessLifecycle.ts",
       "layer": "SC",
-      "lines": 164,
+      "lines": 179,
       "valueImports": 2,
       "typeImports": 1,
       "crossLayerValueDeps": [
@@ -1137,10 +1109,10 @@
       "score": 4
     },
     {
-      "path": "src/Scraper/Mappers/DefaultScrapeResultMapper.ts",
+      "path": "src/Scraper/Mappers/FromLegacy.ts",
       "layer": "BP",
-      "lines": 176,
-      "valueImports": 4,
+      "lines": 95,
+      "valueImports": 3,
       "typeImports": 3,
       "crossLayerValueDeps": [
         {
@@ -1157,7 +1129,7 @@
       "newClasses": [
         "Date"
       ],
-      "newCount": 3,
+      "newCount": 2,
       "ocpRisks": [],
       "score": 4
     },
@@ -1181,20 +1153,6 @@
       ],
       "newClasses": [],
       "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
-      "layer": "BP",
-      "lines": 503,
-      "valueImports": 3,
-      "typeImports": 4,
-      "crossLayerValueDeps": [],
-      "newClasses": [
-        "Error"
-      ],
-      "newCount": 5,
       "ocpRisks": [],
       "score": 4
     },
@@ -1530,23 +1488,16 @@
       "score": 3
     },
     {
-      "path": "src/Services/DryRunCollector.ts",
-      "layer": "IS",
-      "lines": 217,
-      "valueImports": 1,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
+      "path": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
+      "layer": "BP",
+      "lines": 380,
+      "valueImports": 4,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
       "newClasses": [
-        "Date",
-        "IAccountPreview"
+        "Error"
       ],
-      "newCount": 3,
+      "newCount": 1,
       "ocpRisks": [],
       "score": 3
     },
@@ -1573,50 +1524,6 @@
         "PollerLifecycle"
       ],
       "newCount": 7,
-      "ocpRisks": [],
-      "score": 3
-    },
-    {
-      "path": "src/Services/Notifications/TelegramFormatter.ts",
-      "layer": "IS",
-      "lines": 352,
-      "valueImports": 0,
-      "typeImports": 2,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 3
-    },
-    {
-      "path": "src/Services/Notifications/WebhookNotifier.ts",
-      "layer": "IS",
-      "lines": 230,
-      "valueImports": 1,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "NetworkError"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 3
-    },
-    {
-      "path": "src/Types/Index.ts",
-      "layer": "ST",
-      "lines": 314,
-      "valueImports": 0,
-      "typeImports": 1,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
       "ocpRisks": [],
       "score": 3
     },
@@ -1895,6 +1802,26 @@
       "score": 2
     },
     {
+      "path": "src/Scraper/Mappers/ToCanonical.ts",
+      "layer": "BP",
+      "lines": 76,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
       "path": "src/Scraper/PhoneNumberNormaliser.ts",
       "layer": "BP",
       "lines": 59,
@@ -1929,6 +1856,60 @@
         "Date"
       ],
       "newCount": 4,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/AttemptRunner.ts",
+      "layer": "BP",
+      "lines": 147,
+      "valueImports": 3,
+      "typeImports": 5,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/ResultEnvelope.ts",
+      "layer": "BP",
+      "lines": 66,
+      "valueImports": 1,
+      "typeImports": 4,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/ScraperSetup.ts",
+      "layer": "BP",
+      "lines": 133,
+      "valueImports": 6,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 2
     },
@@ -2009,6 +1990,26 @@
       "score": 2
     },
     {
+      "path": "src/Services/DryRun/PreviewBuilder.ts",
+      "layer": "IS",
+      "lines": 66,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
       "path": "src/Services/Import/BatchFactory.ts",
       "layer": "IS",
       "lines": 150,
@@ -2049,6 +2050,44 @@
       "score": 2
     },
     {
+      "path": "src/Services/Metrics/Registry.ts",
+      "layer": "IS",
+      "lines": 165,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Map"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Metrics/Serializer.ts",
+      "layer": "IS",
+      "lines": 140,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
       "path": "src/Services/Notifications/NotificationGate.ts",
       "layer": "IS",
       "lines": 42,
@@ -2063,6 +2102,26 @@
       ],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/Notifications/WebhookNotifier.ts",
+      "layer": "IS",
+      "lines": 74,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Errors/ErrorTypes.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "NetworkError"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 2
     },
@@ -2094,6 +2153,82 @@
         {
           "to": "src/Types/Index.ts",
           "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/ReceiptImportHandler.ts",
+      "layer": "IS",
+      "lines": 182,
+      "valueImports": 2,
+      "typeImports": 6,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "ReceiptImportFlow"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/SpendingWatch/AlertFormatter.ts",
+      "layer": "IS",
+      "lines": 58,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/SpendingWatch/ThresholdEvaluator.ts",
+      "layer": "IS",
+      "lines": 58,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Services/SpendingWatch/TransactionQuery.ts",
+      "layer": "IS",
+      "lines": 41,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
           "dynamic": false
         }
       ],
@@ -2538,9 +2673,9 @@
     {
       "path": "src/Importer/ImporterWiring.ts",
       "layer": "(none)",
-      "lines": 193,
+      "lines": 196,
       "valueImports": 6,
-      "typeImports": 10,
+      "typeImports": 11,
       "crossLayerValueDeps": [],
       "newClasses": [
         "BankScraper"
@@ -2733,11 +2868,71 @@
       "score": 0
     },
     {
+      "path": "src/Scraper/Mappers/DefaultScrapeResultMapper.ts",
+      "layer": "BP",
+      "lines": 21,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Mappers/Index.ts",
+      "layer": "BP",
+      "lines": 10,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Scraper/Mappers/IScrapeResultMapper.ts",
       "layer": "BP",
-      "lines": 45,
+      "lines": 46,
       "valueImports": 0,
       "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Mappers/Sign.ts",
+      "layer": "BP",
+      "lines": 23,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Mappers/ToLegacy.ts",
+      "layer": "BP",
+      "lines": 38,
+      "valueImports": 0,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Mappers/Types.ts",
+      "layer": "BP",
+      "lines": 14,
+      "valueImports": 0,
+      "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -2762,6 +2957,54 @@
       "lines": 36,
       "valueImports": 0,
       "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/Index.ts",
+      "layer": "BP",
+      "lines": 8,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/OtpRetriever.ts",
+      "layer": "BP",
+      "lines": 65,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/Types.ts",
+      "layer": "BP",
+      "lines": 65,
+      "valueImports": 0,
+      "typeImports": 8,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Strategies/LiveScrapeStrategy.ts",
+      "layer": "BP",
+      "lines": 46,
+      "valueImports": 1,
+      "typeImports": 6,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -2811,9 +3054,9 @@
     {
       "path": "src/Scrapers/Pipeline/ContextFactory.ts",
       "layer": "BP",
-      "lines": 100,
+      "lines": 103,
       "valueImports": 1,
-      "typeImports": 15,
+      "typeImports": 16,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -2841,6 +3084,70 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Steps/Bank/ImportStage.ts",
+      "layer": "BP",
+      "lines": 53,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Steps/Bank/Index.ts",
+      "layer": "BP",
+      "lines": 16,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Steps/Bank/MapStage.ts",
+      "layer": "BP",
+      "lines": 70,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Steps/Bank/ScrapeStage.ts",
+      "layer": "BP",
+      "lines": 45,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Error"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Steps/Bank/Shared.ts",
+      "layer": "BP",
+      "lines": 70,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Error"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -2911,9 +3218,9 @@
     {
       "path": "src/Scrapers/Pipeline/Types/PipelineContext.ts",
       "layer": "BP",
-      "lines": 61,
+      "lines": 63,
       "valueImports": 0,
-      "typeImports": 14,
+      "typeImports": 15,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -2948,6 +3255,78 @@
       "path": "src/Services/Account/Index.ts",
       "layer": "IS",
       "lines": 19,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/DryRun/Collector.ts",
+      "layer": "IS",
+      "lines": 58,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/DryRun/Index.ts",
+      "layer": "IS",
+      "lines": 6,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/DryRun/TelegramFormatter.ts",
+      "layer": "IS",
+      "lines": 27,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/DryRun/TextFormatter.ts",
+      "layer": "IS",
+      "lines": 63,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/DryRun/Types.ts",
+      "layer": "IS",
+      "lines": 20,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/DryRunCollector.ts",
+      "layer": "IS",
+      "lines": 3,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -2993,11 +3372,155 @@
       "score": 0
     },
     {
+      "path": "src/Services/Metrics/Index.ts",
+      "layer": "IS",
+      "lines": 14,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Metrics/Summary.ts",
+      "layer": "IS",
+      "lines": 87,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Metrics/Types.ts",
+      "layer": "IS",
+      "lines": 53,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/MetricsService.ts",
+      "layer": "IS",
+      "lines": 16,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Notifications/INotifier.ts",
       "layer": "IS",
       "lines": 13,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Telegram/CompactFormat.ts",
+      "layer": "IS",
+      "lines": 72,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Telegram/DefaultFormat.ts",
+      "layer": "IS",
+      "lines": 53,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Telegram/EmojiFormat.ts",
+      "layer": "IS",
+      "lines": 83,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Telegram/Index.ts",
+      "layer": "IS",
+      "lines": 65,
+      "valueImports": 4,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Telegram/LedgerFormat.ts",
+      "layer": "IS",
+      "lines": 71,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Telegram/Shared.ts",
+      "layer": "IS",
+      "lines": 123,
+      "valueImports": 0,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Telegram/Types.ts",
+      "layer": "IS",
+      "lines": 25,
+      "valueImports": 0,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/TelegramFormatter.ts",
+      "layer": "IS",
+      "lines": 3,
+      "valueImports": 0,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3032,6 +3555,66 @@
       "score": 0
     },
     {
+      "path": "src/Services/Notifications/Webhook/DiscordFormat.ts",
+      "layer": "IS",
+      "lines": 41,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Webhook/Index.ts",
+      "layer": "IS",
+      "lines": 50,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Webhook/PlainFormat.ts",
+      "layer": "IS",
+      "lines": 59,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Webhook/Shared.ts",
+      "layer": "IS",
+      "lines": 19,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/Webhook/SlackFormat.ts",
+      "layer": "IS",
+      "lines": 40,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Notifications/WebhookNotifierFactory.ts",
       "layer": "IS",
       "lines": 50,
@@ -3049,7 +3632,95 @@
     {
       "path": "src/Services/Receipt/Index.ts",
       "layer": "IS",
-      "lines": 17,
+      "lines": 19,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/Ocr/AmountExtractor.ts",
+      "layer": "IS",
+      "lines": 99,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/Ocr/DateExtractor.ts",
+      "layer": "IS",
+      "lines": 63,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/Ocr/MemoExtractor.ts",
+      "layer": "IS",
+      "lines": 19,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/Ocr/MerchantExtractor.ts",
+      "layer": "IS",
+      "lines": 79,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/Ocr/Patterns.ts",
+      "layer": "IS",
+      "lines": 87,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "RegExp"
+      ],
+      "newCount": 4,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/OcrImagePreprocess.ts",
+      "layer": "IS",
+      "lines": 44,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/OcrParsing.ts",
+      "layer": "IS",
+      "lines": 3,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -3073,9 +3744,33 @@
     {
       "path": "src/Services/Receipt/Types.ts",
       "layer": "IS",
-      "lines": 31,
+      "lines": 64,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/SpendingWatch/Index.ts",
+      "layer": "IS",
+      "lines": 11,
       "valueImports": 0,
       "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/SpendingWatch/Types.ts",
+      "layer": "IS",
+      "lines": 17,
+      "valueImports": 0,
+      "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3157,6 +3852,102 @@
       "score": 0
     },
     {
+      "path": "src/Types/Actual.ts",
+      "layer": "ST",
+      "lines": 30,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Types/Bank.ts",
+      "layer": "ST",
+      "lines": 70,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Types/Categorization.ts",
+      "layer": "ST",
+      "lines": 23,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Types/Import.ts",
+      "layer": "ST",
+      "lines": 67,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Types/Importer.ts",
+      "layer": "ST",
+      "lines": 40,
+      "valueImports": 0,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Types/Index.ts",
+      "layer": "ST",
+      "lines": 90,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Types/Logging.ts",
+      "layer": "ST",
+      "lines": 12,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Types/Notifications.ts",
+      "layer": "ST",
+      "lines": 37,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Types/Pipeline/Index.ts",
       "layer": "ST",
       "lines": 54,
@@ -3200,6 +3991,18 @@
       "lines": 57,
       "valueImports": 0,
       "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Types/Telegram.ts",
+      "layer": "ST",
+      "lines": 44,
+      "valueImports": 0,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
