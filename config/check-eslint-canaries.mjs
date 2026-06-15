@@ -132,6 +132,11 @@ const CANARIES = {
     description:
       'PR 23 — src/Services/Notifications/Telegram/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
   },
+  'tests/eslint-canaries/TypesIndexMaxLines.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 25 (Types barrel split) — src/Types/** capped at max-lines: 80 (this canary file exceeds 80 LoC)',
+  },
 };
 
 let allPassed = true;

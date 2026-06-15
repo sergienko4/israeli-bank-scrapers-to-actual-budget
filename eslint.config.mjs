@@ -1183,6 +1183,33 @@ export default tseslint.config(
     },
   },
 
+  // ─── Section 7t: Types/** barrel + domain files max-lines: 80 ───
+  //
+  // The Types/Index.ts god-file (30+ inline interface/type defs) was split
+  // into eight cohesive domain files (Actual, Bank, Notifications, Logging,
+  // Categorization, Telegram, Importer, Import) with Index.ts kept as a pure
+  // re-export barrel so all ~125 consumer imports stay valid. The default
+  // cap is `max: 300`; this rule caps every file under `src/Types/**` at 80
+  // so neither the barrel nor any domain file can drift back toward a
+  // god-file. Per eslint-rules-guidlines.md §1 PRECEDENT, the ceiling is
+  // ~35% above today's largest effective measurement (the Index.ts barrel
+  // at 59 effective LoC). New type groups MUST land in a new
+  // `src/Types/<Domain>.ts` file, not inline in an existing one.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines: 80` rule survives on the canary fixture; flat-config rule
+  // keys are replaced (not merged) by later matching blocks, so the canary
+  // file MUST be configured by the LAST block listing it.
+  {
+    files: [
+      'src/Types/**/*.ts',
+      'tests/eslint-canaries/TypesIndexMaxLines.canary.ts',
+    ],
+    rules: {
+      'max-lines': ['error', { max: 80, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
