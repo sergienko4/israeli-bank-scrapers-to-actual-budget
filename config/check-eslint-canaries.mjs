@@ -137,6 +137,11 @@ const CANARIES = {
     description:
       'PR 25 (Types barrel split) — src/Types/** capped at max-lines: 80 (this canary file exceeds 80 LoC)',
   },
+  'tests/eslint-canaries/WebhookFormatterMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 26 — src/Services/Notifications/Webhook/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
 };
 
 let allPassed = true;

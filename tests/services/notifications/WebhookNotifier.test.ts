@@ -126,6 +126,17 @@ describe('WebhookNotifier', () => {
       expect(body.content).toContain('❌ leumi');
       expect(body.content).toContain('Timeout');
     });
+
+    it('slack: renders 0.0s for a bank with 0ms duration (valid 0 not omitted)', async () => {
+      const notifier = new WebhookNotifier({ url: 'https://hooks.slack.com/test', format: 'slack' });
+      const zeroDur = makeSummary({
+        banks: [{ bankName: 'discount', startTime: 0, endTime: 0, duration: 0, status: 'success', transactionsImported: 5, transactionsSkipped: 0, accounts: [] }]
+      });
+      await notifier.sendSummary(zeroDur);
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.text).toContain('discount');
+      expect(body.text).toContain('0.0s');
+    });
   });
 
   describe('error handling', () => {

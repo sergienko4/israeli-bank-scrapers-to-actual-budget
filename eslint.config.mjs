@@ -1210,7 +1210,34 @@ export default tseslint.config(
     },
   },
 
-  // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
+  // ─── Section 7u: Webhook formatter cluster max-fn-lines: 10 ───
+  //
+  // WHY: WebhookNotifier.ts (211 LoC) mixed HTTP transport with Slack/Discord/
+  // plain payload presentation. The pure presentation functions were carved
+  // into a `src/Services/Notifications/Webhook/**` cluster (Shared /
+  // SlackFormat / DiscordFormat / PlainFormat / Index) so the notifier is
+  // transport-only and new payload formats are additive. Per §1 PRECEDENT in
+  // eslint-rules-guidlines.md, every cluster shipped via a split PR locks at
+  // 10 effective LoC per function so no formatter can drift back into a
+  // god-function.
+  //
+  // Scope:
+  //   - `src/Services/Notifications/Webhook/**/*.ts` (5 new files).
+  //   - `tests/eslint-canaries/WebhookFormatterMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, >10-LoC fn body).
+  //
+  // NOTE: Placed AFTER Section 7r (Telegram, the sibling formatter cluster)
+  // so the canary file is configured by the LAST matching block; flat-config
+  // rule keys are replaced (not merged) by later blocks.
+  {
+    files: [
+      'src/Services/Notifications/Webhook/**/*.ts',
+      'tests/eslint-canaries/WebhookFormatterMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
   {
     files: ['src/Services/ReceiptImportHandler.ts'],
     rules: {
