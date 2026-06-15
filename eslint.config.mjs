@@ -1134,6 +1134,25 @@ export default tseslint.config(
     },
   },
 
+  // ─── Section 7r: Telegram formatter cluster max-fn-lines: 10 ───
+  // Placed AFTER Section 7q (parallel-OODA sibling).
+  // Scope: src/Services/Notifications/Telegram/**/*.ts (7 new files:
+  //   Types / Shared / DefaultFormat / CompactFormat / LedgerFormat /
+  //   EmojiFormat / Index) carved out of TelegramFormatter.ts (330 LoC).
+  // Backed by canary fixture
+  // `tests/eslint-canaries/TelegramFormatterMaxLinesPerFunction.canary.ts`
+  // per §2 CANARY. The harness at `config/check-eslint-canaries.mjs`
+  // asserts the rule fires.
+  {
+    files: [
+      'src/Services/Notifications/Telegram/**/*.ts',
+      'tests/eslint-canaries/TelegramFormatterMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // ─── Section 7s: Receipt Ocr/ cluster max-fn-lines: 10 ───
   //
   // WHY a new section rather than extending Section 7k:
@@ -1152,7 +1171,7 @@ export default tseslint.config(
   //     (canary fixture, 12-LoC fn body).
   //
   // NOTE: IIFEs intentionally NOT included (per PR #441 F2 lesson).
-  // NOTE: Placed AFTER Section 7q (parallel-OODA sibling) so the
+  // NOTE: Placed AFTER Section 7r (Telegram, parallel-OODA sibling merged first) so the
   // canary file is configured by the LAST matching block.
   {
     files: [
