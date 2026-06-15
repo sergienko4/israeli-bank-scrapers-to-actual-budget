@@ -3,6 +3,17 @@
 # Prevent MSYS from converting Unix paths to Windows paths for Docker volume mounts
 export MSYS_NO_PATHCONV=1
 
+# ── Commit-stage scope (Testing Diamond) ──────────────────────────
+# Heavy acceptance-stage gates run in GitHub CI ONLY, never in this hook:
+#   - Docker image build (--no-cache) + scraper-API smoke test
+#   - Trivy image scan (depends on the built image)
+#   - mocked E2E (test:e2e:mock) + Telegram E2E (test:e2e)
+# CI parity is enforced by .github/workflows/pr.yml (build / trivy / e2e
+# jobs) and _e2e-suite.yml (test:e2e:setup + test:e2e). Keeping only the
+# fast lint/type/static/unit gates locally holds commits to ~1-2 min and
+# avoids blocking on the GitHub-rate-limited camoufox fetch in the Docker
+# build. See chore(husky) PR moving these gates to CI-only.
+
 echo ""
 echo "🛑 MANDATORY QUALITY GATE INITIATED 🛑"
 echo "==========================================="
@@ -53,7 +64,7 @@ wait_gates() {
 # PHASE 1: Independent gates (no dependencies — all parallel)
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "⚡ Phase 1/3: Running 12 independent gates in parallel..."
+echo "⚡ Phase 1/2: Running 15 independent gates in parallel..."
 echo ""
 
 run_gate "1-typecheck"    "Type-checking TypeScript"       npm run type-check
@@ -100,73 +111,21 @@ echo "✅ Phase 1 complete (15 gates passed)"
 # PHASE 2: Gates that need build output (parallel)
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "⚡ Phase 2/3: Running 4 build-dependent gates in parallel..."
+echo "⚡ Phase 2/2: Running 2 build-dependent gates in parallel..."
 echo ""
 
 run_gate "4-typedoc"      "Generating TypeDoc API docs"    npm run docs
 run_gate "5-unittest"     "Running unit tests + coverage"  npm run test:unit
-run_gate "13-e2e-mock"    "Running mocked E2E tests"       npm run test:e2e:mock
 
-# Docker build runs in foreground — Phase 3 needs the image variable
-# Force clean build: remove ALL local importer images + dangling layers
-LOCAL_IMAGE="israeli-bank-importer:pre-commit"
-echo "  🧹 Removing all local importer images..."
-docker rmi -f "$LOCAL_IMAGE" israeli-bank-importer-importer:latest 2>/dev/null || true
-docker image prune -f 2>/dev/null || true
-echo "  🐳 Building Docker image (no cache)..."
-docker build --no-cache -t "$LOCAL_IMAGE" . > "$GATE_DIR/10-docker-build.log" 2>&1
-if [ $? -ne 0 ]; then
-  echo "  ❌ 10-docker-build"
-  cat "$GATE_DIR/10-docker-build.log"
-  exit 1
-fi
-
-echo "  🌐 Scraper API smoke test..."
-# Verifies the scraper package imports inside the Docker image and that
-# createScraper() returns an instance with the expected public API.
-# Catches breaking changes in minor bumps (the kind that silently
-# removed .initialize()/.terminate() and re-cased CompanyTypes keys).
-# The full browser-launch path is exercised end-to-end by the e2e-mock
-# gate.
-docker run --rm "$LOCAL_IMAGE" \
-  node --input-type=module -e "
-    import { createScraper } from '@sergienko4/israeli-bank-scrapers';
-    const s = createScraper({ companyId: 'hapoalim', startDate: new Date() });
-    if (typeof s.scrape !== 'function') {
-      throw new Error('Scraper API broken: .scrape() missing');
-    }
-    console.log('Scraper API smoke test passed');
-  " > "$GATE_DIR/10-docker-smoke.log" 2>&1
-if [ $? -ne 0 ]; then
-  echo "  ❌ 10-docker-smoke"
-  cat "$GATE_DIR/10-docker-smoke.log"
-  exit 1
-fi
-echo "  ✅ 10-docker"
-
-wait_gates "4-typedoc" "5-unittest" "13-e2e-mock"
+wait_gates "4-typedoc" "5-unittest"
 
 echo ""
-echo "✅ Phase 2 complete (4 gates passed)"
-
-# ═══════════════════════════════════════════════════════════════════
-# PHASE 3: Gates that need Docker image (parallel)
-# ═══════════════════════════════════════════════════════════════════
-echo ""
-echo "⚡ Phase 3/3: Running 2 final gates in parallel..."
-echo ""
-
-run_gate "12-trivy" "Scanning Docker image (Trivy)" docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$(pwd)/config/trivy:/trivy-config" aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c image --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed --scanners vuln,secret --secret-config /trivy-config/secret.yaml --pkg-types os,library --skip-dirs 'root/.npm' "$LOCAL_IMAGE"
-run_gate "14-e2e-telegram" "Running real E2E tests (Telegram)" npm run test:e2e
-
-wait_gates "12-trivy" "14-e2e-telegram"
-
-echo ""
-echo "✅ Phase 3 complete (2 gates passed)"
+echo "✅ Phase 2 complete (2 gates passed)"
 
 # ────────────────────────────────────────────────────────────────
 echo ""
 echo "==========================================="
-echo "✅ ALL 21 GATES PASSED. COMMITTING."
-echo "   (CodeQL — GitHub CI only, no local equivalent)"
+echo "✅ ALL 17 GATES PASSED. COMMITTING."
+echo "   (Docker build, Trivy, mocked + Telegram E2E, CodeQL —"
+echo "    GitHub CI only: .github/workflows/pr.yml + _e2e-suite.yml)"
 echo "==========================================="
