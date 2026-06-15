@@ -12,7 +12,7 @@ import type { IBankMetrics } from '../../MetricsService.js';
  */
 export default function bankLine(b: IBankMetrics): string {
   const icon = b.status === 'success' ? '✅' : '❌';
-  const dur = b.duration ? `${(b.duration / 1000).toFixed(1)}s` : '';
+  const dur = b.duration === undefined ? '' : `${(b.duration / 1000).toFixed(1)}s`;
   const errSuffix = b.error ? ` — ${b.error}` : '';
   return `${icon} ${b.bankName}: ${String(b.transactionsImported)} txns ${dur}${errSuffix}`;
 }
