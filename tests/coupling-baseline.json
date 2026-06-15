@@ -2,341 +2,13 @@
   "generatedAt": "2026-06-15",
   "totalFiles": 238,
   "scoreDistribution": {
-    "critical8plus": 3,
-    "high5to7": 27,
-    "medium3to4": 28,
-    "low1to2": 49,
-    "clean0": 131
+    "critical8plus": 0,
+    "high5to7": 1,
+    "medium3to4": 6,
+    "low1to2": 23,
+    "clean0": 208
   },
   "files": [
-    {
-      "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
-      "layer": "SC",
-      "lines": 65,
-      "valueImports": 5,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Config/ConfigLoader.ts",
-          "toLayer": "CC",
-          "dynamic": true
-        },
-        {
-          "to": "src/Config/ConfigValidator.ts",
-          "toLayer": "CC",
-          "dynamic": true
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 8
-    },
-    {
-      "path": "src/Scheduler/Telegram/PollerWiring.ts",
-      "layer": "SC",
-      "lines": 46,
-      "valueImports": 4,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/TelegramPoller.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "TelegramPoller"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 8
-    },
-    {
-      "path": "src/Scheduler/TelegramSchedulerWiring.ts",
-      "layer": "SC",
-      "lines": 76,
-      "valueImports": 6,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Services/Notifications/TelegramNotifier.ts",
-          "toLayer": "IS",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Error",
-        "TelegramNotifier"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 8
-    },
-    {
-      "path": "src/Services/AccountImporter.ts",
-      "layer": "IS",
-      "lines": 181,
-      "valueImports": 8,
-      "typeImports": 6,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Scraper/BankScraper.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "AccountLogPresenter",
-        "AccountReconciler",
-        "LiveAccountWriter"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 7
-    },
-    {
-      "path": "src/Services/Receipt/ReceiptImportFlow.ts",
-      "layer": "IS",
-      "lines": 217,
-      "valueImports": 5,
-      "typeImports": 6,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ReceiptPhotoOcrPipeline"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 7
-    },
-    {
-      "path": "src/Services/TelegramImportCoordinator.ts",
-      "layer": "IS",
-      "lines": 301,
-      "valueImports": 3,
-      "typeImports": 6,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 7
-    },
-    {
-      "path": "src/Config/ConfigLoader.ts",
-      "layer": "CC",
-      "lines": 168,
-      "valueImports": 10,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Scheduler/Config/ConfigFileReader.ts",
-      "layer": "SC",
-      "lines": 89,
-      "valueImports": 4,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Config/ConfigEncryption.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Scheduler/ConfigBootstrap.ts",
-      "layer": "SC",
-      "lines": 58,
-      "valueImports": 4,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Scheduler/CronLoop.ts",
-      "layer": "SC",
-      "lines": 118,
-      "valueImports": 5,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Promise"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Scheduler/Telegram/CommandRegistry.ts",
-      "layer": "SC",
-      "lines": 77,
-      "valueImports": 3,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ConfigurationError.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigurationError"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 6
-    },
     {
       "path": "src/Scheduler/Telegram/ReceiptHandlerFactory.ts",
       "layer": "SC",
@@ -369,685 +41,21 @@
       "score": 6
     },
     {
-      "path": "src/Scraper/FailureLogShim.ts",
-      "layer": "BP",
-      "lines": 40,
-      "valueImports": 3,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ScraperErrorMessages.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/HistoryCategoryResolver.ts",
-      "layer": "IS",
-      "lines": 119,
-      "valueImports": 3,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Map"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/Import/BatchSummaryNotifier.ts",
-      "layer": "IS",
-      "lines": 66,
-      "valueImports": 3,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/Import/PollerLifecycle.ts",
-      "layer": "IS",
-      "lines": 75,
-      "valueImports": 3,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/ImportQueue.ts",
-      "layer": "IS",
-      "lines": 109,
-      "valueImports": 3,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Error"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/Notifications/TelegramOtpPoller.ts",
-      "layer": "IS",
-      "lines": 122,
-      "valueImports": 4,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Promise",
-        "TimeoutError"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/Receipt/ReceiptImporter.ts",
-      "layer": "IS",
-      "lines": 180,
-      "valueImports": 4,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/ReceiptApiAdapter.ts",
-      "layer": "IS",
-      "lines": 50,
-      "valueImports": 4,
+      "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
+      "layer": "SC",
+      "lines": 65,
+      "valueImports": 5,
       "typeImports": 2,
       "crossLayerValueDeps": [
         {
           "to": "src/Config/ConfigLoader.ts",
           "toLayer": "CC",
-          "dynamic": false
+          "dynamic": true
         },
         {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
+          "to": "src/Config/ConfigValidator.ts",
           "toLayer": "CC",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigLoader",
-        "ConfigurationError"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/ReceiptOcrService.ts",
-      "layer": "IS",
-      "lines": 138,
-      "valueImports": 6,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/SpendingWatchService.ts",
-      "layer": "IS",
-      "lines": 37,
-      "valueImports": 4,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Error"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/TelegramPollHttp.ts",
-      "layer": "IS",
-      "lines": 159,
-      "valueImports": 3,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "AbortController",
-        "TelegramPollHttp"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/TelegramQueryCommands.ts",
-      "layer": "IS",
-      "lines": 193,
-      "valueImports": 5,
-      "typeImports": 6,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "LogFileReader"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/Transaction/AccountResolver.ts",
-      "layer": "IS",
-      "lines": 106,
-      "valueImports": 3,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Actual"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Services/TransactionService.ts",
-      "layer": "IS",
-      "lines": 102,
-      "valueImports": 6,
-      "typeImports": 4,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "AccountResolver",
-        "DedupQuery",
-        "TransactionBatchImporter"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 6
-    },
-    {
-      "path": "src/Config/ConfigLoaderValidator.ts",
-      "layer": "CC",
-      "lines": 311,
-      "valueImports": 4,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 5
-    },
-    {
-      "path": "src/Services/Receipt/Ocr/Index.ts",
-      "layer": "IS",
-      "lines": 66,
-      "valueImports": 7,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 5
-    },
-    {
-      "path": "src/Services/TelegramCommandHandler.ts",
-      "layer": "IS",
-      "lines": 187,
-      "valueImports": 8,
-      "typeImports": 7,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "CommandRouter",
-        "TelegramImportCoordinator",
-        "TelegramQueryCommands"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 5
-    },
-    {
-      "path": "src/Services/TelegramPoller.ts",
-      "layer": "IS",
-      "lines": 242,
-      "valueImports": 5,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "AbortController",
-        "Promise",
-        "TelegramPollHttp",
-        "TelegramPollRecovery",
-        "TelegramUpdateDispatcher"
-      ],
-      "newCount": 7,
-      "ocpRisks": [],
-      "score": 5
-    },
-    {
-      "path": "src/Config/ConfigEncryption.ts",
-      "layer": "CC",
-      "lines": 148,
-      "valueImports": 3,
-      "typeImports": 0,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigurationError"
-      ],
-      "newCount": 4,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Logger/LogCleanup.ts",
-      "layer": "CC",
-      "lines": 89,
-      "valueImports": 4,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date",
-        "Set"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Resilience/GracefulShutdown.ts",
-      "layer": "CC",
-      "lines": 94,
-      "valueImports": 3,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Resilience/RetryStrategy.ts",
-      "layer": "CC",
-      "lines": 130,
-      "valueImports": 3,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Error",
-        "Promise",
-        "ShutdownError"
-      ],
-      "newCount": 4,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Scheduler/ImportProcessRunner.ts",
-      "layer": "SC",
-      "lines": 108,
-      "valueImports": 3,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date",
-        "Promise"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Scheduler/Process/SchedulerProcessLifecycle.ts",
-      "layer": "SC",
-      "lines": 179,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Scheduler/SchedulerBootstrap.ts",
-      "layer": "SC",
-      "lines": 141,
-      "valueImports": 6,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
+          "dynamic": true
         }
       ],
       "newClasses": [],
@@ -1082,427 +90,14 @@
       "score": 4
     },
     {
-      "path": "src/Scraper/CredentialsBuilder.ts",
-      "layer": "BP",
-      "lines": 61,
-      "valueImports": 3,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/MaskPhone.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Scraper/Mappers/FromLegacy.ts",
-      "layer": "BP",
-      "lines": 95,
-      "valueImports": 3,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Scraper/Strategies/MockScrapeStrategy.ts",
-      "layer": "BP",
-      "lines": 133,
-      "valueImports": 3,
-      "typeImports": 4,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/Account/AccountReconciler.ts",
-      "layer": "IS",
-      "lines": 104,
-      "valueImports": 2,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Map"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/Account/LiveAccountWriter.ts",
-      "layer": "IS",
-      "lines": 171,
-      "valueImports": 2,
-      "typeImports": 4,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/Notifications/NotificationDispatcher.ts",
-      "layer": "IS",
-      "lines": 78,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/Notifications/TelegramApiClient.ts",
-      "layer": "IS",
-      "lines": 194,
-      "valueImports": 2,
-      "typeImports": 0,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "NetworkError"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/Notifications/TelegramNotifier.ts",
-      "layer": "IS",
-      "lines": 187,
-      "valueImports": 6,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "TelegramApiClient"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/Receipt/ReceiptPayeeMatcher.ts",
-      "layer": "IS",
-      "lines": 77,
-      "valueImports": 2,
+      "path": "src/Config/ConfigLoaderValidator.ts",
+      "layer": "CC",
+      "lines": 311,
+      "valueImports": 4,
       "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
+      "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/ReconciliationService.ts",
-      "layer": "IS",
-      "lines": 93,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date",
-        "Error"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/TelegramPollRecovery.ts",
-      "layer": "IS",
-      "lines": 113,
-      "valueImports": 3,
-      "typeImports": 0,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/TelegramUpdateDispatcher.ts",
-      "layer": "IS",
-      "lines": 198,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/NetworkError.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "NetworkError",
-        "TelegramUpdateDispatcher"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/Transaction/TransactionBatchImporter.ts",
-      "layer": "IS",
-      "lines": 194,
-      "valueImports": 3,
-      "typeImports": 4,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/TranslateCategoryResolver.ts",
-      "layer": "IS",
-      "lines": 64,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Services/TwoFactorService.ts",
-      "layer": "IS",
-      "lines": 111,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "TwoFactorAuthError"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Config/ConfigValidator.ts",
-      "layer": "CC",
-      "lines": 106,
-      "valueImports": 8,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigLoader",
-        "ConfigValidator"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 3
-    },
-    {
-      "path": "src/Config/Validators/NotificationChannelValidators.ts",
-      "layer": "CC",
-      "lines": 150,
-      "valueImports": 1,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [
-        "if(config.X) chain x2"
-      ],
-      "score": 3
-    },
-    {
-      "path": "src/Logger/Index.ts",
-      "layer": "CC",
-      "lines": 93,
-      "valueImports": 7,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "FileLogger",
-        "LogBuffer",
-        "LogMediator",
-        "PinoAdapter"
-      ],
-      "newCount": 5,
       "ocpRisks": [],
       "score": 3
     },
@@ -1521,120 +116,46 @@
       "score": 3
     },
     {
-      "path": "src/Services/ImportMediator.ts",
+      "path": "src/Services/AccountImporter.ts",
       "layer": "IS",
-      "lines": 168,
-      "valueImports": 7,
-      "typeImports": 3,
+      "lines": 181,
+      "valueImports": 8,
+      "typeImports": 6,
       "crossLayerValueDeps": [
         {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
+          "to": "src/Scraper/BankScraper.ts",
+          "toLayer": "BP",
           "dynamic": false
         }
       ],
       "newClasses": [
-        "BatchSummaryNotifier",
-        "Date",
-        "Error",
-        "ImportQueue",
-        "JobProcessor",
-        "Map",
-        "PollerLifecycle"
+        "AccountLogPresenter",
+        "AccountReconciler",
+        "LiveAccountWriter"
       ],
-      "newCount": 7,
+      "newCount": 3,
       "ocpRisks": [],
       "score": 3
     },
     {
-      "path": "src/Config/Loaders/EnvLoader.ts",
-      "layer": "CC",
-      "lines": 158,
-      "valueImports": 1,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
+      "path": "src/Services/TelegramImportCoordinator.ts",
+      "layer": "IS",
+      "lines": 301,
+      "valueImports": 3,
+      "typeImports": 6,
+      "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
       "ocpRisks": [],
-      "score": 2
+      "score": 3
     },
     {
-      "path": "src/Config/Loaders/JsonFileReader.ts",
+      "path": "src/Config/ConfigLoader.ts",
       "layer": "CC",
-      "lines": 52,
-      "valueImports": 4,
+      "lines": 168,
+      "valueImports": 10,
       "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ConfigurationError"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Config/Validators/BankDateValidators.ts",
-      "layer": "CC",
-      "lines": 127,
-      "valueImports": 1,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Config/Validators/ConfigOnlineChecker.ts",
-      "layer": "CC",
-      "lines": 125,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Config/Validators/OptionalSectionValidators.ts",
-      "layer": "CC",
-      "lines": 96,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
+      "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
       "ocpRisks": [],
@@ -1682,26 +203,6 @@
       "score": 2
     },
     {
-      "path": "src/Logger/LogRotatingStream.ts",
-      "layer": "CC",
-      "lines": 95,
-      "valueImports": 5,
-      "typeImports": 0,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
       "path": "src/Logger/MaskPhone.ts",
       "layer": "CC",
       "lines": 27,
@@ -1720,22 +221,20 @@
       "score": 2
     },
     {
-      "path": "src/Resilience/TimeoutWrapper.ts",
-      "layer": "CC",
-      "lines": 39,
-      "valueImports": 1,
-      "typeImports": 0,
+      "path": "src/Scheduler/Config/ConfigFileReader.ts",
+      "layer": "SC",
+      "lines": 89,
+      "valueImports": 4,
+      "typeImports": 1,
       "crossLayerValueDeps": [
         {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
+          "to": "src/Config/ConfigEncryption.ts",
+          "toLayer": "CC",
           "dynamic": false
         }
       ],
-      "newClasses": [
-        "Promise"
-      ],
-      "newCount": 1,
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 2
     },
@@ -1780,611 +279,95 @@
       "score": 2
     },
     {
-      "path": "src/Scraper/BankRegistry.ts",
-      "layer": "BP",
-      "lines": 121,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "DefaultBankRegistry",
-        "Map"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Scraper/DateRangeShims.ts",
-      "layer": "BP",
-      "lines": 54,
-      "valueImports": 1,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Scraper/Mappers/ToCanonical.ts",
-      "layer": "BP",
-      "lines": 76,
-      "valueImports": 2,
+      "path": "src/Scheduler/Telegram/PollerWiring.ts",
+      "layer": "SC",
+      "lines": 46,
+      "valueImports": 4,
       "typeImports": 3,
       "crossLayerValueDeps": [
         {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
+          "to": "src/Services/TelegramPoller.ts",
+          "toLayer": "IS",
           "dynamic": false
         }
       ],
       "newClasses": [
-        "Date"
+        "TelegramPoller"
       ],
       "newCount": 1,
       "ocpRisks": [],
       "score": 2
     },
     {
-      "path": "src/Scraper/PhoneNumberNormaliser.ts",
-      "layer": "BP",
-      "lines": 59,
-      "valueImports": 1,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Scraper/Policies/DateRangePolicy.ts",
-      "layer": "BP",
-      "lines": 110,
-      "valueImports": 1,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 4,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Scraper/Strategies/Live/AttemptRunner.ts",
-      "layer": "BP",
-      "lines": 147,
-      "valueImports": 3,
-      "typeImports": 5,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Scraper/Strategies/Live/ResultEnvelope.ts",
-      "layer": "BP",
-      "lines": 66,
-      "valueImports": 1,
-      "typeImports": 4,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Scraper/Strategies/Live/ScraperSetup.ts",
-      "layer": "BP",
-      "lines": 133,
+      "path": "src/Scheduler/TelegramSchedulerWiring.ts",
+      "layer": "SC",
+      "lines": 76,
       "valueImports": 6,
       "typeImports": 2,
       "crossLayerValueDeps": [
         {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Scrapers/Pipeline/Runner/PipelineRunner.ts",
-      "layer": "BP",
-      "lines": 53,
-      "valueImports": 1,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Account/AccountLogPresenter.ts",
-      "layer": "IS",
-      "lines": 82,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Account/AccountTargetResolver.ts",
-      "layer": "IS",
-      "lines": 32,
-      "valueImports": 1,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/AuditLogService.ts",
-      "layer": "IS",
-      "lines": 169,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
+          "to": "src/Services/Notifications/TelegramNotifier.ts",
+          "toLayer": "IS",
           "dynamic": false
         }
       ],
       "newClasses": [
-        "Date",
         "Error",
-        "IAuditEntry"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/DryRun/PreviewBuilder.ts",
-      "layer": "IS",
-      "lines": 66,
-      "valueImports": 1,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
+        "TelegramNotifier"
       ],
       "newCount": 2,
       "ocpRisks": [],
       "score": 2
     },
     {
-      "path": "src/Services/Import/BatchFactory.ts",
-      "layer": "IS",
-      "lines": 150,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "IBatchTracker",
-        "IImportJob",
-        "Promise"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Import/JobProcessor.ts",
-      "layer": "IS",
-      "lines": 111,
-      "valueImports": 2,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Metrics/Registry.ts",
-      "layer": "IS",
-      "lines": 165,
-      "valueImports": 3,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Map"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Metrics/Serializer.ts",
-      "layer": "IS",
-      "lines": 140,
-      "valueImports": 1,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Notifications/NotificationGate.ts",
-      "layer": "IS",
-      "lines": 42,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Notifications/WebhookNotifier.ts",
-      "layer": "IS",
-      "lines": 74,
-      "valueImports": 2,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ErrorTypes.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "NetworkError"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/NotificationService.ts",
-      "layer": "IS",
-      "lines": 71,
-      "valueImports": 3,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Receipt/ReceiptPhotoOcrPipeline.ts",
-      "layer": "IS",
-      "lines": 70,
-      "valueImports": 3,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/ReceiptImportHandler.ts",
-      "layer": "IS",
-      "lines": 182,
-      "valueImports": 2,
-      "typeImports": 6,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "ReceiptImportFlow"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/SpendingWatch/AlertFormatter.ts",
-      "layer": "IS",
-      "lines": 58,
-      "valueImports": 3,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/SpendingWatch/ThresholdEvaluator.ts",
-      "layer": "IS",
-      "lines": 58,
-      "valueImports": 1,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/SpendingWatch/TransactionQuery.ts",
-      "layer": "IS",
-      "lines": 41,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Telegram/AuditQuery.ts",
-      "layer": "IS",
-      "lines": 136,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Telegram/CommandRouter.ts",
-      "layer": "IS",
-      "lines": 55,
-      "valueImports": 2,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Telegram/ReceiptCommandRoutes.ts",
-      "layer": "IS",
-      "lines": 62,
-      "valueImports": 2,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/TelegramCommandFormatters.ts",
-      "layer": "IS",
-      "lines": 198,
-      "valueImports": 1,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Errors/ScraperErrorMessages.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/Transaction/DedupQuery.ts",
+      "path": "src/Services/ReceiptApiAdapter.ts",
       "layer": "IS",
       "lines": 50,
-      "valueImports": 1,
-      "typeImports": 1,
+      "valueImports": 4,
+      "typeImports": 2,
       "crossLayerValueDeps": [
         {
-          "to": "src/Logger/Index.ts",
+          "to": "src/Config/ConfigLoader.ts",
           "toLayer": "CC",
           "dynamic": false
         }
       ],
       "newClasses": [
-        "Set"
+        "ConfigLoader",
+        "ConfigurationError"
       ],
       "newCount": 2,
       "ocpRisks": [],
       "score": 2
     },
     {
-      "path": "src/Services/Transaction/ImportedIdBuilder.ts",
-      "layer": "IS",
-      "lines": 67,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
+      "path": "src/Config/ConfigValidator.ts",
+      "layer": "CC",
+      "lines": 106,
+      "valueImports": 8,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigLoader",
+        "ConfigValidator"
       ],
-      "newClasses": [],
-      "newCount": 0,
+      "newCount": 2,
       "ocpRisks": [],
-      "score": 2
+      "score": 1
     },
     {
-      "path": "src/Utils/Loggable.ts",
-      "layer": "ST",
-      "lines": 29,
+      "path": "src/Config/Validators/NotificationChannelValidators.ts",
+      "layer": "CC",
+      "lines": 150,
       "valueImports": 1,
-      "typeImports": 0,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        }
-      ],
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
-      "ocpRisks": [],
-      "score": 2
+      "ocpRisks": [
+        "if(config.X) chain x2"
+      ],
+      "score": 1
     },
     {
       "path": "src/Importer/ImporterBootstrap.ts",
@@ -2413,6 +396,23 @@
       "score": 1
     },
     {
+      "path": "src/Logger/Index.ts",
+      "layer": "CC",
+      "lines": 93,
+      "valueImports": 7,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "FileLogger",
+        "LogBuffer",
+        "LogMediator",
+        "PinoAdapter"
+      ],
+      "newCount": 5,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
       "path": "src/Scrapers/Pipeline/Steps/FinalizeImportStep.ts",
       "layer": "BP",
       "lines": 234,
@@ -2421,6 +421,26 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Services/ImportMediator.ts",
+      "layer": "IS",
+      "lines": 168,
+      "valueImports": 7,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "BatchSummaryNotifier",
+        "Date",
+        "Error",
+        "ImportQueue",
+        "JobProcessor",
+        "Map",
+        "PollerLifecycle"
+      ],
+      "newCount": 7,
       "ocpRisks": [],
       "score": 1
     },
@@ -2456,6 +476,66 @@
       "score": 1
     },
     {
+      "path": "src/Services/Receipt/Ocr/Index.ts",
+      "layer": "IS",
+      "lines": 66,
+      "valueImports": 7,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Services/Receipt/ReceiptImportFlow.ts",
+      "layer": "IS",
+      "lines": 217,
+      "valueImports": 5,
+      "typeImports": 6,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ReceiptPhotoOcrPipeline"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Services/TelegramCommandHandler.ts",
+      "layer": "IS",
+      "lines": 187,
+      "valueImports": 8,
+      "typeImports": 7,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "CommandRouter",
+        "TelegramImportCoordinator",
+        "TelegramQueryCommands"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Services/TelegramPoller.ts",
+      "layer": "IS",
+      "lines": 242,
+      "valueImports": 5,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AbortController",
+        "Promise",
+        "TelegramPollHttp",
+        "TelegramPollRecovery",
+        "TelegramUpdateDispatcher"
+      ],
+      "newCount": 7,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
       "path": "src/Config/BankCredentialSpecs.ts",
       "layer": "CC",
       "lines": 45,
@@ -2464,6 +544,20 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/ConfigEncryption.ts",
+      "layer": "CC",
+      "lines": 148,
+      "valueImports": 3,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 4,
       "ocpRisks": [],
       "score": 0
     },
@@ -2482,6 +576,32 @@
       "score": 0
     },
     {
+      "path": "src/Config/Loaders/EnvLoader.ts",
+      "layer": "CC",
+      "lines": 158,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Loaders/JsonFileReader.ts",
+      "layer": "CC",
+      "lines": 52,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Config/Validators/ActualOfflineChecker.ts",
       "layer": "CC",
       "lines": 65,
@@ -2490,6 +610,20 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Validators/BankDateValidators.ts",
+      "layer": "CC",
+      "lines": 127,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 3,
       "ocpRisks": [],
       "score": 0
     },
@@ -2504,6 +638,18 @@
         "Set"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Validators/ConfigOnlineChecker.ts",
+      "layer": "CC",
+      "lines": 125,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },
@@ -2525,6 +671,18 @@
       "lines": 80,
       "valueImports": 1,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Validators/OptionalSectionValidators.ts",
+      "layer": "CC",
+      "lines": 96,
+      "valueImports": 2,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -2773,6 +931,21 @@
       "score": 0
     },
     {
+      "path": "src/Logger/LogCleanup.ts",
+      "layer": "CC",
+      "lines": 89,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date",
+        "Set"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Logger/LogFileReader.ts",
       "layer": "CC",
       "lines": 90,
@@ -2811,6 +984,20 @@
       "score": 0
     },
     {
+      "path": "src/Logger/LogRotatingStream.ts",
+      "layer": "CC",
+      "lines": 95,
+      "valueImports": 5,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Logger/PinoAdapter.ts",
       "layer": "CC",
       "lines": 101,
@@ -2837,6 +1024,48 @@
       "score": 0
     },
     {
+      "path": "src/Resilience/GracefulShutdown.ts",
+      "layer": "CC",
+      "lines": 94,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Resilience/RetryStrategy.ts",
+      "layer": "CC",
+      "lines": 130,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Error",
+        "Promise",
+        "ShutdownError"
+      ],
+      "newCount": 4,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Resilience/TimeoutWrapper.ts",
+      "layer": "CC",
+      "lines": 39,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Promise"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Scheduler.ts",
       "layer": "(none)",
       "lines": 34,
@@ -2849,6 +1078,85 @@
       "score": 0
     },
     {
+      "path": "src/Scheduler/ConfigBootstrap.ts",
+      "layer": "SC",
+      "lines": 58,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scheduler/CronLoop.ts",
+      "layer": "SC",
+      "lines": 118,
+      "valueImports": 5,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Promise"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scheduler/ImportProcessRunner.ts",
+      "layer": "SC",
+      "lines": 108,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date",
+        "Promise"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scheduler/Process/SchedulerProcessLifecycle.ts",
+      "layer": "SC",
+      "lines": 179,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scheduler/SchedulerBootstrap.ts",
+      "layer": "SC",
+      "lines": 141,
+      "valueImports": 6,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scheduler/Telegram/CommandRegistry.ts",
+      "layer": "SC",
+      "lines": 77,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Scheduler/Telegram/Index.ts",
       "layer": "SC",
       "lines": 20,
@@ -2857,6 +1165,21 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/BankRegistry.ts",
+      "layer": "BP",
+      "lines": 121,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "DefaultBankRegistry",
+        "Map"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -2875,11 +1198,49 @@
       "score": 0
     },
     {
+      "path": "src/Scraper/CredentialsBuilder.ts",
+      "layer": "BP",
+      "lines": 61,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/DateRangeShims.ts",
+      "layer": "BP",
+      "lines": 54,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Scraper/EmptyResultDetector.ts",
       "layer": "BP",
       "lines": 37,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/FailureLogShim.ts",
+      "layer": "BP",
+      "lines": 40,
+      "valueImports": 3,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -2895,6 +1256,20 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Mappers/FromLegacy.ts",
+      "layer": "BP",
+      "lines": 95,
+      "valueImports": 3,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -2935,6 +1310,20 @@
       "score": 0
     },
     {
+      "path": "src/Scraper/Mappers/ToCanonical.ts",
+      "layer": "BP",
+      "lines": 76,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Scraper/Mappers/ToLegacy.ts",
       "layer": "BP",
       "lines": 38,
@@ -2959,6 +1348,32 @@
       "score": 0
     },
     {
+      "path": "src/Scraper/PhoneNumberNormaliser.ts",
+      "layer": "BP",
+      "lines": 59,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Policies/DateRangePolicy.ts",
+      "layer": "BP",
+      "lines": 110,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 4,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Scraper/ScraperOptionsBuilder.ts",
       "layer": "BP",
       "lines": 36,
@@ -2976,6 +1391,18 @@
       "lines": 36,
       "valueImports": 0,
       "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/AttemptRunner.ts",
+      "layer": "BP",
+      "lines": 147,
+      "valueImports": 3,
+      "typeImports": 5,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3007,6 +1434,30 @@
       "score": 0
     },
     {
+      "path": "src/Scraper/Strategies/Live/ResultEnvelope.ts",
+      "layer": "BP",
+      "lines": 66,
+      "valueImports": 1,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/ScraperSetup.ts",
+      "layer": "BP",
+      "lines": 133,
+      "valueImports": 6,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Scraper/Strategies/Live/Types.ts",
       "layer": "BP",
       "lines": 65,
@@ -3024,6 +1475,18 @@
       "lines": 46,
       "valueImports": 1,
       "typeImports": 6,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Strategies/MockScrapeStrategy.ts",
+      "layer": "BP",
+      "lines": 133,
+      "valueImports": 3,
+      "typeImports": 4,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3100,6 +1563,18 @@
       "lines": 172,
       "valueImports": 1,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Runner/PipelineRunner.ts",
+      "layer": "BP",
+      "lines": 53,
+      "valueImports": 1,
+      "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3259,10 +1734,48 @@
       "score": 0
     },
     {
+      "path": "src/Services/Account/AccountLogPresenter.ts",
+      "layer": "IS",
+      "lines": 82,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Account/AccountMutator.ts",
       "layer": "IS",
       "lines": 31,
       "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Account/AccountReconciler.ts",
+      "layer": "IS",
+      "lines": 104,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Account/AccountTargetResolver.ts",
+      "layer": "IS",
+      "lines": 32,
+      "valueImports": 1,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -3279,6 +1792,34 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Account/LiveAccountWriter.ts",
+      "layer": "IS",
+      "lines": 171,
+      "valueImports": 2,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/AuditLogService.ts",
+      "layer": "IS",
+      "lines": 169,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date",
+        "Error",
+        "IAuditEntry"
+      ],
+      "newCount": 3,
       "ocpRisks": [],
       "score": 0
     },
@@ -3303,6 +1844,20 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/DryRun/PreviewBuilder.ts",
+      "layer": "IS",
+      "lines": 66,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -3355,11 +1910,53 @@
       "score": 0
     },
     {
+      "path": "src/Services/HistoryCategoryResolver.ts",
+      "layer": "IS",
+      "lines": 119,
+      "valueImports": 3,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/ICategoryResolver.ts",
       "layer": "IS",
       "lines": 22,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Import/BatchFactory.ts",
+      "layer": "IS",
+      "lines": 150,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "IBatchTracker",
+        "IImportJob",
+        "Promise"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Import/BatchSummaryNotifier.ts",
+      "layer": "IS",
+      "lines": 66,
+      "valueImports": 3,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3375,6 +1972,44 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Import/JobProcessor.ts",
+      "layer": "IS",
+      "lines": 111,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Import/PollerLifecycle.ts",
+      "layer": "IS",
+      "lines": 75,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/ImportQueue.ts",
+      "layer": "IS",
+      "lines": 109,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Error"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 0
     },
@@ -3396,6 +2031,32 @@
       "lines": 14,
       "valueImports": 0,
       "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Metrics/Registry.ts",
+      "layer": "IS",
+      "lines": 165,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Metrics/Serializer.ts",
+      "layer": "IS",
+      "lines": 140,
+      "valueImports": 1,
+      "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3444,6 +2105,30 @@
       "lines": 13,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/NotificationDispatcher.ts",
+      "layer": "IS",
+      "lines": 78,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/NotificationGate.ts",
+      "layer": "IS",
+      "lines": 42,
+      "valueImports": 2,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3535,6 +2220,20 @@
       "score": 0
     },
     {
+      "path": "src/Services/Notifications/TelegramApiClient.ts",
+      "layer": "IS",
+      "lines": 194,
+      "valueImports": 2,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "NetworkError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Notifications/TelegramFormatter.ts",
       "layer": "IS",
       "lines": 3,
@@ -3559,6 +2258,20 @@
       "score": 0
     },
     {
+      "path": "src/Services/Notifications/TelegramNotifier.ts",
+      "layer": "IS",
+      "lines": 187,
+      "valueImports": 6,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "TelegramApiClient"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Notifications/TelegramNotifierFactory.ts",
       "layer": "IS",
       "lines": 49,
@@ -3570,6 +2283,21 @@
         "TypeError"
       ],
       "newCount": 4,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/TelegramOtpPoller.ts",
+      "layer": "IS",
+      "lines": 122,
+      "valueImports": 4,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Promise",
+        "TimeoutError"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -3634,6 +2362,20 @@
       "score": 0
     },
     {
+      "path": "src/Services/Notifications/WebhookNotifier.ts",
+      "layer": "IS",
+      "lines": 74,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "NetworkError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Notifications/WebhookNotifierFactory.ts",
       "layer": "IS",
       "lines": 50,
@@ -3645,6 +2387,18 @@
         "WebhookNotifier"
       ],
       "newCount": 4,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/NotificationService.ts",
+      "layer": "IS",
+      "lines": 71,
+      "valueImports": 3,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },
@@ -3749,6 +2503,20 @@
       "score": 0
     },
     {
+      "path": "src/Services/Receipt/ReceiptImporter.ts",
+      "layer": "IS",
+      "lines": 180,
+      "valueImports": 4,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Receipt/ReceiptMenuPresenter.ts",
       "layer": "IS",
       "lines": 100,
@@ -3761,10 +2529,87 @@
       "score": 0
     },
     {
+      "path": "src/Services/Receipt/ReceiptPayeeMatcher.ts",
+      "layer": "IS",
+      "lines": 77,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Receipt/ReceiptPhotoOcrPipeline.ts",
+      "layer": "IS",
+      "lines": 70,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Receipt/Types.ts",
       "layer": "IS",
       "lines": 64,
       "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/ReceiptImportHandler.ts",
+      "layer": "IS",
+      "lines": 182,
+      "valueImports": 2,
+      "typeImports": 6,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ReceiptImportFlow"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/ReceiptOcrService.ts",
+      "layer": "IS",
+      "lines": 138,
+      "valueImports": 6,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/ReconciliationService.ts",
+      "layer": "IS",
+      "lines": 93,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date",
+        "Error"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/SpendingWatch/AlertFormatter.ts",
+      "layer": "IS",
+      "lines": 58,
+      "valueImports": 3,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -3785,11 +2630,63 @@
       "score": 0
     },
     {
+      "path": "src/Services/SpendingWatch/ThresholdEvaluator.ts",
+      "layer": "IS",
+      "lines": 58,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/SpendingWatch/TransactionQuery.ts",
+      "layer": "IS",
+      "lines": 41,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/SpendingWatch/Types.ts",
       "layer": "IS",
       "lines": 17,
       "valueImports": 0,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/SpendingWatchService.ts",
+      "layer": "IS",
+      "lines": 37,
+      "valueImports": 4,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Error"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Telegram/AuditQuery.ts",
+      "layer": "IS",
+      "lines": 136,
+      "valueImports": 2,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3809,11 +2706,35 @@
       "score": 0
     },
     {
+      "path": "src/Services/Telegram/CommandRouter.ts",
+      "layer": "IS",
+      "lines": 55,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Telegram/ICommandRoute.ts",
       "layer": "IS",
       "lines": 73,
       "valueImports": 1,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Telegram/ReceiptCommandRoutes.ts",
+      "layer": "IS",
+      "lines": 62,
+      "valueImports": 2,
+      "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3845,6 +2766,20 @@
       "score": 0
     },
     {
+      "path": "src/Services/TelegramCommandFormatters.ts",
+      "layer": "IS",
+      "lines": 198,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/TelegramPollBackoff.ts",
       "layer": "IS",
       "lines": 45,
@@ -3859,6 +2794,102 @@
       "score": 0
     },
     {
+      "path": "src/Services/TelegramPollHttp.ts",
+      "layer": "IS",
+      "lines": 159,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AbortController",
+        "TelegramPollHttp"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TelegramPollRecovery.ts",
+      "layer": "IS",
+      "lines": 126,
+      "valueImports": 3,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TelegramQueryCommands.ts",
+      "layer": "IS",
+      "lines": 193,
+      "valueImports": 5,
+      "typeImports": 6,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "LogFileReader"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TelegramUpdateDispatcher.ts",
+      "layer": "IS",
+      "lines": 198,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "NetworkError",
+        "TelegramUpdateDispatcher"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Transaction/AccountResolver.ts",
+      "layer": "IS",
+      "lines": 106,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Actual"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Transaction/DedupQuery.ts",
+      "layer": "IS",
+      "lines": 50,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Transaction/ImportedIdBuilder.ts",
+      "layer": "IS",
+      "lines": 67,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Transaction/Index.ts",
       "layer": "IS",
       "lines": 23,
@@ -3867,6 +2898,60 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Transaction/TransactionBatchImporter.ts",
+      "layer": "IS",
+      "lines": 194,
+      "valueImports": 3,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TransactionService.ts",
+      "layer": "IS",
+      "lines": 102,
+      "valueImports": 6,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AccountResolver",
+        "DedupQuery",
+        "TransactionBatchImporter"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TranslateCategoryResolver.ts",
+      "layer": "IS",
+      "lines": 64,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactorService.ts",
+      "layer": "IS",
+      "lines": 111,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "TwoFactorAuthError"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 0
     },
@@ -4059,6 +3144,18 @@
       "path": "src/Utils/Index.ts",
       "layer": "ST",
       "lines": 27,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Utils/Loggable.ts",
+      "layer": "ST",
+      "lines": 29,
       "valueImports": 1,
       "typeImports": 0,
       "crossLayerValueDeps": [],
