@@ -729,29 +729,34 @@ export default tseslint.config(
     },
   },
 
-  // 7f. TELEGRAM POLLER — tightened max-lines (PR 7: TelegramPoller split)
+  // 7f. TELEGRAM POLLER — tightened max-lines (PR 7 split; PR 28 re-tighten)
   // After extracting `TelegramPollHttp.ts` (long-poll HTTP wrappers),
-  // `TelegramPollBackoff.ts` (pure backoff math) and
+  // `TelegramPollBackoff.ts` (pure backoff math),
   // `TelegramUpdateDispatcher.ts` (chat-id filtering + text/photo/callback
-  // routing), `TelegramPoller.ts` is a thin lifecycle + error-recovery
-  // orchestrator (~160 effective LoC). The default cap is `max: 300`;
-  // this rule caps it at 200 so the orchestrator cannot drift back into
-  // being a 418-LoC mixed-concern class. Adding a new update kind MUST be
-  // a new branch inside `TelegramUpdateDispatcher.ts`, not inline here.
-  // Adding a new HTTP endpoint MUST be a new function in
-  // `TelegramPollHttp.ts`, not inline here.
+  // routing) and `TelegramPollRecovery.ts` (error classification + backoff
+  // policy — PR 28), `TelegramPoller.ts` is a thin lifecycle shell
+  // (137 effective LoC). Per eslint-rules §1 PRECEDENT, splitting a file
+  // under an existing ceiling re-tightens it: the prior `max: 200` is
+  // lowered to `max: 170` (~24% above today's largest effective
+  // measurement, 137) so neither the poller nor the recovery policy can
+  // drift back toward the old 200-line budget. Adding a new update kind
+  // MUST be a new branch inside `TelegramUpdateDispatcher.ts`; a new HTTP
+  // endpoint MUST be a new function in `TelegramPollHttp.ts`; new
+  // error-recovery behaviour MUST live in `TelegramPollRecovery.ts` —
+  // never inline here.
   //
   // NOTE: Placed AFTER section 7 (canary files override) so the
-  // `max-lines: 200` rule survives on the canary fixture; flat-config rule
+  // `max-lines: 170` rule survives on the canary fixture; flat-config rule
   // keys are replaced (not merged) by later matching blocks, so the canary
   // file MUST be configured by the LAST block listing it.
   {
     files: [
       'src/Services/TelegramPoller.ts',
+      'src/Services/TelegramPollRecovery.ts',
       'tests/eslint-canaries/TelegramPollerMaxLines.canary.ts',
     ],
     rules: {
-      'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
+      'max-lines': ['error', { max: 170, skipBlankLines: true, skipComments: true }],
     },
   },
 

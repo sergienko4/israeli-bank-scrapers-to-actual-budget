@@ -1,10 +1,10 @@
 {
   "generatedAt": "2026-06-15",
-  "totalFiles": 237,
+  "totalFiles": 238,
   "scoreDistribution": {
-    "critical8plus": 4,
-    "high5to7": 26,
-    "medium3to4": 27,
+    "critical8plus": 3,
+    "high5to7": 27,
+    "medium3to4": 28,
     "low1to2": 49,
     "clean0": 131
   },
@@ -114,39 +114,6 @@
       "score": 8
     },
     {
-      "path": "src/Services/TelegramPoller.ts",
-      "layer": "IS",
-      "lines": 294,
-      "valueImports": 6,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Logger/Index.ts",
-          "toLayer": "CC",
-          "dynamic": false
-        },
-        {
-          "to": "src/Types/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        },
-        {
-          "to": "src/Utils/Index.ts",
-          "toLayer": "ST",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "AbortController",
-        "Promise",
-        "TelegramPollHttp",
-        "TelegramUpdateDispatcher"
-      ],
-      "newCount": 6,
-      "ocpRisks": [],
-      "score": 8
-    },
-    {
       "path": "src/Services/AccountImporter.ts",
       "layer": "IS",
       "lines": 181,
@@ -181,7 +148,7 @@
     {
       "path": "src/Services/Receipt/ReceiptImportFlow.ts",
       "layer": "IS",
-      "lines": 219,
+      "lines": 217,
       "valueImports": 5,
       "typeImports": 6,
       "crossLayerValueDeps": [
@@ -887,6 +854,35 @@
       "score": 5
     },
     {
+      "path": "src/Services/TelegramPoller.ts",
+      "layer": "IS",
+      "lines": 242,
+      "valueImports": 5,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Types/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [
+        "AbortController",
+        "Promise",
+        "TelegramPollHttp",
+        "TelegramPollRecovery",
+        "TelegramUpdateDispatcher"
+      ],
+      "newCount": 7,
+      "ocpRisks": [],
+      "score": 5
+    },
+    {
       "path": "src/Config/ConfigEncryption.ts",
       "layer": "CC",
       "lines": 148,
@@ -1323,6 +1319,29 @@
         "Error"
       ],
       "newCount": 2,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/TelegramPollRecovery.ts",
+      "layer": "IS",
+      "lines": 113,
+      "valueImports": 3,
+      "typeImports": 0,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Logger/Index.ts",
+          "toLayer": "CC",
+          "dynamic": false
+        },
+        {
+          "to": "src/Utils/Index.ts",
+          "toLayer": "ST",
+          "dynamic": false
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 4
     },
