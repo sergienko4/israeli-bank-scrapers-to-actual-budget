@@ -52,9 +52,20 @@ function fixtureFile(relPath: string, body: string): void {
   writeFileSync(abs, `${body}\n`);
 }
 
-/** Runs the scanner as a subprocess rooted at the fixture dir. */
+/**
+ * Runs the scanner as a subprocess rooted at the fixture dir.
+ * A hard timeout and maxBuffer guard against a blocked scanner hanging CI;
+ * `res.error` (timeout/spawn failure) is surfaced immediately rather than
+ * masked by a null status.
+ */
 function runScanner(...args: string[]): { status: number | null; stdout: string; stderr: string } {
-  const res = spawnSync(process.execPath, [SCANNER, ...args], { cwd: root, encoding: 'utf8' });
+  const res = spawnSync(process.execPath, [SCANNER, ...args], {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: 15_000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (res.error) throw res.error;
   return { status: res.status, stdout: res.stdout ?? '', stderr: res.stderr ?? '' };
 }
 
