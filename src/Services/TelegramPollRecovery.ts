@@ -24,15 +24,28 @@ const MAX_CONSECUTIVE_ERRORS = 60;
 /** The action the poll loop must take after a failed cycle. */
 export type RecoveryOutcome = 'fatal-stop' | 'circuit-breaker-stop' | 'retry';
 
-/** A classified recovery decision returned to the poll loop. */
-export interface IRecoveryDecision {
-  /** Whether the loop must stop or should retry. */
-  readonly outcome: RecoveryOutcome;
-  /** The status string the poll cycle resolves with. */
-  readonly status: string;
-  /** Backoff delay in milliseconds; present only when outcome is 'retry'. */
-  readonly sleepMs?: number;
-}
+/**
+ * A classified recovery decision returned to the poll loop.
+ *
+ * Discriminated on {@link RecoveryOutcome}: a 'retry' decision always carries
+ * its backoff `sleepMs`, while a stop decision never does — invalid
+ * retry-without-delay states are unrepresentable at the type level.
+ */
+export type IRecoveryDecision =
+  | {
+    /** Discriminant marking a retryable failure. */
+    readonly outcome: 'retry';
+    /** The status string the poll cycle resolves with. */
+    readonly status: string;
+    /** Backoff delay in milliseconds before the next poll attempt. */
+    readonly sleepMs: number;
+  }
+  | {
+    /** Discriminant marking a fatal HTTP code or circuit-breaker trip. */
+    readonly outcome: Exclude<RecoveryOutcome, 'retry'>;
+    /** The status string the poll cycle resolves with. */
+    readonly status: string;
+  };
 
 /** Classifies Telegram poll failures into stop/retry decisions with backoff. */
 export default class TelegramPollRecovery {

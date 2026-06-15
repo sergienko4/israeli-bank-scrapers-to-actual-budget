@@ -194,7 +194,7 @@ export default class TelegramPoller {
       this._running = false;
       return succeed({ status: decision.status });
     }
-    if (this._running && decision.sleepMs !== undefined) {
+    if (this._running) {
       await this.interruptibleSleep(decision.sleepMs);
     }
     return succeed({ status: decision.status });
