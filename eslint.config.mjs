@@ -1133,6 +1133,56 @@ export default tseslint.config(
       'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
     },
   },
+
+  // ─── Section 7r: Telegram formatter cluster max-fn-lines: 10 ───
+  // Placed AFTER Section 7q (parallel-OODA sibling).
+  // Scope: src/Services/Notifications/Telegram/**/*.ts (7 new files:
+  //   Types / Shared / DefaultFormat / CompactFormat / LedgerFormat /
+  //   EmojiFormat / Index) carved out of TelegramFormatter.ts (330 LoC).
+  // Backed by canary fixture
+  // `tests/eslint-canaries/TelegramFormatterMaxLinesPerFunction.canary.ts`
+  // per §2 CANARY. The harness at `config/check-eslint-canaries.mjs`
+  // asserts the rule fires.
+  {
+    files: [
+      'src/Services/Notifications/Telegram/**/*.ts',
+      'tests/eslint-canaries/TelegramFormatterMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
+  // ─── Section 7s: Receipt Ocr/ cluster max-fn-lines: 10 ───
+  //
+  // WHY a new section rather than extending Section 7k:
+  // Section 7k (PR 14) lists explicit file paths, not a glob. The three
+  // files it covers (OcrParsing.ts, OcrImagePreprocess.ts, ReceiptOcrService.ts)
+  // do NOT include the new `src/Services/Receipt/Ocr/**` cluster, so the
+  // max-lines-per-function: 10 cap would be unenforced on the new sub-modules
+  // without this additional block. Per §1 PRECEDENT in eslint-rules-guidlines.md,
+  // every new cluster shipped via a split PR must lock at 10 effective LoC.
+  //
+  // Scope:
+  //   - `src/Services/Receipt/Ocr/**/*.ts` (5 new files:
+  //     Patterns / DateExtractor / AmountExtractor / MerchantExtractor /
+  //     MemoExtractor / Index).
+  //   - `tests/eslint-canaries/OcrParsingMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, 12-LoC fn body).
+  //
+  // NOTE: IIFEs intentionally NOT included (per PR #441 F2 lesson).
+  // NOTE: Placed AFTER Section 7r (Telegram, parallel-OODA sibling merged first) so the
+  // canary file is configured by the LAST matching block.
+  {
+    files: [
+      'src/Services/Receipt/Ocr/**/*.ts',
+      'tests/eslint-canaries/OcrParsingMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10a. RECEIPT HANDLER — at max-lines limit, pending refactor to extract payee query logic
   {
     files: ['src/Services/ReceiptImportHandler.ts'],

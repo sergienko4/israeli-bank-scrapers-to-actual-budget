@@ -122,6 +122,16 @@ const CANARIES = {
     description:
       'PR 22 — src/Services/DryRun/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
   },
+  'tests/eslint-canaries/OcrParsingMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 24 — src/Services/Receipt/Ocr/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
+  'tests/eslint-canaries/TelegramFormatterMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 23 — src/Services/Notifications/Telegram/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
 };
 
 let allPassed = true;
