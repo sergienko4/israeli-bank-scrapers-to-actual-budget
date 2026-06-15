@@ -13,7 +13,7 @@ import type {
   IScraperScrapingResult,
 } from '@sergienko4/israeli-bank-scrapers';
 
-import type { IBankTransaction } from '../Index.js';
+import type { IBankTransaction } from '../Bank.js';
 
 /** Sign-handling policy applied by the mapper for a given bank. */
 export type ISignPolicy = 'flip-credit' | 'preserve';
