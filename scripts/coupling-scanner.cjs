@@ -13,7 +13,10 @@
  *   guarantees CI portability.
  *
  * Scoring formula (intentionally simple — see decoupling-report.md §1):
- *   +2 per cross-layer value import     -- the dominant coupling signal
+ *   +2 per cross-layer value import     -- the dominant coupling signal,
+ *                                          EXCLUDING the sanctioned shared
+ *                                          kernel (see KERNEL_LAYERS /
+ *                                          KERNEL_PREFIXES + isKernelTarget)
  *   +3 if file > 400 LoC                -- god-class smell
  *   +2 if file > 300 LoC
  *   +1 if file > 200 LoC
@@ -55,6 +58,51 @@ const LAYER_RULES = [
   { prefix: 'src/Errors/', layer: 'ST' },
   { prefix: 'src/Helpers/', layer: 'ST' },
 ];
+
+/**
+ * Sanctioned "shared kernel": value imports INTO these modules do NOT count as
+ * cross-layer coupling. Penalising imports of shared infrastructure measures
+ * "uses common utilities", not "hard to change in isolation" — the property the
+ * score is meant to capture. Two sanctioned groups:
+ *   1. The whole ST layer (Types, Utils, Errors, Shared, Helpers) — the
+ *      shared-toolbox layer whose purpose is to be imported anywhere (the
+ *      Result-pattern helpers succeed/fail, errorMessage, error classes). These
+ *      are runtime values, so `import type` cannot remove the dependency.
+ *   2. The Logger module — a sanctioned cross-cutting concern (getLogger()).
+ * Config and Resilience (also CC) are deliberately NOT kernel: reaching into
+ * them is genuine coupling.
+ */
+const KERNEL_LAYERS = new Set(['ST']);
+const KERNEL_PREFIXES = ['src/Logger/'];
+
+/**
+ * Reports whether a value-import target belongs to the sanctioned shared kernel.
+ *
+ * @param {string} targetPath - Resolved POSIX-style path of the imported module.
+ * @param {string} targetLayer - Layer code of the imported module.
+ * @returns {boolean} True when imports of this target are exempt from scoring.
+ */
+function isKernelTarget(targetPath, targetLayer) {
+  if (KERNEL_LAYERS.has(targetLayer)) return true;
+  return KERNEL_PREFIXES.some((prefix) => targetPath.startsWith(prefix));
+}
+
+/**
+ * Reports whether a resolved value import is genuine cross-layer coupling.
+ *
+ * A dependency counts only when it crosses a boundary between two mapped layers
+ * AND its target is not part of the sanctioned shared kernel.
+ *
+ * @param {string} fromLayer - Layer code of the importing file.
+ * @param {string} targetPath - Resolved POSIX-style path of the imported module.
+ * @param {string} targetLayer - Layer code of the imported module.
+ * @returns {boolean} True when the import contributes to the coupling score.
+ */
+function isCrossLayerCoupling(fromLayer, targetPath, targetLayer) {
+  if (fromLayer === '(none)' || targetLayer === '(none)') return false;
+  if (fromLayer === targetLayer) return false;
+  return !isKernelTarget(targetPath, targetLayer);
+}
 
 /**
  * Resolves the architecture layer of a source file from its relative path.
@@ -235,7 +283,7 @@ function scanFile(absPath) {
     const resolved = resolveImport(relPath, imp.spec);
     if (!resolved) continue;
     const targetLayer = layerOf(resolved);
-    if (targetLayer !== myLayer && myLayer !== '(none)' && targetLayer !== '(none)') {
+    if (isCrossLayerCoupling(myLayer, resolved, targetLayer)) {
       crossLayerValueDeps.push({ to: resolved, toLayer: targetLayer, dynamic: imp.dynamic });
     }
   }
@@ -341,4 +389,12 @@ function main() {
   console.log(`baseline written: ${path.relative(ROOT, BASELINE_PATH)}`);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  layerOf,
+  isKernelTarget,
+  isCrossLayerCoupling,
+};
