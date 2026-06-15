@@ -1,9 +1,9 @@
 /**
- * TelegramPoller — long-poll lifecycle + error-recovery orchestrator.
+ * TelegramPoller — long-poll lifecycle shell.
  *
- * Thin shell around {@link TelegramPollHttp} (HTTP), the pure helpers in
- * `./TelegramPollBackoff.js` (backoff math), and
- * {@link TelegramUpdateDispatcher} (update routing).
+ * Thin shell around {@link TelegramPollHttp} (HTTP),
+ * {@link TelegramUpdateDispatcher} (update routing), and
+ * {@link TelegramPollRecovery} (error classification + backoff policy).
  *
  * Public class API is byte-identical to the pre-PR-7 version.
  */
@@ -11,26 +11,23 @@
 import { getLogger } from '../Logger/Index.js';
 import type { Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
-import { errorMessage } from '../Utils/Index.js';
-import {
-  backoffSeconds, computeBackoff, isFatalHttpCode,
-} from './TelegramPollBackoff.js';
 import TelegramPollHttp, { type PollOutcome } from './TelegramPollHttp.js';
+import TelegramPollRecovery, {
+  type IRecoveryDecision,
+} from './TelegramPollRecovery.js';
 import TelegramUpdateDispatcher, {
   type PhotoHandler, type TextHandler,
 } from './TelegramUpdateDispatcher.js';
 
-const MAX_CONSECUTIVE_ERRORS = 60;
-
 /** Long-polls the Telegram Bot API for updates and dispatches them to a handler. */
 export default class TelegramPoller {
   private readonly _http: TelegramPollHttp;
+  private readonly _recovery = new TelegramPollRecovery();
   private _offset = 0;
   private _running = false;
   private _startedAt = 0;
   private _abortController: AbortController | null = null;
   private _sleepController: AbortController | null = null;
-  private _consecutiveErrors = 0;
   private _runId = 0;
   private _onPhoto?: PhotoHandler;
 
@@ -69,7 +66,7 @@ export default class TelegramPoller {
     this._running = true;
     const runId = ++this._runId;
     this._startedAt = Math.floor(Date.now() / 1000);
-    this._consecutiveErrors = 0;
+    this._recovery.reset();
     await this.clearOldMessages();
     if (this._runId !== runId) return succeed({ status: 'superseded' });
     getLogger().info('🤖 Telegram command listener started');
@@ -124,14 +121,16 @@ export default class TelegramPoller {
       const outcome = await this.fetchUpdates();
       if (outcome.kind === 'http-error') {
         const code = String(outcome.statusCode);
-        return await this.handlePollHttpError(code);
+        const decision = this._recovery.onHttpError(code);
+        return await this.applyRecovery(decision);
       }
       if (outcome.kind === 'aborted') return succeed({ status: 'poll-aborted' });
       await this.dispatchUpdates(outcome);
-      this._consecutiveErrors = 0;
+      this._recovery.reset();
       return succeed({ status: 'poll-ok' });
     } catch (error: unknown) {
-      return await this.handlePollException(error);
+      const decision = this._recovery.onException(error);
+      return await this.applyRecovery(decision);
     }
   }
 
@@ -182,74 +181,23 @@ export default class TelegramPoller {
   }
 
   /**
-   * Handles an HTTP error from poll(), stopping on fatal codes or applying backoff.
+   * Applies a recovery decision: stops the loop on fatal or circuit-breaker
+   * outcomes, or sleeps with backoff (interruptibly) on a retry outcome.
    *
-   * @param httpCode - The HTTP status code as a string.
-   * @returns Procedure indicating the error was handled.
+   * @param decision - The classified decision from {@link TelegramPollRecovery}.
+   * @returns Procedure carrying the decision's status string.
    */
-  private async handlePollHttpError(
-    httpCode: string
+  private async applyRecovery(
+    decision: IRecoveryDecision
   ): Promise<Procedure<{ status: string }>> {
-    this._consecutiveErrors++;
-    if (isFatalHttpCode(httpCode)) {
-      const log = `🛑 Telegram poll fatal error (HTTP ${httpCode}) — stopping poller`;
-      getLogger().error(log);
+    if (decision.outcome !== 'retry') {
       this._running = false;
-      return succeed({ status: 'poll-fatal-stopped' });
+      return succeed({ status: decision.status });
     }
-    return await this.backoffOrTrip(`HTTP ${httpCode}`);
-  }
-
-  /**
-   * Handles an exception thrown during poll(), applying backoff.
-   *
-   * @param error - The unknown error from the poll attempt.
-   * @returns Procedure indicating the error was recovered.
-   */
-  private async handlePollException(
-    error: unknown
-  ): Promise<Procedure<{ status: string }>> {
-    this._consecutiveErrors++;
-    const detail = errorMessage(error);
-    return await this.backoffOrTrip(detail);
-  }
-
-  /**
-   * Trips the circuit breaker or logs retry and sleeps with backoff.
-   *
-   * @param detail - Human-readable error detail for the log message.
-   * @returns Procedure indicating the backoff or circuit-breaker result.
-   */
-  private async backoffOrTrip(
-    detail: string
-  ): Promise<Procedure<{ status: string }>> {
-    if (this._consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-      const max = String(MAX_CONSECUTIVE_ERRORS);
-      getLogger().error(`🛑 Telegram poll ${detail} — ${max} errors, stopping`);
-      this._running = false;
-      return succeed({ status: 'poll-circuit-breaker' });
+    if (this._running && decision.sleepMs !== undefined) {
+      await this.interruptibleSleep(decision.sleepMs);
     }
-    return await this.logAndSleep(detail);
-  }
-
-  /**
-   * Logs a retryable error and sleeps with exponential backoff.
-   *
-   * @param detail - Error detail for the log message.
-   * @returns Procedure with handled status.
-   */
-  private async logAndSleep(detail: string): Promise<Procedure<{ status: string }>> {
-    const count = String(this._consecutiveErrors);
-    const max = String(MAX_CONSECUTIVE_ERRORS);
-    const seconds = backoffSeconds(this._consecutiveErrors);
-    getLogger().warn(
-      `⚠️  Telegram poll ${detail} (${count}/${max}) — retrying in ${seconds}s`
-    );
-    if (this._running) {
-      const delay = computeBackoff(this._consecutiveErrors);
-      await this.interruptibleSleep(delay);
-    }
-    return succeed({ status: 'poll-error-handled' });
+    return succeed({ status: decision.status });
   }
 
   /**

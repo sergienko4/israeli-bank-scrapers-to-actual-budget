@@ -67,7 +67,7 @@ const CANARIES = {
   },
   'tests/eslint-canaries/TelegramPollerMaxLines.canary.ts': {
     minErrors: 1,
-    description: 'PR 7 — TelegramPoller.ts capped at max-lines: 200 (this canary exceeds 200 LoC)',
+    description: 'PR 7/28 — TelegramPoller.ts + TelegramPollRecovery.ts capped at max-lines: 170 (this canary exceeds 170 LoC)',
   },
   'tests/eslint-canaries/TelegramCommandHandlerMaxLines.canary.ts': {
     minErrors: 1,
