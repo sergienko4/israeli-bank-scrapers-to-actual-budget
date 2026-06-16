@@ -13,6 +13,7 @@
 
 import api from '@actual-app/api';
 
+import { createDateRangePolicy } from '../Scraper/Policies/DateRangePolicy.js';
 import { AccountImporter } from '../Services/AccountImporter.js';
 import { AuditLogService } from '../Services/AuditLogService.js';
 import { DryRunCollector } from '../Services/DryRunCollector.js';
@@ -123,5 +124,6 @@ export function buildAccountImporter(
     isDryRun: services.isDryRun,
     dryRunCollector: services.dryRunCollector,
     shutdownHandler: resilience.shutdownHandler,
+    dateRangePolicy: createDateRangePolicy(),
   });
 }

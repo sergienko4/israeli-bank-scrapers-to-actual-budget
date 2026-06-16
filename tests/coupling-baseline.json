@@ -4,8 +4,8 @@
   "scoreDistribution": {
     "critical8plus": 0,
     "high5to7": 1,
-    "medium3to4": 6,
-    "low1to2": 22,
+    "medium3to4": 5,
+    "low1to2": 23,
     "clean0": 209
   },
   "files": [
@@ -116,28 +116,6 @@
       "score": 3
     },
     {
-      "path": "src/Services/AccountImporter.ts",
-      "layer": "IS",
-      "lines": 181,
-      "valueImports": 8,
-      "typeImports": 6,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Scraper/BankScraper.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [
-        "AccountLogPresenter",
-        "AccountReconciler",
-        "LiveAccountWriter"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 3
-    },
-    {
       "path": "src/Services/TelegramImportCoordinator.ts",
       "layer": "IS",
       "lines": 301,
@@ -164,8 +142,8 @@
     {
       "path": "src/Importer/CoreServicesWiring.ts",
       "layer": "(none)",
-      "lines": 128,
-      "valueImports": 13,
+      "lines": 130,
+      "valueImports": 14,
       "typeImports": 4,
       "crossLayerValueDeps": [],
       "newClasses": [
@@ -403,6 +381,22 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Services/AccountImporter.ts",
+      "layer": "IS",
+      "lines": 183,
+      "valueImports": 7,
+      "typeImports": 7,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AccountLogPresenter",
+        "AccountReconciler",
+        "LiveAccountWriter"
+      ],
+      "newCount": 3,
       "ocpRisks": [],
       "score": 1
     },
@@ -3149,8 +3143,8 @@
     {
       "path": "src/Utils/PhoneNumberNormaliser.ts",
       "layer": "ST",
-      "lines": 59,
-      "valueImports": 1,
+      "lines": 62,
+      "valueImports": 2,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
