@@ -27,6 +27,7 @@ interface CrossLayerDep {
   to: string;
   toLayer: string;
   dynamic: boolean;
+  direction: 'inward' | 'outward';
 }
 
 interface FileRecord {
@@ -40,6 +41,7 @@ interface FileRecord {
 interface Baseline {
   totalFiles: number;
   scoreDistribution: { critical8plus: number; high5to7: number; medium3to4: number; low1to2: number; clean0: number };
+  wrongDirectionDeps: number;
   files: FileRecord[];
 }
 
@@ -102,6 +104,15 @@ beforeAll(() => {
     "import { succeed } from '../Types/Result.js';\nimport { loadConfig } from '../Config/ConfigLoader.js';\n\nexport function wirePeerCoupled(): void {\n  loadConfig();\n  succeed(undefined);\n}",
   );
 
+  // A genuine wrong-direction (inner -> outer) edge: a Resilience (CC) module
+  // reaching DOWN into a Scrapers (BP) domain file — the #459 smell shape.
+  // BP is not kernel, so the dep is counted AND classified 'outward'.
+  fixtureFile('src/Scrapers/SomeBank.ts', 'export function scrape(): unknown[] {\n  return [];\n}');
+  fixtureFile(
+    'src/Resilience/ReachIntoScraper.ts',
+    "import { scrape } from '../Scrapers/SomeBank.js';\n\nexport function reachDown(): void {\n  scrape();\n}",
+  );
+
   const report = runScanner();
   expect(report.status, report.stderr).toBe(0);
 });
@@ -128,7 +139,19 @@ describe('coupling-scanner CLI shared-kernel exemption (E2E)', () => {
     expect(peer.crossLayerValueDeps).toHaveLength(1); // only the Config dep survives the filter
     expect(peer.crossLayerValueDeps[0]?.toLayer).toBe('CC');
     expect(peer.crossLayerValueDeps[0]?.to).toBe('src/Config/ConfigLoader.ts');
+    expect(peer.crossLayerValueDeps[0]?.direction).toBe('inward'); // SC(1) -> CC(4) is allowed
     expect(peer.score).toBe(2); // 1 counted cross-layer dep × 2
+  });
+
+  it('report mode classifies an inner->outer dep as a wrong-direction smell', () => {
+    const baseline = readBaseline();
+    const reach = recordFor(baseline, 'src/Resilience/ReachIntoScraper.ts');
+
+    expect(reach.layer).toBe('CC');
+    expect(reach.crossLayerValueDeps).toHaveLength(1);
+    expect(reach.crossLayerValueDeps[0]?.toLayer).toBe('BP');
+    expect(reach.crossLayerValueDeps[0]?.direction).toBe('outward'); // CC(4) -> BP(3) inverts the rule
+    expect(baseline.wrongDirectionDeps).toBe(1); // exactly this edge across the whole fixture
   });
 
   it('report mode keeps the fixture critical-free under the corrected metric', () => {

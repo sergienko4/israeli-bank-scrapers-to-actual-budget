@@ -14,6 +14,7 @@ import {
   layerOf,
   isKernelTarget,
   isCrossLayerCoupling,
+  classifyDirection,
 } from '../scripts/coupling-scanner.cjs';
 
 describe('coupling-scanner layer mapping', () => {
@@ -69,5 +70,30 @@ describe('coupling-scanner cross-layer decision (canary)', () => {
     expect(isCrossLayerCoupling('IS', 'src/Services/Other.ts', 'IS')).toBe(false);
     expect(isCrossLayerCoupling('(none)', 'src/Config/ConfigLoader.ts', 'CC')).toBe(false);
     expect(isCrossLayerCoupling('IS', 'src/Whatever.ts', '(none)')).toBe(false);
+  });
+});
+
+describe('coupling-scanner direction classification (canary)', () => {
+  it('CANARY: inward deps (outer -> inner) are allowed', () => {
+    // The real composition-root / config-read edges in the live baseline.
+    expect(classifyDirection('SC', 'IS')).toBe('inward'); // Scheduler -> Services
+    expect(classifyDirection('SC', 'CC')).toBe('inward'); // Scheduler -> Config
+    expect(classifyDirection('IS', 'CC')).toBe('inward'); // Services  -> Config
+    expect(classifyDirection('IS', 'BP')).toBe('inward'); // Services  -> Scrapers
+  });
+
+  it('CANARY: outward deps (inner -> outer) are wrong-direction smells', () => {
+    // The exact #459 edge: Logger (CC) reaching down into a Scraper (BP).
+    expect(classifyDirection('CC', 'BP')).toBe('outward');
+    // A domain scraper depending up on a service inverts the dependency rule.
+    expect(classifyDirection('BP', 'IS')).toBe('outward');
+    expect(classifyDirection('CC', 'SC')).toBe('outward');
+    // A shared-kernel module (ST, innermost) must not reach up into Config (CC).
+    expect(classifyDirection('ST', 'CC')).toBe('outward');
+  });
+
+  it('defaults unmapped layers to inward so it never invents a smell', () => {
+    expect(classifyDirection('(none)', 'CC')).toBe('inward');
+    expect(classifyDirection('IS', '(none)')).toBe('inward');
   });
 });

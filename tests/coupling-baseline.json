@@ -8,6 +8,7 @@
     "low1to2": 24,
     "clean0": 208
   },
+  "wrongDirectionDeps": 0,
   "files": [
     {
       "path": "src/Scheduler/Telegram/ReceiptHandlerFactory.ts",
@@ -19,17 +20,20 @@
         {
           "to": "src/Services/ReceiptApiAdapter.ts",
           "toLayer": "IS",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         },
         {
           "to": "src/Services/ReceiptImportHandler.ts",
           "toLayer": "IS",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         },
         {
           "to": "src/Services/ReceiptOcrService.ts",
           "toLayer": "IS",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         }
       ],
       "newClasses": [
@@ -50,12 +54,14 @@
         {
           "to": "src/Config/ConfigLoader.ts",
           "toLayer": "CC",
-          "dynamic": true
+          "dynamic": true,
+          "direction": "inward"
         },
         {
           "to": "src/Config/ConfigValidator.ts",
           "toLayer": "CC",
-          "dynamic": true
+          "dynamic": true,
+          "direction": "inward"
         }
       ],
       "newClasses": [],
@@ -73,12 +79,14 @@
         {
           "to": "src/Services/AuditLogService.ts",
           "toLayer": "IS",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         },
         {
           "to": "src/Services/TelegramCommandHandler.ts",
           "toLayer": "IS",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         }
       ],
       "newClasses": [
@@ -190,7 +198,8 @@
         {
           "to": "src/Config/ConfigEncryption.ts",
           "toLayer": "CC",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         }
       ],
       "newClasses": [],
@@ -208,7 +217,8 @@
         {
           "to": "src/Config/ConfigLoader.ts",
           "toLayer": "CC",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         }
       ],
       "newClasses": [
@@ -228,7 +238,8 @@
         {
           "to": "src/Services/ImportMediator.ts",
           "toLayer": "IS",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         }
       ],
       "newClasses": [
@@ -248,7 +259,8 @@
         {
           "to": "src/Services/TelegramPoller.ts",
           "toLayer": "IS",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         }
       ],
       "newClasses": [
@@ -268,7 +280,8 @@
         {
           "to": "src/Services/Notifications/TelegramNotifier.ts",
           "toLayer": "IS",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         }
       ],
       "newClasses": [
@@ -289,7 +302,8 @@
         {
           "to": "src/Config/ConfigLoader.ts",
           "toLayer": "CC",
-          "dynamic": false
+          "dynamic": false,
+          "direction": "inward"
         }
       ],
       "newClasses": [
