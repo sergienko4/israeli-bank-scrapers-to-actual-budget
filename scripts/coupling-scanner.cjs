@@ -105,6 +105,45 @@ function isCrossLayerCoupling(fromLayer, targetPath, targetLayer) {
 }
 
 /**
+ * Architectural dependency ranks, outermost (0) to innermost (5).
+ *
+ * Clean-architecture's dependency rule says imports must point INWARD: an outer
+ * layer may depend on an inner layer, never the reverse. Ranks encode that order
+ * so a confirmed cross-layer value dep can be classified by direction:
+ *   EP  Bootstrap / entry — the outermost composition root.
+ *   SC  Scheduler — orchestration that drives the services.
+ *   IS  Services — the application / integration layer.
+ *   BP  Scrapers — the bank-scraping domain pipeline.
+ *   CC  Config / Resilience — cross-cutting subsystems (the Logger module is
+ *       kernel-exempt as a target; see KERNEL_PREFIXES).
+ *   ST  Shared kernel — Types / Utils / Errors / Shared / Helpers (kernel-exempt).
+ * An inward dep (fromRank < toRank) is allowed; an OUTWARD dep (fromRank >
+ * toRank) inverts the rule and is the genuine cross-layer smell — e.g. the
+ * Logger(CC) -> Scraper(BP) edge removed in #459.
+ */
+const LAYER_RANK = { EP: 0, SC: 1, IS: 2, BP: 3, CC: 4, ST: 5 };
+
+/**
+ * Classifies a confirmed cross-layer value dep by architectural direction.
+ *
+ * Only called for deps that already passed {@link isCrossLayerCoupling} (two
+ * different mapped, non-kernel layers), so the result is 'inward' or 'outward'
+ * in practice. Unmapped inputs default to 'inward' so the classifier never
+ * invents a wrong-direction edge.
+ *
+ * @param {string} fromLayer - Layer code of the importing file.
+ * @param {string} toLayer - Layer code of the imported module.
+ * @returns {'inward'|'outward'} 'outward' = inner depends on outer (a
+ *   dependency-rule violation); 'inward' = the allowed direction.
+ */
+function classifyDirection(fromLayer, toLayer) {
+  const from = LAYER_RANK[fromLayer];
+  const to = LAYER_RANK[toLayer];
+  if (from === undefined || to === undefined) return 'inward';
+  return from > to ? 'outward' : 'inward';
+}
+
+/**
  * Resolves the architecture layer of a source file from its relative path.
  *
  * @param {string} relPath - POSIX-style path relative to repo root (e.g. "src/Index.ts").
@@ -284,7 +323,12 @@ function scanFile(absPath) {
     if (!resolved) continue;
     const targetLayer = layerOf(resolved);
     if (isCrossLayerCoupling(myLayer, resolved, targetLayer)) {
-      crossLayerValueDeps.push({ to: resolved, toLayer: targetLayer, dynamic: imp.dynamic });
+      crossLayerValueDeps.push({
+        to: resolved,
+        toLayer: targetLayer,
+        dynamic: imp.dynamic,
+        direction: classifyDirection(myLayer, targetLayer),
+      });
     }
   }
   const newCounts = countNewExpressions(src);
@@ -346,10 +390,15 @@ function main() {
   const report = files.map(scanFile);
   report.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
   const dist = distribution(report);
+  const wrongDirectionDeps = report.reduce(
+    (n, f) => n + f.crossLayerValueDeps.filter((d) => d.direction === 'outward').length,
+    0,
+  );
   const output = {
     generatedAt: new Date().toISOString().slice(0, 10),
     totalFiles: report.length,
     scoreDistribution: dist,
+    wrongDirectionDeps,
     files: report,
   };
 
@@ -386,6 +435,7 @@ function main() {
   console.log(`  medium (3-4):   ${dist.medium3to4}`);
   console.log(`  low (1-2):      ${dist.low1to2}`);
   console.log(`  clean (0):      ${dist.clean0}`);
+  console.log(`wrong-direction value deps: ${wrongDirectionDeps}`);
   console.log(`baseline written: ${path.relative(ROOT, BASELINE_PATH)}`);
 }
 
@@ -397,4 +447,6 @@ module.exports = {
   layerOf,
   isKernelTarget,
   isCrossLayerCoupling,
+  classifyDirection,
+  LAYER_RANK,
 };

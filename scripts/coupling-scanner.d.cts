@@ -19,3 +19,9 @@ export function isCrossLayerCoupling(
   targetPath: string,
   targetLayer: string,
 ): boolean;
+
+/** Classifies a confirmed cross-layer value dep as 'inward' (allowed) or 'outward' (a dependency-rule violation). */
+export function classifyDirection(fromLayer: string, toLayer: string): 'inward' | 'outward';
+
+/** Architectural dependency ranks, outermost (0) to innermost (5); used to classify direction. */
+export const LAYER_RANK: Readonly<Record<string, number>>;
