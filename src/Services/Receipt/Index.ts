@@ -15,4 +15,4 @@ export {
 export type { IPayeeMatch } from './ReceiptPayeeMatcher.js';
 export { default as findReceiptPayeeMatch } from './ReceiptPayeeMatcher.js';
 export { default as ReceiptPhotoOcrPipeline } from './ReceiptPhotoOcrPipeline.js';
-export type { IReceiptActualApi } from './Types.js';
+export type { IReceiptActualApi, IReceiptOcr } from './Types.js';

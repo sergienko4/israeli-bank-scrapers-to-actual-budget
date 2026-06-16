@@ -6,7 +6,23 @@
  * orchestrator, keeping the dependency graph one-way.
  */
 
-import type { IReceiptData } from '../../Types/Index.js';
+import type { IReceiptData, Procedure } from '../../Types/Index.js';
+
+/**
+ * OCR surface consumed by the receipt-import sub-modules.
+ *
+ * Abstracts the single instance behaviour the consumers need from
+ * ReceiptOcrService, so they depend on this contract (Dependency
+ * Inversion) instead of the concrete tesseract-backed implementation.
+ */
+export interface IReceiptOcr {
+  /**
+   * Recognizes text from raw image bytes.
+   * @param imageBuffer - Raw image bytes (JPEG/PNG).
+   * @returns Procedure with `{ text }` on success, or a typed failure.
+   */
+  recognize(imageBuffer: Buffer): Promise<Procedure<{ text: string }>>;
+}
 
 /** Actual Budget API surface needed by Receipt import sub-modules. */
 export interface IReceiptActualApi {

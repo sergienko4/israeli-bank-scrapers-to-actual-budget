@@ -9,17 +9,18 @@ import type { IReceiptData, Procedure } from '../../Types/Index.js';
 import { fail, isFail, succeed } from '../../Types/Index.js';
 import { escapeHtml } from '../Notifications/TelegramFormatter.js';
 import type TelegramNotifier from '../Notifications/TelegramNotifier.js';
-import ReceiptOcrService from '../ReceiptOcrService.js';
+import parseReceiptFromText from './OcrParsing.js';
+import type { IReceiptOcr } from './Types.js';
 
 /** Photo-to-receipt pipeline: download → OCR → parse. */
 export default class ReceiptPhotoOcrPipeline {
   /**
    * Creates a ReceiptPhotoOcrPipeline.
-   * @param _ocr - OCR service that recognizes text from raw image bytes.
+   * @param _ocr - OCR abstraction that recognizes text from raw image bytes.
    * @param _telegramNotifier - Telegram notifier used to download photos by file_id.
    */
   constructor(
-    private readonly _ocr: ReceiptOcrService,
+    private readonly _ocr: IReceiptOcr,
     private readonly _telegramNotifier: TelegramNotifier,
   ) {}
 
@@ -62,7 +63,7 @@ export default class ReceiptPhotoOcrPipeline {
     const ocrResult = await this._ocr.recognize(buffer);
     if (isCancelled()) return fail('flow cancelled');
     if (isFail(ocrResult)) return fail(ocrResult.message);
-    const parseResult = ReceiptOcrService.parseReceipt(ocrResult.data.text);
+    const parseResult = parseReceiptFromText(ocrResult.data.text);
     if (isFail(parseResult)) return fail(parseResult.message);
     return succeed({ receipt: parseResult.data });
   }
