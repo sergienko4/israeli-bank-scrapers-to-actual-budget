@@ -1,0 +1,206 @@
+name: PR Status Watch
+
+# Durable, server-side reflector for open PRs. Posts ONE idempotent sticky
+# comment summarising CI state + CodeRabbit review state + an overall
+# ready/blocked verdict, so the maintainer can see PR health at a glance
+# without anyone polling. Runs on GitHub's infra, independent of any local
+# agent session. The verdict logic lives in scripts/pr-status-logic.cjs (unit
+# tested by tests/pr-status-logic.test.ts) so the CI signal deliberately
+# EXCLUDES CodeRabbit's own check run (e.g. its "Insufficient usage credits"
+# rate-limit status) and a CR outage never masquerades as a CI failure;
+# CodeRabbit's *review* is tracked separately. This job name is intentionally
+# NOT in the required ruleset, so it can never block a merge.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed, edited]
+  check_suite:
+    types: [completed]
+  workflow_dispatch: {}
+  schedule:
+    # Durable heartbeat: refresh every open PR every 6h even with no events,
+    # so monitoring never depends on a local agent session being alive.
+    - cron: '0 */6 * * *'
+
+permissions:
+  contents: read
+  checks: read
+  pull-requests: write
+
+concurrency:
+  # Key by PR number when the event has one (so a PR's own events serialise and
+  # never race on the sticky comment); fall back to suite id, then the run id
+  # for scheduled / manual sweeps.
+  group: >-
+    pr-status-watch-${{
+      github.event.pull_request.number
+      || github.event.check_suite.pull_requests[0].number
+      || github.event.check_suite.id
+      || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  reflect:
+    name: PR Status Watch
+    runs-on: ubuntu-latest
+    steps:
+      # Check out the DEFAULT branch (never the PR head) so the verdict module
+      # this write-permission job executes is always the trusted, reviewed
+      # version. A PR can never make this job run its own code — the module
+      # only changes via a merged PR to the default branch.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch || github.ref_name }}
+          persist-credentials: false
+      - name: Reflect CI + CodeRabbit status to a sticky comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MARKER = '<!-- pr-status-watch -->';
+            const { owner, repo } = context.repo;
+            const { ciVerdict, crVerdict, overallVerdict } = require(
+              `${process.env.GITHUB_WORKSPACE}/scripts/pr-status-logic.cjs`
+            );
+
+            // Resolve the PR number(s) for this event. PR / review / check_suite
+            // events carry their PR(s); scheduled + manual runs sweep every open
+            // PR (the durable backfill).
+            let prNumbers = [];
+            if (context.payload.pull_request) {
+              prNumbers = [context.payload.pull_request.number];
+            } else if (context.payload.check_suite) {
+              prNumbers = (context.payload.check_suite.pull_requests || []).map((p) => p.number);
+            } else {
+              const open = await github.paginate(github.rest.pulls.list, {
+                owner,
+                repo,
+                state: 'open',
+                per_page: 100,
+              });
+              prNumbers = open.map((p) => p.number);
+            }
+            prNumbers = [...new Set(prNumbers)].filter(Boolean);
+            if (prNumbers.length === 0) {
+              core.info('No open PR to reflect for this event.');
+              return;
+            }
+
+            const QUERY = `
+              query ($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    state
+                    commits(last: 1) {
+                      nodes {
+                        commit {
+                          statusCheckRollup {
+                            contexts(first: 100) {
+                              nodes {
+                                __typename
+                                ... on CheckRun { name status conclusion }
+                                ... on StatusContext { context state }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                    reviews(last: 30) {
+                      nodes { author { login } state submittedAt }
+                    }
+                  }
+                }
+              }`;
+
+            const CI_CELL = {
+              SUCCESS: '✅ passing',
+              FAILURE: '❌ failing',
+              PENDING: '⏳ running',
+              NONE: '— none yet',
+            };
+            const CR_CELL = {
+              APPROVED: '✅ approved',
+              CHANGES_REQUESTED: '🟠 changes requested',
+              COMMENTED: '💬 commented',
+              DISMISSED: '🚫 dismissed',
+              NONE: '⏳ none yet',
+            };
+
+            const STAMP_RE = /\n<sub>Last updated [^\n]*<\/sub>\s*$/;
+            let failures = 0;
+
+            for (const number of prNumbers) {
+              try {
+                const data = await github.graphql(QUERY, { owner, repo, number });
+                const pr = data?.repository?.pullRequest;
+                if (!pr || pr.state !== 'OPEN') {
+                  core.info(`PR #${number} is not open; skipping.`);
+                  continue;
+                }
+
+                const contexts =
+                  pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.contexts?.nodes ?? [];
+                const ci = ciVerdict(contexts);
+                const cr = crVerdict(pr.reviews?.nodes ?? []);
+                const overall = overallVerdict(ci, cr);
+
+                // Everything except the volatile timestamp footer. Comparing the
+                // core lets a scheduled sweep skip a no-op edit (no notification
+                // churn) when nothing material changed.
+                const core_ = [
+                  MARKER,
+                  '## 🔭 PR status watch',
+                  '',
+                  '| Signal | State |',
+                  '| --- | --- |',
+                  `| CI checks | ${CI_CELL[ci] ?? ci} |`,
+                  `| CodeRabbit review | ${CR_CELL[cr] ?? cr} |`,
+                  `| **Overall** | **${overall}** |`,
+                  '',
+                  '<sub>Auto-updated by the `pr-status-watch` workflow on PR sync, review,',
+                  'check-suite completion, and a 6-hourly sweep. The agent never merges —',
+                  'this is a maintainer signal.</sub>',
+                ].join('\n');
+                const body = `${core_}\n<sub>Last updated ${new Date().toISOString()}.</sub>`;
+
+                const comments = await github.paginate(github.rest.issues.listComments, {
+                  owner,
+                  repo,
+                  issue_number: number,
+                  per_page: 100,
+                });
+                // Match only the reflector's OWN sticky comment: the bot author
+                // AND the marker. Filtering by author alone (or marker alone) could
+                // collide with a human/bot comment that quotes the marker.
+                const existing = comments.find(
+                  (c) =>
+                    c.user &&
+                    c.user.login === 'github-actions[bot]' &&
+                    c.body &&
+                    c.body.includes(MARKER),
+                );
+
+                if (existing) {
+                  if ((existing.body || '').replace(STAMP_RE, '') === core_) {
+                    core.info(`PR #${number} unchanged (${overall}); skipping edit.`);
+                    continue;
+                  }
+                  await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+                  core.info(`Updated status comment on PR #${number}: ${overall}`);
+                } else {
+                  await github.rest.issues.createComment({ owner, repo, issue_number: number, body });
+                  core.info(`Created status comment on PR #${number}: ${overall}`);
+                }
+              } catch (err) {
+                failures += 1;
+                core.warning(`PR #${number}: ${err.message}`);
+              }
+            }
+
+            if (failures > 0) {
+              // Surface reflector breakage without blocking merges (this job is
+              // intentionally not a required check).
+              core.setFailed(`${failures} PR(s) failed to reflect.`);
+            }
