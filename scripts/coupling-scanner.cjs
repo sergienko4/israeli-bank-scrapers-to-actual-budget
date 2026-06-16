@@ -486,5 +486,6 @@ module.exports = {
   isKernelTarget,
   isCrossLayerCoupling,
   classifyDirection,
+  newWrongDirectionEdges,
   LAYER_RANK,
 };

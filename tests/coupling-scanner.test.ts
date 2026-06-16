@@ -15,6 +15,7 @@ import {
   isKernelTarget,
   isCrossLayerCoupling,
   classifyDirection,
+  newWrongDirectionEdges,
 } from '../scripts/coupling-scanner.cjs';
 
 describe('coupling-scanner layer mapping', () => {
@@ -95,5 +96,86 @@ describe('coupling-scanner direction classification (canary)', () => {
   it('defaults unmapped layers to inward so it never invents a smell', () => {
     expect(classifyDirection('(none)', 'CC')).toBe('inward');
     expect(classifyDirection('IS', '(none)')).toBe('inward');
+  });
+});
+
+describe('coupling-scanner new wrong-direction edge guard (canary)', () => {
+  // Minimal fixture builders mirroring the scanner's record + baseline shapes.
+  const dep = (to: string, direction: 'inward' | 'outward', toLayer = 'BP') => ({
+    to,
+    toLayer,
+    direction,
+  });
+  const file = (path: string, layer: string, deps: ReturnType<typeof dep>[]) => ({
+    path,
+    layer,
+    crossLayerValueDeps: deps,
+  });
+  const baselineEdge = (path: string, to: string, direction = 'outward') => ({
+    path,
+    crossLayerValueDeps: [{ to, direction }],
+  });
+
+  it('flags a newly-introduced outward edge absent from the baseline', () => {
+    const report = [
+      file('src/Config/Reach.ts', 'CC', [dep('src/Scrapers/SomeBank.ts', 'outward')]),
+    ];
+    const result = newWrongDirectionEdges(report, { files: [] });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain('src/Config/Reach.ts');
+    expect(result[0]).toContain('src/Scrapers/SomeBank.ts');
+  });
+
+  it('suppresses an outward edge that already exists in the baseline', () => {
+    const target = 'src/Scrapers/SomeBank.ts';
+    const baseline = { files: [baselineEdge('src/Config/Reach.ts', target)] };
+    const report = [file('src/Config/Reach.ts', 'CC', [dep(target, 'outward')])];
+    expect(newWrongDirectionEdges(report, baseline)).toEqual([]);
+  });
+
+  it('never flags inward edges, even brand-new ones', () => {
+    // Scheduler (outer) reading Config (inner) is an allowed inward dep — it must
+    // never raise a wrong-direction smell regardless of the baseline.
+    const report = [
+      file('src/Scheduler/Wire.ts', 'SC', [dep('src/Config/ConfigLoader.ts', 'inward', 'CC')]),
+    ];
+    expect(newWrongDirectionEdges(report, { files: [] })).toEqual([]);
+  });
+
+  it('CANARY: catches an edge-identity SWAP even when the count is unchanged', () => {
+    // The baseline knows exactly one outward edge (ReachA -> target). The report
+    // retires it and introduces a DIFFERENT outward edge (ReachB -> target), so
+    // wrongDirectionDeps stays 1 == baseline 1. A count-only guard passes here;
+    // the identity diff must still flag ReachB and must NOT resurface ReachA.
+    const target = 'src/Scrapers/SomeBank.ts';
+    const baseline = { files: [baselineEdge('src/Resilience/ReachA.ts', target)] };
+    const report = [file('src/Config/ReachB.ts', 'CC', [dep(target, 'outward')])];
+    const result = newWrongDirectionEdges(report, baseline);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain('src/Config/ReachB.ts');
+    expect(result.join('\n')).not.toContain('src/Resilience/ReachA.ts');
+  });
+
+  it('treats the same source with a different target as a distinct new edge', () => {
+    // Identity is (path, to): the SAME offender file adding a NEW downward target
+    // is a fresh violation, while its pre-existing target stays suppressed.
+    const baseline = { files: [baselineEdge('src/Config/Reach.ts', 'src/Scrapers/BankA.ts')] };
+    const report = [
+      file('src/Config/Reach.ts', 'CC', [
+        dep('src/Scrapers/BankA.ts', 'outward'),
+        dep('src/Scrapers/BankB.ts', 'outward'),
+      ]),
+    ];
+    const result = newWrongDirectionEdges(report, baseline);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toContain('src/Scrapers/BankB.ts');
+    expect(result[0]).not.toContain('BankA');
+  });
+
+  it('tolerates a baseline with no files array (??-guarded)', () => {
+    const report = [
+      file('src/Config/Reach.ts', 'CC', [dep('src/Scrapers/SomeBank.ts', 'outward')]),
+    ];
+    expect(newWrongDirectionEdges(report, {})).toHaveLength(1);
   });
 });

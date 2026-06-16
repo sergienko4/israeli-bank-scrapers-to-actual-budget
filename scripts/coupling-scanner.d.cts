@@ -23,5 +23,37 @@ export function isCrossLayerCoupling(
 /** Classifies a confirmed cross-layer value dep as 'inward' (allowed) or 'outward' (a dependency-rule violation). */
 export function classifyDirection(fromLayer: string, toLayer: string): 'inward' | 'outward';
 
+/** A resolved cross-layer value-dependency edge recorded on a scanned file. */
+export interface CrossLayerValueDep {
+  to: string;
+  toLayer: string;
+  direction: 'inward' | 'outward';
+}
+
+/** A scanned source-file record carrying its classified cross-layer edges. */
+export interface ScannedFile {
+  path: string;
+  layer: string;
+  crossLayerValueDeps: CrossLayerValueDep[];
+}
+
+/** The parsed coupling-baseline JSON, narrowed to the fields the guard reads. */
+export interface CouplingBaseline {
+  files?: Array<{
+    path: string;
+    crossLayerValueDeps?: Array<{ to: string; direction: string }>;
+  }>;
+}
+
+/**
+ * Lists outward (wrong-direction) edges present in the report but absent from
+ * the baseline, identified by (path, to) so a count-unchanged swap is still
+ * caught. Returns one formatted "  + from (layer) -> to (toLayer)" line each.
+ */
+export function newWrongDirectionEdges(
+  report: ScannedFile[],
+  baseline: CouplingBaseline,
+): string[];
+
 /** Architectural dependency ranks, outermost (0) to innermost (5); used to classify direction. */
 export const LAYER_RANK: Readonly<Record<string, number>>;
