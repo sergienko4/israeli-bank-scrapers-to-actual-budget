@@ -11,17 +11,16 @@ import type { Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import type { INotifier } from './Notifications/INotifier.js';
 import type TelegramNotifier from './Notifications/TelegramNotifier.js';
-import type { IReceiptActualApi } from './Receipt/Index.js';
+import type { IReceiptActualApi, IReceiptOcr } from './Receipt/Index.js';
 import { ReceiptImportFlow } from './Receipt/ReceiptImportFlow.js';
 import type { IReceiptFlowContext, IReceiptState } from './Receipt/Types.js';
-import type ReceiptOcrService from './ReceiptOcrService.js';
 
 export type { IReceiptActualApi } from './Receipt/Index.js';
 
 /** Options for constructing a ReceiptImportHandler. */
 export interface IReceiptHandlerOptions {
   /** OCR service for receipt text extraction. */
-  readonly ocr: ReceiptOcrService;
+  readonly ocr: IReceiptOcr;
   /** Basic notifier for sending text replies. */
   readonly notifier: INotifier;
   /** Extended notifier for photo download and menus. */

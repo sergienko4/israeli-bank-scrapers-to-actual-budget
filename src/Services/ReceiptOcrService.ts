@@ -20,6 +20,7 @@ import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import preprocessForOcr from './Receipt/OcrImagePreprocess.js';
 import parseReceiptFromText from './Receipt/OcrParsing.js';
+import type { IReceiptOcr } from './Receipt/Types.js';
 
 const DEFAULT_LANGUAGES = 'heb+eng';
 const TESSERACT_CACHE = './data/tesseract';
@@ -28,7 +29,7 @@ type OcrWorker = Awaited<ReturnType<typeof createWorker>>;
 type OcrTextResult = Procedure<{ text: string }>;
 
 /** Extracts transaction data from receipt photos via OCR. */
-export default class ReceiptOcrService {
+export default class ReceiptOcrService implements IReceiptOcr {
   private readonly _languages: string;
 
   /**

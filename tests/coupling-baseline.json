@@ -472,9 +472,9 @@
     {
       "path": "src/Services/Receipt/ReceiptImportFlow.ts",
       "layer": "IS",
-      "lines": 217,
+      "lines": 216,
       "valueImports": 5,
-      "typeImports": 6,
+      "typeImports": 5,
       "crossLayerValueDeps": [],
       "newClasses": [
         "ReceiptPhotoOcrPipeline"
@@ -2525,9 +2525,9 @@
     {
       "path": "src/Services/Receipt/ReceiptPhotoOcrPipeline.ts",
       "layer": "IS",
-      "lines": 70,
+      "lines": 71,
       "valueImports": 3,
-      "typeImports": 2,
+      "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -2537,7 +2537,7 @@
     {
       "path": "src/Services/Receipt/Types.ts",
       "layer": "IS",
-      "lines": 64,
+      "lines": 80,
       "valueImports": 0,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -2549,9 +2549,9 @@
     {
       "path": "src/Services/ReceiptImportHandler.ts",
       "layer": "IS",
-      "lines": 182,
+      "lines": 181,
       "valueImports": 2,
-      "typeImports": 6,
+      "typeImports": 5,
       "crossLayerValueDeps": [],
       "newClasses": [
         "ReceiptImportFlow"
@@ -2563,9 +2563,9 @@
     {
       "path": "src/Services/ReceiptOcrService.ts",
       "layer": "IS",
-      "lines": 138,
+      "lines": 139,
       "valueImports": 6,
-      "typeImports": 1,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3149,8 +3149,8 @@
     {
       "path": "src/Utils/PhoneNumberNormaliser.ts",
       "layer": "ST",
-      "lines": 59,
-      "valueImports": 1,
+      "lines": 62,
+      "valueImports": 2,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],

@@ -19,8 +19,7 @@ import { errorMessage } from '../../Utils/Index.js';
 import type { INotifier } from '../Notifications/INotifier.js';
 import { escapeHtml } from '../Notifications/TelegramFormatter.js';
 import type TelegramNotifier from '../Notifications/TelegramNotifier.js';
-import type ReceiptOcrService from '../ReceiptOcrService.js';
-import type { IPayeeMatch, IReceiptActualApi } from './Index.js';
+import type { IPayeeMatch, IReceiptActualApi, IReceiptOcr } from './Index.js';
 import {
   findReceiptPayeeMatch,
   importReceipt,
@@ -34,7 +33,7 @@ import type { IReceiptFlowContext } from './Types.js';
 /** Dependencies for constructing a {@link ReceiptImportFlow}. */
 export interface IReceiptFlowDeps {
   /** OCR service for receipt text extraction. */
-  readonly ocr: ReceiptOcrService;
+  readonly ocr: IReceiptOcr;
   /** Basic notifier for sending text replies. */
   readonly notifier: INotifier;
   /** Extended notifier for photo download and menus. */
