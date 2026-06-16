@@ -60,9 +60,16 @@ jobs:
           script: |
             const MARKER = '<!-- pr-status-watch -->';
             const { owner, repo } = context.repo;
-            const { ciVerdict, crVerdict, overallVerdict } = require(
-              `${process.env.GITHUB_WORKSPACE}/scripts/pr-status-logic.cjs`
-            );
+            const fs = require('fs');
+            const MODULE = `${process.env.GITHUB_WORKSPACE}/scripts/pr-status-logic.cjs`;
+            // The default branch may not yet carry this module (e.g. the very PR
+            // that first adds this workflow). No-op cleanly rather than failing —
+            // the reflector activates once it is merged to the default branch.
+            if (!fs.existsSync(MODULE)) {
+              core.info('pr-status-logic.cjs not on the default branch yet; skipping until merged.');
+              return;
+            }
+            const { ciVerdict, crVerdict, overallVerdict } = require(MODULE);
 
             // Resolve the PR number(s) for this event. PR / review / check_suite
             // events carry their PR(s); scheduled + manual runs sweep every open
