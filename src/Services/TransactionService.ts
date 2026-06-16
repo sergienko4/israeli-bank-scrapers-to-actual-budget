@@ -13,7 +13,7 @@ import { errorMessage } from '../Utils/Index.js';
 import type { ICategoryResolver } from './ICategoryResolver.js';
 import AccountResolver from './Transaction/AccountResolver.js';
 import DedupQuery from './Transaction/DedupQuery.js';
-import type { IBatchOutcome } from './Transaction/TransactionBatchImporter.js';
+import type { IBatchOutcome, ITransactionBatchImporter } from './Transaction/TransactionBatchImporter.js';
 import TransactionBatchImporter from './Transaction/TransactionBatchImporter.js';
 
 export interface IImportResult {
@@ -33,17 +33,25 @@ export interface IImportTransactionsOpts {
 /** Handles importing bank transactions into Actual Budget. */
 export class TransactionService {
   private readonly _accountResolver: AccountResolver;
-  private readonly _batchImporter: TransactionBatchImporter;
+  private readonly _batchImporter: ITransactionBatchImporter;
 
   /**
    * Creates a TransactionService with the given Actual API and optional category resolver.
    * @param actualApi - The Actual Budget API module for all database operations.
    * @param categoryResolver - Optional resolver to auto-assign categories by description.
+   * @param batchImporter - Optional batch importer; defaults to a concrete
+   *   {@link TransactionBatchImporter}. Injectable as an {@link ITransactionBatchImporter}
+   *   seam so import orchestration can be driven by a fake in tests.
    */
-  constructor(actualApi: typeof api, categoryResolver?: ICategoryResolver) {
-    const dedupQuery = new DedupQuery(actualApi);
+  constructor(
+    actualApi: typeof api,
+    categoryResolver?: ICategoryResolver,
+    batchImporter?: ITransactionBatchImporter,
+  ) {
     this._accountResolver = new AccountResolver(actualApi);
-    this._batchImporter = new TransactionBatchImporter(actualApi, dedupQuery, categoryResolver);
+    this._batchImporter =
+      batchImporter ??
+      new TransactionBatchImporter(actualApi, new DedupQuery(actualApi), categoryResolver);
   }
 
   /**
