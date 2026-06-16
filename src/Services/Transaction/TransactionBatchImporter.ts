@@ -37,6 +37,22 @@ export interface IBatchOutcome {
   existingTransactions: ITransactionRecord[];
 }
 
+/**
+ * Abstraction for the per-account transaction batch-import loop.
+ *
+ * TransactionService depends on this seam rather than the concrete
+ * {@link TransactionBatchImporter} so the import-orchestration logic can be
+ * exercised by a fake in tests without reaching Actual Budget.
+ */
+export interface ITransactionBatchImporter {
+  /**
+   * Processes a transaction batch, separating new from already-imported.
+   * @param opts - Batch options containing bank name, account info and transactions.
+   * @returns Outcome with arrays of new and existing ITransactionRecord.
+   */
+  processBatch(opts: IBatchOpts): Promise<IBatchOutcome>;
+}
+
 interface IBatchContext {
   txns: IBankTransaction[];
   accountKey: string;
@@ -59,7 +75,7 @@ interface ISingleTxnContext {
  * Imports a batch of bank transactions into Actual Budget with dedup
  * against both new-hash and legacy imported_id formats.
  */
-export default class TransactionBatchImporter {
+export default class TransactionBatchImporter implements ITransactionBatchImporter {
   private readonly _api: typeof api;
   private readonly _dedupQuery: DedupQuery;
   private readonly _categoryResolver?: ICategoryResolver;
