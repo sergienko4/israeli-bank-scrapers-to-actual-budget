@@ -14,6 +14,7 @@
 
 import type { Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
+import logger from './UtilLogger.js';
 
 const STRIP_RE = /[+\-\s]/g;
 const ISRAELI_CANONICAL_RE = /^972\d{9}$/;
@@ -25,6 +26,7 @@ const ISRAELI_LOCAL_LEN = 10;
  * @returns Stripped digits-only string ready for canonical validation.
  */
 export function stripPhoneFormatting(raw: string): string {
+  logger.debug('stripPhoneFormatting');
   if (typeof raw !== 'string') return '';
   const stripped = raw.replaceAll(STRIP_RE, '');
   if (stripped.length === ISRAELI_LOCAL_LEN && stripped.startsWith('0')) {
@@ -44,6 +46,7 @@ export function stripPhoneFormatting(raw: string): string {
  *          or fail with a human-readable reason on schema mismatch.
  */
 export default function normalisePhoneNumber(raw: string): Procedure<string> {
+  logger.debug('normalisePhoneNumber');
   if (typeof raw !== 'string' || raw.length === 0) {
     return fail('Phone must be Israeli digits-only (972XXXXXXXXX or 0XXXXXXXXX)');
   }

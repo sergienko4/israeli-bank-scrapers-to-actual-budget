@@ -60,8 +60,9 @@ describe('coupling-scanner cross-layer decision (canary)', () => {
     // Wiring/service reaching into Config internals, services, or scrapers.
     expect(isCrossLayerCoupling('SC', 'src/Config/ConfigLoader.ts', 'CC')).toBe(true);
     expect(isCrossLayerCoupling('IS', 'src/Scraper/BankScraper.ts', 'BP')).toBe(true);
-    // The real wrong-direction edge: Logger (CC) reaching down into a scraper util.
-    expect(isCrossLayerCoupling('CC', 'src/Scraper/PhoneNumberNormaliser.ts', 'BP')).toBe(true);
+    // A cross-cutting concern (CC) importing any domain (BP) module is counted
+    // as a wrong-direction edge — the scanner's core CC->BP entanglement guard.
+    expect(isCrossLayerCoupling('CC', 'src/Scraper/CredentialsBuilder.ts', 'BP')).toBe(true);
   });
 
   it('never counts same-layer or unmapped imports', () => {

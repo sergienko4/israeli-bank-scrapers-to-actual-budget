@@ -3,7 +3,7 @@ import type { ScraperCredentials } from '@sergienko4/israeli-bank-scrapers';
 import { getLogger } from '../Logger/Index.js';
 import maskPhone from '../Logger/MaskPhone.js';
 import type { IBankConfig } from '../Types/Index.js';
-import normalisePhoneNumber, { stripPhoneFormatting } from './PhoneNumberNormaliser.js';
+import normalisePhoneNumber, { stripPhoneFormatting } from '../Utils/PhoneNumberNormaliser.js';
 
 /**
  * Coerces a config phoneNumber to the upstream-required canonical form,
