@@ -3149,8 +3149,8 @@
     {
       "path": "src/Utils/PhoneNumberNormaliser.ts",
       "layer": "ST",
-      "lines": 62,
-      "valueImports": 2,
+      "lines": 59,
+      "valueImports": 1,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
