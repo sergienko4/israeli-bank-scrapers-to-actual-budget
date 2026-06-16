@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { IDateRangePolicy } from '../../src/Scraper/Policies/DateRangePolicy.js';
 import { AccountImporter } from '../../src/Services/AccountImporter.js';
 import { DryRunCollector } from '../../src/Services/DryRunCollector.js';
 import type { MetricsService } from '../../src/Services/MetricsService.js';
@@ -18,14 +19,15 @@ vi.mock('../../src/Logger/Index.js', () => ({
   getLogBuffer: vi.fn(),
 }));
 
-// ── BankScraper (filterTransactionsByDate) mock ──────────────────────────────
-vi.mock('../../src/Scraper/BankScraper.js', () => ({
-  filterTransactionsByDate: vi.fn((txns: unknown[]) => txns),
-  computeStartDate: vi.fn(() => new Date()),
-  isEmptyResultError: vi.fn(),
-  logScrapeFailure: vi.fn(),
-  BankScraper: vi.fn(),
-}));
+// ── Date-range policy fake ───────────────────────────────────────────────────
+// AccountImporter now receives an injected IDateRangePolicy (Phase-3 migration
+// off the BankScraper back-compat shim). Filtering is a pass-through here so
+// these tests stay focused on import orchestration; date math has its own tests.
+const passthroughDateRangePolicy: IDateRangePolicy = {
+  computeStartDate: () => new Date(),
+  filterByDate: (txns) => txns,
+  formatDateRange: () => '',
+};
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -70,6 +72,7 @@ function makeOpts(overrides = {}) {
     isDryRun: false,
     dryRunCollector: makeDryRunCollector(),
     shutdownHandler: { isShuttingDown: vi.fn().mockReturnValue(false), onShutdown: vi.fn() },
+    dateRangePolicy: passthroughDateRangePolicy,
     ...overrides,
   };
 }

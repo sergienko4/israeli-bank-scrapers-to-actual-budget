@@ -3,7 +3,7 @@
  */
 import { getLogger } from '../Logger/Index.js';
 import type { IShutdownHandler } from '../Resilience/GracefulShutdown.js';
-import { filterTransactionsByDate } from '../Scraper/BankScraper.js';
+import type { IDateRangePolicy } from '../Scraper/Policies/DateRangePolicy.js';
 import type {
   IBankConfig, IBankTransaction, ICanonicalScrapeResult,
 } from '../Types/Index.js';
@@ -32,6 +32,8 @@ export interface IAccountImporterOpts {
   dryRunCollector: DryRunCollector;
   /** Shutdown handler for checking whether to abort mid-run. */
   shutdownHandler: IShutdownHandler;
+  /** Date-range policy used to filter transactions to the configured window. */
+  dateRangePolicy: IDateRangePolicy;
 }
 
 /** Processes scraped accounts: imports transactions, reconciles balances, tracks metrics. */
@@ -142,7 +144,7 @@ export class AccountImporter {
   ): Promise<{ imported: number; skipped: number }> {
     const targetResult = findTargetForAccount(bankCtx.bankConfig, account.accountNumber);
     const accountName = isSuccess(targetResult) ? targetResult.data.accountName : undefined;
-    const txns = filterTransactionsByDate(account.txns, bankCtx.bankConfig);
+    const txns = [...this.opts.dateRangePolicy.filterByDate(account.txns, bankCtx.bankConfig)];
     AccountLogPresenter.logAccountInfo({
       accountNumber: account.accountNumber, accountName,
       balance: account.balance, currency: bankCtx.currency, txnCount: txns.length,
