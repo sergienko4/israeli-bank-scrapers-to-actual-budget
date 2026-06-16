@@ -12,6 +12,9 @@ import { CREDENTIAL_SPECS } from './BankCredentialSpecs.js';
 import { BANK_DATE_VALIDATORS } from './Validators/BankDateValidators.js';
 import { isValidUUID } from './Validators/ValidationResult.js';
 
+// Email format: non-empty local part, "@", domain, and a dotted TLD, no spaces.
+const EMAIL_RE = /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/;
+
 /**
  * Validates all settings for a single bank entry.
  * @param bankName - The key used for this bank in the banks map.
@@ -60,13 +63,19 @@ function validateDateConfig(bankName: string, config: IBankConfig): Procedure<{ 
 function validateTargets(
   bankName: string, targets: IBankConfig['targets']
 ): Procedure<{ valid: true }> {
-  if (!targets || targets.length === 0) {
+  if (!Array.isArray(targets) || targets.length === 0) {
     return fail(
       `No targets configured for ${bankName}. At least one target is required.`
     );
   }
   for (let idx = 0; idx < targets.length; idx++) {
-    const targetResult = validateTarget(bankName, targets[idx], idx);
+    const target: unknown = targets[idx];
+    if (target === null || typeof target !== 'object' || Array.isArray(target)) {
+      return fail(`Invalid target for ${bankName} target ${String(idx)}. Must be an object.`);
+    }
+    const targetResult = validateTarget(
+      bankName, target as Parameters<typeof validateTarget>[1], idx
+    );
     if (isFail(targetResult)) return targetResult;
   }
   return succeed({ valid: true as const });
@@ -82,7 +91,7 @@ function validateTargets(
 function validateTargetId(
   bankName: string, accountId: string, idx: number
 ): Procedure<{ valid: true }> {
-  if (!accountId) {
+  if (typeof accountId !== 'string' || !accountId) {
     return fail(`Missing actualAccountId for ${bankName} target ${String(idx)}`);
   }
   if (!isValidUUID(accountId)) {
@@ -113,8 +122,11 @@ function validateTarget(
   const idResult = validateTargetId(bankName, target.actualAccountId, idx);
   if (isFail(idResult)) return idResult;
   const { accounts } = target;
-  if (accounts !== 'all' && (!Array.isArray(accounts) || accounts.length === 0)) {
-    return fail(`Invalid accounts for ${bankName} target ${String(idx)}. Must be "all" or array.`);
+  if (accounts !== 'all' && (!Array.isArray(accounts) || accounts.length === 0 ||
+    ![...accounts].every((account: unknown) => typeof account === 'string'))) {
+    return fail(
+      `Invalid accounts for ${bankName} target ${String(idx)}. Must be "all" or array of strings.`
+    );
   }
   if (typeof target.reconcile !== 'boolean') {
     return fail(`Invalid reconcile for ${bankName} target ${String(idx)}. Must be boolean.`);
@@ -147,20 +159,18 @@ function validateBankCredentials(
 function validateFieldFormats(
   bankName: string, config: IBankConfig
 ): Procedure<{ valid: true }> {
-  if (config.email && !/^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/.test(config.email)) {
+  if (config.email &&
+      (typeof config.email !== 'string' || !EMAIL_RE.test(config.email))) {
     return fail(`Invalid email format for ${bankName}: "${config.email}"`);
   }
-  const phone = config.phoneNumber?.replaceAll(/[\s-]/g, '');
-  if (config.phoneNumber && phone && !/^\+?\d{10,15}$/.test(phone)) {
-    return fail(
-      `Invalid phone number format for ${bankName}: "${config.phoneNumber}". ` +
-      'Expected 10-15 digits.'
-    );
+  const phone = typeof config.phoneNumber === 'string'
+    ? config.phoneNumber.replaceAll(/[\s-]/g, '') : '';
+  if (config.phoneNumber && !/^\+?\d{10,15}$/.test(phone)) {
+    return fail(`Invalid phone number format for ${bankName}: "${config.phoneNumber}".`);
   }
-  if (config.card6Digits && !/^\d{6}$/.test(config.card6Digits)) {
-    return fail(
-      `Invalid card6Digits format for ${bankName}: "${config.card6Digits}". Expected 6 digits.`
-    );
+  if (config.card6Digits &&
+      (typeof config.card6Digits !== 'string' || !/^\d{6}$/.test(config.card6Digits))) {
+    return fail(`Invalid card6Digits format for ${bankName}: "${config.card6Digits}".`);
   }
   return succeed({ valid: true as const });
 }

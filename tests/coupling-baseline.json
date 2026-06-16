@@ -528,7 +528,7 @@
     {
       "path": "src/Config/BankConfigValidators.ts",
       "layer": "CC",
-      "lines": 186,
+      "lines": 196,
       "valueImports": 4,
       "typeImports": 1,
       "crossLayerValueDeps": [],
