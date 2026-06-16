@@ -5,8 +5,8 @@
     "critical8plus": 0,
     "high5to7": 1,
     "medium3to4": 5,
-    "low1to2": 23,
-    "clean0": 209
+    "low1to2": 24,
+    "clean0": 208
   },
   "files": [
     {
@@ -508,6 +508,18 @@
         "TelegramUpdateDispatcher"
       ],
       "newCount": 7,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Services/Transaction/TransactionBatchImporter.ts",
+      "layer": "IS",
+      "lines": 210,
+      "valueImports": 3,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 1
     },
@@ -2878,21 +2890,9 @@
       "score": 0
     },
     {
-      "path": "src/Services/Transaction/TransactionBatchImporter.ts",
-      "layer": "IS",
-      "lines": 194,
-      "valueImports": 3,
-      "typeImports": 4,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 0
-    },
-    {
       "path": "src/Services/TransactionService.ts",
       "layer": "IS",
-      "lines": 102,
+      "lines": 110,
       "valueImports": 6,
       "typeImports": 4,
       "crossLayerValueDeps": [],
