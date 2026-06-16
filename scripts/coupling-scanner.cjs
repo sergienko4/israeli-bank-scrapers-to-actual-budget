@@ -370,14 +370,41 @@ function distribution(files) {
 }
 
 /**
+ * Lists outward (wrong-direction) cross-layer edges present in the current
+ * report but absent from the baseline — the NEW dependency-rule violations a
+ * --check run must flag. Mirrors how the critical-count guard diffs new
+ * critical files against the baseline so only freshly-introduced edges print.
+ *
+ * @param {object[]} report - Scanned file records (each with crossLayerValueDeps).
+ * @param {object} baseline - Parsed baseline JSON.
+ * @returns {string[]} "from -> to" lines, one per newly-introduced outward edge.
+ */
+function newWrongDirectionEdges(report, baseline) {
+  const known = new Set(
+    (baseline.files ?? []).flatMap((f) =>
+      (f.crossLayerValueDeps ?? [])
+        .filter((d) => d.direction === 'outward')
+        .map((d) => `${f.path}|${d.to}`),
+    ),
+  );
+  return report.flatMap((f) =>
+    f.crossLayerValueDeps
+      .filter((d) => d.direction === 'outward' && !known.has(`${f.path}|${d.to}`))
+      .map((d) => `  + ${f.path} (${f.layer}) -> ${d.to} (${d.toLayer})`),
+  );
+}
+
+/**
  * Entry point: writes a baseline JSON or verifies the current state against it.
  *
  * Modes:
  *   - default (`coupling:report`): scans src/, writes tests/coupling-baseline.json,
  *     prints the bucket summary.
- *   - --check  (`coupling:check` gate): scans src/, compares the critical-bucket
- *     count to the committed baseline; exits non-zero (printing the offending
- *     new criticals) when the critical count regresses.
+ *   - --check  (`coupling:check` gate): scans src/ and compares against the
+ *     committed baseline. Exits non-zero when EITHER the critical-bucket count
+ *     regresses (printing the offending new criticals) OR a NEW wrong-direction
+ *     (inner -> outer) value edge appears by identity — even if the aggregate
+ *     count is unchanged (printing the offending new edges).
  *
  * @returns {void} Process exit code communicates success/failure.
  */
@@ -417,6 +444,17 @@ function main() {
       const regressors = report.filter((f) => f.score >= 8 && !baselineNames.has(f.path));
       for (const r of regressors) {
         console.error(`  + ${r.path} (score=${r.score})`);
+      }
+      process.exit(1);
+    }
+    const baselineWrong = baseline.wrongDirectionDeps ?? 0;
+    const newWrong = newWrongDirectionEdges(report, baseline);
+    if (newWrong.length > 0 || wrongDirectionDeps > baselineWrong) {
+      console.error(
+        `REGRESSION: wrong-direction value deps introduced (total=${wrongDirectionDeps}, baseline=${baselineWrong})`,
+      );
+      for (const line of newWrong) {
+        console.error(line);
       }
       process.exit(1);
     }

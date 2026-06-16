@@ -182,4 +182,71 @@ describe('coupling-scanner CLI shared-kernel exemption (E2E)', () => {
       rmSync(join(root, regressor), { force: true });
     }
   });
+
+  it('check mode fails (exit 1) on a newly introduced wrong-direction dep', () => {
+    const offender = 'src/Config/ReachIntoScraperToo.ts';
+    // A 2nd inner->outer edge (Config reaching down into a Scrapers domain file)
+    // beyond the one baked into the baseline → wrongDirectionDeps 1 → 2. Score
+    // stays low (1 dep), so this is caught ONLY by the direction guard, not the
+    // critical-count guard — exactly the #459 class of regression that motivated it.
+    fixtureFile(
+      offender,
+      "import { scrape } from '../Scrapers/SomeBank.js';\n\nexport function reachAgain(): void {\n  scrape();\n}",
+    );
+
+    try {
+      const check = runScanner('--check');
+      expect(check.status).toBe(1);
+      expect(check.stderr).toContain('wrong-direction value deps');
+      expect(check.stderr).toContain(offender);
+    } finally {
+      rmSync(join(root, offender), { force: true });
+    }
+  });
+
+  it('check mode passes (exit 0) when only an allowed inward dep is added', () => {
+    // A NEW inward (outer -> inner) edge: Scheduler (SC, rank 1) reading Config
+    // (CC, rank 4). It IS a counted peer dep, but direction='inward', so it must
+    // NOT raise wrongDirectionDeps and must NOT trip the new guard.
+    const inward = 'src/Scheduler/ExtraInwardWiring.ts';
+    fixtureFile(
+      inward,
+      "import { loadConfig } from '../Config/ConfigLoader.js';\n\nexport function wireExtra(): void {\n  loadConfig();\n}",
+    );
+
+    try {
+      const check = runScanner('--check');
+      expect(check.status, check.stderr).toBe(0);
+      expect(check.stdout).toContain('critical=0');
+    } finally {
+      rmSync(join(root, inward), { force: true });
+    }
+  });
+
+  it('check mode fails when a wrong-direction edge is swapped (count unchanged)', () => {
+    // Remove the baseline's single outward edge and add a DIFFERENT one, keeping
+    // wrongDirectionDeps at 1 == baseline 1. A count-only guard would MISS this;
+    // the identity diff catches the freshly-introduced edge regardless of count.
+    const removed = 'src/Resilience/ReachIntoScraper.ts';
+    const added = 'src/Config/SwapReach.ts';
+    rmSync(join(root, removed), { force: true });
+    fixtureFile(
+      added,
+      "import { scrape } from '../Scrapers/SomeBank.js';\n\nexport function reachSwap(): void {\n  scrape();\n}",
+    );
+
+    try {
+      const check = runScanner('--check');
+      expect(check.status).toBe(1);
+      expect(check.stderr).toContain('wrong-direction value deps');
+      expect(check.stderr).toContain(added);
+    } finally {
+      rmSync(join(root, added), { force: true });
+      // Restore the original outward fixture so the suite stays idempotent.
+      fixtureFile(
+        removed,
+        "import { scrape } from '../Scrapers/SomeBank.js';\n\nexport function reachDown(): void {\n  scrape();\n}",
+      );
+    }
+  });
 });
