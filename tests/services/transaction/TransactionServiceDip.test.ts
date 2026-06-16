@@ -14,6 +14,7 @@
  */
 
 import type api from '@actual-app/api';
+import { faker } from '@faker-js/faker';
 import { describe, it, expect, vi } from 'vitest';
 import {
   TransactionService, type IImportTransactionsOpts,
@@ -22,7 +23,7 @@ import type {
   IBatchOutcome, ITransactionBatchImporter,
 } from '../../../src/Services/Transaction/TransactionBatchImporter.js';
 import type { ITransactionRecord } from '../../../src/Types/Index.js';
-import { assertProcedureSuccess } from '../../helpers/factories.js';
+import { assertProcedureSuccess, fakeTransactionRecord } from '../../helpers/factories.js';
 
 vi.mock('../../../src/Logger/Index.js', () => ({
   getLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -36,20 +37,17 @@ const STUB_API = {} as unknown as typeof api;
 /** Builds import options; content is irrelevant since the injected fake returns a fixed outcome. */
 function buildOpts(): IImportTransactionsOpts {
   return {
-    bankName: 'hapoalim', accountNumber: '12345',
-    actualAccountId: 'acc-1', transactions: [],
+    bankName: 'hapoalim',
+    accountNumber: faker.finance.accountNumber(),
+    actualAccountId: faker.string.uuid(),
+    transactions: [],
   };
 }
 
 describe('TransactionService DIP — orchestrator depends on the ITransactionBatchImporter abstraction', () => {
   it('TXN-DIP-01: maps an injected fake importer outcome to imported/skipped counts', async () => {
-    const newTransactions: ITransactionRecord[] = [
-      { date: '01/01/2025', description: 'Coffee', amount: -12.5 },
-      { date: '02/01/2025', description: 'Salary', amount: 5000 },
-    ];
-    const existingTransactions: ITransactionRecord[] = [
-      { date: '03/01/2025', description: 'Rent', amount: -3000 },
-    ];
+    const newTransactions: ITransactionRecord[] = [fakeTransactionRecord(), fakeTransactionRecord()];
+    const existingTransactions: ITransactionRecord[] = [fakeTransactionRecord()];
     const outcome: IBatchOutcome = { newTransactions, existingTransactions };
     const fakeImporter: ITransactionBatchImporter = {
       processBatch: vi.fn().mockResolvedValue(outcome),

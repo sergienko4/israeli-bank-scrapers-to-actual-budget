@@ -48,10 +48,10 @@ export class TransactionService {
     categoryResolver?: ICategoryResolver,
     batchImporter?: ITransactionBatchImporter,
   ) {
-    const dedupQuery = new DedupQuery(actualApi);
     this._accountResolver = new AccountResolver(actualApi);
     this._batchImporter =
-      batchImporter ?? new TransactionBatchImporter(actualApi, dedupQuery, categoryResolver);
+      batchImporter ??
+      new TransactionBatchImporter(actualApi, new DedupQuery(actualApi), categoryResolver);
   }
 
   /**
