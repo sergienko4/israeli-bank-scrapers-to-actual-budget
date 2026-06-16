@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import normalisePhoneNumber from '../../src/Scraper/PhoneNumberNormaliser.js';
+import normalisePhoneNumber from '../../src/Utils/PhoneNumberNormaliser.js';
 
 describe('normalisePhoneNumber', () => {
   it('TC-NORM-001 — strips leading plus', () => {

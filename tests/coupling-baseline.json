@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-06-15",
+  "generatedAt": "2026-06-16",
   "totalFiles": 238,
   "scoreDistribution": {
     "critical8plus": 0,
     "high5to7": 1,
     "medium3to4": 6,
-    "low1to2": 23,
-    "clean0": 208
+    "low1to2": 22,
+    "clean0": 209
   },
   "files": [
     {
@@ -199,24 +199,6 @@
         "SpendingWatchService"
       ],
       "newCount": 4,
-      "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Logger/MaskPhone.ts",
-      "layer": "CC",
-      "lines": 27,
-      "valueImports": 1,
-      "typeImports": 0,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Scraper/PhoneNumberNormaliser.ts",
-          "toLayer": "BP",
-          "dynamic": false
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
       "ocpRisks": [],
       "score": 2
     },
@@ -998,6 +980,18 @@
       "score": 0
     },
     {
+      "path": "src/Logger/MaskPhone.ts",
+      "layer": "CC",
+      "lines": 27,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Logger/PinoAdapter.ts",
       "layer": "CC",
       "lines": 101,
@@ -1340,18 +1334,6 @@
       "layer": "BP",
       "lines": 14,
       "valueImports": 0,
-      "typeImports": 1,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 0
-    },
-    {
-      "path": "src/Scraper/PhoneNumberNormaliser.ts",
-      "layer": "BP",
-      "lines": 59,
-      "valueImports": 1,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -3158,6 +3140,18 @@
       "lines": 29,
       "valueImports": 1,
       "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Utils/PhoneNumberNormaliser.ts",
+      "layer": "ST",
+      "lines": 59,
+      "valueImports": 1,
+      "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,

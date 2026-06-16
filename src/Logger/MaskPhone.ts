@@ -5,7 +5,7 @@
  * empty / unparseable inputs.
  */
 
-import normalisePhoneNumber from '../Scraper/PhoneNumberNormaliser.js';
+import normalisePhoneNumber from '../Utils/PhoneNumberNormaliser.js';
 
 const MASKED = '<masked>';
 const VISIBLE_TRAILING = 3;
