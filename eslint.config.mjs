@@ -1003,7 +1003,6 @@ export default tseslint.config(
     files: ['src/Scrapers/Pipeline/Steps/Bank/BankRunRecorder.ts'],
     rules: {
       'max-lines-per-function': ['error', { max: 25, skipBlankLines: true, skipComments: true }],
-      '@typescript-eslint/max-params': ['error', { max: 4 }], // recordQuarantine needs 4 params
       'jsdoc/require-description': 'off', // Inline closure methods documented at interface level
       'jsdoc/require-returns': 'off',
       'jsdoc/require-param-description': 'off',

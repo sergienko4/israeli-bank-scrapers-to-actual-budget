@@ -184,7 +184,11 @@ function buildProcessor(
     mutator.reduce({ kind: 'start', bankName: entry.bankName });
     const outcome = await processOneBank({ entry, ctx, start });
     if (isFail(outcome)) {
-      return recordQuarantine(mutator, entry.bankName, start, outcome);
+      return recordQuarantine(mutator, {
+        bankName: entry.bankName,
+        start,
+        outcome,
+      });
     }
     return recordSuccess(mutator, outcome, entry.bankName);
   };

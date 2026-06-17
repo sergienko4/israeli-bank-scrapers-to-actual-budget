@@ -98,20 +98,26 @@ export function recordSuccess(
 }
 
 /**
+ * Options for recordQuarantine.
+ */
+export interface IRecordQuarantineOpts {
+  readonly bankName: string;
+  readonly start: number;
+  readonly outcome: IProcedureFailure;
+}
+
+/**
  * Records a quarantined bank — pushes entry + emits 'failure' delta.
  * Preserves original Error reference end-to-end (INV-3).
  * @param mutator - Run mutator.
- * @param bankName - Bank name for the quarantine entry.
- * @param start - Process start timestamp (ms since epoch).
- * @param outcome - Failed Procedure carrying status + optional Error.
+ * @param opts - Quarantine recording options.
  * @returns The outcome unchanged (strategy logs + skips).
  */
 export function recordQuarantine(
   mutator: IRunMutator,
-  bankName: string,
-  start: number,
-  outcome: IProcedureFailure,
+  opts: IRecordQuarantineOpts,
 ): Procedure<IBankResult> {
+  const { bankName, start, outcome } = opts;
   const stage = stageFromStatus(outcome.status);
   const error = outcome.error ?? new Error(outcome.message);
   const entry: IBankQuarantineEntry = Object.freeze({
