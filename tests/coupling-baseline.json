@@ -1,29 +1,15 @@
 {
   "generatedAt": "2026-06-17",
-  "totalFiles": 240,
+  "totalFiles": 241,
   "scoreDistribution": {
     "critical8plus": 0,
     "high5to7": 0,
-    "medium3to4": 1,
-    "low1to2": 26,
-    "clean0": 213
+    "medium3to4": 0,
+    "low1to2": 27,
+    "clean0": 214
   },
   "wrongDirectionDeps": 0,
   "files": [
-    {
-      "path": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
-      "layer": "BP",
-      "lines": 380,
-      "valueImports": 4,
-      "typeImports": 4,
-      "crossLayerValueDeps": [],
-      "newClasses": [
-        "Error"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 3
-    },
     {
       "path": "src/Config/ConfigLoader.ts",
       "layer": "CC",
@@ -197,6 +183,18 @@
         "TelegramNotifier"
       ],
       "newCount": 2,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
+      "layer": "BP",
+      "lines": 273,
+      "valueImports": 5,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 2
     },
@@ -1556,6 +1554,20 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Steps/Bank/BankRunRecorder.ts",
+      "layer": "BP",
+      "lines": 131,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Error"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 0
     },
