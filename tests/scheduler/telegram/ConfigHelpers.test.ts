@@ -12,9 +12,8 @@ vi.mock('../../../src/Logger/Index.js', () => ({
   deriveLogFormat: vi.fn(() => 'words'),
 }));
 
-const { mockLoadFullConfig, mockLoadRaw, mockValidateAll, mockFormatReport } = vi.hoisted(() => ({
+const { mockLoadFullConfig, mockValidateAll, mockFormatReport } = vi.hoisted(() => ({
   mockLoadFullConfig: vi.fn(),
-  mockLoadRaw: vi.fn(),
   mockValidateAll: vi.fn(),
   mockFormatReport: vi.fn(),
 }));
@@ -22,12 +21,6 @@ vi.mock('../../../src/Scheduler/ConfigBootstrap.js', () => ({
   loadFullConfig: mockLoadFullConfig,
   loadLogConfig: vi.fn(() => ({ success: true, data: { logDir: '/tmp/logs' } })),
 }));
-vi.mock('../../../src/Config/ConfigLoader.js', () => {
-  class MockConfigLoader {
-    loadRaw = mockLoadRaw;
-  }
-  return { ConfigLoader: MockConfigLoader };
-});
 vi.mock('../../../src/Config/ConfigValidator.js', () => {
   class MockConfigValidator {
     validateAll = mockValidateAll;
@@ -43,7 +36,6 @@ describe('ConfigHelpers edge cases', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockLoadFullConfig.mockReset();
-    mockLoadRaw.mockReset();
     mockValidateAll.mockReset();
     mockFormatReport.mockReset();
   });
@@ -61,14 +53,14 @@ describe('ConfigHelpers edge cases', () => {
   });
 
   it('runConfigValidation returns FAIL prefix when raw config cannot load', async () => {
-    mockLoadRaw.mockReturnValue(fail('missing config.json'));
+    mockLoadFullConfig.mockReturnValue(fail('missing config.json'));
     const out = await runConfigValidation();
     expect(out.startsWith('[FAIL]')).toBe(true);
     expect(out).toContain('missing config.json');
   });
 
   it('runConfigValidation delegates to ConfigValidator.formatReport on success', async () => {
-    mockLoadRaw.mockReturnValue(succeed({ banks: {} }));
+    mockLoadFullConfig.mockReturnValue(succeed({ banks: {} }));
     mockValidateAll.mockResolvedValue([{ ok: true }]);
     mockFormatReport.mockReturnValue('FORMATTED REPORT');
     const out = await runConfigValidation();

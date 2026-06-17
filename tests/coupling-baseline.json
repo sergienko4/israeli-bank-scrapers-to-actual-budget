@@ -4,37 +4,12 @@
   "scoreDistribution": {
     "critical8plus": 0,
     "high5to7": 0,
-    "medium3to4": 2,
-    "low1to2": 25,
+    "medium3to4": 1,
+    "low1to2": 26,
     "clean0": 213
   },
   "wrongDirectionDeps": 0,
   "files": [
-    {
-      "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
-      "layer": "SC",
-      "lines": 65,
-      "valueImports": 5,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Config/ConfigLoader.ts",
-          "toLayer": "CC",
-          "dynamic": true,
-          "direction": "inward"
-        },
-        {
-          "to": "src/Config/ConfigValidator.ts",
-          "toLayer": "CC",
-          "dynamic": true,
-          "direction": "inward"
-        }
-      ],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
     {
       "path": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
       "layer": "BP",
@@ -139,6 +114,25 @@
         "ConfigLoader"
       ],
       "newCount": 2,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
+      "layer": "SC",
+      "lines": 61,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Config/ConfigValidator.ts",
+          "toLayer": "CC",
+          "dynamic": true,
+          "direction": "inward"
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 2
     },
