@@ -41,6 +41,8 @@ export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLi
 
 /**
  * Assembles provider options including start date and OTP retriever.
+ * The OTP retriever is conditionally attached based on bank type to avoid
+ * double prompts for banks that read from credentials (oneZero, pepper, payBox).
  * @param deps - Strategy dependencies used to resolve Chrome args.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @param otpRetriever - Optional OTP retriever attached for 2FA banks.
@@ -50,7 +52,7 @@ export function buildScraperOptions(
   deps: LiveDeps, scrapeOpts: LiveOpts, otpRetriever: OtpRetriever,
 ): ScraperOptions {
   const options = buildBaseScraperOptions(deps, scrapeOpts);
-  attachOtpRetriever(options, otpRetriever);
+  attachOtpRetriever(options, otpRetriever, scrapeOpts.companyType);
   return options;
 }
 
@@ -72,18 +74,26 @@ export function buildBaseScraperOptions(deps: LiveDeps, scrapeOpts: LiveOpts): S
 }
 
 /**
+ * Banks that read otpCodeRetriever from credentials, not ScraperOptions.
+ */
+const CREDS_ONLY_BANKS = ['oneZero', 'pepper', 'payBox'];
+
+/**
  * Attaches the OTP adapter expected by the provider package.
+ * Only attaches for banks that use OtpHandler (beinleumi). Banks that read
+ * otpCodeRetriever from credentials (oneZero, pepper, payBox) already have
+ * it attached by buildCredentials and should NOT get it in ScraperOptions
+ * to avoid double OTP prompts.
  * @param target - Provider options object that receives the adapter.
  * @param otpRetriever - Optional OTP retriever attached for 2FA banks.
+ * @param companyId - CompanyType to determine if bank uses OtpHandler.
  * @returns True when the OTP adapter was attached.
  */
-export function attachOtpRetriever(target: ScraperOptions, otpRetriever: OtpRetriever): boolean {
-  if (!otpRetriever) return false;
-  /**
-   * Delegates provider OTP lookup to the configured retriever.
-   * @returns OTP code provided by the injected retriever.
-   */
-  target.otpCodeRetriever = (): Promise<string> => otpRetriever();
+export function attachOtpRetriever(
+  target: ScraperOptions, otpRetriever: OtpRetriever, companyId: string,
+): boolean {
+  if (!otpRetriever || CREDS_ONLY_BANKS.includes(companyId)) return false;
+  target.otpCodeRetriever = otpRetriever;
   return true;
 }
 
