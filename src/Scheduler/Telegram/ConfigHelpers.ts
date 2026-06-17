@@ -7,10 +7,8 @@
  * the rest of the Telegram orchestration surface.
  */
 
-import type * as ConfigLoaderModule from '../../Config/ConfigLoader.js';
 import type * as ConfigValidatorModule from '../../Config/ConfigValidator.js';
 import { getLogger } from '../../Logger/Index.js';
-import { isFail } from '../../Types/Index.js';
 import { loadFullConfig } from '../ConfigBootstrap.js';
 
 /**
@@ -30,34 +28,32 @@ export function getConfiguredBankNames(): string[] {
 }
 
 /**
- * Lazily loads ConfigLoader and ConfigValidator modules.
+ * Lazily loads ConfigValidator module.
  *
- * @returns The two module namespaces needed by runConfigValidation.
+ * @returns The ConfigValidator module namespace.
  */
 async function loadValidationDeps(): Promise<{
-  configLoaderModule: typeof ConfigLoaderModule;
   configValidatorModule: typeof ConfigValidatorModule;
 }> {
-  const configLoaderModule = await import('../../Config/ConfigLoader.js');
   const configValidatorModule = await import('../../Config/ConfigValidator.js');
-  return { configLoaderModule, configValidatorModule };
+  return { configValidatorModule };
 }
 
 /**
- * Lazily imports ConfigLoader and ConfigValidator and runs all validation checks.
+ * Runs all validation checks on the live config.
  *
- * The lazy import is preserved from the original implementation to minimise
- * the blast radius of this refactor; there is no circular dependency today.
+ * Uses loadFullConfig (already imported from ConfigBootstrap) for config loading,
+ * eliminating the need for a dynamic ConfigLoader import. ConfigValidator is still
+ * lazily imported to minimise the blast radius.
  *
  * @returns Formatted validation report string for display in Telegram.
  */
 export async function runConfigValidation(): Promise<string> {
-  const { configLoaderModule, configValidatorModule } = await loadValidationDeps();
-  const loader = new configLoaderModule.ConfigLoader();
-  const rawResult = loader.loadRaw();
-  if (isFail(rawResult)) {
+  const rawResult = loadFullConfig();
+  if (!rawResult.success) {
     return `[FAIL] Cannot load config: ${rawResult.message}`;
   }
+  const { configValidatorModule } = await loadValidationDeps();
   const validator = new configValidatorModule.ConfigValidator();
   const results = await validator.validateAll(rawResult.data);
   return configValidatorModule.ConfigValidator.formatReport(results);

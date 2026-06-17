@@ -88,6 +88,39 @@ function isKernelTarget(targetPath, targetLayer) {
 }
 
 /**
+ * Composition roots: files that wire dependencies for the application.
+ * Factory files are composition roots per Martin Fowler — they instantiate
+ * and wire collaborators for use by the rest of the application. Their
+ * inward imports (outer-to-inner, e.g. SC→IS) are by design and exempt
+ * from coupling scoring.
+ *
+ * Why exempt: Factories exist to break circular dependencies by centralizing
+ * construction. Penalizing them for doing their job creates false coupling
+ * signals. This exemption mirrors the kernel exemption (#455) but is
+ * narrower: ONLY inward deps, ONLY from allowlisted roots.
+ *
+ * Established in PR # (coupling-tail-resolution T5).
+ */
+const COMPOSITION_ROOTS = new Set([
+  'src/Scheduler/Telegram/ReceiptHandlerFactory.ts',
+  'src/Scheduler/Telegram/HandlerFactory.ts',
+]);
+
+/**
+ * Reports whether a cross-layer dep should be exempt from scoring because
+ * it originates from a composition root and points inward.
+ *
+ * @param {string} sourcePath - Resolved POSIX-style path of the importing file.
+ * @param {{to: string, toLayer: string, dynamic: boolean, direction: string}} dep - The dependency object.
+ * @returns {boolean} True when this dep is exempt (composition-root + inward).
+ */
+function isCompositionRootExempt(sourcePath, dep) {
+  if (!COMPOSITION_ROOTS.has(sourcePath)) return false;
+  if (dep.direction !== 'inward') return false;
+  return true;
+}
+
+/**
  * Reports whether a resolved value import is genuine cross-layer coupling.
  *
  * A dependency counts only when it crosses a boundary between two mapped layers
@@ -323,12 +356,16 @@ function scanFile(absPath) {
     if (!resolved) continue;
     const targetLayer = layerOf(resolved);
     if (isCrossLayerCoupling(myLayer, resolved, targetLayer)) {
-      crossLayerValueDeps.push({
+      const dep = {
         to: resolved,
         toLayer: targetLayer,
         dynamic: imp.dynamic,
         direction: classifyDirection(myLayer, targetLayer),
-      });
+      };
+      // T5 composition-root exemption: inward deps from factories are exempt
+      if (!isCompositionRootExempt(relPath, dep)) {
+        crossLayerValueDeps.push(dep);
+      }
     }
   }
   const newCounts = countNewExpressions(src);
@@ -485,7 +522,9 @@ module.exports = {
   layerOf,
   isKernelTarget,
   isCrossLayerCoupling,
+  isCompositionRootExempt,
   classifyDirection,
   newWrongDirectionEdges,
+  COMPOSITION_ROOTS,
   LAYER_RANK,
 };

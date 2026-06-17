@@ -20,6 +20,12 @@ export function isCrossLayerCoupling(
   targetLayer: string,
 ): boolean;
 
+/** Reports whether a cross-layer dep should be exempt from scoring (composition-root + inward). */
+export function isCompositionRootExempt(
+  sourcePath: string,
+  dep: { to: string; toLayer: string; dynamic: boolean; direction: 'inward' | 'outward' },
+): boolean;
+
 /** Classifies a confirmed cross-layer value dep as 'inward' (allowed) or 'outward' (a dependency-rule violation). */
 export function classifyDirection(fromLayer: string, toLayer: string): 'inward' | 'outward';
 
@@ -57,3 +63,6 @@ export function newWrongDirectionEdges(
 
 /** Architectural dependency ranks, outermost (0) to innermost (5); used to classify direction. */
 export const LAYER_RANK: Readonly<Record<string, number>>;
+
+/** Composition roots: files that wire dependencies (factories). Inward deps from these are exempt from scoring. */
+export const COMPOSITION_ROOTS: ReadonlySet<string>;
