@@ -1,12 +1,12 @@
 {
   "generatedAt": "2026-06-16",
-  "totalFiles": 238,
+  "totalFiles": 239,
   "scoreDistribution": {
     "critical8plus": 0,
     "high5to7": 1,
-    "medium3to4": 5,
+    "medium3to4": 4,
     "low1to2": 24,
-    "clean0": 208
+    "clean0": 210
   },
   "wrongDirectionDeps": 0,
   "files": [
@@ -96,18 +96,6 @@
       "newCount": 2,
       "ocpRisks": [],
       "score": 4
-    },
-    {
-      "path": "src/Config/ConfigLoaderValidator.ts",
-      "layer": "CC",
-      "lines": 311,
-      "valueImports": 4,
-      "typeImports": 1,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 3
     },
     {
       "path": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
@@ -538,6 +526,18 @@
       "score": 1
     },
     {
+      "path": "src/Config/BankConfigValidators.ts",
+      "layer": "CC",
+      "lines": 196,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Config/BankCredentialSpecs.ts",
       "layer": "CC",
       "lines": 45,
@@ -560,6 +560,18 @@
         "ConfigurationError"
       ],
       "newCount": 4,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/ConfigLoaderValidator.ts",
+      "layer": "CC",
+      "lines": 138,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },

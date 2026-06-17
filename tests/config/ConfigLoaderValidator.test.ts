@@ -293,6 +293,90 @@ describe('validateBank', () => {
     expect(isFail(result) && result.message).toContain('Invalid email format');
   });
 
+  it('rejects a non-array targets value instead of silently accepting it', () => {
+    const config = fakeBankConfig({
+      daysBack: 7, startDate: undefined,
+      targets: {} as never,
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('No targets configured');
+  });
+
+  it('rejects a null entry in targets without throwing', () => {
+    const config = fakeBankConfig({
+      daysBack: 7, startDate: undefined,
+      targets: [null] as never,
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('Must be an object');
+  });
+
+  it('rejects a non-string element in an accounts array', () => {
+    const config = fakeBankConfig({
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: [null] as never })],
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('Invalid accounts for');
+  });
+
+  it('rejects a separator-only phone number', () => {
+    const config = fakeBankConfig({
+      phoneNumber: '---',
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('Invalid phone number format');
+  });
+
+  it('rejects a non-string phone number without throwing', () => {
+    const config = fakeBankConfig({
+      phoneNumber: 12345 as never,
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('Invalid phone number format');
+  });
+
+  it('rejects a numeric card6Digits value', () => {
+    const config = fakeBankConfig({
+      card6Digits: 123456 as never,
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('Invalid card6Digits format');
+  });
+
+  it('rejects a non-string actualAccountId instead of coercing it through the UUID check', () => {
+    const config = fakeBankConfig({
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: [VALID_UUID] as never, accounts: 'all' })],
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('actualAccountId');
+  });
+
+  it('rejects a non-string email instead of coercing it through the format check', () => {
+    const config = fakeBankConfig({
+      email: ['user@example.com'] as never,
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('Invalid email format');
+  });
+
   // Spec-driven cross-bank credential coverage. Replaces hand-rolled per-bank
   // cases — adding a bank to CREDENTIAL_SPECS automatically extends coverage.
   it.each(BANK_SPEC_CASES)(
