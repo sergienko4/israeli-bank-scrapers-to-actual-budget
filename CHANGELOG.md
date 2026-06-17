@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.38.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.4...v1.38.5) (2026-06-17)
+
+
+### Fixed
+
+* **deps:** override js-yaml to patched 4.2.0 ([#453](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/453)) ([77cb525](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/77cb525b09add0f85381fe890bd2dc98aefb170e))
+* **deps:** override markdown-it to patched 14.2.0 ([#457](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/457)) ([b3e4bab](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b3e4bab30c949784e12097271382939cfffb22ca))
+
+
+### Refactored
+
+* AccountImporter uses IDateRangePolicy ([#460](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/460)) ([411515c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/411515cc7883b6ce97456e0c11f9a08558e734d5))
+* **config:** extract bank validators module ([#466](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/466)) ([c2c406d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c2c406da9d46cdcb63163d59590373dca31c0db3))
+* decouple TransactionService importer ([#462](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/462)) ([1c154ce](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1c154ce814e10fcd9c2dbb7281aae8f02956d60d))
+* **dry-run:** split DryRunCollector into DryRun/ cluster (PR 22) ([#442](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/442)) ([abcc09b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/abcc09b285a50ec7427cc923c40020a56003968f))
+* extract TelegramPoll recovery policy ([#452](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/452)) ([d904565](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d904565b717a6ee07ce5e8f6e71acc7dae307e9d))
+* move PhoneNumberNormaliser to Utils ([#459](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/459)) ([37b5ca5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/37b5ca54182b84294711280f9313cbfacb014372))
+* **notifications:** split TelegramFormatter into Telegram/ cluster ([#443](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/443)) ([ede98d1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ede98d1e39b93c5d61235042f922d71aaa5074a7))
+* **pipeline:** split ProcessAllBanksStep into Bank/ 3-stage cluster (PR 15) ([#437](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/437)) ([7c50639](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7c5063955a0550ce219f142452a280ef0b46fab1))
+* receipt consumers depend on IReceiptOcr ([#461](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/461)) ([0b2b7a5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/0b2b7a576ecb06759dc9da4d4018bd78e63959df))
+* **receipt:** split OcrParsing into Ocr/ cluster ([#444](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/444)) ([e7ea193](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/e7ea1931c9928f104063d22482a168a90b7963bc))
+* **receipt:** split ReceiptOcrService (PR 14) ([#436](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/436)) ([fb3494d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fb3494d2fd433722e5a4bfdb41cef8c7a5db010d))
+* **scheduler:** extract SchedulerProcessLifecycle (PR 20b) ([#434](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/434)) ([60d2918](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/60d2918bbce7b90f8adc9234c763f82b74926f55))
+* **scraper:** split DefaultScrapeResultMapper into 4 modules (PR 16) ([#438](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/438)) ([fa68167](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fa68167fa6a65810c2a3e9b1fe6dfc9597873dfa))
+* **scraper:** split LiveScrapeStrategy into Live/ cluster (PR 19) ([#439](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/439)) ([bcaff9f](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/bcaff9fa2f182e862a02d7ae53a886895637d284))
+* **services:** split MetricsService into Metrics/ cluster (PR 18) ([#440](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/440)) ([1fd3955](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1fd395513a0e0d140fd63da95bcc0b682a3fbad1))
+* **spending-watch:** split SpendingWatchService into SpendingWatch/ cluster (PR 21) ([#441](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/441)) ([9e62173](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/9e62173e21b9443477ddc43f643d735c3f9b16e5))
+* split ReceiptImportHandler adapter/flow ([#451](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/451)) ([8f110d5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/8f110d5aa96d52a2eea5c5d7d9e9f738f6d0527f))
+* split WebhookNotifier formatter cluster ([#450](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/450)) ([95ee487](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/95ee48718e44742498e219616537cc3a1a2852ef))
+* **types:** split Types/Index.ts barrel into domain files ([#449](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/449)) ([5636cd4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5636cd48f2397c5003936f93e0bf047b6d956290))
+
+
+### Testing
+
+* **coupling:** add e2e for kernel exemption ([#456](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/456)) ([d72bf6a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d72bf6abfc0509ee7e6212bfde96ceb15b76617f))
+* **coupling:** guard e2e scanner spawn timeout ([#458](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/458)) ([fda3c66](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fda3c66d7f14a82232a792654a3300a9d3b73415))
+
 ## [1.38.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.3...v1.38.4) (2026-06-13)
 
 
