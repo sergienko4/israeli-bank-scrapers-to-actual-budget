@@ -14,8 +14,8 @@ describe('ScraperSetup', () => {
   describe('attachOtpRetriever (fix for paybox-double-otp)', () => {
     const mockOtpRetriever = async () => '123456';
 
-    describe('credentials-only banks (oneZero, pepper, payBox)', () => {
-      const credsBanks = ['oneZero', 'pepper', 'payBox'];
+    describe('credentials-only banks (OneZero, Pepper, PayBox)', () => {
+      const credsBanks = ['OneZero', 'Pepper', 'PayBox'];
 
       credsBanks.forEach((companyId) => {
         it(`should NOT attach to ScraperOptions for ${companyId}`, () => {

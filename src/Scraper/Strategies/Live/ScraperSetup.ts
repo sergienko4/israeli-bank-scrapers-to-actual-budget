@@ -75,18 +75,19 @@ export function buildBaseScraperOptions(deps: LiveDeps, scrapeOpts: LiveOpts): S
 
 /**
  * Banks that read otpCodeRetriever from credentials, not ScraperOptions.
+ * Values must match CompanyTypes enum string values (PascalCase).
  */
-const CREDS_ONLY_BANKS = ['oneZero', 'pepper', 'payBox'];
+const CREDS_ONLY_BANKS = ['OneZero', 'Pepper', 'PayBox'];
 
 /**
  * Attaches the OTP adapter expected by the provider package.
  * Only attaches for banks that use OtpHandler (beinleumi). Banks that read
- * otpCodeRetriever from credentials (oneZero, pepper, payBox) already have
+ * otpCodeRetriever from credentials (OneZero, Pepper, PayBox) already have
  * it attached by buildCredentials and should NOT get it in ScraperOptions
  * to avoid double OTP prompts.
  * @param target - Provider options object that receives the adapter.
  * @param otpRetriever - Optional OTP retriever attached for 2FA banks.
- * @param companyId - CompanyType to determine if bank uses OtpHandler.
+ * @param companyId - CompanyType enum value to determine if bank uses OtpHandler.
  * @returns True when the OTP adapter was attached.
  */
 export function attachOtpRetriever(
