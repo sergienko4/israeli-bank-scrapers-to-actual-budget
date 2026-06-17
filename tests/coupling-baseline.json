@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-06-16",
-  "totalFiles": 239,
+  "generatedAt": "2026-06-17",
+  "totalFiles": 240,
   "scoreDistribution": {
     "critical8plus": 0,
     "high5to7": 1,
-    "medium3to4": 4,
-    "low1to2": 24,
-    "clean0": 210
+    "medium3to4": 3,
+    "low1to2": 25,
+    "clean0": 211
   },
   "wrongDirectionDeps": 0,
   "files": [
@@ -108,18 +108,6 @@
         "Error"
       ],
       "newCount": 1,
-      "ocpRisks": [],
-      "score": 3
-    },
-    {
-      "path": "src/Services/TelegramImportCoordinator.ts",
-      "layer": "IS",
-      "lines": 301,
-      "valueImports": 3,
-      "typeImports": 6,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
       "ocpRisks": [],
       "score": 3
     },
@@ -492,6 +480,20 @@
         "TelegramQueryCommands"
       ],
       "newCount": 3,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Services/TelegramImportCoordinator.ts",
+      "layer": "IS",
+      "lines": 203,
+      "valueImports": 3,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "TelegramImportExecutor"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 1
     },
@@ -2790,6 +2792,18 @@
         "Date"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TelegramImportExecutor.ts",
+      "layer": "IS",
+      "lines": 162,
+      "valueImports": 3,
+      "typeImports": 6,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },
