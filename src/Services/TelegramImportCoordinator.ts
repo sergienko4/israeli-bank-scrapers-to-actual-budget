@@ -131,8 +131,7 @@ export class TelegramImportCoordinator {
       return succeed({ status: 'nothing-to-retry' });
     }
     await this._executor.reply(`🔄 Retrying ${String(failed.length)} failed bank(s): ${failed.join(', ')}...`);
-    await this._executor.executeImport([...failed]);
-    return succeed({ status: 'retry-started' });
+    return await this._executor.executeImport([...failed]);
   }
 
   /**

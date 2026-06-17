@@ -12,7 +12,6 @@
 import type { ILogger } from '../Logger/ILogger.js';
 import type { IBatchResult, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
-import { errorMessage } from '../Utils/Index.js';
 import type { IAuditLog } from './AuditLogService.js';
 import type { ImportMediator } from './ImportMediator.js';
 import type { INotifier } from './Notifications/INotifier.js';
@@ -111,8 +110,8 @@ export class TelegramImportExecutor {
         return fail('already-running');
       }
       return succeed(await this._mediator.waitForBatch(batchId));
-    } catch (error: unknown) {
-      return await this.handleImportPipelineError(error);
+    } catch {
+      return await this.handleImportPipelineError();
     }
   }
 
@@ -126,8 +125,8 @@ export class TelegramImportExecutor {
     try {
       await this._notifier.sendMessage(text);
       return succeed({ status: 'reply-sent' });
-    } catch (error: unknown) {
-      this._logger.debug(`Failed to send reply: ${errorMessage(error)}`);
+    } catch {
+      this._logger.debug('Failed to send Telegram reply');
       return succeed({ status: 'reply-failed' });
     }
   }
@@ -135,13 +134,11 @@ export class TelegramImportExecutor {
   /**
    * Replies and logs when the mediator throws inside the import pipeline.
    *
-   * @param error - The unknown error thrown by the mediator.
    * @returns A normalized `fail('import-error')` Procedure.
    */
-  private async handleImportPipelineError(error: unknown): Promise<Procedure<IBatchResult>> {
-    const msg = errorMessage(error);
-    this._logger.error(`runImportPipeline failed: ${msg}`);
-    await this.reply(`❌ Import failed: ${msg}`);
+  private async handleImportPipelineError(): Promise<Procedure<IBatchResult>> {
+    this._logger.error('runImportPipeline failed (mediator error)');
+    await this.reply('❌ Import failed. Check logs for details.');
     return fail('import-error');
   }
 
