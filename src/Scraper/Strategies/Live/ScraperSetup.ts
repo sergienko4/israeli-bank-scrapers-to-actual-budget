@@ -77,7 +77,7 @@ export function buildBaseScraperOptions(deps: LiveDeps, scrapeOpts: LiveOpts): S
  * Banks that read otpCodeRetriever from credentials, not ScraperOptions.
  * Values must match CompanyTypes enum string values (PascalCase).
  */
-const CREDS_ONLY_BANKS = ['OneZero', 'Pepper', 'PayBox'];
+const CREDS_ONLY_BANKS = new Set(['OneZero', 'Pepper', 'PayBox']);
 
 /**
  * Attaches the OTP adapter expected by the provider package.
@@ -93,7 +93,7 @@ const CREDS_ONLY_BANKS = ['OneZero', 'Pepper', 'PayBox'];
 export function attachOtpRetriever(
   target: ScraperOptions, otpRetriever: OtpRetriever, companyId: string,
 ): boolean {
-  if (!otpRetriever || CREDS_ONLY_BANKS.includes(companyId)) return false;
+  if (!otpRetriever || CREDS_ONLY_BANKS.has(companyId)) return false;
   target.otpCodeRetriever = otpRetriever;
   return true;
 }
