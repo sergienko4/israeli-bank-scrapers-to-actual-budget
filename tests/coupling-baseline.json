@@ -3,47 +3,13 @@
   "totalFiles": 240,
   "scoreDistribution": {
     "critical8plus": 0,
-    "high5to7": 1,
-    "medium3to4": 3,
+    "high5to7": 0,
+    "medium3to4": 2,
     "low1to2": 25,
-    "clean0": 211
+    "clean0": 213
   },
   "wrongDirectionDeps": 0,
   "files": [
-    {
-      "path": "src/Scheduler/Telegram/ReceiptHandlerFactory.ts",
-      "layer": "SC",
-      "lines": 35,
-      "valueImports": 3,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Services/ReceiptApiAdapter.ts",
-          "toLayer": "IS",
-          "dynamic": false,
-          "direction": "inward"
-        },
-        {
-          "to": "src/Services/ReceiptImportHandler.ts",
-          "toLayer": "IS",
-          "dynamic": false,
-          "direction": "inward"
-        },
-        {
-          "to": "src/Services/ReceiptOcrService.ts",
-          "toLayer": "IS",
-          "dynamic": false,
-          "direction": "inward"
-        }
-      ],
-      "newClasses": [
-        "ReceiptImportHandler",
-        "ReceiptOcrService"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 6
-    },
     {
       "path": "src/Scheduler/Telegram/ConfigHelpers.ts",
       "layer": "SC",
@@ -66,34 +32,6 @@
       ],
       "newClasses": [],
       "newCount": 0,
-      "ocpRisks": [],
-      "score": 4
-    },
-    {
-      "path": "src/Scheduler/Telegram/HandlerFactory.ts",
-      "layer": "SC",
-      "lines": 74,
-      "valueImports": 5,
-      "typeImports": 3,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Services/AuditLogService.ts",
-          "toLayer": "IS",
-          "dynamic": false,
-          "direction": "inward"
-        },
-        {
-          "to": "src/Services/TelegramCommandHandler.ts",
-          "toLayer": "IS",
-          "dynamic": false,
-          "direction": "inward"
-        }
-      ],
-      "newClasses": [
-        "AuditLogService",
-        "TelegramCommandHandler"
-      ],
-      "newCount": 2,
       "ocpRisks": [],
       "score": 4
     },
@@ -487,8 +425,8 @@
       "path": "src/Services/TelegramImportCoordinator.ts",
       "layer": "IS",
       "lines": 203,
-      "valueImports": 3,
-      "typeImports": 5,
+      "valueImports": 2,
+      "typeImports": 6,
       "crossLayerValueDeps": [],
       "newClasses": [
         "TelegramImportExecutor"
@@ -1185,6 +1123,21 @@
       "score": 0
     },
     {
+      "path": "src/Scheduler/Telegram/HandlerFactory.ts",
+      "layer": "SC",
+      "lines": 74,
+      "valueImports": 5,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AuditLogService",
+        "TelegramCommandHandler"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Scheduler/Telegram/Index.ts",
       "layer": "SC",
       "lines": 20,
@@ -1193,6 +1146,21 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scheduler/Telegram/ReceiptHandlerFactory.ts",
+      "layer": "SC",
+      "lines": 35,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ReceiptImportHandler",
+        "ReceiptOcrService"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -2798,8 +2766,8 @@
     {
       "path": "src/Services/TelegramImportExecutor.ts",
       "layer": "IS",
-      "lines": 162,
-      "valueImports": 3,
+      "lines": 159,
+      "valueImports": 2,
       "typeImports": 6,
       "crossLayerValueDeps": [],
       "newClasses": [],
