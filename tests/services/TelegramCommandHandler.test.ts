@@ -613,7 +613,8 @@ describe('TelegramCommandHandler', () => {
     });
     await handler.handle('/scan ');
     const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
-    expect(calls.some((m: string) => m.includes('Import failed') && m.includes('mediator-exploded'))).toBe(true);
+    // CR F4 fix: error details sanitized to prevent PII/secret leaks
+    expect(calls.some((m: string) => m.includes('Import failed') && m.includes('Check logs'))).toBe(true);
   });
 
   // ─── Regression: import pipeline failures must NOT be masked as `already-running` ───
