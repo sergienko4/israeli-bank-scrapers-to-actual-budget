@@ -139,7 +139,7 @@ const RESTRICTED_SYNTAX_RULES = [
 export default tseslint.config(
   // 1. GLOBAL IGNORES
   {
-    ignores: ['.github/**', 'lib/**', 'node_modules/**', 'coverage/**', 'src/coverage/**', 'tsup.config.ts', '**/*.js', '**/*.mjs', '**/*.cjs'],
+    ignores: ['.github/**', 'lib/**', 'node_modules/**', 'coverage/**', 'src/coverage/**', 'tsup.config.ts', '**/*.js', '**/*.mjs', '**/*.cjs', '**/__canaries__/**'],
   },
 
   // 2. BASE CONFIGS

@@ -484,6 +484,21 @@ function main() {
       }
       process.exit(1);
     }
+    // T7: High-coupling gate (spec.md S5)
+    const baselineHigh = baseline.scoreDistribution.high5to7;
+    if (dist.high5to7 > baselineHigh) {
+      console.error(`REGRESSION: high-coupling count ${dist.high5to7} > baseline ${baselineHigh}`);
+      const baselineHighNames = new Set(
+        baseline.files.filter((f) => f.score >= 5 && f.score < 8).map((f) => f.path),
+      );
+      const highRegressors = report.filter(
+        (f) => f.score >= 5 && f.score < 8 && !baselineHighNames.has(f.path),
+      );
+      for (const r of highRegressors) {
+        console.error(`  + ${r.path} (score=${r.score})`);
+      }
+      process.exit(1);
+    }
     const baselineWrong = baseline.wrongDirectionDeps ?? 0;
     const newWrong = newWrongDirectionEdges(report, baseline);
     if (newWrong.length > 0 || wrongDirectionDeps > baselineWrong) {
@@ -496,7 +511,7 @@ function main() {
       process.exit(1);
     }
     console.log(
-      `coupling-scanner --check OK: critical=${dist.critical8plus} (baseline=${baselineCrit})`,
+      `coupling-scanner --check OK: critical=${dist.critical8plus} (baseline=${baselineCrit}), high=${dist.high5to7} (baseline=${baselineHigh})`,
     );
     process.exit(0);
   }

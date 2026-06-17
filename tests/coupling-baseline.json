@@ -1,15 +1,46 @@
 {
   "generatedAt": "2026-06-17",
-  "totalFiles": 241,
+  "totalFiles": 242,
   "scoreDistribution": {
     "critical8plus": 0,
-    "high5to7": 0,
+    "high5to7": 1,
     "medium3to4": 0,
     "low1to2": 27,
     "clean0": 214
   },
   "wrongDirectionDeps": 0,
   "files": [
+    {
+      "path": "src/Scrapers/Pipeline/__canaries__/HighCouplingCanary.ts",
+      "layer": "BP",
+      "lines": 63,
+      "valueImports": 3,
+      "typeImports": 0,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Config/ConfigLoader.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        },
+        {
+          "to": "src/Config/ConfigLoaderValidator.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        },
+        {
+          "to": "src/Config/ConfigValidator.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 6
+    },
     {
       "path": "src/Config/ConfigLoader.ts",
       "layer": "CC",
@@ -189,7 +220,7 @@
     {
       "path": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
       "layer": "BP",
-      "lines": 273,
+      "lines": 277,
       "valueImports": 5,
       "typeImports": 5,
       "crossLayerValueDeps": [],
@@ -1560,7 +1591,7 @@
     {
       "path": "src/Scrapers/Pipeline/Steps/Bank/BankRunRecorder.ts",
       "layer": "BP",
-      "lines": 131,
+      "lines": 137,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [],
