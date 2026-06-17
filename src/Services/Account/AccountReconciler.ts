@@ -39,6 +39,13 @@ const RECONCILIATION_MESSAGES = new Map<string, (diff: number) => string>([
   ['already-reconciled', FORMAT_ALREADY_RECONCILED],
 ]);
 
+/**
+ * Banks known to return unreliable or missing balance data.
+ * API-direct flows (oneZero, pepper, payBox) may return balance:0
+ * when balance is unknown, which would incorrectly zero out accounts.
+ */
+const UNRELIABLE_BALANCE_BANKS = new Set(['oneZero', 'pepper', 'payBox', 'paybox']);
+
 /** Context passed to AccountReconciler.reconcileIfConfigured. */
 export interface IReconcileCtx {
   /** Actual Budget account ID to reconcile. */
@@ -74,6 +81,10 @@ export class AccountReconciler {
    */
   public async reconcileIfConfigured(target: IBankTarget, ctx: IReconcileCtx): Promise<void> {
     if (!target.reconcile || ctx.balance === undefined) return;
+    if (UNRELIABLE_BALANCE_BANKS.has(ctx.bankName) && ctx.balance === 0) {
+      getLogger().info('     ⚠️  Skipping reconcile: balance=0 from API-direct bank (unreliable)');
+      return;
+    }
     getLogger().info('     🔄 Reconciling account balance...');
     const result = await this.opts.reconciliationService.reconcile(
       ctx.actualAccountId, ctx.balance, ctx.currency,
