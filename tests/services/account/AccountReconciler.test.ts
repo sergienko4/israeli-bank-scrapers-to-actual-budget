@@ -69,7 +69,7 @@ describe('AccountReconciler', () => {
   });
 
   describe('balance zero guard for API-direct banks (fix for paybox-reconcile-zero)', () => {
-    const apiDirectBanks = ['oneZero', 'pepper', 'payBox', 'paybox'];
+    const apiDirectBanks = ['onezero', 'pepper', 'paybox', 'OneZero', 'Pepper', 'PayBox'];
 
     apiDirectBanks.forEach((bankName) => {
       it(`skips reconciliation when balance=0 for ${bankName}`, async () => {

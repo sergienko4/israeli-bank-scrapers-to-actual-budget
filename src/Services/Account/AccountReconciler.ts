@@ -43,8 +43,9 @@ const RECONCILIATION_MESSAGES = new Map<string, (diff: number) => string>([
  * Banks known to return unreliable or missing balance data.
  * API-direct flows (oneZero, pepper, payBox) may return balance:0
  * when balance is unknown, which would incorrectly zero out accounts.
+ * All values lowercase for case-insensitive matching.
  */
-const UNRELIABLE_BALANCE_BANKS = new Set(['oneZero', 'pepper', 'payBox', 'paybox']);
+const UNRELIABLE_BALANCE_BANKS = new Set(['onezero', 'pepper', 'paybox']);
 
 /** Context passed to AccountReconciler.reconcileIfConfigured. */
 export interface IReconcileCtx {
@@ -81,7 +82,8 @@ export class AccountReconciler {
    */
   public async reconcileIfConfigured(target: IBankTarget, ctx: IReconcileCtx): Promise<void> {
     if (!target.reconcile || ctx.balance === undefined) return;
-    if (UNRELIABLE_BALANCE_BANKS.has(ctx.bankName) && ctx.balance === 0) {
+    const bankName = ctx.bankName.toLowerCase();
+    if (UNRELIABLE_BALANCE_BANKS.has(bankName) && ctx.balance === 0) {
       getLogger().info('     ⚠️  Skipping reconcile: balance=0 from API-direct bank (unreliable)');
       return;
     }
