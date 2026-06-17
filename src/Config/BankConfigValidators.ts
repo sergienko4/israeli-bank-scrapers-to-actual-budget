@@ -16,6 +16,16 @@ import { isValidUUID } from './Validators/ValidationResult.js';
 const EMAIL_RE = /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/;
 
 /**
+ * Type guard: validates config is a non-null object at runtime.
+ * Defensive check despite IBankConfig typing - external JSON may be malformed.
+ * @param config - The value to check.
+ * @returns True if config is a non-null object.
+ */
+function isValidConfigObject(config: unknown): config is Record<string, unknown> {
+  return config !== null && typeof config === 'object';
+}
+
+/**
  * Validates all settings for a single bank entry.
  * @param bankName - The key used for this bank in the banks map.
  * @param config - The IBankConfig object to validate.
@@ -24,6 +34,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/;
 export default function validateBank(
   bankName: string, config: IBankConfig
 ): Procedure<{ valid: true }> {
+  if (!isValidConfigObject(config)) {
+    return fail(`${bankName}: config must be a non-null object`);
+  }
   const dateResult = validateDateConfig(bankName, config);
   if (isFail(dateResult)) return dateResult;
   const targetsResult = validateTargets(bankName, config.targets);
