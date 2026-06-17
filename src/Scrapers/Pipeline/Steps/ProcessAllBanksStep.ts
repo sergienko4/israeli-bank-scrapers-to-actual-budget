@@ -14,28 +14,24 @@
  */
 
 import type {
-  IBankConfig, IBankMetricsDelta, IBankQuarantineEntry,
+  IBankConfig,
   IBankResult, IBankResultsState,
-  IPipelineContext, IProcedureFailure,
-  IProcedureSuccess, PipelineStep, Procedure,
+  IPipelineContext,
+  PipelineStep, Procedure,
 } from '../Index.js';
 import { fail, isFail, succeed } from '../Index.js';
 import type { IMetricsAcc } from '../Reducers/MetricsReducer.js';
 import * as MetricsReducer from '../Reducers/MetricsReducer.js';
 import type { IPaginationStrategy } from '../Strategies/IPaginationStrategy.js';
 import createSequentialStrategy from '../Strategies/SequentialPaginationStrategy.js';
+import type { IRunMutator } from './Bank/BankRunRecorder.js';
+import {
+  createMutator, recordQuarantine, recordSuccess,
+} from './Bank/BankRunRecorder.js';
 import type { IBankEntry, IBankOpts } from './Bank/Index.js';
 import {
-  importStage, mapStage, scrapeStage, stageFromStatus,
+  importStage, mapStage, scrapeStage,
 } from './Bank/Index.js';
-
-/** Closure mutator holding the run's mutable state. */
-interface IRunMutator {
-  reduce(delta: IBankMetricsDelta): Procedure<{ recorded: true }>;
-  addQuarantine(entry: IBankQuarantineEntry): Procedure<{ recorded: true }>;
-  getMetrics(): IMetricsAcc;
-  getQuarantine(): readonly IBankQuarantineEntry[];
-}
 
 /** Bundle for the pagination iteration helper (keeps params ≤ 3). */
 interface IIterateOpts {
@@ -49,13 +45,6 @@ interface IIterateOpts {
 interface IRunResult {
   readonly partition: IBankResultsState;
   readonly metricsAcc: IMetricsAcc;
-}
-
-/** Opts bundle used by recordQuarantine / recordSuccess (params ≤ 3). */
-interface IRecordOpts {
-  readonly entry: IBankEntry;
-  readonly start: number;
-  readonly mutator: IRunMutator;
 }
 
 /**
@@ -179,43 +168,6 @@ async function iterateBanks(
  * Creates a closure mutator capturing `metrics` (let) and `quarantine` (const).
  * @returns IRunMutator handle for the per-bank processor.
  */
-function createMutator(): IRunMutator {
-  let metrics: IMetricsAcc = MetricsReducer.EMPTY;
-  const quarantine: IBankQuarantineEntry[] = [];
-  return Object.freeze({
-    /**
-     * Records a metrics delta into the in-memory accumulator.
-     * @param delta - Metrics delta event.
-     * @returns Recorded acknowledgement.
-     */
-    reduce: (delta: IBankMetricsDelta): Procedure<{ recorded: true }> => {
-      metrics = MetricsReducer.reduce(metrics, delta);
-      return succeed({ recorded: true as const });
-    },
-    /**
-     * Appends a quarantine entry to the run's collection.
-     * @param entry - Quarantine entry to append.
-     * @returns Recorded acknowledgement.
-     */
-    addQuarantine: (
-      entry: IBankQuarantineEntry,
-    ): Procedure<{ recorded: true }> => {
-      quarantine.push(entry);
-      return succeed({ recorded: true as const });
-    },
-    /**
-     * Returns the current metrics accumulator snapshot.
-     * @returns Current IMetricsAcc.
-     */
-    getMetrics: (): IMetricsAcc => metrics,
-    /**
-     * Returns the current quarantine array (readonly view).
-     * @returns Current quarantine entries.
-     */
-    getQuarantine: (): readonly IBankQuarantineEntry[] => quarantine,
-  });
-}
-
 /**
  * Builds the per-entry processor closure for the strategy.
  * @param ctx - Pipeline context.
@@ -228,73 +180,18 @@ function buildProcessor(
   return async (
     entry: IBankEntry,
   ): Promise<Procedure<IBankResult>> => {
-    return await processAndRecord(
-      { entry, start: Date.now(), mutator }, ctx,
-    );
+    const start = Date.now();
+    mutator.reduce({ kind: 'start', bankName: entry.bankName });
+    const outcome = await processOneBank({ entry, ctx, start });
+    if (isFail(outcome)) {
+      return recordQuarantine(mutator, {
+        bankName: entry.bankName,
+        start,
+        outcome,
+      });
+    }
+    return recordSuccess(mutator, outcome, entry.bankName);
   };
-}
-
-/**
- * Records the start delta, processes one bank, and records the outcome.
- * @param opts - Per-bank record opts (entry, start, mutator).
- * @param ctx - Pipeline context.
- * @returns Procedure reflecting the bank outcome.
- */
-async function processAndRecord(
-  opts: IRecordOpts, ctx: IPipelineContext,
-): Promise<Procedure<IBankResult>> {
-  opts.mutator.reduce({ kind: 'start', bankName: opts.entry.bankName });
-  const outcome = await processOneBank(
-    { entry: opts.entry, ctx, start: opts.start },
-  );
-  if (isFail(outcome)) return recordQuarantine(opts, outcome);
-  return recordSuccess(opts.mutator, outcome, opts.entry.bankName);
-}
-
-/**
- * Records a successful bank result via a 'success' delta.
- * @param mutator - Run mutator.
- * @param outcome - Successful Procedure carrying the IBankResult.
- * @param bankName - Bank name for the delta payload.
- * @returns The outcome unchanged.
- */
-function recordSuccess(
-  mutator: IRunMutator,
-  outcome: IProcedureSuccess<IBankResult>,
-  bankName: string,
-): Procedure<IBankResult> {
-  mutator.reduce({
-    kind: 'success',
-    bankName,
-    imported: outcome.data.imported,
-    skipped: outcome.data.skipped,
-  });
-  return outcome;
-}
-
-/**
- * Records a quarantined bank — pushes entry + emits 'failure' delta.
- * Preserves original Error reference end-to-end (INV-3).
- * @param opts - Per-bank record opts.
- * @param outcome - Failed Procedure carrying status + optional Error.
- * @returns The outcome unchanged (strategy logs + skips).
- */
-function recordQuarantine(
-  opts: IRecordOpts, outcome: IProcedureFailure,
-): Procedure<IBankResult> {
-  const stage = stageFromStatus(outcome.status);
-  const error = outcome.error ?? new Error(outcome.message);
-  const entry: IBankQuarantineEntry = Object.freeze({
-    bankName: opts.entry.bankName,
-    stage,
-    error,
-    durationMs: Date.now() - opts.start,
-  });
-  opts.mutator.addQuarantine(entry);
-  opts.mutator.reduce({
-    kind: 'failure', bankName: opts.entry.bankName, error,
-  });
-  return outcome;
 }
 
 /**
