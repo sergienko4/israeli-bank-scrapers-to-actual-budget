@@ -1393,6 +1393,39 @@ export default tseslint.config(
       'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
     },
   },
+  // ─── Section 7y: Services/Account cluster max-fn-lines: 10 ───
+  //
+  // WHY: src/Services/Account (LiveAccountWriter / AccountReconciler and
+  // their siblings) own per-account import + balance-reconciliation
+  // orchestration. LiveAccountWriter's import/reconcile methods and
+  // AccountReconciler.reconcileIfConfigured had drifted to 11+ effective
+  // LoC; they were split into SRP helpers so every function in the
+  // cluster is <= 10 effective LoC. Per §1 PRECEDENT in
+  // eslint-rules-guidlines.md, the drained cluster locks at 10 so no
+  // Account function can grow back into a multi-responsibility blob.
+  //
+  // This is the third slice of the Track-A drain of the global
+  // `max-lines-per-function: 20` cap toward 10, cluster by cluster.
+  //
+  // Scope:
+  //   - `src/Services/Account/**/*.ts` (the Account/ directory only;
+  //     the sibling src/Services/AccountImporter.ts is NOT under it).
+  //   - `tests/eslint-canaries/ServicesAccountMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, >10-LoC fn body).
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines-per-function: 10` rule survives on the canary fixture;
+  // flat-config rule keys are replaced (not merged) by later matching
+  // blocks, so the canary is configured by THIS last matching block.
+  {
+    files: [
+      'src/Services/Account/**/*.ts',
+      'tests/eslint-canaries/ServicesAccountMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
 
   // 10. PRE-EXISTING REGEX PATTERNS (warn until refactored)
   {
