@@ -12,21 +12,58 @@ import { errorMessage } from '../../Utils/Index.js';
 import { fail, type IValidationResult,pass, warn } from './ValidationResult.js';
 
 /**
+ * Performs a `fetch` with the shared 5-second abort timeout applied.
+ * @param url - The request URL.
+ * @param init - Optional fetch init; its `signal` is overridden with the timeout.
+ * @returns The fetch Response promise.
+ */
+function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(5000) });
+}
+
+/**
  * Authenticates with the Actual Budget server and returns a session token.
  * @param serverURL - The Actual server base URL.
  * @param password - The Actual server password.
  * @returns The session token string, or empty string if login failed.
  */
-async function loginToActualServer(
-  serverURL: string, password: string): Promise<string> {
-  const resp = await fetch(`${serverURL}/account/login`, {
+async function loginToActualServer(serverURL: string, password: string): Promise<string> {
+  const resp = await fetchWithTimeout(`${serverURL}/account/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password }),
-    signal: AbortSignal.timeout(5000),
   });
   const data = await resp.json() as { data?: { token?: string } };
   return data.data?.token ?? '';
+}
+
+/**
+ * Fetches the server's user-file list.
+ * @param serverURL - The Actual server base URL.
+ * @param token - Authenticated session token.
+ * @returns The parsed list-user-files payload.
+ */
+async function listUserFiles(
+  serverURL: string, token: string
+): Promise<{ data?: { groupId?: string }[] }> {
+  const resp = await fetchWithTimeout(`${serverURL}/sync/list-user-files`, {
+    method: 'POST',
+    headers: { 'X-ACTUAL-TOKEN': token, 'Content-Type': 'application/json' },
+  });
+  return await resp.json() as { data?: { groupId?: string }[] };
+}
+
+/**
+ * Builds the budget-presence result from the lookup outcome.
+ * @param found - Whether the budget syncId was present on the server.
+ * @param syncId - The budget sync ID that was looked up.
+ * @returns A pass result if found, fail if not found.
+ */
+function budgetFoundResult(found: boolean, syncId: string): IValidationResult {
+  return found
+    ? pass('actual.budget', `Budget ${syncId.slice(0, 8)}… found on server`)
+    : fail('actual.budget',
+      `Budget "${syncId}" not found — check syncId in Settings → Advanced`);
 }
 
 /**
@@ -39,17 +76,21 @@ async function loginToActualServer(
 async function findBudgetOnServer(
   serverURL: string, token: string, syncId: string
 ): Promise<IValidationResult> {
-  const resp = await fetch(`${serverURL}/sync/list-user-files`, {
-    method: 'POST',
-    headers: { 'X-ACTUAL-TOKEN': token, 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(5000),
-  });
-  const data = await resp.json() as { data?: { groupId?: string }[] };
+  const data = await listUserFiles(serverURL, token);
   const wasFound = (data.data ?? []).some(f => f.groupId === syncId);
-  return wasFound
-    ? pass('actual.budget', `Budget ${syncId.slice(0, 8)}… found on server`)
-    : fail('actual.budget',
-      `Budget "${syncId}" not found — check syncId in Settings → Advanced`);
+  return budgetFoundResult(wasFound, syncId);
+}
+
+/**
+ * Builds the server-reachability result from the response status.
+ * @param serverURL - The server URL used in messages.
+ * @param status - The HTTP status code from the reachability probe.
+ * @returns A pass result when status < 500, else fail.
+ */
+function serverReachableResult(serverURL: string, status: number): IValidationResult {
+  return status < 500
+    ? pass('actual.server', `Actual server reachable: ${serverURL} (${String(status)})`)
+    : fail('actual.server', `Actual server error ${String(status)}: ${serverURL}`);
 }
 
 /**
@@ -60,13 +101,24 @@ async function findBudgetOnServer(
 export async function checkActualServer(config: IImporterConfig): Promise<IValidationResult> {
   const { serverURL } = config.actual.init;
   try {
-    const resp = await fetch(serverURL, { signal: AbortSignal.timeout(5000) });
-    return resp.status < 500
-      ? pass('actual.server', `Actual server reachable: ${serverURL} (${String(resp.status)})`)
-      : fail('actual.server', `Actual server error ${String(resp.status)}: ${serverURL}`);
+    const resp = await fetchWithTimeout(serverURL);
+    return serverReachableResult(serverURL, resp.status);
   } catch (e: unknown) {
     return fail('actual.server', `Cannot reach Actual server: ${errorMessage(e)}`);
   }
+}
+
+/**
+ * Logs in and looks up the configured budget, without error handling.
+ * @param config - The IImporterConfig with server credentials and budget syncId.
+ * @returns A IValidationResult indicating whether the budget was found.
+ */
+async function verifyBudget(config: IImporterConfig): Promise<IValidationResult> {
+  const { serverURL, password } = config.actual.init;
+  const { syncId } = config.actual.budget;
+  const token = await loginToActualServer(serverURL, password);
+  if (!token) return fail('actual.budget', 'Cannot verify budget — login failed');
+  return await findBudgetOnServer(serverURL, token, syncId);
 }
 
 /**
@@ -75,15 +127,38 @@ export async function checkActualServer(config: IImporterConfig): Promise<IValid
  * @returns A IValidationResult indicating whether the budget was found.
  */
 export async function checkActualBudget(config: IImporterConfig): Promise<IValidationResult> {
-  const { serverURL, password } = config.actual.init;
-  const { syncId } = config.actual.budget;
   try {
-    const token = await loginToActualServer(serverURL, password);
-    if (!token) return fail('actual.budget', 'Cannot verify budget — login failed');
-    return await findBudgetOnServer(serverURL, token, syncId);
+    return await verifyBudget(config);
   } catch (e: unknown) {
     return fail('actual.budget', `Cannot verify budget: ${errorMessage(e)}`);
   }
+}
+
+interface ITelegramMe {
+  ok: boolean;
+  result?: { username?: string };
+}
+
+/**
+ * Calls the Telegram getMe endpoint and returns the parsed payload.
+ * @param botToken - The Telegram bot token to verify.
+ * @returns The parsed getMe response.
+ */
+async function fetchTelegramMe(botToken: string): Promise<ITelegramMe> {
+  const url = `https://api.telegram.org/bot${botToken}/getMe`;
+  const resp = await fetchWithTimeout(url);
+  return await resp.json() as ITelegramMe;
+}
+
+/**
+ * Builds the token-validity result from the getMe payload.
+ * @param data - The parsed getMe response.
+ * @returns A pass result when the token is valid, else fail.
+ */
+function telegramTokenResult(data: ITelegramMe): IValidationResult {
+  return data.ok
+    ? pass('telegram.token', `Telegram bot valid (@${data.result?.username ?? '?'})`)
+    : fail('telegram.token', 'Invalid Telegram bot token');
 }
 
 /**
@@ -95,13 +170,8 @@ export async function checkTelegramToken(
   tg: NonNullable<INotificationConfig['telegram']>
 ): Promise<IValidationResult> {
   try {
-    const url = `https://api.telegram.org/bot${tg.botToken}/getMe`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    const json: unknown = await resp.json();
-    const data = json as { ok: boolean; result?: { username?: string } };
-    return data.ok
-      ? pass('telegram.token', `Telegram bot valid (@${data.result?.username ?? '?'})`)
-      : fail('telegram.token', 'Invalid Telegram bot token');
+    const data = await fetchTelegramMe(tg.botToken);
+    return telegramTokenResult(data);
   } catch (e: unknown) {
     return fail('telegram.token', `Telegram check failed: ${errorMessage(e)}`);
   }

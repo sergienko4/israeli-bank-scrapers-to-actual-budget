@@ -11,6 +11,30 @@ import { fail, type IValidationResult,pass } from './ValidationResult.js';
 export type { IValidationResult } from './ValidationResult.js';
 
 /**
+ * Builds the botToken format validation result.
+ * @param tg - The Telegram config whose botToken is checked.
+ * @returns Pass when the token matches `<id>:<rest>`, else fail.
+ */
+function tokenResult(tg: NonNullable<INotificationConfig['telegram']>): IValidationResult {
+  const isTokenValid = /^\d+:.+$/.test(tg.botToken);
+  return isTokenValid
+    ? pass('telegram.botToken', 'Telegram botToken format valid')
+    : fail('telegram.botToken',
+      'Invalid botToken format — expected "123456:ABCdef..."');
+}
+
+/**
+ * Builds the chatId presence validation result.
+ * @param tg - The Telegram config whose chatId is checked.
+ * @returns Pass when chatId is set, else fail.
+ */
+function chatIdResult(tg: NonNullable<INotificationConfig['telegram']>): IValidationResult {
+  return tg.chatId
+    ? pass('telegram.chatId', 'Telegram chatId is set')
+    : fail('telegram.chatId', 'Telegram chatId is missing');
+}
+
+/**
  * Validates Telegram bot token format and chat ID presence offline.
  * @param tg - The Telegram config to check.
  * @returns Array of IValidationResult objects for botToken and chatId.
@@ -18,16 +42,9 @@ export type { IValidationResult } from './ValidationResult.js';
 function checkTelegramOffline(
   tg: NonNullable<INotificationConfig['telegram']>
 ): IValidationResult[] {
-  const isTokenValid = /^\d+:.+$/.test(tg.botToken);
-  return [
-    isTokenValid
-      ? pass('telegram.botToken', 'Telegram botToken format valid')
-      : fail('telegram.botToken',
-        'Invalid botToken format — expected "123456:ABCdef..."'),
-    tg.chatId
-      ? pass('telegram.chatId', 'Telegram chatId is set')
-      : fail('telegram.chatId', 'Telegram chatId is missing'),
-  ];
+  const token = tokenResult(tg);
+  const chat = chatIdResult(tg);
+  return [token, chat];
 }
 
 /**
@@ -54,16 +71,9 @@ function aggregateChannelResults(
   notifications: NonNullable<IImporterConfig['notifications']>
 ): IValidationResult[] {
   const { telegram, webhook } = notifications;
-  const results: IValidationResult[] = [];
-  if (telegram) {
-    const telegramResults = checkTelegramOffline(telegram);
-    results.push(...telegramResults);
-  }
-  if (webhook) {
-    const webhookResult = checkWebhookOffline(webhook);
-    results.push(webhookResult);
-  }
-  return results;
+  const telegramResults = telegram ? checkTelegramOffline(telegram) : [];
+  const webhookResults = webhook ? [checkWebhookOffline(webhook)] : [];
+  return [...telegramResults, ...webhookResults];
 }
 
 /**
