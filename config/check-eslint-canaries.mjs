@@ -92,6 +92,11 @@ const CANARIES = {
     description:
       'Track A — src/Config/Validators/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
   },
+  'tests/eslint-canaries/ServicesAccountMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'Track A — src/Services/Account/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
   'tests/eslint-canaries/SchedulerProcessMaxLinesPerFunction.canary.ts': {
     minErrors: 1,
     description:
