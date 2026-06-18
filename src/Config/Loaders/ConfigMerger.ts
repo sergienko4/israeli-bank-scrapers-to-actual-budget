@@ -32,6 +32,24 @@ function mergeValue(target: ConfigValue, source: ConfigValue): ConfigValue {
 }
 
 /**
+ * Merges every entry of source onto a shallow copy of target.
+ *
+ * Iterates the source's own enumerable keys, deep-merging each value via
+ * {@link mergeValue}. The target object is never mutated.
+ *
+ * @param target - Base config to copy and merge into.
+ * @param source - Partial config whose values override or extend the target.
+ * @returns A new ConfigRecord with source values merged on top of target.
+ */
+function mergeEntries(target: IImporterConfig, source: Partial<IImporterConfig>): ConfigRecord {
+  const result: ConfigRecord = { ...target };
+  for (const [key, srcVal] of Object.entries(source)) {
+    result[key] = mergeValue(result[key], srcVal);
+  }
+  return result;
+}
+
+/**
  * Deep-merges source into target, returning a new merged IImporterConfig.
  *
  * Source values win over target for primitives and arrays. Plain objects
@@ -45,10 +63,5 @@ export default function deepMerge(
   target: IImporterConfig,
   source: Partial<IImporterConfig>
 ): IImporterConfig {
-  const result: ConfigRecord = { ...target };
-  for (const [key, srcVal] of Object.entries(source)) {
-    const tgtVal = result[key];
-    result[key] = mergeValue(tgtVal, srcVal);
-  }
-  return result as unknown as IImporterConfig;
+  return mergeEntries(target, source) as unknown as IImporterConfig;
 }

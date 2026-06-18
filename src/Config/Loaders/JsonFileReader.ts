@@ -17,6 +17,23 @@ import {
 } from '../ConfigEncryption.js';
 
 /**
+ * Resolves the config encryption password or throws when it is missing.
+ *
+ * @param filePath - File path used in the error message.
+ * @returns The encryption password resolved from the environment.
+ * @throws ConfigurationError when CREDENTIALS_ENCRYPTION_PASSWORD is not set.
+ */
+function requirePassword(filePath: string): string {
+  const password = getEncryptionPassword();
+  if (!password) {
+    throw new ConfigurationError(
+      `🔐 ${filePath} is encrypted. Set CREDENTIALS_ENCRYPTION_PASSWORD env var.`,
+    );
+  }
+  return password;
+}
+
+/**
  * Decrypts an encrypted config payload using the environment password.
  *
  * @param raw - Raw JSON string of the encrypted payload.
@@ -25,12 +42,7 @@ import {
  * @throws ConfigurationError when CREDENTIALS_ENCRYPTION_PASSWORD is not set.
  */
 function decryptFile(raw: string, filePath: string): IImporterConfig {
-  const password = getEncryptionPassword();
-  if (!password) {
-    throw new ConfigurationError(
-      `🔐 ${filePath} is encrypted. Set CREDENTIALS_ENCRYPTION_PASSWORD env var.`,
-    );
-  }
+  const password = requirePassword(filePath);
   getLogger().info(`🔐 Decrypting ${filePath}...`);
   const decrypted = decryptConfig(raw, password);
   return JSON.parse(decrypted) as IImporterConfig;
