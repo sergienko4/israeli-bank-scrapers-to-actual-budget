@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.38.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.5...v1.38.6) (2026-06-18)
+
+
+### Fixed
+
+* **paybox:** resolve double OTP + add CI type-check ([#474](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/474)) ([406198d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/406198df62835a50e0b6ee104ace2e6063743f9e))
+* **validation:** add null/typeof guard to validateBank ([#473](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/473)) ([77a5b62](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/77a5b62bf01e523f436fdfd6fdc33055044e2158))
+
+
+### Refactored
+
+* **coupling-t3:** ProcessAllBanksStep split achieves medium=0 ([#470](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/470)) ([be7752c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/be7752c9951a4c09b491934a07cb0aa9535cc2d9))
+* **svc:** split TelegramImportCoordinator (T2) ([#467](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/467)) ([8cf654c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/8cf654c767049b1a3b21169756f63a78f5e2dae5))
+
 ## [1.38.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.4...v1.38.5) (2026-06-17)
 
 
