@@ -9,14 +9,14 @@
  * stays a thin loop coordinator.
  */
 import { getLogger } from '../../Logger/Index.js';
-import type { IBankTarget, IBankTransaction, Procedure } from '../../Types/Index.js';
+import type { IActualAccount, IBankTarget, IBankTransaction, Procedure } from '../../Types/Index.js';
 import { isFail } from '../../Types/Index.js';
 import type { MetricsService } from '../MetricsService.js';
 import type {
   IImportResult, IImportTransactionsOpts,
   TransactionService,
 } from '../TransactionService.js';
-import type { AccountReconciler } from './AccountReconciler.js';
+import type { AccountReconciler, IReconcileCtx } from './AccountReconciler.js';
 
 /** Context for importing one account's transactions. */
 export interface IImportTxnCtx {
@@ -80,16 +80,28 @@ export class LiveAccountWriter {
   public async importLiveAccount(
     target: IBankTarget, account: IAccountSnapshot, bankCtx: IWriteBankCtx,
   ): Promise<{ imported: number; skipped: number }> {
-    const accountResult = await this.opts.transactionService.getOrCreateAccount(
-      target.actualAccountId, bankCtx.bankName, account.accountNumber,
-    );
-    if (isFail(accountResult)) {
-      getLogger().error(`     ❌ Account error: ${accountResult.message}`);
-      return { imported: 0, skipped: 0 };
-    }
+    const accountResult = await this.resolveAccount(target, account, bankCtx);
+    if (isFail(accountResult)) return { imported: 0, skipped: 0 };
     const resolvedTarget = { ...target, actualAccountId: accountResult.data.id };
     const result = await this.importAndReconcile(resolvedTarget, account, bankCtx);
     return { imported: result.imported, skipped: result.skipped };
+  }
+
+  /**
+   * Resolves (or creates) the Actual Budget account, logging any failure.
+   * @param target - The IBankTarget with the configured Actual Budget account ID.
+   * @param account - The scraped account snapshot providing the account number.
+   * @param bankCtx - Bank name and currency context.
+   * @returns The account-resolution Procedure from the transaction service.
+   */
+  private async resolveAccount(
+    target: IBankTarget, account: IAccountSnapshot, bankCtx: IWriteBankCtx,
+  ): Promise<Procedure<IActualAccount>> {
+    const result = await this.opts.transactionService.getOrCreateAccount(
+      target.actualAccountId, bankCtx.bankName, account.accountNumber,
+    );
+    if (isFail(result)) getLogger().error(`     ❌ Account error: ${result.message}`);
+    return result;
   }
 
   /**
@@ -102,17 +114,44 @@ export class LiveAccountWriter {
   private async importAndReconcile(
     target: IBankTarget, account: IAccountSnapshot, bankCtx: IWriteBankCtx,
   ): Promise<IImportResult> {
-    const ctx: IImportTxnCtx = {
+    const ctx = LiveAccountWriter.buildImportCtx(target, account, bankCtx);
+    const result = await this.importAndRecordTransactions(ctx, account.txns);
+    const reconcileCtx = LiveAccountWriter.buildReconcileCtx(target, account, bankCtx);
+    await this.opts.reconciler.reconcileIfConfigured(target, reconcileCtx);
+    return result;
+  }
+
+  /**
+   * Builds the transaction-import context for one account.
+   * @param target - The IBankTarget providing the account ID and display name.
+   * @param account - The scraped account snapshot.
+   * @param bankCtx - Bank name and currency context.
+   * @returns The IImportTxnCtx for the import and metrics flow.
+   */
+  private static buildImportCtx(
+    target: IBankTarget, account: IAccountSnapshot, bankCtx: IWriteBankCtx,
+  ): IImportTxnCtx {
+    return {
       bankName: bankCtx.bankName, accountNumber: account.accountNumber,
       accountName: target.accountName, actualAccountId: target.actualAccountId,
       balance: account.balance, currency: bankCtx.currency,
     };
-    const result = await this.importAndRecordTransactions(ctx, account.txns);
-    await this.opts.reconciler.reconcileIfConfigured(target, {
-      actualAccountId: target.actualAccountId,
-      balance: account.balance, currency: bankCtx.currency, bankName: bankCtx.bankName,
-    });
-    return result;
+  }
+
+  /**
+   * Builds the reconciliation context for one account.
+   * @param target - The IBankTarget providing the resolved Actual Budget account ID.
+   * @param account - The scraped account snapshot providing the balance.
+   * @param bankCtx - Bank name and currency context.
+   * @returns The IReconcileCtx for the reconciliation flow.
+   */
+  private static buildReconcileCtx(
+    target: IBankTarget, account: IAccountSnapshot, bankCtx: IWriteBankCtx,
+  ): IReconcileCtx {
+    return {
+      actualAccountId: target.actualAccountId, balance: account.balance,
+      currency: bankCtx.currency, bankName: bankCtx.bankName,
+    };
   }
 
   /**
@@ -124,13 +163,20 @@ export class LiveAccountWriter {
   private async importAndRecordTransactions(
     ctx: IImportTxnCtx, txns: IBankTransaction[],
   ): Promise<IImportResult> {
-    const emptyResult: IImportResult = {
+    if (txns.length === 0) return LiveAccountWriter.emptyImportResult();
+    const procedureResult = await this.executeImport(ctx, txns);
+    if (isFail(procedureResult)) return LiveAccountWriter.emptyImportResult();
+    return this.recordImportResult(ctx, procedureResult.data);
+  }
+
+  /**
+   * Builds an empty import result for the no-op and failure paths.
+   * @returns An IImportResult with zero counts and empty transaction arrays.
+   */
+  private static emptyImportResult(): IImportResult {
+    return {
       imported: 0, skipped: 0, newTransactions: [], existingTransactions: [],
     };
-    if (txns.length === 0) return emptyResult;
-    const procedureResult = await this.executeImport(ctx, txns);
-    if (isFail(procedureResult)) return emptyResult;
-    return this.recordImportResult(ctx, procedureResult.data);
   }
 
   /**
@@ -142,15 +188,27 @@ export class LiveAccountWriter {
   private async executeImport(
     ctx: IImportTxnCtx, txns: IBankTransaction[],
   ): Promise<Procedure<IImportResult>> {
-    const opts: IImportTransactionsOpts = {
-      bankName: ctx.bankName, accountNumber: ctx.accountNumber,
-      actualAccountId: ctx.actualAccountId, transactions: txns,
-    };
+    const opts = LiveAccountWriter.buildImportOpts(ctx, txns);
     const procedureResult = await this.opts.transactionService.importTransactions(opts);
     if (isFail(procedureResult)) {
       getLogger().error(`     ❌ Import error: ${procedureResult.message}`);
     }
     return procedureResult;
+  }
+
+  /**
+   * Builds the import-transactions options payload for one account.
+   * @param ctx - Context with bank name, account number, and account ID.
+   * @param txns - The IBankTransaction array to import.
+   * @returns The IImportTransactionsOpts for TransactionService.importTransactions.
+   */
+  private static buildImportOpts(
+    ctx: IImportTxnCtx, txns: IBankTransaction[],
+  ): IImportTransactionsOpts {
+    return {
+      bankName: ctx.bankName, accountNumber: ctx.accountNumber,
+      actualAccountId: ctx.actualAccountId, transactions: txns,
+    };
   }
 
   /**

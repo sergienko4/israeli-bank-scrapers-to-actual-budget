@@ -10,7 +10,7 @@ import { getLogger } from '../../Logger/Index.js';
 import type { IBankTarget } from '../../Types/Index.js';
 import { isFail } from '../../Types/Index.js';
 import type { MetricsService } from '../MetricsService.js';
-import type { ReconciliationService } from '../ReconciliationService.js';
+import type { IReconciliationResult, ReconciliationService } from '../ReconciliationService.js';
 
 /**
  * Formats a reconciliation message with the signed ILS adjustment amount.
@@ -82,21 +82,51 @@ export class AccountReconciler {
    */
   public async reconcileIfConfigured(target: IBankTarget, ctx: IReconcileCtx): Promise<void> {
     if (!target.reconcile || ctx.balance === undefined) return;
-    const bankName = ctx.bankName.toLowerCase();
-    if (UNRELIABLE_BALANCE_BANKS.has(bankName) && ctx.balance === 0) {
+    const balance = ctx.balance;
+    if (AccountReconciler.isUnreliableZeroBalance(ctx)) {
       getLogger().info('     ⚠️  Skipping reconcile: balance=0 from API-direct bank (unreliable)');
       return;
     }
+    await this.reconcileBalance(ctx, balance);
+  }
+
+  /**
+   * Decides whether a zero balance from an API-direct bank should be skipped.
+   * @param ctx - Context with the bank name and scraped balance.
+   * @returns True when the bank is known to report an unreliable balance of 0.
+   */
+  private static isUnreliableZeroBalance(ctx: IReconcileCtx): boolean {
+    const bankName = ctx.bankName.toLowerCase();
+    return UNRELIABLE_BALANCE_BANKS.has(bankName) && ctx.balance === 0;
+  }
+
+  /**
+   * Reconciles a known balance, then records metrics and logs the outcome.
+   * @param ctx - Context with the actual account ID, currency, and bank name.
+   * @param balance - The known (defined) scraped balance to reconcile.
+   */
+  private async reconcileBalance(ctx: IReconcileCtx, balance: number): Promise<void> {
     getLogger().info('     🔄 Reconciling account balance...');
-    const result = await this.opts.reconciliationService.reconcile(
-      ctx.actualAccountId, ctx.balance, ctx.currency,
-    );
+    const service = this.opts.reconciliationService;
+    const result = await service.reconcile(ctx.actualAccountId, balance, ctx.currency);
     if (isFail(result)) {
       getLogger().error(`     ❌ Reconciliation error: ${result.message}`);
       return;
     }
-    this.opts.metrics.recordReconciliation(ctx.bankName, result.data.status, result.data.diff);
-    AccountReconciler.logReconciliationOutcome(result.data.status, result.data.diff);
+    this.recordReconcileSuccess(ctx.bankName, result.data.status, result.data.diff);
+  }
+
+  /**
+   * Records reconciliation metrics and emits the status-specific outcome log.
+   * @param bankName - Bank name for metrics tagging.
+   * @param status - The reconciliation outcome status.
+   * @param diff - The reconciliation diff in cents (signed).
+   */
+  private recordReconcileSuccess(
+    bankName: string, status: IReconciliationResult['status'], diff: number,
+  ): void {
+    this.opts.metrics.recordReconciliation(bankName, status, diff);
+    AccountReconciler.logReconciliationOutcome(status, diff);
   }
 
   /**
