@@ -147,6 +147,11 @@ const CANARIES = {
     description:
       'PR 27 — ReceiptImportHandler.ts + Receipt/ReceiptImportFlow.ts capped at max-lines: 200 (this canary exceeds 200 LoC)',
   },
+  'tests/eslint-canaries/GlobalSourceMaxLines.canary.ts': {
+    minErrors: 1,
+    description:
+      'Global src/** default max-lines tightened 300 -> 200 (size/cohesion Track B); this canary exceeds 200 LoC',
+  },
 };
 
 let allPassed = true;
