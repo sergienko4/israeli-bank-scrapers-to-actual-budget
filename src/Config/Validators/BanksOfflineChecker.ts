@@ -19,6 +19,21 @@ export type { IValidationResult } from './ValidationResult.js';
 const KNOWN_BANKS = new Set(Object.keys(CompanyTypes).map(k => k.toLowerCase()));
 
 /**
+ * Computes the next Levenshtein matrix row from the previous row.
+ * @param prev - The previous matrix row (index 0 holds the prior row number).
+ * @param ca - The current character from the first string.
+ * @param b - The second string being compared against.
+ * @returns The next matrix row.
+ */
+function nextLevRow(prev: number[], ca: string, b: string): number[] {
+  const next: number[] = [prev[0] + 1];
+  for (let j = 1; j <= b.length; j++)
+    next[j] = ca === b[j - 1] ? prev[j - 1]
+      : 1 + Math.min(prev[j], next[j - 1], prev[j - 1]);
+  return next;
+}
+
+/**
  * Computes the Levenshtein edit distance between two strings.
  * @param a - First string to compare.
  * @param b - Second string to compare.
@@ -26,14 +41,8 @@ const KNOWN_BANKS = new Set(Object.keys(CompanyTypes).map(k => k.toLowerCase()))
  */
 function levenshtein(a: string, b: string): number {
   let row = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    const next: number[] = Array.from({ length: b.length + 1 }, () => 0);
-    next[0] = i;
-    for (let j = 1; j <= b.length; j++)
-      next[j] = a[i - 1] === b[j - 1] ? row[j - 1]
-        : 1 + Math.min(row[j], next[j - 1], row[j - 1]);
-    row = next;
-  }
+  for (let i = 1; i <= a.length; i++)
+    row = nextLevRow(row, a[i - 1], b);
   return row[b.length];
 }
 
@@ -68,20 +77,36 @@ function checkBankName(name: string): IValidationResult {
 }
 
 /**
+ * Builds the "both startDate and daysBack set" failure result.
+ * @param name - Bank key used in the result message.
+ * @returns A fail IValidationResult.
+ */
+function bothDatesSet(name: string): IValidationResult {
+  return fail(`bank.${name}.dates`,
+    `${name}: cannot use both "startDate" and "daysBack" — choose one`);
+}
+
+/**
+ * Builds the "neither startDate nor daysBack set" warning result.
+ * @param name - Bank key used in the result message.
+ * @returns A warn IValidationResult.
+ */
+function noDatesSet(name: string): IValidationResult {
+  return warn(`bank.${name}.dates`,
+    `${name}: no daysBack/startDate set — will fetch ~1 year of history`);
+}
+
+/**
  * Validates that startDate and daysBack are not both set for a bank.
  * @param name - Bank key used in result messages.
  * @param cfg - The IBankConfig whose date fields to check.
  * @returns Array containing a single IValidationResult for the date config.
  */
 function checkBankDates(name: string, cfg: IBankConfig): IValidationResult[] {
-  if (cfg.startDate && cfg.daysBack) {
-    return [fail(`bank.${name}.dates`,
-      `${name}: cannot use both "startDate" and "daysBack" — choose one`)];
-  }
-  if (!cfg.startDate && !cfg.daysBack) {
-    return [warn(`bank.${name}.dates`,
-      `${name}: no daysBack/startDate set — will fetch ~1 year of history`)];
-  }
+  const hasStart = typeof cfg.startDate === 'string' && cfg.startDate.length > 0;
+  const hasDays = typeof cfg.daysBack === 'number';
+  if (hasStart && hasDays) return [bothDatesSet(name)];
+  if (!hasStart && !hasDays) return [noDatesSet(name)];
   return [pass(`bank.${name}.dates`, `${name}: date config valid`)];
 }
 
@@ -99,6 +124,20 @@ function formatTargetSummary(target: IBankTarget, idx: number): string {
 }
 
 /**
+ * Builds the invalid-actualAccountId failure result.
+ * @param name - Bank key used in result messages.
+ * @param idx - Zero-based target index used in result labels.
+ * @param id - The actualAccountId that failed validation.
+ * @returns A fail result describing the invalid actualAccountId.
+ */
+function invalidTargetId(name: string, idx: number, id: string): IValidationResult {
+  const idLabel = id || '(empty)';
+  const tag = `bank.${name}.target[${String(idx)}]`;
+  return fail(tag,
+    `${name} target[${String(idx)}]: invalid actualAccountId "${idLabel}" — expected UUID`);
+}
+
+/**
  * Validates a single bank target's actualAccountId format and accounts field.
  * @param name - Bank key used in result messages.
  * @param target - The IBankTarget to check.
@@ -109,12 +148,8 @@ function checkBankTarget(
   name: string, target: IBankTarget, idx: number
 ): IValidationResult {
   const id = target.actualAccountId;
+  if (!id || !isValidUUID(id)) return invalidTargetId(name, idx, id);
   const tag = `bank.${name}.target[${String(idx)}]`;
-  if (!id || !isValidUUID(id)) {
-    const idLabel = id || '(empty)';
-    return fail(tag,
-      `${name} target[${String(idx)}]: invalid actualAccountId "${idLabel}" — expected UUID`);
-  }
   return pass(tag, `${name} ${formatTargetSummary(target, idx)}`);
 }
 

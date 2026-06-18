@@ -47,19 +47,13 @@ function validateDaysBack(bankName: string, daysBack: number): Procedure<{ valid
 }
 
 /**
- * Validates startDate format, ensures it is not in the future, and not older than one year.
+ * Validates that a startDate is neither in the future nor older than one year.
  * @param bankName - Bank name used in error messages.
- * @param startDate - The startDate string (YYYY-MM-DD) to validate.
- * @returns Procedure success on valid date, else failure message.
+ * @param startDate - The startDate string (YYYY-MM-DD); re-parsed for the range comparison.
+ * @returns Procedure success when the date is within the allowed range.
  */
-function validateStartDate(
-  bankName: string, startDate: string
-): Procedure<{ valid: true }> {
+function checkDateRange(bankName: string, startDate: string): Procedure<{ valid: true }> {
   const date = new Date(startDate);
-  const dateTimestamp = date.getTime();
-  if (Number.isNaN(dateTimestamp)) {
-    return fail(`Invalid startDate for ${bankName}: "${startDate}". Use YYYY-MM-DD`);
-  }
   if (date > new Date()) {
     return fail(`startDate cannot be in the future for ${bankName}. Got: ${startDate}`);
   }
@@ -67,6 +61,21 @@ function validateStartDate(
     return fail(`${bankName}: startDate too old (>1 year). Got: ${startDate}`);
   }
   return succeed({ valid: true as const });
+}
+
+/**
+ * Validates startDate format, ensures it is not in the future, and not older than one year.
+ * @param bankName - Bank name used in error messages.
+ * @param startDate - The startDate string (YYYY-MM-DD) to validate.
+ * @returns Procedure success on valid date, else failure message.
+ */
+function validateStartDate(bankName: string, startDate: string): Procedure<{ valid: true }> {
+  const date = new Date(startDate);
+  const dateTimestamp = date.getTime();
+  if (Number.isNaN(dateTimestamp)) {
+    return fail(`Invalid startDate for ${bankName}: "${startDate}". Use YYYY-MM-DD`);
+  }
+  return checkDateRange(bankName, startDate);
 }
 
 const DAYS_BACK_VALIDATOR: IBlockValidator<IBankDateContext> = {

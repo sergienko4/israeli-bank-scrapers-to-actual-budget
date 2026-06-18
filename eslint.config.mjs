@@ -1361,6 +1361,38 @@ export default tseslint.config(
       'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
     },
   },
+  // ─── Section 7x: Config/Validators cluster max-fn-lines: 10 ───
+  //
+  // WHY: src/Config/Validators (offline/online config checkers + report
+  // formatter) are deterministic validation helpers. Several functions
+  // (Levenshtein row math, bank/target/date checks, notification-channel
+  // validators, Actual-server + Telegram online probes) had drifted to
+  // 11-15 effective LoC; they were split into SRP helpers so every
+  // function in the cluster is <= 10 effective LoC. Per §1 PRECEDENT in
+  // eslint-rules-guidlines.md, the drained cluster locks at 10 so no
+  // validator function can grow back into a multi-responsibility blob.
+  //
+  // This is the second slice of the Track-A drain of the global
+  // `max-lines-per-function: 20` cap toward 10, cluster by cluster.
+  //
+  // Scope:
+  //   - `src/Config/Validators/**/*.ts` (6 files).
+  //   - `tests/eslint-canaries/ConfigValidatorsMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, >10-LoC fn body).
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines-per-function: 10` rule survives on the canary fixture;
+  // flat-config rule keys are replaced (not merged) by later matching
+  // blocks, so the canary is configured by THIS last matching block.
+  {
+    files: [
+      'src/Config/Validators/**/*.ts',
+      'tests/eslint-canaries/ConfigValidatorsMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
 
   // 10. PRE-EXISTING REGEX PATTERNS (warn until refactored)
   {

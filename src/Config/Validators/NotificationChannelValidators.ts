@@ -45,6 +45,19 @@ function validateBotToken(botToken: string): Procedure<{ valid: true }> {
   return succeed({ valid: true as const });
 }
 
+const MESSAGE_FORMATS = ['summary', 'compact', 'ledger', 'emoji'];
+const SHOW_TX_VALUES = ['new', 'all', 'none'];
+
+/**
+ * Returns the first failing procedure, or success when all pass.
+ * @param results - Procedures to inspect in order.
+ * @returns The first failure, else success.
+ */
+function firstFailure(...results: Procedure<{ valid: true }>[]): Procedure<{ valid: true }> {
+  for (const r of results) if (isFail(r)) return r;
+  return succeed({ valid: true as const });
+}
+
 /**
  * Validates the Telegram channel config (botToken, chatId, format enums).
  * @param telegram - The Telegram block to validate.
@@ -56,16 +69,24 @@ function validateTelegramConfig(
   const tokenResult = validateBotToken(telegram.botToken);
   if (isFail(tokenResult)) return tokenResult;
   if (!telegram.chatId) return fail('Telegram chatId is required');
-  const formatResult = validateEnumField(
-    telegram.messageFormat || false,
-    ['summary', 'compact', 'ledger', 'emoji'], 'messageFormat'
-  );
-  if (isFail(formatResult)) return formatResult;
-  const showResult = validateEnumField(
-    telegram.showTransactions || false,
-    ['new', 'all', 'none'], 'showTransactions'
-  );
-  if (isFail(showResult)) return showResult;
+  const format = validateEnumField(telegram.messageFormat || false, MESSAGE_FORMATS, 'messageFormat');
+  const show = validateEnumField(telegram.showTransactions || false, SHOW_TX_VALUES, 'showTransactions');
+  return firstFailure(format, show);
+}
+
+const WEBHOOK_FORMATS = ['slack', 'discord', 'plain'];
+
+/**
+ * Validates that a webhook URL is present and uses an http(s) scheme.
+ * @param url - The webhook URL to validate (may be undefined).
+ * @returns Procedure success when the URL is present and well-formed.
+ */
+function validateWebhookUrl(url?: string): Procedure<{ valid: true }> {
+  if (!url) return fail('Webhook url is required when webhook notifications are configured');
+  const hasScheme = url.startsWith('http://') || url.startsWith('https://');
+  if (!hasScheme) {
+    return fail(`Invalid webhook url format. Must start with http:// or https://, got: ${url}`);
+  }
   return succeed({ valid: true as const });
 }
 
@@ -77,18 +98,10 @@ function validateTelegramConfig(
 function validateWebhookConfig(
   webhook: NonNullable<INotificationConfig['webhook']>
 ): Procedure<{ valid: true }> {
-  if (!webhook.url) {
-    return fail('Webhook url is required when webhook notifications are configured');
-  }
-  if (!webhook.url.startsWith('http://') && !webhook.url.startsWith('https://')) {
-    return fail(
-      `Invalid webhook url format. Must start with http:// or https://, got: ${webhook.url}`
-    );
-  }
-  const formatResult = validateEnumField(
-    webhook.format || false, ['slack', 'discord', 'plain'], 'webhook format'
-  );
-  if (isFail(formatResult)) return formatResult;
+  const urlResult = validateWebhookUrl(webhook.url);
+  if (isFail(urlResult)) return urlResult;
+  const format = validateEnumField(webhook.format || false, WEBHOOK_FORMATS, 'webhook format');
+  if (isFail(format)) return format;
   return succeed({ valid: true as const });
 }
 
