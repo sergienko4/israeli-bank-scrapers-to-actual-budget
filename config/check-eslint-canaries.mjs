@@ -82,6 +82,11 @@ const CANARIES = {
     description:
       'PR 433 — src/Scheduler/Config/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
   },
+  'tests/eslint-canaries/ConfigLoadersMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'Track A — src/Config/Loaders/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
   'tests/eslint-canaries/SchedulerProcessMaxLinesPerFunction.canary.ts': {
     minErrors: 1,
     description:
