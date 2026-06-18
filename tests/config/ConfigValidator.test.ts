@@ -314,6 +314,19 @@ describe('ConfigValidator', () => {
       const results = ConfigValidator.validateOffline(makeConfig());
       expectCheck(results, 'bank.discount.dates', 'pass');
     });
+
+    it('treats daysBack 0 as an explicit date setting (not unset)', () => {
+      const cfg = makeConfig({
+        banks: {
+          leumi: {
+            username: 'u', password: TEST_CREDENTIAL_SHORT, daysBack: 0,
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: 'all' }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expectCheck(results, 'bank.leumi.dates', 'pass');
+    });
   });
 
   // ─── Bank targets ───
@@ -605,6 +618,30 @@ describe('ConfigValidator', () => {
       expectCheck(results, 'actual.budget', 'fail');
       expect(fail(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('not found');
+    });
+
+    it('reports cannot-verify (not "not found") when list-user-files is non-ok', async () => {
+      const cfg = makeConfig();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetFoundMocks(cfg.actual.budget.syncId)[0]) // login ok
+        .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ data: [] }) });
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await ConfigValidator.validateOnline(cfg);
+      const msg = fail(results).find(r => r.check === 'actual.budget')?.message ?? '';
+      expect(msg).toContain('Cannot verify budget');
+      expect(msg).not.toContain('not found');
+    });
+
+    it('reports cannot-verify when login is non-ok', async () => {
+      const cfg = makeConfig();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await ConfigValidator.validateOnline(cfg);
+      const msg = fail(results).find(r => r.check === 'actual.budget')?.message ?? '';
+      expect(msg).toContain('Cannot verify budget');
     });
 
     it('fails when login fails (no token returned)', async () => {

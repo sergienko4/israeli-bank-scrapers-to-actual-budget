@@ -7,6 +7,7 @@
  * converts thrown errors to `fail` results so the orchestrator never
  * has to wrap calls in try/catch.
  */
+import NetworkError from '../../Errors/NetworkError.js';
 import type { IImporterConfig, INotificationConfig } from '../../Types/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
 import { fail, type IValidationResult,pass, warn } from './ValidationResult.js';
@@ -33,6 +34,7 @@ async function loginToActualServer(serverURL: string, password: string): Promise
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password }),
   });
+  if (!resp.ok) throw new NetworkError(`login failed (HTTP ${String(resp.status)})`);
   const data = await resp.json() as { data?: { token?: string } };
   return data.data?.token ?? '';
 }
@@ -50,6 +52,7 @@ async function listUserFiles(
     method: 'POST',
     headers: { 'X-ACTUAL-TOKEN': token, 'Content-Type': 'application/json' },
   });
+  if (!resp.ok) throw new NetworkError(`list-user-files failed (HTTP ${String(resp.status)})`);
   return await resp.json() as { data?: { groupId?: string }[] };
 }
 

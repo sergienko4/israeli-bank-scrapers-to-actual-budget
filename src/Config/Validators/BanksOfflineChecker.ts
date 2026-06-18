@@ -103,8 +103,10 @@ function noDatesSet(name: string): IValidationResult {
  * @returns Array containing a single IValidationResult for the date config.
  */
 function checkBankDates(name: string, cfg: IBankConfig): IValidationResult[] {
-  if (cfg.startDate && cfg.daysBack) return [bothDatesSet(name)];
-  if (!cfg.startDate && !cfg.daysBack) return [noDatesSet(name)];
+  const hasStart = typeof cfg.startDate === 'string' && cfg.startDate.length > 0;
+  const hasDays = typeof cfg.daysBack === 'number';
+  if (hasStart && hasDays) return [bothDatesSet(name)];
+  if (!hasStart && !hasDays) return [noDatesSet(name)];
   return [pass(`bank.${name}.dates`, `${name}: date config valid`)];
 }
 
