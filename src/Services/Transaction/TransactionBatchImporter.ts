@@ -71,6 +71,20 @@ interface ISingleTxnContext {
   existingTransactions: ITransactionRecord[];
 }
 
+type SingleImportResult = Procedure<{ status: string }>;
+
+interface IImportPayload {
+  account: string;
+  date: string;
+  amount: number;
+  payee_name: string;
+  imported_payee: string;
+  imported_id: string;
+  category: string | undefined;
+  notes: string;
+  cleared: boolean;
+}
+
 /**
  * Imports a batch of bank transactions into Actual Budget with dedup
  * against both new-hash and legacy imported_id formats.
@@ -104,17 +118,31 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
    */
   public async processBatch(opts: IBatchOpts): Promise<IBatchOutcome> {
     const existingIds = await this._dedupQuery.getExistingImportedIds(opts.actualAccountId);
-    const newTransactions: ITransactionRecord[] = [];
-    const existingTransactions: ITransactionRecord[] = [];
-    const batchCtx: IBatchContext = {
+    const batchCtx = TransactionBatchImporter.buildBatchContext(opts, existingIds);
+    await this.processTxnAt(batchCtx, 0);
+    return {
+      newTransactions: batchCtx.newTxns,
+      existingTransactions: batchCtx.existingTxns,
+    };
+  }
+
+  /**
+   * Builds the mutable batch context (accumulator arrays + dedup set) the
+   * per-transaction loop fills. The returned newTxns/existingTxns arrays
+   * are the same references {@link processBatch} returns.
+   * @param opts - Batch options with bank name, account info and transactions.
+   * @param existingIds - Pre-fetched imported_id set used for dedup.
+   * @returns Fresh batch context seeded with empty accumulators.
+   */
+  private static buildBatchContext(opts: IBatchOpts, existingIds: Set<string>): IBatchContext {
+    return {
       txns: opts.transactions,
       accountKey: `${opts.bankName}-${opts.accountNumber}`,
       actualAccountId: opts.actualAccountId,
-      existingIds, newTxns: newTransactions,
-      existingTxns: existingTransactions,
+      existingIds,
+      newTxns: [],
+      existingTxns: [],
     };
-    await this.processTxnAt(batchCtx, 0);
-    return { newTransactions, existingTransactions };
   }
 
   /**
@@ -140,15 +168,31 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
   private async processSingleAt(ctx: IBatchContext, idx: number): Promise<void> {
     const txn = ctx.txns[idx];
     const parsed = parseTransaction(txn);
-    const importedId = buildImportedId(ctx.accountKey, txn, parsed);
-    const legacyId = buildImportedIdLegacy(ctx.accountKey, txn, parsed);
-    const isExisting = ctx.existingIds.has(importedId) || ctx.existingIds.has(legacyId);
-    const target = isExisting ? ctx.existingTxns : ctx.newTxns;
+    const { importedId, target } = TransactionBatchImporter.classify(ctx, txn, parsed);
     await this.importSingleTransaction({
       actualAccountId: ctx.actualAccountId, txn,
       parsed, importedId, target,
       existingTransactions: ctx.existingTxns,
     });
+  }
+
+  /**
+   * Classifies a transaction as new or already-imported via dual-format
+   * dedup (new hash + legacy imported_id), returning the imported_id to
+   * persist plus the accumulator array it belongs in.
+   * @param ctx - Batch context with the dedup set and accumulator arrays.
+   * @param txn - Raw bank transaction being classified.
+   * @param parsed - Parsed transaction record derived from txn.
+   * @returns The chosen imported_id and the target accumulator array.
+   */
+  private static classify(
+    ctx: IBatchContext, txn: IBankTransaction, parsed: ITransactionRecord,
+  ): { importedId: string; target: ITransactionRecord[] } {
+    const importedId = buildImportedId(ctx.accountKey, txn, parsed);
+    const legacyId = buildImportedIdLegacy(ctx.accountKey, txn, parsed);
+    const isExisting = ctx.existingIds.has(importedId) || ctx.existingIds.has(legacyId);
+    const target = isExisting ? ctx.existingTxns : ctx.newTxns;
+    return { importedId, target };
   }
 
   /**
@@ -166,18 +210,8 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
    * @param ctx - Context with account ID, transaction data, and targets.
    * @returns Procedure indicating the import result.
    */
-  private async importSingleTransaction(
-    ctx: ISingleTxnContext,
-  ): Promise<Procedure<{ status: string }>> {
-    const resolved = this.resolveCategory(ctx.parsed.description);
-    const payload = {
-      account: ctx.actualAccountId, date: ctx.parsed.date, amount: ctx.parsed.amount,
-      payee_name: resolved?.payeeName ?? ctx.parsed.description,
-      imported_payee: resolved?.importedPayee ?? ctx.parsed.description,
-      imported_id: ctx.importedId,
-      category: resolved?.categoryId, notes: ctx.txn.memo ?? ctx.parsed.description,
-      cleared: true,
-    };
+  private async importSingleTransaction(ctx: ISingleTxnContext): Promise<SingleImportResult> {
+    const payload = this.buildImportPayload(ctx);
     try {
       await this._api.importTransactions(ctx.actualAccountId, [payload]);
       ctx.target.push(ctx.parsed);
@@ -188,16 +222,31 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
   }
 
   /**
+   * Builds the Actual Budget import payload for one transaction, applying
+   * category-resolver output (payee_name / imported_payee / category) and
+   * falling back to the transaction description.
+   * @param ctx - Single-transaction context with parsed data and imported_id.
+   * @returns Import payload object passed to actualApi.importTransactions.
+   */
+  private buildImportPayload(ctx: ISingleTxnContext): IImportPayload {
+    const resolved = this.resolveCategory(ctx.parsed.description);
+    return {
+      account: ctx.actualAccountId, date: ctx.parsed.date, amount: ctx.parsed.amount,
+      payee_name: resolved?.payeeName ?? ctx.parsed.description,
+      imported_payee: resolved?.importedPayee ?? ctx.parsed.description,
+      imported_id: ctx.importedId, category: resolved?.categoryId, cleared: true,
+      notes: ctx.txn.memo ?? ctx.parsed.description,
+    };
+  }
+
+  /**
    * Handles errors from importing a single transaction, treating duplicates as
    * existing rather than failure.
    * @param error - The caught error.
    * @param ctx - Context with transaction data and target arrays.
    * @returns Procedure indicating the error handling result.
    */
-  private static handleImportError(
-    error: unknown,
-    ctx: ISingleTxnContext,
-  ): Procedure<{ status: string }> {
+  private static handleImportError(error: unknown, ctx: ISingleTxnContext): SingleImportResult {
     const msg = error instanceof Error ? error.message : String(error);
     if (msg.includes('already exists')) {
       ctx.existingTransactions.push(ctx.parsed);

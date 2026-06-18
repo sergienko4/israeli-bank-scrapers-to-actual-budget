@@ -41,16 +41,30 @@ export default class AccountResolver {
     accountId: string, bankName: string, accountNumber: string,
   ): Promise<Procedure<IActualAccount>> {
     try {
-      const accounts = await this._api.getAccounts() as IActualAccount[];
-      const accountLabel = `${bankName} - ${accountNumber}`;
-      const existing = AccountResolver.findExistingAccount(accounts, accountId, accountLabel);
-      if (existing) return succeed(existing);
-
-      getLogger().info(`     ➕ Creating new account: ${accountLabel}`);
-      return await this.createNewAccount(accountLabel);
+      return await this.resolveOrCreate(accountId, bankName, accountNumber);
     } catch (error: unknown) {
       return fail(`Account lookup failed: ${errorMessage(error)}`, { error: error as Error });
     }
+  }
+
+  /**
+   * Resolves an existing account (by UUID then label) or creates a new one.
+   * Holds the non-error-handling body of {@link getOrCreateAccount} so each
+   * function stays within the per-function line budget.
+   * @param accountId - Configured account UUID to match first.
+   * @param bankName - Bank name used to build the account label.
+   * @param accountNumber - Account number used to build the account label.
+   * @returns Procedure wrapping the found or newly created IActualAccount.
+   */
+  private async resolveOrCreate(
+    accountId: string, bankName: string, accountNumber: string,
+  ): Promise<Procedure<IActualAccount>> {
+    const accounts = await this._api.getAccounts() as IActualAccount[];
+    const accountLabel = `${bankName} - ${accountNumber}`;
+    const existing = AccountResolver.findExistingAccount(accounts, accountId, accountLabel);
+    if (existing) return succeed(existing);
+    getLogger().info(`     ➕ Creating new account: ${accountLabel}`);
+    return await this.createNewAccount(accountLabel);
   }
 
   /**
@@ -72,13 +86,23 @@ export default class AccountResolver {
     // satisfies the project's no-restricted-syntax rule which forbids
     // a bare `return undefined`.
     if (byName.length === 0) return byName[0];
+    AccountResolver.logNameMatch(byName, accountLabel);
+    return byName[0];
+  }
+
+  /**
+   * Logs a name-fallback match: warns on label collisions (>1 account) and
+   * always records the chosen account at info level.
+   * @param byName - Accounts matching the deterministic label (length >= 1).
+   * @param accountLabel - The label the accounts were matched on.
+   */
+  private static logNameMatch(byName: IActualAccount[], accountLabel: string): void {
     if (byName.length > 1) {
       getLogger().warn(
         `     ⚠️ ${String(byName.length)} accounts named "${accountLabel}" — using ${byName[0].id}`,
       );
     }
     getLogger().info(`     Found existing account by name: ${accountLabel} (${byName[0].id})`);
-    return byName[0];
   }
 
   /**
@@ -89,17 +113,29 @@ export default class AccountResolver {
    * @param accountLabel - Display name for the new account.
    * @returns Procedure wrapping the created IActualAccount.
    */
-  private async createNewAccount(
-    accountLabel: string,
-  ): Promise<Procedure<IActualAccount>> {
+  private async createNewAccount(accountLabel: string): Promise<Procedure<IActualAccount>> {
     try {
       const payload = { name: accountLabel, offbudget: false, closed: false };
       const created = await this._api.createAccount(payload);
-      if (!created) return fail('account creation returned empty', { status: 'account-not-found' });
-      if (typeof created === 'string') return succeed({ id: created, name: accountLabel });
-      return succeed(created as IActualAccount);
+      return AccountResolver.mapCreatedAccount(created, accountLabel);
     } catch (error: unknown) {
       return fail(`Account creation failed: ${errorMessage(error)}`, { error: error as Error });
     }
+  }
+
+  /**
+   * Maps the Actual `createAccount` return (empty / string UUID / object)
+   * into a Procedure, applying the configured label when the API returns
+   * only a string id.
+   * @param created - Raw createAccount result (undefined, string, or account).
+   * @param accountLabel - Label applied when the API returns only an id string.
+   * @returns Procedure wrapping the created IActualAccount, or failure.
+   */
+  private static mapCreatedAccount(
+    created: Awaited<ReturnType<(typeof api)['createAccount']>>, accountLabel: string,
+  ): Procedure<IActualAccount> {
+    if (!created) return fail('account creation returned empty', { status: 'account-not-found' });
+    if (typeof created === 'string') return succeed({ id: created, name: accountLabel });
+    return succeed(created as IActualAccount);
   }
 }
