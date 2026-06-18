@@ -19,6 +19,7 @@ import type {
   IBankTransaction, IResolvedCategory, ITransactionRecord, Procedure,
 } from '../../Types/Index.js';
 import { fail, succeed } from '../../Types/Index.js';
+import { errorMessage } from '../../Utils/Index.js';
 import type { ICategoryResolver } from '../ICategoryResolver.js';
 import type DedupQuery from './DedupQuery.js';
 import {
@@ -242,12 +243,12 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
   /**
    * Handles errors from importing a single transaction, treating duplicates as
    * existing rather than failure.
-   * @param error - The caught error.
+   * @param error - The caught error, normalized via {@link errorMessage}.
    * @param ctx - Context with transaction data and target arrays.
    * @returns Procedure indicating the error handling result.
    */
   private static handleImportError(error: unknown, ctx: ISingleTxnContext): SingleImportResult {
-    const msg = error instanceof Error ? error.message : String(error);
+    const msg = errorMessage(error);
     if (msg.includes('already exists')) {
       ctx.existingTransactions.push(ctx.parsed);
       return succeed({ status: 'duplicate' });
