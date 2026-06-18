@@ -250,8 +250,18 @@ export default tseslint.config(
       ],
 
       // === CLEAN CODE LIMITS ===
+      // `max-lines` global default tightened 300 -> 200 (size/cohesion initiative,
+      // Track B). The original 300 was a generous bootstrap default; after the
+      // decoupling + split program the largest effective src file is 164 eff LoC
+      // (Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts), so 200 sits ~22% above
+      // today's largest -- inside the eslint-rules-guidlines.md §1 "20-40% above
+      // largest" band -- and locks files against regrowth without trapping any
+      // current file. Backed by the GlobalSourceMaxLines canary (Section 7a).
+      // `max-lines-per-function` stays at the global 20 here; tightening it to 10
+      // is the opportunistic Track-A drain tracked in
+      // hardening_todos.eslint-max-lines-per-function-tighten-10.
       'max-lines-per-function': ['error', { max: 20, skipBlankLines: true, skipComments: true }],
-      'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
+      'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
       '@typescript-eslint/max-params': ['error', { max: 3 }],
       'complexity': ['error', { max: 10 }],
 
@@ -592,6 +602,26 @@ export default tseslint.config(
       '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
       'no-console': 'error',
+    },
+  },
+
+  // 7a. GLOBAL SOURCE max-lines guard (size/cohesion initiative, Track B)
+  // The global default `max-lines` (the CLEAN CODE LIMITS block, src/**) is
+  // tightened to 200. Because canary fixtures live OUTSIDE src/, the literal
+  // global block never applies to them -- so, mirroring every other max-lines
+  // canary section, this block re-applies `max-lines: 200` to the dedicated
+  // GlobalSourceMaxLines fixture so the harness can prove the global ceiling is
+  // alive on every commit. Real src files are NOT added here; per-area tighter
+  // caps (7c-7v) own their own files + canaries.
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the `max-lines: 200`
+  // rule survives on the canary fixture; flat-config rule keys are replaced (not
+  // merged) by later matching blocks, so the canary file MUST be configured by the
+  // LAST block listing it (no later block lists this fixture).
+  {
+    files: ['tests/eslint-canaries/GlobalSourceMaxLines.canary.ts'],
+    rules: {
+      'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
     },
   },
 
