@@ -25,14 +25,25 @@ export class TimeoutWrapper implements ITimeoutWrapper {
     timeoutMs: number,
     operationName: string
   ): Promise<T> {
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      const delay = timeoutMs;
+    const timeoutPromise = this.makeTimeoutPromise(promise, timeoutMs, operationName);
+    return Promise.race([promise, timeoutPromise]);
+  }
+
+  /**
+   * Builds a promise that rejects with a TimeoutError once the deadline elapses.
+   * @param promise - The original operation; its settlement clears the timer.
+   * @param timeoutMs - Maximum allowed duration in milliseconds.
+   * @param operationName - Label used in the TimeoutError message.
+   * @returns A promise that never resolves and rejects when the deadline passes.
+   */
+  private makeTimeoutPromise(
+    promise: Promise<unknown>, timeoutMs: number, operationName: string
+  ): Promise<never> {
+    return new Promise<never>((_, reject) => {
       const timer = globalThis.setTimeout(() => {
-        reject(new this._errorFactory(operationName, delay));
-      }, delay);
+        reject(new this._errorFactory(operationName, timeoutMs));
+      }, timeoutMs);
       void promise.finally(() => { clearTimeout(timer); });
     });
-
-    return Promise.race([promise, timeoutPromise]);
   }
 }
