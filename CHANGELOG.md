@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.38.7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.6...v1.38.7) (2026-06-19)
+
+
+### Refactored
+
+* **config:** drain + lock Config/Loaders at fn max 10 ([#476](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/476)) ([7e74cba](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7e74cba79d2482f1d28f1af23f9bdb91e405c7b8))
+* **config:** lock Config/Validators at fn max 10 ([#478](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/478)) ([c4697bb](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c4697bbb17ca98cccb4192410931df30b41ba94e))
+* **import:** drain Services/Import to fn max 10 ([#481](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/481)) ([871e315](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/871e315534761ecd11c0f9a7e9898acf1e29fad2))
+* **resilience:** drain + lock src/Resilience at fn max 10 ([#483](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/483)) ([bcdcd57](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/bcdcd57fe9255be424e7d6d2a0a18105a481b086))
+* **services:** drain + lock Services/Transaction at fn max 10 ([#480](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/480)) ([001be35](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/001be35204ca2e1d8eabb52b8f44a37b795ada7f))
+* **services:** drain Services/Account to max-fn-lines 10 ([#479](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/479)) ([2e20435](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/2e20435a1cbed5365b1f0423de6c039835df4097))
+* **telegram:** drain + lock Services/Telegram at fn max 10 ([#482](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/482)) ([7577763](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/75777632039e0976a5d5865780a754abe9c353f9))
+
 ## [1.38.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.5...v1.38.6) (2026-06-18)
 
 
