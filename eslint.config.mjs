@@ -1533,6 +1533,41 @@ export default tseslint.config(
     },
   },
 
+  // ─── Section 7ac: Resilience cluster max-fn-lines: 10 ───
+  //
+  // WHY: src/Resilience (RetryStrategy / GracefulShutdown / TimeoutWrapper)
+  // own exponential-backoff retry, SIGTERM/SIGINT shutdown draining and
+  // promise timeout racing. RetryStrategy's attempt loop, single-attempt
+  // runner and backoff handler, GracefulShutdown's callback drainer and
+  // TimeoutWrapper's wrap had drifted to 11+ effective LoC; they were split
+  // into SRP helpers (AttemptResult<T> type, ensureNotExhausted, runOnce,
+  // handleAttemptError, logRetryWarning, runCallback, makeTimeoutPromise) so
+  // every function in the cluster is <= 10 effective LoC. Per §1 PRECEDENT in
+  // eslint-rules-guidlines.md, the drained cluster locks at 10 so no Resilience
+  // function can grow back into a multi-responsibility blob.
+  //
+  // This is the seventh slice of the Track-A drain of the global
+  // `max-lines-per-function: 20` cap toward 10, cluster by cluster.
+  //
+  // Scope:
+  //   - `src/Resilience/**/*.ts` (the Resilience/ directory only).
+  //   - `tests/eslint-canaries/ResilienceMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, >10-LoC fn body).
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines-per-function: 10` rule survives on the canary fixture;
+  // flat-config rule keys are replaced (not merged) by later matching
+  // blocks, so the canary is configured by THIS last matching block.
+  {
+    files: [
+      'src/Resilience/**/*.ts',
+      'tests/eslint-canaries/ResilienceMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10. PRE-EXISTING REGEX PATTERNS (warn until refactored)
   {
     files: [
