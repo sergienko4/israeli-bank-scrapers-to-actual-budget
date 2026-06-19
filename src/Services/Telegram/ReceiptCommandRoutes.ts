@@ -47,15 +47,34 @@ export default function buildReceiptCommandRoutes(
   receiptHandler?: ReceiptImportHandler,
 ): readonly ICommandRoute[] {
   if (!receiptHandler) return Object.freeze<ICommandRoute[]>([]);
-  const exactRoutes = EXACT_RECEIPT_ROUTES.map(([pattern, method]) =>
-    makeExactRoute(pattern, async () => await receiptHandler[method]()),
+  return Object.freeze([
+    ...buildExactReceiptRoutes(receiptHandler),
+    ...buildPrefixReceiptRoutes(receiptHandler),
+  ]);
+}
+
+/**
+ * Builds the three exact-match receipt routes (confirm / choose / cancel).
+ * @param handler - Receipt import handler whose methods back the routes.
+ * @returns Ordered array of exact receipt routes.
+ */
+function buildExactReceiptRoutes(
+  handler: ReceiptImportHandler,
+): readonly ICommandRoute[] {
+  return EXACT_RECEIPT_ROUTES.map(([pattern, method]) =>
+    makeExactRoute(pattern, async () => await handler[method]()),
   );
-  const accHandler = requirePayload(async (id) => await receiptHandler.onAccountSelected(id));
-  const catHandler = requirePayload(async (id) => await receiptHandler.onCategorySelected(id));
-  const routes: ICommandRoute[] = [
-    ...exactRoutes,
-    makePrefixRoute(ACC_PREFIX, accHandler),
-    makePrefixRoute(CAT_PREFIX, catHandler),
-  ];
-  return Object.freeze(routes);
+}
+
+/**
+ * Builds the two payload-bearing prefix receipt routes (account / category).
+ * @param handler - Receipt import handler whose methods back the routes.
+ * @returns Ordered array of prefix receipt routes.
+ */
+function buildPrefixReceiptRoutes(
+  handler: ReceiptImportHandler,
+): readonly ICommandRoute[] {
+  const accHandler = requirePayload(async (id) => await handler.onAccountSelected(id));
+  const catHandler = requirePayload(async (id) => await handler.onCategorySelected(id));
+  return [makePrefixRoute(ACC_PREFIX, accHandler), makePrefixRoute(CAT_PREFIX, catHandler)];
 }

@@ -50,32 +50,25 @@ export function createAuditQuery(auditLog?: IAuditLog): IAuditQuery {
      * @param n - Number of entries to fetch.
      * @returns Up to n entries; empty array when no log or read fails.
      */
-    getRecent(n: number): readonly IAuditEntry[] {
-      return readRecent(n, auditLog);
-    },
+    getRecent: (n: number): readonly IAuditEntry[] => readRecent(n, auditLog),
     /**
      * Reads the failed bank names from the most recent run.
      * @returns Failed bank names; empty array when unavailable.
      */
-    getLastFailedBanks(): readonly string[] {
-      return readLastFailed(auditLog);
-    },
+    getLastFailedBanks: (): readonly string[] => readLastFailed(auditLog),
     /**
-     * Picks the fresh audit entry recorded during this batch's window.
+     * Reads the audit entry recorded during the batch window.
      * @param batch - Recently completed batch.
-     * @returns Procedure carrying the entry, or a `fail` when none / stale.
+     * @returns Procedure carrying the fresh entry, or a `fail` when none.
      */
-    getFreshEntryFor(batch: IBatchResult): Procedure<IAuditEntry> {
-      return pickFreshEntry(batch, auditLog);
-    },
+    getFreshEntryFor: (batch: IBatchResult): Procedure<IAuditEntry> =>
+      pickFreshEntry(batch, auditLog),
     /**
      * Reads the consecutive failure count for a bank.
      * @param bankName - Bank to check.
-     * @returns Consecutive failure count; 0 when unavailable.
+     * @returns Consecutive failure count (0 if none / on failure).
      */
-    getConsecutiveFailures(bankName: string): number {
-      return readStreak(bankName, auditLog);
-    },
+    getConsecutiveFailures: (bankName: string): number => readStreak(bankName, auditLog),
   };
 }
 

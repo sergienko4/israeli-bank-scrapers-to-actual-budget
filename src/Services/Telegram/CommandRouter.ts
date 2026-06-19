@@ -40,15 +40,25 @@ export default class CommandRouter {
    * @param command - Parsed command token.
    * @returns Matching route or undefined.
    */
-  private findRoute(
-    command: string,
-  ): ICommandRoute | undefined {
-    const exact = this.routes.find(
-      r => r.match === 'exact' && r.pattern === command,
-    );
-    if (exact) return exact;
-    return this.routes.find(
-      r => r.match === 'prefix' && command.startsWith(r.pattern),
-    );
+  private findRoute(command: string): ICommandRoute | undefined {
+    return this.findExact(command) ?? this.findPrefix(command);
+  }
+
+  /**
+   * Finds the first exact-match route for `command`.
+   * @param command - Parsed command token.
+   * @returns The matching exact route, or undefined when none.
+   */
+  private findExact(command: string): ICommandRoute | undefined {
+    return this.routes.find(r => r.match === 'exact' && r.pattern === command);
+  }
+
+  /**
+   * Finds the first prefix-match route for `command`.
+   * @param command - Parsed command token.
+   * @returns The matching prefix route, or undefined when none.
+   */
+  private findPrefix(command: string): ICommandRoute | undefined {
+    return this.routes.find(r => r.match === 'prefix' && command.startsWith(r.pattern));
   }
 }
