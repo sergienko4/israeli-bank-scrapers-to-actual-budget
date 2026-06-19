@@ -73,21 +73,24 @@ export class GracefulShutdownHandler implements IShutdownHandler {
    * Runs each registered shutdown callback sequentially, logging errors without aborting.
    * @returns Procedure indicating all callbacks have been executed.
    */
-  /**
-   * Iteratively executes all registered shutdown callbacks in order.
-   * @returns Procedure indicating all callbacks have been executed.
-   */
   private async executeCallbacks(): Promise<Procedure<{ status: string }>> {
     for (const callback of this._callbacks) {
-      try {
-        const result = await callback();
-        if (isFail(result)) {
-          getLogger().error(`Shutdown callback failed: ${result.message}`);
-        }
-      } catch (error: unknown) {
-        getLogger().error(`Error during shutdown callback: ${errorMessage(error)}`);
-      }
+      await GracefulShutdownHandler.runCallback(callback);
     }
     return succeed({ status: 'callbacks-complete' });
+  }
+
+  /**
+   * Executes one shutdown callback, logging a failed Procedure or thrown error.
+   * @param callback - The registered shutdown callback to run.
+   * @returns A promise that resolves once the callback settles.
+   */
+  private static async runCallback(callback: ShutdownCallback): Promise<void> {
+    try {
+      const result = await callback();
+      if (isFail(result)) getLogger().error(`Shutdown callback failed: ${result.message}`);
+    } catch (error: unknown) {
+      getLogger().error(`Error during shutdown callback: ${errorMessage(error)}`);
+    }
   }
 }

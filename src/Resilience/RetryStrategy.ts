@@ -27,6 +27,11 @@ export interface IRetryOptions {
   shouldRetry?: (error: Error) => boolean;
 }
 
+/** Outcome of a single retry attempt: success carries data, failure carries the error. */
+type AttemptResult<T> =
+  | { success: true; data: T; error?: never }
+  | { success: false; data?: never; error: Error };
+
 /** Retries an async operation with exponential backoff until success or max attempts. */
 export class ExponentialBackoffRetry implements IRetryStrategy {
   /**
@@ -58,13 +63,23 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
     for (let attempt = startAttempt; ; attempt++) {
       const result = await this.tryOneAttempt(fn, operationName, attempt);
       if (result.success) return result.data;
-      if (attempt >= this.options.maxAttempts) {
-        throw new ShutdownError(
-          `${operationName} failed after ${String(this.options.maxAttempts)} attempts. ` +
-          `Last error: ${result.error.message}`
-        );
-      }
+      this.ensureNotExhausted(attempt, operationName, result.error);
     }
+  }
+
+  /**
+   * Throws a ShutdownError when the retry budget has been fully consumed.
+   * @param attempt - Current attempt number (1-based).
+   * @param operationName - Label for the error message.
+   * @param error - The error from the most recent failed attempt.
+   * @returns Nothing; returns normally only while attempts remain.
+   */
+  private ensureNotExhausted(attempt: number, operationName: string, error: Error): void {
+    if (attempt < this.options.maxAttempts) return;
+    throw new ShutdownError(
+      `${operationName} failed after ${String(this.options.maxAttempts)} attempts. ` +
+      `Last error: ${error.message}`
+    );
   }
 
   /**
@@ -76,22 +91,42 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
    */
   private async tryOneAttempt<T>(
     fn: () => Promise<T>, operationName: string, attempt: number
-  ): Promise<
-    { success: true; data: T; error?: never } |
-    { success: false; data?: never; error: Error }
-  > {
+  ): Promise<AttemptResult<T>> {
     if (this.options.shouldShutdown?.()) throw new ShutdownError('cancelled due to shutdown');
     try {
-      getLogger().info(`  🔄 Attempt ${String(attempt)}/${String(this.options.maxAttempts)}...`);
-      const data = await fn();
-      return { success: true, data };
+      return await this.runOnce(fn, attempt);
     } catch (error: unknown) {
-      const lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt >= this.options.maxAttempts) return { success: false, error: lastError };
-      if (this.options.shouldRetry && !this.options.shouldRetry(lastError)) throw lastError;
-      await this.handleRetryBackoff(attempt, operationName, lastError);
-      return { success: false, error: lastError };
+      return await this.handleAttemptError<T>(error, operationName, attempt);
     }
+  }
+
+  /**
+   * Executes the operation once and wraps the resolved value as a success result.
+   * @param fn - Async function to execute.
+   * @param attempt - Current attempt number (1-based), used in the log line.
+   * @returns A success result carrying the resolved value.
+   */
+  private async runOnce<T>(fn: () => Promise<T>, attempt: number): Promise<AttemptResult<T>> {
+    getLogger().info(`  🔄 Attempt ${String(attempt)}/${String(this.options.maxAttempts)}...`);
+    const data = await fn();
+    return { success: true, data };
+  }
+
+  /**
+   * Converts a thrown value into a failure result, applying retry policy and backoff.
+   * @param error - The thrown value from the failed attempt.
+   * @param operationName - Label for log messages.
+   * @param attempt - Current attempt number (1-based).
+   * @returns A failure result carrying the normalized error.
+   */
+  private async handleAttemptError<T>(
+    error: unknown, operationName: string, attempt: number
+  ): Promise<AttemptResult<T>> {
+    const lastError = error instanceof Error ? error : new Error(String(error));
+    if (attempt >= this.options.maxAttempts) return { success: false, error: lastError };
+    if (this.options.shouldRetry && !this.options.shouldRetry(lastError)) throw lastError;
+    await this.handleRetryBackoff(attempt, operationName, lastError);
+    return { success: false, error: lastError };
   }
 
   /**
@@ -105,14 +140,25 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
     attempt: number, operationName: string, error: Error
   ): Promise<Procedure<{ status: string }>> {
     const backoffMs = this.options.initialBackoffMs * 2 ** (attempt - 1);
-    getLogger().warn(
-      `  ⚠️  ${operationName} failed ` +
-      `(attempt ${String(attempt)}/${String(this.options.maxAttempts)}): ${error.message}`
-    );
+    this.logRetryWarning(attempt, operationName, error);
     getLogger().info(`  ⏳ Retrying in ${String(backoffMs / 1000)}s...`);
     this.options.onRetry?.({ attempt, maxAttempts: this.options.maxAttempts, backoffMs, error });
     await ExponentialBackoffRetry.sleep(backoffMs);
     return succeed({ status: 'backoff-complete' });
+  }
+
+  /**
+   * Logs a warning describing the failed attempt and its error.
+   * @param attempt - Current attempt number (1-based).
+   * @param operationName - Label for the log message.
+   * @param error - The error from the failed attempt.
+   * @returns Nothing.
+   */
+  private logRetryWarning(attempt: number, operationName: string, error: Error): void {
+    getLogger().warn(
+      `  ⚠️  ${operationName} failed ` +
+      `(attempt ${String(attempt)}/${String(this.options.maxAttempts)}): ${error.message}`
+    );
   }
 
   /**
