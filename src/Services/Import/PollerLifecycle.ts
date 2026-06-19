@@ -23,6 +23,17 @@ import { succeed } from '../../Types/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
 import type TelegramPoller from '../TelegramPoller.js';
 
+/**
+ * Logs a poller-resume failure and returns the message that was logged.
+ * @param err - The rejection reason from poller.start().
+ * @returns The formatted failure message.
+ */
+function logResumeFailure(err: unknown): string {
+  const msg = `Failed to resume poller: ${errorMessage(err)}`;
+  getLogger().error(msg);
+  return msg;
+}
+
 /** Manages start/stop lifecycle of an injected TelegramPoller. */
 export default class PollerLifecycle {
   private _poller: TelegramPoller | null = null;
@@ -64,11 +75,7 @@ export default class PollerLifecycle {
       return succeed({ status: 'no-poller' });
     }
     this._stopped = false;
-    this._poller.start().catch((err: unknown) => {
-      getLogger().error(
-        `Failed to resume poller: ${errorMessage(err)}`
-      );
-    });
+    this._poller.start().catch(logResumeFailure);
     return succeed({ status: 'poller-resumed' });
   }
 }

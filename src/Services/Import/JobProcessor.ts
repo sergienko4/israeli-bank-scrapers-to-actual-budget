@@ -49,6 +49,20 @@ export interface IJobProcessorOptions {
   readonly onBatchFinalized: BatchFinalizedCallback;
 }
 
+/**
+ * Shapes the child-process environment for one import job.
+ * @param bankName - The bank to import, or `all` for every configured bank.
+ * @param extra - Extra environment entries carried by the batch tracker.
+ * @returns The environment map passed to spawnImport.
+ */
+function buildJobEnv(
+  bankName: string,
+  extra: Record<string, string>
+): Record<string, string> {
+  if (bankName === 'all') return extra;
+  return { IMPORT_BANKS: bankName, ...extra };
+}
+
 /** Owns the per-job spawn + per-batch finalization flow. */
 export default class JobProcessor {
   /**
@@ -65,10 +79,7 @@ export default class JobProcessor {
   public async processJob(job: IImportJob): Promise<IImportJobResult> {
     await this.opts.pollerLifecycle.stop();
     const tracker = this.opts.trackerStore.get(job.batchId);
-    const extra = tracker?.extraEnv ?? {};
-    const env = job.bankName === 'all'
-      ? extra
-      : { IMPORT_BANKS: job.bankName, ...extra };
+    const env = buildJobEnv(job.bankName, tracker?.extraEnv ?? {});
     const start = Date.now();
     const exitCode = await this.opts.spawnImport(env);
     return { job, exitCode, durationMs: Date.now() - start };
@@ -87,11 +98,24 @@ export default class JobProcessor {
     const tracker = this.opts.trackerStore.get(job.batchId);
     if (!tracker) return fail(`unknown batch: ${job.batchId}`);
     const jobResult = toJobResult(job, result);
+    this.recordAndMaybeFinalize(tracker, jobResult);
+    return succeed({ status: 'job-recorded' });
+  }
+
+  /**
+   * Records a job result on the tracker and finalizes the batch once every
+   * job has reported in.
+   * @param tracker - The batch tracker accumulating job results.
+   * @param jobResult - The result to append.
+   */
+  private recordAndMaybeFinalize(
+    tracker: IBatchTracker,
+    jobResult: IImportJobResult
+  ): void {
     tracker.results.push(jobResult);
     if (tracker.results.length === tracker.totalJobs) {
       void this.finalizeBatch(tracker);
     }
-    return succeed({ status: 'job-recorded' });
   }
 
   /**

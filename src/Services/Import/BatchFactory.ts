@@ -46,33 +46,82 @@ export interface IDeferredBatchPromise {
   readonly resolve: (r: IBatchResult) => Procedure<{ status: string }>;
 }
 
+/** Mutable holder for the Promise executor's resolve callback. */
+interface IResolverHolder {
+  current: (r: IBatchResult) => IBatchResult;
+}
+
+/**
+ * Identity placeholder for the resolver holder, returned unchanged
+ * until the Promise executor overwrites it with the real resolve.
+ * @param r - The batch result, passed through unchanged.
+ * @returns The same batch result.
+ */
+function passthroughResult(r: IBatchResult): IBatchResult {
+  return r;
+}
+
+/**
+ * Wraps a holder's resolve callback as a Procedure-returning resolver.
+ * @param holder - Holder whose `current` is set by the Promise executor.
+ * @returns A resolve function that fulfils the batch promise.
+ */
+function makeBatchResolver(
+  holder: IResolverHolder
+): (result: IBatchResult) => Procedure<{ status: string }> {
+  return (result: IBatchResult): Procedure<{ status: string }> => {
+    holder.current(result);
+    return succeed({ status: 'batch-resolved' });
+  };
+}
+
 /**
  * Builds a deferred promise pair so callers can `await` a batch
  * result that will be resolved later by handleJobComplete.
  * @returns IDeferredBatchPromise with the promise and its resolve callback.
  */
 export function buildDeferredPromise(): IDeferredBatchPromise {
-  /**
-   * Placeholder — overwritten by Promise constructor.
-   * @param r - The batch result to pass through.
-   * @returns The same batch result.
-   */
-  let doResolve: (r: IBatchResult) => IBatchResult = (r) => r;
+  const holder: IResolverHolder = { current: passthroughResult };
   const promise = new Promise<IBatchResult>((cb) => {
-    doResolve = cb as unknown as (r: IBatchResult) => IBatchResult;
+    holder.current = cb as unknown as (r: IBatchResult) => IBatchResult;
   });
-  /**
-   * Resolves the batch promise and returns a Procedure.
-   * @param result - The IBatchResult to resolve with.
-   * @returns Procedure indicating the batch was resolved.
-   */
-  const resolve = (
-    result: IBatchResult
-  ): Procedure<{ status: string }> => {
-    doResolve(result);
-    return succeed({ status: 'batch-resolved' });
-  };
+  const resolve = makeBatchResolver(holder);
   return { promise, resolve };
+}
+
+/** Identity + options + deferred promise needed to build a tracker. */
+interface ITrackerParts {
+  readonly batchId: string;
+  readonly opts: IImportRequestOptions;
+  readonly totalJobs: number;
+  readonly deferred: IDeferredBatchPromise;
+}
+
+/**
+ * Builds the non-identifying default fields of a tracker.
+ * @param opts - The import request options.
+ * @returns The extraEnv + results defaults.
+ */
+function trackerDefaults(
+  opts: IImportRequestOptions
+): Pick<IBatchTracker, 'extraEnv' | 'results'> {
+  return { extraEnv: opts.extraEnv ?? {}, results: [] };
+}
+
+/**
+ * Assembles a full IBatchTracker from its parts.
+ * @param parts - The batch identity, options, and deferred promise.
+ * @returns A new IBatchTracker.
+ */
+function assembleTracker(parts: ITrackerParts): IBatchTracker {
+  return {
+    ...parts.deferred,
+    ...trackerDefaults(parts.opts),
+    batchId: parts.batchId,
+    source: parts.opts.source,
+    startTime: Date.now(),
+    totalJobs: parts.totalJobs,
+  };
 }
 
 /**
@@ -88,16 +137,7 @@ export function createTracker(
   totalJobs: number
 ): IBatchTracker {
   const deferred = buildDeferredPromise();
-  return {
-    batchId,
-    source: opts.source,
-    startTime: Date.now(),
-    totalJobs,
-    extraEnv: opts.extraEnv ?? {},
-    results: [],
-    resolve: deferred.resolve,
-    promise: deferred.promise,
-  };
+  return assembleTracker({ batchId, opts, totalJobs, deferred });
 }
 
 /**
@@ -129,21 +169,33 @@ export function toJobResult(
   return result;
 }
 
+/** Success/failure tally for a batch's job results. */
+interface IJobCounts {
+  readonly successCount: number;
+  readonly failureCount: number;
+}
+
+/**
+ * Tallies success/failure counts from job results.
+ * @param results - The collected job results.
+ * @returns The success and failure counts.
+ */
+function jobCounts(results: readonly IImportJobResult[]): IJobCounts {
+  const successCount = results.filter((r) => r.exitCode === 0).length;
+  return { successCount, failureCount: results.length - successCount };
+}
+
 /**
  * Builds an IBatchResult from the tracker's collected job results.
  * @param tracker - The IBatchTracker with all job results.
  * @returns The aggregate IBatchResult.
  */
 export function buildBatchResult(tracker: IBatchTracker): IBatchResult {
-  const successCount = tracker.results.filter(
-    (r) => r.exitCode === 0
-  ).length;
   return {
+    ...jobCounts(tracker.results),
     batchId: tracker.batchId,
     source: tracker.source,
     jobs: tracker.results,
     totalDurationMs: Date.now() - tracker.startTime,
-    successCount,
-    failureCount: tracker.results.length - successCount,
   };
 }
