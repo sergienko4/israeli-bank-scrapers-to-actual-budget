@@ -60,7 +60,9 @@ function buildJobEnv(
   extra: Record<string, string>
 ): Record<string, string> {
   if (bankName === 'all') return extra;
-  return { IMPORT_BANKS: bankName, ...extra };
+  // IMPORT_BANKS is spread last so the explicit bank target always wins,
+  // never overridable by an entry carried in extraEnv.
+  return { ...extra, IMPORT_BANKS: bankName };
 }
 
 /** Owns the per-job spawn + per-batch finalization flow. */
