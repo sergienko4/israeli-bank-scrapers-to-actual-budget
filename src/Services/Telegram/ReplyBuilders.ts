@@ -68,13 +68,21 @@ export function buildHelpLines(
 export function buildStatusLines(
   args: IStatusLinesArgs,
 ): readonly string[] {
-  const resultLabel = args.lastResult?.failureCount === 0 ? 'success' : 'failed';
-  const label = args.lastResult ? ` (${resultLabel})` : '';
-  const runLine = args.lastTime
-    ? `Last run: ${timeSince(args.lastTime)} ago${label}`
-    : 'No imports run yet';
+  const runLine = buildRunLine(args);
   const currentLine = `Currently: ${args.isImporting ? '⏳ importing...' : '✅ idle'}`;
   return Object.freeze(['📊 <b>Status</b>', '', runLine, currentLine]);
+}
+
+/**
+ * Builds the "Last run" status line (or the no-runs fallback).
+ * @param args - Status-line inputs (reads lastTime + lastResult).
+ * @returns The formatted run line.
+ */
+function buildRunLine(args: IStatusLinesArgs): string {
+  if (!args.lastTime) return 'No imports run yet';
+  const resultLabel = args.lastResult?.failureCount === 0 ? 'success' : 'failed';
+  const label = args.lastResult ? ` (${resultLabel})` : '';
+  return `Last run: ${timeSince(args.lastTime)} ago${label}`;
 }
 
 /**

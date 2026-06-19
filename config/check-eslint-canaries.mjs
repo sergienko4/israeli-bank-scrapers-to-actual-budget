@@ -107,6 +107,11 @@ const CANARIES = {
     description:
       'Track A — src/Services/Import/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
   },
+  'tests/eslint-canaries/ServicesTelegramMaxLinesPerFunction.canary.ts': {
+    minErrors: 1,
+    description:
+      'Track A — src/Services/Telegram/** capped at max-lines-per-function: 10 (this canary fn exceeds 10 LoC)',
+  },
   'tests/eslint-canaries/SchedulerProcessMaxLinesPerFunction.canary.ts': {
     minErrors: 1,
     description:

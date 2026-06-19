@@ -53,20 +53,20 @@ export function makeExactRoute(
  * @param handler - Handler invoked with the extracted payload ('' when missing).
  * @returns Frozen ICommandRoute entry.
  */
-export function makePrefixRoute(
-  prefix: string,
-  handler: CommandHandler,
-): ICommandRoute {
-  /**
-   * Extracts the payload immediately following `prefix`.
-   * @param raw - Trimmed raw command/callback string.
-   * @returns The payload after the prefix, or '' when missing.
-   */
-  const parse = (raw: string): string => extractPrefixPayload(raw, prefix);
+export function makePrefixRoute(prefix: string, handler: CommandHandler): ICommandRoute {
   return Object.freeze({
     match: 'prefix' as const,
     pattern: prefix,
-    parse,
+    parse: prefixParser(prefix),
     handle: handler,
   });
+}
+
+/**
+ * Builds the standard payload extractor closure for a prefix route.
+ * @param prefix - Literal prefix whose trailing payload should be extracted.
+ * @returns A parser returning the payload after `prefix`, or '' when missing.
+ */
+function prefixParser(prefix: string): (raw: string) => string {
+  return (raw: string): string => extractPrefixPayload(raw, prefix);
 }
