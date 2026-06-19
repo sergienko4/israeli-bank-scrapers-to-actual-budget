@@ -32,20 +32,25 @@ export default class BatchSummaryNotifier {
    * @param batch - The IBatchResult to summarize.
    * @returns Procedure with status: `no-notifier`, `sent`, or `notifier-threw`.
    */
-  public async send(
-    batch: IBatchResult
-  ): Promise<Procedure<{ status: string }>> {
+  public async send(batch: IBatchResult): Promise<Procedure<{ status: string }>> {
     if (!this._notifier) return succeed({ status: 'no-notifier' });
     const msg = BatchSummaryNotifier.formatMessage(batch);
     try {
       await this._notifier.sendMessage(msg);
       return succeed({ status: 'sent' });
     } catch (err: unknown) {
-      getLogger().debug(
-        `Failed to send batch summary: ${errorMessage(err)}`
-      );
-      return succeed({ status: 'notifier-threw' });
+      return BatchSummaryNotifier.onSendError(err);
     }
+  }
+
+  /**
+   * Logs a notifier failure and maps it to a `notifier-threw` status.
+   * @param err - The error thrown by the notifier.
+   * @returns Procedure with status `notifier-threw`.
+   */
+  private static onSendError(err: unknown): Procedure<{ status: string }> {
+    getLogger().debug(`Failed to send batch summary: ${errorMessage(err)}`);
+    return succeed({ status: 'notifier-threw' });
   }
 
   /**

@@ -1460,6 +1460,42 @@ export default tseslint.config(
     },
   },
 
+  // ─── Section 7aa: Services/Import cluster max-fn-lines: 10 ───
+  //
+  // WHY: src/Services/Import (BatchFactory / JobProcessor / BatchSummaryNotifier
+  // / PollerLifecycle and their siblings) own batch construction, per-job
+  // processing, batch-summary notification and poller lifecycle. BatchFactory's
+  // tracker/result builders, JobProcessor's job methods, BatchSummaryNotifier's
+  // send and PollerLifecycle's resume had drifted to 11+ effective LoC; they
+  // were split into SRP helpers so every function in the cluster is <= 10
+  // effective LoC. Per §1 PRECEDENT in eslint-rules-guidlines.md, the drained
+  // cluster locks at 10 so no Import function can grow back into a
+  // multi-responsibility blob.
+  //
+  // This is the fifth slice of the Track-A drain of the global
+  // `max-lines-per-function: 20` cap toward 10, cluster by cluster.
+  //
+  // Scope:
+  //   - `src/Services/Import/**/*.ts` (the Import/ directory only; the siblings
+  //     src/Services/ImportQueue.ts and src/Services/ImportMediator.ts are NOT
+  //     under it).
+  //   - `tests/eslint-canaries/ServicesImportMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, >10-LoC fn body).
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines-per-function: 10` rule survives on the canary fixture;
+  // flat-config rule keys are replaced (not merged) by later matching
+  // blocks, so the canary is configured by THIS last matching block.
+  {
+    files: [
+      'src/Services/Import/**/*.ts',
+      'tests/eslint-canaries/ServicesImportMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
+
   // 10. PRE-EXISTING REGEX PATTERNS (warn until refactored)
   {
     files: [
