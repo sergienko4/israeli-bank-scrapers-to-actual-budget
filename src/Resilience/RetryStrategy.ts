@@ -7,6 +7,7 @@ import { ShutdownError } from '../Errors/ErrorTypes.js';
 import { getLogger } from '../Logger/Index.js';
 import type { Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
+import { errorMessage } from '../Utils/Index.js';
 
 export interface IRetryStrategy {
   execute<T>(fn: () => Promise<T>, operationName: string): Promise<T>;
@@ -122,7 +123,7 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
   private async handleAttemptError<T>(
     error: unknown, operationName: string, attempt: number
   ): Promise<AttemptResult<T>> {
-    const lastError = error instanceof Error ? error : new Error(String(error));
+    const lastError = error instanceof Error ? error : new Error(errorMessage(error));
     if (attempt >= this.options.maxAttempts) return { success: false, error: lastError };
     if (this.options.shouldRetry && !this.options.shouldRetry(lastError)) throw lastError;
     await this.handleRetryBackoff(attempt, operationName, lastError);
