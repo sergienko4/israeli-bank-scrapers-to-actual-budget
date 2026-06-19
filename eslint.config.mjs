@@ -1426,6 +1426,39 @@ export default tseslint.config(
       'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
     },
   },
+  // ─── Section 7z: Services/Transaction cluster max-fn-lines: 10 ───
+  //
+  // WHY: src/Services/Transaction (TransactionBatchImporter / AccountResolver
+  // / DedupQuery and their siblings) own per-batch transaction import, dedup
+  // and account resolution. TransactionBatchImporter's batch/import methods,
+  // AccountResolver's get/find/create methods and DedupQuery's query had
+  // drifted to 11+ effective LoC; they were split into SRP helpers so every
+  // function in the cluster is <= 10 effective LoC. Per §1 PRECEDENT in
+  // eslint-rules-guidlines.md, the drained cluster locks at 10 so no
+  // Transaction function can grow back into a multi-responsibility blob.
+  //
+  // This is the fourth slice of the Track-A drain of the global
+  // `max-lines-per-function: 20` cap toward 10, cluster by cluster.
+  //
+  // Scope:
+  //   - `src/Services/Transaction/**/*.ts` (the Transaction/ directory only;
+  //     the sibling src/Services/TransactionService.ts is NOT under it).
+  //   - `tests/eslint-canaries/ServicesTransactionMaxLinesPerFunction.canary.ts`
+  //     (canary fixture, >10-LoC fn body).
+  //
+  // NOTE: Placed AFTER section 7 (canary files override) so the
+  // `max-lines-per-function: 10` rule survives on the canary fixture;
+  // flat-config rule keys are replaced (not merged) by later matching
+  // blocks, so the canary is configured by THIS last matching block.
+  {
+    files: [
+      'src/Services/Transaction/**/*.ts',
+      'tests/eslint-canaries/ServicesTransactionMaxLinesPerFunction.canary.ts',
+    ],
+    rules: {
+      'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
+    },
+  },
 
   // 10. PRE-EXISTING REGEX PATTERNS (warn until refactored)
   {

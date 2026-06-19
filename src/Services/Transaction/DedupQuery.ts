@@ -33,11 +33,7 @@ export default class DedupQuery {
    * @returns Set of imported_id strings for fast duplicate detection.
    */
   public async getExistingImportedIds(accountId: string): Promise<Set<string>> {
-    const query = this._api.q('transactions')
-      .filter({ account: accountId })
-      .select(['imported_id']);
-    const result = await this._api.aqlQuery(query);
-    const data = (result as { data?: { imported_id: string | null }[] } | null)?.data;
+    const data = await this.queryImportedIdRows(accountId);
     if (!data) {
       getLogger().warn(`No existing imported IDs found for account ${accountId}`);
       return new Set<string>();
@@ -45,5 +41,22 @@ export default class DedupQuery {
     const ids = data.map((t) => t.imported_id).filter((id): id is string => id !== null);
     getLogger().debug(`     Dedup: ${String(ids.length)} existing imported IDs for ${accountId}`);
     return new Set(ids);
+  }
+
+  /**
+   * Runs the AQL query that selects every `imported_id` row for an account.
+   * Returns undefined when Actual yields no data field (some versions return
+   * a null result), letting the caller emit the empty-set warning.
+   * @param accountId - UUID of the Actual account to query.
+   * @returns The raw imported_id rows, or undefined when no data is present.
+   */
+  private async queryImportedIdRows(
+    accountId: string,
+  ): Promise<{ imported_id: string | null }[] | undefined> {
+    const query = this._api.q('transactions')
+      .filter({ account: accountId })
+      .select(['imported_id']);
+    const result = await this._api.aqlQuery(query);
+    return (result as { data?: { imported_id: string | null }[] } | null)?.data;
   }
 }
