@@ -26,7 +26,7 @@ jobs:
   update-badge:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/ci/setup
       - name: Run unit tests with JSON reporter
         run: npx vitest run --config config/vitest.config.ts --reporter=json --outputFile=test-results.json
