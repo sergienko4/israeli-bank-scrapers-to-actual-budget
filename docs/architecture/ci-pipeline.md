@@ -155,7 +155,7 @@ The renderer is **idempotent** (running twice produces identical bytes) and
 
 ## Pinning policy
 
-- **GitHub Actions:** pinned to the **major tag** (e.g., `actions/checkout@v6`).
+- **GitHub Actions:** pinned to the **major tag** (e.g., `actions/checkout@v7`).
   See the `actions.pinned_versions` array in `ci-config.yml` for the
   authoritative list. Workflows MUST use a tag from that list and MUST NOT
   inline a different version.
