@@ -66,20 +66,21 @@ badges:
 actions:
   # Single source of truth for pinned action versions. Workflows MUST use a
   # tag from this list and MUST NOT inline a different version. Some entries
-  # are major-only (e.g. actions/checkout@v6) and some include a minor/patch
+  # are major-only (e.g. actions/checkout@v7) and some include a minor/patch
   # (e.g. aquasecurity/trivy-action@v0.36.0) when the upstream does not ship
   # a moving major tag. Dependabot bumps these in PRs that also update the
   # corresponding workflow `uses:` lines. SHA pinning is deferred — see
   # docs/architecture/ci-pipeline.md.
   pinned_versions:
-    - actions/checkout@v6
+    - actions/checkout@v7
     - actions/setup-node@v6
-    - actions/setup-python@v5
+    - actions/setup-python@v6
     - actions/cache@v5
     - actions/upload-artifact@v7
     - actions/download-artifact@v8
     - actions/upload-pages-artifact@v5
     - actions/deploy-pages@v5
+    - actions/github-script@v9
     - docker/setup-buildx-action@v4
     - docker/login-action@v4
     - docker/metadata-action@v6
