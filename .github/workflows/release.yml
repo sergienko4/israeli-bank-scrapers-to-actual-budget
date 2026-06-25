@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # For workflow_dispatch, checkout the requested tag (not the default
           # branch) so we build the historical commit, preserving release
