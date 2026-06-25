@@ -43,7 +43,7 @@ COPY tsconfig.json ./
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN npm install -g npm@latest \
     && NPM_MODS=/usr/local/lib/node_modules/npm/node_modules \
-    && PATCH_PKGS="minimatch tar picomatch brace-expansion" \
+    && PATCH_PKGS="minimatch tar picomatch brace-expansion undici" \
     && for pkg in $PATCH_PKGS; do \
          cd /tmp \
          && npm pack "${pkg}@latest" --quiet \
