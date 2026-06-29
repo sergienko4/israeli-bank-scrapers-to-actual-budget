@@ -12,13 +12,11 @@ import type { IPortalGoogleConfig } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
 import { buildAuthUrl, exchangeCode } from './GoogleOAuth.js';
 import { isEmailAllowed } from './PortalAuthPolicy.js';
-import type { IPortalRuntime } from './PortalRuntime.js';
+import { type IPortalRuntime, portalCookieOptions } from './PortalRuntime.js';
 import type { ISessionPayload } from './PortalSession.js';
 
 const STATE_COOKIE = 'portal_oauth_state';
-const STATE_COOKIE_OPTS = {
-  path: '/', httpOnly: true, sameSite: 'lax', maxAge: 600,
-} as const;
+const STATE_MAX_AGE = 600;
 
 /** Factor-granting callback inputs supplied by the auth-routes module. */
 export interface IGrantArgs {
@@ -48,15 +46,17 @@ interface IGoogleRouteCtx {
 /**
  * Registers the consent-start route that redirects to Google's OAuth screen.
  * @param app - Fastify instance.
+ * @param rt - Resolved portal runtime (drives the cookie Secure flag).
  * @param google - Verified portal Google config.
  * @returns Confirmation that the consent route is registered.
  */
 function registerConsentRoute(
-  app: FastifyInstance, google: IPortalGoogleConfig,
+  app: FastifyInstance, rt: IPortalRuntime, google: IPortalGoogleConfig,
 ): { registered: true } {
   app.get('/auth/google', (_req, reply) => {
     const state = randomBytes(16).toString('hex');
-    reply.setCookie(STATE_COOKIE, state, STATE_COOKIE_OPTS);
+    const cookieOpts = portalCookieOptions(rt, STATE_MAX_AGE);
+    reply.setCookie(STATE_COOKIE, state, cookieOpts);
     const url = buildAuthUrl(google, state);
     return reply.redirect(url);
   });
@@ -100,7 +100,7 @@ export function registerGoogleRoutes(
 ): { registered: boolean } {
   const google = rt.portal.google;
   if (!google) return { registered: false };
-  registerConsentRoute(app, google);
+  registerConsentRoute(app, rt, google);
   registerCallbackRoute(app, { rt, grant, google });
   return { registered: true };
 }

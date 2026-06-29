@@ -67,16 +67,20 @@ services:
   # Optional config portal — browser UI to view/edit/add/remove config.
   # Enable by uncommenting; mounts config rw so saves persist. Set a password:
   #   node scripts/hash-portal-password.js "yourpass"  → credentials.json portal.passwordHash
+  # To expose over HTTPS, front it with a TLS reverse proxy (Caddy/Traefik) and
+  # set PORTAL_SECURE_COOKIES=true. See docs/configuration/portal.md.
   # portal:
   #   image: sergienko4/israeli-bank-importer:latest
   #   container_name: israeli-bank-portal
   #   restart: unless-stopped
   #   command: ["node", "dist/Portal.js"]
   #   ports:
-  #     - "8080:8080"
+  #     - "8080:8080"                         # drop this when fronting with a TLS proxy
   #   environment:
   #     - PORTAL_ENABLED=true
   #     - PORTAL_HOST=0.0.0.0
+  #     # - PORTAL_PORT=8080
+  #     # - PORTAL_SECURE_COOKIES=true        # only behind HTTPS (TLS reverse proxy)
   #     # - CREDENTIALS_ENCRYPTION_PASSWORD=your_encryption_password
   #   volumes:
   #     - ./config.json:/app/config.json:rw

@@ -10,32 +10,54 @@
 <body>
   <section id="login" class="login hidden">
     <div class="card login-card">
-      <h1>🖥️ Config Portal</h1>
-      <p id="login-hint">Sign in to manage your importer configuration.</p>
-      <a id="google-btn" class="btn google hidden" href="/auth/google">Continue with Google</a>
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">🏦</span>
+        <div class="brand-text">
+          <h1>Config Portal</h1>
+          <p class="brand-sub">Israeli Bank → Actual Budget</p>
+        </div>
+      </div>
+      <p id="login-hint" class="muted">Sign in to manage your importer configuration.</p>
+      <a id="google-btn" class="btn google hidden" href="/auth/google">
+        <span class="g-mark" aria-hidden="true">G</span> Continue with Google
+      </a>
       <label for="pw" class="visually-hidden">Portal password</label>
       <input id="pw" class="hidden" type="password" placeholder="Portal password" autocomplete="current-password" />
-      <button id="pw-btn" class="btn primary hidden">Sign in</button>
-      <p id="login-err" class="err"></p>
+      <button id="pw-btn" class="btn primary block hidden">Sign in</button>
+      <p id="login-err" class="err" role="alert"></p>
     </div>
+    <p class="login-foot muted">🔒 Your credentials never leave this server.</p>
   </section>
 
   <div id="app" class="app hidden">
+    <div id="scrim" class="scrim"></div>
     <aside class="sidebar">
-      <h2>⚙️ Config</h2>
-      <nav id="nav"></nav>
-      <button id="logout" class="btn ghost">Logout</button>
+      <div class="brand sidebar-brand">
+        <span class="brand-mark" aria-hidden="true">🏦</span>
+        <div class="brand-text">
+          <strong>Config Portal</strong>
+          <span class="brand-sub">Importer settings</span>
+        </div>
+      </div>
+      <nav id="nav" aria-label="Configuration sections"></nav>
+      <button id="logout" class="btn ghost block">Log out</button>
     </aside>
     <main>
       <header class="topbar">
-        <span id="title">Banks</span>
-        <button id="save" class="btn primary">Save</button>
+        <button id="menu" class="icon-btn menu" aria-label="Open navigation">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="topbar-title">
+          <span id="title">Banks</span>
+          <span id="subtitle" class="subtitle"></span>
+        </div>
+        <button id="save" class="btn primary">Save changes</button>
       </header>
-      <div id="status" class="status"></div>
+      <div id="status" class="status" role="status"></div>
       <div id="view" class="view"></div>
     </main>
-    <nav id="bottomnav" class="bottomnav"></nav>
   </div>
+  <div id="toast" class="toast-wrap" aria-live="polite"></div>
   <script src="/app.js"></script>
 </body>
 </html>

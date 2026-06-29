@@ -8,6 +8,7 @@ import type { IImporterConfig, IPortalConfig, PortalAuthMode } from '../Types/In
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8080;
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 const MIN_SECRET_LENGTH = 16;
 const KNOWN_WEAK_SECRETS = ['change-me-portal-secret'];
 
@@ -17,7 +18,31 @@ export interface IPortalRuntime {
   port: number;
   authMode: PortalAuthMode;
   sessionSecret: string;
+  secureCookies: boolean;
   portal: IPortalConfig;
+}
+
+/** Cookie attributes shared by every portal cookie. */
+export interface ICookieOptions {
+  path: string;
+  httpOnly: true;
+  sameSite: 'lax';
+  secure: boolean;
+  maxAge?: number;
+}
+
+/**
+ * Builds cookie attributes for portal cookies, marking them Secure when the
+ * runtime requires it (HTTPS deployments behind a TLS-terminating proxy).
+ * @param rt - Resolved portal runtime.
+ * @param maxAge - Optional max-age in seconds (omitted for session cookies).
+ * @returns Cookie options carrying the resolved Secure flag.
+ */
+export function portalCookieOptions(rt: IPortalRuntime, maxAge?: number): ICookieOptions {
+  const base: ICookieOptions = {
+    path: '/', httpOnly: true, sameSite: 'lax', secure: rt.secureCookies,
+  };
+  return maxAge === undefined ? base : { ...base, maxAge };
 }
 
 /**
@@ -53,6 +78,35 @@ export function isSessionSecretWeak(secret: string): boolean {
 }
 
 /**
+ * Resolves whether portal cookies should carry the `Secure` attribute. Enable
+ * for HTTPS deployments (e.g. behind a TLS reverse proxy); keep it off for
+ * plain-HTTP localhost/LAN so browsers still send the cookie. `PORTAL_SECURE_COOKIES`
+ * env wins over the config flag.
+ * @param portal - Portal config block.
+ * @returns True when cookies must be marked Secure.
+ */
+export function resolveSecureCookies(portal: IPortalConfig): boolean {
+  const override = process.env.PORTAL_SECURE_COOKIES;
+  if (override === 'true') return true;
+  if (override === 'false') return false;
+  return portal.secureCookies === true;
+}
+
+/**
+ * Whether the resolved bind host exposes the portal beyond loopback.
+ *
+ * A non-loopback bind (e.g. `0.0.0.0` or a LAN address) makes the portal
+ * reachable from the network, so session cookies and freshly typed secrets
+ * traverse the wire unless a TLS reverse proxy fronts it. Callers use this to
+ * emit a boot warning recommending HTTPS + `PORTAL_SECURE_COOKIES`.
+ * @param host - Resolved listen host.
+ * @returns True when the host is not a loopback address.
+ */
+export function isNonLoopbackHost(host: string): boolean {
+  return !LOOPBACK_HOSTS.has(host);
+}
+
+/**
  * Resolves host/port/auth/secret from config + env, applying safe defaults.
  * @param config - Merged importer config.
  * @returns Resolved runtime settings for the portal server.
@@ -64,6 +118,7 @@ export function resolvePortalRuntime(config: IImporterConfig): IPortalRuntime {
     port: normalizePort(process.env.PORTAL_PORT ?? portal.port),
     authMode: portal.authMode ?? 'password',
     sessionSecret: portal.sessionSecret ?? '',
+    secureCookies: resolveSecureCookies(portal),
     portal,
   };
 }

@@ -9,6 +9,13 @@
 const DOC_BASE =
   'https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/';
 
+// Inline eye icon so the secret reveal toggle renders on every OS/browser
+// (emoji glyphs are unavailable in some headless/server font sets).
+const EYE_SVG =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"' +
+  ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+  '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+
 let manifest = { sections: [], banks: [], bankRequirements: {} };
 let config = {};
 let current = '';
@@ -136,16 +143,41 @@ async function load() {
  * @returns {Promise<void>} resolves when saved
  */
 async function save() {
+  const btn = $('save');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
   $('status').textContent = 'Saving…';
   $('status').className = 'status';
   try {
     await api('/api/config', { method: 'PUT', body: JSON.stringify(config) });
     $('status').textContent = '✅ Saved';
     $('status').className = 'status ok';
+    toast('Changes saved', 'ok');
   } catch (e) {
     $('status').textContent = `❌ ${e.message}`;
     $('status').className = 'status err';
+    toast(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
+}
+
+/**
+ * Shows an auto-dismissing toast notification.
+ * @param {string} message text to display
+ * @param {string} [kind] 'ok', 'err', or '' for neutral
+ * @returns {void}
+ */
+function toast(message, kind) {
+  const node = el('div', `toast ${kind || ''}`.trim(), message);
+  $('toast').appendChild(node);
+  requestAnimationFrame(() => node.classList.add('show'));
+  setTimeout(() => {
+    node.classList.remove('show');
+    setTimeout(() => node.remove(), 250);
+  }, 2600);
 }
 
 /**
@@ -160,24 +192,46 @@ function sectionByKey(key) {
 // ---------- navigation ----------
 
 /**
- * Rebuilds the sidebar + bottom navigation from the manifest sections.
+ * Rebuilds the sidebar navigation from the manifest sections.
  * @returns {void}
  */
 function buildNav() {
-  ['nav', 'bottomnav'].forEach((id) => {
-    const host = $(id);
-    host.innerHTML = '';
-    manifest.sections.forEach((s) => {
-      const label = `${s.icon || ''} ${s.label}`.trim();
-      const b = button(label, s.key === current ? 'active' : '');
-      b.dataset.section = s.key;
-      b.onclick = () => {
-        current = s.key;
-        render();
-      };
-      host.appendChild(b);
-    });
+  const host = $('nav');
+  host.innerHTML = '';
+  manifest.sections.forEach((s) => {
+    const label = `${s.icon || ''} ${s.label}`.trim();
+    const b = button(label, s.key === current ? 'active' : '');
+    b.dataset.section = s.key;
+    b.onclick = () => selectSection(s.key);
+    host.appendChild(b);
   });
+}
+
+/**
+ * Activates a section and closes the mobile drawer.
+ * @param {string} key section key
+ * @returns {void}
+ */
+function selectSection(key) {
+  current = key;
+  closeDrawer();
+  render();
+}
+
+/**
+ * Opens the mobile navigation drawer.
+ * @returns {void}
+ */
+function openDrawer() {
+  $('app').classList.add('nav-open');
+}
+
+/**
+ * Closes the mobile navigation drawer.
+ * @returns {void}
+ */
+function closeDrawer() {
+  $('app').classList.remove('nav-open');
 }
 
 // ---------- render dispatch ----------
@@ -190,6 +244,7 @@ function render() {
   const sec = sectionByKey(current);
   current = sec.key;
   $('title').textContent = sec.label;
+  $('subtitle').textContent = sectionSubtitle(sec);
   $('status').textContent = '';
   $('status').className = 'status';
   buildNav();
@@ -206,15 +261,33 @@ function render() {
 }
 
 /**
+ * Builds a short contextual subtitle for the section header.
+ * @param {object} sec section descriptor
+ * @returns {string} subtitle text (may be empty)
+ */
+function sectionSubtitle(sec) {
+  if (sec.kind === 'bankMap') {
+    const n = Object.keys(config.banks || {}).length;
+    return `${n} bank${n === 1 ? '' : 's'} configured`;
+  }
+  if (sec.kind === 'list') {
+    const n = (config[sec.key] || []).length;
+    return `${n} item${n === 1 ? '' : 's'}`;
+  }
+  return sec.help || '';
+}
+
+/**
  * Builds the "read the docs" link for a section.
  * @param {string} doc doc path under docs/
  * @returns {HTMLAnchorElement} the link
  */
 function docLink(doc) {
-  const a = el('a', 'doc', `📖 ${doc}`);
+  const a = el('a', 'doc', '📖 Read the documentation');
   a.href = DOC_BASE + doc;
   a.target = '_blank';
   a.rel = 'noopener';
+  a.title = doc;
   return a;
 }
 
@@ -228,7 +301,9 @@ function docLink(doc) {
  */
 function renderObject(sec, view) {
   const obj = sec.key === '' ? config : (config[sec.key] || (config[sec.key] = {}));
-  (sec.fields || []).forEach((f) => view.appendChild(fieldNode(f, obj, sec.key)));
+  const panel = el('div', 'card panel');
+  (sec.fields || []).forEach((f) => panel.appendChild(fieldNode(f, obj, sec.key)));
+  view.appendChild(panel);
 }
 
 /**
@@ -373,7 +448,9 @@ function secretNode(field, obj, path) {
   i.oninput = () => {
     obj[field.key] = i.value;
   };
-  const eye = button('👁', 'btn ghost reveal');
+  const eye = button('', 'btn ghost reveal');
+  eye.innerHTML = EYE_SVG;
+  eye.setAttribute('aria-label', 'Show or hide secret');
   eye.onclick = () => {
     i.type = i.type === 'password' ? 'text' : 'password';
   };
@@ -727,5 +804,7 @@ $('logout').onclick = async () => {
   location.reload();
 };
 $('save').onclick = save;
+$('menu').onclick = openDrawer;
+$('scrim').onclick = closeDrawer;
 
 init();

@@ -16,7 +16,7 @@ import { getLogger } from '../Logger/Index.js';
 import registerApiRoutes from './PortalApiRoutes.js';
 import { registerAuthRoutes } from './PortalAuthRoutes.js';
 import PortalConfigStore from './PortalConfigStore.js';
-import type { IPortalRuntime } from './PortalRuntime.js';
+import { type IPortalRuntime, isNonLoopbackHost } from './PortalRuntime.js';
 
 /**
  * Resolves the static UI directory (compiled dist or source fallback).
@@ -61,5 +61,12 @@ export async function startPortal(
   await app.listen({ host: rt.host, port: rt.port });
   const url = `http://${rt.host}:${String(rt.port)}`;
   getLogger().info(`🖥️  Config portal on ${url} (auth: ${rt.authMode})`);
+  if (isNonLoopbackHost(rt.host)) {
+    getLogger().warn(
+      `⚠️  Portal is bound to non-loopback host ${rt.host} and reachable from the network. `
+      + 'Put it behind a TLS reverse proxy and set PORTAL_SECURE_COOKIES=true so cookies '
+      + 'and secrets are never sent over plain HTTP.',
+    );
+  }
   return app;
 }

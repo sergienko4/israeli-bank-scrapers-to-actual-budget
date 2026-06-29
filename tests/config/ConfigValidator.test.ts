@@ -358,6 +358,35 @@ describe('ConfigValidator', () => {
       expectCheck(results, 'bank.discount.target[0]', 'pass');
     });
 
+    it('fails when accounts is an empty array', () => {
+      const cfg = makeConfig({
+        banks: {
+          discount: {
+            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: [] }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expectCheck(results, 'bank.discount.target[0]', 'fail');
+    });
+
+    it('fails when accounts is a raw string instead of "all" or a list', () => {
+      const cfg = makeConfig({
+        banks: {
+          discount: {
+            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
+            targets: [{
+              actualAccountId: fakeUuid(), reconcile: true,
+              accounts: '123,456' as unknown as string[],
+            }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expectCheck(results, 'bank.discount.target[0]', 'fail');
+    });
+
     it('uses accountName as label in pass message when set', () => {
       const cfg = makeConfig({
         banks: {

@@ -25,6 +25,7 @@ export interface IPortalConfig {
   host?: string;             // Bind address. Default: 127.0.0.1
   port?: number;             // Listen port. Default: 8080
   authMode?: PortalAuthMode; // Default: 'password'
+  secureCookies?: boolean;   // Mark cookies Secure (enable behind HTTPS). Default: false
   passwordHash?: string;     // scrypt hash for password auth (secret)
   sessionSecret?: string;    // signing key for session cookies (secret)
   google?: IPortalGoogleConfig;

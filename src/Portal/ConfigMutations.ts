@@ -5,7 +5,7 @@
  */
 
 import SECRET_KEYS from '../Config/SecretKeys.js';
-import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
+import type { IBankConfig, IBankTarget, IImporterConfig } from '../Types/Index.js';
 
 const MASK = '********';
 
@@ -39,6 +39,60 @@ export function maskSecrets<T>(value: T): T {
     out[k] = SECRET_KEYS.includes(k) && typeof v === 'string' && v ? MASK : maskSecrets(v);
   }
   return out as T;
+}
+
+/**
+ * Cleans a raw account list to non-empty trimmed strings, or 'all' if none.
+ * @param items - Candidate account entries.
+ * @returns A non-empty string list, or the 'all' sentinel.
+ */
+function cleanAccountList(items: readonly unknown[]): string[] | 'all' {
+  const cleaned = items
+    .filter((a): a is string => typeof a === 'string' && a.trim() !== '')
+    .map(a => a.trim());
+  return cleaned.length ? cleaned : 'all';
+}
+
+/**
+ * Coerces a raw `accounts` value (the UI sends a string) into the importer's
+ * `string[] | 'all'` shape: the 'all' sentinel, or a comma/space-separated list
+ * split into trimmed account numbers. Empty input falls back to 'all'.
+ * @param value - Raw accounts value from the UI (string or already-typed).
+ * @returns The normalized accounts value.
+ */
+export function coerceAccounts(value: unknown): string[] | 'all' {
+  if (Array.isArray(value)) return cleanAccountList(value);
+  if (typeof value !== 'string') return 'all';
+  const trimmed = value.trim();
+  if (trimmed === '' || trimmed.toLowerCase() === 'all') return 'all';
+  const parts = trimmed.split(/[\s,]+/);
+  return cleanAccountList(parts);
+}
+
+/**
+ * Normalizes every target's `accounts` field within a single bank.
+ * @param bank - Bank config whose targets to normalize.
+ * @returns A new bank config with coerced target accounts.
+ */
+function coerceBankTargets(bank: IBankConfig): IBankConfig {
+  if (!bank.targets) return bank;
+  const targets: IBankTarget[] = bank.targets.map(
+    target => ({ ...target, accounts: coerceAccounts(target.accounts) }),
+  );
+  return { ...bank, targets };
+}
+
+/**
+ * Normalizes every bank target's `accounts` field to `string[] | 'all'` before
+ * validation/persistence, so a UI string never reaches the strict loader.
+ * @param config - Config whose bank targets to normalize.
+ * @returns A new config with coerced target accounts.
+ */
+export function coerceTargetAccounts(config: IImporterConfig): IImporterConfig {
+  const entries = Object.entries(config.banks).map(
+    ([name, bank]) => [name, coerceBankTargets(bank)] as const,
+  );
+  return { ...config, banks: Object.fromEntries(entries) };
 }
 
 /**

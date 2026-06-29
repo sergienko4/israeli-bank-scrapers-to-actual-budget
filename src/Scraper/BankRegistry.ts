@@ -2,59 +2,24 @@
  * Bank registry — maps user-facing bank aliases to canonical entries.
  *
  * Replaces the hardcoded COMPANY_TYPE_MAP previously embedded in
- * BankScraper. Adding a new bank is now additive registration; no
+ * BankScraper. The supported-bank entries come from the shared BANK_CATALOG
+ * (Types/BankCatalog), so adding a new bank is one catalog entry; no
  * orchestration code needs to change (OCP — open for extension,
  * closed for modification).
  */
 
-import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
-
-import type { ISignPolicy, Procedure } from '../Types/Index.js';
+import type { IBankCatalogEntry } from '../Types/BankCatalog.js';
+import { BANK_CATALOG } from '../Types/BankCatalog.js';
+import type { Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 
-/** Canonical entry for a single supported bank. */
-export interface IBankRegistryEntry {
-  readonly bankId: string;
-  readonly companyType: CompanyTypes;
-  readonly aliases: readonly string[];
-  readonly signPolicy: ISignPolicy;
-}
+/** Canonical entry for a single supported bank (sourced from the catalog). */
+export type IBankRegistryEntry = IBankCatalogEntry;
 
 /** Read-only lookup surface exposed to collaborators. */
 export interface IBankRegistry {
   resolve(name: string): Procedure<IBankRegistryEntry>;
   list(): readonly IBankRegistryEntry[];
-}
-
-const DEFAULT_REGISTRY_ENTRIES: readonly IBankRegistryEntry[] = Object.freeze([
-  entry({ bankId: 'hapoalim',         companyType: CompanyTypes.Hapoalim,         aliases: ['hapoalim'],                              signPolicy: 'preserve' }),
-  entry({ bankId: 'leumi',            companyType: CompanyTypes.Leumi,            aliases: ['leumi'],                                 signPolicy: 'preserve' }),
-  entry({ bankId: 'discount',         companyType: CompanyTypes.Discount,         aliases: ['discount'],                              signPolicy: 'preserve' }),
-  entry({ bankId: 'mizrahi',          companyType: CompanyTypes.Mizrahi,          aliases: ['mizrahi'],                               signPolicy: 'preserve' }),
-  entry({ bankId: 'mercantile',       companyType: CompanyTypes.Mercantile,       aliases: ['mercantile'],                            signPolicy: 'preserve' }),
-  entry({ bankId: 'otsarhahayal',     companyType: CompanyTypes.OtsarHahayal,     aliases: ['otsarHahayal', 'otsarhahayal'],          signPolicy: 'preserve' }),
-  entry({ bankId: 'beinleumi',        companyType: CompanyTypes.Beinleumi,        aliases: ['beinleumi'],                             signPolicy: 'preserve' }),
-  entry({ bankId: 'massad',           companyType: CompanyTypes.Massad,           aliases: ['massad'],                                signPolicy: 'preserve' }),
-  entry({ bankId: 'yahav',            companyType: CompanyTypes.Yahav,            aliases: ['yahav'],                                 signPolicy: 'preserve' }),
-  entry({ bankId: 'visacal',          companyType: CompanyTypes.VisaCal,          aliases: ['visaCal', 'visacal'],                    signPolicy: 'flip-credit' }),
-  entry({ bankId: 'max',              companyType: CompanyTypes.Max,              aliases: ['max'],                                   signPolicy: 'flip-credit' }),
-  entry({ bankId: 'isracard',         companyType: CompanyTypes.Isracard,         aliases: ['isracard'],                              signPolicy: 'flip-credit' }),
-  entry({ bankId: 'amex',             companyType: CompanyTypes.Amex,             aliases: ['amex'],                                  signPolicy: 'flip-credit' }),
-  entry({ bankId: 'beyahadbishvilha', companyType: CompanyTypes.BeyahadBishvilha, aliases: ['beyahadBishvilha', 'beyahadbishvilha'],  signPolicy: 'preserve' }),
-  entry({ bankId: 'behatsdaa',        companyType: CompanyTypes.Behatsdaa,        aliases: ['behatsdaa'],                             signPolicy: 'preserve' }),
-  entry({ bankId: 'pagi',             companyType: CompanyTypes.Pagi,             aliases: ['pagi'],                                  signPolicy: 'preserve' }),
-  entry({ bankId: 'onezero',          companyType: CompanyTypes.OneZero,          aliases: ['oneZero', 'onezero'],                    signPolicy: 'preserve' }),
-  entry({ bankId: 'paybox',           companyType: CompanyTypes.PayBox,           aliases: ['payBox', 'paybox'],                      signPolicy: 'preserve' }),
-  entry({ bankId: 'pepper',           companyType: CompanyTypes.Pepper,           aliases: ['pepper'],                                signPolicy: 'preserve' }),
-]);
-
-/**
- * Builds a frozen registry entry from its component parts.
- * @param spec - All fields of the IBankRegistryEntry to freeze.
- * @returns Frozen IBankRegistryEntry ready for inclusion in the registry.
- */
-function entry(spec: IBankRegistryEntry): IBankRegistryEntry {
-  return Object.freeze(spec);
 }
 
 /** In-memory IBankRegistry implementation backed by a frozen alias map. */
@@ -113,7 +78,7 @@ class DefaultBankRegistry implements IBankRegistry {
  * @returns Frozen IBankRegistry seeded with every supported bank alias.
  */
 export function createBankRegistry(): IBankRegistry {
-  return new DefaultBankRegistry(DEFAULT_REGISTRY_ENTRIES);
+  return new DefaultBankRegistry(BANK_CATALOG);
 }
 
 /** Frozen default registry exposed for read-only inspection. */

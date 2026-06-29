@@ -138,6 +138,30 @@ function invalidTargetId(name: string, idx: number, id: string): IValidationResu
 }
 
 /**
+ * Reports whether an accounts filter is the 'all' sentinel or a non-empty list
+ * of strings — the shape the importer's strict loader requires.
+ * @param accounts - The target's accounts value.
+ * @returns True when accounts is 'all' or a non-empty array of strings.
+ */
+function isValidAccounts(accounts: unknown): boolean {
+  if (accounts === 'all') return true;
+  return Array.isArray(accounts) && accounts.length > 0
+    && accounts.every(account => typeof account === 'string');
+}
+
+/**
+ * Builds the invalid-accounts failure result for a bank target.
+ * @param name - Bank key used in the message.
+ * @param idx - Zero-based target index used in result labels.
+ * @param tag - Result tag for the target.
+ * @returns A fail result describing the invalid accounts shape.
+ */
+function invalidTargetAccounts(name: string, idx: number, tag: string): IValidationResult {
+  return fail(tag,
+    `${name} target[${String(idx)}]: invalid accounts — must be "all" or account numbers`);
+}
+
+/**
  * Validates a single bank target's actualAccountId format and accounts field.
  * @param name - Bank key used in result messages.
  * @param target - The IBankTarget to check.
@@ -150,6 +174,7 @@ function checkBankTarget(
   const id = target.actualAccountId;
   if (!id || !isValidUUID(id)) return invalidTargetId(name, idx, id);
   const tag = `bank.${name}.target[${String(idx)}]`;
+  if (!isValidAccounts(target.accounts)) return invalidTargetAccounts(name, idx, tag);
   return pass(tag, `${name} ${formatTargetSummary(target, idx)}`);
 }
 

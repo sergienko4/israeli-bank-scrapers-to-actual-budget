@@ -28,6 +28,11 @@ export interface ISplitConfig {
 
 /**
  * Whether a value is a plain (non-array) object eligible for recursion.
+ *
+ * Arrays are treated as atomic leaves (never recursed): the loader's deep-merge
+ * replaces arrays wholesale, so a secret split out of an array element could not
+ * be recombined. The manifest gate (`listSecretErrors`) structurally forbids
+ * declaring a `secret` field inside any list, keeping this invariant safe.
  * @param value - Candidate value.
  * @returns True for plain objects, false for primitives, arrays, and null.
  */

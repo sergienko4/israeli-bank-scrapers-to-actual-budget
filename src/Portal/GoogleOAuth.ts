@@ -8,8 +8,27 @@ import type { IPortalGoogleConfig, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 
-const AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
-const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const DEFAULT_AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
+const DEFAULT_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+/**
+ * Resolves the Google authorization endpoint. The `GOOGLE_AUTH_BASE` env var
+ * overrides it for self-hosted identity proxies and end-to-end tests; otherwise
+ * Google's public consent URL is used.
+ * @returns The authorization base URL.
+ */
+export function resolveAuthBase(): string {
+  return process.env.GOOGLE_AUTH_BASE ?? DEFAULT_AUTH_BASE;
+}
+
+/**
+ * Resolves the Google token endpoint. The `GOOGLE_TOKEN_URL` env var overrides
+ * it for self-hosted identity proxies and end-to-end tests.
+ * @returns The token exchange URL.
+ */
+export function resolveTokenUrl(): string {
+  return process.env.GOOGLE_TOKEN_URL ?? DEFAULT_TOKEN_URL;
+}
 
 /**
  * Builds the Google consent URL for the configured client + redirect.
@@ -22,7 +41,7 @@ export function buildAuthUrl(google: IPortalGoogleConfig, state: string): string
     client_id: google.clientId, redirect_uri: google.redirectUri,
     response_type: 'code', scope: 'openid email', state,
   });
-  return `${AUTH_BASE}?${params.toString()}`;
+  return `${resolveAuthBase()}?${params.toString()}`;
 }
 
 /** Claims this helper consumes from a Google id_token payload. */
@@ -64,7 +83,8 @@ export async function exchangeCode(
       code, client_id: google.clientId, client_secret: google.clientSecret ?? '',
       redirect_uri: google.redirectUri, grant_type: 'authorization_code',
     });
-    const res = await fetch(TOKEN_URL, { method: 'POST', body });
+    const tokenUrl = resolveTokenUrl();
+    const res = await fetch(tokenUrl, { method: 'POST', body });
     if (!res.ok) return fail(`Google token exchange failed: ${String(res.status)}`);
     const data = (await res.json()) as { id_token?: string };
     const claims = claimsFromIdToken(data.id_token ?? '');

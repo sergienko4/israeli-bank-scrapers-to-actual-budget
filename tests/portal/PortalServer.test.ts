@@ -61,6 +61,54 @@ describe('PortalServer routes (password mode)', () => {
     expect(del.statusCode).toBe(200);
   });
 
+  it('serves the manifest payload when authenticated', async () => {
+    const cookie = await loginCookie();
+    const res = await app.inject({ method: 'GET', url: '/api/manifest', cookies: { portal_session: cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(Array.isArray(body.sections)).toBe(true);
+    expect(body.banks).toContain('discount');
+    expect(body.bankRequirements.discount).toBeDefined();
+  });
+
+  it('returns 400 when a config write fails validation', async () => {
+    const cookie = await loginCookie();
+    const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });
+    const bad = masked.json();
+    bad.actual.budget.syncId = 'not-a-uuid';
+    const put = await app.inject({
+      method: 'PUT', url: '/api/config', cookies: { portal_session: cookie }, payload: bad,
+    });
+    expect(put.statusCode).toBe(400);
+    expect(put.json().error).toBeTruthy();
+  });
+
+  it('returns 400 when adding an unknown bank', async () => {
+    const cookie = await loginCookie();
+    const add = await app.inject({
+      method: 'POST', url: '/api/banks/notabank', cookies: { portal_session: cookie }, payload: fakeBankConfig(),
+    });
+    expect(add.statusCode).toBe(400);
+    expect(add.json().error).toBeTruthy();
+  });
+
+  it('returns 400 when removing the only configured bank', async () => {
+    const cookie = await loginCookie();
+    const del = await app.inject({ method: 'DELETE', url: '/api/banks/discount', cookies: { portal_session: cookie } });
+    expect(del.statusCode).toBe(400);
+    expect(del.json().error).toBeTruthy();
+  });
+
+  it('returns 400 (not 500) when the config body is malformed', async () => {
+    const cookie = await loginCookie();
+    const put = await app.inject({
+      method: 'PUT', url: '/api/config', cookies: { portal_session: cookie },
+      payload: { actual: {}, banks: {} },
+    });
+    expect(put.statusCode).toBe(400);
+    expect(put.json().error).toBeTruthy();
+  });
+
   it('runs validation and clears the session on logout', async () => {
     const cookie = await loginCookie();
     const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });

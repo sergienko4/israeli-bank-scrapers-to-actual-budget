@@ -11,7 +11,7 @@ import { fail, isFail } from '../Types/Index.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { type IGrantArgs, registerGoogleRoutes } from './PortalGoogleRoutes.js';
 import { verifyPassword } from './PortalPassword.js';
-import type { IPortalRuntime } from './PortalRuntime.js';
+import { type IPortalRuntime, portalCookieOptions } from './PortalRuntime.js';
 import { createSession, type ISessionPayload, readSession } from './PortalSession.js';
 
 const COOKIE = 'portal_session';
@@ -37,7 +37,8 @@ function grant(args: IGrantArgs): { granted: true } {
   const prior = sessionOf(req, runtime.sessionSecret);
   const base = isFail(prior) ? { google: false, password: false } : prior.data;
   const token = createSession({ ...base, ...factor }, runtime.sessionSecret);
-  reply.setCookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', path: '/' });
+  const cookieOpts = portalCookieOptions(runtime);
+  reply.setCookie(COOKIE, token, cookieOpts);
   return { granted: true };
 }
 

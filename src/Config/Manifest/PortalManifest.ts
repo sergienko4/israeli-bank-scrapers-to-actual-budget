@@ -27,6 +27,10 @@ const PORTAL_SECTION: IManifestSection = {
       help: 'password | google | both.',
     },
     {
+      key: 'secureCookies', label: 'Secure cookies', kind: 'boolean',
+      help: 'Mark session cookies Secure. Enable only when served over HTTPS.',
+    },
+    {
       key: 'passwordHash', label: 'Password hash', kind: 'secret',
       help: 'scrypt hash for password auth (managed for you).',
     },

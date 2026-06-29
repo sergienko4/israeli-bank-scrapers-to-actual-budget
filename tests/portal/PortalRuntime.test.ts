@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { isPortalEnabled, isSessionSecretWeak, resolvePortalRuntime } from '../../src/Portal/PortalRuntime.js';
+import {
+  isNonLoopbackHost, isPortalEnabled, isSessionSecretWeak, portalCookieOptions,
+  resolvePortalRuntime, resolveSecureCookies,
+} from '../../src/Portal/PortalRuntime.js';
 import { fakeImporterConfig } from '../helpers/factories.js';
+import { fakePortalRuntime } from '../helpers/portalFactories.js';
 
-const ENV_KEYS = ['PORTAL_ENABLED', 'PORTAL_HOST', 'PORTAL_PORT'] as const;
+const ENV_KEYS = ['PORTAL_ENABLED', 'PORTAL_HOST', 'PORTAL_PORT', 'PORTAL_SECURE_COOKIES'] as const;
 const saved: Record<string, string | undefined> = {};
 
 describe('PortalRuntime', () => {
@@ -67,6 +71,50 @@ describe('PortalRuntime', () => {
 
     it('accepts a sufficiently long, non-placeholder secret', () => {
       expect(isSessionSecretWeak('a-strong-session-secret')).toBe(false);
+    });
+  });
+
+  describe('isNonLoopbackHost', () => {
+    it('is false for loopback hosts that stay on the local machine', () => {
+      expect(isNonLoopbackHost('127.0.0.1')).toBe(false);
+      expect(isNonLoopbackHost('::1')).toBe(false);
+      expect(isNonLoopbackHost('localhost')).toBe(false);
+    });
+
+    it('is true for network-exposed bind hosts', () => {
+      expect(isNonLoopbackHost('0.0.0.0')).toBe(true);
+      expect(isNonLoopbackHost('10.0.0.5')).toBe(true);
+    });
+  });
+
+  describe('resolveSecureCookies', () => {
+    it('defaults to false and honours the config flag', () => {
+      expect(resolveSecureCookies({ enabled: true })).toBe(false);
+      expect(resolveSecureCookies({ enabled: true, secureCookies: true })).toBe(true);
+    });
+
+    it('lets PORTAL_SECURE_COOKIES env override the config flag', () => {
+      process.env.PORTAL_SECURE_COOKIES = 'true';
+      expect(resolveSecureCookies({ enabled: true })).toBe(true);
+      process.env.PORTAL_SECURE_COOKIES = 'false';
+      expect(resolveSecureCookies({ enabled: true, secureCookies: true })).toBe(false);
+    });
+
+    it('is surfaced on the resolved runtime', () => {
+      process.env.PORTAL_SECURE_COOKIES = 'true';
+      expect(resolvePortalRuntime(fakeImporterConfig()).secureCookies).toBe(true);
+    });
+  });
+
+  describe('portalCookieOptions', () => {
+    it('marks cookies Secure per the runtime and omits maxAge by default', () => {
+      const secure = portalCookieOptions(fakePortalRuntime({ secureCookies: true }));
+      expect(secure).toEqual({ path: '/', httpOnly: true, sameSite: 'lax', secure: true });
+    });
+
+    it('includes maxAge when provided and reflects an insecure runtime', () => {
+      const opts = portalCookieOptions(fakePortalRuntime({ secureCookies: false }), 600);
+      expect(opts).toEqual({ path: '/', httpOnly: true, sameSite: 'lax', secure: false, maxAge: 600 });
     });
   });
 });

@@ -18,10 +18,10 @@ import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
 vi.mock('node:fs');
 
 const mockScraper = { scrape: vi.fn() };
-vi.mock('@sergienko4/israeli-bank-scrapers', () => ({
-  createScraper: vi.fn(() => mockScraper),
-  CompanyTypes: { Discount: 'discount' },
-}));
+vi.mock('@sergienko4/israeli-bank-scrapers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sergienko4/israeli-bank-scrapers')>();
+  return { ...actual, createScraper: vi.fn(() => mockScraper) };
+});
 
 vi.mock('../../../src/Scraper/ScraperOptionsBuilder.js', () => ({
   buildChromeArgs: vi.fn(() => []),

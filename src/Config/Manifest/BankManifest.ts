@@ -4,6 +4,10 @@
  * — the single source consumed by CREDENTIAL_SPECS.
  */
 
+import { type CompanyTypes, SCRAPERS } from '@sergienko4/israeli-bank-scrapers';
+
+import { BANK_CATALOG } from '../../Types/BankCatalog.js';
+import type { IBankConfig } from '../../Types/Index.js';
 import type { IBankRequirement, IManifestField, IManifestSection } from './ManifestTypes.js';
 
 /** Editable fields shown on every bank card. */
@@ -66,7 +70,7 @@ const TARGET_FIELDS: readonly IManifestField[] = [
   },
   {
     key: 'accounts', label: 'Accounts', kind: 'string',
-    help: '"all" or specific bank account numbers.',
+    help: '"all" or comma-separated bank account numbers.',
   },
   {
     key: 'reconcile', label: 'Reconcile', kind: 'boolean',
@@ -80,14 +84,60 @@ export const BANKS_SECTION: IManifestSection = {
   doc: 'configuration/banks.md', bankFields: BANK_FIELDS, targetFields: TARGET_FIELDS,
 };
 
-/** Per-bank required credentials — the single source behind CREDENTIAL_SPECS. */
-export const BANK_REQUIREMENTS: Readonly<Record<string, IBankRequirement>> = {
-  discount: { displayName: 'Discount bank', required: ['id', 'password', 'num'] },
-  leumi: { displayName: 'leumi', required: ['username', 'password'] },
-  hapoalim: { displayName: 'Hapoalim', required: ['userCode', 'password'] },
-  yahav: { displayName: 'Yahav', required: ['nationalID', 'password'] },
-  onezero: { displayName: 'OneZero', required: ['email', 'password', 'phoneNumber'] },
-  paybox: { displayName: 'PayBox', required: ['phoneNumber'] },
-  pepper: { displayName: 'Pepper', required: ['phoneNumber', 'password'] },
-  max: { displayName: 'Max', required: ['username', 'password', 'id'] },
+/**
+ * Required login fields this importer enforces beyond (or instead of) the
+ * scraper's declared `loginFields`, keyed by registry bankId. OneZero needs a
+ * phone number for OTP; Max needs an id; Yahav logs in with nationalID only.
+ */
+const REQUIRED_OVERRIDES: Readonly<Record<string, readonly (keyof IBankConfig)[]>> = {
+  yahav: ['nationalID', 'password'],
+  onezero: ['email', 'password', 'phoneNumber'],
+  max: ['username', 'password', 'id'],
 };
+
+/** Display-name overrides preserving the importer's existing error strings. */
+const DISPLAY_NAME_OVERRIDES: Readonly<Record<string, string>> = {
+  discount: 'Discount bank', leumi: 'leumi', hapoalim: 'Hapoalim', yahav: 'Yahav',
+  onezero: 'OneZero', paybox: 'PayBox', pepper: 'Pepper', max: 'Max',
+};
+
+/**
+ * Reads the scraper's declared login fields for a company type.
+ * @param companyType - CompanyTypes value (also the SCRAPERS key).
+ * @returns The login field keys the scraper requires for that company.
+ */
+function scraperLoginFields(companyType: CompanyTypes): readonly (keyof IBankConfig)[] {
+  return SCRAPERS[companyType as keyof typeof SCRAPERS].loginFields;
+}
+
+/**
+ * Builds one bank's requirement from registry + scraper, applying overrides.
+ * @param bankId - Registry bank id.
+ * @param companyType - The bank's scraper company type.
+ * @returns The derived per-bank credential requirement.
+ */
+function bankRequirement(bankId: string, companyType: CompanyTypes): IBankRequirement {
+  const scraperName = SCRAPERS[companyType as keyof typeof SCRAPERS].name;
+  const required = REQUIRED_OVERRIDES[bankId] ?? scraperLoginFields(companyType);
+  return { displayName: DISPLAY_NAME_OVERRIDES[bankId] ?? scraperName, required };
+}
+
+/**
+ * Builds the per-bank requirement map for EVERY registered bank.
+ * @returns Frozen requirement map keyed by registry bankId.
+ */
+function buildBankRequirements(): Readonly<Record<string, IBankRequirement>> {
+  const entries = BANK_CATALOG.map(
+    item => [item.bankId, bankRequirement(item.bankId, item.companyType)] as const,
+  );
+  const map = Object.fromEntries(entries);
+  return Object.freeze(map);
+}
+
+/**
+ * Per-bank required credentials for EVERY registered bank — the single source
+ * behind CREDENTIAL_SPECS. Derived from the bank registry + the scraper's
+ * `loginFields`, so a bank can never be registered without a credential spec
+ * (no registry/manifest drift), with documented project-specific overrides.
+ */
+export const BANK_REQUIREMENTS = buildBankRequirements();
