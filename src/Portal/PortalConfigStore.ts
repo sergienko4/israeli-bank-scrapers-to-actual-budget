@@ -10,7 +10,7 @@ import ConfigWriter from '../Config/ConfigWriter.js';
 import type { IActualConfig, IImporterConfig, Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
-import { coerceTargetAccounts, maskSecrets, restoreMasked } from './ConfigMutations.js';
+import { coerceTargetAccounts, hashPlainPortalPassword, maskSecrets, restoreMasked } from './ConfigMutations.js';
 
 /** Loads, masks, validates, and persists the portal-managed config. */
 export default class PortalConfigStore {
@@ -62,17 +62,19 @@ export default class PortalConfigStore {
   }
 
   /**
-   * Shapes (restore masked secrets + coerce target accounts) and offline-validates
-   * the incoming config. Anything that throws or fails here is treated as invalid
-   * client input (mapped to HTTP 400); write/I/O faults are deferred to
-   * {@link persist} so they surface as server errors instead.
+   * Shapes (restore masked secrets, hash a freshly-typed portal password, and
+   * coerce target accounts) and offline-validates the incoming config. Anything
+   * that throws or fails here is treated as invalid client input (mapped to HTTP
+   * 400); write/I/O faults are deferred to {@link persist} so they surface as
+   * server errors instead.
    * @param next - Replacement config from the portal UI.
    * @returns The validated config, or a failure describing the bad input.
    */
   private validate(next: IImporterConfig): Procedure<IImporterConfig> {
     try {
       const restored = restoreMasked(next, this._config);
-      const merged = coerceTargetAccounts(restored);
+      const hashed = hashPlainPortalPassword(restored);
+      const merged = coerceTargetAccounts(hashed);
       const fails = ConfigValidator.validateOffline(merged).filter(r => r.status === 'fail');
       if (fails.length) {
         const messages = fails.map(f => f.message).join('; ');

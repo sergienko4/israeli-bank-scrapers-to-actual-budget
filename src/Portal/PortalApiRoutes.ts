@@ -22,16 +22,14 @@ const MANIFEST_PAYLOAD = {
 };
 
 /**
- * Registers the public auth-mode probe + guarded config API routes.
+ * Registers the manifest probe + guarded config API routes.
  * @param app - Fastify instance.
  * @param store - Shared config store.
- * @param authMode - Configured auth mode, exposed for the login page.
  * @returns Confirmation that the API routes are registered.
  */
 export default function registerApiRoutes(
-  app: FastifyInstance, store: PortalConfigStore, authMode: string,
+  app: FastifyInstance, store: PortalConfigStore,
 ): { registered: true } {
-  app.get('/auth/mode', (_req, reply) => reply.send({ authMode }));
   app.get('/api/manifest', (_req, reply) => reply.send(MANIFEST_PAYLOAD));
   registerConfigRoutes(app, store);
   registerBankRoutes(app, store);

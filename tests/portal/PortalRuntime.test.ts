@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  isNonLoopbackHost, isPortalEnabled, isSessionSecretWeak, portalCookieOptions,
-  resolvePortalRuntime, resolveSecureCookies,
+  isNonLoopbackHost, isPortalEnabled, isSessionSecretWeak, portalAuthConfigError,
+  portalBootBlocker, portalCookieOptions, resolvePortalRuntime, resolveSecureCookies,
 } from '../../src/Portal/PortalRuntime.js';
+import type { PortalAuthMode } from '../../src/Types/Index.js';
 import { fakeImporterConfig } from '../helpers/factories.js';
-import { fakePortalRuntime } from '../helpers/portalFactories.js';
+import { fakeGoogleConfig, fakePortalConfig, fakePortalRuntime } from '../helpers/portalFactories.js';
 
 const ENV_KEYS = ['PORTAL_ENABLED', 'PORTAL_HOST', 'PORTAL_PORT', 'PORTAL_SECURE_COOKIES'] as const;
 const saved: Record<string, string | undefined> = {};
@@ -59,6 +60,11 @@ describe('PortalRuntime', () => {
     it('falls back to the default port when the value is non-numeric', () => {
       process.env.PORTAL_PORT = 'not-a-number';
       expect(resolvePortalRuntime(fakeImporterConfig()).port).toBe(8080);
+    });
+
+    it('coerces an unknown auth mode to password', () => {
+      const config = fakeImporterConfig({ portal: { enabled: true, authMode: 'bogus' as PortalAuthMode } });
+      expect(resolvePortalRuntime(config).authMode).toBe('password');
     });
   });
 
@@ -115,6 +121,39 @@ describe('PortalRuntime', () => {
     it('includes maxAge when provided and reflects an insecure runtime', () => {
       const opts = portalCookieOptions(fakePortalRuntime({ secureCookies: false }), 600);
       expect(opts).toEqual({ path: '/', httpOnly: true, sameSite: 'lax', secure: false, maxAge: 600 });
+    });
+  });
+
+  describe('portalAuthConfigError', () => {
+    it('returns empty when password mode has a passwordHash', () => {
+      const rt = fakePortalRuntime({ authMode: 'password', portal: fakePortalConfig({ authMode: 'password' }) });
+      expect(portalAuthConfigError(rt)).toBe('');
+    });
+
+    it('flags password/both mode that has no passwordHash', () => {
+      const portal = fakePortalConfig({ authMode: 'both', passwordHash: undefined });
+      expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'both', portal }))).toMatch(/passwordHash/);
+    });
+
+    it('flags google/both mode with an incomplete google client', () => {
+      const portal = fakePortalConfig({ authMode: 'google', google: undefined });
+      expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'google', portal }))).toMatch(/google/);
+    });
+
+    it('returns empty when both mode has a password and a complete google client', () => {
+      const portal = fakePortalConfig({ authMode: 'both', google: fakeGoogleConfig() });
+      expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'both', portal }))).toBe('');
+    });
+  });
+
+  describe('portalBootBlocker', () => {
+    it('blocks a weak session secret', () => {
+      const portal = fakePortalConfig({ sessionSecret: 'weak' });
+      expect(portalBootBlocker(fakePortalRuntime({ sessionSecret: 'weak', portal }))).toMatch(/sessionSecret/);
+    });
+
+    it('returns empty when the runtime is fully configured', () => {
+      expect(portalBootBlocker(fakePortalRuntime())).toBe('');
     });
   });
 });

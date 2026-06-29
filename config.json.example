@@ -139,6 +139,7 @@
     "host": "127.0.0.1",
     "port": 8080,
     "authMode": "password",
+    "secureCookies": false,
     "google": { "clientId": "", "redirectUri": "http://localhost:8080/auth/google/callback", "allowedEmails": [] }
   },
 
@@ -174,6 +175,7 @@
     "portal.host": "Bind address. 127.0.0.1 (default, local only) or 0.0.0.0 to expose. Env: PORTAL_HOST",
     "portal.port": "Listen port. Default 8080. Env: PORTAL_PORT",
     "portal.authMode": "password | google | both (google then password). Default: password",
+    "portal.secureCookies": "Mark session cookies Secure (enable behind HTTPS). Default: false. Env: PORTAL_SECURE_COOKIES",
     "portal.google": "OAuth: clientId+redirectUri+allowedEmails here; clientSecret in credentials.json",
     "spendingWatch": "Array of rules. Each rule: {alertFromAmount, numOfDayToCount, watchPayees?}",
     "spendingWatch[].alertFromAmount": "Trigger alert if total spending exceeds this amount (currency units)",

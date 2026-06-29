@@ -13,7 +13,9 @@ secret split + encryption right. The portal replaces that with a safe, guided UI
 you can reach over the network: it validates every change, masks and preserves
 secrets, and writes the files back for you (settings to `config.json`, secrets
 to `credentials.json`). The importer/scheduler reloads config on its next run,
-so no restart is needed.
+so no restart is needed. (Changing the portal's **own** auth settings —
+`authMode`, `passwordHash`, or `sessionSecret` — is the exception: the portal
+reads those once at startup, so restart the portal for those to take effect.)
 
 ## Manifest-driven UI
 
@@ -186,6 +188,10 @@ node scripts/hash-portal-password.js "your-password"
 Put the printed `scrypt$…` value in `credentials.json` under
 `portal.passwordHash`, and set a random `portal.sessionSecret` (16+ characters).
 
+> **Tip:** This manual hash only bootstraps the **first** password. Once the
+> portal is running, setting or changing the password in the UI hashes it for
+> you automatically on save — you never paste a hash again.
+
 ### Google
 
 Google mode lets a chosen set of Google accounts sign in. You create an OAuth
@@ -252,6 +258,32 @@ fake-Google server and drives the **entire** browser flow (click *Continue with
 Google* → consent → callback → email allow-list → app), so the Google path is
 validated on every pull request with no real Google account or network access.
 The same flow works unchanged against real Google once the client above is set.
+
+#### Validate a real Google client in CI (optional secrets)
+
+The fake-Google flow proves the *portal code* works. To additionally prove that
+**your real OAuth client** is configured correctly (client id/secret valid and
+the redirect URI registered), the E2E pipeline runs a secret-gated smoke,
+`scripts/google-oauth-smoke.mjs`. It never opens a browser — it asks Google's
+token endpoint to exchange a deliberately invalid code with your real
+credentials and asserts Google's reply:
+
+- `invalid_grant` → **pass** (credentials + redirect URI are recognised; only
+  the throwaway code was rejected),
+- `invalid_client` → fail (client id/secret wrong),
+- `redirect_uri_mismatch` → fail (redirect URI not registered).
+
+Add these repository secrets (**Settings → Secrets and variables → Actions**) to
+turn it on; when any is missing the smoke self-skips so forks stay green:
+
+| Secret | Value |
+| --- | --- |
+| `GOOGLE_CLIENT_ID` | Your OAuth client id (`…apps.googleusercontent.com`). |
+| `GOOGLE_CLIENT_SECRET` | The matching client secret (`GOCSPX-…`). |
+| `GOOGLE_REDIRECT_URI` | A redirect URI registered on the client, e.g. `http://127.0.0.1:8088/auth/google/callback`. |
+
+The client secret is read only from the environment and is never printed. Run it
+locally the same way: `GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… GOOGLE_REDIRECT_URI=… npm run smoke:google-config`.
 
 ## Security
 

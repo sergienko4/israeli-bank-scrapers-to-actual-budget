@@ -4,7 +4,8 @@
  * (merged config.json + credentials.json); env wins for host/port/enabled.
  */
 
-import type { IImporterConfig, IPortalConfig, PortalAuthMode } from '../Types/Index.js';
+import type { IImporterConfig, IPortalConfig, IPortalGoogleConfig, PortalAuthMode } from '../Types/Index.js';
+import { PORTAL_AUTH_MODES } from '../Types/Index.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8080;
@@ -107,6 +108,17 @@ export function isNonLoopbackHost(host: string): boolean {
 }
 
 /**
+ * Coerces a raw auth mode to a known {@link PortalAuthMode}, defaulting unknown
+ * or missing values to `password` so a hand-edited typo can never reach the
+ * factor check with no policy (which would otherwise fail the login request).
+ * @param mode - Raw authMode from config (possibly invalid or undefined).
+ * @returns A valid portal auth mode.
+ */
+function normalizeAuthMode(mode?: string): PortalAuthMode {
+  return PORTAL_AUTH_MODES.includes(mode as PortalAuthMode) ? (mode as PortalAuthMode) : 'password';
+}
+
+/**
  * Resolves host/port/auth/secret from config + env, applying safe defaults.
  * @param config - Merged importer config.
  * @returns Resolved runtime settings for the portal server.
@@ -116,9 +128,50 @@ export function resolvePortalRuntime(config: IImporterConfig): IPortalRuntime {
   return {
     host: process.env.PORTAL_HOST ?? portal.host ?? DEFAULT_HOST,
     port: normalizePort(process.env.PORTAL_PORT ?? portal.port),
-    authMode: portal.authMode ?? 'password',
+    authMode: normalizeAuthMode(portal.authMode),
     sessionSecret: portal.sessionSecret ?? '',
     secureCookies: resolveSecureCookies(portal),
     portal,
   };
+}
+
+/**
+ * Whether a Google OAuth config has every field needed to run the consent flow.
+ * @param google - Portal Google config, if present.
+ * @returns True when clientId, clientSecret, and redirectUri are all set.
+ */
+function isGoogleConfigComplete(google?: IPortalGoogleConfig): boolean {
+  return Boolean(google?.clientId && google.clientSecret && google.redirectUri);
+}
+
+/**
+ * Validates that the resolved auth mode has the credential(s) it needs to log
+ * in, so the portal never boots into an un-loginable state — e.g. `password`/
+ * `both` with no passwordHash, or `google`/`both` with an incomplete Google
+ * client. This closes the silent lockout users hit as "both doesn't work".
+ * @param rt - Resolved portal runtime.
+ * @returns An actionable error message, or '' when the auth config is bootable.
+ */
+export function portalAuthConfigError(rt: IPortalRuntime): string {
+  const mode = rt.authMode;
+  if ((mode === 'password' || mode === 'both') && !rt.portal.passwordHash) {
+    return 'set portal.passwordHash for password/both mode (type a password in the portal, then restart)';
+  }
+  if ((mode === 'google' || mode === 'both') && !isGoogleConfigComplete(rt.portal.google)) {
+    return 'set portal.google.clientId, clientSecret, and redirectUri for google/both mode';
+  }
+  return '';
+}
+
+/**
+ * Single reason the portal must refuse to boot, or '' when it is safe to start:
+ * a weak session secret (cookie-forgery risk) or an un-loginable auth config.
+ * @param rt - Resolved portal runtime.
+ * @returns A boot-blocking reason, or '' when the portal may start.
+ */
+export function portalBootBlocker(rt: IPortalRuntime): string {
+  if (isSessionSecretWeak(rt.sessionSecret)) {
+    return 'set a strong portal.sessionSecret (>=16 chars) in credentials.json';
+  }
+  return portalAuthConfigError(rt);
 }

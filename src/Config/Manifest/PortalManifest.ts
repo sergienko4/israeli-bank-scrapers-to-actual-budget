@@ -24,22 +24,24 @@ const PORTAL_SECTION: IManifestSection = {
     },
     {
       key: 'authMode', label: 'Auth mode', kind: 'select', options: PORTAL_AUTH_MODES,
-      help: 'password | google | both.',
+      help: 'password | google | both. Changing this needs a portal restart to take effect.',
     },
     {
       key: 'secureCookies', label: 'Secure cookies', kind: 'boolean',
       help: 'Mark session cookies Secure. Enable only when served over HTTPS.',
     },
     {
-      key: 'passwordHash', label: 'Password hash', kind: 'secret',
-      help: 'scrypt hash for password auth (managed for you).',
+      key: 'passwordHash', label: 'Portal password', kind: 'secret',
+      help: 'Set or change the portal password; it is hashed on save. Needed for password and both modes. Changing it needs a portal restart to take effect.',
     },
     {
       key: 'sessionSecret', label: 'Session secret', kind: 'secret',
-      help: 'Signing key for session cookies (>= 16 chars).',
+      help: 'Signing key for session cookies (>= 16 chars). Changing it needs a portal restart to take effect.',
     },
     {
-      key: 'google', label: 'Google OAuth', kind: 'group', fields: [
+      key: 'google', label: 'Google OAuth', kind: 'group',
+      showWhen: { field: 'authMode', in: ['google', 'both'] },
+      fields: [
         { key: 'clientId', label: 'Client id', kind: 'string', help: 'Google OAuth client id.' },
         {
           key: 'clientSecret', label: 'Client secret', kind: 'secret',

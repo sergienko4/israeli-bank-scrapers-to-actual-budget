@@ -35,11 +35,11 @@ function $(id) {
  * @param {object} [opts] fetch options
  * @returns {Promise<object>} parsed JSON body ({} for 204)
  */
-async function api(path, opts) {
-  const res = await fetch(path, {
-    headers: { 'content-type': 'application/json' },
-    ...opts,
-  });
+async function api(path, opts = {}) {
+  // Only declare a JSON body when one is actually sent: a bodyless POST (e.g.
+  // logout) with content-type application/json trips Fastify's empty-body guard.
+  const headers = opts.body == null ? {} : { 'content-type': 'application/json' };
+  const res = await fetch(path, { ...opts, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `HTTP ${res.status}`);
@@ -88,40 +88,110 @@ function joinPath(prefix, key) {
 // ---------- auth / bootstrap ----------
 
 /**
- * Boots the app: probes auth mode, then either loads config or shows login.
+ * Boots the app: refreshes auth state, then loads config or shows the login step.
  * @returns {Promise<void>} resolves when boot is complete
  */
 async function init() {
-  const mode = await api('/auth/mode').catch(() => ({ authMode: 'password' }));
-  const authMode = mode.authMode || 'password';
-  $('google-btn').classList.toggle('hidden', authMode === 'password');
-  $('pw').classList.toggle('hidden', authMode === 'google');
-  $('pw-btn').classList.toggle('hidden', authMode === 'google');
-  $('login-hint').textContent =
-    authMode === 'both'
-      ? 'Sign in with Google, then enter the portal password.'
-      : 'Sign in to manage your importer configuration.';
-  try {
-    await load();
-  } catch {
-    $('login').classList.remove('hidden');
-  }
+  await refreshAuth();
 }
 
 /**
- * Submits the portal password and loads config on success.
+ * Re-reads auth status and either opens the app (when every required factor is
+ * satisfied) or shows the remaining login step. Called on boot, after returning
+ * from Google, and after a password submit so `both` mode advances cleanly.
+ * @returns {Promise<void>} resolves when the view is updated
+ */
+async function refreshAuth() {
+  const status = await api('/auth/status').catch(() => ({ authMode: 'password' }));
+  if (status.authorized) {
+    try {
+      await load();
+      return;
+    } catch {
+      showLoadError();
+      return;
+    }
+  }
+  showLogin(status);
+}
+
+/**
+ * Shows the login panel with only the step(s) still required for the auth mode,
+ * marking a satisfied factor so `both` mode guides Google → password clearly.
+ * @param {object} status auth status {authMode, google, password, email}
+ * @returns {void}
+ */
+function showLogin(status) {
+  const mode = status.authMode || 'password';
+  const needGoogle = mode !== 'password' && !status.google;
+  const needPassword = mode !== 'google' && !status.password;
+  $('google-btn').classList.toggle('hidden', !needGoogle);
+  $('pw').classList.toggle('hidden', !needPassword);
+  $('pw-btn').classList.toggle('hidden', !needPassword);
+  $('reload-btn').classList.add('hidden');
+  $('login-hint').textContent = loginHint(status);
+  $('login').classList.remove('hidden');
+  if (needGoogle) $('google-btn').focus();
+  else if (needPassword) $('pw').focus();
+}
+
+/**
+ * Shows a recoverable error when the user is authenticated but the config could
+ * not be loaded, offering a reload instead of a dead-end blank login card.
+ * @returns {void}
+ */
+function showLoadError() {
+  $('google-btn').classList.add('hidden');
+  $('pw').classList.add('hidden');
+  $('pw-btn').classList.add('hidden');
+  $('reload-btn').classList.remove('hidden');
+  $('login-hint').textContent = 'Signed in, but your configuration could not be loaded.';
+  $('login-err').textContent = 'Could not load configuration. Check the server logs, then reload.';
+  $('login').classList.remove('hidden');
+  $('reload-btn').focus();
+}
+
+/**
+ * Builds the login hint, acknowledging any factor already satisfied in `both`.
+ * @param {object} status auth status {authMode, google, password, email}
+ * @returns {string} the hint text
+ */
+function loginHint(status) {
+  if (status.authMode === 'both') {
+    if (status.google) {
+      const who = status.email ? ` as ${status.email}` : '';
+      return `✓ Signed in${who}. Now enter the portal password.`;
+    }
+    if (status.password) return '✓ Password accepted. Now sign in with Google.';
+    return 'Sign in with Google, then enter the portal password.';
+  }
+  if (status.authMode === 'google') return 'Sign in with Google to manage your configuration.';
+  return 'Sign in to manage your importer configuration.';
+}
+
+/**
+ * Submits the portal password, then refreshes auth: opens the app when the mode
+ * is now fully satisfied, or advances to the next required step otherwise (so a
+ * correct password in `both` mode is acknowledged, not shown as an error).
  * @returns {Promise<void>} resolves when handled
  */
 async function login() {
+  const btn = $('pw-btn');
+  const label = btn.textContent;
   $('login-err').textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
   try {
     await api('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ password: $('pw').value }),
     });
-    await load();
+    await refreshAuth();
   } catch (e) {
     $('login-err').textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 }
 
@@ -202,6 +272,7 @@ function buildNav() {
     const label = `${s.icon || ''} ${s.label}`.trim();
     const b = button(label, s.key === current ? 'active' : '');
     b.dataset.section = s.key;
+    if (s.key === current) b.setAttribute('aria-current', 'page');
     b.onclick = () => selectSection(s.key);
     host.appendChild(b);
   });
@@ -219,19 +290,28 @@ function selectSection(key) {
 }
 
 /**
- * Opens the mobile navigation drawer.
+ * Opens the mobile navigation drawer and moves focus into it.
  * @returns {void}
  */
 function openDrawer() {
-  $('app').classList.add('nav-open');
+  const app = $('app');
+  if (app.classList.contains('nav-open')) return;
+  app.classList.add('nav-open');
+  $('menu').setAttribute('aria-expanded', 'true');
+  const first = $('nav').querySelector('button');
+  if (first) first.focus();
 }
 
 /**
- * Closes the mobile navigation drawer.
+ * Closes the mobile navigation drawer, returning focus to the menu button.
  * @returns {void}
  */
 function closeDrawer() {
-  $('app').classList.remove('nav-open');
+  const app = $('app');
+  const wasOpen = app.classList.contains('nav-open');
+  app.classList.remove('nav-open');
+  $('menu').setAttribute('aria-expanded', 'false');
+  if (wasOpen) $('menu').focus();
 }
 
 // ---------- render dispatch ----------
@@ -302,8 +382,22 @@ function docLink(doc) {
 function renderObject(sec, view) {
   const obj = sec.key === '' ? config : (config[sec.key] || (config[sec.key] = {}));
   const panel = el('div', 'card panel');
-  (sec.fields || []).forEach((f) => panel.appendChild(fieldNode(f, obj, sec.key)));
+  (sec.fields || [])
+    .filter((f) => isFieldVisible(f, obj))
+    .forEach((f) => panel.appendChild(fieldNode(f, obj, sec.key)));
   view.appendChild(panel);
+}
+
+/**
+ * Reports whether a field renders, honoring an optional `showWhen` condition
+ * that gates visibility on a sibling field's current value.
+ * @param {object} field manifest field (may carry showWhen)
+ * @param {object} obj object the field and its sibling controller live on
+ * @returns {boolean} true when the field should render
+ */
+function isFieldVisible(field, obj) {
+  const cond = field.showWhen;
+  return !cond || cond.in.includes(obj[cond.field]);
 }
 
 /**
@@ -332,7 +426,9 @@ function groupNode(field, obj, path) {
   const fs = el('fieldset', 'group');
   fs.dataset.path = path;
   fs.appendChild(el('legend', null, field.label));
-  (field.fields || []).forEach((f) => fs.appendChild(fieldNode(f, sub, path)));
+  (field.fields || [])
+    .filter((f) => isFieldVisible(f, sub))
+    .forEach((f) => fs.appendChild(fieldNode(f, sub, path)));
   return fs;
 }
 
@@ -405,6 +501,7 @@ function selectNode(field, obj, path) {
   s.value = obj[field.key] == null ? '' : String(obj[field.key]);
   s.onchange = () => {
     obj[field.key] = s.value;
+    render();
   };
   return s;
 }
@@ -515,9 +612,10 @@ function listItemNode(field, arr, idx, path) {
   if (field.fields) {
     field.fields.forEach((sub) => row.appendChild(fieldNode(sub, arr[idx], path)));
   } else {
-    row.appendChild(scalarItemInput(arr, idx, path));
+    row.appendChild(scalarItemInput(field, arr, idx, path));
   }
   const del = button('✕', 'btn danger');
+  del.setAttribute('aria-label', `Remove ${field.label} ${idx + 1}`);
   del.onclick = () => {
     arr.splice(idx, 1);
     render();
@@ -528,15 +626,17 @@ function listItemNode(field, arr, idx, path) {
 
 /**
  * Builds a text input bound to a string list element.
+ * @param {object} field the list field (for an accessible name)
  * @param {Array} arr backing array
  * @param {number} idx element index
  * @param {string} path dotted path
  * @returns {HTMLInputElement} the input
  */
-function scalarItemInput(arr, idx, path) {
+function scalarItemInput(field, arr, idx, path) {
   const i = el('input');
   i.type = 'text';
   i.dataset.path = path;
+  i.setAttribute('aria-label', `${field.label} ${idx + 1}`);
   i.value = arr[idx] == null ? '' : String(arr[idx]);
   i.oninput = () => {
     arr[idx] = i.value;
@@ -658,6 +758,7 @@ function addFieldControl(sec, bank, name) {
   if (!missing.length) return wrap;
   const sel = el('select');
   sel.dataset.addField = name;
+  sel.setAttribute('aria-label', `Add a field to ${name}`);
   const ph = el('option', null, '+ Add field…');
   ph.value = '';
   sel.appendChild(ph);
@@ -753,6 +854,7 @@ function addBankControl(sec) {
   const wrap = el('div', 'add-bank');
   const sel = el('select');
   sel.id = 'add-bank-select';
+  sel.setAttribute('aria-label', 'Select a bank to add');
   const ph = el('option', null, 'Add a bank…');
   ph.value = '';
   sel.appendChild(ph);
@@ -806,5 +908,9 @@ $('logout').onclick = async () => {
 $('save').onclick = save;
 $('menu').onclick = openDrawer;
 $('scrim').onclick = closeDrawer;
+$('reload-btn').onclick = () => location.reload();
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('app').classList.contains('nav-open')) closeDrawer();
+});
 
 init();

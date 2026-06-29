@@ -29,9 +29,17 @@ describe('PortalServer routes (password mode)', () => {
   });
   afterEach(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }); });
 
-  it('reports the auth mode without auth', async () => {
-    const res = await app.inject({ method: 'GET', url: '/auth/mode' });
-    expect(res.json()).toEqual({ authMode: 'password' });
+  it('reports auth status with no factors when there is no session', async () => {
+    const res = await app.inject({ method: 'GET', url: '/auth/status' });
+    expect(res.json()).toEqual({
+      authMode: 'password', google: false, password: false, email: null, authorized: false,
+    });
+  });
+
+  it('reports the password factor satisfied after a successful login', async () => {
+    const cookie = await loginCookie();
+    const res = await app.inject({ method: 'GET', url: '/auth/status', cookies: { portal_session: cookie } });
+    expect(res.json()).toMatchObject({ authMode: 'password', password: true, authorized: true });
   });
 
   it('rejects a bad password with 401', async () => {
@@ -41,6 +49,11 @@ describe('PortalServer routes (password mode)', () => {
 
   it('guards /api/config with 401 when no cookie is present', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/config' });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('guards a percent-encoded /api path that decodes to a real route', async () => {
+    const res = await app.inject({ method: 'GET', url: '/%61pi/config' });
     expect(res.statusCode).toBe(401);
   });
 

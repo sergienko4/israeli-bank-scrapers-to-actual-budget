@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import type { IImporterConfig } from '../../src/Types/Index.js';
 import {
-  addBank, coerceAccounts, coerceTargetAccounts, maskSecrets, removeBank, restoreMasked,
+  addBank, coerceAccounts, coerceTargetAccounts, hashPlainPortalPassword,
+  maskSecrets, removeBank, restoreMasked,
 } from '../../src/Portal/ConfigMutations.js';
+import { hashPassword, verifyPassword } from '../../src/Portal/PortalPassword.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
 
 const MASK = '********';
@@ -40,6 +42,48 @@ describe('ConfigMutations', () => {
 
     it('returns primitives unchanged', () => {
       expect(restoreMasked('plain', undefined)).toBe('plain');
+    });
+
+    it('restores masked secrets nested inside array items', () => {
+      const next = { items: [{ password: MASK, id: '1' }, { password: 'typed', id: '2' }] };
+      const prev = { items: [{ password: 'old-secret', id: '1' }, { password: 'x', id: '2' }] };
+      const restored = restoreMasked(next, prev);
+      expect(restored.items[0].password).toBe('old-secret');
+      expect(restored.items[1].password).toBe('typed');
+    });
+  });
+
+  describe('hashPlainPortalPassword', () => {
+    it('hashes a freshly-typed plaintext portal password so login works', () => {
+      const config = fakeImporterConfig({ portal: { enabled: true, passwordHash: 'Sergienko-Portal-9182' } });
+      const out = hashPlainPortalPassword(config);
+      expect(out.portal?.passwordHash).toMatch(/^scrypt\$/);
+      expect(verifyPassword('Sergienko-Portal-9182', out.portal?.passwordHash ?? '')).toBe(true);
+    });
+
+    it('leaves an already-encoded scrypt hash untouched', () => {
+      const stored = hashPassword('Already-Hashed-7766');
+      const config = fakeImporterConfig({ portal: { enabled: true, passwordHash: stored } });
+      expect(hashPlainPortalPassword(config).portal?.passwordHash).toBe(stored);
+    });
+
+    it('hashes a plaintext that merely starts with scrypt$ but is not a real hash', () => {
+      const config = fakeImporterConfig({ portal: { enabled: true, passwordHash: 'scrypt$fake' } });
+      const out = hashPlainPortalPassword(config);
+      expect(out.portal?.passwordHash).not.toBe('scrypt$fake');
+      expect(verifyPassword('scrypt$fake', out.portal?.passwordHash ?? '')).toBe(true);
+    });
+
+    it('leaves empty or absent passwords untouched', () => {
+      const empty = fakeImporterConfig({ portal: { enabled: true, passwordHash: '' } });
+      expect(hashPlainPortalPassword(empty).portal?.passwordHash).toBe('');
+      const none = fakeImporterConfig({ portal: { enabled: true } });
+      expect(hashPlainPortalPassword(none).portal?.passwordHash).toBeUndefined();
+    });
+
+    it('returns the same config when there is no portal block', () => {
+      const config = fakeImporterConfig();
+      expect(hashPlainPortalPassword(config)).toBe(config);
     });
   });
 

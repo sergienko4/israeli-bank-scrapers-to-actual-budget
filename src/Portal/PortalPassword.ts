@@ -7,6 +7,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 const SALT_BYTES = 16;
 const KEY_BYTES = 64;
+const ENCODED_HASH = /^scrypt\$[0-9a-f]+\$[0-9a-f]+$/;
 
 /**
  * Hashes a plaintext password with a random salt for storage in credentials.json.
@@ -31,4 +32,15 @@ export function verifyPassword(password: string, stored: string): boolean {
   const candidate = scryptSync(password, salt, KEY_BYTES);
   const expected = Buffer.from(hash, 'hex');
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+}
+
+/**
+ * Whether a value is already an encoded scrypt hash rather than a plaintext
+ * password, so a freshly typed password — even one that happens to start with
+ * "scrypt$" — is hashed on save and never stored verbatim.
+ * @param value - Candidate stored value.
+ * @returns True when the value matches the `scrypt$salt$hash` structure.
+ */
+export function isEncodedHash(value: string): boolean {
+  return ENCODED_HASH.test(value);
 }

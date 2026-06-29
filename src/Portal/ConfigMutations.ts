@@ -6,24 +6,47 @@
 
 import SECRET_KEYS from '../Config/SecretKeys.js';
 import type { IBankConfig, IBankTarget, IImporterConfig } from '../Types/Index.js';
+import { hashPassword, isEncodedHash } from './PortalPassword.js';
 
 const MASK = '********';
 
 /**
- * Restores masked secrets in an incoming object from the previous values, so a
- * round-tripped MASK never overwrites a real secret.
+ * Restores masked secrets in an incoming value from the previous values, so a
+ * round-tripped MASK never overwrites a real secret. Arrays are recursed
+ * element-wise (mirroring {@link maskSecrets}) so secrets nested inside list
+ * items are restored too.
  * @param next - Incoming (possibly masked) value from the UI.
  * @param prev - Previous stored value to restore from.
  * @returns next with MASK secrets replaced by prev's values.
  */
 export function restoreMasked<T>(next: T, prev: unknown): T {
-  if (!next || typeof next !== 'object' || Array.isArray(next)) return next;
+  if (Array.isArray(next)) {
+    const prevArr = Array.isArray(prev) ? prev : [];
+    return next.map((v, i) => restoreMasked<unknown>(v, prevArr[i])) as unknown as T;
+  }
+  if (!next || typeof next !== 'object') return next;
   const before = (prev ?? {}) as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(next)) {
     out[k] = v === MASK ? before[k] : restoreMasked(v, before[k]);
   }
   return out as T;
+}
+
+/**
+ * Hashes a freshly-typed plaintext portal password. The UI password field
+ * accepts a plaintext value; when it is not already an encoded scrypt hash (and
+ * not empty), it is hashed here on save so password/`both` auth works without
+ * the user pre-computing a hash. An untouched field arrives as the MASK and has
+ * already been restored to the stored hash by {@link restoreMasked}.
+ * @param config - Config whose `portal.passwordHash` may be plaintext.
+ * @returns A new config with `portal.passwordHash` encoded when applicable.
+ */
+export function hashPlainPortalPassword(config: IImporterConfig): IImporterConfig {
+  const { portal } = config;
+  const value = portal?.passwordHash;
+  if (!portal || !value || isEncodedHash(value)) return config;
+  return { ...config, portal: { ...portal, passwordHash: hashPassword(value) } };
 }
 
 /**

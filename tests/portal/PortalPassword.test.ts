@@ -1,6 +1,8 @@
+import { randomBytes, scryptSync } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
-import { hashPassword, verifyPassword } from '../../src/Portal/PortalPassword.js';
+import { hashPassword, isEncodedHash, verifyPassword } from '../../src/Portal/PortalPassword.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 describe('PortalPassword', () => {
@@ -37,6 +39,29 @@ describe('PortalPassword', () => {
 
     it('returns false when hash length differs from the candidate', () => {
       expect(verifyPassword(TEST_CREDENTIAL, 'scrypt$abcd$00')).toBe(false);
+    });
+  });
+
+  describe('isEncodedHash', () => {
+    it('is true for a real scrypt$salt$hash value', () => {
+      expect(isEncodedHash(hashPassword(TEST_CREDENTIAL))).toBe(true);
+    });
+
+    it('is false for plaintext, even when it starts with scrypt$', () => {
+      expect(isEncodedHash('my-password')).toBe(false);
+      expect(isEncodedHash('scrypt$not-a-real-hash')).toBe(false);
+      expect(isEncodedHash('scrypt$abc$XYZ')).toBe(false);
+    });
+  });
+
+  describe('scripts/hash-portal-password.js format compatibility', () => {
+    it('verifies a hash produced exactly like the standalone script', () => {
+      const salt = randomBytes(16).toString('hex');
+      const hash = scryptSync(TEST_CREDENTIAL, salt, 64).toString('hex');
+      const stored = `scrypt$${salt}$${hash}`;
+      expect(isEncodedHash(stored)).toBe(true);
+      expect(verifyPassword(TEST_CREDENTIAL, stored)).toBe(true);
+      expect(verifyPassword('wrong-password', stored)).toBe(false);
     });
   });
 });

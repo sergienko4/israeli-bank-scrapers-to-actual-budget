@@ -6,7 +6,7 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import type { Procedure } from '../Types/Index.js';
+import type { PortalAuthMode, Procedure } from '../Types/Index.js';
 import { fail, isFail } from '../Types/Index.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { type IGrantArgs, registerGoogleRoutes } from './PortalGoogleRoutes.js';
@@ -15,6 +15,15 @@ import { type IPortalRuntime, portalCookieOptions } from './PortalRuntime.js';
 import { createSession, type ISessionPayload, readSession } from './PortalSession.js';
 
 const COOKIE = 'portal_session';
+
+/** Public auth status for the login UI: configured mode + satisfied factors. */
+export interface IAuthStatus {
+  authMode: PortalAuthMode;
+  google: boolean;
+  password: boolean;
+  email: string | null;
+  authorized: boolean;
+}
 
 /**
  * Reads and verifies the session cookie from a request.
@@ -43,6 +52,18 @@ function grant(args: IGrantArgs): { granted: true } {
 }
 
 /**
+ * Whether the request matched a protected `/api/*` route. Decided from the
+ * router's matched route template, not the raw URL, so a percent-encoded path
+ * like `/%61pi/config` — which Fastify decodes to `/api/config` before route
+ * matching — cannot slip past a raw-prefix check and reach a handler unguarded.
+ * @param req - Incoming request (this global preHandler runs after routing).
+ * @returns True when the matched route path is under `/api/`.
+ */
+function isApiRoute(req: FastifyRequest): boolean {
+  return (req.routeOptions.url ?? '').startsWith('/api/');
+}
+
+/**
  * Guards /api/* paths: denies unless the session satisfies the auth mode.
  * @param req - Request.
  * @param reply - Reply.
@@ -50,11 +71,32 @@ function grant(args: IGrantArgs): { granted: true } {
  * @returns True when the request may proceed; sends 401 and returns false otherwise.
  */
 function guardApi(req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime): boolean {
-  if (!req.url.startsWith('/api/')) return true;
+  if (!isApiRoute(req)) return true;
   const result = sessionOf(req, rt.sessionSecret);
   const isAllowed = isFail(result) ? false : isAuthorized(result.data, rt.authMode);
   if (!isAllowed) reply.code(401).send({ error: 'Unauthorized' });
   return isAllowed;
+}
+
+/**
+ * Reports the configured auth mode plus which factors the caller's current
+ * session already satisfies, so the login UI can show the right next step and
+ * acknowledge a completed factor (e.g. Google done, password still pending in
+ * `both` mode) instead of re-showing an identical login form.
+ * @param req - Incoming request (carries the session cookie).
+ * @param rt - Resolved portal runtime.
+ * @returns Auth mode, per-factor flags, email, and overall authorization.
+ */
+function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
+  const result = sessionOf(req, rt.sessionSecret);
+  const session = isFail(result) ? null : result.data;
+  return {
+    authMode: rt.authMode,
+    google: session?.google ?? false,
+    password: session?.password ?? false,
+    email: session?.email ?? null,
+    authorized: session ? isAuthorized(session, rt.authMode) : false,
+  };
 }
 
 /**
@@ -64,6 +106,10 @@ function guardApi(req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime):
  * @returns Confirmation that the auth routes are registered.
  */
 export function registerAuthRoutes(app: FastifyInstance, rt: IPortalRuntime): { registered: true } {
+  app.get('/auth/status', (req, reply) => {
+    const status = authStatus(req, rt);
+    return reply.send(status);
+  });
   app.post('/auth/login', (req, reply) => {
     const { password } = req.body as { password?: string };
     const hash = rt.portal.passwordHash ?? '';

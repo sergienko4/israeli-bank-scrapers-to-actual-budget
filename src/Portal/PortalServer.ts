@@ -43,7 +43,7 @@ export async function buildPortal(
   await app.register(cookie, { secret: rt.sessionSecret });
   await app.register(fstatic, { root: publicDir() });
   registerAuthRoutes(app, rt);
-  registerApiRoutes(app, store, rt.authMode);
+  registerApiRoutes(app, store);
   app.setNotFoundHandler((_req, reply) => reply.sendFile('index.html'));
   return await app;
 }

@@ -18,6 +18,14 @@ export type FieldKind =
   | 'group'
   | 'list';
 
+/** Gates a field's visibility on a sibling field's current value. */
+export interface IShowWhenCondition {
+  /** Sibling field key whose value is tested. */
+  field: string;
+  /** Values of the sibling field that make this field visible. */
+  in: readonly string[];
+}
+
 /** One configuration field: a leaf, a nested group, or a list. */
 export interface IManifestField {
   /** Object key exactly as it appears in config.json. */
@@ -38,6 +46,8 @@ export interface IManifestField {
   max?: number;
   /** Nested fields for `group` kinds, or item shape for object `list` kinds. */
   fields?: readonly IManifestField[];
+  /** Optional visibility gate keyed on a sibling field's value. */
+  showWhen?: IShowWhenCondition;
 }
 
 /** How a whole section is structured for rendering. */
