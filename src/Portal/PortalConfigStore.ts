@@ -15,6 +15,7 @@ import { maskSecrets, restoreMasked } from './ConfigMutations.js';
 export default class PortalConfigStore {
   private _config: IImporterConfig;
   private readonly _writer: ConfigWriter;
+  private readonly _loaded: boolean;
 
   /**
    * Builds a store seeded from the given config path.
@@ -22,6 +23,7 @@ export default class PortalConfigStore {
    */
   constructor(configPath = '/app/config.json') {
     const loaded = new ConfigLoader(configPath).loadRaw();
+    this._loaded = !isFail(loaded);
     this._config = isFail(loaded) ? { actual: {} as IActualConfig, banks: {} } : loaded.data;
     this._writer = new ConfigWriter(configPath);
   }
@@ -40,6 +42,9 @@ export default class PortalConfigStore {
    * @returns Procedure success, or first validation/write failure.
    */
   public save(next: IImporterConfig): Procedure<{ saved: true }> {
+    if (!this._loaded) {
+      return fail('Config did not load cleanly; refusing to overwrite existing files');
+    }
     const merged = restoreMasked(next, this._config);
     const fails = ConfigValidator.validateOffline(merged).filter(r => r.status === 'fail');
     if (fails.length) {

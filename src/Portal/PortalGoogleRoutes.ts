@@ -15,6 +15,11 @@ import { isEmailAllowed } from './PortalAuthPolicy.js';
 import type { IPortalRuntime } from './PortalRuntime.js';
 import type { ISessionPayload } from './PortalSession.js';
 
+const STATE_COOKIE = 'portal_oauth_state';
+const STATE_COOKIE_OPTS = {
+  path: '/', httpOnly: true, sameSite: 'lax', maxAge: 600,
+} as const;
+
 /** Factor-granting callback inputs supplied by the auth-routes module. */
 export interface IGrantArgs {
   req: FastifyRequest;
@@ -50,7 +55,8 @@ function registerConsentRoute(
   app: FastifyInstance, google: IPortalGoogleConfig,
 ): { registered: true } {
   app.get('/auth/google', (_req, reply) => {
-    const state = randomBytes(8).toString('hex');
+    const state = randomBytes(16).toString('hex');
+    reply.setCookie(STATE_COOKIE, state, STATE_COOKIE_OPTS);
     const url = buildAuthUrl(google, state);
     return reply.redirect(url);
   });
@@ -66,8 +72,12 @@ function registerConsentRoute(
 function registerCallbackRoute(app: FastifyInstance, ctx: IGoogleRouteCtx): { registered: true } {
   const { rt: runtime, grant, google } = ctx;
   app.get('/auth/google/callback', async (req, reply) => {
-    const { code } = req.query as { code?: string };
-    if (!code) return await reply.code(400).send({ error: 'Missing code' });
+    const { code, state } = req.query as { code?: string; state?: string };
+    const expected = req.cookies[STATE_COOKIE];
+    if (!code || !state || state !== expected) {
+      return await reply.code(400).send({ error: 'Invalid state' });
+    }
+    reply.clearCookie(STATE_COOKIE, { path: '/' });
     const email = await exchangeCode(google, code);
     if (isFail(email) || !isEmailAllowed(email.data, google.allowedEmails)) {
       return await reply.code(403).send({ error: 'Email not allowed' });

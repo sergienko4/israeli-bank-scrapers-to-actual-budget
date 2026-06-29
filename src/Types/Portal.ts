@@ -5,8 +5,11 @@
  * credentials.json; non-secret fields belong in config.json.
  */
 
+/** Portal authentication modes (single source for type + UI). */
+export const PORTAL_AUTH_MODES = ['password', 'google', 'both'] as const;
+
 /** Authentication mode. `both` = Google first, then portal password. */
-export type PortalAuthMode = 'password' | 'google' | 'both';
+export type PortalAuthMode = typeof PORTAL_AUTH_MODES[number];
 
 /** Google OAuth settings; clientSecret is a secret (credentials.json). */
 export interface IPortalGoogleConfig {

@@ -7,7 +7,7 @@ import { ConfigLoader } from '../Config/ConfigLoader.js';
 import { getLogger } from '../Logger/Index.js';
 import { isFail } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
-import { isPortalEnabled, resolvePortalRuntime } from './PortalRuntime.js';
+import { isPortalEnabled, isSessionSecretWeak, resolvePortalRuntime } from './PortalRuntime.js';
 import { startPortal } from './PortalServer.js';
 
 const CONFIG_PATH = process.env.PORTAL_CONFIG_PATH ?? '/app/config.json';
@@ -22,6 +22,10 @@ export default async function bootPortal(): Promise<boolean> {
   if (!isPortalEnabled(loaded.data)) { getLogger().info('🖥️  Config portal disabled'); return false; }
   try {
     const runtime = resolvePortalRuntime(loaded.data);
+    if (isSessionSecretWeak(runtime.sessionSecret)) {
+      getLogger().error('Portal: set a strong portal.sessionSecret (>=16 chars) in credentials.json');
+      return false;
+    }
     await startPortal(runtime, CONFIG_PATH);
     return true;
   } catch (error: unknown) {

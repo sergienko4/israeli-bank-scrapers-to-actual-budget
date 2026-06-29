@@ -228,6 +228,8 @@ npm run build
 npm test                # unit tests + coverage (config/vitest.config.ts)
 npm run test:unit       # explicit unit run
 npm run test:e2e:mock   # Dockerized mocked E2E (no real banks)
+npm run test:e2e:portal # real-browser portal UI E2E (Camoufox)
+npm run camoufox:install # one-time: fetch the Camoufox browser binary
 npm run docs:serve      # http://127.0.0.1:8000 — MkDocs Material preview
 ```
 

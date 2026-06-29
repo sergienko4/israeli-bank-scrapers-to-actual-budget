@@ -6,11 +6,20 @@
 
 import type { FastifyInstance } from 'fastify';
 
+import { BANK_REQUIREMENTS, CONFIG_MANIFEST } from '../Config/ConfigManifest.js';
 import { ConfigValidator } from '../Config/ConfigValidator.js';
+import { DEFAULT_BANK_REGISTRY } from '../Scraper/BankRegistry.js';
 import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
 import { addBank, removeBank } from './ConfigMutations.js';
 import type PortalConfigStore from './PortalConfigStore.js';
+
+/** Static manifest payload (sections, supported bank ids, per-bank required keys), built once. */
+const MANIFEST_PAYLOAD = {
+  sections: CONFIG_MANIFEST,
+  banks: DEFAULT_BANK_REGISTRY.list().map(bank => bank.bankId),
+  bankRequirements: BANK_REQUIREMENTS,
+};
 
 /**
  * Registers the public auth-mode probe + guarded config API routes.
@@ -23,6 +32,25 @@ export default function registerApiRoutes(
   app: FastifyInstance, store: PortalConfigStore, authMode: string,
 ): { registered: true } {
   app.get('/auth/mode', (_req, reply) => reply.send({ authMode }));
+  app.get('/api/manifest', (_req, reply) => reply.send(MANIFEST_PAYLOAD));
+  registerConfigRoutes(app, store);
+  registerBankRoutes(app, store);
+  app.post('/api/validate', (req, reply) => {
+    const report = ConfigValidator.validateOffline(req.body as IImporterConfig);
+    return reply.type('application/json').send(report);
+  });
+  return { registered: true };
+}
+
+/**
+ * Registers the masked-read + validated-write config routes.
+ * @param app - Fastify instance.
+ * @param store - Shared config store.
+ * @returns Confirmation that the config routes are registered.
+ */
+function registerConfigRoutes(
+  app: FastifyInstance, store: PortalConfigStore,
+): { registered: true } {
   app.get('/api/config', (_req, reply) => {
     const masked = store.masked();
     return reply.send(masked);
@@ -31,11 +59,6 @@ export default function registerApiRoutes(
     const result = store.save(req.body as IImporterConfig);
     if (isFail(result)) return reply.code(400).send({ error: result.message });
     return reply.send({ ok: true });
-  });
-  registerBankRoutes(app, store);
-  app.post('/api/validate', (req, reply) => {
-    const report = ConfigValidator.validateOffline(req.body as IImporterConfig);
-    return reply.type('application/json').send(report);
   });
   return { registered: true };
 }

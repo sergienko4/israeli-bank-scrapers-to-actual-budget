@@ -52,9 +52,15 @@ export type {
   ShowTransactions,
   WebhookFormat,
 } from './Notifications.js';
+export {
+  MESSAGE_FORMATS,
+  SHOW_TRANSACTIONS_OPTIONS,
+  WEBHOOK_FORMATS,
+} from './Notifications.js';
 
 // Log output config (see ./Logging.ts)
 export type { ILogConfig, LogFormat } from './Logging.js';
+export { LOG_FORMATS } from './Logging.js';
 
 // Categorization + payee translation (see ./Categorization.ts)
 export type {
@@ -63,6 +69,7 @@ export type {
   IResolvedCategory,
   ITranslationRule,
 } from './Categorization.js';
+export { CATEGORIZATION_MODES } from './Categorization.js';
 
 // Root importer config + proxy + resilience (see ./Importer.ts)
 export type { IImporterConfig, IProxyConfig, IResilienceConfig } from './Importer.js';
@@ -70,6 +77,7 @@ export { DEFAULT_RESILIENCE_CONFIG } from './Importer.js';
 
 // Config web-portal settings (see ./Portal.ts)
 export type { IPortalConfig, IPortalGoogleConfig, PortalAuthMode } from './Portal.js';
+export { PORTAL_AUTH_MODES } from './Portal.js';
 
 // Telegram Bot API wire types + receipt (see ./Telegram.ts)
 export type {

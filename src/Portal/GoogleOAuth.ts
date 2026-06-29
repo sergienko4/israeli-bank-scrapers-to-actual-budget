@@ -25,16 +25,29 @@ export function buildAuthUrl(google: IPortalGoogleConfig, state: string): string
   return `${AUTH_BASE}?${params.toString()}`;
 }
 
+/** Claims this helper consumes from a Google id_token payload. */
+interface IIdTokenClaims {
+  email: string;
+  emailVerified: boolean;
+}
+
 /**
- * Decodes the email claim from a Google id_token JWT (payload is unverified
- * here; transport is HTTPS to Google, allow-list enforced separately).
+ * Decodes the email + email_verified claims from a Google id_token JWT. The
+ * signature is not re-checked here (the token came straight from Google over
+ * HTTPS); the caller additionally enforces the email allow-list.
  * @param idToken - Compact JWT returned by the token endpoint.
- * @returns The email claim, or empty string when absent.
+ * @returns The email claim and whether Google marked it verified.
  */
-function emailFromIdToken(idToken: string): string {
+function claimsFromIdToken(idToken: string): IIdTokenClaims {
   const part = idToken.split('.')[1] ?? '';
   const json = Buffer.from(part, 'base64url').toString();
-  return (JSON.parse(json) as { email?: string }).email ?? '';
+  const payload = JSON.parse(json) as {
+    email?: string;
+    email_verified?: boolean | string;
+  };
+  const verified = payload.email_verified;
+  const isVerified = verified === true || verified === 'true';
+  return { email: payload.email ?? '', emailVerified: isVerified };
 }
 
 /**
@@ -54,8 +67,9 @@ export async function exchangeCode(
     const res = await fetch(TOKEN_URL, { method: 'POST', body });
     if (!res.ok) return fail(`Google token exchange failed: ${String(res.status)}`);
     const data = (await res.json()) as { id_token?: string };
-    const email = emailFromIdToken(data.id_token ?? '');
-    return succeed(email);
+    const claims = claimsFromIdToken(data.id_token ?? '');
+    if (!claims.emailVerified) return fail('Google did not verify the account email');
+    return succeed(claims.email);
   } catch (error: unknown) {
     return fail(`Google OAuth error: ${errorMessage(error)}`);
   }

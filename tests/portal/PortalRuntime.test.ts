@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { isPortalEnabled, resolvePortalRuntime } from '../../src/Portal/PortalRuntime.js';
+import { isPortalEnabled, isSessionSecretWeak, resolvePortalRuntime } from '../../src/Portal/PortalRuntime.js';
 import { fakeImporterConfig } from '../helpers/factories.js';
 
 const ENV_KEYS = ['PORTAL_ENABLED', 'PORTAL_HOST', 'PORTAL_PORT'] as const;
@@ -33,7 +33,7 @@ describe('PortalRuntime', () => {
       expect(rt.host).toBe('127.0.0.1');
       expect(rt.port).toBe(8080);
       expect(rt.authMode).toBe('password');
-      expect(rt.sessionSecret).toBe('change-me-portal-secret');
+      expect(rt.sessionSecret).toBe('');
     });
 
     it('honours config values', () => {
@@ -50,6 +50,23 @@ describe('PortalRuntime', () => {
       const rt = resolvePortalRuntime(fakeImporterConfig({ portal: { enabled: true, host: '0.0.0.0', port: 9999 } }));
       expect(rt.host).toBe('10.0.0.5');
       expect(rt.port).toBe(3000);
+    });
+
+    it('falls back to the default port when the value is non-numeric', () => {
+      process.env.PORTAL_PORT = 'not-a-number';
+      expect(resolvePortalRuntime(fakeImporterConfig()).port).toBe(8080);
+    });
+  });
+
+  describe('isSessionSecretWeak', () => {
+    it('flags empty, too-short, and known placeholder secrets', () => {
+      expect(isSessionSecretWeak('')).toBe(true);
+      expect(isSessionSecretWeak('short')).toBe(true);
+      expect(isSessionSecretWeak('change-me-portal-secret')).toBe(true);
+    });
+
+    it('accepts a sufficiently long, non-placeholder secret', () => {
+      expect(isSessionSecretWeak('a-strong-session-secret')).toBe(false);
     });
   });
 });

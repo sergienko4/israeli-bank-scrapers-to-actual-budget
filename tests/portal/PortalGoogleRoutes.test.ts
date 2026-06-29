@@ -11,12 +11,24 @@ let app: FastifyInstance;
 let dir: string;
 
 /**
- * Builds an id_token JWT carrying the email claim for token-exchange mocks.
+ * Builds an id_token JWT carrying the email + verified claim for exchange mocks.
  * @param email - Email claim to embed.
- * @returns Compact JWT string.
+ * @returns Compact JWT string (email marked verified).
  */
 function jwtWithEmail(email: string): string {
-  return `h.${Buffer.from(JSON.stringify({ email })).toString('base64url')}.s`;
+  const claims = { email, email_verified: true };
+  return `h.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.s`;
+}
+
+/**
+ * Drives the consent route and extracts the issued OAuth state nonce.
+ * @returns The state value set in the portal_oauth_state cookie.
+ */
+async function startConsent(): Promise<string> {
+  const res = await app.inject({ method: 'GET', url: '/auth/google' });
+  const header = res.headers['set-cookie'];
+  const raw = Array.isArray(header) ? header[0] : String(header);
+  return raw.split(';')[0].split('=')[1];
 }
 
 describe('PortalGoogleRoutes', () => {
@@ -39,16 +51,32 @@ describe('PortalGoogleRoutes', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('returns 400 when the state does not match the cookie', async () => {
+    const res = await app.inject({
+      method: 'GET', url: '/auth/google/callback?code=ok&state=forged',
+      cookies: { portal_oauth_state: 'real' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('grants a session and redirects when the email is allowed', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({ id_token: jwtWithEmail('allowed@example.com') }) }));
-    const res = await app.inject({ method: 'GET', url: '/auth/google/callback?code=ok' });
+    const state = await startConsent();
+    const res = await app.inject({
+      method: 'GET', url: `/auth/google/callback?code=ok&state=${state}`,
+      cookies: { portal_oauth_state: state },
+    });
     expect(res.statusCode).toBe(302);
     expect(res.headers.location).toBe('/');
   });
 
   it('returns 403 when the email is not allow-listed', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({ id_token: jwtWithEmail('intruder@example.com') }) }));
-    const res = await app.inject({ method: 'GET', url: '/auth/google/callback?code=ok' });
+    const state = await startConsent();
+    const res = await app.inject({
+      method: 'GET', url: `/auth/google/callback?code=ok&state=${state}`,
+      cookies: { portal_oauth_state: state },
+    });
     expect(res.statusCode).toBe(403);
   });
 

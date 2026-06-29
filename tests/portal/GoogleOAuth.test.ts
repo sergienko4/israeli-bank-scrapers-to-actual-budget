@@ -5,12 +5,14 @@ import { buildAuthUrl, exchangeCode } from '../../src/Portal/GoogleOAuth.js';
 import { fakeGoogleConfig } from '../helpers/portalFactories.js';
 
 /**
- * Builds a fake Google id_token JWT carrying the given email claim.
+ * Builds a fake Google id_token JWT carrying the given email + verified flag.
  * @param email - Email claim to embed in the payload.
+ * @param verified - Whether Google marked the email verified (default true).
  * @returns Compact `header.payload.sig` token string.
  */
-function jwtWithEmail(email: string): string {
-  const payload = Buffer.from(JSON.stringify({ email })).toString('base64url');
+function jwtWithEmail(email: string, verified = true): string {
+  const claims = { email, email_verified: verified };
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
   return `header.${payload}.signature`;
 }
 
@@ -53,14 +55,14 @@ describe('GoogleOAuth', () => {
       if (isFail(result)) expect(result.message).toMatch(/400/);
     });
 
-    it('returns an empty email when the id_token has no email claim', async () => {
-      const payload = Buffer.from(JSON.stringify({ sub: '123' })).toString('base64url');
+    it('fails when the id_token email is not verified', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true, status: 200, json: () => Promise.resolve({ id_token: `h.${payload}.s` }),
+        ok: true, status: 200,
+        json: () => Promise.resolve({ id_token: jwtWithEmail('spoof@example.com', false) }),
       }));
       const result = await exchangeCode(fakeGoogleConfig(), 'auth-code');
-      expect(isSuccess(result)).toBe(true);
-      if (isSuccess(result)) expect(result.data).toBe('');
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/verif/i);
     });
 
     it('fails when fetch throws', async () => {

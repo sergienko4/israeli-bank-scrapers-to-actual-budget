@@ -5,10 +5,20 @@
  * config edit without ever writing plaintext credentials to config.json.
  */
 
-import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
+import type { IImporterConfig } from '../Types/Index.js';
+import SECRET_KEYS from './SecretKeys.js';
 
-/** Bank fields treated as secret and routed to credentials.json. */
-const SECRET_BANK_FIELDS = ['password', 'otpLongTermToken'] as const;
+/** Secret-bearing config key names, shared with the portal masker. */
+const SECRETS = new Set<string>(SECRET_KEYS);
+
+/** Mutable record alias for recursive traversal of config branches. */
+type Branch = Record<string, unknown>;
+
+/** A value separated into its non-secret and secret parts. */
+interface IPair {
+  settings: unknown;
+  secrets: unknown;
+}
 
 /** Settings + secrets halves produced by {@link splitSecrets}. */
 export interface ISplitConfig {
@@ -17,46 +27,63 @@ export interface ISplitConfig {
 }
 
 /**
- * Moves a bank's secret fields into the secrets bucket, leaving settings clean.
- * @param name - Bank id key.
- * @param bank - Bank config to scan for secret fields.
- * @param secrets - Mutable secrets bucket keyed by bank id.
- * @returns The bank config without its secret fields.
+ * Whether a value is a plain (non-array) object eligible for recursion.
+ * @param value - Candidate value.
+ * @returns True for plain objects, false for primitives, arrays, and null.
  */
-function extractBankSecrets(
-  name: string, bank: IBankConfig, secrets: Record<string, IBankConfig>,
-): IBankConfig {
-  const secretSet = new Set<string>(SECRET_BANK_FIELDS);
-  for (const field of SECRET_BANK_FIELDS) {
-    if (bank[field] === undefined) continue;
-    secrets[name] = { ...secrets[name], [field]: bank[field] };
-  }
-  const kept = Object.entries(bank).filter(([key]) => !secretSet.has(key));
-  return Object.fromEntries(kept);
+function isBranch(value: unknown): value is Branch {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
- * Splits banks into settings + secrets, preserving every non-secret field.
- * @param config - The merged importer config.
- * @returns Pair of cleaned bank settings and per-bank secret fields.
+ * Whether a leaf at a secret-named key is a real secret worth relocating.
+ * @param value - Leaf value found at a secret key.
+ * @returns True for non-empty string secrets (skips null/empty placeholders).
  */
-function splitBanks(config: IImporterConfig): {
-  banks: Record<string, IBankConfig>; secretBanks: Record<string, IBankConfig>;
-} {
-  const banks: Record<string, IBankConfig> = {};
-  const secretBanks: Record<string, IBankConfig> = {};
-  for (const [name, bank] of Object.entries(config.banks)) {
-    banks[name] = extractBankSecrets(name, bank, secretBanks);
+function isSecretLeaf(value: unknown): boolean {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Whether a split result is an emptied plain object that can be dropped.
+ * @param value - Settings side of a split branch.
+ * @returns True when value is a plain object with no remaining keys.
+ */
+function isEmptyBranch(value: unknown): boolean {
+  return isBranch(value) && Object.keys(value).length === 0;
+}
+
+/**
+ * Splits one object's keys into settings + secrets, recursing into branches.
+ * @param obj - Object to divide.
+ * @returns Pair of settings and secrets (secrets undefined when none found).
+ */
+function splitBranch(obj: Branch): IPair {
+  const settings: Branch = {};
+  const secrets: Branch = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (SECRETS.has(key) && isSecretLeaf(value)) { secrets[key] = value; continue; }
+    if (!isBranch(value)) { settings[key] = value; continue; }
+    const child = splitBranch(value);
+    if (!isEmptyBranch(child.settings)) settings[key] = child.settings;
+    if (child.secrets !== undefined) secrets[key] = child.secrets;
   }
-  return { banks, secretBanks };
+  return { settings, secrets: Object.keys(secrets).length ? secrets : undefined };
 }
 
 /**
  * Splits a merged config into non-secret settings and secret credentials.
+ *
+ * Walks the whole config tree and relocates every {@link SECRET_KEYS}-named
+ * string leaf into the secrets half, so config.json never receives a plaintext
+ * credential. The loader's deep-merge recombines the two halves on load.
  * @param config - The merged importer config to divide.
  * @returns ISplitConfig with settings (config.json) and secrets (credentials.json).
  */
 export default function splitSecrets(config: IImporterConfig): ISplitConfig {
-  const { banks, secretBanks } = splitBanks(config);
-  return { settings: { ...config, banks }, secrets: { banks: secretBanks } };
+  const { settings, secrets } = splitBranch(config as unknown as Branch);
+  return {
+    settings: settings as IImporterConfig,
+    secrets: secrets ?? {},
+  };
 }

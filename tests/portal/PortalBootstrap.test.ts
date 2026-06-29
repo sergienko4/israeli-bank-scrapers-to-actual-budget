@@ -27,14 +27,20 @@ describe('bootPortal', () => {
   });
 
   it('starts and returns true when enabled', async () => {
-    loadRaw.mockReturnValue(succeed(fakeImporterConfig({ portal: { enabled: true, port: 0 } })));
+    loadRaw.mockReturnValue(succeed(fakeImporterConfig({ portal: { enabled: true, port: 0, sessionSecret: 'a-strong-session-secret' } })));
     startPortal.mockResolvedValue({});
     expect(await bootPortal()).toBe(true);
     expect(startPortal).toHaveBeenCalledOnce();
   });
 
+  it('returns false when the session secret is weak', async () => {
+    loadRaw.mockReturnValue(succeed(fakeImporterConfig({ portal: { enabled: true, port: 0, sessionSecret: 'weak' } })));
+    expect(await bootPortal()).toBe(false);
+    expect(startPortal).not.toHaveBeenCalled();
+  });
+
   it('returns false when startup throws', async () => {
-    loadRaw.mockReturnValue(succeed(fakeImporterConfig({ portal: { enabled: true, port: 0 } })));
+    loadRaw.mockReturnValue(succeed(fakeImporterConfig({ portal: { enabled: true, port: 0, sessionSecret: 'a-strong-session-secret' } })));
     startPortal.mockRejectedValue(new Error('bind failed'));
     expect(await bootPortal()).toBe(false);
   });

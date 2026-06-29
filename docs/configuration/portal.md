@@ -3,6 +3,10 @@
 An optional, opt-in web portal to view/edit/add/remove your importer
 configuration from phone, tablet, or desktop. Disabled by default.
 
+## Manifest-driven UI
+
+The portal renders entirely from the project's [config manifest](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/getting-started/configuration.md#config-manifest-single-source-of-truth), served at `GET /api/manifest`. Every section, field, bank option, and enum you see is generated from that single source — so when a new config option is added to the manifest it appears in the portal automatically, with no UI changes and nothing to maintain in two places.
+
 ## Enable
 
 Add to `config.json` (or set `PORTAL_ENABLED=true`):

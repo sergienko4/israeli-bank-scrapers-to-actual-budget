@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import splitSecrets from '../../src/Config/SecretSplitter.js';
-import { fakeBankConfig, fakeImporterConfig } from '../helpers/factories.js';
+import { fakeBankConfig, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
 
 describe('SecretSplitter.splitSecrets', () => {
   it('moves bank password + otpLongTermToken into the secrets half', () => {
@@ -20,5 +20,38 @@ describe('SecretSplitter.splitSecrets', () => {
     const { settings, secrets } = splitSecrets(config);
     expect(settings.banks.discount.id).toBe('7');
     expect(secrets.banks?.discount).toBeUndefined();
+  });
+
+  it('routes portal, actual, and notification secrets out of settings', () => {
+    const config = fakeImporterConfig({
+      portal: {
+        enabled: true, passwordHash: 'hash', sessionSecret: 'session-secret-1234',
+        google: { clientId: 'id', clientSecret: 'cs', redirectUri: 'r', allowedEmails: [] },
+      },
+      notifications: { enabled: true, telegram: fakeTelegramConfig({ botToken: 'bt' }), webhook: { url: 'https://hook' } },
+    });
+    const { settings, secrets } = splitSecrets(config);
+    expect(settings.actual.init.password).toBeUndefined();
+    expect(secrets.actual?.init.password).toBeDefined();
+    expect(settings.portal?.passwordHash).toBeUndefined();
+    expect(settings.portal?.sessionSecret).toBeUndefined();
+    expect(settings.portal?.google?.clientSecret).toBeUndefined();
+    expect(secrets.portal).toMatchObject({ passwordHash: 'hash', sessionSecret: 'session-secret-1234' });
+    expect(secrets.portal?.google?.clientSecret).toBe('cs');
+    expect(settings.notifications?.telegram?.botToken).toBeUndefined();
+    expect(settings.notifications?.webhook?.url).toBeUndefined();
+    expect(secrets.notifications?.telegram?.botToken).toBe('bt');
+    expect(secrets.notifications?.webhook?.url).toBe('https://hook');
+  });
+
+  it('keeps non-secret portal + notification fields in settings', () => {
+    const config = fakeImporterConfig({
+      portal: { enabled: true, sessionSecret: 'session-secret-1234', google: { clientId: 'id', redirectUri: 'r', allowedEmails: ['a@b.c'] } },
+      notifications: { enabled: true, telegram: fakeTelegramConfig({ botToken: 'bt', chatId: '-42' }) },
+    });
+    const { settings } = splitSecrets(config);
+    expect(settings.portal?.enabled).toBe(true);
+    expect(settings.portal?.google?.clientId).toBe('id');
+    expect(settings.notifications?.telegram?.chatId).toBe('-42');
   });
 });

@@ -1,4 +1,6 @@
-import { rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -41,5 +43,14 @@ describe('PortalConfigStore', () => {
     const { store } = makeStore();
     const result = store.save(fakeImporterConfig({ banks: {} }));
     expect(isFail(result)).toBe(true);
+  });
+
+  it('refuses to save when the initial config failed to load', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'portal-bad-'));
+    dirs.push(dir);
+    const path = join(dir, 'config.json');
+    writeFileSync(path, '{ this is not valid json', 'utf8');
+    const store = new PortalConfigStore(path);
+    expect(isFail(store.save(fakeImporterConfig()))).toBe(true);
   });
 });

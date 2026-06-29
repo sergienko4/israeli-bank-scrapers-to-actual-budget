@@ -15,18 +15,36 @@ import { errorMessage } from '../Utils/Index.js';
 import { encryptConfig, getEncryptionPassword } from './ConfigEncryption.js';
 import splitSecrets from './SecretSplitter.js';
 
+/** A pending file write: destination path + serialized JSON payload. */
+interface IPendingWrite {
+  path: string;
+  json: string;
+}
+
 /**
- * Serialises content and writes it atomically, backing up any existing file.
- * @param path - Destination file path.
- * @param json - Pretty-printed JSON string to persist.
- * @returns Confirmation flag once the file is in place.
+ * Stages a payload to a sibling `.tmp` file, backing up any existing target.
+ * The real file is left untouched until {@link commitWrites} renames it.
+ * @param item - Destination path and JSON payload to stage.
+ * @returns The staged temp path awaiting an atomic rename into place.
  */
-function atomicWrite(path: string, json: string): { written: true } {
-  if (existsSync(path)) copyFileSync(path, `${path}.bak`);
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, json, { encoding: 'utf8', mode: 0o600 });
-  renameSync(tmp, path);
-  return { written: true };
+function stageWrite(item: IPendingWrite): string {
+  if (existsSync(item.path)) copyFileSync(item.path, `${item.path}.bak`);
+  const tmp = `${item.path}.tmp`;
+  writeFileSync(tmp, item.json, { encoding: 'utf8', mode: 0o600 });
+  return tmp;
+}
+
+/**
+ * Commits files as one unit: stages every `.tmp` first, then renames each into
+ * place. A serialization or staging failure therefore never leaves config.json
+ * secret-stripped while credentials.json is missing those same secrets.
+ * @param items - Files to persist together (secrets-superset file first).
+ * @returns Status object with the count of files committed.
+ */
+function commitWrites(items: readonly IPendingWrite[]): { committed: number } {
+  const staged = items.map((item) => ({ path: item.path, tmp: stageWrite(item) }));
+  for (const { path, tmp } of staged) renameSync(tmp, path);
+  return { committed: staged.length };
 }
 
 /**
@@ -60,12 +78,14 @@ export default class ConfigWriter {
   public write(config: IImporterConfig): Procedure<{ written: true }> {
     try {
       const { settings, secrets } = splitSecrets(config);
-      const settingsJson = JSON.stringify(settings, null, 2);
-      atomicWrite(this._configPath, settingsJson);
       const configDir = dirname(this._configPath);
       const credPath = join(configDir, 'credentials.json');
       const credJson = maybeEncrypt(secrets);
-      atomicWrite(credPath, credJson);
+      const settingsJson = JSON.stringify(settings, null, 2);
+      commitWrites([
+        { path: credPath, json: credJson },
+        { path: this._configPath, json: settingsJson },
+      ]);
       return succeed({ written: true as const });
     } catch (error: unknown) {
       return fail(`Failed to write config: ${errorMessage(error)}`);

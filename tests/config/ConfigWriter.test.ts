@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -49,5 +49,15 @@ describe('ConfigWriter.write', () => {
     process.env.CREDENTIALS_ENCRYPTION_PASSWORD = TEST_ENCRYPTION_KEY;
     new ConfigWriter(configPath).write(fakeImporterConfig());
     expect(JSON.parse(readFileSync(credPath, 'utf8')).encrypted).toBe(true);
+  });
+
+  it('leaves config.json intact when credentials.json cannot be written', () => {
+    const inlineSecret = 'inline-secret-pw';
+    writeFileSync(configPath, JSON.stringify({ banks: { discount: { id: '1', password: inlineSecret } } }));
+    mkdirSync(`${credPath}.tmp`);
+    const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ id: '1', password: inlineSecret }) } });
+    const result = new ConfigWriter(configPath).write(config);
+    expect(isSuccess(result)).toBe(false);
+    expect(readFileSync(configPath, 'utf8')).toContain(inlineSecret);
   });
 });

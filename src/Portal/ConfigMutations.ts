@@ -4,9 +4,9 @@
  * GET response so credentials never leave the box in plaintext.
  */
 
-import type { IBankConfig, IBankTarget, IImporterConfig } from '../Types/Index.js';
+import SECRET_KEYS from '../Config/SecretKeys.js';
+import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
 
-const SECRET_KEYS = ['password', 'otpLongTermToken', 'sessionSecret', 'passwordHash', 'clientSecret'];
 const MASK = '********';
 
 /**
@@ -62,18 +62,4 @@ export function removeBank(config: IImporterConfig, name: string): IImporterConf
   const kept = Object.entries(config.banks).filter(([key]) => key !== name);
   const banks = Object.fromEntries(kept);
   return { ...config, banks };
-}
-
-/**
- * Replaces a bank's targets array, returning a new config.
- * @param config - Current config.
- * @param name - Bank id key.
- * @param targets - Replacement targets list.
- * @returns New config with targets applied.
- */
-export function setTargets(
-  config: IImporterConfig, name: string, targets: IBankTarget[],
-): IImporterConfig {
-  const bank = config.banks[name];
-  return addBank(config, name, { ...bank, targets });
 }

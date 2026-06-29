@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
 import fstatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 
@@ -38,6 +39,7 @@ export async function buildPortal(
   rt: IPortalRuntime, store: PortalConfigStore,
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
   await app.register(cookie, { secret: rt.sessionSecret });
   await app.register(fstatic, { root: publicDir() });
   registerAuthRoutes(app, rt);

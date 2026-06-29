@@ -107,6 +107,12 @@ jobs:
             exit 1
           fi
 
+      - name: Ensure Camoufox browser for portal UI E2E
+        # The portal UI E2E (tests/e2e/portal-ui.e2e.test.ts) drives the real
+        # served SPA in Camoufox on the runner host. build-image already warms
+        # ~/.cache/camoufox, but make the dependency explicit + rate-limit-safe.
+        uses: ./.github/actions/docker/camoufox-cache
+
       - name: Verify pipeline results
         run: npm run test:e2e
         env:

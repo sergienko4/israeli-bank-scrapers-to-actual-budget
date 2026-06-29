@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IImporterConfig } from '../../src/Types/Index.js';
-import { addBank, maskSecrets, removeBank, restoreMasked, setTargets } from '../../src/Portal/ConfigMutations.js';
-import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
+import { addBank, maskSecrets, removeBank, restoreMasked } from '../../src/Portal/ConfigMutations.js';
+import { fakeBankConfig, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
 
 const MASK = '********';
 
@@ -19,6 +19,15 @@ describe('ConfigMutations', () => {
       expect(maskSecrets(42)).toBe(42);
       expect(maskSecrets({ password: '' })).toEqual({ password: '' });
     });
+
+    it('masks notification botToken and webhook url', () => {
+      const config = fakeImporterConfig({
+        notifications: { enabled: true, telegram: fakeTelegramConfig({ botToken: 'bt' }), webhook: { url: 'https://hook' } },
+      });
+      const masked = maskSecrets(config);
+      expect(masked.notifications?.telegram?.botToken).toBe(MASK);
+      expect(masked.notifications?.webhook?.url).toBe(MASK);
+    });
   });
 
   describe('restoreMasked', () => {
@@ -32,7 +41,7 @@ describe('ConfigMutations', () => {
     });
   });
 
-  describe('addBank / removeBank / setTargets', () => {
+  describe('addBank / removeBank', () => {
     const base: IImporterConfig = fakeImporterConfig({ banks: { discount: fakeBankConfig() } });
 
     it('adds a bank immutably', () => {
@@ -44,12 +53,6 @@ describe('ConfigMutations', () => {
     it('removes a bank', () => {
       const next = removeBank(addBank(base, 'leumi', fakeBankConfig()), 'discount');
       expect(Object.keys(next.banks)).toEqual(['leumi']);
-    });
-
-    it('replaces targets', () => {
-      const targets = [fakeBankTarget(), fakeBankTarget()];
-      const next = setTargets(base, 'discount', targets);
-      expect(next.banks.discount.targets).toHaveLength(2);
     });
   });
 });
