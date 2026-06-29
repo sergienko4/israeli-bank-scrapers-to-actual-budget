@@ -75,6 +75,7 @@ See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scra
 - 🏷️ Auto-categorization (`history` / `translate` Hebrew → English)
 - 🚨 Spending watch with payee filters and threshold alerts
 - 🔐 Encrypted config (AES-256-GCM + PBKDF2 derivation)
+- 🖥️ Optional web config portal (mobile + desktop; password/Google auth)
 - 📤 OTP auto-forward (Android MacroDroid + iPhone Shortcuts guides)
 - ⏰ Cron-based scheduling (Docker, VM, Synology, Oracle Cloud, Kubernetes)
 - 🦊 Camoufox stealth browser (Firefox + C++-level fingerprint masking)
@@ -243,6 +244,7 @@ Pre-commit runs a 21-gate hook (type-check, lint, build, audit, tests, Docker bu
 | Quick start | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/getting-started/quick-start/> |
 | Per-bank options | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/banks/> |
 | Configuration reference | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/getting-started/configuration/> |
+| Config portal | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/configuration/portal/> |
 | Telegram & webhooks | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/notifications/telegram/> |
 | Deployment guides | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/deployment/docker-compose/> |
 | Architecture | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/architecture/> |

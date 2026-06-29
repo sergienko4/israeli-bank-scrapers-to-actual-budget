@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Importer Config Portal</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <section id="login" class="login hidden">
+    <div class="card login-card">
+      <h1>🖥️ Config Portal</h1>
+      <p id="login-hint">Sign in to manage your importer configuration.</p>
+      <a id="google-btn" class="btn google hidden" href="/auth/google">Continue with Google</a>
+      <input id="pw" class="hidden" type="password" placeholder="Portal password" autocomplete="current-password" />
+      <button id="pw-btn" class="btn primary hidden">Sign in</button>
+      <p id="login-err" class="err"></p>
+    </div>
+  </section>
+
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <h2>⚙️ Config</h2>
+      <nav id="nav"></nav>
+      <button id="logout" class="btn ghost">Logout</button>
+    </aside>
+    <main>
+      <header class="topbar">
+        <span id="title">Banks</span>
+        <button id="save" class="btn primary">Save</button>
+      </header>
+      <div id="status" class="status"></div>
+      <div id="view" class="view"></div>
+    </main>
+    <nav id="bottomnav" class="bottomnav"></nav>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

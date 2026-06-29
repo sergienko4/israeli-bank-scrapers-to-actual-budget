@@ -8,6 +8,7 @@ import type { IBankConfig } from './Bank.js';
 import type { ICategorizationConfig } from './Categorization.js';
 import type { ILogConfig } from './Logging.js';
 import type { INotificationConfig, ISpendingWatchRule } from './Notifications.js';
+import type { IPortalConfig } from './Portal.js';
 
 /** Optional SOCKS5/HTTP proxy for Chromium scraping (useful in restricted networks). */
 export interface IProxyConfig {
@@ -24,6 +25,7 @@ export interface IImporterConfig {
   spendingWatch?: ISpendingWatchRule[];  // Spending watch rules (empty/missing = disabled)
   delayBetweenBanks?: number;  // Milliseconds to wait between bank imports (default: 0)
   proxy?: IProxyConfig;   // Optional proxy for Chromium (socks5/http)
+  portal?: IPortalConfig; // Optional config web portal (disabled by default)
 }
 
 export interface IResilienceConfig {
