@@ -49,9 +49,41 @@ Then start the portal entry point: `node dist/Portal.js`. Open
 
 ## Run in Docker
 
-`docker-compose.yml` ships a commented `portal` service. Uncomment it to run the
-portal alongside the importer, sharing the same config files (mounted
-**read-write** so saves persist):
+The portal turns the importer's Docker deployment into a web-managed one: instead
+of SSHing to the host and hand-editing JSON on the volume, you browse to the
+portal and edit config there. Edits propagate to the importer on its next
+scheduled run — no restart, no manual file surgery.
+
+### Mount a config DIRECTORY, not single files
+
+Both the importer and the portal read config from a **directory** mounted at
+`/app/config` (holding `config.json` and the optional `credentials.json`), not
+from individual single-file bind mounts. This is required, not cosmetic:
+
+- The portal saves **atomically** — it writes a temp file, then renames it over
+  the target. A rename swaps the file's *inode*.
+- With a **single-file** bind mount, the importer container is pinned to the
+  original inode, so it would **never see the portal's edits**, and the portal's
+  rename can fail with `EBUSY` (you cannot rename over a mountpoint).
+- With a **directory** mount, the rename happens normally inside the shared
+  directory and every reader re-resolves the path on its next run, so edits
+  propagate correctly.
+
+Point the importer at the directory and tell it where the file lives:
+
+```yaml
+importer:
+  environment:
+    - CONFIG_PATH=/app/config/config.json   # default is /app/config.json
+  volumes:
+    - ./config:/app/config:ro               # READ-ONLY — the importer never writes
+```
+
+### Least privilege: importer reads, portal writes
+
+Run the portal as a **separate service** that mounts the **same** directory
+**read-write**, while the importer keeps it **read-only**. Each container gets
+exactly the permission it needs — only the portal can ever modify your config:
 
 ```yaml
 portal:
@@ -63,20 +95,26 @@ portal:
     - "8080:8080"
   environment:
     - PORTAL_ENABLED=true
-    - PORTAL_HOST=0.0.0.0          # listen on all interfaces inside the container
+    - PORTAL_HOST=0.0.0.0                    # listen on all interfaces inside the container
+    - PORTAL_CONFIG_PATH=/app/config/config.json
     # - CREDENTIALS_ENCRYPTION_PASSWORD=your_encryption_password
   volumes:
-    - ./config.json:/app/config.json:rw
-    - ./credentials.json:/app/credentials.json:rw
+    - ./config:/app/config:rw                # READ-WRITE — the portal is the only writer
 ```
 
-- The importer mounts `config.json` read-only; the portal mounts it
-  **read-write** so it can save your edits. Point both at the same files.
+- `credentials.json` rides along inside the same directory — no separate mount.
 - `PORTAL_HOST=0.0.0.0` lets the container accept connections; the published
   port (`8080:8080`) is what you reach from your LAN at
   `http://<docker-host>:8080`.
 - Always require auth (set a password or Google) before exposing the port — the
   portal can edit secrets.
+
+> **Migrating from single-file mounts?** If you previously mounted
+> `./config.json:/app/config.json`, create a `./config/` directory, move
+> `config.json` (and `credentials.json`) into it, then switch to the directory
+> mounts above plus `CONFIG_PATH`/`PORTAL_CONFIG_PATH`. The code still defaults
+> to `/app/config.json`, so an existing single-file importer-only deployment
+> keeps working — but the portal's saves only propagate with a directory mount.
 
 ## Expose over HTTPS
 

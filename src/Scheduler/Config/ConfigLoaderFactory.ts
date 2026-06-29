@@ -7,6 +7,7 @@
  */
 
 import { ConfigLoader } from '../../Config/ConfigLoader.js';
+import { resolveConfigPath } from '../../Config/ConfigPath.js';
 import type { IImporterConfig, Procedure } from '../../Types/Index.js';
 
 /**
@@ -15,5 +16,5 @@ import type { IImporterConfig, Procedure } from '../../Types/Index.js';
  * @returns Procedure with the merged IImporterConfig, or failure if absent.
  */
 export default function loadRaw(): Procedure<IImporterConfig> {
-  return new ConfigLoader().loadRaw();
+  return new ConfigLoader(resolveConfigPath()).loadRaw();
 }

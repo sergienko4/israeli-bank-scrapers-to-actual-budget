@@ -3,6 +3,7 @@
  */
 
 import { ConfigLoader } from '../Config/ConfigLoader.js';
+import { resolveConfigPath } from '../Config/ConfigPath.js';
 import { ConfigurationError } from '../Errors/ErrorTypes.js';
 import { getLogger } from '../Logger/Index.js';
 import type { IImporterConfig } from '../Types/Index.js';
@@ -32,7 +33,7 @@ export default async function createReceiptApi(): Promise<IReceiptActualApi> {
  * @returns The validated config data.
  */
 function loadConfig(): IImporterConfig {
-  const loader = new ConfigLoader();
+  const loader = new ConfigLoader(resolveConfigPath());
   const result = loader.loadRaw();
   if (!result.success) throw new ConfigurationError(result.message);
   return result.data;

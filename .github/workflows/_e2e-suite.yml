@@ -107,13 +107,20 @@ jobs:
             exit 1
           fi
 
-      - name: Ensure Camoufox browser for portal UI E2E
-        # The portal UI E2E (tests/e2e/portal-ui.e2e.test.ts) drives the real
-        # served SPA in Camoufox on the runner host. build-image already warms
-        # ~/.cache/camoufox, but make the dependency explicit + rate-limit-safe.
+      - name: Ensure Camoufox browser for portal E2E
+        # Both portal E2Es drive the real served SPA in Camoufox on the runner
+        # host: portal-ui.e2e.test.ts (in-process server) and
+        # portal-docker.e2e.test.ts (server inside the israeli-bank-importer:e2e
+        # container, exercising the read-only/read-write config-directory mounts).
+        # build-image already warms ~/.cache/camoufox, but make the dependency
+        # explicit + rate-limit-safe.
         uses: ./.github/actions/docker/camoufox-cache
 
       - name: Verify pipeline results
+        # Runs the full E2E suite (config/vitest.config.e2e.ts), including the
+        # Dockerized portal round-trip (portal-docker.e2e.test.ts) which boots
+        # the portal inside the israeli-bank-importer:e2e image built above and
+        # proves a read-only mount blocks writes while a read-write mount persists.
         run: npm run test:e2e
         env:
           E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}

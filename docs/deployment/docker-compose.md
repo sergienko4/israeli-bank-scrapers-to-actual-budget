@@ -6,7 +6,7 @@ The recommended way to run the importer. The repo ships a `docker-compose.yml` t
 
 ```text
 docker-compose.yml          # Actual Budget + importer
-config.json.example         # template — copy to config.json
+config.json.example         # template — copy to config/config.json
 ```
 
 ## First-time setup
@@ -20,7 +20,7 @@ docker compose up -d actual-server
 #    - Create a budget
 #    - Settings → Show Advanced Settings → Sync ID → copy
 
-# 3. Edit config.json:
+# 3. Put config.json in ./config/ and edit it (config/config.json):
 #      "serverURL": "http://actual-server:5006"   ← internal service name
 #      "syncId": "<your Sync ID>"
 
@@ -60,11 +60,9 @@ Named volumes are used by default — data survives container recreation. To use
 
 ```yaml
 volumes:
-  - ./config.json:/app/config.json:ro
+  - ./config:/app/config:ro     # config DIRECTORY (config.json + optional credentials.json)
   - ./data:/app/data
   - ./cache:/app/cache
-  - ./chrome-data:/app/chrome-data
-  - ./logs:/app/logs
 ```
 
 ## Health

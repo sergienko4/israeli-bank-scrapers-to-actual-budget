@@ -10,6 +10,7 @@ import { getLogger } from '../Logger/Index.js';
 import type { IImporterConfig } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
 import { ConfigLoader } from './ConfigLoader.js';
+import { resolveConfigPath } from './ConfigPath.js';
 import { checkActualOffline } from './Validators/ActualOfflineChecker.js';
 import { checkBanksOffline } from './Validators/BanksOfflineChecker.js';
 import {
@@ -91,7 +92,7 @@ export class ConfigValidator {
  * @returns Exit code: 0 if all checks pass, 1 if any check fails.
  */
 export async function runValidateMode(): Promise<number> {
-  const loader = new ConfigLoader();
+  const loader = new ConfigLoader(resolveConfigPath());
   const rawResult = loader.loadRaw();
   if (isFail(rawResult)) {
     getLogger().info(`[FAIL] Cannot load config: ${rawResult.message}`);
