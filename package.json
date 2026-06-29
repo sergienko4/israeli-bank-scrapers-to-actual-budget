@@ -17,6 +17,7 @@
     "test:e2e:real": "vitest run --config config/vitest.config.e2e-real.ts",
     "test:e2e:portal": "vitest run --config config/vitest.config.e2e.ts -t \"Portal UI\"",
     "camoufox:install": "npx @hieutran094/camoufox-js fetch",
+    "smoke:google-config": "node scripts/google-oauth-smoke.mjs",
     "type-check": "bash config/tsc-strict-src.sh --noEmit",
     "type-check:e2e": "bash config/tsc-strict-src.sh --noEmit --project tsconfig.e2e.json",
     "type-check:test": "bash config/tsc-strict-src.sh --noEmit --project tsconfig.test.json",

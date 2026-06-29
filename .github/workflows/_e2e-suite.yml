@@ -17,6 +17,12 @@ on:
         required: false
       E2E_TELEGRAM_CHAT_ID:
         required: false
+      GOOGLE_CLIENT_ID:
+        required: false
+      GOOGLE_CLIENT_SECRET:
+        required: false
+      GOOGLE_REDIRECT_URI:
+        required: false
 
 # Reusable workflow runs locally only: checkout, build, docker build/run.
 # No SARIF upload, no commit/PR writes, no package pushes. Lock down to
@@ -33,6 +39,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/ci/setup
+
+      - name: Google OAuth config-validity smoke (secret-gated)
+        # Validates the real Google OAuth credentials without a browser: probes
+        # Google's token endpoint with an invalid code (invalid_grant = valid
+        # client_id/secret + registered redirect_uri). Self-skips (exit 0) when
+        # the GOOGLE_* secrets are absent, so forks and secret-less runs stay
+        # green. No client_id/secret is ever printed.
+        run: npm run smoke:google-config
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
 
       - name: Build TypeScript
         run: npm run build
