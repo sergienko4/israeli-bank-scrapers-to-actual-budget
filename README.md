@@ -228,12 +228,12 @@ npm run build
 npm test                # unit tests + coverage (config/vitest.config.ts)
 npm run test:unit       # explicit unit run
 npm run test:e2e:mock   # Dockerized mocked E2E (no real banks)
-npm run test:e2e:portal # real-browser portal UI E2E (Camoufox)
-npm run camoufox:install # one-time: fetch the Camoufox browser binary
+npm run camoufox:install # one-time: fetch the Camoufox browser binary (required before portal E2E)
+npm run test:e2e:portal # real-browser portal E2E suite (Camoufox)
 npm run docs:serve      # http://127.0.0.1:8000 — MkDocs Material preview
 ```
 
-Pre-commit runs an 18-gate hook (type-check ×3, audit, build, TypeDoc, unit tests, ESLint, Biome, Semgrep, markdownlint, config-structure, manifest, link-check, circular-dep, PII scan, ESLint canaries, coupling regression); the heavier Docker build, Trivy, and E2E gates run in CI. Plan PRs accordingly. The decoupling baseline is captured at `tests/coupling-baseline.json` and regenerated via `npm run coupling:report`; CI fails on any new file scoring >= 8 (see `scripts/coupling-scanner.cjs`).
+Pre-commit runs an 18-gate hook (type-check ×3, audit, build, TypeDoc, unit tests, ESLint, Biome, Semgrep, markdownlint, config-structure, manifest, link-check, circular-dep, PII scan, ESLint canaries, coupling regression); the heavier Docker image build, Trivy, mocked + Telegram E2E, and CodeQL gates run in CI only, not in the hook. Plan PRs accordingly. The decoupling baseline is captured at `tests/coupling-baseline.json` and regenerated via `npm run coupling:report`; CI fails on any new file scoring >= 8 (see `scripts/coupling-scanner.cjs`).
 
 </details>
 

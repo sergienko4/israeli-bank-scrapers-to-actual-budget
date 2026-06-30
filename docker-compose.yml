@@ -93,6 +93,13 @@ services:
   #   container_name: israeli-bank-portal
   #   restart: unless-stopped
   #   command: ["node", "dist/Portal.js"]
+  #   healthcheck:
+  #     # Override the image default (it probes dist/Scheduler.js); the portal runs Portal.js.
+  #     test: ["CMD", "sh", "-c", "ps aux | grep -q '[n]ode dist/Portal.js'"]
+  #     interval: 5m
+  #     timeout: 10s
+  #     start_period: 30s
+  #     retries: 3
   #   ports:
   #     - "8080:8080"                         # drop this when fronting with a TLS proxy
   #   environment:

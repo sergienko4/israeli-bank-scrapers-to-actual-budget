@@ -60,10 +60,12 @@ Named volumes are used by default — data survives container recreation. To use
 
 ```yaml
 volumes:
-  - ./config:/app/config:ro     # config DIRECTORY (config.json + optional credentials.json)
+  - ./config:/app/config:ro     # config DIRECTORY (config.json + optional credentials.json) — importer is read-only
   - ./data:/app/data
   - ./cache:/app/cache
 ```
+
+`:ro` is correct for the **importer** — it never writes its config. If you enable the optional config portal (see `docs/configuration/portal.md`), the portal service must mount the **same `./config` directory read-write** (`./config:/app/config:rw`): the portal saves atomically (write a temp file, then rename), which a read-only — or single-file — mount breaks. Always bind-mount the **directory**, never a single `config.json` file.
 
 ## Health
 
