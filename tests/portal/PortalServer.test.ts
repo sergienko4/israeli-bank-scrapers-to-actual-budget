@@ -254,6 +254,11 @@ describe('PortalServer routes (password mode)', () => {
     expect(Array.isArray(report.json())).toBe(true);
     const out = await app.inject({ method: 'POST', url: '/auth/logout', cookies: { portal_session: cookie } });
     expect(out.statusCode).toBe(200);
+    const setCookie = out.headers['set-cookie'];
+    const cleared = (Array.isArray(setCookie) ? setCookie : [String(setCookie)])
+      .find(entry => entry.startsWith('portal_session='));
+    expect(cleared).toBeDefined();
+    expect(cleared).toMatch(/max-age=0|expires=thu, 01 jan 1970/i);
   });
 
   it('starts and listens on an ephemeral port', async () => {

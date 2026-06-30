@@ -27,8 +27,10 @@ function jwtWithEmail(email: string): string {
 async function startConsent(): Promise<string> {
   const res = await app.inject({ method: 'GET', url: '/auth/google' });
   const header = res.headers['set-cookie'];
-  const raw = Array.isArray(header) ? header[0] : String(header);
-  return raw.split(';')[0].split('=')[1];
+  const cookies = Array.isArray(header) ? header : [String(header)];
+  const stateCookie = cookies.find(cookie => cookie.startsWith('portal_oauth_state='));
+  if (!stateCookie) throw new Error('portal_oauth_state cookie was not set');
+  return stateCookie.split(';')[0].slice('portal_oauth_state='.length);
 }
 
 describe('PortalGoogleRoutes', () => {

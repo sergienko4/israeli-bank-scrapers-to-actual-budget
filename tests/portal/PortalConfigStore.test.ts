@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import type { IImporterConfig, Procedure } from '../../src/Types/Index.js';
 import { isFail, isSuccess } from '../../src/Types/Index.js';
-import { fakeBankConfig, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
+import { fakeBankConfig, fakeBankTarget, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
 import { seedConfigDir } from '../helpers/portalFactories.js';
 
 const dirs: string[] = [];
@@ -70,7 +70,7 @@ describe('PortalConfigStore', () => {
 
   it('coerces a comma-separated target accounts string into an array on save', () => {
     const bank = fakeBankConfig({
-      targets: [{ actualAccountId: '11111111-1111-1111-1111-111111111111', reconcile: false, accounts: '123, 456' as unknown as string[] }],
+      targets: [fakeBankTarget({ accounts: '123, 456' as unknown as string[] })],
     });
     const { store } = makeStore(fakeImporterConfig({ banks: { discount: bank } }));
     const result = save(store, store.masked());

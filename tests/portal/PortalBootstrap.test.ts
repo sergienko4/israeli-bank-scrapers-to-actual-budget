@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fail, succeed } from '../../src/Types/Index.js';
 import { hashPassword } from '../../src/Portal/PortalPassword.js';
@@ -16,7 +16,11 @@ const { default: bootPortal } = await import('../../src/Portal/PortalBootstrap.j
 const PASSWORD_HASH = hashPassword('boot-test-pass');
 
 describe('bootPortal', () => {
-  afterEach(() => { vi.clearAllMocks(); });
+  // PORTAL_ENABLED is a full override that wins over config in both directions,
+  // so a value leaking from the host shell would flip the enabled/disabled
+  // cases. Neutralise it to '' (neither 'true' nor 'false') so config drives.
+  beforeEach(() => { vi.stubEnv('PORTAL_ENABLED', ''); });
+  afterEach(() => { vi.clearAllMocks(); vi.unstubAllEnvs(); });
 
   it('returns false when config cannot be loaded', async () => {
     loadRaw.mockReturnValue(fail('boom'));
