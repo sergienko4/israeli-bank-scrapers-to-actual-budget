@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { fakeBankTarget } from '../helpers/factories.js';
+
 /* ── Paths + index.html body (kept in sync with the real SPA shell) ── */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -207,6 +209,11 @@ function makeManifest(): ManifestDef {
  * Builds a config whose shape matches {@link makeManifest}, with stored values
  * for the general/watch/banks sections (extras/alerts/root are intentionally
  * absent to exercise the SPA's lazy create-on-render branches).
+ *
+ * The per-bank field sets are deliberately explicit (not factory-generated):
+ * hapoalim carries only username/password so the add-field control still lists
+ * the remaining manifest fields, while leumi carries every declared field so
+ * that control collapses to null. Target shapes come from the shared factory.
  * @returns A fresh config fixture.
  */
 function makeConfig(): Record<string, unknown> {
@@ -229,7 +236,7 @@ function makeConfig(): Record<string, unknown> {
       hapoalim: {
         username: 'avi-cohen',
         password: 'bank-pass-1',
-        targets: [{ actualAccountId: 'acct-1', accounts: 'all', reconcile: false }],
+        targets: [fakeBankTarget({ actualAccountId: 'acct-1', accounts: 'all', reconcile: false })],
       },
       leumi: { username: 'dana', userCode: 'D123', id: 'ID9', password: 'p', daysBack: 30, twoFactorAuth: true },
     },
