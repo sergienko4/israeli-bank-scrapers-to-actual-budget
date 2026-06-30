@@ -19,6 +19,13 @@ import globals from 'globals';
 
 export default [
   {
+    // Vendored, unmodified third-party assets (e.g. jedison) are served
+    // verbatim and must NOT be linted: they carry their own bundled
+    // eslint-disable directives and minified output that our SPA guardrails
+    // do not apply to.
+    ignores: ['src/Portal/Public/vendor/**'],
+  },
+  {
     files: ['src/Portal/Public/**/*.js', 'tests/eslint-canaries/portal/**/*.js'],
     languageOptions: {
       ecmaVersion: 2022,

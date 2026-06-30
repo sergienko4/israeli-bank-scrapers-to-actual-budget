@@ -10,5 +10,6 @@ docs/
 config/
 scripts/
 tasks/
+src/Portal/Public/vendor/
 *.json
 *.md

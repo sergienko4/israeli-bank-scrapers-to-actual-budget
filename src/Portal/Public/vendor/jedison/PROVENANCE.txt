@@ -1,0 +1,43 @@
+Vendored third-party asset — Jedison
+====================================
+
+Package name : jedison
+Version      : 1.13.0  (pinned exact in package.json devDependencies)
+License      : MIT  (see ./LICENSE — Copyright (c) 2025 German Bisurgi)
+Upstream repo: https://github.com/germanbisurgi/jedison
+Docs         : https://germanbisurgi.github.io/jedison-docs/
+
+Files copied (verbatim, unmodified) from the installed npm package:
+  jedison.js      <- node_modules/jedison/dist/esm/jedison.js      (ESM build, default export)
+  jedison.js.map  <- node_modules/jedison/dist/esm/jedison.js.map  (source map, dev only)
+  LICENSE         <- node_modules/jedison/LICENSE
+
+Why vendored
+------------
+The portal SPA (src/Portal/Public) is a no-build, browser ES-module app served
+statically by @fastify/static under a strict CSP with NO CDN access. Jedison is
+therefore copied here and imported by URL:
+
+  import Jedison from '/vendor/jedison/jedison.js'
+
+jedison is declared as a devDependency (not a runtime import from node_modules):
+it is shipped as this static asset, so it must not appear in the production
+dependency/audit graph.
+
+Self-containment / offline notes
+--------------------------------
+- jedison has ZERO runtime npm dependencies; this single ESM file is the entire
+  import graph (no relative sub-path imports — verified: the only module syntax
+  in the file is the trailing `export { index as default }`).
+- All third-party integrations (DOMPurify, Sortable, IMask, Choices, flatpickr,
+  ace, Quill, etc.) are OPTIONAL and feature-detected via `window.<Global> && ...`;
+  none are required by the default theme (`new Jedison.Theme()`), which renders
+  plain HTML inputs/selects with `jedi-`-prefixed CSS classes.
+- CSP-safe: the bundle contains NO `eval`, `new Function`, or inline event-handler
+  attributes. DOM is built with createElement/addEventListener. (`innerHTML` is
+  used only for trusted schema-supplied title/description text, optionally
+  sanitized when window.DOMPurify is present.)
+
+Do NOT edit these vendored files. To update, re-run:
+  npm install jedison@<version> --save-dev --save-exact
+and re-copy dist/esm/jedison.js + .map + LICENSE, then bump the version above.
