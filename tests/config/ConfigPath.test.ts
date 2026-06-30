@@ -21,4 +21,26 @@ describe('resolveConfigPath', () => {
     expect(resolveConfigPath()).toBe(DEFAULT_CONFIG_PATH);
     expect(DEFAULT_CONFIG_PATH).toBe('/app/config.json');
   });
+
+  it('treats an empty CONFIG_PATH as unset and uses the default', () => {
+    process.env.CONFIG_PATH = '';
+    expect(resolveConfigPath()).toBe(DEFAULT_CONFIG_PATH);
+  });
+
+  it('treats a whitespace-only CONFIG_PATH as unset and uses the default', () => {
+    process.env.CONFIG_PATH = '   ';
+    expect(resolveConfigPath()).toBe(DEFAULT_CONFIG_PATH);
+  });
+
+  it('trims surrounding whitespace from a set CONFIG_PATH', () => {
+    process.env.CONFIG_PATH = '  /srv/data/config.json  ';
+    expect(resolveConfigPath()).toBe('/srv/data/config.json');
+  });
+
+  it('keeps the unset default at /app/config.json for non-Docker bare-metal boot', () => {
+    // bootConfigAndLogger() feeds this value into ConfigLoader; it must match the
+    // loader's own no-arg default so local runs without CONFIG_PATH are not regressed.
+    delete process.env.CONFIG_PATH;
+    expect(resolveConfigPath()).toBe('/app/config.json');
+  });
 });

@@ -2,11 +2,14 @@
  * Writes the importer configuration back to disk for the config portal.
  *
  * Splits the merged config into settings (config.json) + secrets
- * (credentials.json), writes each atomically with a .bak backup, and
- * re-encrypts credentials.json when CREDENTIALS_ENCRYPTION_PASSWORD is set.
+ * (credentials.json) and writes each atomically via a temp file + rename,
+ * re-encrypting credentials.json when CREDENTIALS_ENCRYPTION_PASSWORD is set.
+ * No plaintext `.bak` copies are kept: the encrypted credentials.json is the
+ * only persisted secret artifact, so a previously-unencrypted file (or an
+ * inline-secret config.json) can never linger in plaintext beside it.
  */
 
-import { copyFileSync, existsSync, renameSync, writeFileSync } from 'node:fs';
+import { renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import type { IImporterConfig, Procedure } from '../Types/Index.js';
@@ -22,33 +25,53 @@ interface IPendingWrite {
 }
 
 /**
- * Stages a payload to a sibling `.tmp` file, backing up any existing target.
- * The real file is left untouched until {@link commitWrites} renames it.
+ * Stages a payload to a sibling `.tmp` file (owner-only mode) without touching
+ * the real target, which {@link commitWrites} renames into place atomically.
+ * No plaintext backup of the prior file is made, so an earlier unencrypted
+ * credentials.json or inline-secret config.json is never duplicated on disk.
  * @param item - Destination path and JSON payload to stage.
  * @returns The staged temp path awaiting an atomic rename into place.
  */
 function stageWrite(item: IPendingWrite): string {
-  if (existsSync(item.path)) copyFileSync(item.path, `${item.path}.bak`);
   const tmp = `${item.path}.tmp`;
   writeFileSync(tmp, item.json, { encoding: 'utf8', mode: 0o600 });
   return tmp;
 }
 
 /**
+ * Deletes staged temp files best-effort after a failed commit so no
+ * partially-written (and possibly secret-bearing) artifact is left behind.
+ * @param tmps - Temp paths to remove; already-renamed or missing paths are ignored.
+ * @returns Status object with the count of temp files removed.
+ */
+function cleanupTemps(tmps: readonly string[]): { removed: number } {
+  for (const tmp of tmps) rmSync(tmp, { force: true });
+  return { removed: tmps.length };
+}
+
+/**
  * Commits files as one unit: stages every `.tmp` first, then renames each into
  * place. Staging all temps before any rename means a serialization or staging
  * failure never leaves config.json secret-stripped while credentials.json is
- * missing those same secrets. Note the two renames are not a single atomic
- * transaction — a process crash in the narrow window between them can leave one
- * file updated and the other from the prior write; the importer re-validates on
- * its next run and surfaces any resulting mismatch rather than importing blindly.
+ * missing those same secrets; any staged temp is removed on failure. Note the
+ * two renames are not a single atomic transaction — a process crash in the
+ * narrow window between them can leave one file updated and the other from the
+ * prior write; the importer re-validates on its next run and surfaces any
+ * resulting mismatch rather than importing blindly.
  * @param items - Files to persist together (secrets-superset file first).
  * @returns Status object with the count of files committed.
  */
 function commitWrites(items: readonly IPendingWrite[]): { committed: number } {
-  const staged = items.map((item) => ({ path: item.path, tmp: stageWrite(item) }));
-  for (const { path, tmp } of staged) renameSync(tmp, path);
-  return { committed: staged.length };
+  const staged: { path: string; tmp: string }[] = [];
+  try {
+    for (const item of items) staged.push({ path: item.path, tmp: stageWrite(item) });
+    for (const { path, tmp } of staged) renameSync(tmp, path);
+    return { committed: staged.length };
+  } catch (error: unknown) {
+    const tmps = staged.map(entry => entry.tmp);
+    cleanupTemps(tmps);
+    throw error;
+  }
 }
 
 /**

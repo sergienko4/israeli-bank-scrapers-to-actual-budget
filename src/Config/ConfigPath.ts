@@ -14,9 +14,12 @@ export const DEFAULT_CONFIG_PATH = '/app/config.json';
 
 /**
  * Resolves the importer config.json path from the `CONFIG_PATH` env var,
- * falling back to the container default.
+ * falling back to the container default when the variable is unset, empty,
+ * or whitespace-only. A blank override is treated as absent so callers never
+ * receive an unusable empty path; a surrounding-whitespace value is trimmed.
  * @returns Absolute path to config.json (credentials.json is its sibling).
  */
 export function resolveConfigPath(): string {
-  return process.env.CONFIG_PATH ?? DEFAULT_CONFIG_PATH;
+  const configPath = process.env.CONFIG_PATH?.trim();
+  return configPath ? configPath : DEFAULT_CONFIG_PATH;
 }

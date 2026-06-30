@@ -47,9 +47,9 @@ function checkActualServerUrl(config: IImporterConfig): IValidationResult {
   const { serverURL } = config.actual.init;
   if (!serverURL) return fail('actual.serverURL', 'serverURL is missing');
   return (serverURL.startsWith('http://') || serverURL.startsWith('https://'))
-    ? pass('actual.serverURL', `Server URL format valid: ${serverURL}`)
+    ? pass('actual.serverURL', 'Server URL format valid')
     : fail('actual.serverURL',
-      `Invalid serverURL "${serverURL}" — must start with http:// or https://`);
+      'Invalid serverURL — must start with http:// or https://');
 }
 
 /**

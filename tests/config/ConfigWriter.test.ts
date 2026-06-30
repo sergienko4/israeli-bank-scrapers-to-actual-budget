@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -37,18 +37,35 @@ describe('ConfigWriter.write', () => {
     expect(creds.banks.discount.password).toBe('pw');
   });
 
-  it('creates a .bak when overwriting an existing config', () => {
+  it('does not leave a plaintext .bak backup when overwriting an existing config', () => {
     const writer = new ConfigWriter(configPath);
-    writer.write(fakeImporterConfig());
-    writer.write(fakeImporterConfig());
-    expect(existsSync(`${configPath}.bak`)).toBe(true);
-    expect(existsSync(`${credPath}.bak`)).toBe(true);
+    const first = writer.write(fakeImporterConfig({ banks: { discount: fakeBankConfig({ password: 'first-pw' }) } }));
+    const second = writer.write(fakeImporterConfig({ banks: { discount: fakeBankConfig({ password: 'second-pw' }) } }));
+    expect(isSuccess(first)).toBe(true);
+    expect(isSuccess(second)).toBe(true);
+    expect(existsSync(`${configPath}.bak`)).toBe(false);
+    expect(existsSync(`${credPath}.bak`)).toBe(false);
   });
 
   it('encrypts credentials.json when CREDENTIALS_ENCRYPTION_PASSWORD is set', () => {
     process.env.CREDENTIALS_ENCRYPTION_PASSWORD = TEST_ENCRYPTION_KEY;
     new ConfigWriter(configPath).write(fakeImporterConfig());
     expect(JSON.parse(readFileSync(credPath, 'utf8')).encrypted).toBe(true);
+  });
+
+  it('leaves no plaintext secret on disk after an encrypted save', () => {
+    process.env.CREDENTIALS_ENCRYPTION_PASSWORD = TEST_ENCRYPTION_KEY;
+    const inlineSecret = 'prior-plaintext-pw';
+    // Simulate a pre-encryption state: plaintext secrets already sitting on disk.
+    writeFileSync(configPath, JSON.stringify({ banks: { discount: { id: '1', password: inlineSecret } } }));
+    writeFileSync(credPath, JSON.stringify({ banks: { discount: { password: inlineSecret } } }));
+    const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ id: '1', password: inlineSecret }) } });
+    const result = new ConfigWriter(configPath).write(config);
+    expect(isSuccess(result)).toBe(true);
+    expect(JSON.parse(readFileSync(credPath, 'utf8')).encrypted).toBe(true);
+    const onDisk = readdirSync(dir).filter(name => statSync(join(dir, name)).isFile());
+    const leaking = onDisk.filter(name => readFileSync(join(dir, name), 'utf8').includes(inlineSecret));
+    expect(leaking).toEqual([]);
   });
 
   it('leaves config.json intact when credentials.json cannot be written', () => {
@@ -59,5 +76,6 @@ describe('ConfigWriter.write', () => {
     const result = new ConfigWriter(configPath).write(config);
     expect(isSuccess(result)).toBe(false);
     expect(readFileSync(configPath, 'utf8')).toContain(inlineSecret);
+    expect(existsSync(credPath)).toBe(false);
   });
 });

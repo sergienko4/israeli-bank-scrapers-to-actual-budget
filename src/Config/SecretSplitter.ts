@@ -61,22 +61,40 @@ function isEmptyBranch(value: unknown): boolean {
   return isBranch(value) && Object.keys(value).length === 0;
 }
 
+/** Mutable settings + secrets branches accumulated during one traversal. */
+interface IBranchAcc {
+  settings: Branch;
+  secrets: Branch;
+}
+
+/**
+ * Routes one config entry into the settings and/or secrets accumulators,
+ * recursing into nested branches. Mutates and returns {@link acc} so the parent
+ * traversal stays a single pass over the object's entries.
+ * @param entry - The [key, value] pair being classified.
+ * @param acc - Settings and secrets branches to populate.
+ * @returns The same accumulator, after routing this entry.
+ */
+function assignEntry(entry: [string, unknown], acc: IBranchAcc): IBranchAcc {
+  const [key, value] = entry;
+  if (SECRETS.has(key) && isSecretLeaf(value)) { acc.secrets[key] = value; return acc; }
+  if (!isBranch(value)) { acc.settings[key] = value; return acc; }
+  const child = splitBranch(value);
+  if (!isEmptyBranch(child.settings)) acc.settings[key] = child.settings;
+  if (child.secrets !== undefined) acc.secrets[key] = child.secrets;
+  return acc;
+}
+
 /**
  * Splits one object's keys into settings + secrets, recursing into branches.
  * @param obj - Object to divide.
  * @returns Pair of settings and secrets (secrets undefined when none found).
  */
 function splitBranch(obj: Branch): IPair {
-  const settings: Branch = {};
-  const secrets: Branch = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (SECRETS.has(key) && isSecretLeaf(value)) { secrets[key] = value; continue; }
-    if (!isBranch(value)) { settings[key] = value; continue; }
-    const child = splitBranch(value);
-    if (!isEmptyBranch(child.settings)) settings[key] = child.settings;
-    if (child.secrets !== undefined) secrets[key] = child.secrets;
-  }
-  return { settings, secrets: Object.keys(secrets).length ? secrets : undefined };
+  const acc: IBranchAcc = { settings: {}, secrets: {} };
+  for (const item of Object.entries(obj)) assignEntry(item, acc);
+  const secrets = Object.keys(acc.secrets).length ? acc.secrets : undefined;
+  return { settings: acc.settings, secrets };
 }
 
 /**

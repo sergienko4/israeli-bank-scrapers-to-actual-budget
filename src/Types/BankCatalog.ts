@@ -19,12 +19,19 @@ export interface IBankCatalogEntry {
 }
 
 /**
- * Freezes one catalog entry so the shared catalog stays immutable.
+ * Freezes one catalog entry so the shared catalog stays fully immutable.
+ *
+ * Both the entry object and its nested `aliases` array are frozen, so no
+ * consumer can mutate `BANK_CATALOG[n].aliases` and affect every other reader
+ * of this shared source of truth.
  * @param spec - All fields of the IBankCatalogEntry to freeze.
- * @returns Frozen IBankCatalogEntry ready for inclusion in the catalog.
+ * @returns Deeply-frozen IBankCatalogEntry ready for inclusion in the catalog.
  */
 function entry(spec: IBankCatalogEntry): IBankCatalogEntry {
-  return Object.freeze(spec);
+  return Object.freeze({
+    ...spec,
+    aliases: Object.freeze([...spec.aliases]),
+  });
 }
 
 /** Every supported bank, in registration order. */

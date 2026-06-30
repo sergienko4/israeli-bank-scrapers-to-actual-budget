@@ -179,6 +179,26 @@ describe('ConfigValidator', () => {
       const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'actual.serverURL', 'fail');
     });
+
+    it('does not echo embedded credentials in the serverURL pass message', () => {
+      const cfg = makeConfig();
+      cfg.actual.init.serverURL = 'http://admin:s3cr3t-pw@actual.example.com';
+      const results = ConfigValidator.validateOffline(cfg);
+      expectCheck(results, 'actual.serverURL', 'pass');
+      const msg = pass(results).find(r => r.check === 'actual.serverURL')?.message ?? '';
+      expect(msg).not.toContain('s3cr3t-pw');
+      expect(msg).not.toContain('actual.example.com');
+    });
+
+    it('does not echo embedded credentials in the serverURL fail message', () => {
+      const cfg = makeConfig();
+      cfg.actual.init.serverURL = 'ftp://admin:s3cr3t-pw@bad-host';
+      const results = ConfigValidator.validateOffline(cfg);
+      expectCheck(results, 'actual.serverURL', 'fail');
+      const msg = fail(results).find(r => r.check === 'actual.serverURL')?.message ?? '';
+      expect(msg).not.toContain('s3cr3t-pw');
+      expect(msg).not.toContain('bad-host');
+    });
   });
 
   // ─── Bank names ───
@@ -385,6 +405,32 @@ describe('ConfigValidator', () => {
       });
       const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'bank.discount.target[0]', 'fail');
+    });
+
+    it('fails when accounts contains a whitespace-only entry', () => {
+      const cfg = makeConfig({
+        banks: {
+          discount: {
+            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: ['123', '   '] }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expectCheck(results, 'bank.discount.target[0]', 'fail');
+    });
+
+    it('passes when accounts is a list of non-blank ids', () => {
+      const cfg = makeConfig({
+        banks: {
+          discount: {
+            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
+            targets: [{ actualAccountId: fakeUuid(), reconcile: true, accounts: ['123', '456'] }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expectCheck(results, 'bank.discount.target[0]', 'pass');
     });
 
     it('uses accountName as label in pass message when set', () => {

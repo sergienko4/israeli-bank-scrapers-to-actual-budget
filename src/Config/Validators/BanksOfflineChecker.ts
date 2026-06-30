@@ -139,14 +139,16 @@ function invalidTargetId(name: string, idx: number, id: string): IValidationResu
 
 /**
  * Reports whether an accounts filter is the 'all' sentinel or a non-empty list
- * of strings — the shape the importer's strict loader requires.
+ * of non-blank strings — the shape the importer's strict loader and the portal
+ * normalization path both require, so a hand-edited config cannot smuggle in a
+ * whitespace-only account id the writer would have stripped.
  * @param accounts - The target's accounts value.
- * @returns True when accounts is 'all' or a non-empty array of strings.
+ * @returns True when accounts is 'all' or a non-empty array of non-blank strings.
  */
 function isValidAccounts(accounts: unknown): boolean {
   if (accounts === 'all') return true;
   return Array.isArray(accounts) && accounts.length > 0
-    && accounts.every(account => typeof account === 'string');
+    && accounts.every(account => typeof account === 'string' && account.trim() !== '');
 }
 
 /**
