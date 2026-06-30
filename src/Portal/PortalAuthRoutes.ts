@@ -11,7 +11,7 @@ import { fail, isFail } from '../Types/Index.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { type IGrantArgs, registerGoogleRoutes } from './PortalGoogleRoutes.js';
 import { verifyPassword } from './PortalPassword.js';
-import { LOGIN_RATE_LIMIT, STATUS_RATE_LIMIT } from './PortalRateLimit.js';
+import { LOGIN_MAX, RATE_WINDOW, STATUS_MAX } from './PortalRateLimit.js';
 import { type IPortalRuntime, portalCookieOptions } from './PortalRuntime.js';
 import { createSession, type ISessionPayload, readSession } from './PortalSession.js';
 
@@ -101,17 +101,14 @@ function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
 }
 
 /**
- * Registers the password-login + logout + guard routes.
+ * Registers the password-login route with a strict per-route rate limit.
  * @param app - Fastify instance.
- * @param rt - Resolved portal runtime.
- * @returns Confirmation that the auth routes are registered.
+ * @param rt - Resolved portal runtime providing the configured password hash.
+ * @returns Confirmation that the login route is registered.
  */
-export function registerAuthRoutes(app: FastifyInstance, rt: IPortalRuntime): { registered: true } {
-  app.get('/auth/status', STATUS_RATE_LIMIT, (req, reply) => {
-    const status = authStatus(req, rt);
-    return reply.send(status);
-  });
-  app.post('/auth/login', LOGIN_RATE_LIMIT, (req, reply) => {
+function registerLoginRoute(app: FastifyInstance, rt: IPortalRuntime): { registered: true } {
+  const loginLimit = { config: { rateLimit: { max: LOGIN_MAX, timeWindow: RATE_WINDOW } } };
+  app.post('/auth/login', loginLimit, (req, reply) => {
     const { password } = req.body as { password?: string };
     const hash = rt.portal.passwordHash ?? '';
     if (!password || !hash || !verifyPassword(password, hash)) {
@@ -120,6 +117,22 @@ export function registerAuthRoutes(app: FastifyInstance, rt: IPortalRuntime): { 
     grant({ req, reply, rt, factor: { password: true } });
     return reply.send({ ok: true });
   });
+  return { registered: true };
+}
+
+/**
+ * Registers the auth-status + password-login + logout + guard routes.
+ * @param app - Fastify instance.
+ * @param rt - Resolved portal runtime.
+ * @returns Confirmation that the auth routes are registered.
+ */
+export function registerAuthRoutes(app: FastifyInstance, rt: IPortalRuntime): { registered: true } {
+  const statusLimit = { config: { rateLimit: { max: STATUS_MAX, timeWindow: RATE_WINDOW } } };
+  app.get('/auth/status', statusLimit, (req, reply) => {
+    const status = authStatus(req, rt);
+    return reply.send(status);
+  });
+  registerLoginRoute(app, rt);
   app.post('/auth/logout', (_req, reply) => reply.clearCookie(COOKIE, { path: '/' }).send({ ok: true }));
   registerGoogleRoutes(app, rt, grant);
   app.addHook('preHandler', (req, reply, done) => { if (guardApi(req, reply, rt)) done(); });

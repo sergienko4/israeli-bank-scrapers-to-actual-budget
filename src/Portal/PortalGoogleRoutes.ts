@@ -12,7 +12,7 @@ import type { IPortalGoogleConfig } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
 import { buildAuthUrl, exchangeCode } from './GoogleOAuth.js';
 import { isEmailAllowed } from './PortalAuthPolicy.js';
-import { OAUTH_RATE_LIMIT } from './PortalRateLimit.js';
+import { OAUTH_MAX, RATE_WINDOW } from './PortalRateLimit.js';
 import { type IPortalRuntime, portalCookieOptions } from './PortalRuntime.js';
 import type { ISessionPayload } from './PortalSession.js';
 
@@ -47,7 +47,8 @@ interface IGoogleRouteCtx {
 function registerConsentRoute(
   app: FastifyInstance, rt: IPortalRuntime, google: IPortalGoogleConfig,
 ): { registered: true } {
-  app.get('/auth/google', OAUTH_RATE_LIMIT, (_req, reply) => {
+  const oauthLimit = { config: { rateLimit: { max: OAUTH_MAX, timeWindow: RATE_WINDOW } } };
+  app.get('/auth/google', oauthLimit, (_req, reply) => {
     const state = randomBytes(16).toString('hex');
     const cookieOpts = portalCookieOptions(rt, STATE_MAX_AGE);
     reply.setCookie(STATE_COOKIE, state, cookieOpts);
@@ -65,7 +66,8 @@ function registerConsentRoute(
  */
 function registerCallbackRoute(app: FastifyInstance, ctx: IGoogleRouteCtx): { registered: true } {
   const { rt: runtime, grant, google } = ctx;
-  app.get('/auth/google/callback', OAUTH_RATE_LIMIT, async (req, reply) => {
+  const oauthLimit = { config: { rateLimit: { max: OAUTH_MAX, timeWindow: RATE_WINDOW } } };
+  app.get('/auth/google/callback', oauthLimit, async (req, reply) => {
     const { code, state } = req.query as { code?: string; state?: string };
     const expected = req.cookies[STATE_COOKIE];
     if (!code || !state || state !== expected) {
