@@ -29,6 +29,22 @@ interface IStartPortalContainerOptions {
 }
 
 /**
+ * Maps the container to the host user so it writes config files as that user.
+ * The portal persists `credentials.json` at mode 0600; running as the host uid
+ * lets the test process (same uid) both grant write access to the mounted dir
+ * and read those secrets back when asserting persistence. POSIX-only: Windows
+ * lacks getuid/getgid and Docker Desktop manages volume permissions itself, so
+ * the mapping is omitted there.
+ * @returns `['--user', 'uid:gid']` on POSIX hosts, otherwise an empty array.
+ */
+function hostUserArgs(): string[] {
+  const uid = process.getuid?.();
+  const gid = process.getgid?.();
+  if (uid === undefined || gid === undefined) return [];
+  return ['--user', `${String(uid)}:${String(gid)}`];
+}
+
+/**
  * Builds the Docker CLI arguments for a portal container.
  * @param opts - Host directory, host port, and mount permission mode.
  * @returns Argument array safe for {@link execFileSync}.
@@ -37,7 +53,7 @@ function dockerArgs(opts: IStartPortalContainerOptions): string[] {
   const portSpec = `127.0.0.1:${String(opts.hostPort)}:8080`;
   const volumeSpec = `${opts.dir}:/app/config:${opts.mode}`;
   return [
-    'run', '-d', '-p', portSpec, '-v', volumeSpec,
+    'run', '-d', ...hostUserArgs(), '-p', portSpec, '-v', volumeSpec,
     '-e', 'PORTAL_ENABLED=true', '-e', 'PORTAL_HOST=0.0.0.0',
     '-e', `PORTAL_CONFIG_PATH=${CONTAINER_CONFIG_PATH}`,
     '-e', `CONFIG_PATH=${CONTAINER_CONFIG_PATH}`,

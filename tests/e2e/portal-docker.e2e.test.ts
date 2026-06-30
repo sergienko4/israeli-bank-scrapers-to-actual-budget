@@ -92,8 +92,9 @@ function seedDir(): ISeededDir {
   const config = seedConfig();
   const json = JSON.stringify(config, null, 2);
   writeFileSync(configPath, json, 'utf8');
-  // mkdtemp creates the dir 0700; the container runs as the non-root `node`
-  // user, so widen to 0755/0644 so it can traverse and read the bind mount.
+  // The container runs as the host user (see hostUserArgs) so it owns this dir
+  // and writes split secrets the host can read back. Widen perms anyway so a
+  // Windows-local run (where --user is skipped) can still traverse and read it.
   chmodSync(dir, 0o755);
   chmodSync(configPath, 0o644);
   return { dir, configPath, credsPath };
@@ -257,7 +258,7 @@ async function attemptReadOnlySave(page: Page): Promise<void> {
   const daysBack = byPath(page, 'banks.discount.daysBack');
   await daysBack.fill('99');
   await page.click('#save');
-  await page.waitForSelector('#status:has-text("Failed to write config")', { timeout: 15_000 });
+  await page.waitForSelector('#status:has-text("Failed to persist configuration")', { timeout: 15_000 });
   const statusText = await page.locator('#status').textContent();
   expect(statusText).not.toMatch(/Saved/i);
 }
