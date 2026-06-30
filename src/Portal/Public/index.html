@@ -23,8 +23,8 @@
       </a>
       <label for="pw" class="visually-hidden">Portal password</label>
       <input id="pw" class="hidden" type="password" placeholder="Portal password" autocomplete="current-password" />
-      <button id="pw-btn" class="btn primary block hidden">Sign in</button>
-      <button id="reload-btn" class="btn ghost block hidden">Reload</button>
+      <button type="button" id="pw-btn" class="btn primary block hidden">Sign in</button>
+      <button type="button" id="reload-btn" class="btn ghost block hidden">Reload</button>
       <p id="login-err" class="err" role="alert"></p>
     </div>
     <p class="login-foot muted">🔒 Your credentials never leave this server.</p>
@@ -41,18 +41,18 @@
         </div>
       </div>
       <nav id="nav" aria-label="Configuration sections"></nav>
-      <button id="logout" class="btn ghost block">Log out</button>
+      <button type="button" id="logout" class="btn ghost block">Log out</button>
     </aside>
     <main id="main">
       <header class="topbar">
-        <button id="menu" class="icon-btn menu" aria-label="Open navigation" aria-expanded="false">
+        <button type="button" id="menu" class="icon-btn menu" aria-label="Open navigation" aria-expanded="false">
           <span></span><span></span><span></span>
         </button>
         <div class="topbar-title">
           <h1 id="title">Banks</h1>
           <span id="subtitle" class="subtitle"></span>
         </div>
-        <button id="save" class="btn primary">Save changes</button>
+        <button type="button" id="save" class="btn primary">Save changes</button>
       </header>
       <output id="status" class="status"></output>
       <div id="view" class="view"></div>

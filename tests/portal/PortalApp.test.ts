@@ -1117,3 +1117,29 @@ describe('PortalApp logout and reload wiring', () => {
     expect(reloadSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('PortalApp SPA shell module contract', () => {
+  // app.js boots with a top-level `await init()`, which is only valid when the
+  // browser loads it as an ES module. The ESLint guardrail keeps `await init()`
+  // in app.js, but a revert of this script tag to a classic `<script>` would
+  // make top-level await a browser syntax error while every lint/canary gate
+  // (which parse app.js as a module on its own) still pass. Lock the other half
+  // of the runtime contract here — SonarCloud S7785.
+  it('loads /app.js as an ES module', () => {
+    const shell = new DOMParser().parseFromString(readFileSync(INDEX_PATH, 'utf8'), 'text/html');
+    const appScript = shell.querySelector('script[src="/app.js"]');
+    expect(appScript).not.toBeNull();
+    expect(appScript?.getAttribute('type')).toBe('module');
+  });
+
+  // Every shell <button> sits outside a <form>, but an implicit `type="submit"`
+  // would still let a stray future <form> wrapper turn a click into a navigation
+  // that drops unsaved edits. Pin each control to type="button" so intent is
+  // explicit and click handlers stay the only behaviour.
+  it('declares every shell button as type="button"', () => {
+    const shell = new DOMParser().parseFromString(readFileSync(INDEX_PATH, 'utf8'), 'text/html');
+    const buttons = [...shell.querySelectorAll('button')];
+    expect(buttons.length).toBeGreaterThan(0);
+    expect(buttons.every(button => button.getAttribute('type') === 'button')).toBe(true);
+  });
+});
