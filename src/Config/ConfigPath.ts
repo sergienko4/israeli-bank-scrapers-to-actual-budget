@@ -21,5 +21,5 @@ export const DEFAULT_CONFIG_PATH = '/app/config.json';
  */
 export function resolveConfigPath(): string {
   const configPath = process.env.CONFIG_PATH?.trim();
-  return configPath ? configPath : DEFAULT_CONFIG_PATH;
+  return configPath || DEFAULT_CONFIG_PATH;
 }

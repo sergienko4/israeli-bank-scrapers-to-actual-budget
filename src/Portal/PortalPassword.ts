@@ -8,7 +8,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 const SALT_BYTES = 16;
 const KEY_BYTES = 64;
 const ENCODED_HASH = new RegExp(
-  `^scrypt\\$[0-9a-f]{${String(SALT_BYTES * 2)}}\\$[0-9a-f]{${String(KEY_BYTES * 2)}}$`,
+  String.raw`^scrypt\$[0-9a-f]{${String(SALT_BYTES * 2)}}\$[0-9a-f]{${String(KEY_BYTES * 2)}}$`,
 );
 
 /**

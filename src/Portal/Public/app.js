@@ -961,4 +961,7 @@ matchMedia('(min-width: 761px)').addEventListener('change', (e) => {
   if (e.matches) closeDrawer();
 });
 
-init();
+// Boot the SPA. Top-level await (this file is loaded as an ES module via
+// <script type="module">) so a failed initial auth/render rejects the module
+// rather than leaving an unhandled floating promise — SonarCloud S7785.
+await init();
