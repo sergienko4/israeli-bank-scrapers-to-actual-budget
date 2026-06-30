@@ -71,18 +71,19 @@ function normalizePort(value?: string | number): number {
 }
 
 /**
- * Resolves the portal bind host: a non-blank `PORTAL_HOST` env wins, else the
- * config host, else the loopback default. A blank or whitespace-only env value
- * is ignored so it can never override config with an empty string (which `??`
- * would otherwise accept as present).
+ * Resolves the portal bind host: a non-blank `PORTAL_HOST` env wins, else a
+ * non-blank config host, else the loopback default. Blank or whitespace-only
+ * values from either source are ignored so an empty string can never reach
+ * `app.listen()` and break startup (which `??` would otherwise accept).
  * @param envHost - Raw `PORTAL_HOST` value, possibly unset or blank.
- * @param configHost - Host from the portal config block, if any.
- * @returns The resolved bind host.
+ * @param configHost - Host from the portal config block, possibly blank.
+ * @returns The resolved, non-blank bind host.
  */
 function resolveHost(envHost?: string, configHost?: string): string {
-  const trimmed = envHost?.trim() ?? '';
-  if (trimmed !== '') return trimmed;
-  return configHost ?? DEFAULT_HOST;
+  const envTrimmed = envHost?.trim() ?? '';
+  if (envTrimmed !== '') return envTrimmed;
+  const configTrimmed = configHost?.trim() ?? '';
+  return configTrimmed !== '' ? configTrimmed : DEFAULT_HOST;
 }
 
 /**

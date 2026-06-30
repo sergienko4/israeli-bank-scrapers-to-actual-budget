@@ -44,7 +44,9 @@ function publicDir(): string {
 function isSpaShellRequest(req: FastifyRequest): boolean {
   const [path] = req.url.split('?');
   return req.method === 'GET'
+    && path !== '/api'
     && !path.startsWith('/api/')
+    && path !== '/auth'
     && !path.startsWith('/auth/')
     && !path.includes('.');
 }

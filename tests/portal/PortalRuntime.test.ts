@@ -60,6 +60,21 @@ describe('PortalRuntime', () => {
       expect(rt.port).toBe(9999);
     });
 
+    it('treats whitespace-only PORTAL_PORT env as unset so config wins', () => {
+      process.env.PORTAL_PORT = '   ';
+      const config = fakeImporterConfig({ portal: { enabled: true, host: '0.0.0.0', port: 9999 } });
+      const rt = resolvePortalRuntime(config);
+      expect(rt.host).toBe('0.0.0.0');
+      expect(rt.port).toBe(9999);
+    });
+
+    it('falls back to the loopback default when the config host is blank', () => {
+      const config = fakeImporterConfig({ portal: { enabled: true, host: '   ', port: 9999 } });
+      const rt = resolvePortalRuntime(config);
+      expect(rt.host).toBe('127.0.0.1');
+      expect(rt.port).toBe(9999);
+    });
+
     it('honours config values', () => {
       const config = fakeImporterConfig({
         portal: { enabled: true, host: '0.0.0.0', port: 9999, authMode: 'both', sessionSecret: 's3cret' },
