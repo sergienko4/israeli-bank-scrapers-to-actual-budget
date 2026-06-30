@@ -71,6 +71,35 @@ function normalizePort(value?: string | number): number {
 }
 
 /**
+ * Resolves the portal bind host: a non-blank `PORTAL_HOST` env wins, else the
+ * config host, else the loopback default. A blank or whitespace-only env value
+ * is ignored so it can never override config with an empty string (which `??`
+ * would otherwise accept as present).
+ * @param envHost - Raw `PORTAL_HOST` value, possibly unset or blank.
+ * @param configHost - Host from the portal config block, if any.
+ * @returns The resolved bind host.
+ */
+function resolveHost(envHost?: string, configHost?: string): string {
+  const trimmed = envHost?.trim() ?? '';
+  if (trimmed !== '') return trimmed;
+  return configHost ?? DEFAULT_HOST;
+}
+
+/**
+ * Resolves the portal listen port: a non-blank `PORTAL_PORT` env wins, else the
+ * config port, each normalized to a valid positive integer (else the default).
+ * A blank or whitespace-only env value is ignored so it can never mask a
+ * configured port by collapsing straight to the default.
+ * @param envPort - Raw `PORTAL_PORT` value, possibly unset or blank.
+ * @param configPort - Port from the portal config block, if any.
+ * @returns A valid listen port.
+ */
+function resolvePort(envPort?: string, configPort?: number): number {
+  const trimmed = envPort?.trim() ?? '';
+  return trimmed === '' ? normalizePort(configPort) : normalizePort(trimmed);
+}
+
+/**
  * Whether a session secret is too weak to safely sign portal cookies.
  *
  * The portal refuses to boot on a weak/missing secret because session cookies
@@ -130,8 +159,8 @@ function normalizeAuthMode(mode?: string): PortalAuthMode {
 export function resolvePortalRuntime(config: IImporterConfig): IPortalRuntime {
   const portal = config.portal ?? { enabled: false };
   return {
-    host: process.env.PORTAL_HOST ?? portal.host ?? DEFAULT_HOST,
-    port: normalizePort(process.env.PORTAL_PORT ?? portal.port),
+    host: resolveHost(process.env.PORTAL_HOST, portal.host),
+    port: resolvePort(process.env.PORTAL_PORT, portal.port),
     authMode: normalizeAuthMode(portal.authMode),
     sessionSecret: portal.sessionSecret ?? '',
     secureCookies: resolveSecureCookies(portal),

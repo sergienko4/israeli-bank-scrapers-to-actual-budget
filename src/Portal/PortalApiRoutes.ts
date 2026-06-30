@@ -7,7 +7,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { BANK_REQUIREMENTS, CONFIG_MANIFEST } from '../Config/ConfigManifest.js';
-import { ConfigValidator } from '../Config/ConfigValidator.js';
 import { getLogger } from '../Logger/Index.js';
 import { DEFAULT_BANK_REGISTRY } from '../Scraper/BankRegistry.js';
 import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
@@ -37,7 +36,7 @@ export default function registerApiRoutes(
   registerBankRoutes(app, store);
   app.post('/api/validate', (req, reply) => {
     try {
-      const report = ConfigValidator.validateOffline(req.body as IImporterConfig);
+      const report = store.validate(req.body as IImporterConfig);
       return reply.type('application/json').send(report);
     } catch (error: unknown) {
       return reply.code(400).send({ error: errorMessage(error) });

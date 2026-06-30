@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import type { IImporterConfig, Procedure } from '../../src/Types/Index.js';
 import { isFail, isSuccess } from '../../src/Types/Index.js';
-import { fakeBankConfig, fakeImporterConfig } from '../helpers/factories.js';
+import { fakeBankConfig, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
 import { seedConfigDir } from '../helpers/portalFactories.js';
 
 const dirs: string[] = [];
@@ -50,6 +50,16 @@ describe('PortalConfigStore', () => {
     const result = save(store, next);
     expect(isSuccess(result)).toBe(true);
     expect(store.raw().banks.discount.password).not.toBe('********');
+  });
+
+  it('validates restored secrets so a masked botToken is not false-flagged', () => {
+    const config = fakeImporterConfig({
+      notifications: { enabled: true, telegram: fakeTelegramConfig() },
+    });
+    const { store } = makeStore(config);
+    const report = store.validate(store.masked());
+    const tokenCheck = report.find(result => result.check === 'telegram.botToken');
+    expect(tokenCheck?.status).toBe('pass');
   });
 
   it('rejects an invalid config without persisting', () => {

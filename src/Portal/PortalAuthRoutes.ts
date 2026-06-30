@@ -109,7 +109,8 @@ function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
 function registerLoginRoute(app: FastifyInstance, rt: IPortalRuntime): { registered: true } {
   const loginLimit = { config: { rateLimit: { max: LOGIN_MAX, timeWindow: RATE_WINDOW } } };
   app.post('/auth/login', loginLimit, (req, reply) => {
-    const { password } = req.body as { password?: string };
+    const body = req.body as { password?: unknown } | null;
+    const password = typeof body?.password === 'string' ? body.password : '';
     const hash = rt.portal.passwordHash ?? '';
     if (!password || !hash || !verifyPassword(password, hash)) {
       return reply.code(401).send({ error: 'Invalid password' });

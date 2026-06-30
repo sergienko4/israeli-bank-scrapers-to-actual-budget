@@ -5,7 +5,7 @@
  */
 
 import { ConfigLoader } from '../Config/ConfigLoader.js';
-import { ConfigValidator } from '../Config/ConfigValidator.js';
+import { ConfigValidator, type IValidationResult } from '../Config/ConfigValidator.js';
 import ConfigWriter from '../Config/ConfigWriter.js';
 import ConfigurationError from '../Errors/ConfigurationError.js';
 import type { IImporterConfig, Procedure } from '../Types/Index.js';
@@ -106,6 +106,21 @@ export default class PortalConfigStore {
    */
   public raw(): IImporterConfig {
     return this._config;
+  }
+
+  /**
+   * Runs the offline validation report against a candidate config with its
+   * round-tripped masked secrets restored, so the portal's live "Validate"
+   * preview judges the real secret values it will persist — never the masked
+   * placeholders the browser echoes back — keeping the preview and the eventual
+   * save verdict in agreement (e.g. a masked Telegram botToken is not reported
+   * as a format error it does not actually have).
+   * @param next - Candidate config from the portal UI (secrets may be masked).
+   * @returns The per-check offline validation report.
+   */
+  public validate(next: IImporterConfig): IValidationResult[] {
+    const restored = restoreMasked(next, this._config);
+    return ConfigValidator.validateOffline(restored);
   }
 
   /**

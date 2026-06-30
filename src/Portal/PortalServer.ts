@@ -33,17 +33,20 @@ function publicDir(): string {
  * Whether an unmatched request should fall through to the SPA shell.
  *
  * Only GET navigations to non-API, non-auth, extension-less paths are genuine
- * front-end routes. Missing `/api/*` or `/auth/*` endpoints (and absent static
+ * front-end routes. The query string is ignored so a deep link such as
+ * `/report?ref=a.b` is still served the shell instead of being mistaken for a
+ * static asset. Missing `/api/*` or `/auth/*` endpoints (and absent static
  * assets) must surface as a JSON 404 rather than be masked by index.html, which
  * would hide routing bugs and break the API contract.
  * @param req - The unmatched incoming request.
  * @returns True when index.html should be served for this request.
  */
 function isSpaShellRequest(req: FastifyRequest): boolean {
+  const [path] = req.url.split('?');
   return req.method === 'GET'
-    && !req.url.startsWith('/api/')
-    && !req.url.startsWith('/auth/')
-    && !req.url.includes('.');
+    && !path.startsWith('/api/')
+    && !path.startsWith('/auth/')
+    && !path.includes('.');
 }
 
 /**

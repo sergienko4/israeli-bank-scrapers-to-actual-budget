@@ -47,6 +47,16 @@ describe('PortalServer routes (password mode)', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('rejects a non-string password with 401 instead of a 500', async () => {
+    const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { password: 123 } });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rejects a login with no JSON body with 401 instead of a 500', async () => {
+    const res = await app.inject({ method: 'POST', url: '/auth/login' });
+    expect(res.statusCode).toBe(401);
+  });
+
   it('rate-limits the login route once its per-route maximum is exceeded', async () => {
     const attempts = Array.from({ length: 15 }, () => (
       app.inject({ method: 'POST', url: '/auth/login', payload: { password: 'nope' } })
@@ -81,6 +91,12 @@ describe('PortalServer routes (password mode)', () => {
 
   it('still serves the SPA shell for an unknown non-API front-end route', async () => {
     const res = await app.inject({ method: 'GET', url: '/dashboard' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+  });
+
+  it('serves the SPA shell for a front-end route that carries a query string', async () => {
+    const res = await app.inject({ method: 'GET', url: '/report?ref=a.b' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
   });
