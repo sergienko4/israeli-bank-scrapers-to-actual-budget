@@ -123,18 +123,29 @@ function byPath(page: Page, path: string): Locator {
 }
 
 /**
- * Waits until the status bar reports a successful save.
+ * Waits until the status bar reports a fresh successful save.
+ *
+ * Matches the success class (set only on completion) so a stale "Saved" left by
+ * an earlier save in the same test cannot satisfy the wait prematurely.
  * @param page - Active page.
  */
 async function expectSaved(page: Page): Promise<void> {
-  await page.waitForSelector('#status:has-text("Saved")', { timeout: 15_000 });
+  await page.waitForSelector('#status.ok:has-text("Saved")', { timeout: 15_000 });
 }
 
 /**
- * Clicks the global Save button and waits for the success status.
+ * Clicks the global Save button and waits for a fresh success status.
+ *
+ * The status bar is reset before the click so the wait observes THIS save's
+ * completion, never a prior save's leftover "Saved" state (which would let the
+ * subsequent disk read race the new write).
  * @param page - Active page on the authed app.
  */
 async function save(page: Page): Promise<void> {
+  await page.locator('#status').evaluate((el) => {
+    el.textContent = '';
+    el.setAttribute('class', 'status');
+  });
   await page.click('#save');
   await expectSaved(page);
 }

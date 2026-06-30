@@ -64,31 +64,44 @@ async function openGoogleLogin(
 }
 
 /**
- * Tears down the browser context, both servers, the temp dir, and env seam.
- * @param server - The running portal.
- * @param context - The browser context to close.
- * @param fake - The fake-Google stub to close.
+ * Tears down whatever setup produced and clears the Google env seam.
+ *
+ * Each resource argument may be undefined when a test failed partway through
+ * setup; the guards keep teardown a no-op for resources that were never
+ * created, while the env seam is always cleared.
+ * @param server - The running portal, when one was started.
+ * @param context - The browser context to close, when one was opened.
+ * @param fake - The fake-Google stub to close, when one was started.
  */
 async function teardown(
-  server: IGooglePortalServer, context: BrowserContext, fake: IFakeGoogle,
+  server: IGooglePortalServer | undefined,
+  context: BrowserContext | undefined,
+  fake: IFakeGoogle | undefined,
 ): Promise<void> {
-  await context.close();
-  await server.app.close();
-  await fake.close();
-  rmSync(server.dir, { recursive: true, force: true });
+  if (context) await context.close();
+  if (server) {
+    await server.app.close();
+    rmSync(server.dir, { recursive: true, force: true });
+  }
+  if (fake) await fake.close();
   delete process.env.GOOGLE_AUTH_BASE;
   delete process.env.GOOGLE_TOKEN_URL;
 }
 
 describe('Portal Google OAuth E2E', () => {
   it('signs in through the full Google consent flow and opens the app', async () => {
-    const fake = await startFakeGoogle();
-    useFakeGoogle(fake);
-    const server = await startSeededGooglePortal(seedConfig(), {
-      allowedEmails: [GOOGLE_TEST_EMAIL],
-    });
-    const { context, page } = await openGoogleLogin(server);
+    let fake: IFakeGoogle | undefined;
+    let server: IGooglePortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      fake = await startFakeGoogle();
+      useFakeGoogle(fake);
+      server = await startSeededGooglePortal(seedConfig(), {
+        allowedEmails: [GOOGLE_TEST_EMAIL],
+      });
+      const opened = await openGoogleLogin(server);
+      context = opened.context;
+      const { page } = opened;
       expect(await page.locator('#pw').isHidden()).toBe(true);
 
       await page.click('#google-btn');
@@ -106,13 +119,18 @@ describe('Portal Google OAuth E2E', () => {
   }, 120_000);
 
   it('rejects a Google account that is not on the allow-list', async () => {
-    const fake = await startFakeGoogle();
-    useFakeGoogle(fake);
-    const server = await startSeededGooglePortal(seedConfig(), {
-      allowedEmails: ['someone-else@example.com'],
-    });
-    const { context, page } = await openGoogleLogin(server);
+    let fake: IFakeGoogle | undefined;
+    let server: IGooglePortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      fake = await startFakeGoogle();
+      useFakeGoogle(fake);
+      server = await startSeededGooglePortal(seedConfig(), {
+        allowedEmails: ['someone-else@example.com'],
+      });
+      const opened = await openGoogleLogin(server);
+      context = opened.context;
+      const { page } = opened;
       await page.click('#google-btn');
       await page.waitForSelector('#approve', { state: 'visible' });
 

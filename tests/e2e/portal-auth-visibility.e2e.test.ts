@@ -90,21 +90,32 @@ async function gotoSection(page: Page, key: string): Promise<void> {
 }
 
 /**
- * Tears down the context + server and removes the seeded temp dir.
- * @param server - The running portal server.
- * @param context - The browser context to close.
+ * Tears down whatever setup produced, removing the seeded temp dir.
+ *
+ * Both arguments may be undefined when a test failed partway through setup; the
+ * guards keep teardown a no-op for resources that were never created.
+ * @param server - The running portal server, when one was started.
+ * @param context - The browser context to close, when one was opened.
  */
-async function teardown(server: IPortalServer, context: BrowserContext): Promise<void> {
-  await context.close();
-  await server.app.close();
-  rmSync(server.dir, { recursive: true, force: true });
+async function teardown(
+  server: IPortalServer | undefined, context: BrowserContext | undefined,
+): Promise<void> {
+  if (context) await context.close();
+  if (server) {
+    await server.app.close();
+    rmSync(server.dir, { recursive: true, force: true });
+  }
 }
 
 describe('Portal auth-affordance E2E', () => {
   it('logs out cleanly (200) and clears the session', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openLogin(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openLogin(server);
+      context = opened.context;
+      const { page } = opened;
       await loginOk(page);
 
       const [res] = await Promise.all([
@@ -124,9 +135,13 @@ describe('Portal auth-affordance E2E', () => {
   }, 120_000);
 
   it('hides the Google OAuth group until auth mode is Google', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openLogin(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openLogin(server);
+      context = opened.context;
+      const { page } = opened;
       await loginOk(page);
       await gotoSection(page, 'portal');
       await byPath(page, 'portal.authMode').waitFor({ state: 'visible' });

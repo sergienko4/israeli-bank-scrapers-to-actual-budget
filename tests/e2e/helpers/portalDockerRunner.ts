@@ -24,6 +24,7 @@ export interface IPortalContainer {
 /** Options for starting the Dockerized portal. */
 interface IStartPortalContainerOptions {
   dir: string;
+  /** Retained for the existing caller; Docker now assigns the actual host port. */
   hostPort: number;
   mode: 'ro' | 'rw';
 }
@@ -46,11 +47,16 @@ function hostUserArgs(): string[] {
 
 /**
  * Builds the Docker CLI arguments for a portal container.
- * @param opts - Host directory, host port, and mount permission mode.
+ *
+ * Publishes the container's portal port to an OS-assigned host port
+ * ({@code 127.0.0.1::8080}) instead of a pre-chosen one, so concurrent E2E runs
+ * cannot collide on a probed-then-released port; {@link startPortalContainer}
+ * reads the bound port back afterwards.
+ * @param opts - Host directory and mount permission mode.
  * @returns Argument array safe for {@link execFileSync}.
  */
 function dockerArgs(opts: IStartPortalContainerOptions): string[] {
-  const portSpec = `127.0.0.1:${String(opts.hostPort)}:8080`;
+  const portSpec = '127.0.0.1::8080';
   const volumeSpec = `${opts.dir}:/app/config:${opts.mode}`;
   return [
     'run', '-d', ...hostUserArgs(), '-p', portSpec, '-v', volumeSpec,
@@ -70,8 +76,29 @@ function dockerEnv(): NodeJS.ProcessEnv {
 }
 
 /**
- * Starts the config portal in the E2E Docker image.
- * @param opts - Host directory, host port, and mount permission mode.
+ * Reads the host port Docker bound to the container's portal port.
+ *
+ * Pairs with the {@code 127.0.0.1::8080} publish in {@link dockerArgs}: Docker
+ * owns the allocation and the binding is read back here, eliminating the
+ * probe-then-reuse race that made parallel runs flaky. Throws when Docker
+ * reports no usable mapping.
+ * @param id - Docker container id.
+ * @returns The bound host port number.
+ */
+function mappedHostPort(id: string): number {
+  const env = dockerEnv();
+  const output = execFileSync('docker', ['port', id, '8080/tcp'], { encoding: 'utf8', env });
+  const mapping = output.split('\n').map((line) => line.trim()).find((line) => line.length > 0);
+  const port = Number(mapping?.split(':').pop());
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new Error(`No host port mapped for the portal container: ${output.trim()}`);
+  }
+  return port;
+}
+
+/**
+ * Starts the config portal in the E2E Docker image on a Docker-assigned port.
+ * @param opts - Host directory and mount permission mode.
  * @returns Container id and host base URL for browser/API access.
  */
 export function startPortalContainer(opts: IStartPortalContainerOptions): IPortalContainer {
@@ -79,7 +106,8 @@ export function startPortalContainer(opts: IStartPortalContainerOptions): IPorta
   const env = dockerEnv();
   const output = execFileSync('docker', args, { encoding: 'utf8', env });
   const id = output.trim();
-  const baseUrl = `http://127.0.0.1:${String(opts.hostPort)}`;
+  const hostPort = mappedHostPort(id);
+  const baseUrl = `http://127.0.0.1:${String(hostPort)}`;
   return { id, baseUrl };
 }
 
@@ -176,7 +204,11 @@ export function stopPortalContainer(id: string): void {
 }
 
 /**
- * Allocates an unused host TCP port for an isolated portal container.
+ * Allocates an unused host TCP port by briefly binding port 0.
+ *
+ * Retained for the existing caller; {@link startPortalContainer} no longer
+ * binds to this number (Docker assigns the host port), so the prior
+ * probe-then-reuse race no longer affects container startup.
  * @returns A port number that was free when probed.
  */
 export async function freeHostPort(): Promise<number> {

@@ -62,14 +62,22 @@ async function openMobileApp(
 }
 
 /**
- * Tears down a context + server and removes the seeded temp dir.
- * @param server - The running portal server.
- * @param context - The browser context to close.
+ * Tears down whatever setup produced and removes the seeded temp dir.
+ *
+ * Both arguments may be undefined when a test failed partway through setup
+ * (e.g. {@link openMobileApp} timing out); the guards keep teardown a no-op for
+ * resources that were never created.
+ * @param server - The running portal server, when one was started.
+ * @param context - The browser context to close, when one was opened.
  */
-async function teardown(server: IPortalServer, context: BrowserContext): Promise<void> {
-  await context.close();
-  await server.app.close();
-  rmSync(server.dir, { recursive: true, force: true });
+async function teardown(
+  server: IPortalServer | undefined, context: BrowserContext | undefined,
+): Promise<void> {
+  if (context) await context.close();
+  if (server) {
+    await server.app.close();
+    rmSync(server.dir, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -83,9 +91,13 @@ async function navOpen(page: Page): Promise<boolean> {
 
 describe('Portal mobile E2E', () => {
   it('navigates via the drawer, edits, saves, and persists on a phone', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openMobileApp(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openMobileApp(server);
+      context = opened.context;
+      const { page } = opened;
       // On a phone the hamburger is shown and the drawer starts closed.
       expect(await page.locator('#menu').isVisible()).toBe(true);
       expect(await navOpen(page)).toBe(false);
@@ -117,9 +129,13 @@ describe('Portal mobile E2E', () => {
   }, 120_000);
 
   it('closes the drawer when the scrim is tapped', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openMobileApp(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openMobileApp(server);
+      context = opened.context;
+      const { page } = opened;
       await page.click('#menu');
       expect(await navOpen(page)).toBe(true);
       // Tap the scrim to the right of the drawer (the drawer itself sits on top).
