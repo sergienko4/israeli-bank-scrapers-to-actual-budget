@@ -7,11 +7,20 @@
 #   docker compose pull && docker compose up -d        Update to latest
 #
 # First-time setup:
-#   1. docker compose up -d actual-server
-#   2. Open http://localhost:5006, create account + budget
-#   3. Copy the budget's Group ID from Settings → Advanced into config.json syncId
-#   4. Set serverURL in config.json to: http://actual-server:5006
-#   5. docker compose up -d importer
+#   1. mkdir config   (settings live in ./config/ — a directory, see note below)
+#   2. Put your config.json (and optional credentials.json) inside ./config/
+#   3. docker compose up -d actual-server
+#   4. Open http://localhost:5006, create account + budget
+#   5. Copy the budget's Group ID from Settings → Advanced into config/config.json syncId
+#   6. Set serverURL in config/config.json to: http://actual-server:5006
+#   7. docker compose up -d importer
+#
+# Why a ./config DIRECTORY (not ./config.json file)? The optional portal saves
+# edits atomically (write temp file, then rename) which swaps the file's inode.
+# A single-file bind mount pins a container to the original inode, so the
+# importer would never see portal edits (and the portal's rename can fail with
+# EBUSY). Mounting the directory makes edits propagate and lets the importer be
+# read-only while the portal is read-write. See docs/configuration/portal.md.
 
 services:
   actual-server:
@@ -44,6 +53,8 @@ services:
           cpus: '1.5'
     environment:
       - TZ=Asia/Jerusalem
+      # Config lives in the mounted ./config directory (see top-of-file note).
+      - CONFIG_PATH=/app/config/config.json
       # Cron schedule: run every 8 hours (at midnight, 8am, 4pm)
       # Remove SCHEDULE to run once and exit
       - SCHEDULE=0 */8 * * *
@@ -52,17 +63,56 @@ services:
       # Dry run: scrape banks and preview transactions without importing (see README → Config Validation)
       # - DRY_RUN=true
     volumes:
-      - ./config.json:/app/config.json:ro             # Settings (serverURL: http://actual-server:5006)
-      # - ./credentials.json:/app/credentials.json:ro  # Secrets (optional, see README)
+      # Config DIRECTORY, READ-ONLY (least privilege — the importer never writes).
+      # Holds config.json + the optional credentials.json. A directory mount (not
+      # a single-file mount) is required so the portal's atomic saves propagate
+      # here; see the top-of-file note and docs/configuration/portal.md.
+      - ./config:/app/config:ro
       - importer-data:/app/data             # Actual Budget sync data
       - importer-cache:/app/cache           # App cache
-      # - importer-chrome:/app/chrome-data  # Legacy (unused with Camoufox v7.9.0+)
     healthcheck:
       test: ["CMD", "ps", "aux"]
       interval: 5m
       timeout: 10s
       start_period: 30s
       retries: 3
+
+  # Optional config portal — browser UI to view/edit/add/remove config.
+  # Enable by uncommenting. It shares the SAME ./config directory as the importer
+  # but mounts it READ-WRITE — least privilege: importer ro (reader), portal rw
+  # (the only writer). Saves propagate to the importer on its next run. Set a
+  # password:
+  #   node scripts/hash-portal-password.js "yourpass"  → credentials.json portal.passwordHash
+  # The portal also REQUIRES a strong portal.sessionSecret (>=16 chars) in
+  # credentials.json or it refuses to boot (cookie-forgery guard). Generate one:
+  #   node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+  # To expose over HTTPS, front it with a TLS reverse proxy (Caddy/Traefik) and
+  # set PORTAL_SECURE_COOKIES=true. See docs/configuration/portal.md.
+  # portal:
+  #   image: sergienko4/israeli-bank-importer:latest
+  #   container_name: israeli-bank-portal
+  #   restart: unless-stopped
+  #   command: ["node", "dist/Portal.js"]
+  #   healthcheck:
+  #     # Override the image default (it probes dist/Scheduler.js); the portal runs Portal.js.
+  #     test: ["CMD", "sh", "-c", "ps aux | grep -q '[n]ode dist/Portal.js'"]
+  #     interval: 5m
+  #     timeout: 10s
+  #     start_period: 30s
+  #     retries: 3
+  #   ports:
+  #     - "8080:8080"                         # drop this when fronting with a TLS proxy
+  #   environment:
+  #     - PORTAL_ENABLED=true
+  #     - PORTAL_HOST=0.0.0.0
+  #     - PORTAL_CONFIG_PATH=/app/config/config.json
+  #     # - PORTAL_PORT=8080
+  #     # - PORTAL_SECURE_COOKIES=true        # only behind HTTPS (TLS reverse proxy)
+  #     # - CREDENTIALS_ENCRYPTION_PASSWORD=your_encryption_password
+  #   volumes:
+  #     # Same ./config DIRECTORY as the importer, but READ-WRITE (the portal is
+  #     # the only writer). credentials.json rides along inside the directory.
+  #     - ./config:/app/config:rw
 
 # Named volumes for data persistence (survive container recreation)
 volumes:

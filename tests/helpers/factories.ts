@@ -91,7 +91,7 @@ export function fakeBankConfig(overrides?: Partial<IBankConfig>): IBankConfig {
     id: faker.string.numeric(9),
     password: faker.internet.password({ length: 12 }),
     num: faker.string.alphanumeric(6).toUpperCase(),
-    daysBack: faker.number.int({ min: 7, max: 90 }),
+    daysBack: faker.number.int({ min: 7, max: 30 }),
     targets: [fakeBankTarget()],
     ...overrides,
   };

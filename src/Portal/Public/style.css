@@ -1,0 +1,360 @@
+/* Config Portal — design system. Dark-first with a light theme, a manifest-driven
+   app shell (persistent sidebar on desktop, slide-in drawer on mobile), and
+   accessible, tactile form controls. All structural hooks (ids, data-* and the
+   classes app.js sets) are preserved for the E2E suite. */
+
+:root {
+  --bg: #0b0f17;
+  --bg-grad: radial-gradient(1200px 600px at 80% -10%, #16203400, #0b0f17 60%);
+  --surface: #131a26;
+  --surface-2: #18212f;
+  --elevated: #1b2433;
+  --fg: #e7edf6;
+  --muted: #93a0b4;
+  --faint: #6c788d;
+  --line: #283346;
+  --line-soft: #ffffff12;
+  --accent: #5b8cff;
+  --accent-strong: #3b6ef0;
+  --accent-soft: #5b8cff1f;
+  --accent-ring: #5b8cff4d;
+  --accent-text: #5b8cff;
+  --ok: #34d399;
+  --ok-soft: #34d39920;
+  --danger: #f87171;
+  --danger-soft: #f8717118;
+  --warn: #fbbf24;
+  --switch-off: #2c3850;
+  --r-sm: 9px; --r: 12px; --r-lg: 16px; --r-xl: 22px;
+  --tap: 46px;
+  --shadow-1: 0 1px 2px #00000040, 0 1px 3px #00000030;
+  --shadow-2: 0 8px 24px #00000050, 0 2px 6px #00000040;
+  --shadow-3: 0 24px 60px #00000070;
+  --sidebar-w: 252px;
+  --content-w: 860px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #eef2f8;
+    --bg-grad: radial-gradient(1200px 600px at 80% -10%, #dbe6ff66, #eef2f8 60%);
+    --surface: #ffffff;
+    --surface-2: #f6f8fc;
+    --elevated: #ffffff;
+    --fg: #0f1b2d;
+    --muted: #5a6b85;
+    --faint: #8593a8;
+    --line: #e1e8f2;
+    --line-soft: #eef2f8;
+    --accent: #3b6ef0;
+    --accent-strong: #2a57d6;
+    --accent-soft: #3b6ef014;
+    --accent-ring: #3b6ef03d;
+    --accent-text: #2a57d6;
+    /* Darken semantic text colors for AA contrast (>=4.5:1) on light surfaces;
+       the dark-theme values above are too light against near-white backgrounds. */
+    --ok: #047857;
+    --danger: #c81e1e;
+    --switch-off: #cdd7e6;
+    --shadow-1: 0 1px 2px #1b2b4814, 0 1px 3px #1b2b4810;
+    --shadow-2: 0 10px 30px #1b2b4818, 0 2px 8px #1b2b4810;
+    --shadow-3: 0 24px 60px #1b2b482e;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); }
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  background-image: var(--bg-grad);
+  background-attachment: fixed;
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+.block { width: 100%; }
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--tap); padding: 0 18px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface-2); color: var(--fg);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background .15s, border-color .15s, transform .05s, box-shadow .15s;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+.btn.primary {
+  background: linear-gradient(180deg, #3565e0, #2a57d6);
+  color: #fff; border: 0; box-shadow: var(--shadow-1);
+}
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.primary:disabled { filter: grayscale(.4) brightness(.8); cursor: progress; }
+.btn.google { background: #fff; color: #1f2330; border: 1px solid #dadce0; text-decoration: none; }
+.btn.google:hover { background: #f7f8fa; }
+.g-mark {
+  font-weight: 700; color: #4285f4; font-family: Georgia, serif;
+}
+.btn.ghost { background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); border-color: var(--line); }
+.btn.danger { background: transparent; color: var(--danger); border-color: var(--danger-soft); }
+.btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+.btn.sm { min-height: 38px; padding: 0 12px; font-size: 13px; }
+
+.icon-btn {
+  display: none; width: var(--tap); height: var(--tap); border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface-2); cursor: pointer;
+  flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+}
+.icon-btn.menu span { width: 18px; height: 2px; border-radius: 2px; background: var(--fg); }
+
+/* ---------- login ---------- */
+
+.login { min-height: 100dvh; display: grid; place-items: center; align-content: center; gap: 16px; padding: 24px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark {
+  width: 46px; height: 46px; display: grid; place-items: center; font-size: 24px;
+  border-radius: 14px; background: var(--accent-soft); border: 1px solid var(--line);
+}
+.brand-text h1 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+.brand-sub { color: var(--muted); font-size: 13px; }
+.brand-text .brand-sub { margin: 2px 0 0; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 22px; box-shadow: var(--shadow-2);
+}
+.login-card { width: 100%; max-width: 380px; display: grid; gap: 14px; }
+.login-card .brand { margin-bottom: 2px; }
+.login-card input {
+  min-height: var(--tap); padding: 0 14px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface-2); color: var(--fg); font-size: 16px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.login-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.login-foot { font-size: 12px; }
+.err { color: var(--danger); min-height: 20px; font-size: 13px; }
+
+/* ---------- app shell ---------- */
+
+.app { display: grid; grid-template-columns: var(--sidebar-w) 1fr; min-height: 100dvh; }
+
+.sidebar {
+  background: var(--surface); border-right: 1px solid var(--line);
+  padding: 16px 14px; display: flex; flex-direction: column; gap: 6px;
+  position: sticky; top: 0; height: 100dvh;
+}
+.sidebar-brand { padding: 8px 10px 14px; border-bottom: 1px solid var(--line-soft); margin-bottom: 8px; }
+.sidebar-brand .brand-mark { width: 38px; height: 38px; font-size: 20px; border-radius: 11px; }
+.sidebar-brand strong { font-size: 15px; display: block; letter-spacing: -.01em; }
+.sidebar-brand .brand-sub { font-size: 12px; }
+
+#nav { display: flex; flex-direction: column; gap: 3px; flex: 1; overflow-y: auto; }
+#nav button {
+  position: relative; text-align: left; justify-content: flex-start;
+  min-height: 44px; padding: 0 12px 0 16px; border: 0; border-radius: var(--r);
+  background: transparent; color: var(--muted); font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: background .12s, color .12s; width: 100%;
+}
+#nav button:hover { background: var(--surface-2); color: var(--fg); }
+#nav button.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+#nav button.active::before {
+  content: ''; position: absolute; left: 5px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 18px; border-radius: 2px; background: var(--accent);
+}
+#logout { margin-top: 8px; }
+
+main { min-width: 0; display: flex; flex-direction: column; }
+
+.topbar {
+  display: flex; align-items: center; gap: 14px; padding: 14px 22px;
+  border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(160%) blur(10px);
+}
+.topbar-title { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+#title { font-size: 19px; font-weight: 700; letter-spacing: -.02em; margin: 0; }
+.subtitle { color: var(--muted); font-size: 12.5px; }
+.subtitle:empty { display: none; }
+
+.status { padding: 10px 22px 0; min-height: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.status:empty { display: none; }
+.status.ok { color: var(--ok); }
+.status.err { color: var(--danger); }
+/* <output> defaults to display:inline; force block so these status regions match
+   the <div>/<p> they replaced. Target via .status (not #status) so the lower
+   specificity lets .status:empty keep winning and still hide the empty status. */
+output.status, output#login-hint { display: block; }
+
+.view { padding: 20px 22px 40px; width: 100%; max-width: var(--content-w); margin: 0 auto; }
+
+.scrim {
+  display: none; position: fixed; inset: 0; z-index: 30;
+  background: #00000066; opacity: 0; transition: opacity .2s;
+}
+
+/* ---------- doc link ---------- */
+
+.doc {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px;
+  padding: 5px 12px; border-radius: 999px; background: var(--accent-soft);
+  color: var(--accent-text); font-size: 12.5px; font-weight: 600; text-decoration: none;
+  border: 1px solid var(--line);
+}
+.doc:hover { border-color: var(--accent); }
+
+/* ---------- form rows ---------- */
+
+.row { display: grid; gap: 6px; margin-bottom: 16px; }
+.row label { color: var(--fg); font-size: 13px; font-weight: 600; }
+.row input, .row select {
+  min-height: var(--tap); padding: 0 13px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface-2); color: var(--fg);
+  font-size: 15px; transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.row input:hover, .row select:hover { border-color: var(--faint); }
+.row input:focus, .row select:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.row input::placeholder { color: var(--faint); }
+.help { color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+select {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2393a0b4' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px;
+}
+
+/* boolean → toggle switch (built from the plain checkbox app.js renders) */
+.row input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; min-height: 0; justify-self: start;
+  width: 46px; height: 27px; border-radius: 999px; background: var(--switch-off);
+  border: 1px solid var(--line); position: relative; cursor: pointer; padding: 0;
+  transition: background .15s, border-color .15s;
+}
+.row input[type="checkbox"]::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 21px; height: 21px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0000004d; transition: transform .16s;
+}
+.row input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.row input[type="checkbox"]:checked::after { transform: translateX(19px); }
+.row input[type="checkbox"]:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* ---------- secret ---------- */
+
+.secret { display: flex; gap: 8px; align-items: center; }
+.secret input {
+  flex: 1; min-height: var(--tap); padding: 0 13px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface-2); color: var(--fg);
+  font-size: 15px; letter-spacing: .04em; transition: border-color .15s, box-shadow .15s;
+}
+.secret input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.secret .reveal { min-height: var(--tap); width: var(--tap); padding: 0; font-size: 17px; }
+
+/* ---------- groups ---------- */
+
+.group {
+  border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px 4px;
+  margin: 0 0 16px; background: var(--surface-2); display: grid; gap: 2px;
+}
+.group legend {
+  color: var(--accent-text); font-size: 12px; font-weight: 700; padding: 0 8px;
+  text-transform: uppercase; letter-spacing: .05em;
+}
+
+/* ---------- cards (banks + list sections) ---------- */
+
+.view > .card { margin-bottom: 18px; }
+.panel { display: grid; gap: 2px; }
+.panel > .row:last-child, .panel > .group:last-child { margin-bottom: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.card-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 9px; letter-spacing: -.01em; }
+.card-head h3::before {
+  content: ''; width: 9px; height: 9px; border-radius: 3px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+}
+
+/* ---------- list fields ---------- */
+
+.list { display: grid; gap: 8px; margin-bottom: 16px; }
+.list-head { color: var(--fg); font-size: 13px; font-weight: 600; }
+.list-item { display: flex; gap: 8px; align-items: start; }
+.list-item .row { flex: 1; margin-bottom: 0; }
+.list-item input {
+  flex: 1; min-height: var(--tap); padding: 0 13px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface-2); color: var(--fg); font-size: 15px;
+}
+.list-item input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* ---------- targets ---------- */
+
+.targets { border-top: 1px dashed var(--line); margin-top: 16px; padding-top: 16px; }
+.targets h4 {
+  margin: 0 0 12px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
+}
+.target { background: var(--surface-2); border: 1px solid var(--line); padding: 16px; margin-bottom: 12px; }
+
+/* ---------- add controls ---------- */
+
+.add-bank, .add-field { display: flex; gap: 8px; margin-top: 10px; }
+.add-bank select, .add-field select {
+  flex: 1; min-height: var(--tap); padding: 0 13px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface-2); color: var(--fg); font-size: 14px;
+}
+.add-field select { border-style: dashed; }
+
+/* ---------- toasts ---------- */
+
+.toast-wrap {
+  position: fixed; z-index: 60; right: 20px; bottom: 20px;
+  display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+}
+.toast {
+  min-width: 220px; max-width: min(360px, calc(100vw - 40px)); padding: 13px 16px; border-radius: var(--r);
+  background: var(--elevated); border: 1px solid var(--line); box-shadow: var(--shadow-3);
+  font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px;
+  transform: translateY(8px); opacity: 0; transition: transform .22s, opacity .22s;
+  border-left: 4px solid var(--accent);
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.ok { border-left-color: var(--ok); }
+.toast.err { border-left-color: var(--danger); }
+
+/* ---------- mobile (drawer nav replaces the bottom bar) ---------- */
+
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .icon-btn { display: flex; }
+  .sidebar {
+    position: fixed; left: 0; top: 0; z-index: 40; width: min(82vw, 300px); height: 100dvh;
+    transform: translateX(-100%); transition: transform .24s ease, visibility 0s linear .24s;
+    box-shadow: var(--shadow-3); visibility: hidden;
+  }
+  .app.nav-open .sidebar { transform: translateX(0); visibility: visible; transition: transform .24s ease; }
+  .app.nav-open .scrim { display: block; opacity: 1; }
+  .view { padding: 16px 16px 48px; }
+  .topbar { padding: 12px 14px; }
+  #title { font-size: 17px; }
+  .btn { font-size: 13px; }
+  #save { padding: 0 14px; }
+  .card { padding: 16px; }
+  .card-head { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

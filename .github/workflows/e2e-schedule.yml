@@ -18,9 +18,13 @@ jobs:
     uses: ./.github/workflows/_e2e-suite.yml
     with:
       timeout-minutes: 15
-    # Explicit mapping (not `inherit`): the reusable workflow only needs
-    # these two; passing every caller secret would expose unrelated tokens
-    # (SONAR/RELEASE/GIST/Docker creds) inside the E2E job for no reason.
+    # Explicit mapping (not `inherit`): pass only what the E2E job needs —
+    # the Telegram E2E creds plus the secret-gated Google config smoke. Passing
+    # every caller secret would expose unrelated tokens (SONAR/RELEASE/GIST/
+    # Docker creds) inside the E2E job for no reason.
     secrets:
       E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
       E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}

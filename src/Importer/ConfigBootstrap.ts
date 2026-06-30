@@ -15,6 +15,7 @@
  */
 
 import { ConfigLoader } from '../Config/ConfigLoader.js';
+import { resolveConfigPath } from '../Config/ConfigPath.js';
 import { createLogger, deriveLogFormat } from '../Logger/Index.js';
 import type { IImporterConfig, IProcedureSuccess } from '../Types/Index.js';
 import { isFail, succeed } from '../Types/Index.js';
@@ -45,7 +46,7 @@ export async function handleValidateMode(): Promise<IProcedureSuccess<{ status: 
  * @returns The fully-loaded IImporterConfig.
  */
 export function bootConfigAndLogger(): IImporterConfig {
-  const loader = new ConfigLoader();
+  const loader = new ConfigLoader(resolveConfigPath());
   const result = loader.load();
   if (isFail(result)) {
     process.stderr.write(`Fatal: ${result.message}\n`);

@@ -632,4 +632,21 @@ describe('ConfigLoader', () => {
     });
   });
 
+  describe('validateBootable', () => {
+    it('accepts a fully valid config (boot-gate parity seam)', () => {
+      const result = ConfigLoader.validateBootable(makeValidConfig());
+      expect(isSuccess(result)).toBe(true);
+    });
+
+    it('rejects a malformed serverURL the importer would refuse to boot on', () => {
+      const config = makeValidConfig({ init: { serverURL: 'httptypo://localhost:5006' } });
+      expect(isFail(ConfigLoader.validateBootable(config))).toBe(true);
+    });
+
+    it('rejects a bank missing a required credential', () => {
+      const config = makeValidConfig({ banks: { discount: { num: 'AB12CD', targets: [DEFAULT_TARGET] } as IBankConfig } });
+      expect(isFail(ConfigLoader.validateBootable(config))).toBe(true);
+    });
+  });
+
 });

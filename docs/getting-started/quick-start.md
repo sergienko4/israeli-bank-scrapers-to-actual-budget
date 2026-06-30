@@ -7,15 +7,17 @@ Install [Actual Budget](https://actualbudget.org/) first (a server URL, a budget
 - **Windows / macOS:** [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - **Linux:** `sudo apt install docker.io docker-compose`
 
-## 2. Create `config.json`
+## 2. Create your config
+
+You don't need to clone the repo — the importer runs from a published Docker image. Create a deploy folder with a `config/` subdirectory (the bundled compose mounts `./config` as a directory, so `config.json` lives **inside** it):
 
 ```bash
-git clone https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget.git
-cd israeli-bank-scrapers-to-actual-budget
-cp config.json.example config.json
+mkdir -p my-importer/config && cd my-importer
+curl -o docker-compose.yml https://raw.githubusercontent.com/sergienko4/israeli-bank-scrapers-to-actual-budget/main/docker-compose.yml
+curl -o config/config.json https://raw.githubusercontent.com/sergienko4/israeli-bank-scrapers-to-actual-budget/main/config.json.example
 ```
 
-Edit `config.json`:
+Edit `config/config.json`:
 
 ```json
 {
@@ -75,7 +77,8 @@ The bundled `docker-compose.yml` starts **both** Actual Budget and the importer.
 
     ```bash
     docker run --rm --cap-add SYS_ADMIN \
-      -v $(pwd)/config.json:/app/config.json:ro \
+      -v $(pwd)/config:/app/config:ro \
+      -e CONFIG_PATH=/app/config/config.json \
       -v $(pwd)/data:/app/data \
       -v $(pwd)/cache:/app/cache \
       -v $(pwd)/chrome-data:/app/chrome-data \
@@ -89,7 +92,8 @@ The bundled `docker-compose.yml` starts **both** Actual Budget and the importer.
 
     ```powershell
     docker run --rm --cap-add SYS_ADMIN `
-      -v "${PWD}\config.json:/app/config.json:ro" `
+      -v "${PWD}\config:/app/config:ro" `
+      -e CONFIG_PATH=/app/config/config.json `
       -v "${PWD}\data:/app/data" `
       -v "${PWD}\cache:/app/cache" `
       -v "${PWD}\chrome-data:/app/chrome-data" `

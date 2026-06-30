@@ -2,8 +2,17 @@
  * Notification channel configuration (Telegram, webhook) and spending-watch rules.
  */
 
-export type MessageFormat = 'compact' | 'ledger' | 'emoji' | 'summary';
-export type ShowTransactions = 'new' | 'all' | 'none';
+/** Telegram message-format options (single source for type + UI). */
+export const MESSAGE_FORMATS = ['summary', 'compact', 'ledger', 'emoji'] as const;
+
+/** Telegram message format. Default: 'summary'. */
+export type MessageFormat = typeof MESSAGE_FORMATS[number];
+
+/** Which transactions to list in notifications (single source for type + UI). */
+export const SHOW_TRANSACTIONS_OPTIONS = ['new', 'all', 'none'] as const;
+
+/** Which transactions to show. Default: 'new'. */
+export type ShowTransactions = typeof SHOW_TRANSACTIONS_OPTIONS[number];
 
 export interface ITelegramConfig {
   botToken: string;
@@ -14,7 +23,11 @@ export interface ITelegramConfig {
   enableReceiptImport?: boolean;       // Default: false
 }
 
-export type WebhookFormat = 'slack' | 'discord' | 'plain';
+/** Webhook payload format options (single source for type + UI). */
+export const WEBHOOK_FORMATS = ['plain', 'slack', 'discord'] as const;
+
+/** Webhook payload format. Default: 'plain'. */
+export type WebhookFormat = typeof WEBHOOK_FORMATS[number];
 
 export interface IWebhookConfig {
   url: string;

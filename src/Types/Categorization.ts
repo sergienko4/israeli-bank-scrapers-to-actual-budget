@@ -2,7 +2,11 @@
  * Transaction categorization mode and payee-translation rules.
  */
 
-export type CategorizationMode = 'history' | 'translate' | 'none';
+/** Supported transaction-categorization modes (single source for type + UI). */
+export const CATEGORIZATION_MODES = ['none', 'history', 'translate'] as const;
+
+/** Transaction categorization mode. Default: 'none'. */
+export type CategorizationMode = typeof CATEGORIZATION_MODES[number];
 
 export interface ITranslationRule {
   fromPayee: string;   // Hebrew text to find in bank payee name
