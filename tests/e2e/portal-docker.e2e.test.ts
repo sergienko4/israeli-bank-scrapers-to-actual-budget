@@ -256,7 +256,10 @@ async function blocksReadOnlyWrites(): Promise<void> {
 async function attemptReadOnlySave(page: Page): Promise<void> {
   await gotoBanks(page);
   const daysBack = byPath(page, 'banks.discount.daysBack');
-  await daysBack.fill('99');
+  // Use a value that passes offline validation (daysBack must be 1-30) so the
+  // save reaches the disk write the read-only mount is meant to block; an
+  // out-of-range value would fail validation (400) before any write attempt.
+  await daysBack.fill('29');
   await page.click('#save');
   await page.waitForSelector('#status:has-text("Failed to persist configuration")', { timeout: 15_000 });
   const statusText = await page.locator('#status').textContent();
