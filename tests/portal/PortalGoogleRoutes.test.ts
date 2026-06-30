@@ -80,12 +80,34 @@ describe('PortalGoogleRoutes', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('skips Google routes when unconfigured (SPA fallback)', async () => {
+  it('returns 502 (not 403) when the Google token exchange is rejected', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, json: () => Promise.resolve({}) }));
+    const state = await startConsent();
+    const res = await app.inject({
+      method: 'GET', url: `/auth/google/callback?code=ok&state=${state}`,
+      cookies: { portal_oauth_state: state },
+    });
+    expect(res.statusCode).toBe(502);
+    expect(res.json()).toEqual({ error: 'Google sign-in failed' });
+  });
+
+  it('returns 502 when the Google token endpoint is unreachable (fetch throws)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')));
+    const state = await startConsent();
+    const res = await app.inject({
+      method: 'GET', url: `/auth/google/callback?code=ok&state=${state}`,
+      cookies: { portal_oauth_state: state },
+    });
+    expect(res.statusCode).toBe(502);
+  });
+
+  it('skips Google routes when unconfigured (auth path 404s, not SPA)', async () => {
     const seed = seedConfigDir();
     const plain = await buildPortal(fakePortalRuntime(), new PortalConfigStore(seed.path));
     const res = await plain.inject({ method: 'GET', url: '/auth/google' });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(404);
     expect(res.headers.location).toBeUndefined();
+    expect(res.json()).toEqual({ error: 'Not found' });
     await plain.close();
     rmSync(seed.dir, { recursive: true, force: true });
   });

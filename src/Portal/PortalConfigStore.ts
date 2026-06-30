@@ -7,7 +7,8 @@
 import { ConfigLoader } from '../Config/ConfigLoader.js';
 import { ConfigValidator } from '../Config/ConfigValidator.js';
 import ConfigWriter from '../Config/ConfigWriter.js';
-import type { IActualConfig, IImporterConfig, Procedure } from '../Types/Index.js';
+import ConfigurationError from '../Errors/ConfigurationError.js';
+import type { IImporterConfig, Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import { coerceTargetAccounts, hashPlainPortalPassword, maskSecrets, restoreMasked } from './ConfigMutations.js';
@@ -49,20 +50,45 @@ function collectGateErrors(merged: IImporterConfig): string[] {
   return [...distinct];
 }
 
+/**
+ * Shapes a candidate config — restores round-tripped masked secrets, hashes a
+ * freshly-typed portal password, and coerces target accounts — then gates it on
+ * the importer's exact boot rules plus the portal's own auth bootability (see
+ * {@link collectGateErrors}). Pure transform + validation, no I/O.
+ * @param next - Replacement config from the portal UI.
+ * @param current - Live config used to restore round-tripped masked secrets.
+ * @returns The validated config, or a failure naming every gate violation.
+ */
+function shapeAndGate(next: IImporterConfig, current: IImporterConfig): Procedure<IImporterConfig> {
+  const restored = restoreMasked(next, current);
+  const hashed = hashPlainPortalPassword(restored);
+  const merged = coerceTargetAccounts(hashed);
+  const errors = collectGateErrors(merged);
+  if (errors.length === 0) return succeed(merged);
+  const reason = errors.join('; ');
+  return fail(reason);
+}
+
 /** Loads, masks, validates, and persists the portal-managed config. */
 export default class PortalConfigStore {
   private _config: IImporterConfig;
   private readonly _writer: ConfigWriter;
-  private readonly _loaded: boolean;
 
   /**
-   * Builds a store seeded from the given config path.
+   * Builds a store seeded from the given config path. A load failure is fatal:
+   * it throws to abort portal startup rather than seeding a synthetic empty
+   * config, so a transient read error can never be served as real state or
+   * persisted over the user's real config on the next save.
    * @param configPath - Absolute path to config.json.
+   * @throws Error when the existing config cannot be loaded/parsed.
    */
   constructor(configPath = '/app/config.json') {
     const loaded = new ConfigLoader(configPath).loadRaw();
-    this._loaded = !isFail(loaded);
-    this._config = isFail(loaded) ? { actual: {} as IActualConfig, banks: {} } : loaded.data;
+    if (isFail(loaded)) {
+      const reason = `Portal refused to start; config did not load cleanly: ${loaded.message}`;
+      throw new ConfigurationError(reason);
+    }
+    this._config = loaded.data;
     this._writer = new ConfigWriter(configPath);
   }
 
@@ -83,29 +109,16 @@ export default class PortalConfigStore {
   }
 
   /**
-   * Shapes (restore masked secrets, hash a freshly-typed portal password, and
-   * coerce target accounts) the incoming config, then gates it on the importer's
-   * exact boot rules plus the portal's own auth bootability (see
-   * `collectGateErrors`). Anything that fails here is invalid client input
-   * (HTTP 400); write/I/O faults are deferred to {@link commit} so they surface
-   * as server errors (HTTP 500).
+   * Shapes and gates the incoming config via `shapeAndGate`. Anything that
+   * fails there is invalid client input (HTTP 400); the try/catch only relabels
+   * unexpected shaping throws as failures, while write/I/O faults are deferred to
+   * {@link commit} so they surface as server errors (HTTP 500).
    * @param next - Replacement config from the portal UI.
    * @returns The validated config ready to {@link commit}, or a 400-class failure.
    */
   public prepare(next: IImporterConfig): Procedure<IImporterConfig> {
-    if (!this._loaded) {
-      return fail('Config did not load cleanly; refusing to overwrite existing files');
-    }
     try {
-      const restored = restoreMasked(next, this._config);
-      const hashed = hashPlainPortalPassword(restored);
-      const merged = coerceTargetAccounts(hashed);
-      const errors = collectGateErrors(merged);
-      if (errors.length) {
-        const reason = errors.join('; ');
-        return fail(reason);
-      }
-      return succeed(merged);
+      return shapeAndGate(next, this._config);
     } catch (error: unknown) {
       return fail(`Invalid config: ${errorMessage(error)}`);
     }

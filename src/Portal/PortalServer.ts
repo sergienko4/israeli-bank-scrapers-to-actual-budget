@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import fstatic from '@fastify/static';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 
 import { getLogger } from '../Logger/Index.js';
 import registerApiRoutes from './PortalApiRoutes.js';
@@ -30,6 +30,23 @@ function publicDir(): string {
 }
 
 /**
+ * Whether an unmatched request should fall through to the SPA shell.
+ *
+ * Only GET navigations to non-API, non-auth, extension-less paths are genuine
+ * front-end routes. Missing `/api/*` or `/auth/*` endpoints (and absent static
+ * assets) must surface as a JSON 404 rather than be masked by index.html, which
+ * would hide routing bugs and break the API contract.
+ * @param req - The unmatched incoming request.
+ * @returns True when index.html should be served for this request.
+ */
+function isSpaShellRequest(req: FastifyRequest): boolean {
+  return req.method === 'GET'
+    && !req.url.startsWith('/api/')
+    && !req.url.startsWith('/auth/')
+    && !req.url.includes('.');
+}
+
+/**
  * Assembles the Fastify app with plugins, routes, and SPA fallback.
  * @param rt - Resolved portal runtime.
  * @param store - Config store backing the API.
@@ -44,7 +61,9 @@ export async function buildPortal(
   await app.register(fstatic, { root: publicDir() });
   registerAuthRoutes(app, rt);
   registerApiRoutes(app, store);
-  app.setNotFoundHandler((_req, reply) => reply.sendFile('index.html'));
+  app.setNotFoundHandler((req, reply) => (
+    isSpaShellRequest(req) ? reply.sendFile('index.html') : reply.code(404).send({ error: 'Not found' })
+  ));
   return await app;
 }
 

@@ -65,6 +65,26 @@ describe('PortalServer routes (password mode)', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('returns a JSON 404 (not the SPA shell) for an unknown /api route', async () => {
+    const cookie = await loginCookie();
+    const res = await app.inject({ method: 'GET', url: '/api/does-not-exist', cookies: { portal_session: cookie } });
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    expect(res.json().error).toBe('Not found');
+  });
+
+  it('returns a JSON 404 for an unknown /auth route instead of HTML', async () => {
+    const res = await app.inject({ method: 'POST', url: '/auth/loguot', payload: {} });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('Not found');
+  });
+
+  it('still serves the SPA shell for an unknown non-API front-end route', async () => {
+    const res = await app.inject({ method: 'GET', url: '/dashboard' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+  });
+
   it('serves masked config and accepts writes when authenticated', async () => {
     const cookie = await loginCookie();
     const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });

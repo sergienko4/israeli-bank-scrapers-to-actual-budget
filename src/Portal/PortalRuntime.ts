@@ -11,7 +11,7 @@ const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8080;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 const MIN_SECRET_LENGTH = 16;
-const KNOWN_WEAK_SECRETS = ['change-me-portal-secret'];
+const KNOWN_WEAK_SECRETS = new Set(['change-me-portal-secret']);
 
 /** Fully-resolved portal runtime settings. */
 export interface IPortalRuntime {
@@ -47,12 +47,16 @@ export function portalCookieOptions(rt: IPortalRuntime, maxAge?: number): ICooki
 }
 
 /**
- * Returns whether the portal is enabled via config flag or PORTAL_ENABLED env.
+ * Returns whether the portal should boot. `PORTAL_ENABLED` is a full override:
+ * its `true`/`false` value wins over `config.portal.enabled` in both directions,
+ * so an operator can force the portal on, or force a config-enabled portal off,
+ * without editing config files.
  * @param config - Merged importer config.
  * @returns True when the portal should start.
  */
 export function isPortalEnabled(config: IImporterConfig): boolean {
   if (process.env.PORTAL_ENABLED === 'true') return true;
+  if (process.env.PORTAL_ENABLED === 'false') return false;
   return config.portal?.enabled === true;
 }
 
@@ -75,7 +79,7 @@ function normalizePort(value?: string | number): number {
  * @returns True when the secret is empty, too short, or a known placeholder.
  */
 export function isSessionSecretWeak(secret: string): boolean {
-  return secret.length < MIN_SECRET_LENGTH || KNOWN_WEAK_SECRETS.includes(secret);
+  return secret.length < MIN_SECRET_LENGTH || KNOWN_WEAK_SECRETS.has(secret);
 }
 
 /**
@@ -136,19 +140,33 @@ export function resolvePortalRuntime(config: IImporterConfig): IPortalRuntime {
 }
 
 /**
+ * Whether a config string carries a real, non-blank value.
+ *
+ * Whitespace-only OAuth fields satisfy a plain truthiness check yet can never
+ * authenticate anyone, so they must be treated as missing.
+ * @param value - Candidate string from config (possibly undefined or blank).
+ * @returns True when the value is a non-empty, non-whitespace string.
+ */
+function hasText(value?: string): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
  * Whether a Google OAuth config has every field needed to run the consent flow
- * AND admit at least one user. Without a non-empty allowedEmails the consent
- * flow completes but every login is rejected, so the portal would boot
- * un-loginable in google/both mode.
+ * AND admit at least one user. Blank/whitespace-only fields count as missing,
+ * and without a non-blank allowedEmails entry the consent flow completes but
+ * every login is rejected, so the portal would boot un-loginable in google/both
+ * mode.
  * @param google - Portal Google config, if present.
- * @returns True when clientId, clientSecret, redirectUri, and a non-empty
- *          allowedEmails list are all set.
+ * @returns True when clientId, clientSecret, redirectUri, and at least one
+ *          allowedEmails entry are all present and non-blank.
  */
 function isGoogleConfigComplete(google?: IPortalGoogleConfig): boolean {
-  return Boolean(
-    google?.clientId && google.clientSecret && google.redirectUri
-    && google.allowedEmails && google.allowedEmails.length > 0,
-  );
+  if (!google) return false;
+  return hasText(google.clientId)
+    && hasText(google.clientSecret)
+    && hasText(google.redirectUri)
+    && Boolean(google.allowedEmails?.some(hasText));
 }
 
 /**

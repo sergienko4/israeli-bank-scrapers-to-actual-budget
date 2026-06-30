@@ -52,6 +52,18 @@ describe('PortalPassword', () => {
       expect(isEncodedHash('scrypt$not-a-real-hash')).toBe(false);
       expect(isEncodedHash('scrypt$abc$XYZ')).toBe(false);
     });
+
+    it('rejects structurally hash-like values with malformed or wrong-length hex', () => {
+      const salt = 'a'.repeat(32);
+      const key = 'b'.repeat(128);
+      expect(isEncodedHash(`scrypt$${salt}$${key}`)).toBe(true);
+      expect(isEncodedHash('scrypt$abc$def')).toBe(false);
+      expect(isEncodedHash(`scrypt$${'a'.repeat(31)}$${key}`)).toBe(false);
+      expect(isEncodedHash(`scrypt$${'a'.repeat(33)}$${key}`)).toBe(false);
+      expect(isEncodedHash(`scrypt$${salt}$${'b'.repeat(127)}`)).toBe(false);
+      expect(isEncodedHash(`scrypt$${salt.toUpperCase()}$${key}`)).toBe(false);
+      expect(isEncodedHash(`scrypt$${salt}$${key}extra`)).toBe(false);
+    });
   });
 
   describe('scripts/hash-portal-password.js format compatibility', () => {

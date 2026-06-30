@@ -82,13 +82,12 @@ describe('PortalConfigStore', () => {
     expect(isFail(result)).toBe(true);
   });
 
-  it('refuses to save when the initial config failed to load', () => {
+  it('throws on construction when the initial config fails to load (never serves or overwrites blanks)', () => {
     const dir = mkdtempSync(join(tmpdir(), 'portal-bad-'));
     dirs.push(dir);
     const path = join(dir, 'config.json');
     writeFileSync(path, '{ this is not valid json', 'utf8');
-    const store = new PortalConfigStore(path);
-    expect(isFail(save(store, fakeImporterConfig()))).toBe(true);
+    expect(() => new PortalConfigStore(path)).toThrow(/did not load cleanly/);
   });
 
   it('commit fails (server error) when the config directory is removed before write', () => {

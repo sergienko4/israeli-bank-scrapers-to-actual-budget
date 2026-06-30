@@ -25,6 +25,7 @@
 
 const DISCOVERY_URL = 'https://accounts.google.com/.well-known/openid-configuration';
 const PASS_ERROR = 'invalid_grant';
+const FETCH_TIMEOUT_MS = 10_000;
 const FAIL_ERRORS = {
   invalid_client: 'client_id / client_secret is not recognised by Google',
   redirect_uri_mismatch: 'redirect URI is not registered on this OAuth client',
@@ -43,7 +44,9 @@ function readEnv() {
 }
 
 /**
- * Fetches a URL with a small retry to absorb transient network blips.
+ * Fetches a URL with a small retry and a per-attempt abort timeout, so a hung
+ * endpoint fails fast (and is retried) instead of pinning the CI job until the
+ * workflow-level timeout. A timeout/abort is treated like any retryable error.
  * @param {string} url request URL
  * @param {object} [opts] fetch options
  * @param {number} [attempts] total attempts before throwing
@@ -52,10 +55,14 @@ function readEnv() {
 async function fetchWithRetry(url, opts = {}, attempts = 2) {
   let lastError;
   for (let i = 0; i < attempts; i += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      return await fetch(url, opts);
+      return await fetch(url, { ...opts, signal: controller.signal });
     } catch (error) {
       lastError = error;
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw lastError;

@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { isFail, isSuccess } from '../../src/Types/Index.js';
@@ -41,6 +43,22 @@ describe('PortalSession', () => {
       const tampered = readSession(token, 'different-secret');
       expect(isFail(tampered)).toBe(true);
       if (isFail(tampered)) expect(tampered.message).toMatch(/Bad signature/);
+    });
+
+    it('fails (without throwing) on a validly-signed token whose body is not JSON', () => {
+      const body = Buffer.from('not-json{').toString('base64url');
+      const sig = createHmac('sha256', SECRET).update(body).digest('hex');
+      const result = readSession(`${body}.${sig}`, SECRET);
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/Malformed/);
+    });
+
+    it('fails on a validly-signed token whose payload shape is invalid', () => {
+      const body = Buffer.from(JSON.stringify({ foo: 'bar' })).toString('base64url');
+      const sig = createHmac('sha256', SECRET).update(body).digest('hex');
+      const result = readSession(`${body}.${sig}`, SECRET);
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/Malformed/);
     });
 
     it('fails once the 12h TTL has elapsed', () => {

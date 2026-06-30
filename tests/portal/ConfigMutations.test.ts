@@ -128,6 +128,13 @@ describe('ConfigMutations', () => {
       expect(coerceAccounts([])).toBe('all');
       expect(coerceAccounts(42)).toBe('all');
     });
+
+    it('preserves the "all" sentinel when it is present inside an array input', () => {
+      expect(coerceAccounts(['all'])).toBe('all');
+      expect(coerceAccounts(['ALL'])).toBe('all');
+      expect(coerceAccounts([' all '])).toBe('all');
+      expect(coerceAccounts(['all', '123'])).toBe('all');
+    });
   });
 
   describe('coerceTargetAccounts', () => {

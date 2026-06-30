@@ -30,6 +30,16 @@ describe('PortalRuntime', () => {
     it('is false with no env and disabled config', () => {
       expect(isPortalEnabled(fakeImporterConfig())).toBe(false);
     });
+
+    it('lets PORTAL_ENABLED=false override an enabled config (env wins)', () => {
+      process.env.PORTAL_ENABLED = 'false';
+      expect(isPortalEnabled(fakeImporterConfig({ portal: { enabled: true } }))).toBe(false);
+    });
+
+    it('lets PORTAL_ENABLED=true override a disabled config (env wins)', () => {
+      process.env.PORTAL_ENABLED = 'true';
+      expect(isPortalEnabled(fakeImporterConfig({ portal: { enabled: false } }))).toBe(true);
+    });
   });
 
   describe('resolvePortalRuntime', () => {
@@ -143,6 +153,22 @@ describe('PortalRuntime', () => {
     it('flags google/both mode whose google client has no allowedEmails', () => {
       const portal = fakePortalConfig({ authMode: 'google', google: fakeGoogleConfig({ allowedEmails: [] }) });
       expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'google', portal }))).toMatch(/allowedEmails/);
+    });
+
+    it('flags google/both mode whose google fields are whitespace-only', () => {
+      const google = fakeGoogleConfig({ clientId: '   ', clientSecret: ' ', redirectUri: '\t' });
+      const portal = fakePortalConfig({ authMode: 'google', google });
+      expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'google', portal }))).toMatch(/google/);
+    });
+
+    it('flags google/both mode whose allowedEmails entries are all blank', () => {
+      const portal = fakePortalConfig({ authMode: 'google', google: fakeGoogleConfig({ allowedEmails: ['  ', '\t'] }) });
+      expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'google', portal }))).toMatch(/allowedEmails/);
+    });
+
+    it('accepts google/both mode when a real allowedEmails entry sits beside blank ones', () => {
+      const portal = fakePortalConfig({ authMode: 'both', google: fakeGoogleConfig({ allowedEmails: ['  ', 'allowed@example.com'] }) });
+      expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'both', portal }))).toBe('');
     });
 
     it('returns empty when both mode has a password and a complete google client', () => {

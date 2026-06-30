@@ -11,23 +11,30 @@ import { errorMessage } from '../Utils/Index.js';
 const DEFAULT_AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
 const DEFAULT_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
+/** Hard deadline (ms) for the Google token-exchange request. */
+const TOKEN_TIMEOUT_MS = 10_000;
+
 /**
  * Resolves the Google authorization endpoint. The `GOOGLE_AUTH_BASE` env var
- * overrides it for self-hosted identity proxies and end-to-end tests; otherwise
- * Google's public consent URL is used.
+ * overrides it for self-hosted identity proxies and end-to-end tests; a blank or
+ * whitespace-only value is treated as unset so Google's public consent URL is
+ * used instead of a malformed base.
  * @returns The authorization base URL.
  */
 export function resolveAuthBase(): string {
-  return process.env.GOOGLE_AUTH_BASE ?? DEFAULT_AUTH_BASE;
+  const authBase = process.env.GOOGLE_AUTH_BASE?.trim();
+  return authBase || DEFAULT_AUTH_BASE;
 }
 
 /**
  * Resolves the Google token endpoint. The `GOOGLE_TOKEN_URL` env var overrides
- * it for self-hosted identity proxies and end-to-end tests.
+ * it for self-hosted identity proxies and end-to-end tests; a blank or
+ * whitespace-only value is treated as unset so a `fetch('')` never happens.
  * @returns The token exchange URL.
  */
 export function resolveTokenUrl(): string {
-  return process.env.GOOGLE_TOKEN_URL ?? DEFAULT_TOKEN_URL;
+  const tokenUrl = process.env.GOOGLE_TOKEN_URL?.trim();
+  return tokenUrl || DEFAULT_TOKEN_URL;
 }
 
 /**
@@ -70,10 +77,24 @@ function claimsFromIdToken(idToken: string): IIdTokenClaims {
 }
 
 /**
+ * Sends the token-exchange POST with a hard timeout so a hung Google endpoint
+ * aborts instead of holding the public login route open until the platform
+ * gives up. An abort surfaces as a rejected fetch handled by {@link exchangeCode}.
+ * @param body - URL-encoded token-exchange parameters.
+ * @returns The token endpoint response (the caller inspects `res.ok`).
+ */
+function postToken(body: URLSearchParams): Promise<Response> {
+  const tokenUrl = resolveTokenUrl();
+  const signal = AbortSignal.timeout(TOKEN_TIMEOUT_MS);
+  return fetch(tokenUrl, { method: 'POST', body, signal });
+}
+
+/**
  * Exchanges an OAuth code for tokens and returns the verified email.
  * @param google - Portal Google config (clientId, clientSecret, redirectUri).
  * @param code - Authorization code from the consent redirect.
- * @returns Procedure with the email on success, or failure on error.
+ * @returns Procedure with the email on success, or failure on error (including
+ * a token-endpoint timeout, surfaced through the catch path).
  */
 export async function exchangeCode(
   google: IPortalGoogleConfig, code: string,
@@ -83,8 +104,7 @@ export async function exchangeCode(
       code, client_id: google.clientId, client_secret: google.clientSecret ?? '',
       redirect_uri: google.redirectUri, grant_type: 'authorization_code',
     });
-    const tokenUrl = resolveTokenUrl();
-    const res = await fetch(tokenUrl, { method: 'POST', body });
+    const res = await postToken(body);
     if (!res.ok) return fail(`Google token exchange failed: ${String(res.status)}`);
     const data = (await res.json()) as { id_token?: string };
     const claims = claimsFromIdToken(data.id_token ?? '');

@@ -38,6 +38,13 @@ describe('GoogleOAuth', () => {
       expect(resolveTokenUrl()).toBe('http://127.0.0.1:9/token');
     });
 
+    it('treats a blank or whitespace-only override as unset (falls back to defaults)', () => {
+      process.env.GOOGLE_AUTH_BASE = '';
+      process.env.GOOGLE_TOKEN_URL = '   ';
+      expect(resolveAuthBase()).toBe('https://accounts.google.com/o/oauth2/v2/auth');
+      expect(resolveTokenUrl()).toBe('https://oauth2.googleapis.com/token');
+    });
+
     it('builds the consent URL against the overridden auth base', () => {
       process.env.GOOGLE_AUTH_BASE = 'http://127.0.0.1:9/auth';
       const url = new URL(buildAuthUrl(fakeGoogleConfig(), 'state-xyz'));
@@ -107,6 +114,26 @@ describe('GoogleOAuth', () => {
       const result = await exchangeCode(fakeGoogleConfig(), 'code');
       expect(isFail(result)).toBe(true);
       if (isFail(result)) expect(result.message).toMatch(/network down/);
+    });
+
+    it('attaches an abort signal so a hung token endpoint cannot block forever', async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true, status: 200, json: () => Promise.resolve({ id_token: jwtWithEmail('a@b.com') }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      await exchangeCode(fakeGoogleConfig(), 'auth-code');
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+
+    it('fails cleanly when the token request times out (aborts)', async () => {
+      const abort = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abort));
+      const result = await exchangeCode(fakeGoogleConfig(), 'auth-code');
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/timeout|abort/i);
     });
 
     it('fails when the response carries no id_token', async () => {

@@ -44,6 +44,23 @@ export function createSession(data: Omit<ISessionPayload, 'expires'>, secret: st
 }
 
 /**
+ * Narrows untrusted parsed JSON to a well-formed session payload.
+ *
+ * The cookie body is attacker-controllable, so a tampered or truncated payload
+ * that still carries a valid signature must be rejected before the `/api/*`
+ * guard trusts it as a logged-in session.
+ * @param value - Parsed JSON of unknown shape from the cookie body.
+ * @returns True when the value carries boolean factor flags and a numeric expiry.
+ */
+function isSessionPayload(value: unknown): value is ISessionPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  const payload = value as Record<string, unknown>;
+  return typeof payload.expires === 'number'
+    && typeof payload.google === 'boolean'
+    && typeof payload.password === 'boolean';
+}
+
+/**
  * Verifies a session token and returns its payload when valid + unexpired.
  * @param token - The `payload.sig` cookie value.
  * @param secret - Portal session secret.
@@ -56,7 +73,13 @@ export function readSession(token: string, secret: string): Procedure<ISessionPa
   const want = Buffer.from(expected);
   const got = Buffer.from(sig);
   if (want.length !== got.length || !timingSafeEqual(want, got)) return fail('Bad signature');
-  const decoded = Buffer.from(body, 'base64url').toString();
-  const data = JSON.parse(decoded) as ISessionPayload;
-  return data.expires > Date.now() ? succeed(data) : fail('Session expired');
+  try {
+    const decoded = Buffer.from(body, 'base64url').toString();
+    const parsed = JSON.parse(decoded) as unknown;
+    if (!isSessionPayload(parsed)) return fail('Malformed session payload');
+    return parsed.expires > Date.now() ? succeed(parsed) : fail('Session expired');
+  } catch {
+    // Untrusted cookie: a bad base64/JSON body yields "no session", never a throw.
+    return fail('Malformed session payload');
+  }
 }

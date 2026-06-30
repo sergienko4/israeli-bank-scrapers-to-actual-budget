@@ -59,28 +59,43 @@ function registerConsentRoute(
 }
 
 /**
+ * Handles the Google OAuth callback: validates the CSRF state, exchanges the
+ * code for a verified email, and grants the factor when that email is
+ * allow-listed. Upstream Google/token exchange failures map to 502 (a server-side
+ * problem), kept distinct from a disallowed email's 403.
+ * @param ctx - Runtime, grant callback, and verified Google config.
+ * @param req - Inbound callback request (carries code, state, and the cookie).
+ * @param reply - Reply used to redirect on success or send an error status.
+ * @returns The Fastify reply outcome.
+ */
+async function handleCallback(
+  ctx: IGoogleRouteCtx, req: FastifyRequest, reply: FastifyReply,
+): Promise<FastifyReply> {
+  const { code, state } = req.query as { code?: string; state?: string };
+  if (!code || !state || state !== req.cookies[STATE_COOKIE]) {
+    return await reply.code(400).send({ error: 'Invalid state' });
+  }
+  reply.clearCookie(STATE_COOKIE, { path: '/' });
+  const email = await exchangeCode(ctx.google, code);
+  if (isFail(email)) {
+    return await reply.code(502).send({ error: 'Google sign-in failed' });
+  }
+  if (!isEmailAllowed(email.data, ctx.google.allowedEmails ?? [])) {
+    return await reply.code(403).send({ error: 'Email not allowed' });
+  }
+  ctx.grant({ req, reply, rt: ctx.rt, factor: { google: true, email: email.data } });
+  return await reply.redirect('/');
+}
+
+/**
  * Registers the callback route that verifies the email and grants the factor.
  * @param app - Fastify instance.
  * @param ctx - Runtime, grant callback, and verified Google config.
  * @returns Confirmation that the callback route is registered.
  */
 function registerCallbackRoute(app: FastifyInstance, ctx: IGoogleRouteCtx): { registered: true } {
-  const { rt: runtime, grant, google } = ctx;
   const oauthLimit = { config: { rateLimit: { max: OAUTH_MAX, timeWindow: RATE_WINDOW } } };
-  app.get('/auth/google/callback', oauthLimit, async (req, reply) => {
-    const { code, state } = req.query as { code?: string; state?: string };
-    const expected = req.cookies[STATE_COOKIE];
-    if (!code || !state || state !== expected) {
-      return await reply.code(400).send({ error: 'Invalid state' });
-    }
-    reply.clearCookie(STATE_COOKIE, { path: '/' });
-    const email = await exchangeCode(google, code);
-    if (isFail(email) || !isEmailAllowed(email.data, google.allowedEmails ?? [])) {
-      return await reply.code(403).send({ error: 'Email not allowed' });
-    }
-    grant({ req, reply, rt: runtime, factor: { google: true, email: email.data } });
-    return await reply.redirect('/');
-  });
+  app.get('/auth/google/callback', oauthLimit, (req, reply) => handleCallback(ctx, req, reply));
   return { registered: true };
 }
 

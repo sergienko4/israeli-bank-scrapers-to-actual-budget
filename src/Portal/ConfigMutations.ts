@@ -78,7 +78,10 @@ export function maskSecrets<T>(value: T): T {
 }
 
 /**
- * Cleans a raw account list to non-empty trimmed strings, or 'all' if none.
+ * Cleans a raw account list to non-empty trimmed strings, preserving the 'all'
+ * sentinel: an empty result, or any entry equal to 'all' (case-insensitive),
+ * collapses to 'all' so an already-typed "all accounts" target is never rewritten
+ * into a literal account filter.
  * @param items - Candidate account entries.
  * @returns A non-empty string list, or the 'all' sentinel.
  */
@@ -86,7 +89,8 @@ function cleanAccountList(items: readonly unknown[]): string[] | 'all' {
   const cleaned = items
     .filter((a): a is string => typeof a === 'string' && a.trim() !== '')
     .map(a => a.trim());
-  return cleaned.length ? cleaned : 'all';
+  if (cleaned.length === 0) return 'all';
+  return cleaned.some(account => account.toLowerCase() === 'all') ? 'all' : cleaned;
 }
 
 /**
