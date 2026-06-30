@@ -11,6 +11,7 @@ import { fail, isFail } from '../Types/Index.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { type IGrantArgs, registerGoogleRoutes } from './PortalGoogleRoutes.js';
 import { verifyPassword } from './PortalPassword.js';
+import { LOGIN_RATE_LIMIT, STATUS_RATE_LIMIT } from './PortalRateLimit.js';
 import { type IPortalRuntime, portalCookieOptions } from './PortalRuntime.js';
 import { createSession, type ISessionPayload, readSession } from './PortalSession.js';
 
@@ -106,11 +107,11 @@ function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
  * @returns Confirmation that the auth routes are registered.
  */
 export function registerAuthRoutes(app: FastifyInstance, rt: IPortalRuntime): { registered: true } {
-  app.get('/auth/status', (req, reply) => {
+  app.get('/auth/status', STATUS_RATE_LIMIT, (req, reply) => {
     const status = authStatus(req, rt);
     return reply.send(status);
   });
-  app.post('/auth/login', (req, reply) => {
+  app.post('/auth/login', LOGIN_RATE_LIMIT, (req, reply) => {
     const { password } = req.body as { password?: string };
     const hash = rt.portal.passwordHash ?? '';
     if (!password || !hash || !verifyPassword(password, hash)) {

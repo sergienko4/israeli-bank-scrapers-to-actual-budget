@@ -47,6 +47,14 @@ describe('PortalServer routes (password mode)', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('rate-limits the login route once its per-route maximum is exceeded', async () => {
+    const attempts = Array.from({ length: 15 }, () => (
+      app.inject({ method: 'POST', url: '/auth/login', payload: { password: 'nope' } })
+    ));
+    const codes = (await Promise.all(attempts)).map((res) => res.statusCode);
+    expect(codes).toContain(429);
+  });
+
   it('guards /api/config with 401 when no cookie is present', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/config' });
     expect(res.statusCode).toBe(401);

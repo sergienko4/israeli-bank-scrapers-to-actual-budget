@@ -68,5 +68,5 @@ function sectionSecretKeys(section: IManifestSection): string[] {
  */
 export function deriveSecretKeys(): readonly string[] {
   const all = CONFIG_MANIFEST.flatMap(sectionSecretKeys);
-  return [...new Set(all)].sort();
+  return [...new Set(all)].sort((a, b) => a.localeCompare(b));
 }

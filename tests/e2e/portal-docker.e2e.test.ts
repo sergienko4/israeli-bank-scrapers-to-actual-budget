@@ -4,7 +4,7 @@
  * consume a read-only mount, and the portal needs read-write access to save.
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -92,6 +92,10 @@ function seedDir(): ISeededDir {
   const config = seedConfig();
   const json = JSON.stringify(config, null, 2);
   writeFileSync(configPath, json, 'utf8');
+  // mkdtemp creates the dir 0700; the container runs as the non-root `node`
+  // user, so widen to 0755/0644 so it can traverse and read the bind mount.
+  chmodSync(dir, 0o755);
+  chmodSync(configPath, 0o644);
   return { dir, configPath, credsPath };
 }
 
@@ -190,7 +194,7 @@ async function persistsPortalEdit(): Promise<void> {
   try {
     const port = await freeHostPort();
     container = startPortalContainer({ dir: seeded.dir, hostPort: port, mode: 'rw' });
-    await waitForPortal(container.baseUrl);
+    await waitForPortal(container);
     const opened = await openPortal(container.baseUrl);
     context = opened.context;
     await gotoBanks(opened.page);
@@ -230,7 +234,7 @@ async function blocksReadOnlyWrites(): Promise<void> {
   try {
     const port = await freeHostPort();
     container = startPortalContainer({ dir: seeded.dir, hostPort: port, mode: 'ro' });
-    await waitForPortal(container.baseUrl);
+    await waitForPortal(container);
     const opened = await openPortal(container.baseUrl);
     context = opened.context;
     await attemptReadOnlySave(opened.page);
