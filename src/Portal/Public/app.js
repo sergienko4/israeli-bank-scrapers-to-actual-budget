@@ -203,7 +203,7 @@ async function login() {
 async function load() {
   manifest = await api('/api/manifest');
   config = await api('/api/config');
-  current = (manifest.sections[0] || {}).key || '';
+  current = manifest.sections[0]?.key || '';
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
   render();
@@ -535,6 +535,17 @@ function selectNode(field, obj, path) {
 }
 
 /**
+ * Maps a field kind to its native input type.
+ * @param {string} kind field kind
+ * @returns {string} the input type ('number', 'date', or 'text')
+ */
+function inputType(kind) {
+  if (kind === 'number') return 'number';
+  if (kind === 'date') return 'date';
+  return 'text';
+}
+
+/**
  * Builds a text/number/date input bound to a scalar field.
  * @param {object} field field
  * @param {object} obj object
@@ -545,7 +556,7 @@ function textNode(field, obj, path) {
   const i = el('input');
   i.id = path;
   i.dataset.path = path;
-  i.type = field.kind === 'number' ? 'number' : field.kind === 'date' ? 'date' : 'text';
+  i.type = inputType(field.kind);
   if (field.min != null) i.min = String(field.min);
   if (field.max != null) i.max = String(field.max);
   i.value = obj[field.key] == null ? '' : String(obj[field.key]);
@@ -771,7 +782,7 @@ function bankCard(sec, name) {
  */
 function presentBankFields(sec, bank) {
   return (sec.bankFields || []).filter((f) =>
-    Object.prototype.hasOwnProperty.call(bank, f.key),
+    Object.hasOwn(bank, f.key),
   );
 }
 
@@ -785,7 +796,7 @@ function presentBankFields(sec, bank) {
 function addFieldControl(sec, bank, name) {
   const wrap = el('div', 'add-field');
   const missing = (sec.bankFields || []).filter(
-    (f) => !Object.prototype.hasOwnProperty.call(bank, f.key),
+    (f) => !Object.hasOwn(bank, f.key),
   );
   if (!missing.length) return wrap;
   const sel = el('select');
@@ -913,7 +924,7 @@ function addBankControl(sec) {
  * @returns {void}
  */
 function addBank(name) {
-  const req = (manifest.bankRequirements || {})[name] || {};
+  const req = manifest.bankRequirements?.[name] || {};
   const bank = {
     daysBack: 14,
     twoFactorAuth: false,

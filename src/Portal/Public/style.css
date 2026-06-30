@@ -45,7 +45,6 @@
     --muted: #5a6b85;
     --faint: #8593a8;
     --line: #e1e8f2;
-    --line-soft: #0f1b2d0d;
     --line-soft: #eef2f8;
     --accent: #3b6ef0;
     --accent-strong: #2a57d6;
@@ -84,7 +83,7 @@ body {
 
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
 }
 
 /* ---------- buttons ---------- */
@@ -196,6 +195,10 @@ main { min-width: 0; display: flex; flex-direction: column; }
 .status:empty { display: none; }
 .status.ok { color: var(--ok); }
 .status.err { color: var(--danger); }
+/* <output> defaults to display:inline; force block so these status regions match
+   the <div>/<p> they replaced. Target via .status (not #status) so the lower
+   specificity lets .status:empty keep winning and still hide the empty status. */
+output.status, output#login-hint { display: block; }
 
 .view { padding: 20px 22px 40px; width: 100%; max-width: var(--content-w); margin: 0 auto; }
 
