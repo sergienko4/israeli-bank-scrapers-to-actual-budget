@@ -13,10 +13,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const APP_PATH = join(HERE, '../../src/Portal/Public/app.js');
 const INDEX_PATH = join(HERE, '../../src/Portal/Public/index.html');
 
-const BODY_HTML = readFileSync(INDEX_PATH, 'utf8')
-  .replace(/^[\s\S]*<body[^>]*>/i, '')
-  .replace(/<\/body>[\s\S]*$/i, '')
-  .replace(/<script[\s\S]*?<\/script>/gi, '');
+const PARSED_INDEX = new DOMParser().parseFromString(readFileSync(INDEX_PATH, 'utf8'), 'text/html');
+PARSED_INDEX.querySelectorAll('script').forEach((node) => {
+  node.remove();
+});
+const BODY_HTML = PARSED_INDEX.body.innerHTML;
 
 /* ── Fixture + fetch types ──────────────────────────────────────────── */
 
