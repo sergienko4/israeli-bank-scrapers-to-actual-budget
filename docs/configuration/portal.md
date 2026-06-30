@@ -49,6 +49,13 @@ Then start the portal entry point: `node dist/Portal.js`. Open
 | `authMode` | `password` | `password`, `google`, or `both`. |
 | `secureCookies` / `PORTAL_SECURE_COOKIES` | `false` | Mark cookies `Secure` (enable behind HTTPS). |
 
+> **Boot requirement:** the snippet above is not enough to start. Every mode
+> needs a strong `sessionSecret` (≥16 characters), and `password`/`both` mode
+> also needs a `passwordHash` — both in `credentials.json`. The portal **refuses
+> to boot** without them (it will not start an un-loginable or forgeable portal).
+> See **Authentication** below to set them; after the first boot the UI hashes
+> new passwords for you.
+
 ## Run in Docker
 
 The portal turns the importer's Docker deployment into a web-managed one: instead
@@ -240,7 +247,9 @@ Put the **secret** in `credentials.json`:
 - `redirectUri` **must** match one of the Authorized redirect URIs above,
   character for character (scheme, host, port, path).
 - Only emails in `allowedEmails` may sign in; everyone else is rejected after
-  Google verifies them.
+  Google verifies them. The list **must not be empty** for `google`/`both` mode:
+  the portal treats an empty allow-list as un-loginable and **refuses to boot**,
+  rather than starting a portal nobody can sign into.
 - Use `authMode: "both"` to require Google **and** the portal password.
 
 #### Advanced: override the Google endpoints

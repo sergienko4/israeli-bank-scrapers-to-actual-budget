@@ -83,6 +83,9 @@ services:
   # (the only writer). Saves propagate to the importer on its next run. Set a
   # password:
   #   node scripts/hash-portal-password.js "yourpass"  → credentials.json portal.passwordHash
+  # The portal also REQUIRES a strong portal.sessionSecret (>=16 chars) in
+  # credentials.json or it refuses to boot (cookie-forgery guard). Generate one:
+  #   node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
   # To expose over HTTPS, front it with a TLS reverse proxy (Caddy/Traefik) and
   # set PORTAL_SECURE_COOKIES=true. See docs/configuration/portal.md.
   # portal:
