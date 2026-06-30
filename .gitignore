@@ -7,6 +7,8 @@ config.*.json
 !config.json.example
 # Tool config files in config/ are not credentials — allow them
 !config/release-please/config.json
+# Generated portal JSON Schema (derived from the Config Manifest, no secrets)
+!config/portal/config.schema.json
 credentials.json
 credentials.*.json
 !credentials.json.example

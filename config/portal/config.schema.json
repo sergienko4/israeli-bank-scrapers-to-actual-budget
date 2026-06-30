@@ -1,0 +1,568 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Israeli Bank Importer Config",
+  "properties": {
+    "delayBetweenBanks": {
+      "type": "number",
+      "minimum": 0,
+      "title": "Delay between banks (ms)",
+      "description": "Milliseconds to wait between bank imports. Default 0 (no delay)."
+    },
+    "actual": {
+      "type": "object",
+      "properties": {
+        "init": {
+          "type": "object",
+          "properties": {
+            "serverURL": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Server URL",
+              "description": "URL of the Actual Budget server (http:// or https://)."
+            },
+            "password": {
+              "type": "string",
+              "x-format": "password",
+              "x-secret": true,
+              "title": "Server password",
+              "description": "Actual Budget server password."
+            },
+            "dataDir": {
+              "type": "string",
+              "title": "Data directory",
+              "description": "Local directory for cached budget data."
+            }
+          },
+          "required": [
+            "serverURL",
+            "password"
+          ],
+          "additionalProperties": false,
+          "title": "Connection"
+        },
+        "budget": {
+          "type": "object",
+          "properties": {
+            "syncId": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Sync ID",
+              "description": "UUID of the budget to sync (Actual → Settings → Show Advanced)."
+            },
+            "password": {
+              "type": "string",
+              "x-format": "password",
+              "x-secret": true,
+              "title": "Budget password",
+              "description": "Optional password for an end-to-end encrypted budget."
+            }
+          },
+          "required": [
+            "syncId"
+          ],
+          "additionalProperties": false,
+          "title": "Budget"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "title": "Actual",
+      "x-doc": "configuration/actual.md"
+    },
+    "banks": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "daysBack": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 365,
+            "title": "Days back",
+            "description": "Import the last N days (1-30 typical). Cannot combine with start date."
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Start date",
+            "description": "Fixed YYYY-MM-DD (max 1 year back). Cannot combine with days back."
+          },
+          "id": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "ID",
+            "description": "Bank user/account id."
+          },
+          "password": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "Password",
+            "description": "Bank password."
+          },
+          "num": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "Num",
+            "description": "Bank-specific number/code."
+          },
+          "userCode": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "User code",
+            "description": "Hapoalim user code."
+          },
+          "username": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "Username",
+            "description": "Login username."
+          },
+          "nationalID": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "National ID",
+            "description": "Yahav national ID."
+          },
+          "card6Digits": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "Card 6 digits",
+            "description": "Six card digits (Isracard/Amex)."
+          },
+          "email": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "Email",
+            "description": "Login email."
+          },
+          "phoneNumber": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "Phone number",
+            "description": "E.g. 9725XXXXXXXX."
+          },
+          "otpLongTermToken": {
+            "type": "string",
+            "x-format": "password",
+            "x-secret": true,
+            "title": "OTP long-term token",
+            "description": "Saved after first 2FA login to skip OTP next time."
+          },
+          "twoFactorAuth": {
+            "type": "boolean",
+            "x-format": "checkbox",
+            "title": "Two-factor auth",
+            "description": "true = bot asks for SMS OTP via Telegram."
+          },
+          "twoFactorTimeout": {
+            "type": "number",
+            "minimum": 1,
+            "title": "2FA timeout (s)",
+            "description": "Seconds to wait for OTP reply. Default 300."
+          },
+          "clearSession": {
+            "type": "boolean",
+            "x-format": "checkbox",
+            "title": "Clear session",
+            "description": "No-op with Camoufox; kept for backward compatibility."
+          },
+          "timeout": {
+            "type": "number",
+            "minimum": 0,
+            "title": "Navigation timeout (ms)",
+            "description": "Navigation timeout in ms. Default 30000."
+          },
+          "navigationRetryCount": {
+            "type": "number",
+            "minimum": 0,
+            "title": "Navigation retries",
+            "description": "Retries on page load failure. Default 0."
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "actualAccountId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "title": "Actual account id",
+                  "description": "UUID from the Actual Budget account URL."
+                },
+                "accountName": {
+                  "type": "string",
+                  "title": "Account name",
+                  "description": "Optional friendly label shown in logs and Telegram."
+                },
+                "accounts": {
+                  "type": "string",
+                  "title": "Accounts",
+                  "description": "\"all\" or comma-separated bank account numbers."
+                },
+                "reconcile": {
+                  "type": "boolean",
+                  "x-format": "checkbox",
+                  "title": "Reconcile",
+                  "description": "true = auto-adjust balance to match the bank."
+                }
+              },
+              "required": [
+                "actualAccountId"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "x-bank-map": true,
+      "x-bank-options": [
+        "amex",
+        "behatsdaa",
+        "beinleumi",
+        "beyahadbishvilha",
+        "discount",
+        "hapoalim",
+        "isracard",
+        "leumi",
+        "massad",
+        "max",
+        "mercantile",
+        "mizrahi",
+        "onezero",
+        "otsarhahayal",
+        "pagi",
+        "paybox",
+        "pepper",
+        "visacal",
+        "yahav"
+      ],
+      "title": "Banks",
+      "x-doc": "configuration/banks.md"
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "x-format": "checkbox",
+          "title": "Enabled",
+          "description": "Master switch for notifications."
+        },
+        "maxTransactions": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 25,
+          "title": "Max transactions",
+          "description": "Max transactions per account in notifications (1-25). Default 5."
+        },
+        "telegram": {
+          "type": "object",
+          "properties": {
+            "botToken": {
+              "type": "string",
+              "x-format": "password",
+              "x-secret": true,
+              "title": "Bot token",
+              "description": "Telegram bot token."
+            },
+            "chatId": {
+              "type": "string",
+              "title": "Chat id",
+              "description": "Target chat id."
+            },
+            "messageFormat": {
+              "type": "string",
+              "enum": [
+                "summary",
+                "compact",
+                "ledger",
+                "emoji"
+              ],
+              "title": "Message format",
+              "description": "summary | compact | ledger | emoji."
+            },
+            "showTransactions": {
+              "type": "string",
+              "enum": [
+                "new",
+                "all",
+                "none"
+              ],
+              "title": "Show transactions",
+              "description": "new | all | none."
+            },
+            "listenForCommands": {
+              "type": "boolean",
+              "x-format": "checkbox",
+              "title": "Listen for commands",
+              "description": "Bot listens for /scan, /status, /logs, /help."
+            },
+            "enableReceiptImport": {
+              "type": "boolean",
+              "x-format": "checkbox",
+              "title": "Receipt import",
+              "description": "Enable /import_receipt OCR. Requires listenForCommands."
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "title": "Telegram"
+        },
+        "webhook": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "x-format": "password",
+              "x-secret": true,
+              "title": "Webhook URL",
+              "description": "Slack/Discord/custom URL."
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "plain",
+                "slack",
+                "discord"
+              ],
+              "title": "Format",
+              "description": "slack | discord | plain."
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "title": "Webhook"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "title": "Alerts",
+      "x-doc": "notifications/telegram.md"
+    },
+    "spendingWatch": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "alertFromAmount": {
+            "type": "number",
+            "minimum": 1,
+            "title": "Alert from amount",
+            "description": "Trigger if total spending exceeds this amount."
+          },
+          "numOfDayToCount": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 365,
+            "title": "Days to count",
+            "description": "Time window in days (1 = today only)."
+          },
+          "watchPayees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Watch payees",
+            "description": "Optional payee substrings to match. Empty = all payees."
+          }
+        },
+        "required": [
+          "alertFromAmount",
+          "numOfDayToCount"
+        ],
+        "additionalProperties": false
+      },
+      "title": "Watch",
+      "x-doc": "configuration/spending-watch.md"
+    },
+    "categorization": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "history",
+            "translate"
+          ],
+          "title": "Mode",
+          "description": "none | history | translate."
+        },
+        "translations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fromPayee": {
+                "type": "string",
+                "title": "From (Hebrew)"
+              },
+              "toPayee": {
+                "type": "string",
+                "title": "To (English)"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "title": "Translations",
+          "description": "Payee translation rules (used when mode = translate)."
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "title": "Categories",
+      "x-doc": "configuration/categorization.md"
+    },
+    "logConfig": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": [
+            "words",
+            "json",
+            "table",
+            "phone"
+          ],
+          "title": "Log format",
+          "description": "words | json | table | phone. Default: words."
+        },
+        "logDir": {
+          "type": "string",
+          "title": "Log directory",
+          "description": "Directory for rotating log files. Default: ./logs."
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "title": "Logging",
+      "x-doc": "configuration/logging.md"
+    },
+    "proxy": {
+      "type": "object",
+      "properties": {
+        "server": {
+          "type": "string",
+          "title": "Proxy server",
+          "description": "socks5://host:port or http://host:port (not used with Camoufox yet)."
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "title": "Proxy",
+      "x-doc": "configuration/proxy.md"
+    },
+    "portal": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "x-format": "checkbox",
+          "title": "Enabled",
+          "description": "Start the config web portal."
+        },
+        "host": {
+          "type": "string",
+          "title": "Host",
+          "description": "127.0.0.1 (local only) or 0.0.0.0 to expose."
+        },
+        "port": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 65535,
+          "title": "Port",
+          "description": "Listen port. Default 8080."
+        },
+        "authMode": {
+          "type": "string",
+          "enum": [
+            "password",
+            "google",
+            "both"
+          ],
+          "title": "Auth mode",
+          "description": "password | google | both. Changing this needs a portal restart to take effect."
+        },
+        "secureCookies": {
+          "type": "boolean",
+          "x-format": "checkbox",
+          "title": "Secure cookies",
+          "description": "Mark session cookies Secure. Enable only when served over HTTPS."
+        },
+        "passwordHash": {
+          "type": "string",
+          "x-format": "password",
+          "x-secret": true,
+          "title": "Portal password",
+          "description": "Set or change the portal password; it is hashed on save. Needed for password and both modes. Changing it needs a portal restart to take effect."
+        },
+        "sessionSecret": {
+          "type": "string",
+          "x-format": "password",
+          "x-secret": true,
+          "title": "Session secret",
+          "description": "Signing key for session cookies (>= 16 chars). Changing it needs a portal restart to take effect."
+        },
+        "google": {
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string",
+              "title": "Client id",
+              "description": "Google OAuth client id."
+            },
+            "clientSecret": {
+              "type": "string",
+              "x-format": "password",
+              "x-secret": true,
+              "title": "Client secret",
+              "description": "Google OAuth client secret."
+            },
+            "redirectUri": {
+              "type": "string",
+              "title": "Redirect URI",
+              "description": "OAuth callback URL."
+            },
+            "allowedEmails": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "title": "Allowed emails",
+              "description": "Allow-listed Google emails."
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "title": "Google OAuth",
+          "x-show-when": {
+            "field": "authMode",
+            "in": [
+              "google",
+              "both"
+            ]
+          }
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "title": "Portal",
+      "x-doc": "configuration/portal.md"
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

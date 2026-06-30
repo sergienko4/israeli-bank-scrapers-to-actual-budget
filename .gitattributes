@@ -7,3 +7,7 @@
 
 # Dockerfile must stay LF so RUN layers parse on Linux.
 Dockerfile text eol=lf
+
+# Generated portal JSON Schema is written with LF; pin it so the
+# schema:check drift gate stays stable on Windows (core.autocrlf=true).
+config/portal/config.schema.json text eol=lf
