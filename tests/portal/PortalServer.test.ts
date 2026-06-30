@@ -5,8 +5,8 @@ import type { FastifyInstance } from 'fastify';
 
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { buildPortal, startPortal } from '../../src/Portal/PortalServer.js';
-import { fakeBankConfig } from '../helpers/factories.js';
-import { fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
+import { fakeBankConfig, fakeValidBankConfigFor } from '../helpers/factories.js';
+import { fakePortalConfig, fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
 
 let app: FastifyInstance;
 let dir: string;
@@ -68,7 +68,7 @@ describe('PortalServer routes (password mode)', () => {
 
   it('adds then removes a bank via the API', async () => {
     const cookie = await loginCookie();
-    const add = await app.inject({ method: 'POST', url: '/api/banks/leumi', cookies: { portal_session: cookie }, payload: fakeBankConfig() });
+    const add = await app.inject({ method: 'POST', url: '/api/banks/leumi', cookies: { portal_session: cookie }, payload: fakeValidBankConfigFor('leumi') });
     expect(add.statusCode).toBe(200);
     const del = await app.inject({ method: 'DELETE', url: '/api/banks/discount', cookies: { portal_session: cookie } });
     expect(del.statusCode).toBe(200);
@@ -119,6 +119,86 @@ describe('PortalServer routes (password mode)', () => {
       payload: { actual: {}, banks: {} },
     });
     expect(put.statusCode).toBe(400);
+    expect(put.json().error).toBeTruthy();
+  });
+
+  it('returns 400 when the proxy section is invalid (write-gate parity)', async () => {
+    const cookie = await loginCookie();
+    const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });
+    const bad = masked.json();
+    bad.proxy = { server: '10.0.0.1:1080' };
+    const put = await app.inject({
+      method: 'PUT', url: '/api/config', cookies: { portal_session: cookie }, payload: bad,
+    });
+    expect(put.statusCode).toBe(400);
+    expect(put.json().error).toBeTruthy();
+  });
+
+  it('returns 400 when a spendingWatch rule is incomplete (write-gate parity)', async () => {
+    const cookie = await loginCookie();
+    const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });
+    const bad = masked.json();
+    bad.spendingWatch = [{ alertFromAmount: 100 }];
+    const put = await app.inject({
+      method: 'PUT', url: '/api/config', cookies: { portal_session: cookie }, payload: bad,
+    });
+    expect(put.statusCode).toBe(400);
+    expect(put.json().error).toBeTruthy();
+  });
+
+  it('returns 400 when a bank is missing a required credential (write-gate parity)', async () => {
+    const cookie = await loginCookie();
+    const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });
+    const bad = masked.json();
+    bad.banks.discount.password = '';
+    const put = await app.inject({
+      method: 'PUT', url: '/api/config', cookies: { portal_session: cookie }, payload: bad,
+    });
+    expect(put.statusCode).toBe(400);
+    expect(put.json().error).toBeTruthy();
+  });
+
+  it('returns 400 when the Actual serverURL scheme is malformed (write-gate parity)', async () => {
+    const cookie = await loginCookie();
+    const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });
+    const bad = masked.json();
+    bad.actual.init.serverURL = 'httptypo://localhost:5006';
+    const put = await app.inject({
+      method: 'PUT', url: '/api/config', cookies: { portal_session: cookie }, payload: bad,
+    });
+    expect(put.statusCode).toBe(400);
+    expect(put.json().error).toBeTruthy();
+  });
+
+  it('returns 400 when enabling a portal whose auth config can log nobody in', async () => {
+    const cookie = await loginCookie();
+    const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });
+    const bad = masked.json();
+    bad.portal = fakePortalConfig({ authMode: 'google' });
+    const put = await app.inject({
+      method: 'PUT', url: '/api/config', cookies: { portal_session: cookie }, payload: bad,
+    });
+    expect(put.statusCode).toBe(400);
+    expect(put.json().error).toBeTruthy();
+  });
+
+  it('returns 400 (not 500) when /api/validate receives a body that throws', async () => {
+    const cookie = await loginCookie();
+    const res = await app.inject({
+      method: 'POST', url: '/api/validate', cookies: { portal_session: cookie }, payload: { banks: {} },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBeTruthy();
+  });
+
+  it('returns 500 when persisting fails because the config dir is gone', async () => {
+    const cookie = await loginCookie();
+    const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });
+    rmSync(dir, { recursive: true, force: true });
+    const put = await app.inject({
+      method: 'PUT', url: '/api/config', cookies: { portal_session: cookie }, payload: masked.json(),
+    });
+    expect(put.statusCode).toBe(500);
     expect(put.json().error).toBeTruthy();
   });
 

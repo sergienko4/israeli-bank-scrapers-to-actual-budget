@@ -234,6 +234,8 @@ describe('Portal UI E2E', () => {
       expect(cfg.banks?.discount?.targets).toHaveLength(2);
       expect(creds.banks?.discount?.password).toBe(DISCOUNT_PASSWORD);
       expect(creds.banks?.leumi?.password).toBe('leumi-secret');
+      expect(creds.banks?.leumi?.username).toBe('leumi-user');
+      expect(cfg.banks?.leumi?.username).toBeUndefined();
     } finally {
       await teardown(server, context);
     }

@@ -13,10 +13,11 @@ const MASK = '********';
 describe('ConfigMutations', () => {
   describe('maskSecrets', () => {
     it('masks secret-keyed strings while keeping other fields', () => {
-      const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ id: '12345', password: 'topsecret' }) } });
+      const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ id: '12345', password: 'topsecret', daysBack: 30 }) } });
       const masked = maskSecrets(config);
       expect(masked.banks.discount.password).toBe(MASK);
-      expect(masked.banks.discount.id).toBe('12345');
+      expect(masked.banks.discount.id).toBe(MASK);
+      expect(masked.banks.discount.daysBack).toBe(30);
     });
 
     it('passes primitives and empty secrets through untouched', () => {
@@ -31,6 +32,13 @@ describe('ConfigMutations', () => {
       const masked = maskSecrets(config);
       expect(masked.notifications?.telegram?.botToken).toBe(MASK);
       expect(masked.notifications?.webhook?.url).toBe(MASK);
+    });
+
+    it('masks a numeric value at a secret key (e.g. a hand-edited numeric password)', () => {
+      const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ password: 123456 as unknown as string, daysBack: 30 }) } });
+      const masked = maskSecrets(config);
+      expect(masked.banks.discount.password).toBe(MASK);
+      expect(masked.banks.discount.daysBack).toBe(30);
     });
   });
 

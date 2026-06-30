@@ -16,7 +16,7 @@ export interface IPortalGoogleConfig {
   clientId: string;
   clientSecret?: string;
   redirectUri: string;
-  allowedEmails: string[];
+  allowedEmails?: string[]; // Optional in JSON; absent/empty blocks every google login (see PortalRuntime).
 }
 
 /** Root portal configuration; merged from config.json + credentials.json. */

@@ -50,7 +50,20 @@ export function hashPlainPortalPassword(config: IImporterConfig): IImporterConfi
 }
 
 /**
- * Recursively replaces secret-keyed string values with a mask sentinel.
+ * Whether a leaf value at a secret-named key should be masked. Covers non-empty
+ * strings and any number, so a hand-edited numeric identifier (e.g. a bare
+ * `card6Digits: 123456`) is redacted instead of leaking unmasked to the browser.
+ * @param value - Leaf value found at a secret key.
+ * @returns True when the value is a real secret worth masking.
+ */
+function isMaskableSecret(value: unknown): boolean {
+  if (typeof value === 'number') return true;
+  return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Recursively replaces secret-keyed values with a mask sentinel. Both string and
+ * numeric leaves at secret keys are masked (see `isMaskableSecret`).
  * @param value - Any config sub-tree.
  * @returns A masked deep copy (objects/arrays recursed; primitives passed through).
  */
@@ -59,7 +72,7 @@ export function maskSecrets<T>(value: T): T {
   if (!value || typeof value !== 'object') return value;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) {
-    out[k] = SECRET_KEYS.includes(k) && typeof v === 'string' && v ? MASK : maskSecrets(v);
+    out[k] = SECRET_KEYS.includes(k) && isMaskableSecret(v) ? MASK : maskSecrets(v);
   }
   return out as T;
 }

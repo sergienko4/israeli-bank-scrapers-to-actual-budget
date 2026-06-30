@@ -41,11 +41,14 @@ function isBranch(value: unknown): value is Branch {
 }
 
 /**
- * Whether a leaf at a secret-named key is a real secret worth relocating.
+ * Whether a leaf at a secret-named key is a real secret worth relocating into
+ * credentials.json. Covers non-empty strings and any number, so a hand-edited
+ * numeric identifier is moved out of the never-encrypted config.json too.
  * @param value - Leaf value found at a secret key.
- * @returns True for non-empty string secrets (skips null/empty placeholders).
+ * @returns True for non-empty string or numeric secrets (skips null/empty).
  */
 function isSecretLeaf(value: unknown): boolean {
+  if (typeof value === 'number') return true;
   return typeof value === 'string' && value.length > 0;
 }
 

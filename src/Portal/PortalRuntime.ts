@@ -136,12 +136,19 @@ export function resolvePortalRuntime(config: IImporterConfig): IPortalRuntime {
 }
 
 /**
- * Whether a Google OAuth config has every field needed to run the consent flow.
+ * Whether a Google OAuth config has every field needed to run the consent flow
+ * AND admit at least one user. Without a non-empty allowedEmails the consent
+ * flow completes but every login is rejected, so the portal would boot
+ * un-loginable in google/both mode.
  * @param google - Portal Google config, if present.
- * @returns True when clientId, clientSecret, and redirectUri are all set.
+ * @returns True when clientId, clientSecret, redirectUri, and a non-empty
+ *          allowedEmails list are all set.
  */
 function isGoogleConfigComplete(google?: IPortalGoogleConfig): boolean {
-  return Boolean(google?.clientId && google.clientSecret && google.redirectUri);
+  return Boolean(
+    google?.clientId && google.clientSecret && google.redirectUri
+    && google.allowedEmails && google.allowedEmails.length > 0,
+  );
 }
 
 /**
@@ -158,7 +165,7 @@ export function portalAuthConfigError(rt: IPortalRuntime): string {
     return 'set portal.passwordHash for password/both mode (type a password in the portal, then restart)';
   }
   if ((mode === 'google' || mode === 'both') && !isGoogleConfigComplete(rt.portal.google)) {
-    return 'set portal.google.clientId, clientSecret, and redirectUri for google/both mode';
+    return 'set portal.google.clientId, clientSecret, redirectUri, and at least one allowedEmails entry for google/both mode';
   }
   return '';
 }

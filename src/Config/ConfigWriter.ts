@@ -36,8 +36,12 @@ function stageWrite(item: IPendingWrite): string {
 
 /**
  * Commits files as one unit: stages every `.tmp` first, then renames each into
- * place. A serialization or staging failure therefore never leaves config.json
- * secret-stripped while credentials.json is missing those same secrets.
+ * place. Staging all temps before any rename means a serialization or staging
+ * failure never leaves config.json secret-stripped while credentials.json is
+ * missing those same secrets. Note the two renames are not a single atomic
+ * transaction — a process crash in the narrow window between them can leave one
+ * file updated and the other from the prior write; the importer re-validates on
+ * its next run and surfaces any resulting mismatch rather than importing blindly.
  * @param items - Files to persist together (secrets-superset file first).
  * @returns Status object with the count of files committed.
  */

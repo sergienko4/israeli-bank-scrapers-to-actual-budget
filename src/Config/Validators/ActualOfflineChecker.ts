@@ -37,17 +37,19 @@ function checkActualSyncId(config: IImporterConfig): IValidationResult {
 }
 
 /**
- * Checks whether the Actual server URL is present and starts with http.
+ * Checks whether the Actual server URL is present and starts with http:// or
+ * https:// — the same prefixes the importer's boot validator requires, so the
+ * portal's offline report never green-lights a URL boot would reject.
  * @param config - The IImporterConfig to inspect.
  * @returns A pass result if the URL is valid, otherwise fail.
  */
 function checkActualServerUrl(config: IImporterConfig): IValidationResult {
   const { serverURL } = config.actual.init;
   if (!serverURL) return fail('actual.serverURL', 'serverURL is missing');
-  return serverURL.startsWith('http')
+  return (serverURL.startsWith('http://') || serverURL.startsWith('https://'))
     ? pass('actual.serverURL', `Server URL format valid: ${serverURL}`)
     : fail('actual.serverURL',
-      `Invalid serverURL "${serverURL}" — must start with http://`);
+      `Invalid serverURL "${serverURL}" — must start with http:// or https://`);
 }
 
 /**

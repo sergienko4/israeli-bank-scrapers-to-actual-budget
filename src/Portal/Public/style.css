@@ -18,6 +18,7 @@
   --accent-strong: #3b6ef0;
   --accent-soft: #5b8cff1f;
   --accent-ring: #5b8cff4d;
+  --accent-text: #5b8cff;
   --ok: #34d399;
   --ok-soft: #34d39920;
   --danger: #f87171;
@@ -50,6 +51,11 @@
     --accent-strong: #2a57d6;
     --accent-soft: #3b6ef014;
     --accent-ring: #3b6ef03d;
+    --accent-text: #2a57d6;
+    /* Darken semantic text colors for AA contrast (>=4.5:1) on light surfaces;
+       the dark-theme values above are too light against near-white backgrounds. */
+    --ok: #047857;
+    --danger: #c81e1e;
     --switch-off: #cdd7e6;
     --shadow-1: 0 1px 2px #1b2b4814, 0 1px 3px #1b2b4810;
     --shadow-2: 0 10px 30px #1b2b4818, 0 2px 8px #1b2b4810;
@@ -94,7 +100,7 @@ body {
 .btn:active { transform: translateY(1px); }
 .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
 .btn.primary {
-  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  background: linear-gradient(180deg, #3565e0, #2a57d6);
   color: #fff; border: 0; box-shadow: var(--shadow-1);
 }
 .btn.primary:hover { filter: brightness(1.06); }
@@ -166,7 +172,7 @@ body {
   cursor: pointer; transition: background .12s, color .12s; width: 100%;
 }
 #nav button:hover { background: var(--surface-2); color: var(--fg); }
-#nav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+#nav button.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
 #nav button.active::before {
   content: ''; position: absolute; left: 5px; top: 50%; transform: translateY(-50%);
   width: 3px; height: 18px; border-radius: 2px; background: var(--accent);
@@ -203,7 +209,7 @@ main { min-width: 0; display: flex; flex-direction: column; }
 .doc {
   display: inline-flex; align-items: center; gap: 6px; margin-bottom: 16px;
   padding: 5px 12px; border-radius: 999px; background: var(--accent-soft);
-  color: var(--accent); font-size: 12.5px; font-weight: 600; text-decoration: none;
+  color: var(--accent-text); font-size: 12.5px; font-weight: 600; text-decoration: none;
   border: 1px solid var(--line);
 }
 .doc:hover { border-color: var(--accent); }
@@ -263,7 +269,7 @@ select {
   margin: 0 0 16px; background: var(--surface-2); display: grid; gap: 2px;
 }
 .group legend {
-  color: var(--accent); font-size: 12px; font-weight: 700; padding: 0 8px;
+  color: var(--accent-text); font-size: 12px; font-weight: 700; padding: 0 8px;
   text-transform: uppercase; letter-spacing: .05em;
 }
 
@@ -315,7 +321,7 @@ select {
   display: flex; flex-direction: column; gap: 10px; pointer-events: none;
 }
 .toast {
-  min-width: 220px; max-width: 360px; padding: 13px 16px; border-radius: var(--r);
+  min-width: 220px; max-width: min(360px, calc(100vw - 40px)); padding: 13px 16px; border-radius: var(--r);
   background: var(--elevated); border: 1px solid var(--line); box-shadow: var(--shadow-3);
   font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px;
   transform: translateY(8px); opacity: 0; transition: transform .22s, opacity .22s;

@@ -111,6 +111,19 @@ export class ConfigLoader implements IConfigLoader {
   // ─── Validation ───
 
   /**
+   * Boot-gate validation seam: enforces the exact "is this config bootable?"
+   * rules the importer applies at startup, without file loading. The portal
+   * write-gate calls this so a saved config can never pass the portal yet make
+   * the importer exit(1). Delegates to the loader's own private validation, the
+   * same check the loader runs after merging files, so the two cannot drift.
+   * @param config - The merged IImporterConfig to validate.
+   * @returns Procedure with the validated config, or a config-error failure.
+   */
+  public static validateBootable(config: IImporterConfig): Procedure<IImporterConfig> {
+    return ConfigLoader.validate(config);
+  }
+
+  /**
    * Validates the fully merged config, returning a Procedure with the config or failure.
    * @param config - The merged IImporterConfig to validate.
    * @returns Procedure containing the validated config on success, or failure message.

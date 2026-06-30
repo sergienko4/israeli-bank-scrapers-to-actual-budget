@@ -133,8 +133,9 @@ describe('Config manifest completeness gate', () => {
 
   it('derives the expected secret keys', () => {
     expect(deriveSecretKeys()).toEqual([
-      'botToken', 'clientSecret', 'otpLongTermToken', 'password',
-      'passwordHash', 'sessionSecret', 'url',
+      'botToken', 'card6Digits', 'clientSecret', 'email', 'id', 'nationalID',
+      'num', 'otpLongTermToken', 'password', 'passwordHash', 'phoneNumber',
+      'sessionSecret', 'url', 'userCode', 'username',
     ]);
   });
 

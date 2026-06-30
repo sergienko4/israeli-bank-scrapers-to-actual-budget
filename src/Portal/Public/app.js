@@ -177,6 +177,7 @@ function loginHint(status) {
  */
 async function login() {
   const btn = $('pw-btn');
+  if (btn.disabled) return;
   const label = btn.textContent;
   $('login-err').textContent = '';
   btn.disabled = true;
@@ -206,6 +207,18 @@ async function load() {
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
   render();
+  focusApp();
+}
+
+/**
+ * Moves keyboard focus onto the app's main heading after login so assistive
+ * tech lands on the page content instead of the now-hidden login button.
+ * @returns {void}
+ */
+function focusApp() {
+  const title = $('title');
+  title.setAttribute('tabindex', '-1');
+  title.focus();
 }
 
 /**
@@ -298,6 +311,7 @@ function openDrawer() {
   if (app.classList.contains('nav-open')) return;
   app.classList.add('nav-open');
   $('menu').setAttribute('aria-expanded', 'true');
+  $('main').inert = true;
   const first = $('nav').querySelector('button');
   if (first) first.focus();
 }
@@ -311,6 +325,7 @@ function closeDrawer() {
   const wasOpen = app.classList.contains('nav-open');
   app.classList.remove('nav-open');
   $('menu').setAttribute('aria-expanded', 'false');
+  $('main').inert = false;
   if (wasOpen) $('menu').focus();
 }
 
@@ -444,9 +459,22 @@ function rowNode(field, obj, path) {
   const label = el('label', null, field.label + (field.required ? ' *' : ''));
   label.setAttribute('for', path);
   row.appendChild(label);
-  row.appendChild(inputNode(field, obj, path));
+  const node = inputNode(field, obj, path);
+  if (field.required) markRequired(node);
+  row.appendChild(node);
   if (field.help) row.appendChild(el('small', 'help', field.help));
   return row;
+}
+
+/**
+ * Flags the control inside a row as required for assistive tech, reaching the
+ * inner input when the field renders inside a wrapper (e.g. a secret toggle).
+ * @param {HTMLElement} node input/select element, or a wrapper containing one
+ * @returns {void}
+ */
+function markRequired(node) {
+  const input = node.matches('input, select') ? node : node.querySelector('input, select');
+  if (input) input.setAttribute('aria-required', 'true');
 }
 
 /**
@@ -547,9 +575,13 @@ function secretNode(field, obj, path) {
   };
   const eye = button('', 'btn ghost reveal');
   eye.innerHTML = EYE_SVG;
-  eye.setAttribute('aria-label', 'Show or hide secret');
+  eye.setAttribute('aria-label', 'Show secret');
+  eye.setAttribute('aria-pressed', 'false');
   eye.onclick = () => {
-    i.type = i.type === 'password' ? 'text' : 'password';
+    const reveal = i.type === 'password';
+    i.type = reveal ? 'text' : 'password';
+    eye.setAttribute('aria-pressed', String(reveal));
+    eye.setAttribute('aria-label', reveal ? 'Hide secret' : 'Show secret');
   };
   wrap.append(i, eye);
   return wrap;
@@ -911,6 +943,11 @@ $('scrim').onclick = closeDrawer;
 $('reload-btn').onclick = () => location.reload();
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && $('app').classList.contains('nav-open')) closeDrawer();
+});
+// Reset the mobile drawer's inert/overlay state if the viewport grows to desktop
+// while the drawer is open, so the main panel never gets stuck non-interactive.
+matchMedia('(min-width: 761px)').addEventListener('change', (e) => {
+  if (e.matches) closeDrawer();
 });
 
 init();

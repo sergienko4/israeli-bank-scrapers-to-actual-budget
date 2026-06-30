@@ -36,7 +36,11 @@ export class ConfigValidator {
   private readonly _skipOnlineOnFailure = true;
 
   /**
-   * Runs all offline validation checks (no network calls).
+   * Runs all offline validation checks (no network calls): the required
+   * actual/banks/notifications sections, surfacing every issue at once with
+   * bank-name typo suggestions. This is a human-readable report, not the boot
+   * gate — the portal write-gate additionally runs
+   * {@link ConfigLoader.validateBootable} for full importer-boot parity.
    * @param config - The IImporterConfig to validate.
    * @returns Array of IValidationResult objects for each check.
    */

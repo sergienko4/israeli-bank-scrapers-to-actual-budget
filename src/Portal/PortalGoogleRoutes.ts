@@ -29,13 +29,6 @@ export interface IGrantArgs {
 /** Merges a verified factor into the session cookie; reports completion. */
 export type GrantFn = (args: IGrantArgs) => { granted: true };
 
-/**
- * Registers the Google consent + callback routes when Google is configured.
- * @param app - Fastify instance.
- * @param rt - Resolved runtime (google config).
- * @param grant - Callback to merge a verified factor into the session.
- * @returns Whether the Google routes were registered (skipped when unconfigured).
- */
 /** Resolved runtime, factor-granting callback, and verified Google config. */
 interface IGoogleRouteCtx {
   rt: IPortalRuntime;
@@ -79,7 +72,7 @@ function registerCallbackRoute(app: FastifyInstance, ctx: IGoogleRouteCtx): { re
     }
     reply.clearCookie(STATE_COOKIE, { path: '/' });
     const email = await exchangeCode(google, code);
-    if (isFail(email) || !isEmailAllowed(email.data, google.allowedEmails)) {
+    if (isFail(email) || !isEmailAllowed(email.data, google.allowedEmails ?? [])) {
       return await reply.code(403).send({ error: 'Email not allowed' });
     }
     grant({ req, reply, rt: runtime, factor: { google: true, email: email.data } });

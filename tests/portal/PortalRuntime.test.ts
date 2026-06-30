@@ -140,6 +140,11 @@ describe('PortalRuntime', () => {
       expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'google', portal }))).toMatch(/google/);
     });
 
+    it('flags google/both mode whose google client has no allowedEmails', () => {
+      const portal = fakePortalConfig({ authMode: 'google', google: fakeGoogleConfig({ allowedEmails: [] }) });
+      expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'google', portal }))).toMatch(/allowedEmails/);
+    });
+
     it('returns empty when both mode has a password and a complete google client', () => {
       const portal = fakePortalConfig({ authMode: 'both', google: fakeGoogleConfig() });
       expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'both', portal }))).toBe('');

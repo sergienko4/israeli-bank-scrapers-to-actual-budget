@@ -10,7 +10,13 @@ import { BANK_CATALOG } from '../../Types/BankCatalog.js';
 import type { IBankConfig } from '../../Types/Index.js';
 import type { IBankRequirement, IManifestField, IManifestSection } from './ManifestTypes.js';
 
-/** Editable fields shown on every bank card. */
+/**
+ * Editable fields shown on every bank card. Every login identifier (id, num,
+ * userCode, username, nationalID, card6Digits, email, phoneNumber) is `secret`,
+ * not just the password: each is a bank credential, so it must be masked in the
+ * UI and routed to the encryptable credentials.json — never written in
+ * plaintext to config.json.
+ */
 const BANK_FIELDS: readonly IManifestField[] = [
   {
     key: 'daysBack', label: 'Days back', kind: 'number', min: 1, max: 365,
@@ -20,18 +26,18 @@ const BANK_FIELDS: readonly IManifestField[] = [
     key: 'startDate', label: 'Start date', kind: 'date',
     help: 'Fixed YYYY-MM-DD (max 1 year back). Cannot combine with days back.',
   },
-  { key: 'id', label: 'ID', kind: 'string', help: 'Bank user/account id.' },
+  { key: 'id', label: 'ID', kind: 'secret', help: 'Bank user/account id.' },
   { key: 'password', label: 'Password', kind: 'secret', help: 'Bank password.' },
-  { key: 'num', label: 'Num', kind: 'string', help: 'Bank-specific number/code.' },
-  { key: 'userCode', label: 'User code', kind: 'string', help: 'Hapoalim user code.' },
-  { key: 'username', label: 'Username', kind: 'string', help: 'Login username.' },
-  { key: 'nationalID', label: 'National ID', kind: 'string', help: 'Yahav national ID.' },
+  { key: 'num', label: 'Num', kind: 'secret', help: 'Bank-specific number/code.' },
+  { key: 'userCode', label: 'User code', kind: 'secret', help: 'Hapoalim user code.' },
+  { key: 'username', label: 'Username', kind: 'secret', help: 'Login username.' },
+  { key: 'nationalID', label: 'National ID', kind: 'secret', help: 'Yahav national ID.' },
   {
-    key: 'card6Digits', label: 'Card 6 digits', kind: 'string',
+    key: 'card6Digits', label: 'Card 6 digits', kind: 'secret',
     help: 'Six card digits (Isracard/Amex).',
   },
-  { key: 'email', label: 'Email', kind: 'string', help: 'Login email.' },
-  { key: 'phoneNumber', label: 'Phone number', kind: 'string', help: 'E.g. 9725XXXXXXXX.' },
+  { key: 'email', label: 'Email', kind: 'secret', help: 'Login email.' },
+  { key: 'phoneNumber', label: 'Phone number', kind: 'secret', help: 'E.g. 9725XXXXXXXX.' },
   {
     key: 'otpLongTermToken', label: 'OTP long-term token', kind: 'secret',
     help: 'Saved after first 2FA login to skip OTP next time.',
