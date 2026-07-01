@@ -5,6 +5,9 @@ export default defineConfig({
     root: process.cwd(),
     globals: true,
     environment: 'node',
+    // Setup hooks (e.g. seedConfigDir) do real filesystem I/O; allow 30s so
+    // they do not time out under the loaded pre-commit hook / CI runners.
+    hookTimeout: 30000,
     include: ['tests/**/*.test.ts'],
     exclude: ['tests/e2e/**'],
     coverage: {
