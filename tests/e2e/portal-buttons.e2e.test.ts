@@ -16,6 +16,12 @@
  *  5. A `list` section's "+ Add" primary button and a card's "Remove" button.
  *  6. A secret input's reveal toggle flips type password ⇄ text.
  *  7. A section `doc` renders a safe external "Read the documentation" link.
+ *  8. Add-bank happy path: select + add + fill required + valid target UUID +
+ *     Save persists the bank with its secret split into credentials.json.
+ *  9. Add-bank with no selection gives a toast and adds no card.
+ * 10. Saving an incomplete bank surfaces a per-field problem list, flags the
+ *     offending inputs (aria-invalid), and persists nothing.
+ * 11. Changing a bank password persists the NEW secret to credentials.json.
  *
  * Design notes / no skips: every gap has real manifest support, so nothing is
  * skipped. For test 4 the representative non-Google list field is the OBJECT
@@ -53,6 +59,7 @@ interface ISplitFile {
   banks?: Record<string, {
     targets?: unknown[];
     navigationRetryCount?: number;
+    username?: string;
     password?: string;
   }>;
   spendingWatch?: { alertFromAmount?: number; numOfDayToCount?: number }[];
@@ -393,6 +400,99 @@ describe('Portal buttons E2E', () => {
       const href = await doc.getAttribute('href');
       expect(href?.startsWith(DOC_BASE)).toBe(true);
       expect(href?.endsWith('configuration/banks.md')).toBe(true);
+    } finally {
+      await teardown(server, context);
+    }
+  }, 120_000);
+
+  it('adds a bank via the dropdown, fills its fields + target, and persists it (secret split out)',
+    async () => {
+      const server = await startSeededPortal(seedConfig());
+      const { context, page } = await authedPage(server);
+      try {
+        await gotoBanks(page);
+        expect(await page.locator('[data-bank="leumi"]').count()).toBe(0);
+
+        await page.selectOption('#add-bank-select', 'leumi');
+        await page.click('#add-bank-btn');
+        await page.locator('[data-bank="leumi"]').waitFor({ state: 'visible' });
+
+        await byPath(page, 'banks.leumi.username').fill('leumi-user');
+        await byPath(page, 'banks.leumi.password').fill('leumi-secret-42');
+        await byPath(page, 'banks.leumi.targets.0.actualAccountId').fill(TARGET_B);
+
+        await save(page);
+
+        // The settings half keeps the bank + target but NOT the plaintext secret.
+        const settings = readSplit(server.configPath);
+        expect(settings.banks?.leumi?.targets).toHaveLength(1);
+        expect(settings.banks?.leumi?.password).toBeUndefined();
+        // The secret is split out into the credentials half.
+        expect(readSplit(server.credsPath).banks?.leumi?.password).toBe('leumi-secret-42');
+      } finally {
+        await teardown(server, context);
+      }
+    }, 120_000);
+
+  it('gives feedback and adds no card when Add bank is clicked with no selection', async () => {
+    const server = await startSeededPortal(seedConfig());
+    const { context, page } = await authedPage(server);
+    try {
+      await gotoBanks(page);
+      const cards = page.locator('.card[data-bank]');
+      const before = await cards.count();
+
+      await page.click('#add-bank-btn'); // placeholder still selected
+      await page.waitForSelector('.toast.err', { state: 'visible' });
+      expect(await page.locator('.toast.err').first().textContent()).toContain('Select a bank');
+      expect(await cards.count()).toBe(before);
+    } finally {
+      await teardown(server, context);
+    }
+  }, 120_000);
+
+  it('surfaces which fields are missing when an incomplete bank is saved, persisting nothing',
+    async () => {
+      const server = await startSeededPortal(seedConfig());
+      const { context, page } = await authedPage(server);
+      try {
+        await gotoBanks(page);
+        await page.selectOption('#add-bank-select', 'leumi');
+        await page.click('#add-bank-btn');
+        await page.locator('[data-bank="leumi"]').waitFor({ state: 'visible' });
+
+        // Save with leumi's required credentials + target account left empty.
+        await page.locator('#status').evaluate((node) => {
+          node.textContent = '';
+          node.setAttribute('class', 'status');
+        });
+        await page.click('#save');
+        await page.waitForSelector('#status.err', { timeout: 15_000 });
+
+        // A readable per-problem list is shown, not one opaque semicolon line.
+        expect(await page.locator('#status .error-list li').count()).toBeGreaterThan(0);
+        // The empty required inputs + target account are flagged for the user.
+        expect(await byPath(page, 'banks.leumi.username').getAttribute('aria-invalid')).toBe('true');
+        expect(await byPath(page, 'banks.leumi.targets.0.actualAccountId')
+          .getAttribute('aria-invalid')).toBe('true');
+
+        // Nothing persisted: disk still carries only the seeded discount bank.
+        const settings = readSplit(server.configPath);
+        expect(settings.banks?.leumi).toBeUndefined();
+        expect(settings.banks?.discount).toBeDefined();
+      } finally {
+        await teardown(server, context);
+      }
+    }, 120_000);
+
+  it('persists a changed bank password as the new secret in credentials.json', async () => {
+    const server = await startSeededPortal(seedConfig());
+    const { context, page } = await authedPage(server);
+    try {
+      await gotoBanks(page);
+      await byPath(page, 'banks.discount.password').fill('NEW-password-123');
+      await save(page);
+      expect(readSplit(server.credsPath).banks?.discount?.password).toBe('NEW-password-123');
     } finally {
       await teardown(server, context);
     }

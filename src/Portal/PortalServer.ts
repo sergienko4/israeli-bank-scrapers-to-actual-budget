@@ -64,7 +64,7 @@ export async function buildPortal(
   await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
   await app.register(cookie, { secret: rt.sessionSecret });
   await app.register(fstatic, { root: publicDir() });
-  registerAuthRoutes(app, rt);
+  registerAuthRoutes(app, rt, store);
   registerApiRoutes(app, store);
   app.setNotFoundHandler((req, reply) => (
     isSpaShellRequest(req) ? reply.sendFile('index.html') : reply.code(404).send({ error: 'Not found' })

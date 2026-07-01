@@ -42,7 +42,9 @@ async function api(path, opts = {}) {
   const res = await fetch(path, { ...opts, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    const err = new Error(body.error || `HTTP ${res.status}`);
+    if (Array.isArray(body.errors)) err.details = body.errors;
+    throw err;
   }
   return res.status === 204 ? {} : res.json();
 }
@@ -124,7 +126,9 @@ async function refreshAuth() {
 function showLogin(status) {
   const mode = status.authMode || 'password';
   const needGoogle = mode !== 'password' && !status.google;
-  const needPassword = mode !== 'google' && !status.password;
+  // In `both` mode, sequence Google first: keep the password field hidden until
+  // the Google factor is satisfied, so the user completes one step at a time.
+  const needPassword = mode !== 'google' && !status.password && !needGoogle;
   $('google-btn').classList.toggle('hidden', !needGoogle);
   $('pw').classList.toggle('hidden', !needPassword);
   $('pw-btn').classList.toggle('hidden', !needPassword);
@@ -238,13 +242,111 @@ async function save() {
     $('status').className = 'status ok';
     toast('Changes saved', 'ok');
   } catch (e) {
-    $('status').textContent = `❌ ${e.message}`;
-    $('status').className = 'status err';
-    toast(e.message, 'err');
+    highlightInvalid(missingBankPaths());
+    const lines = Array.isArray(e.details) && e.details.length ? e.details : [e.message];
+    renderSaveError(lines);
   } finally {
     btn.disabled = false;
     btn.textContent = label;
   }
+}
+
+/**
+ * Renders one or more save-failure reasons into the status bar as a readable
+ * list plus a toast, instead of one opaque semicolon-joined line, so the user
+ * can see exactly which field(s)/bank(s) the server rejected.
+ * @param {string[]} lines human-readable failure reasons
+ * @returns {void}
+ */
+function renderSaveError(lines) {
+  const status = $('status');
+  status.textContent = '';
+  status.className = 'status err';
+  status.appendChild(el('strong', null, '❌ Save failed:'));
+  const list = el('ul', 'error-list');
+  lines.forEach((line) => list.appendChild(el('li', null, line)));
+  status.appendChild(list);
+  const summary = lines.length > 1 ? `Save failed: ${lines.length} problems` : lines[0];
+  toast(summary, 'err');
+}
+
+/**
+ * Whether a value is missing for gating purposes: null, undefined, or blank.
+ * @param {*} value candidate value
+ * @returns {boolean} true when the value is null/undefined or whitespace-only
+ */
+function isBlank(value) {
+  return value == null || String(value).trim() === '';
+}
+
+/**
+ * Scans every configured bank for empty required credential fields and empty
+ * target account ids, returning their dotted config paths so a save the server
+ * rejected for missing values can point the user straight at the offenders.
+ * @returns {string[]} dotted paths of empty required bank/target fields
+ */
+function missingBankPaths() {
+  const paths = [];
+  const banks = config.banks || {};
+  Object.keys(banks).forEach((name) => collectBankMissing(name, banks[name], paths));
+  return paths;
+}
+
+/**
+ * Appends a bank's empty required-field and empty target-account paths to an
+ * accumulator.
+ * @param {string} name bank id
+ * @param {object} bank bank config
+ * @param {string[]} out accumulator of dotted paths
+ * @returns {void}
+ */
+function collectBankMissing(name, bank, out) {
+  const required = manifest.bankRequirements?.[name]?.required || [];
+  required.forEach((key) => {
+    if (isBlank(bank[key])) out.push(`banks.${name}.${key}`);
+  });
+  (bank.targets || []).forEach((target, idx) => {
+    if (isBlank(target.actualAccountId)) out.push(`banks.${name}.targets.${idx}.actualAccountId`);
+  });
+}
+
+/**
+ * Flags the given field paths as invalid: navigates to the banks section (so the
+ * offending inputs are rendered), marks each, and focuses the first so a rejected
+ * save lands the user on the field(s) to fix.
+ * @param {string[]} paths dotted config paths to flag
+ * @returns {void}
+ */
+function highlightInvalid(paths) {
+  if (!paths.length) return;
+  if (current !== 'banks') selectSection('banks');
+  clearInvalid();
+  const nodes = paths.map(markInvalidByPath).filter(Boolean);
+  if (nodes[0]) nodes[0].focus();
+}
+
+/**
+ * Clears any previously-flagged invalid controls in the current view.
+ * @returns {void}
+ */
+function clearInvalid() {
+  document.querySelectorAll('.invalid').forEach((node) => {
+    node.classList.remove('invalid');
+    node.removeAttribute('aria-invalid');
+  });
+}
+
+/**
+ * Marks the input at a dotted config path as invalid, if it is currently rendered.
+ * @param {string} path dotted config path
+ * @returns {HTMLElement|null} the flagged element, or null when not rendered
+ */
+function markInvalidByPath(path) {
+  const node = document.querySelector(`[data-path="${path}"]`);
+  if (!node) return null;
+  node.classList.add('invalid');
+  node.setAttribute('aria-invalid', 'true');
+  return node;
 }
 
 /**
@@ -913,6 +1015,7 @@ function addBankControl(sec) {
   add.id = 'add-bank-btn';
   add.onclick = () => {
     if (sel.value) addBank(sel.value);
+    else toast('Select a bank to add first', 'err');
   };
   wrap.append(sel, add);
   return wrap;

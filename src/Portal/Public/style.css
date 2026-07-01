@@ -199,6 +199,13 @@ main { min-width: 0; display: flex; flex-direction: column; }
    the <div>/<p> they replaced. Target via .status (not #status) so the lower
    specificity lets .status:empty keep winning and still hide the empty status. */
 output.status, output#login-hint { display: block; }
+/* Save-failure list: readable multi-line reasons instead of one opaque line. */
+.status .error-list { margin: 4px 0 0; padding-left: 18px; font-weight: 500; }
+.status .error-list li { margin: 2px 0; }
+/* Highlight inputs the server rejected as missing/invalid after a failed save. */
+.invalid, .invalid input, .invalid select {
+  border-color: var(--danger) !important; box-shadow: 0 0 0 3px var(--danger-soft) !important;
+}
 
 .view { padding: 20px 22px 40px; width: 100%; max-width: var(--content-w); margin: 0 auto; }
 

@@ -60,7 +60,10 @@ function persistConfig(
   store: PortalConfigStore, next: IImporterConfig, reply: FastifyReply,
 ): FastifyReply {
   const prepared = store.prepare(next);
-  if (isFail(prepared)) return reply.code(400).send({ error: prepared.message });
+  if (isFail(prepared)) {
+    const errors = prepared.details ?? [prepared.message];
+    return reply.code(400).send({ error: prepared.message, errors });
+  }
   const committed = store.commit(prepared.data);
   if (isFail(committed)) {
     getLogger().error(`Portal config persist failed: ${committed.message}`);

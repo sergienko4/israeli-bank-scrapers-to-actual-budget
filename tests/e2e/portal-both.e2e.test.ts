@@ -1,9 +1,9 @@
 /**
- * Portal `both` auth mode: Google AND password are both required. Verifies the
- * UI guides the user through whichever factor remains — in either order — and
- * opens the app only once both factors are satisfied. The previously broken
- * behavior re-showed an identical login form (no sign of progress), and a
- * correct password entered first surfaced a misleading "Unauthorized" error.
+ * Portal `both` auth mode: Google AND password are both required, sequenced
+ * Google-FIRST. Verifies the UI shows only Google initially, reveals the
+ * password step only after the Google factor is satisfied, and opens the app
+ * only once both factors are complete. The previously broken behavior showed
+ * BOTH factors at once with no sign of progress.
  */
 
 import { rmSync } from 'node:fs';
@@ -116,14 +116,41 @@ async function approveGoogle(page: Page): Promise<void> {
   await page.click('#approve');
 }
 
+/**
+ * Completes the both-mode login (Google consent, then password) to the app.
+ * @param page - The portal page parked on the Google-first login screen.
+ */
+async function completeBothLogin(page: Page): Promise<void> {
+  await approveGoogle(page);
+  await page.waitForSelector('#pw', { state: 'visible' });
+  await page.fill('#pw', PORTAL_PASSWORD);
+  await page.click('#pw-btn');
+  await page.waitForSelector('#app', { state: 'visible', timeout: 15_000 });
+}
+
+/**
+ * Clears the status bar so a later wait observes only THIS action's outcome.
+ * @param page - The authed portal page.
+ */
+async function resetStatus(page: Page): Promise<void> {
+  await page.locator('#status').evaluate((node) => {
+    node.textContent = '';
+    node.setAttribute('class', 'status');
+  });
+}
+
 describe('Portal both-mode auth', () => {
-  it('google first: acknowledges Google, then asks for the password', async () => {
+  it('google first: shows only Google, then asks for the password', async () => {
     const envBackup = backupGoogleEnv();
     let fx: IBothFixture | undefined;
     try {
       fx = await startBoth();
       await fx.page.waitForSelector('#google-btn', { state: 'visible' });
-      expect(await fx.page.locator('#pw').isVisible()).toBe(true);
+      // Google-first: the password field/button stay hidden until Google is done.
+      expect(await fx.page.locator('#pw').isHidden()).toBe(true);
+      expect(await fx.page.locator('#pw-btn').isHidden()).toBe(true);
+      const initialHint = await fx.page.locator('#login-hint').textContent();
+      expect(initialHint).toBe('Sign in with Google, then enter the portal password.');
 
       await approveGoogle(fx.page);
 
@@ -143,24 +170,55 @@ describe('Portal both-mode auth', () => {
     }
   }, 120_000);
 
-  it('password first: accepts the password without error, then asks for Google', async () => {
+  it('keeps the password step hidden until the Google factor is satisfied', async () => {
     const envBackup = backupGoogleEnv();
     let fx: IBothFixture | undefined;
     try {
       fx = await startBoth();
-      await fx.page.waitForSelector('#pw', { state: 'visible' });
-      await fx.page.fill('#pw', PORTAL_PASSWORD);
-      await fx.page.click('#pw-btn');
-
-      await fx.page.waitForSelector('#pw', { state: 'hidden' });
-      expect(await fx.page.locator('#app').isHidden()).toBe(true);
-      expect(await fx.page.locator('#google-btn').isVisible()).toBe(true);
-      expect((await fx.page.locator('#login-err').textContent()) ?? '').toBe('');
-      const hint = await fx.page.locator('#login-hint').textContent();
-      expect(hint).toContain('✓ Password accepted');
+      await fx.page.waitForSelector('#google-btn', { state: 'visible' });
+      // Before Google: password step is absent, so a user cannot submit it first.
+      expect(await fx.page.locator('#pw').isHidden()).toBe(true);
+      expect(await fx.page.locator('#pw-btn').isHidden()).toBe(true);
 
       await approveGoogle(fx.page);
+
+      // After Google: password step is revealed and completes the login.
+      await fx.page.waitForSelector('#pw', { state: 'visible' });
+      expect(await fx.page.locator('#google-btn').isHidden()).toBe(true);
+      expect((await fx.page.locator('#login-err').textContent()) ?? '').toBe('');
+      await fx.page.fill('#pw', PORTAL_PASSWORD);
+      await fx.page.click('#pw-btn');
       await fx.page.waitForSelector('#app', { state: 'visible', timeout: 15_000 });
+    } finally {
+      restoreGoogleEnv(envBackup);
+      await stopBoth(fx);
+    }
+  }, 120_000);
+
+  it('applies an auth-mode switch live: both → google hides the password next login', async () => {
+    const envBackup = backupGoogleEnv();
+    let fx: IBothFixture | undefined;
+    try {
+      fx = await startBoth();
+      await completeBothLogin(fx.page);
+
+      // Switch the auth mode to Google-only and Save — no container restart.
+      await fx.page.click('#nav button[data-section="portal"]');
+      const mode = fx.page.locator('[data-path="portal.authMode"]');
+      await mode.waitFor({ state: 'visible' });
+      await mode.selectOption('google');
+      await resetStatus(fx.page);
+      await fx.page.click('#save');
+      await fx.page.waitForSelector('#status.ok:has-text("Saved")', { timeout: 15_000 });
+
+      // Log out + reload: the LIVE server now reports/serves google-only.
+      await fx.page.click('#logout');
+      await fx.page.waitForSelector('#google-btn', { state: 'visible' });
+      expect(await fx.page.locator('#pw').isHidden()).toBe(true);
+      expect(await fx.page.locator('#pw-btn').isHidden()).toBe(true);
+      const res = await fx.page.request.get(`${fx.server.baseUrl}/auth/status`);
+      const body = (await res.json()) as { authMode?: string };
+      expect(body.authMode).toBe('google');
     } finally {
       restoreGoogleEnv(envBackup);
       await stopBoth(fx);

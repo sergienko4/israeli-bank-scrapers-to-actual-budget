@@ -108,6 +108,22 @@ async function teardown(
 }
 
 describe('Portal auth-affordance E2E', () => {
+  it('password mode shows the password field and hides the Google button', async () => {
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
+    try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openLogin(server);
+      context = opened.context;
+      const { page } = opened;
+      // A1 gating: password auth must offer ONLY the password factor.
+      expect(await page.locator('#pw').isVisible()).toBe(true);
+      expect(await page.locator('#google-btn').isHidden()).toBe(true);
+    } finally {
+      await teardown(server, context);
+    }
+  }, 120_000);
+
   it('logs out cleanly (200) and clears the session', async () => {
     let server: IPortalServer | undefined;
     let context: BrowserContext | undefined;

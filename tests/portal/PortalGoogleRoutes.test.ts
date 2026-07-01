@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
+import { fakeImporterConfig } from '../helpers/factories.js';
 import { fakeGoogleConfig, fakePortalConfig, fakePortalRuntime, seedConfigDir } from '../helpers/portalFactories.js';
 
 let app: FastifyInstance;
@@ -35,9 +36,9 @@ async function startConsent(): Promise<string> {
 
 describe('PortalGoogleRoutes', () => {
   beforeEach(async () => {
-    const seed = seedConfigDir();
-    dir = seed.dir;
     const portal = fakePortalConfig({ authMode: 'google', google: fakeGoogleConfig() });
+    const seed = seedConfigDir(fakeImporterConfig({ portal }));
+    dir = seed.dir;
     app = await buildPortal(fakePortalRuntime({ authMode: 'google', portal }), new PortalConfigStore(seed.path));
   });
   afterEach(async () => { await app.close(); rmSync(dir, { recursive: true, force: true }); vi.unstubAllGlobals(); });
@@ -103,13 +104,13 @@ describe('PortalGoogleRoutes', () => {
     expect(res.statusCode).toBe(502);
   });
 
-  it('skips Google routes when unconfigured (auth path 404s, not SPA)', async () => {
+  it('returns 503 (not the SPA shell) for the Google route when Google is unconfigured', async () => {
     const seed = seedConfigDir();
     const plain = await buildPortal(fakePortalRuntime(), new PortalConfigStore(seed.path));
     const res = await plain.inject({ method: 'GET', url: '/auth/google' });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(503);
     expect(res.headers.location).toBeUndefined();
-    expect(res.json()).toEqual({ error: 'Not found' });
+    expect(res.json()).toEqual({ error: 'Google sign-in is not configured' });
     await plain.close();
     rmSync(seed.dir, { recursive: true, force: true });
   });

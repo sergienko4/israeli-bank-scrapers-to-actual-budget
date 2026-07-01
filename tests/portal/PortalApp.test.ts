@@ -508,11 +508,12 @@ describe('PortalApp bootstrap and authentication', () => {
     expect(byId('login-hint').textContent).toBe('Sign in with Google to manage your configuration.');
   });
 
-  it('asks for Google first then password in both mode', async () => {
+  it('asks for Google first (password hidden) in both mode', async () => {
     unauth({ authMode: 'both', google: false, password: false });
     await boot();
     expect(byId('google-btn').classList.contains('hidden')).toBe(false);
-    expect(byId('pw').classList.contains('hidden')).toBe(false);
+    expect(byId('pw').classList.contains('hidden')).toBe(true);
+    expect(byId('pw-btn').classList.contains('hidden')).toBe(true);
     expect(byId('login-hint').textContent).toBe('Sign in with Google, then enter the portal password.');
   });
 

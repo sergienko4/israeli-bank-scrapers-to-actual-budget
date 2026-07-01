@@ -19,19 +19,24 @@ export function succeed<T>(data: T, status = 'ok'): IProcedureSuccess<T> {
 export interface IFailOptions {
   status?: string;
   error?: Error;
+  details?: readonly string[];
 }
 
 /**
  * Creates a failed Procedure result.
  * @param message - Human-readable failure description.
- * @param opts - Optional status label and original Error.
+ * @param opts - Optional status label, original Error, and structured details.
  * @returns A frozen IProcedureFailure object.
  */
 export function fail(message: string, opts: IFailOptions = {}): IProcedureFailure {
   const status = opts.status ?? 'error';
-  const result: IProcedureFailure = opts.error
-    ? { success: false as const, status, message, error: opts.error }
-    : { success: false as const, status, message };
+  const result: IProcedureFailure = {
+    success: false as const,
+    status,
+    message,
+    ...(opts.error ? { error: opts.error } : {}),
+    ...(opts.details ? { details: opts.details } : {}),
+  };
   return Object.freeze(result);
 }
 

@@ -9,10 +9,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { PortalAuthMode, Procedure } from '../Types/Index.js';
 import { fail, isFail } from '../Types/Index.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
+import type PortalConfigStore from './PortalConfigStore.js';
 import { type IGrantArgs, registerGoogleRoutes } from './PortalGoogleRoutes.js';
 import { verifyPassword } from './PortalPassword.js';
 import { LOGIN_MAX, RATE_WINDOW, STATUS_MAX } from './PortalRateLimit.js';
-import { type IPortalRuntime, portalCookieOptions } from './PortalRuntime.js';
+import {
+  type IPortalRuntime, portalCookieOptions, resolveLiveRuntime, type RuntimeAccessor,
+} from './PortalRuntime.js';
 import { createSession, type ISessionPayload, readSession } from './PortalSession.js';
 
 const COOKIE = 'portal_session';
@@ -101,14 +104,17 @@ function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
 }
 
 /**
- * Registers the password-login route with a strict per-route rate limit.
+ * Registers the password-login route with a strict per-route rate limit. The
+ * password hash is read live per request so a password change saved via the UI
+ * applies on the next login without a process restart.
  * @param app - Fastify instance.
- * @param rt - Resolved portal runtime providing the configured password hash.
+ * @param live - Accessor returning the current per-request portal runtime.
  * @returns Confirmation that the login route is registered.
  */
-function registerLoginRoute(app: FastifyInstance, rt: IPortalRuntime): { registered: true } {
+function registerLoginRoute(app: FastifyInstance, live: RuntimeAccessor): { registered: true } {
   const loginLimit = { config: { rateLimit: { max: LOGIN_MAX, timeWindow: RATE_WINDOW } } };
   app.post('/auth/login', loginLimit, (req, reply) => {
+    const rt = live();
     const body = req.body as { password?: unknown } | null;
     const password = typeof body?.password === 'string' ? body.password : '';
     const hash = rt.portal.passwordHash ?? '';
@@ -122,20 +128,69 @@ function registerLoginRoute(app: FastifyInstance, rt: IPortalRuntime): { registe
 }
 
 /**
- * Registers the auth-status + password-login + logout + guard routes.
- * @param app - Fastify instance.
- * @param rt - Resolved portal runtime.
- * @returns Confirmation that the auth routes are registered.
+ * Builds a live-runtime accessor over the boot runtime + the store's current
+ * config, so every route resolves the up-to-date auth mode + credentials.
+ * @param boot - Boot-time runtime (source of pinned host/port/secret).
+ * @param store - Config store providing the live config per request.
+ * @returns Accessor returning the current per-request portal runtime.
  */
-export function registerAuthRoutes(app: FastifyInstance, rt: IPortalRuntime): { registered: true } {
+function liveAccessor(boot: IPortalRuntime, store: PortalConfigStore): RuntimeAccessor {
+  return () => {
+    const current = store.raw();
+    return resolveLiveRuntime(boot, current);
+  };
+}
+
+/**
+ * Registers the rate-limited `/auth/status` route reporting the live auth mode
+ * plus the caller's satisfied factors.
+ * @param app - Fastify instance.
+ * @param live - Accessor returning the current per-request portal runtime.
+ * @returns Confirmation that the status route is registered.
+ */
+function registerStatusRoute(app: FastifyInstance, live: RuntimeAccessor): { registered: true } {
   const statusLimit = { config: { rateLimit: { max: STATUS_MAX, timeWindow: RATE_WINDOW } } };
   app.get('/auth/status', statusLimit, (req, reply) => {
+    const rt = live();
     const status = authStatus(req, rt);
     return reply.send(status);
   });
-  registerLoginRoute(app, rt);
+  return { registered: true };
+}
+
+/**
+ * Registers the global preHandler that guards `/api/*` against the live auth mode.
+ * @param app - Fastify instance.
+ * @param live - Accessor returning the current per-request portal runtime.
+ * @returns Confirmation that the guard hook is registered.
+ */
+function registerGuardHook(app: FastifyInstance, live: RuntimeAccessor): { registered: true } {
+  app.addHook('preHandler', (req, reply, done) => {
+    const rt = live();
+    if (guardApi(req, reply, rt)) done();
+  });
+  return { registered: true };
+}
+
+/**
+ * Registers the auth-status + password-login + logout + guard routes. Each route
+ * derives a live runtime from the boot runtime + the current config in the store
+ * ({@link resolveLiveRuntime}), so an auth-mode or credential change saved via the
+ * UI applies on the next request without a restart. Host/port/session secret stay
+ * boot-pinned (a live server cannot rebind or rotate its cookie key).
+ * @param app - Fastify instance.
+ * @param boot - Boot-time portal runtime (source of pinned host/port/secret).
+ * @param store - Shared config store providing the live config per request.
+ * @returns Confirmation that the auth routes are registered.
+ */
+export function registerAuthRoutes(
+  app: FastifyInstance, boot: IPortalRuntime, store: PortalConfigStore,
+): { registered: true } {
+  const live = liveAccessor(boot, store);
+  registerStatusRoute(app, live);
+  registerLoginRoute(app, live);
   app.post('/auth/logout', (_req, reply) => reply.clearCookie(COOKIE, { path: '/' }).send({ ok: true }));
-  registerGoogleRoutes(app, rt, grant);
-  app.addHook('preHandler', (req, reply, done) => { if (guardApi(req, reply, rt)) done(); });
+  registerGoogleRoutes(app, live, grant);
+  registerGuardHook(app, live);
   return { registered: true };
 }

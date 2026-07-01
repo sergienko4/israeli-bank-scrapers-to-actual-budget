@@ -65,8 +65,8 @@ function shapeAndGate(next: IImporterConfig, current: IImporterConfig): Procedur
   const merged = coerceTargetAccounts(hashed);
   const errors = collectGateErrors(merged);
   if (errors.length === 0) return succeed(merged);
-  const reason = errors.join('; ');
-  return fail(reason);
+  const reason = errors.join('\n');
+  return fail(reason, { details: errors });
 }
 
 /** Loads, masks, validates, and persists the portal-managed config. */

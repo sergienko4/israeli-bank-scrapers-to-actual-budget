@@ -18,7 +18,8 @@ import type { Browser } from 'playwright-core';
 
 import { hashPassword } from '../../../src/Portal/PortalPassword.js';
 import type { IPortalRuntime } from '../../../src/Portal/PortalRuntime.js';
-import { startPortal } from '../../../src/Portal/PortalServer.js';
+import PortalConfigStore from '../../../src/Portal/PortalConfigStore.js';
+import { buildPortal } from '../../../src/Portal/PortalServer.js';
 import type {
   IImporterConfig, IPortalConfig, IPortalGoogleConfig,
 } from '../../../src/Types/Index.js';
@@ -98,13 +99,33 @@ function boundPort(app: FastifyInstance): number {
 }
 
 /**
- * Seeds a temp config and starts the real portal on an ephemeral port.
+ * Builds the real portal (buildPortal + explicit store) and binds it to an
+ * ephemeral port, returning the store so callers can inspect/patch the live
+ * config the auth routes read per request (e.g. the Google redirectUri).
+ * @param runtime - Boot runtime to bind with.
+ * @param configPath - Path to the seeded config.json backing the store.
+ * @returns The listening app and its config store.
+ */
+async function startWithStore(
+  runtime: IPortalRuntime, configPath: string,
+): Promise<{ app: FastifyInstance; store: PortalConfigStore }> {
+  const store = new PortalConfigStore(configPath);
+  const app = await buildPortal(runtime, store);
+  await app.listen({ host: runtime.host, port: runtime.port });
+  return { app, store };
+}
+
+/**
+ * Seeds a temp config and starts the real portal on an ephemeral port. The
+ * runtime's portal block is written into the seeded config so the live auth
+ * routes (which read the store's config, not the boot runtime) log in cleanly.
  * @param config - Importer config to seed and edit through the UI.
  * @returns The running server handle (app, baseUrl, on-disk paths).
  */
 export async function startSeededPortal(config: IImporterConfig): Promise<IPortalServer> {
-  const { dir, configPath } = seed(config);
-  const app = await startPortal(passwordRuntime(), configPath);
+  const runtime = passwordRuntime();
+  const { dir, configPath } = seed({ ...config, portal: runtime.portal });
+  const { app } = await startWithStore(runtime, configPath);
   const baseUrl = `http://127.0.0.1:${String(boundPort(app))}`;
   return { app, baseUrl, dir, configPath, credsPath: join(dir, 'credentials.json') };
 }
@@ -205,8 +226,25 @@ function googleRuntime(opts: IGooglePortalOptions): IPortalRuntime {
 }
 
 /**
+ * Patches the Google `redirectUri` to the real bound callback URL on both the
+ * store's live config (which the routes read per request) and the returned
+ * runtime (so tests can reference it).
+ * @param store - Config store whose live Google config to patch.
+ * @param runtime - Runtime returned to the test.
+ * @param url - The real callback URL to set.
+ * @returns void.
+ */
+function patchRedirectUri(store: PortalConfigStore, runtime: IPortalRuntime, url: string): void {
+  const live = store.raw().portal?.google;
+  if (live) live.redirectUri = url;
+  if (runtime.portal.google) runtime.portal.google.redirectUri = url;
+}
+
+/**
  * Seeds a temp config and starts the real portal in Google (or `both`) mode,
- * then patches the Google `redirectUri` to the real bound callback URL.
+ * then patches the Google `redirectUri` to the real bound callback URL. The
+ * runtime's portal block is written to disk so the live auth routes resolve the
+ * seeded Google client.
  * @param config - Importer config to seed.
  * @param opts - Allowed emails and optional auth mode.
  * @returns The running server handle including its resolved runtime.
@@ -214,10 +252,10 @@ function googleRuntime(opts: IGooglePortalOptions): IPortalRuntime {
 export async function startSeededGooglePortal(
   config: IImporterConfig, opts: IGooglePortalOptions,
 ): Promise<IGooglePortalServer> {
-  const { dir, configPath } = seed(config);
   const runtime = googleRuntime(opts);
-  const app = await startPortal(runtime, configPath);
+  const { dir, configPath } = seed({ ...config, portal: runtime.portal });
+  const { app, store } = await startWithStore(runtime, configPath);
   const baseUrl = `http://127.0.0.1:${String(boundPort(app))}`;
-  if (runtime.portal.google) runtime.portal.google.redirectUri = `${baseUrl}/auth/google/callback`;
+  patchRedirectUri(store, runtime, `${baseUrl}/auth/google/callback`);
   return { app, baseUrl, dir, configPath, credsPath: join(dir, 'credentials.json'), runtime };
 }

@@ -68,11 +68,16 @@ export function fakePortalRuntime(overrides: Partial<IPortalRuntime> = {}): IPor
 }
 
 /**
- * Creates a tmp dir and writes a config.json there for store/server tests.
+ * Creates a tmp dir and writes a config.json there for store/server tests. The
+ * default config carries a password-mode portal block so the live auth routes —
+ * which read the store's config, not the boot runtime — can log in with
+ * {@link PORTAL_TEST_PASSWORD}.
  * @param config - Importer config to serialise (defaults to a valid fixture).
  * @returns The tmp dir + the config.json path inside it.
  */
-export function seedConfigDir(config: IImporterConfig = fakeImporterConfig()): {
+export function seedConfigDir(
+  config: IImporterConfig = fakeImporterConfig({ portal: fakePortalConfig() }),
+): {
   dir: string; path: string;
 } {
   const dir = mkdtempSync(join(tmpdir(), 'portal-'));

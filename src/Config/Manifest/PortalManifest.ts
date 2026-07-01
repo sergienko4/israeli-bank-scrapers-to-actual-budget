@@ -24,7 +24,7 @@ const PORTAL_SECTION: IManifestSection = {
     },
     {
       key: 'authMode', label: 'Auth mode', kind: 'select', options: PORTAL_AUTH_MODES,
-      help: 'password | google | both. Changing this needs a portal restart to take effect.',
+      help: 'password | google | both. Applies on the next login after you save — no restart needed.',
     },
     {
       key: 'secureCookies', label: 'Secure cookies', kind: 'boolean',
@@ -32,7 +32,7 @@ const PORTAL_SECTION: IManifestSection = {
     },
     {
       key: 'passwordHash', label: 'Portal password', kind: 'secret',
-      help: 'Set or change the portal password; it is hashed on save. Needed for password and both modes. Changing it needs a portal restart to take effect.',
+      help: 'Set or change the portal password; it is hashed on save. Needed for password and both modes. Applies on the next login after you save — no restart needed.',
     },
     {
       key: 'sessionSecret', label: 'Session secret', kind: 'secret',

@@ -23,6 +23,9 @@ export interface IPortalRuntime {
   portal: IPortalConfig;
 }
 
+/** Resolves the current per-request portal runtime (live auth mode + creds). */
+export type RuntimeAccessor = () => IPortalRuntime;
+
 /** Cookie attributes shared by every portal cookie. */
 export interface ICookieOptions {
   path: string;
@@ -170,6 +173,29 @@ export function resolvePortalRuntime(config: IImporterConfig): IPortalRuntime {
 }
 
 /**
+ * Derives a live per-request runtime from the current config while pinning the
+ * settings a running server cannot change: host/port (the socket is already
+ * bound) and the session secret (rotating it would invalidate live cookies).
+ * Auth mode + credentials (passwordHash, Google client) are read live so a
+ * mode/credential change saved via the UI applies on the next request without a
+ * process restart.
+ * @param boot - The runtime resolved at boot (source of pinned host/port/secret).
+ * @param config - The current merged config from the config store.
+ * @returns A runtime whose authMode + portal reflect the live config.
+ */
+export function resolveLiveRuntime(boot: IPortalRuntime, config: IImporterConfig): IPortalRuntime {
+  const live = resolvePortalRuntime(config);
+  return {
+    host: boot.host,
+    port: boot.port,
+    authMode: live.authMode,
+    sessionSecret: boot.sessionSecret,
+    secureCookies: boot.secureCookies,
+    portal: live.portal,
+  };
+}
+
+/**
  * Whether a config string carries a real, non-blank value.
  *
  * Whitespace-only OAuth fields satisfy a plain truthiness check yet can never
@@ -191,7 +217,9 @@ function hasText(value?: string): boolean {
  * @returns True when clientId, clientSecret, redirectUri, and at least one
  *          allowedEmails entry are all present and non-blank.
  */
-function isGoogleConfigComplete(google?: IPortalGoogleConfig): boolean {
+export function isGoogleConfigComplete(
+  google?: IPortalGoogleConfig,
+): google is IPortalGoogleConfig {
   if (!google) return false;
   return hasText(google.clientId)
     && hasText(google.clientSecret)
