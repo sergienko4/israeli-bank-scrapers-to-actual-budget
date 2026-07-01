@@ -1,13 +1,13 @@
 'use strict';
 
-// Config Portal SPA (vanilla JS, no build step). The entire UI is rendered from
-// the server's Config Manifest (GET /api/manifest) over the live config
-// (GET /api/config), so a new config field appears automatically with zero UI
-// changes — the manifest is the single source of truth. Secrets are shown as
+// Config Portal SPA (vanilla JS, no build step). The whole config form is
+// rendered by the vendored jedison library (germanbisurgi/jedison) driven by the
+// auto-generated JSON Schema served at GET /api/schema over the live config
+// (GET /api/config). A new config field appears automatically with zero UI
+// changes — the schema is the single source of truth. Secrets are shown as
 // ******** and preserved on save unless the user overwrites them.
 
-const DOC_BASE =
-  'https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/';
+import Jedison from './vendor/jedison/jedison.js';
 
 // Inline eye icon so the secret reveal toggle renders on every OS/browser
 // (emoji glyphs are unavailable in some headless/server font sets).
@@ -16,9 +16,10 @@ const EYE_SVG =
   ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
 
-let manifest = { sections: [], banks: [], bankRequirements: {} };
+let schema = { properties: {} };
 let config = {};
-let current = '';
+let editor = null;
+let showWhenRules = [];
 
 /**
  * Looks up a DOM element by id.
@@ -42,7 +43,7 @@ async function api(path, opts = {}) {
   const res = await fetch(path, { ...opts, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    throw new Error(body.error ?? `HTTP ${res.status}`);
   }
   return res.status === 204 ? {} : res.json();
 }
@@ -73,16 +74,6 @@ function button(text, cls) {
   const b = el('button', cls, text);
   b.type = 'button';
   return b;
-}
-
-/**
- * Joins a dotted config path segment.
- * @param {string} prefix parent path
- * @param {string} key child key
- * @returns {string} joined path
- */
-function joinPath(prefix, key) {
-  return prefix ? `${prefix}.${key}` : key;
 }
 
 // ---------- auth / bootstrap ----------
@@ -122,7 +113,7 @@ async function refreshAuth() {
  * @returns {void}
  */
 function showLogin(status) {
-  const mode = status.authMode || 'password';
+  const mode = status.authMode ?? 'password';
   const needGoogle = mode !== 'password' && !status.google;
   const needPassword = mode !== 'google' && !status.password;
   $('google-btn').classList.toggle('hidden', !needGoogle);
@@ -197,15 +188,16 @@ async function login() {
 }
 
 /**
- * Loads the manifest + config and shows the app.
+ * Loads the schema + config and renders the app.
  * @returns {Promise<void>} resolves when rendered
  */
 async function load() {
-  manifest = await api('/api/manifest');
+  schema = await api('/api/schema');
   config = await api('/api/config');
-  current = manifest.sections[0]?.key || '';
+  showWhenRules = collectShowWhen(schema, '#', []);
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
+  $('title').textContent = schema.title ?? 'Configuration';
   render();
   focusApp();
 }
@@ -221,8 +213,378 @@ function focusApp() {
   title.focus();
 }
 
+// ---------- render ----------
+
 /**
- * Persists the whole config via PUT /api/config.
+ * Destroys any previous editor and renders the whole config form via jedison,
+ * then wires the secret toggles, conditional visibility, nav, and bank tools.
+ * @returns {void}
+ */
+function render() {
+  const view = $('view');
+  destroyEditor();
+  view.innerHTML = '';
+  const tools = el('div', 'bank-tools');
+  tools.id = 'bank-tools';
+  const container = el('div', 'jedi-form');
+  view.append(tools, container);
+  editor = new Jedison.Create({
+    container,
+    theme: new Jedison.Theme(),
+    schema,
+    data: config,
+    showErrors: 'change',
+    objectAdd: false,
+  });
+  onEditorReady(container);
+}
+
+/**
+ * Runs the post-construction wiring: secret reveal toggles, conditional
+ * visibility, sidebar nav, bank tools, subtitle, and the reactive change hook.
+ * @param {HTMLElement} container the jedison mount point
+ * @returns {void}
+ */
+function onEditorReady(container) {
+  enhanceSecrets(container);
+  applyShowWhen();
+  buildNav();
+  buildBankTools();
+  updateSubtitle();
+  editor.on('change', () => {
+    enhanceSecrets(container);
+    applyShowWhen();
+  });
+}
+
+/**
+ * Destroys the current jedison instance if present so a re-render never leaks
+ * editors or duplicate DOM.
+ * @returns {void}
+ */
+function destroyEditor() {
+  if (editor) {
+    editor.destroy();
+    editor = null;
+  }
+}
+
+/**
+ * Shows a short subtitle summarising how many banks are configured.
+ * @returns {void}
+ */
+function updateSubtitle() {
+  const n = Object.keys(editorBanks()).length;
+  $('subtitle').textContent = `${n} bank${n === 1 ? '' : 's'} configured`;
+}
+
+// ---------- secret reveal toggles ----------
+
+/**
+ * Adds a reveal toggle to every jedison-rendered password input once.
+ * @param {HTMLElement} container the jedison mount point
+ * @returns {void}
+ */
+function enhanceSecrets(container) {
+  container.querySelectorAll('input[type="password"]').forEach(addReveal);
+}
+
+/**
+ * Injects an eye toggle button after a password input (idempotent).
+ * @param {HTMLInputElement} input the password input
+ * @returns {void}
+ */
+function addReveal(input) {
+  if (input.dataset.reveal === 'on') return;
+  input.dataset.reveal = 'on';
+  const wrap = el('span', 'secret-wrap');
+  input.insertAdjacentElement('beforebegin', wrap);
+  wrap.appendChild(input);
+  const eye = button('', 'btn ghost reveal');
+  eye.innerHTML = EYE_SVG;
+  eye.setAttribute('aria-label', 'Show secret');
+  eye.setAttribute('aria-pressed', 'false');
+  eye.onclick = () => toggleReveal(input, eye);
+  wrap.appendChild(eye);
+}
+
+/**
+ * Toggles a secret input between masked and revealed states.
+ * @param {HTMLInputElement} input the password input
+ * @param {HTMLButtonElement} eye the toggle button
+ * @returns {void}
+ */
+function toggleReveal(input, eye) {
+  const reveal = input.type === 'password';
+  input.type = reveal ? 'text' : 'password';
+  eye.setAttribute('aria-pressed', String(reveal));
+  eye.setAttribute('aria-label', reveal ? 'Hide secret' : 'Show secret');
+}
+
+// ---------- conditional visibility (x-show-when) ----------
+
+/**
+ * Walks the schema collecting every `x-show-when` rule as instance paths so the
+ * SPA can toggle any conditional subtree generically, with zero per-field wiring.
+ * @param {object} node the (sub)schema being inspected
+ * @param {string} path the instance path of this node (e.g. '#/portal/google')
+ * @param {Array} out accumulator of {path, controller, in} rules
+ * @returns {Array} the accumulated rules
+ */
+function collectShowWhen(node, path, out) {
+  if (!node || typeof node !== 'object') return out;
+  const cond = node['x-show-when'];
+  if (cond) out.push({ path, controller: controllerPath(path, cond.field), in: cond.in });
+  const props = node.properties ?? {};
+  Object.keys(props).forEach((key) => collectShowWhen(props[key], `${path}/${key}`, out));
+  return out;
+}
+
+/**
+ * Resolves the instance path of a sibling controller field for a conditional.
+ * @param {string} path the conditional subtree's instance path
+ * @param {string} field the controller field name (sibling of the subtree)
+ * @returns {string} the controller's instance path
+ */
+function controllerPath(path, field) {
+  const parent = path.slice(0, path.lastIndexOf('/'));
+  return `${parent}/${field}`;
+}
+
+/**
+ * Applies every collected `x-show-when` rule against the current value.
+ * @returns {void}
+ */
+function applyShowWhen() {
+  const value = editor.getValue();
+  showWhenRules.forEach((rule) => toggleRule(value, rule));
+}
+
+/**
+ * Toggles a single conditional subtree's visibility from its controller value.
+ * @param {object} value the current whole-config value
+ * @param {object} rule a {path, controller, in} rule
+ * @returns {void}
+ */
+function toggleRule(value, rule) {
+  const node = document.querySelector(`#view [data-path="${rule.path}"]`);
+  if (!node) return;
+  const visible = rule.in.includes(valueAt(value, rule.controller));
+  node.style.display = visible ? '' : 'none';
+  node.toggleAttribute('hidden', !visible);
+}
+
+/**
+ * Reads a value out of the config by a jedison instance path ('#/a/b').
+ * @param {object} root the whole-config value
+ * @param {string} path a '#/'-prefixed slash path
+ * @returns {*} the value at the path, or undefined
+ */
+function valueAt(root, path) {
+  const keys = path.replace(/^#\//, '').split('/');
+  let cur = root;
+  for (const key of keys) {
+    if (cur == null || typeof cur !== 'object' || !Object.hasOwn(cur, key)) return undefined;
+    cur = Reflect.get(cur, key);
+  }
+  return cur;
+}
+
+// ---------- navigation (scroll anchors) ----------
+
+/**
+ * Rebuilds the sidebar as jump links to each top-level schema section.
+ * @returns {void}
+ */
+function buildNav() {
+  const host = $('nav');
+  host.innerHTML = '';
+  const props = schema.properties ?? {};
+  Object.keys(props).forEach((key) => {
+    const b = button(props[key].title ?? key, '');
+    b.dataset.section = key;
+    b.onclick = () => jumpTo(key);
+    host.appendChild(b);
+  });
+}
+
+/**
+ * Scrolls a top-level section into view and closes the mobile drawer.
+ * @param {string} key the top-level schema property key
+ * @returns {void}
+ */
+function jumpTo(key) {
+  closeDrawer();
+  const node = document.querySelector(`#view [data-path="#/${key}"]`);
+  if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ---------- bank tools (constrained add / remove) ----------
+
+/**
+ * Reads the current banks map from the live editor value.
+ * @returns {object} the banks map (empty object when none)
+ */
+function editorBanks() {
+  return editor.getValue().banks ?? {};
+}
+
+/**
+ * Rebuilds the bank toolbar: a Validate action, an add-bank control, and a
+ * remove chip per configured bank.
+ * @returns {void}
+ */
+function buildBankTools() {
+  const host = $('bank-tools');
+  host.innerHTML = '';
+  const banks = schema.properties?.banks;
+  if (!banks) return;
+  host.appendChild(validateControl());
+  host.appendChild(addBankControl(banks));
+  const present = editorBanks();
+  Object.keys(present).forEach((name) => host.appendChild(bankRemoveChip(name)));
+}
+
+/**
+ * Builds the "Validate configuration" action.
+ * @returns {HTMLDivElement} the validate control
+ */
+function validateControl() {
+  const wrap = el('div', 'validate-tool');
+  const btn = button('Validate configuration', 'btn ghost');
+  btn.id = 'validate-btn';
+  btn.onclick = validate;
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+/**
+ * Builds the constrained add-bank control: a select of not-yet-added bank ids
+ * (from the schema's x-bank-options) plus an Add button.
+ * @param {object} banks the banks (map) schema node
+ * @returns {HTMLDivElement} the add-bank control
+ */
+function addBankControl(banks) {
+  const wrap = el('div', 'add-bank');
+  const sel = el('select');
+  sel.id = 'add-bank-select';
+  sel.setAttribute('aria-label', 'Select a bank to add');
+  const ph = el('option', null, 'Add a bank…');
+  ph.value = '';
+  sel.appendChild(ph);
+  addBankOptions(sel, banks);
+  const add = button('+ Add bank', 'btn primary');
+  add.id = 'add-bank-btn';
+  add.onclick = () => { if (sel.value) addBank(sel.value); };
+  wrap.append(sel, add);
+  return wrap;
+}
+
+/**
+ * Populates the add-bank select with supported bank ids not already present.
+ * @param {HTMLSelectElement} sel the select to fill
+ * @param {object} banks the banks (map) schema node
+ * @returns {void}
+ */
+function addBankOptions(sel, banks) {
+  const present = editorBanks();
+  (banks['x-bank-options'] ?? [])
+    .filter((id) => !Object.hasOwn(present, id))
+    .forEach((id) => {
+      const o = el('option', null, id);
+      o.value = id;
+      sel.appendChild(o);
+    });
+}
+
+/**
+ * Builds a remove chip for a configured bank.
+ * @param {string} name the bank id
+ * @returns {HTMLDivElement} the remove chip
+ */
+function bankRemoveChip(name) {
+  const chip = el('div', 'bank-chip');
+  chip.appendChild(el('span', 'bank-chip-name', name));
+  const del = button('Remove', 'btn danger');
+  del.dataset.removeBank = name;
+  del.setAttribute('aria-label', `Remove ${name}`);
+  del.onclick = () => removeBank(name);
+  chip.appendChild(del);
+  return chip;
+}
+
+/**
+ * Adds a bank: snapshots the edited value, inserts an empty entry, re-renders.
+ * @param {string} name the bank id to add
+ * @returns {void}
+ */
+function addBank(name) {
+  config = editor.getValue();
+  config.banks = config.banks ?? {};
+  if (!Object.hasOwn(config.banks, name)) config.banks[name] = {};
+  render();
+}
+
+/**
+ * Removes a bank: snapshots the edited value, deletes the entry, re-renders.
+ * @param {string} name the bank id to remove
+ * @returns {void}
+ */
+function removeBank(name) {
+  config = editor.getValue();
+  if (config.banks) delete config.banks[name];
+  render();
+}
+
+// ---------- validate ----------
+
+/**
+ * Runs offline validation of the edited config against POST /api/validate and
+ * reports the outcome in the status line and a toast.
+ * @returns {Promise<void>} resolves when validation completes
+ */
+async function validate() {
+  const btn = $('validate-btn');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Validating…';
+  try {
+    const results = await api('/api/validate', {
+      method: 'POST',
+      body: JSON.stringify(editor.getValue()),
+    });
+    reportValidation(results);
+  } catch (e) {
+    setStatus(`❌ ${e.message}`, 'err');
+    toast(e.message, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+/**
+ * Surfaces validation results, treating any `fail` entry as a problem.
+ * @param {Array} results the /api/validate result list
+ * @returns {void}
+ */
+function reportValidation(results) {
+  const failures = (results ?? []).filter((r) => r.status === 'fail');
+  if (failures.length === 0) {
+    setStatus('✅ Configuration valid', 'ok');
+    toast('Configuration valid', 'ok');
+    return;
+  }
+  const msg = `${failures.length} problem${failures.length === 1 ? '' : 's'}: ${failures[0].message}`;
+  setStatus(`❌ ${msg}`, 'err');
+  toast(msg, 'err');
+}
+
+// ---------- save ----------
+
+/**
+ * Persists the whole config via PUT /api/config. Untouched secrets remain the
+ * ******** mask and are restored server-side, so they round-trip untouched.
  * @returns {Promise<void>} resolves when saved
  */
 async function save() {
@@ -230,21 +592,31 @@ async function save() {
   const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Saving…';
-  $('status').textContent = 'Saving…';
-  $('status').className = 'status';
+  setStatus('Saving…', '');
   try {
+    config = editor.getValue();
     await api('/api/config', { method: 'PUT', body: JSON.stringify(config) });
-    $('status').textContent = '✅ Saved';
-    $('status').className = 'status ok';
+    setStatus('✅ Saved', 'ok');
     toast('Changes saved', 'ok');
   } catch (e) {
-    $('status').textContent = `❌ ${e.message}`;
-    $('status').className = 'status err';
+    setStatus(`❌ ${e.message}`, 'err');
     toast(e.message, 'err');
   } finally {
     btn.disabled = false;
     btn.textContent = label;
   }
+}
+
+/**
+ * Sets the status line text and severity class.
+ * @param {string} text the message
+ * @param {string} kind 'ok', 'err', or '' for neutral
+ * @returns {void}
+ */
+function setStatus(text, kind) {
+  const node = $('status');
+  node.textContent = text;
+  node.className = `status ${kind}`.trim();
 }
 
 /**
@@ -254,7 +626,7 @@ async function save() {
  * @returns {void}
  */
 function toast(message, kind) {
-  const node = el('div', `toast ${kind || ''}`.trim(), message);
+  const node = el('div', `toast ${kind ?? ''}`.trim(), message);
   $('toast').appendChild(node);
   requestAnimationFrame(() => node.classList.add('show'));
   setTimeout(() => {
@@ -263,44 +635,7 @@ function toast(message, kind) {
   }, 2600);
 }
 
-/**
- * Finds a section by key, falling back to the first section.
- * @param {string} key section key
- * @returns {object} the matching section
- */
-function sectionByKey(key) {
-  return manifest.sections.find((s) => s.key === key) || manifest.sections[0];
-}
-
-// ---------- navigation ----------
-
-/**
- * Rebuilds the sidebar navigation from the manifest sections.
- * @returns {void}
- */
-function buildNav() {
-  const host = $('nav');
-  host.innerHTML = '';
-  manifest.sections.forEach((s) => {
-    const label = `${s.icon || ''} ${s.label}`.trim();
-    const b = button(label, s.key === current ? 'active' : '');
-    b.dataset.section = s.key;
-    if (s.key === current) b.setAttribute('aria-current', 'page');
-    b.onclick = () => selectSection(s.key);
-    host.appendChild(b);
-  });
-}
-
-/**
- * Activates a section and closes the mobile drawer.
- * @param {string} key section key
- * @returns {void}
- */
-function selectSection(key) {
-  current = key;
-  closeDrawer();
-  render();
-}
+// ---------- mobile drawer ----------
 
 /**
  * Opens the mobile navigation drawer and moves focus into it.
@@ -327,615 +662,6 @@ function closeDrawer() {
   $('menu').setAttribute('aria-expanded', 'false');
   $('main').inert = false;
   if (wasOpen) $('menu').focus();
-}
-
-// ---------- render dispatch ----------
-
-/**
- * Renders the current section by its structural kind.
- * @returns {void}
- */
-function render() {
-  const sec = sectionByKey(current);
-  current = sec.key;
-  $('title').textContent = sec.label;
-  $('subtitle').textContent = sectionSubtitle(sec);
-  $('status').textContent = '';
-  $('status').className = 'status';
-  buildNav();
-  const view = $('view');
-  view.innerHTML = '';
-  if (sec.doc) view.appendChild(docLink(sec.doc));
-  if (sec.kind === 'bankMap') {
-    renderBanks(sec, view);
-  } else if (sec.kind === 'list') {
-    renderSectionList(sec, view);
-  } else {
-    renderObject(sec, view);
-  }
-}
-
-/**
- * Builds a short contextual subtitle for the section header.
- * @param {object} sec section descriptor
- * @returns {string} subtitle text (may be empty)
- */
-function sectionSubtitle(sec) {
-  if (sec.kind === 'bankMap') {
-    const n = Object.keys(config.banks || {}).length;
-    return `${n} bank${n === 1 ? '' : 's'} configured`;
-  }
-  if (sec.kind === 'list') {
-    const n = (config[sec.key] || []).length;
-    return `${n} item${n === 1 ? '' : 's'}`;
-  }
-  return sec.help || '';
-}
-
-/**
- * Builds the "read the docs" link for a section.
- * @param {string} doc doc path under docs/
- * @returns {HTMLAnchorElement} the link
- */
-function docLink(doc) {
-  const a = el('a', 'doc', '📖 Read the documentation');
-  a.href = DOC_BASE + doc;
-  a.target = '_blank';
-  a.rel = 'noopener';
-  a.title = doc;
-  return a;
-}
-
-// ---------- object sections ----------
-
-/**
- * Renders an `object` section's fields. Section key '' targets the config root.
- * @param {object} sec section descriptor
- * @param {HTMLElement} view container
- * @returns {void}
- */
-function renderObject(sec, view) {
-  const obj = sec.key === '' ? config : (config[sec.key] || (config[sec.key] = {}));
-  const panel = el('div', 'card panel');
-  (sec.fields || [])
-    .filter((f) => isFieldVisible(f, obj))
-    .forEach((f) => panel.appendChild(fieldNode(f, obj, sec.key)));
-  view.appendChild(panel);
-}
-
-/**
- * Reports whether a field renders, honoring an optional `showWhen` condition
- * that gates visibility on a sibling field's current value.
- * @param {object} field manifest field (may carry showWhen)
- * @param {object} obj object the field and its sibling controller live on
- * @returns {boolean} true when the field should render
- */
-function isFieldVisible(field, obj) {
-  const cond = field.showWhen;
-  return !cond || cond.in.includes(obj[cond.field]);
-}
-
-/**
- * Renders a single field (leaf, group, or list) bound to an object.
- * @param {object} field manifest field
- * @param {object} obj object the field lives on
- * @param {string} prefix dotted path of the parent
- * @returns {HTMLElement} the rendered node
- */
-function fieldNode(field, obj, prefix) {
-  const path = joinPath(prefix, field.key);
-  if (field.kind === 'group') return groupNode(field, obj, path);
-  if (field.kind === 'list') return listFieldNode(field, obj, path);
-  return rowNode(field, obj, path);
-}
-
-/**
- * Renders a nested group as a fieldset.
- * @param {object} field group field
- * @param {object} obj parent object
- * @param {string} path dotted path
- * @returns {HTMLFieldSetElement} the fieldset
- */
-function groupNode(field, obj, path) {
-  const sub = obj[field.key] || (obj[field.key] = {});
-  const fs = el('fieldset', 'group');
-  fs.dataset.path = path;
-  fs.appendChild(el('legend', null, field.label));
-  (field.fields || [])
-    .filter((f) => isFieldVisible(f, sub))
-    .forEach((f) => fs.appendChild(fieldNode(f, sub, path)));
-  return fs;
-}
-
-/**
- * Renders a labelled input row for a leaf field.
- * @param {object} field leaf field
- * @param {object} obj object the field lives on
- * @param {string} path dotted path
- * @returns {HTMLDivElement} the row
- */
-function rowNode(field, obj, path) {
-  const row = el('div', 'row');
-  const label = el('label', null, field.label + (field.required ? ' *' : ''));
-  label.setAttribute('for', path);
-  row.appendChild(label);
-  const node = inputNode(field, obj, path);
-  if (field.required) markRequired(node);
-  row.appendChild(node);
-  if (field.help) row.appendChild(el('small', 'help', field.help));
-  return row;
-}
-
-/**
- * Flags the control inside a row as required for assistive tech, reaching the
- * inner input when the field renders inside a wrapper (e.g. a secret toggle).
- * @param {HTMLElement} node input/select element, or a wrapper containing one
- * @returns {void}
- */
-function markRequired(node) {
-  const input = node.matches('input, select') ? node : node.querySelector('input, select');
-  if (input) input.setAttribute('aria-required', 'true');
-}
-
-/**
- * Builds the right input element for a leaf field's kind.
- * @param {object} field leaf field
- * @param {object} obj object the field lives on
- * @param {string} path dotted path
- * @returns {HTMLElement} the input element
- */
-function inputNode(field, obj, path) {
-  if (field.kind === 'boolean') return checkboxNode(field, obj, path);
-  if (field.kind === 'select') return selectNode(field, obj, path);
-  if (field.kind === 'secret') return secretNode(field, obj, path);
-  return textNode(field, obj, path);
-}
-
-/**
- * Builds a checkbox bound to a boolean field.
- * @param {object} field field
- * @param {object} obj object
- * @param {string} path dotted path
- * @returns {HTMLInputElement} the checkbox
- */
-function checkboxNode(field, obj, path) {
-  const i = el('input');
-  i.type = 'checkbox';
-  i.id = path;
-  i.dataset.path = path;
-  i.checked = Boolean(obj[field.key]);
-  i.onchange = () => {
-    obj[field.key] = i.checked;
-  };
-  return i;
-}
-
-/**
- * Builds a select bound to an enum field.
- * @param {object} field field
- * @param {object} obj object
- * @param {string} path dotted path
- * @returns {HTMLSelectElement} the select
- */
-function selectNode(field, obj, path) {
-  const s = el('select');
-  s.id = path;
-  s.dataset.path = path;
-  [''].concat(field.options || []).forEach((o) => {
-    const op = el('option', null, o || '—');
-    op.value = o;
-    s.appendChild(op);
-  });
-  s.value = obj[field.key] == null ? '' : String(obj[field.key]);
-  s.onchange = () => {
-    obj[field.key] = s.value;
-    render();
-  };
-  return s;
-}
-
-/**
- * Maps a field kind to its native input type.
- * @param {string} kind field kind
- * @returns {string} the input type ('number', 'date', or 'text')
- */
-function inputType(kind) {
-  if (kind === 'number') return 'number';
-  if (kind === 'date') return 'date';
-  return 'text';
-}
-
-/**
- * Builds a text/number/date input bound to a scalar field.
- * @param {object} field field
- * @param {object} obj object
- * @param {string} path dotted path
- * @returns {HTMLInputElement} the input
- */
-function textNode(field, obj, path) {
-  const i = el('input');
-  i.id = path;
-  i.dataset.path = path;
-  i.type = inputType(field.kind);
-  if (field.min != null) i.min = String(field.min);
-  if (field.max != null) i.max = String(field.max);
-  i.value = obj[field.key] == null ? '' : String(obj[field.key]);
-  i.oninput = () => {
-    setScalar(obj, field, i.value);
-  };
-  return i;
-}
-
-/**
- * Builds a masked secret input with a reveal toggle.
- * @param {object} field field
- * @param {object} obj object
- * @param {string} path dotted path
- * @returns {HTMLSpanElement} the wrapped input
- */
-function secretNode(field, obj, path) {
-  const wrap = el('span', 'secret');
-  const i = el('input');
-  i.id = path;
-  i.dataset.path = path;
-  i.type = 'password';
-  i.autocomplete = 'off';
-  i.value = obj[field.key] == null ? '' : String(obj[field.key]);
-  i.oninput = () => {
-    obj[field.key] = i.value;
-  };
-  const eye = button('', 'btn ghost reveal');
-  eye.innerHTML = EYE_SVG;
-  eye.setAttribute('aria-label', 'Show secret');
-  eye.setAttribute('aria-pressed', 'false');
-  eye.onclick = () => {
-    const reveal = i.type === 'password';
-    i.type = reveal ? 'text' : 'password';
-    eye.setAttribute('aria-pressed', String(reveal));
-    eye.setAttribute('aria-label', reveal ? 'Hide secret' : 'Show secret');
-  };
-  wrap.append(i, eye);
-  return wrap;
-}
-
-/**
- * Coerces and stores a scalar value, dropping empty numbers.
- * @param {object} obj object
- * @param {object} field field
- * @param {string} raw raw input value
- * @returns {void}
- */
-function setScalar(obj, field, raw) {
-  if (field.kind === 'number') {
-    if (raw === '') delete obj[field.key];
-    else obj[field.key] = Number(raw);
-    return;
-  }
-  obj[field.key] = raw;
-}
-
-// ---------- list fields (scalar lists + object lists) ----------
-
-/**
- * Renders a list field: object items when `fields` is present, else strings.
- * @param {object} field list field
- * @param {object} obj parent object
- * @param {string} path dotted path
- * @returns {HTMLDivElement} the list editor
- */
-function listFieldNode(field, obj, path) {
-  const arr = obj[field.key] || (obj[field.key] = []);
-  const wrap = el('div', 'list');
-  wrap.dataset.path = path;
-  wrap.appendChild(el('div', 'list-head', field.label));
-  if (field.help) wrap.appendChild(el('small', 'help', field.help));
-  arr.forEach((_, idx) =>
-    wrap.appendChild(listItemNode(field, arr, idx, `${path}.${idx}`)),
-  );
-  const add = button(`+ Add ${field.label}`, 'btn');
-  add.dataset.add = path;
-  add.onclick = () => {
-    arr.push(field.fields ? {} : '');
-    render();
-  };
-  wrap.appendChild(add);
-  return wrap;
-}
-
-/**
- * Renders one list item (object sub-fields or a single string input).
- * @param {object} field list field
- * @param {Array} arr backing array
- * @param {number} idx item index
- * @param {string} path dotted path
- * @returns {HTMLDivElement} the item row
- */
-function listItemNode(field, arr, idx, path) {
-  const row = el('div', 'list-item');
-  if (field.fields) {
-    field.fields.forEach((sub) => row.appendChild(fieldNode(sub, arr[idx], path)));
-  } else {
-    row.appendChild(scalarItemInput(field, arr, idx, path));
-  }
-  const del = button('✕', 'btn danger');
-  del.setAttribute('aria-label', `Remove ${field.label} ${idx + 1}`);
-  del.onclick = () => {
-    arr.splice(idx, 1);
-    render();
-  };
-  row.appendChild(del);
-  return row;
-}
-
-/**
- * Builds a text input bound to a string list element.
- * @param {object} field the list field (for an accessible name)
- * @param {Array} arr backing array
- * @param {number} idx element index
- * @param {string} path dotted path
- * @returns {HTMLInputElement} the input
- */
-function scalarItemInput(field, arr, idx, path) {
-  const i = el('input');
-  i.type = 'text';
-  i.dataset.path = path;
-  i.setAttribute('aria-label', `${field.label} ${idx + 1}`);
-  i.value = arr[idx] == null ? '' : String(arr[idx]);
-  i.oninput = () => {
-    arr[idx] = i.value;
-  };
-  return i;
-}
-
-// ---------- list sections (e.g. spendingWatch) ----------
-
-/**
- * Renders a `list` section as a list of item cards.
- * @param {object} sec section descriptor
- * @param {HTMLElement} view container
- * @returns {void}
- */
-function renderSectionList(sec, view) {
-  const arr = config[sec.key] || (config[sec.key] = []);
-  arr.forEach((_, idx) => view.appendChild(listCard(sec, arr, idx)));
-  const add = button(`+ Add ${sec.label}`, 'btn primary');
-  add.dataset.add = sec.key;
-  add.onclick = () => {
-    arr.push({});
-    render();
-  };
-  view.appendChild(add);
-}
-
-/**
- * Renders one card for a `list` section item.
- * @param {object} sec section descriptor
- * @param {Array} arr backing array
- * @param {number} idx item index
- * @returns {HTMLDivElement} the card
- */
-function listCard(sec, arr, idx) {
-  const card = el('div', 'card');
-  card.dataset.item = `${sec.key}.${idx}`;
-  const head = el('div', 'card-head');
-  head.appendChild(el('h3', null, `${sec.label} ${idx + 1}`));
-  const del = button('Remove', 'btn danger');
-  del.onclick = () => {
-    arr.splice(idx, 1);
-    render();
-  };
-  head.appendChild(del);
-  card.appendChild(head);
-  (sec.itemFields || []).forEach((f) =>
-    card.appendChild(fieldNode(f, arr[idx], `${sec.key}.${idx}`)),
-  );
-  return card;
-}
-
-// ---------- banks (bankMap) ----------
-
-/**
- * Renders the banks section: a card per bank plus an add-bank control.
- * @param {object} sec banks section descriptor
- * @param {HTMLElement} view container
- * @returns {void}
- */
-function renderBanks(sec, view) {
-  const banks = config.banks || (config.banks = {});
-  Object.keys(banks).forEach((name) => view.appendChild(bankCard(sec, name)));
-  view.appendChild(addBankControl(sec));
-}
-
-/**
- * Renders one bank card with its present fields, an add-field menu, and targets.
- * @param {object} sec banks section descriptor
- * @param {string} name bank id
- * @returns {HTMLDivElement} the bank card
- */
-function bankCard(sec, name) {
-  const card = el('div', 'card');
-  card.dataset.bank = name;
-  const head = el('div', 'card-head');
-  head.appendChild(el('h3', null, name));
-  const del = button('Remove', 'btn danger');
-  del.dataset.removeBank = name;
-  del.onclick = () => {
-    delete config.banks[name];
-    render();
-  };
-  head.appendChild(del);
-  card.appendChild(head);
-  const bank = config.banks[name];
-  presentBankFields(sec, bank).forEach((f) =>
-    card.appendChild(fieldNode(f, bank, `banks.${name}`)),
-  );
-  card.appendChild(addFieldControl(sec, bank, name));
-  card.appendChild(targetsEditor(sec, bank, name));
-  return card;
-}
-
-/**
- * The bank catalog fields currently present on a bank.
- * @param {object} sec banks section descriptor
- * @param {object} bank bank config
- * @returns {Array} present bank fields
- */
-function presentBankFields(sec, bank) {
-  return (sec.bankFields || []).filter((f) =>
-    Object.hasOwn(bank, f.key),
-  );
-}
-
-/**
- * Builds a dropdown of catalog fields not yet present on the bank.
- * @param {object} sec banks section descriptor
- * @param {object} bank bank config
- * @param {string} name bank id
- * @returns {HTMLDivElement} the add-field control
- */
-function addFieldControl(sec, bank, name) {
-  const wrap = el('div', 'add-field');
-  const missing = (sec.bankFields || []).filter(
-    (f) => !Object.hasOwn(bank, f.key),
-  );
-  if (!missing.length) return wrap;
-  const sel = el('select');
-  sel.dataset.addField = name;
-  sel.setAttribute('aria-label', `Add a field to ${name}`);
-  const ph = el('option', null, '+ Add field…');
-  ph.value = '';
-  sel.appendChild(ph);
-  missing.forEach((f) => {
-    const o = el('option', null, f.label);
-    o.value = f.key;
-    sel.appendChild(o);
-  });
-  sel.onchange = () => {
-    if (!sel.value) return;
-    bank[sel.value] = defaultFor(fieldByKey(sec.bankFields, sel.value));
-    render();
-  };
-  wrap.appendChild(sel);
-  return wrap;
-}
-
-/**
- * Finds a field by key in a field list.
- * @param {Array} fields field list
- * @param {string} key field key
- * @returns {object} the field
- */
-function fieldByKey(fields, key) {
-  return (fields || []).find((f) => f.key === key);
-}
-
-/**
- * Default value for a freshly-added field of a given kind.
- * @param {object} field field
- * @returns {boolean|number|string} default value
- */
-function defaultFor(field) {
-  if (!field) return '';
-  if (field.kind === 'boolean') return false;
-  if (field.kind === 'number') return 0;
-  return '';
-}
-
-/**
- * Renders the per-bank Actual targets editor.
- * @param {object} sec banks section descriptor
- * @param {object} bank bank config
- * @param {string} name bank id
- * @returns {HTMLDivElement} the targets editor
- */
-function targetsEditor(sec, bank, name) {
-  const wrap = el('div', 'targets');
-  wrap.appendChild(el('h4', null, 'Targets'));
-  const targets = bank.targets || (bank.targets = []);
-  targets.forEach((_, idx) =>
-    wrap.appendChild(targetRow(sec, targets, idx, `banks.${name}.targets.${idx}`)),
-  );
-  const add = button('+ Add target', 'btn');
-  add.dataset.addTarget = name;
-  add.onclick = () => {
-    targets.push({ actualAccountId: '', accounts: 'all', reconcile: false });
-    render();
-  };
-  wrap.appendChild(add);
-  return wrap;
-}
-
-/**
- * Renders one target row inside a bank card.
- * @param {object} sec banks section descriptor
- * @param {Array} targets backing array
- * @param {number} idx target index
- * @param {string} path dotted path
- * @returns {HTMLDivElement} the target row
- */
-function targetRow(sec, targets, idx, path) {
-  const row = el('div', 'card target');
-  row.dataset.target = path;
-  (sec.targetFields || []).forEach((f) =>
-    row.appendChild(fieldNode(f, targets[idx], path)),
-  );
-  const del = button('Remove target', 'btn danger');
-  del.onclick = () => {
-    targets.splice(idx, 1);
-    render();
-  };
-  row.appendChild(del);
-  return row;
-}
-
-/**
- * Builds the "add a bank" dropdown + button from the supported bank list.
- * @param {object} sec banks section descriptor
- * @returns {HTMLDivElement} the add-bank control
- */
-function addBankControl(sec) {
-  const wrap = el('div', 'add-bank');
-  const sel = el('select');
-  sel.id = 'add-bank-select';
-  sel.setAttribute('aria-label', 'Select a bank to add');
-  const ph = el('option', null, 'Add a bank…');
-  ph.value = '';
-  sel.appendChild(ph);
-  const existing = config.banks || {};
-  (manifest.banks || [])
-    .filter((b) => !existing[b])
-    .forEach((b) => {
-      const o = el('option', null, b);
-      o.value = b;
-      sel.appendChild(o);
-    });
-  const add = button('+ Add bank', 'btn primary');
-  add.id = 'add-bank-btn';
-  add.onclick = () => {
-    if (sel.value) addBank(sel.value);
-  };
-  wrap.append(sel, add);
-  return wrap;
-}
-
-/**
- * Adds a bank, templating its required credential fields and one empty target.
- * @param {string} name bank id
- * @returns {void}
- */
-function addBank(name) {
-  const req = manifest.bankRequirements?.[name] || {};
-  const bank = {
-    daysBack: 14,
-    twoFactorAuth: false,
-    targets: [{ actualAccountId: '', accounts: 'all', reconcile: false }],
-  };
-  (req.required || []).forEach((k) => {
-    if (!(k in bank)) bank[k] = '';
-  });
-  (config.banks || (config.banks = {}))[name] = bank;
-  current = 'banks';
-  render();
 }
 
 // ---------- wiring ----------

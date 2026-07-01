@@ -358,3 +358,132 @@ select {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+
+/* ============================================================================
+   jedison form theming — maps the vendored jedison library's jedi-prefixed DOM
+   (rendered by new Jedison.Theme() at GET /api/schema) onto the portal design
+   tokens so the schema-driven config form matches the hand-styled shell in both
+   dark (default) and light (prefers-color-scheme) themes. Everything is scoped
+   under #view so the login card and shell chrome are untouched.
+   ========================================================================== */
+
+/* ---- portal-owned bank toolbar (add / remove / validate) ---- */
+.bank-tools {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  margin-bottom: 18px; padding: 14px 16px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-1);
+}
+.bank-tools .add-bank { display: flex; gap: 8px; align-items: center; }
+.bank-tools .validate-tool { margin-right: auto; }
+.bank-tools select {
+  min-height: var(--tap); padding: 0 36px 0 13px; border: 1px solid var(--line);
+  border-radius: var(--r); background-color: var(--surface-2); color: var(--fg); font-size: 15px;
+}
+.bank-chip {
+  display: inline-flex; gap: 8px; align-items: center; padding: 6px 6px 6px 12px;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px;
+}
+.bank-chip-name { font-size: 13px; font-weight: 600; color: var(--fg); }
+.bank-chip .btn.danger { min-height: 34px; padding: 0 12px; font-size: 12px; }
+
+/* ---- jedison editors: containers ---- */
+#view .jedi-form { display: grid; gap: 4px; }
+#view .jedi-editor-container { min-width: 0; }
+#view .jedi-editor-fieldset,
+#view .jedi-editor-card {
+  border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface);
+  padding: 16px 18px; margin: 0 0 16px; box-shadow: var(--shadow-1); min-width: 0;
+}
+#view .jedi-editor-card-header,
+#view .jedi-editor-legend { padding: 0; margin: 0 0 12px; border: 0; background: transparent; }
+#view .jedi-legend,
+#view .jedi-editor-legend .jedi-title {
+  font-size: 15px; font-weight: 700; color: var(--fg); letter-spacing: .01em;
+}
+
+/* ---- jedison editors: labels, help, controls ---- */
+#view .jedi-label,
+#view .jedi-title { color: var(--fg); font-size: 13px; font-weight: 600; margin-bottom: 4px; display: inline-block; }
+#view .jedi-description { color: var(--muted); font-size: 12px; line-height: 1.4; margin-top: 4px; display: block; }
+#view input,
+#view select,
+#view textarea {
+  width: 100%; min-height: var(--tap); padding: 0 13px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--surface-2); color: var(--fg); font-size: 15px;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+#view textarea { padding: 10px 13px; min-height: calc(var(--tap) * 1.6); }
+#view input:hover,
+#view select:hover,
+#view textarea:hover { border-color: var(--faint); }
+#view input:focus,
+#view select:focus,
+#view textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring);
+}
+#view input::placeholder { color: var(--faint); }
+#view select {
+  appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2393a0b4' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+
+/* ---- boolean checkbox → toggle switch (matches the shell's toggles) ---- */
+#view input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; min-height: 0; width: 46px; height: 27px;
+  border-radius: 999px; background: var(--switch-off); border: 1px solid var(--line);
+  position: relative; cursor: pointer; padding: 0; flex: none;
+  transition: background .15s, border-color .15s;
+}
+#view input[type="checkbox"]::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 21px; height: 21px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #0000004d; transition: transform .16s;
+}
+#view input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+#view input[type="checkbox"]:checked::after { transform: translateX(19px); }
+#view input[type="checkbox"]:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-ring); }
+#view .jedi-checkbox-control { display: flex; gap: 10px; align-items: center; }
+#view .jedi-checkbox-control .jedi-label { margin-bottom: 0; }
+
+/* ---- secret inputs: masked field + reveal toggle (injected by app.js) ---- */
+#view .secret-wrap { position: relative; display: block; }
+#view .secret-wrap > input { padding-right: calc(var(--tap) + 4px); letter-spacing: .04em; }
+#view .secret-wrap > .reveal {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  min-height: 38px; height: 38px; width: 38px; padding: 0;
+  display: flex; align-items: center; justify-content: center; color: var(--muted);
+}
+#view .secret-wrap > .reveal[aria-pressed="true"] { color: var(--accent); }
+
+/* ---- jedison buttons (array add/delete/move, property adders) ---- */
+#view .jedi-btn {
+  min-height: 38px; padding: 0 14px; border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--surface-2); color: var(--fg); font: inherit; font-size: 13px;
+  font-weight: 600; cursor: pointer; transition: border-color .15s, background .15s;
+}
+#view .jedi-btn:hover { border-color: var(--accent); }
+#view .jedi-array-delete,
+#view .jedi-array-delete-all { color: var(--danger); border-color: var(--danger-soft); }
+#view .jedi-array-delete:hover,
+#view .jedi-array-delete-all:hover { background: var(--danger-soft); border-color: var(--danger); }
+#view .jedi-array-item {
+  border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2);
+  padding: 14px; margin-bottom: 12px;
+}
+#view .jedi-btn-group,
+#view .jedi-array-actions-slot,
+#view .jedi-actions-slot { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---- validation feedback ---- */
+#view .jedi-error-message { color: var(--danger); font-size: 12px; margin-top: 4px; display: block; }
+#view .jedi-warning-message { color: var(--warn); font-size: 12px; margin-top: 4px; display: block; }
+#view input[aria-invalid="true"],
+#view select[aria-invalid="true"] { border-color: var(--danger); }
+#view .jedi-info-button { color: var(--muted); background: transparent; border: 0; cursor: help; }
+
+@media (max-width: 760px) {
+  .bank-tools { padding: 12px; }
+  #view .jedi-editor-fieldset,
+  #view .jedi-editor-card { padding: 14px; }
+}

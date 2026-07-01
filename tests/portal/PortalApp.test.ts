@@ -7,13 +7,12 @@ import { fileURLToPath } from 'node:url';
 import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fakeBankTarget } from '../helpers/factories.js';
-
-/* ── Paths + index.html body (kept in sync with the real SPA shell) ── */
+/* ── Paths + fixtures (real SPA shell + the real generated schema) ── */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP_PATH = join(HERE, '../../src/Portal/Public/app.js');
 const INDEX_PATH = join(HERE, '../../src/Portal/Public/index.html');
+const SCHEMA_PATH = join(HERE, '../../config/portal/config.schema.json');
 
 const PARSED_INDEX = new DOMParser().parseFromString(readFileSync(INDEX_PATH, 'utf8'), 'text/html');
 PARSED_INDEX.querySelectorAll('script').forEach((node) => {
@@ -21,57 +20,34 @@ PARSED_INDEX.querySelectorAll('script').forEach((node) => {
 });
 const BODY_HTML = PARSED_INDEX.body.innerHTML;
 
-/* ── Fixture + fetch types ──────────────────────────────────────────── */
+// The app.js under test imports the real vendored jedison, which renders plain
+// DOM under jsdom — so the tests drive and assert on the true jedi- markup the
+// schema produces (no library mock), giving realistic coverage of the render,
+// secret-reveal, conditional-visibility, add/remove-bank and save wiring.
+const SCHEMA = JSON.parse(readFileSync(SCHEMA_PATH, 'utf8')) as Record<string, unknown>;
+const MASK = '********';
 
-interface FieldDef {
-  key: string;
-  label: string;
-  kind: string;
-  options?: string[];
-  fields?: FieldDef[];
-  required?: boolean;
-  help?: string;
-  min?: number;
-  max?: number;
-  showWhen?: { field: string; in: string[] };
-}
+/* ── Types ──────────────────────────────────────────────────────────── */
 
-interface SectionDef {
-  key: string;
-  label: string;
-  kind: string;
-  icon?: string;
-  doc?: string;
-  help?: string;
-  fields?: FieldDef[];
-  itemFields?: FieldDef[];
-  bankFields?: FieldDef[];
-  targetFields?: FieldDef[];
-}
-
-interface ManifestDef {
-  sections: SectionDef[];
-  banks: string[];
-  bankRequirements: Record<string, { required: string[] }>;
-}
-
-interface FailSpec {
-  status: number;
-  body: unknown;
-  throwJson: boolean;
+interface ValidationResult {
+  status: 'pass' | 'fail' | 'warn';
+  check: string;
+  message: string;
 }
 
 interface PortalState {
   statusOk: boolean;
   status: Record<string, unknown>;
-  manifestOk: boolean;
-  manifest: ManifestDef;
+  schemaOk: boolean;
   config: Record<string, unknown>;
   loginOk: boolean;
-  loginFail: FailSpec;
   saveOk: boolean;
-  saveFail: FailSpec;
+  saveStatus: number;
+  saveErrorless: boolean;
+  validateOk: boolean;
+  validateResults: ValidationResult[] | null;
   logoutOk: boolean;
+  schemaBody?: Record<string, unknown>;
 }
 
 interface FakeResponse {
@@ -87,164 +63,61 @@ interface FetchInit {
 }
 
 /**
- * Builds a rich manifest that exercises every section kind (object, list,
- * bankMap) and every field kind the SPA can render.
- * @returns A fresh manifest fixture.
- */
-function makeManifest(): ManifestDef {
-  return {
-    banks: ['hapoalim', 'leumi', 'discount'],
-    bankRequirements: {
-      hapoalim: { required: ['username', 'password'] },
-      leumi: { required: ['userCode', 'password'] },
-      discount: { required: ['daysBack', 'id'] },
-    },
-    sections: [
-      {
-        key: 'general',
-        label: 'General',
-        icon: '⚙️',
-        kind: 'object',
-        doc: 'GeneralSettings.md',
-        help: 'Core importer behavior',
-        fields: [
-          { key: 'enabled', label: 'Enabled', kind: 'boolean' },
-          { key: 'mode', label: 'Run mode', kind: 'select', options: ['fast', 'thorough'] },
-          { key: 'apiKey', label: 'API key', kind: 'secret', required: true },
-          { key: 'authToken', label: 'Auth token', kind: 'string', required: true, help: 'Required token' },
-          { key: 'retries', label: 'Retries', kind: 'number', min: 0, max: 10, help: 'Retry attempts' },
-          { key: 'startDate', label: 'Start date', kind: 'date' },
-          { key: 'note', label: 'Note', kind: 'string', help: 'Free text' },
-          { key: 'deepPath', label: 'Deep scan path', kind: 'string', showWhen: { field: 'mode', in: ['thorough'] } },
-          {
-            key: 'advanced',
-            label: 'Advanced',
-            kind: 'group',
-            fields: [
-              { key: 'timeout', label: 'Timeout', kind: 'number' },
-              { key: 'proxy', label: 'Proxy', kind: 'group', fields: [{ key: 'host', label: 'Host', kind: 'string' }] },
-            ],
-          },
-          { key: 'tags', label: 'Tag', kind: 'list', help: 'Plain string list' },
-          {
-            key: 'rules',
-            label: 'Rule',
-            kind: 'list',
-            fields: [
-              { key: 'pattern', label: 'Pattern', kind: 'string' },
-              { key: 'active', label: 'Active', kind: 'boolean' },
-            ],
-          },
-        ],
-      },
-      {
-        key: 'watch',
-        label: 'Spending watch',
-        icon: '👀',
-        kind: 'list',
-        itemFields: [
-          { key: 'label', label: 'Label', kind: 'string' },
-          { key: 'limit', label: 'Limit', kind: 'number' },
-        ],
-      },
-      {
-        key: 'alerts',
-        label: 'Alerts',
-        icon: '🔔',
-        kind: 'list',
-        itemFields: [{ key: 'name', label: 'Name', kind: 'string' }],
-      },
-      {
-        key: 'banks',
-        label: 'Banks',
-        icon: '🏦',
-        kind: 'bankMap',
-        doc: 'Banks.md',
-        bankFields: [
-          { key: 'username', label: 'Username', kind: 'string' },
-          { key: 'userCode', label: 'User code', kind: 'string' },
-          { key: 'id', label: 'ID', kind: 'string' },
-          { key: 'password', label: 'Password', kind: 'secret' },
-          { key: 'daysBack', label: 'Days back', kind: 'number' },
-          { key: 'twoFactorAuth', label: 'Two-factor auth', kind: 'boolean' },
-        ],
-        targetFields: [
-          { key: 'actualAccountId', label: 'Actual account ID', kind: 'string' },
-          { key: 'accounts', label: 'Accounts', kind: 'string' },
-          { key: 'reconcile', label: 'Reconcile', kind: 'boolean' },
-        ],
-      },
-      {
-        key: 'extras',
-        label: 'Extras',
-        kind: 'object',
-        fields: [
-          { key: 'label', label: 'Label', kind: 'string' },
-          { key: 'channel', label: 'Channel', kind: 'select', options: ['email', 'sms'] },
-          { key: 'token', label: 'Token', kind: 'secret' },
-          { key: 'count', label: 'Count', kind: 'number' },
-          { key: 'when', label: 'When', kind: 'date' },
-          { key: 'flag', label: 'Flag', kind: 'boolean' },
-          { key: 'opts', label: 'Options', kind: 'group', fields: [{ key: 'verbose', label: 'Verbose', kind: 'boolean' }] },
-          { key: 'extraTags', label: 'Extra tag', kind: 'list' },
-        ],
-      },
-      {
-        key: 'about',
-        label: 'About',
-        kind: 'object',
-        doc: 'Overview.md',
-      },
-      {
-        key: '',
-        label: 'Root',
-        kind: 'object',
-        fields: [{ key: 'rootField', label: 'Root field', kind: 'string' }],
-      },
-    ],
-  };
-}
-
-/**
- * Builds a config whose shape matches {@link makeManifest}, with stored values
- * for the general/watch/banks sections (extras/alerts/root are intentionally
- * absent to exercise the SPA's lazy create-on-render branches).
- *
- * The per-bank field sets are deliberately explicit (not factory-generated):
- * hapoalim carries only username/password so the add-field control still lists
- * the remaining manifest fields, while leumi carries every declared field so
- * that control collapses to null. Target shapes come from the shared factory.
+ * Builds a masked config whose shape matches the generated schema, with secrets
+ * pre-masked as ******** exactly like GET /api/config returns them.
  * @returns A fresh config fixture.
  */
 function makeConfig(): Record<string, unknown> {
   return {
-    general: {
-      enabled: true,
-      mode: 'thorough',
-      apiKey: 'sk-secret-123',
-      authToken: 'tok-abc',
-      retries: 3,
-      startDate: '2024-03-01',
-      note: 'imported nightly',
-      deepPath: '/deep/scan',
-      advanced: { timeout: 45, proxy: { host: 'proxy.local' } },
-      tags: ['salary', 'rent'],
-      rules: [{ pattern: 'GROCERY', active: true }],
+    delayBetweenBanks: 0,
+    actual: {
+      init: { serverURL: 'https://actual.example', password: MASK, dataDir: '/data' },
+      budget: { syncId: 'uuid-1', password: MASK },
     },
-    watch: [{ label: 'Dining', limit: 500 }],
     banks: {
       hapoalim: {
-        username: 'avi-cohen',
-        password: 'bank-pass-1',
-        targets: [fakeBankTarget({ actualAccountId: 'acct-1', accounts: 'all', reconcile: false })],
+        daysBack: 14,
+        username: MASK,
+        password: MASK,
+        twoFactorAuth: false,
+        targets: [{ actualAccountId: 'acct-1', accounts: 'all', reconcile: false }],
       },
-      leumi: { username: 'dana', userCode: 'D123', id: 'ID9', password: 'p', daysBack: 30, twoFactorAuth: true },
+      leumi: { userCode: MASK, password: MASK, daysBack: 30 },
     },
-    rootField: 'root-value',
+    notifications: {
+      enabled: true,
+      maxTransactions: 5,
+      telegram: { botToken: MASK, chatId: '123', messageFormat: 'summary', showTransactions: 'new' },
+      webhook: { url: MASK, format: 'slack' },
+    },
+    spendingWatch: [{ alertFromAmount: 100, numOfDayToCount: 7, watchPayees: ['coffee'] }],
+    categorization: { mode: 'history', translations: [] },
+    logConfig: { format: 'words', logDir: './logs' },
+    proxy: { server: '' },
+    portal: {
+      enabled: true,
+      host: '127.0.0.1',
+      port: 8080,
+      authMode: 'password',
+      secureCookies: false,
+      passwordHash: MASK,
+      sessionSecret: MASK,
+      google: { clientId: 'cid', clientSecret: MASK, redirectUri: 'https://cb', allowedEmails: ['a@b.co'] },
+    },
   };
 }
 
-/* ── Module-scoped harness state ────────────────────────────────────── */
+/* ── Harness state ──────────────────────────────────────────────────── */
+
+/**
+ * Deep-clones the generated schema so a test can mutate an edge-case variant
+ * (missing title, banks without options, etc.) without affecting other tests.
+ * @returns A structural copy of the schema.
+ */
+function cloneSchema(): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(SCHEMA)) as Record<string, unknown>;
+}
+
 
 let state: PortalState;
 let fetchMock: Mock;
@@ -252,17 +125,16 @@ let reloadSpy: Mock;
 let mediaChange: ((event: { matches: boolean }) => void) | undefined;
 
 /**
- * Produces a minimal Response-like object the SPA's api() helper understands.
+ * Produces a Response-like object the SPA's api() helper understands.
  * @param status - HTTP status code.
  * @param body - Parsed JSON body to resolve.
- * @param throwJson - When true, json() rejects to exercise the parse-failure path.
  * @returns A fake response.
  */
-function makeResponse(status: number, body: unknown, throwJson = false): FakeResponse {
+function makeResponse(status: number, body: unknown): FakeResponse {
   return {
     ok: status >= 200 && status < 300,
     status,
-    json: throwJson ? (): Promise<unknown> => Promise.reject(new Error('bad json')) : (): Promise<unknown> => Promise.resolve(body),
+    json: (): Promise<unknown> => Promise.resolve(body),
   };
 }
 
@@ -273,48 +145,39 @@ function makeResponse(status: number, body: unknown, throwJson = false): FakeRes
  * @returns The fake response for the route.
  */
 function route(path: string, method: string): FakeResponse {
-  if (path === '/auth/status') {
-    return state.statusOk ? makeResponse(200, state.status) : makeResponse(503, { error: 'status unavailable' });
-  }
-  if (path === '/api/manifest') {
-    return state.manifestOk ? makeResponse(200, state.manifest) : makeResponse(500, { error: 'manifest unavailable' });
-  }
-  if (path === '/api/config' && method === 'PUT') {
-    return state.saveOk ? makeResponse(204, {}) : makeResponse(state.saveFail.status, state.saveFail.body, state.saveFail.throwJson);
-  }
-  if (path === '/api/config') {
-    return makeResponse(200, state.config);
-  }
-  if (path === '/auth/login') {
-    return state.loginOk ? makeResponse(200, { ok: true }) : makeResponse(state.loginFail.status, state.loginFail.body, state.loginFail.throwJson);
-  }
-  if (path === '/auth/logout') {
-    return state.logoutOk ? makeResponse(204, {}) : makeResponse(500, { error: 'logout failed' });
-  }
+  if (path === '/auth/status') return state.statusOk ? makeResponse(200, state.status) : makeResponse(503, { error: 'status' });
+  if (path === '/api/schema') return state.schemaOk ? makeResponse(200, state.schemaBody ?? SCHEMA) : makeResponse(500, { error: 'schema' });
+  if (path === '/api/config' && method === 'PUT') return state.saveOk ? makeResponse(204, {}) : makeResponse(state.saveStatus, state.saveErrorless ? {} : { error: 'Disk full' });
+  if (path === '/api/config') return makeResponse(200, state.config);
+  if (path === '/api/validate') return state.validateOk ? makeResponse(200, state.validateResults) : makeResponse(500, { error: 'validate down' });
+  if (path === '/auth/login') return state.loginOk ? makeResponse(200, { ok: true }) : makeResponse(401, { error: 'Invalid portal password' });
+  if (path === '/auth/logout') return state.logoutOk ? makeResponse(204, {}) : makeResponse(500, { error: 'logout failed' });
   return makeResponse(404, { error: 'not found' });
 }
 
 /**
- * Resets harness state and installs the DOM, fetch, matchMedia and location
- * stubs the SPA touches at import time.
+ * Resets harness state and installs the DOM, fetch, matchMedia, scrollIntoView
+ * and location stubs the SPA touches at import time.
  * @returns Nothing.
  */
 function installHarness(): void {
   state = {
     statusOk: true,
     status: { authorized: true, authMode: 'password', google: false, password: true, email: '' },
-    manifestOk: true,
-    manifest: makeManifest(),
+    schemaOk: true,
     config: makeConfig(),
     loginOk: true,
-    loginFail: { status: 401, body: { error: 'Invalid portal password' }, throwJson: false },
     saveOk: true,
-    saveFail: { status: 500, body: { error: 'Disk full' }, throwJson: false },
+    saveStatus: 500,
+    saveErrorless: false,
+    validateOk: true,
+    validateResults: [],
     logoutOk: true,
   };
   document.body.innerHTML = BODY_HTML;
   mediaChange = undefined;
   reloadSpy = vi.fn();
+  Element.prototype.scrollIntoView = vi.fn();
   Object.defineProperty(window, 'location', {
     configurable: true,
     value: { reload: reloadSpy, href: 'http://localhost/', assign: vi.fn(), replace: vi.fn() },
@@ -339,8 +202,8 @@ const settle = (): Promise<void> => new Promise((resolve) => { setTimeout(resolv
 
 /**
  * Imports the SPA (runs its top-level wiring + init) and waits for the boot
- * fetch chain to settle.
- * @returns Resolves once the initial render (or login view) is in place.
+ * fetch chain to settle so the initial render or login view is in place.
+ * @returns Resolves once boot completes.
  */
 async function boot(): Promise<void> {
   await import(APP_PATH);
@@ -370,104 +233,74 @@ function byId(id: string): HTMLElement {
 }
 
 const inputId = (id: string): HTMLInputElement => byId(id) as HTMLInputElement;
-const selectId = (id: string): HTMLSelectElement => byId(id) as HTMLSelectElement;
-
-/**
- * Resolves the first element matching a selector, failing when absent.
- * @param selector - CSS selector.
- * @returns The element.
- */
-function query(selector: string): HTMLElement {
-  const node = document.querySelector(selector);
-  if (!node) throw new Error(`${selector} not found`);
-  return node as HTMLElement;
-}
-
+const clickId = (id: string): void => { byId(id).click(); };
 const maybe = (selector: string): HTMLElement | null => document.querySelector(selector) as HTMLElement | null;
 
-const clickId = (id: string): void => { byId(id).click(); };
-
 /**
- * Sets a text/number input value and dispatches the input event the SPA binds.
- * @param target - Element id or the element itself.
- * @param value - Value to enter.
- * @returns Nothing.
+ * Resolves a jedison editor container by its instance path (e.g. '#/banks/leumi').
+ * @param path - The jedison instance path.
+ * @returns The container element, or null when absent.
  */
-function typeText(target: string | HTMLElement, value: string): void {
-  const node = (typeof target === 'string' ? inputId(target) : target) as HTMLInputElement;
-  node.value = value;
-  node.dispatchEvent(new Event('input', { bubbles: true }));
+function jedi(path: string): HTMLElement | null {
+  return document.querySelector(`#view [data-path="${path}"]`) as HTMLElement | null;
 }
 
 /**
- * Sets a select value and dispatches a change event.
- * @param target - Element id or the select element itself.
- * @param value - Option value to select.
+ * Sets a jedison-rendered control's value and dispatches the change event the
+ * library listens for (showErrors defaults to 'change').
+ * @param id - The control element id (jedison derives it from the path).
+ * @param value - The value to set.
  * @returns Nothing.
  */
-function changeSelect(target: string | HTMLElement, value: string): void {
-  const node = (typeof target === 'string' ? selectId(target) : target) as HTMLSelectElement;
-  node.value = value;
-  node.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-const toggleCheckbox = (id: string): void => {
+function setControl(id: string, value: string): void {
   const node = inputId(id);
-  node.checked = !node.checked;
+  node.value = value;
   node.dispatchEvent(new Event('change', { bubbles: true }));
-};
-
-const pressEnter = (node: HTMLElement): void => { node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); };
-const pressEscape = (): void => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); };
-
-/**
- * Clicks the sidebar navigation button for a section key.
- * @param key - Section key (may be the empty string for the root section).
- * @returns Nothing.
- */
-function clickNav(key: string): void {
-  const btn = byId('nav').querySelector(`[data-section="${key}"]`);
-  if (!btn) throw new Error(`nav button "${key}" not found`);
-  (btn as HTMLElement).click();
 }
 
 /**
- * Saves the config under fake timers so the toast lifecycle fully drains.
- * @returns Resolves once save + toast timers complete.
+ * Sets a plain (non-jedison) input's value without dispatching events.
+ * @param id - Element id.
+ * @param value - Value to set.
+ * @returns Nothing.
  */
-async function saveConfig(): Promise<void> {
-  vi.useFakeTimers();
-  clickId('save');
-  await vi.runAllTimersAsync();
-  vi.useRealTimers();
+function setValue(id: string, value: string): void {
+  inputId(id).value = value;
 }
 
 /**
  * Reads the most recent PUT /api/config body the SPA submitted.
  * @returns The parsed config payload.
  */
-function putBody(): unknown {
+function putBody(): Record<string, unknown> {
   const calls = fetchMock.mock.calls as Array<[string, FetchInit | undefined]>;
   const put = [...calls].reverse().find((call) => call[0] === '/api/config' && call[1]?.method === 'PUT');
   if (!put?.[1]?.body) throw new Error('no PUT /api/config body captured');
-  return JSON.parse(put[1].body);
+  return JSON.parse(put[1].body) as Record<string, unknown>;
 }
 
 /**
- * Walks a nested value by keys/indices.
- * @param root - Root value.
- * @param keys - Path of keys/indices to descend.
- * @returns The value at the path (or undefined).
+ * Reports whether the SPA requested the given path (optionally by method).
+ * @param path - Request path to look for.
+ * @param method - Optional HTTP method to match.
+ * @returns True when a matching request was made.
  */
-function dig(root: unknown, ...keys: Array<string | number>): unknown {
-  let cur: unknown = root;
-  for (const key of keys) cur = (cur as Record<string | number, unknown>)[key];
-  return cur;
+function called(path: string, method?: string): boolean {
+  const calls = fetchMock.mock.calls as Array<[string, FetchInit | undefined]>;
+  return calls.some((c) => c[0] === path && (method ? c[1]?.method === method : true));
 }
 
-const asArray = (value: unknown): unknown[] => value as unknown[];
-const putSomePut = (): boolean =>
-  (fetchMock.mock.calls as Array<[string, FetchInit | undefined]>).some((c) => c[0] === '/api/config' && c[1]?.method === 'PUT');
+/**
+ * Runs a click action under fake timers so any toast lifecycle fully drains.
+ * @param id - Id of the button to click.
+ * @returns Resolves once queued timers complete.
+ */
+async function clickWithTimers(id: string): Promise<void> {
+  vi.useFakeTimers();
+  clickId(id);
+  await vi.advanceTimersByTimeAsync(100);
+  vi.useRealTimers();
+}
 
 beforeEach(() => {
   vi.resetModules();
@@ -482,12 +315,28 @@ afterEach(() => {
 /* ── Tests ──────────────────────────────────────────────────────────── */
 
 describe('PortalApp bootstrap and authentication', () => {
-  it('renders the first section when already authorized', async () => {
+  it('renders the jedison form when already authorized', async () => {
     await boot();
     expect(byId('app').classList.contains('hidden')).toBe(false);
     expect(byId('login').classList.contains('hidden')).toBe(true);
-    expect(byId('title').textContent).toBe('General');
-    expect(byId('subtitle').textContent).toBe('Core importer behavior');
+    expect(byId('title').textContent).toBe('Israeli Bank Importer Config');
+    expect(byId('subtitle').textContent).toBe('2 banks configured');
+    expect(maybe('#view [data-path="#"]')).not.toBeNull();
+  });
+
+  it('fetches the schema and config and seeds jedison with the masked data', async () => {
+    await boot();
+    expect(called('/api/schema')).toBe(true);
+    expect(called('/api/config')).toBe(true);
+    expect(inputId('root-actual-init-password').value).toBe(MASK);
+    expect(inputId('root-actual-init-password').type).toBe('password');
+  });
+
+  it('moves focus to the title heading after login', async () => {
+    await boot();
+    const title = byId('title');
+    expect(title.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(title);
   });
 
   it('shows the password step when unauthorized in password mode', async () => {
@@ -495,12 +344,11 @@ describe('PortalApp bootstrap and authentication', () => {
     await boot();
     expect(byId('login').classList.contains('hidden')).toBe(false);
     expect(byId('pw').classList.contains('hidden')).toBe(false);
-    expect(byId('pw-btn').classList.contains('hidden')).toBe(false);
     expect(byId('google-btn').classList.contains('hidden')).toBe(true);
     expect(byId('login-hint').textContent).toBe('Sign in to manage your importer configuration.');
   });
 
-  it('shows only the Google step in google mode', async () => {
+  it('shows the google step when unauthorized in google mode', async () => {
     unauth({ authMode: 'google', google: false });
     await boot();
     expect(byId('google-btn').classList.contains('hidden')).toBe(false);
@@ -508,597 +356,230 @@ describe('PortalApp bootstrap and authentication', () => {
     expect(byId('login-hint').textContent).toBe('Sign in with Google to manage your configuration.');
   });
 
-  it('asks for Google first then password in both mode', async () => {
-    unauth({ authMode: 'both', google: false, password: false });
+  it('acknowledges a satisfied google factor in both mode', async () => {
+    unauth({ authMode: 'both', google: true, password: false, email: 'me@x.co' });
     await boot();
-    expect(byId('google-btn').classList.contains('hidden')).toBe(false);
-    expect(byId('pw').classList.contains('hidden')).toBe(false);
-    expect(byId('login-hint').textContent).toBe('Sign in with Google, then enter the portal password.');
+    expect(byId('login-hint').textContent).toBe('✓ Signed in as me@x.co. Now enter the portal password.');
   });
 
-  it('acknowledges a signed-in Google user (with email) in both mode', async () => {
-    unauth({ authMode: 'both', google: true, password: false, email: 'avi@example.com' });
-    await boot();
-    expect(byId('google-btn').classList.contains('hidden')).toBe(true);
-    expect(byId('pw').classList.contains('hidden')).toBe(false);
-    expect(byId('login-hint').textContent).toBe('✓ Signed in as avi@example.com. Now enter the portal password.');
-  });
-
-  it('acknowledges a signed-in Google user without email in both mode', async () => {
-    unauth({ authMode: 'both', google: true, password: false, email: '' });
-    await boot();
-    expect(byId('login-hint').textContent).toBe('✓ Signed in. Now enter the portal password.');
-  });
-
-  it('acknowledges an accepted password and asks for Google in both mode', async () => {
+  it('guides both mode when only the password is satisfied', async () => {
     unauth({ authMode: 'both', google: false, password: true });
     await boot();
-    expect(byId('google-btn').classList.contains('hidden')).toBe(false);
-    expect(byId('pw').classList.contains('hidden')).toBe(true);
     expect(byId('login-hint').textContent).toBe('✓ Password accepted. Now sign in with Google.');
   });
 
-  it('falls back to the password step when the status check fails', async () => {
+  it('prompts both factors when neither is satisfied in both mode', async () => {
+    unauth({ authMode: 'both', google: false, password: false });
+    await boot();
+    expect(byId('login-hint').textContent).toBe('Sign in with Google, then enter the portal password.');
+  });
+
+  it('falls back to the password step when the status probe fails', async () => {
     state.statusOk = false;
     await boot();
     expect(byId('login').classList.contains('hidden')).toBe(false);
     expect(byId('pw').classList.contains('hidden')).toBe(false);
-    expect(byId('login-hint').textContent).toBe('Sign in to manage your importer configuration.');
   });
 
-  it('shows a recoverable load error when the config cannot be loaded', async () => {
-    state.manifestOk = false;
-    await boot();
-    expect(byId('reload-btn').classList.contains('hidden')).toBe(false);
-    expect(byId('google-btn').classList.contains('hidden')).toBe(true);
-    expect(byId('login-hint').textContent).toBe('Signed in, but your configuration could not be loaded.');
-    expect(byId('login-err').textContent).toContain('Could not load configuration');
-  });
-
-  it('defaults to the password step when the status omits an auth mode', async () => {
-    unauth({ password: false });
-    await boot();
-    expect(byId('pw').classList.contains('hidden')).toBe(false);
-    expect(byId('login-hint').textContent).toBe('Sign in to manage your importer configuration.');
-  });
-
-  it('focuses no field when an unauthorized status leaves no step to complete', async () => {
-    unauth({ authMode: 'both', google: true, password: true });
+  it('shows a recoverable load error when the schema cannot be fetched', async () => {
+    state.schemaOk = false;
     await boot();
     expect(byId('login').classList.contains('hidden')).toBe(false);
-    expect(byId('google-btn').classList.contains('hidden')).toBe(true);
-    expect(byId('pw').classList.contains('hidden')).toBe(true);
-  });
-
-  it('shows a load error when the manifest contains no sections', async () => {
-    state.manifest = { sections: [], banks: [], bankRequirements: {} };
-    await boot();
     expect(byId('reload-btn').classList.contains('hidden')).toBe(false);
     expect(byId('login-err').textContent).toContain('Could not load configuration');
   });
 });
 
-describe('PortalApp login flow', () => {
-  it('submits the password and opens the app on success', async () => {
+describe('PortalApp login submission', () => {
+  it('opens the app after a correct password', async () => {
     unauth({ authMode: 'password', password: false });
     await boot();
-    typeText('pw', 'correct-horse-battery');
-    state.status = { authorized: true };
+    state.status = { authorized: true, authMode: 'password' };
+    setValue('pw', 'hunter2');
     clickId('pw-btn');
     await settle();
     await settle();
+    expect(called('/auth/login', 'POST')).toBe(true);
     expect(byId('app').classList.contains('hidden')).toBe(false);
-    expect(byId('login').classList.contains('hidden')).toBe(true);
-    expect(fetchMock.mock.calls.some((c) => c[0] === '/auth/login')).toBe(true);
+  });
+
+  it('shows an error and stays on login after a wrong password', async () => {
+    unauth({ authMode: 'password', password: false });
+    state.loginOk = false;
+    await boot();
+    setValue('pw', 'nope');
+    clickId('pw-btn');
+    await settle();
+    expect(byId('login-err').textContent).toBe('Invalid portal password');
+    expect(byId('app').classList.contains('hidden')).toBe(true);
   });
 
   it('submits the password when Enter is pressed', async () => {
     unauth({ authMode: 'password', password: false });
+    state.status = { authorized: true, authMode: 'password' };
     await boot();
-    typeText('pw', 'enter-key-pass');
-    state.status = { authorized: true };
-    pressEnter(byId('pw'));
+    setValue('pw', 'hunter2');
+    byId('pw').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await settle();
     await settle();
-    expect(fetchMock.mock.calls.some((c) => c[0] === '/auth/login')).toBe(true);
+    expect(called('/auth/login', 'POST')).toBe(true);
   });
 
-  it('ignores a submit while the sign-in button is disabled', async () => {
+  it('ignores a submit while the button is already busy', async () => {
     unauth({ authMode: 'password', password: false });
     await boot();
     inputId('pw-btn').disabled = true;
-    pressEnter(byId('pw'));
+    byId('pw').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await settle();
-    expect(fetchMock.mock.calls.some((c) => c[0] === '/auth/login')).toBe(false);
-  });
-
-  it('does not submit when a non-Enter key is pressed in the password box', async () => {
-    unauth({ authMode: 'password', password: false });
-    await boot();
-    typeText('pw', 'irrelevant');
-    byId('pw').dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
-    await settle();
-    expect(fetchMock.mock.calls.some((c) => c[0] === '/auth/login')).toBe(false);
-  });
-
-  it('shows the server message when the password is rejected', async () => {
-    unauth({ authMode: 'password', password: false });
-    state.loginOk = false;
-    await boot();
-    typeText('pw', 'wrong-pass');
-    clickId('pw-btn');
-    await settle();
-    await settle();
-    expect(byId('login-err').textContent).toBe('Invalid portal password');
-    expect(inputId('pw-btn').disabled).toBe(false);
-    expect(byId('pw-btn').textContent).toBe('Sign in');
-  });
-
-  it('shows a generic HTTP error when the server sends no message', async () => {
-    unauth({ authMode: 'password', password: false });
-    state.loginOk = false;
-    state.loginFail = { status: 503, body: {}, throwJson: false };
-    await boot();
-    typeText('pw', 'x');
-    clickId('pw-btn');
-    await settle();
-    await settle();
-    expect(byId('login-err').textContent).toBe('HTTP 503');
-  });
-
-  it('recovers when the error body is not valid JSON', async () => {
-    unauth({ authMode: 'password', password: false });
-    state.loginOk = false;
-    state.loginFail = { status: 500, body: null, throwJson: true };
-    await boot();
-    typeText('pw', 'x');
-    clickId('pw-btn');
-    await settle();
-    await settle();
-    expect(byId('login-err').textContent).toBe('HTTP 500');
+    expect(called('/auth/login', 'POST')).toBe(false);
   });
 });
 
-describe('PortalApp save flow', () => {
-  it('persists the config and shows a success status with a toast', async () => {
+describe('PortalApp secret reveal toggles', () => {
+  it('wraps every secret input and reveals then re-masks on toggle', async () => {
     await boot();
-    vi.useFakeTimers();
-    clickId('save');
-    await vi.advanceTimersByTimeAsync(50);
-    expect(byId('status').textContent).toContain('Saved');
-    expect(byId('status').className).toContain('ok');
-    const toastNode = byId('toast').querySelector('.toast');
-    expect(toastNode).not.toBeNull();
-    expect(toastNode?.classList.contains('show')).toBe(true);
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(byId('toast').querySelector('.toast')).toBeNull();
-    vi.useRealTimers();
-    expect(putSomePut()).toBe(true);
-  });
-
-  it('shows an error status and toast when saving fails', async () => {
-    state.saveOk = false;
-    await boot();
-    vi.useFakeTimers();
-    clickId('save');
-    await vi.advanceTimersByTimeAsync(50);
-    expect(byId('status').textContent).toContain('Disk full');
-    expect(byId('status').className).toContain('err');
-    expect(byId('toast').querySelector('.toast.err')).not.toBeNull();
-    await vi.advanceTimersByTimeAsync(3000);
-    vi.useRealTimers();
-  });
-});
-
-describe('PortalApp navigation and drawer', () => {
-  it('switches sections and marks the active nav item', async () => {
-    await boot();
-    clickNav('watch');
-    expect(byId('title').textContent).toBe('Spending watch');
-    expect(byId('subtitle').textContent).toBe('1 item');
-    const active = byId('nav').querySelector('[data-section="watch"]');
-    expect(active?.classList.contains('active')).toBe(true);
-    expect(active?.getAttribute('aria-current')).toBe('page');
-  });
-
-  it('opens the mobile drawer from the menu button', async () => {
-    await boot();
-    clickId('menu');
-    expect(byId('app').classList.contains('nav-open')).toBe(true);
-    expect(byId('menu').getAttribute('aria-expanded')).toBe('true');
-    expect(byId('nav').querySelector('button')).toBe(document.activeElement);
-  });
-
-  it('ignores a second open while the drawer is already open', async () => {
-    await boot();
-    clickId('menu');
-    clickId('menu');
-    expect(byId('app').classList.contains('nav-open')).toBe(true);
-  });
-
-  it('closes the drawer when the scrim is clicked', async () => {
-    await boot();
-    clickId('menu');
-    clickId('scrim');
-    expect(byId('app').classList.contains('nav-open')).toBe(false);
-    expect(byId('menu').getAttribute('aria-expanded')).toBe('false');
-    expect(byId('menu')).toBe(document.activeElement);
-  });
-
-  it('closing an already-closed drawer is a no-op', async () => {
-    await boot();
-    clickId('scrim');
-    expect(byId('app').classList.contains('nav-open')).toBe(false);
-    expect(byId('menu').getAttribute('aria-expanded')).toBe('false');
-  });
-
-  it('closes the drawer on Escape when open', async () => {
-    await boot();
-    clickId('menu');
-    pressEscape();
-    expect(byId('app').classList.contains('nav-open')).toBe(false);
-  });
-
-  it('ignores Escape when the drawer is closed', async () => {
-    await boot();
-    pressEscape();
-    expect(byId('app').classList.contains('nav-open')).toBe(false);
-    expect(byId('menu').getAttribute('aria-expanded')).toBe('false');
-  });
-
-  it('closes the drawer when the viewport grows to desktop', async () => {
-    await boot();
-    clickId('menu');
-    mediaChange?.({ matches: true });
-    expect(byId('app').classList.contains('nav-open')).toBe(false);
-  });
-
-  it('keeps the drawer open when a non-matching media change fires', async () => {
-    await boot();
-    clickId('menu');
-    mediaChange?.({ matches: false });
-    expect(byId('app').classList.contains('nav-open')).toBe(true);
-  });
-});
-
-describe('PortalApp object section fields', () => {
-  it('renders a control for every field kind plus the docs link', async () => {
-    await boot();
-    expect(query('a.doc').getAttribute('href')).toContain('GeneralSettings.md');
-    expect(inputId('general.enabled').type).toBe('checkbox');
-    expect(inputId('general.enabled').checked).toBe(true);
-    expect(selectId('general.mode').value).toBe('thorough');
-    expect(inputId('general.apiKey').type).toBe('password');
-    expect(inputId('general.apiKey').value).toBe('sk-secret-123');
-    expect(inputId('general.apiKey').getAttribute('aria-required')).toBe('true');
-    expect(inputId('general.authToken').type).toBe('text');
-    expect(inputId('general.authToken').getAttribute('aria-required')).toBe('true');
-    expect(inputId('general.retries').type).toBe('number');
-    expect(inputId('general.retries').min).toBe('0');
-    expect(inputId('general.retries').max).toBe('10');
-    expect(inputId('general.startDate').type).toBe('date');
-    expect(inputId('general.startDate').value).toBe('2024-03-01');
-    expect(query('[data-path="general.advanced"]').tagName).toBe('FIELDSET');
-    expect(byId('general.advanced.timeout').getAttribute('type')).toBe('number');
-    expect(maybe('[data-path="general.advanced.proxy"]')).not.toBeNull();
-    expect(byId('general.advanced.proxy.host')).not.toBeNull();
-  });
-
-  it('hides a conditional field when its controller value changes', async () => {
-    await boot();
-    expect(maybe('#general\\.deepPath')).not.toBeNull();
-    changeSelect('general.mode', 'fast');
-    expect(document.getElementById('general.deepPath')).toBeNull();
-    expect(selectId('general.mode').value).toBe('fast');
-  });
-
-  it('persists a toggled checkbox value', async () => {
-    await boot();
-    toggleCheckbox('general.enabled');
-    await saveConfig();
-    expect(dig(putBody(), 'general', 'enabled')).toBe(false);
-  });
-
-  it('stores a numeric value entered into a number field', async () => {
-    await boot();
-    typeText('general.retries', '7');
-    await saveConfig();
-    expect(dig(putBody(), 'general', 'retries')).toBe(7);
-  });
-
-  it('removes a number field from the config when cleared', async () => {
-    await boot();
-    typeText('general.retries', '');
-    await saveConfig();
-    expect(dig(putBody(), 'general', 'retries')).toBeUndefined();
-  });
-
-  it('stores text typed into a string field', async () => {
-    await boot();
-    typeText('general.note', 'updated note');
-    await saveConfig();
-    expect(dig(putBody(), 'general', 'note')).toBe('updated note');
-  });
-
-  it('stores a new secret value', async () => {
-    await boot();
-    typeText('general.apiKey', 'rotated-secret');
-    await saveConfig();
-    expect(dig(putBody(), 'general', 'apiKey')).toBe('rotated-secret');
-  });
-
-  it('reveals and hides a secret when the eye toggle is clicked', async () => {
-    await boot();
-    const eye = query('.secret .reveal');
-    const secret = inputId('general.apiKey');
-    expect(secret.type).toBe('password');
+    const input = inputId('root-actual-init-password');
+    const wrap = input.parentElement as HTMLElement;
+    expect(wrap.classList.contains('secret-wrap')).toBe(true);
+    const eye = wrap.querySelector('.reveal') as HTMLButtonElement;
+    expect(eye.getAttribute('aria-pressed')).toBe('false');
     eye.click();
-    expect(secret.type).toBe('text');
+    expect(input.type).toBe('text');
     expect(eye.getAttribute('aria-pressed')).toBe('true');
     expect(eye.getAttribute('aria-label')).toBe('Hide secret');
     eye.click();
-    expect(secret.type).toBe('password');
+    expect(input.type).toBe('password');
     expect(eye.getAttribute('aria-pressed')).toBe('false');
-    expect(eye.getAttribute('aria-label')).toBe('Show secret');
-  });
-
-  it('renders empty controls for a section with no stored values', async () => {
-    await boot();
-    clickNav('extras');
-    expect(inputId('extras.label').value).toBe('');
-    expect(selectId('extras.channel').value).toBe('');
-    expect(inputId('extras.token').value).toBe('');
-    expect(inputId('extras.count').value).toBe('');
-    expect(inputId('extras.when').value).toBe('');
-    expect(inputId('extras.flag').checked).toBe(false);
-    expect(maybe('[data-path="extras.opts"]')).not.toBeNull();
-    expect(byId('extras.opts.verbose')).not.toBeNull();
-  });
-
-  it('binds the root section to the config root', async () => {
-    await boot();
-    clickNav('');
-    expect(byId('title').textContent).toBe('Root');
-    expect(inputId('rootField').value).toBe('root-value');
-  });
-
-  it('renders a fieldless object section with only its docs link', async () => {
-    await boot();
-    clickNav('about');
-    expect(byId('title').textContent).toBe('About');
-    expect(query('a.doc').getAttribute('href')).toContain('Overview.md');
-    expect(byId('view').querySelectorAll('input, select').length).toBe(0);
   });
 });
 
-describe('PortalApp list fields', () => {
-  it('renders scalar and object list items', async () => {
+describe('PortalApp conditional visibility (x-show-when)', () => {
+  it('hides the google subtree in password mode and reveals it in both mode', async () => {
     await boot();
-    expect((query('[aria-label="Tag 1"]') as HTMLInputElement).value).toBe('salary');
-    expect((query('[aria-label="Tag 2"]') as HTMLInputElement).value).toBe('rent');
-    expect(inputId('general.rules.0.pattern').value).toBe('GROCERY');
-    expect(inputId('general.rules.0.active').checked).toBe(true);
-  });
-
-  it('renders an empty input for a null scalar list entry', async () => {
-    (state.config.general as Record<string, unknown>).tags = ['payday', null];
-    await boot();
-    expect((query('[aria-label="Tag 1"]') as HTMLInputElement).value).toBe('payday');
-    expect((query('[aria-label="Tag 2"]') as HTMLInputElement).value).toBe('');
-  });
-
-  it('adds a scalar list item', async () => {
-    await boot();
-    query('[data-add="general.tags"]').click();
-    expect(maybe('[aria-label="Tag 3"]')).not.toBeNull();
-    await saveConfig();
-    expect(asArray(dig(putBody(), 'general', 'tags'))).toHaveLength(3);
-  });
-
-  it('edits a scalar list item', async () => {
-    await boot();
-    typeText(query('[aria-label="Tag 1"]'), 'groceries');
-    await saveConfig();
-    expect(dig(putBody(), 'general', 'tags', 0)).toBe('groceries');
-  });
-
-  it('removes a scalar list item', async () => {
-    await boot();
-    query('[aria-label="Remove Tag 1"]').click();
-    await saveConfig();
-    expect(asArray(dig(putBody(), 'general', 'tags'))).toEqual(['rent']);
-  });
-
-  it('adds an object list item', async () => {
-    await boot();
-    query('[data-add="general.rules"]').click();
-    expect(byId('general.rules.1.pattern')).not.toBeNull();
-    await saveConfig();
-    expect(asArray(dig(putBody(), 'general', 'rules'))).toHaveLength(2);
-  });
-
-  it('removes an object list item', async () => {
-    await boot();
-    query('[aria-label="Remove Rule 1"]').click();
-    await saveConfig();
-    expect(asArray(dig(putBody(), 'general', 'rules'))).toHaveLength(0);
-  });
-
-  it('creates the backing array for a list field with no stored value', async () => {
-    await boot();
-    clickNav('extras');
-    expect(maybe('[data-path="extras.extraTags"]')).not.toBeNull();
-    expect(maybe('[aria-label="Extra tag 1"]')).toBeNull();
-    query('[data-add="extras.extraTags"]').click();
-    expect(maybe('[aria-label="Extra tag 1"]')).not.toBeNull();
+    expect((jedi('#/portal/google') as HTMLElement).style.display).toBe('none');
+    setControl('root-portal-authMode', 'both');
+    expect((jedi('#/portal/google') as HTMLElement).style.display).toBe('');
+    setControl('root-portal-authMode', 'password');
+    expect((jedi('#/portal/google') as HTMLElement).style.display).toBe('none');
   });
 });
 
-describe('PortalApp list sections', () => {
-  it('renders a card per list-section item', async () => {
+describe('PortalApp navigation', () => {
+  it('builds a jump link per top-level section', async () => {
     await boot();
-    clickNav('watch');
-    expect(maybe('[data-item="watch.0"]')).not.toBeNull();
-    expect(inputId('watch.0.label').value).toBe('Dining');
-    expect(inputId('watch.0.limit').value).toBe('500');
+    const links = document.querySelectorAll('#nav [data-section]');
+    expect(links.length).toBe(Object.keys(SCHEMA.properties as object).length);
   });
 
-  it('adds a list-section item', async () => {
+  it('scrolls the target section into view on click', async () => {
     await boot();
-    clickNav('watch');
-    query('[data-add="watch"]').click();
-    expect(maybe('[data-item="watch.1"]')).not.toBeNull();
-    expect(byId('subtitle').textContent).toBe('2 items');
-    await saveConfig();
-    expect(asArray(dig(putBody(), 'watch'))).toHaveLength(2);
-  });
-
-  it('removes a list-section item', async () => {
-    await boot();
-    clickNav('watch');
-    query('[data-item="watch.0"] .danger').click();
-    expect(byId('subtitle').textContent).toBe('0 items');
-    await saveConfig();
-    expect(asArray(dig(putBody(), 'watch'))).toHaveLength(0);
-  });
-
-  it('creates the backing array for a list section with no stored value', async () => {
-    await boot();
-    clickNav('alerts');
-    expect(byId('title').textContent).toBe('Alerts');
-    expect(maybe('[data-add="alerts"]')).not.toBeNull();
-    expect(maybe('[data-item="alerts.0"]')).toBeNull();
-    query('[data-add="alerts"]').click();
-    expect(maybe('[data-item="alerts.0"]')).not.toBeNull();
+    const btn = byId('nav').querySelector('[data-section="banks"]') as HTMLElement;
+    btn.click();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 });
 
-describe('PortalApp banks section', () => {
-  it('renders a card per bank with present fields, dropdown and targets', async () => {
+describe('PortalApp bank tools', () => {
+  it('offers only banks that are not already configured', async () => {
     await boot();
-    clickNav('banks');
+    const opts = [...document.querySelectorAll('#add-bank-select option')].map((o) => (o as HTMLOptionElement).value);
+    expect(opts).not.toContain('hapoalim');
+    expect(opts).not.toContain('leumi');
+    expect(opts).toContain('discount');
+    expect([...document.querySelectorAll('[data-remove-bank]')].map((n) => (n as HTMLElement).dataset.removeBank)).toEqual(['hapoalim', 'leumi']);
+  });
+
+  it('adds a constrained bank and persists it on save', async () => {
+    await boot();
+    inputId('add-bank-select').value = 'discount';
+    clickId('add-bank-btn');
+    await settle();
+    expect(jedi('#/banks/discount')).not.toBeNull();
+    expect([...document.querySelectorAll('#add-bank-select option')].map((o) => (o as HTMLOptionElement).value)).not.toContain('discount');
+    expect(byId('subtitle').textContent).toBe('3 banks configured');
+    await clickWithTimers('save');
+    expect(putBody().banks).toHaveProperty('discount');
+  });
+
+  it('ignores the add button when no bank is selected', async () => {
+    await boot();
+    inputId('add-bank-select').value = '';
+    clickId('add-bank-btn');
+    await settle();
     expect(byId('subtitle').textContent).toBe('2 banks configured');
-    expect(inputId('banks.hapoalim.username').value).toBe('avi-cohen');
-    expect(inputId('banks.hapoalim.password').value).toBe('bank-pass-1');
-    expect(maybe('[data-add-field="hapoalim"]')).not.toBeNull();
-    expect(inputId('banks.hapoalim.targets.0.actualAccountId').value).toBe('acct-1');
-    const addBank = selectId('add-bank-select');
-    const options = Array.from(addBank.options).map((o) => o.value);
-    expect(options).toContain('discount');
-    expect(options).not.toContain('hapoalim');
-    expect(maybe('[data-add-field="leumi"]')).toBeNull();
-    expect(maybe('[data-add-target="leumi"]')).not.toBeNull();
   });
 
-  it('adds a numeric field to a bank defaulting to zero', async () => {
+  it('removes a bank and persists the removal on save', async () => {
     await boot();
-    clickNav('banks');
-    changeSelect(query('[data-add-field="hapoalim"]'), 'daysBack');
-    expect(inputId('banks.hapoalim.daysBack').value).toBe('0');
-    await saveConfig();
-    expect(dig(putBody(), 'banks', 'hapoalim', 'daysBack')).toBe(0);
-  });
-
-  it('adds a boolean field to a bank defaulting to false', async () => {
-    await boot();
-    clickNav('banks');
-    changeSelect(query('[data-add-field="hapoalim"]'), 'twoFactorAuth');
-    expect(inputId('banks.hapoalim.twoFactorAuth').checked).toBe(false);
-    await saveConfig();
-    expect(dig(putBody(), 'banks', 'hapoalim', 'twoFactorAuth')).toBe(false);
-  });
-
-  it('adds a string field to a bank defaulting to empty', async () => {
-    await boot();
-    clickNav('banks');
-    changeSelect(query('[data-add-field="hapoalim"]'), 'userCode');
-    expect(inputId('banks.hapoalim.userCode').value).toBe('');
-    await saveConfig();
-    expect(dig(putBody(), 'banks', 'hapoalim', 'userCode')).toBe('');
-  });
-
-  it('ignores the add-field placeholder option', async () => {
-    await boot();
-    clickNav('banks');
-    changeSelect(query('[data-add-field="hapoalim"]'), '');
-    expect(maybe('#banks\\.hapoalim\\.daysBack')).toBeNull();
-  });
-
-  it('removes a bank', async () => {
-    await boot();
-    clickNav('banks');
-    query('[data-remove-bank="leumi"]').click();
-    expect(maybe('[data-bank="leumi"]')).toBeNull();
+    (byId('bank-tools').querySelector('[data-remove-bank="hapoalim"]') as HTMLElement).click();
+    await settle();
+    expect(jedi('#/banks/hapoalim')).toBeNull();
     expect(byId('subtitle').textContent).toBe('1 bank configured');
-    await saveConfig();
-    expect(dig(putBody(), 'banks', 'leumi')).toBeUndefined();
-  });
-
-  it('adds a bank, templating required fields and one target', async () => {
-    await boot();
-    clickNav('banks');
-    selectId('add-bank-select').value = 'discount';
-    clickId('add-bank-btn');
-    expect(maybe('[data-bank="discount"]')).not.toBeNull();
-    await saveConfig();
-    expect(dig(putBody(), 'banks', 'discount', 'daysBack')).toBe(14);
-    expect(dig(putBody(), 'banks', 'discount', 'twoFactorAuth')).toBe(false);
-    expect(dig(putBody(), 'banks', 'discount', 'id')).toBe('');
-    expect(asArray(dig(putBody(), 'banks', 'discount', 'targets'))).toHaveLength(1);
-  });
-
-  it('templates a bank that has no requirements entry', async () => {
-    state.manifest.banks.push('isracard');
-    await boot();
-    clickNav('banks');
-    selectId('add-bank-select').value = 'isracard';
-    clickId('add-bank-btn');
-    expect(maybe('[data-bank="isracard"]')).not.toBeNull();
-    await saveConfig();
-    expect(dig(putBody(), 'banks', 'isracard', 'daysBack')).toBe(14);
-    expect(asArray(dig(putBody(), 'banks', 'isracard', 'targets'))).toHaveLength(1);
-  });
-
-  it('does nothing when adding a bank without a selection', async () => {
-    await boot();
-    clickNav('banks');
-    clickId('add-bank-btn');
-    expect(maybe('[data-bank="discount"]')).toBeNull();
-  });
-
-  it('adds a target to a bank', async () => {
-    await boot();
-    clickNav('banks');
-    query('[data-add-target="hapoalim"]').click();
-    expect(maybe('[data-target="banks.hapoalim.targets.1"]')).not.toBeNull();
-    await saveConfig();
-    expect(asArray(dig(putBody(), 'banks', 'hapoalim', 'targets'))).toHaveLength(2);
-  });
-
-  it('removes a target from a bank', async () => {
-    await boot();
-    clickNav('banks');
-    query('[data-target="banks.hapoalim.targets.0"] .danger').click();
-    await saveConfig();
-    expect(asArray(dig(putBody(), 'banks', 'hapoalim', 'targets'))).toHaveLength(0);
-  });
-
-  it('renders only the add-bank control when no banks are configured', async () => {
-    delete state.config.banks;
-    await boot();
-    clickNav('banks');
-    expect(byId('subtitle').textContent).toBe('0 banks configured');
-    expect(maybe('[data-bank]')).toBeNull();
-    expect(byId('add-bank-select')).not.toBeNull();
+    await clickWithTimers('save');
+    expect(putBody().banks).not.toHaveProperty('hapoalim');
   });
 });
 
-describe('PortalApp logout and reload wiring', () => {
+describe('PortalApp save', () => {
+  it('round-trips an untouched secret as the mask', async () => {
+    await boot();
+    await clickWithTimers('save');
+    const actual = putBody().actual as { init: { password: string } };
+    expect(actual.init.password).toBe(MASK);
+    expect(byId('status').textContent).toBe('✅ Saved');
+    expect(byId('status').className).toContain('ok');
+  });
+
+  it('sends a freshly typed secret verbatim', async () => {
+    await boot();
+    setControl('root-actual-init-password', 'brand-new-secret');
+    await clickWithTimers('save');
+    const actual = putBody().actual as { init: { password: string } };
+    expect(actual.init.password).toBe('brand-new-secret');
+  });
+
+  it('surfaces a save failure in the status line and a toast', async () => {
+    await boot();
+    state.saveOk = false;
+    await clickWithTimers('save');
+    expect(byId('status').textContent).toBe('❌ Disk full');
+    expect(byId('status').className).toContain('err');
+    expect(maybe('#toast .toast.err')).not.toBeNull();
+  });
+});
+
+describe('PortalApp validate', () => {
+  it('reports a valid configuration', async () => {
+    await boot();
+    state.validateResults = [{ status: 'pass', check: 'schema', message: 'ok' }];
+    await clickWithTimers('validate-btn');
+    expect(byId('status').textContent).toBe('✅ Configuration valid');
+    expect(called('/api/validate', 'POST')).toBe(true);
+  });
+
+  it('reports the first failing check', async () => {
+    await boot();
+    state.validateResults = [{ status: 'fail', check: 'portal', message: 'Bad host' }];
+    await clickWithTimers('validate-btn');
+    expect(byId('status').textContent).toBe('❌ 1 problem: Bad host');
+    expect(byId('status').className).toContain('err');
+  });
+
+  it('surfaces a validate request failure', async () => {
+    await boot();
+    state.validateOk = false;
+    await clickWithTimers('validate-btn');
+    expect(byId('status').className).toContain('err');
+    expect(maybe('#toast .toast.err')).not.toBeNull();
+  });
+});
+
+describe('PortalApp logout, reload and drawer wiring', () => {
   it('logs out then reloads the page', async () => {
     await boot();
     clickId('logout');
     await settle();
-    expect(fetchMock.mock.calls.some((c) => c[0] === '/auth/logout')).toBe(true);
+    expect(called('/auth/logout', 'POST')).toBe(true);
     expect(reloadSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -1111,20 +592,149 @@ describe('PortalApp logout and reload wiring', () => {
   });
 
   it('reloads from the load-error reload button', async () => {
-    state.manifestOk = false;
+    state.schemaOk = false;
     await boot();
     clickId('reload-btn');
     expect(reloadSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('opens and closes the mobile drawer', async () => {
+    await boot();
+    clickId('menu');
+    expect(byId('app').classList.contains('nav-open')).toBe(true);
+    clickId('scrim');
+    expect(byId('app').classList.contains('nav-open')).toBe(false);
+  });
+
+  it('closes the drawer on Escape', async () => {
+    await boot();
+    clickId('menu');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(byId('app').classList.contains('nav-open')).toBe(false);
+  });
+
+  it('closes the drawer when the viewport grows to desktop', async () => {
+    await boot();
+    clickId('menu');
+    expect(byId('app').classList.contains('nav-open')).toBe(true);
+    mediaChange?.({ matches: true });
+    expect(byId('app').classList.contains('nav-open')).toBe(false);
+  });
+});
+
+describe('PortalApp edge-case coverage', () => {
+  it('defaults the login step to password when the status omits authMode', async () => {
+    unauth({ password: false, google: false });
+    await boot();
+    expect(byId('pw').classList.contains('hidden')).toBe(false);
+    expect(byId('login-hint').textContent).toBe('Sign in to manage your importer configuration.');
+  });
+
+  it('acknowledges a satisfied google factor without an email in both mode', async () => {
+    unauth({ authMode: 'both', google: true, password: false, email: '' });
+    await boot();
+    expect(byId('login-hint').textContent).toBe('✓ Signed in. Now enter the portal password.');
+  });
+
+  it('shows the google step alone when google is already satisfied', async () => {
+    unauth({ authMode: 'google', google: true });
+    await boot();
+    expect(byId('pw').classList.contains('hidden')).toBe(true);
+    expect(byId('google-btn').classList.contains('hidden')).toBe(true);
+  });
+
+  it('falls back to a generic title when the schema has none', async () => {
+    const stripped = cloneSchema();
+    delete stripped.title;
+    state.schemaBody = stripped;
+    await boot();
+    expect(byId('title').textContent).toBe('Configuration');
+  });
+
+  it('reports an HTTP status when a save failure omits an error body', async () => {
+    await boot();
+    state.saveOk = false;
+    state.saveErrorless = true;
+    await clickWithTimers('save');
+    expect(byId('status').textContent).toBe('❌ HTTP 500');
+  });
+
+  it('treats a null validation response as valid', async () => {
+    await boot();
+    state.validateResults = null;
+    await clickWithTimers('validate-btn');
+    expect(byId('status').textContent).toBe('✅ Configuration valid');
+  });
+
+  it('pluralises the problem count when several checks fail', async () => {
+    await boot();
+    state.validateResults = [
+      { status: 'fail', check: 'a', message: 'First problem' },
+      { status: 'fail', check: 'b', message: 'Second problem' },
+    ];
+    await clickWithTimers('validate-btn');
+    expect(byId('status').textContent).toBe('❌ 2 problems: First problem');
+  });
+
+  it('ignores a second open while the drawer is already open', async () => {
+    await boot();
+    clickId('menu');
+    clickId('menu');
+    expect(byId('app').classList.contains('nav-open')).toBe(true);
+  });
+
+  it('does not submit the login on a non-Enter key', async () => {
+    unauth({ authMode: 'password', password: false });
+    await boot();
+    byId('pw').dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    await settle();
+    expect(called('/auth/login', 'POST')).toBe(false);
+  });
+
+  it('keeps the drawer untouched when the viewport stays narrow', async () => {
+    await boot();
+    clickId('menu');
+    mediaChange?.({ matches: false });
+    expect(byId('app').classList.contains('nav-open')).toBe(true);
+  });
+
+  it('skips scrolling when the target section is not rendered', async () => {
+    await boot();
+    (jedi('#/proxy') as HTMLElement).remove();
+    (byId('nav').querySelector('[data-section="proxy"]') as HTMLElement).click();
+    expect(byId('app').classList.contains('nav-open')).toBe(false);
+  });
+
+  it('opens the drawer even when the nav has no focusable link', async () => {
+    await boot();
+    byId('nav').innerHTML = '';
+    clickId('menu');
+    expect(byId('app').classList.contains('nav-open')).toBe(true);
+  });
+
+  it('offers no add options when the banks schema lacks bank options', async () => {
+    const stripped = cloneSchema();
+    const props = stripped.properties as Record<string, Record<string, unknown>>;
+    delete props.banks['x-bank-options'];
+    state.schemaBody = stripped;
+    await boot();
+    expect(document.querySelectorAll('#add-bank-select option').length).toBe(1);
+  });
+
+  it('renders no bank tools when the schema has no banks section', async () => {
+    const stripped = cloneSchema();
+    delete (stripped.properties as Record<string, unknown>).banks;
+    state.schemaBody = stripped;
+    await boot();
+    expect(maybe('#add-bank-select')).toBeNull();
+    expect(byId('subtitle').textContent).toBe('0 banks configured');
+  });
 });
 
 describe('PortalApp SPA shell module contract', () => {
-  // app.js boots with a top-level `await init()`, which is only valid when the
-  // browser loads it as an ES module. The ESLint guardrail keeps `await init()`
-  // in app.js, but a revert of this script tag to a classic `<script>` would
-  // make top-level await a browser syntax error while every lint/canary gate
-  // (which parse app.js as a module on its own) still pass. Lock the other half
-  // of the runtime contract here — SonarCloud S7785.
+  // app.js boots with a top-level `await init()`, valid only when the browser
+  // loads it as an ES module. Lock the runtime contract so a revert of the
+  // script tag to a classic <script> is caught — SonarCloud S7785.
   it('loads /app.js as an ES module', () => {
     const shell = new DOMParser().parseFromString(readFileSync(INDEX_PATH, 'utf8'), 'text/html');
     const appScript = shell.querySelector('script[src="/app.js"]');
@@ -1132,14 +742,12 @@ describe('PortalApp SPA shell module contract', () => {
     expect(appScript?.getAttribute('type')).toBe('module');
   });
 
-  // Every shell <button> sits outside a <form>, but an implicit `type="submit"`
-  // would still let a stray future <form> wrapper turn a click into a navigation
-  // that drops unsaved edits. Pin each control to type="button" so intent is
-  // explicit and click handlers stay the only behaviour.
+  // Every shell <button> sits outside a <form>; pin each to type="button" so a
+  // stray future <form> wrapper can never turn a click into a navigation.
   it('declares every shell button as type="button"', () => {
     const shell = new DOMParser().parseFromString(readFileSync(INDEX_PATH, 'utf8'), 'text/html');
     const buttons = [...shell.querySelectorAll('button')];
     expect(buttons.length).toBeGreaterThan(0);
-    expect(buttons.every(button => button.getAttribute('type') === 'button')).toBe(true);
+    expect(buttons.every((button) => button.getAttribute('type') === 'button')).toBe(true);
   });
 });
