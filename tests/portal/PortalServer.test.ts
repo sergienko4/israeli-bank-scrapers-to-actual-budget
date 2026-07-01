@@ -143,6 +143,20 @@ describe('PortalServer routes (password mode)', () => {
     expect(body.bankRequirements.discount).toBeDefined();
   });
 
+  it('serves the generated config schema when authenticated', async () => {
+    const cookie = await loginCookie();
+    const res = await app.inject({ method: 'GET', url: '/api/schema', cookies: { portal_session: cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.type).toBe('object');
+    expect(body.properties.banks['x-bank-map']).toBe(true);
+  });
+
+  it('guards /api/schema with 401 when no cookie is present', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/schema' });
+    expect(res.statusCode).toBe(401);
+  });
+
   it('returns 400 when a config write fails validation', async () => {
     const cookie = await loginCookie();
     const masked = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });

@@ -7,6 +7,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { BANK_REQUIREMENTS, CONFIG_MANIFEST } from '../Config/ConfigManifest.js';
+import { buildConfigSchema, type IJsonSchema } from '../Config/Schema/GenerateConfigSchema.js';
 import { getLogger } from '../Logger/Index.js';
 import { DEFAULT_BANK_REGISTRY } from '../Scraper/BankRegistry.js';
 import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
@@ -22,6 +23,9 @@ const MANIFEST_PAYLOAD = {
   bankRequirements: BANK_REQUIREMENTS,
 };
 
+/** Generated draft-2020-12 config JSON Schema (built once from the manifest) for the jedison form. */
+const SCHEMA_PAYLOAD: IJsonSchema = buildConfigSchema();
+
 /**
  * Registers the manifest probe + guarded config API routes.
  * @param app - Fastify instance.
@@ -32,6 +36,7 @@ export default function registerApiRoutes(
   app: FastifyInstance, store: PortalConfigStore,
 ): { registered: true } {
   app.get('/api/manifest', (_req, reply) => reply.send(MANIFEST_PAYLOAD));
+  app.get('/api/schema', (_req, reply) => reply.send(SCHEMA_PAYLOAD));
   registerConfigRoutes(app, store);
   registerBankRoutes(app, store);
   app.post('/api/validate', (req, reply) => {
