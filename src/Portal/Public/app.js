@@ -663,7 +663,10 @@ function textNode(field, obj, path) {
   if (field.max != null) i.max = String(field.max);
   i.value = obj[field.key] == null ? '' : String(obj[field.key]);
   i.oninput = () => {
-    setScalar(obj, field, i.value);
+    const invalid = setScalar(obj, field, i.value, i.validity.badInput);
+    i.classList.toggle('invalid', invalid);
+    if (invalid) i.setAttribute('aria-invalid', 'true');
+    else i.removeAttribute('aria-invalid');
   };
   return i;
 }
@@ -701,19 +704,31 @@ function secretNode(field, obj, path) {
 }
 
 /**
- * Coerces and stores a scalar value, dropping empty numbers.
+ * Coerces and stores a scalar value. Empty numbers are dropped; a non-empty
+ * invalid number (bad input state or non-finite) is rejected — the key is
+ * removed rather than persisted as NaN (which JSON serializes to null).
  * @param {object} obj object
  * @param {object} field field
  * @param {string} raw raw input value
- * @returns {void}
+ * @param {boolean} badInput whether the numeric input element reports bad input
+ * @returns {boolean} true when a non-empty numeric input was rejected as invalid
  */
-function setScalar(obj, field, raw) {
-  if (field.kind === 'number') {
-    if (raw === '') delete obj[field.key];
-    else obj[field.key] = Number(raw);
-    return;
+function setScalar(obj, field, raw, badInput) {
+  if (field.kind !== 'number') {
+    obj[field.key] = raw;
+    return false;
   }
-  obj[field.key] = raw;
+  if (raw === '') {
+    delete obj[field.key];
+    return false;
+  }
+  const num = Number(raw);
+  if (badInput || !Number.isFinite(num)) {
+    delete obj[field.key];
+    return true;
+  }
+  obj[field.key] = num;
+  return false;
 }
 
 // ---------- list fields (scalar lists + object lists) ----------

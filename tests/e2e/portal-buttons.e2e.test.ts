@@ -36,7 +36,7 @@
 import { readFileSync, rmSync } from 'node:fs';
 
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
@@ -73,7 +73,14 @@ afterAll(async () => { await browser?.close(); });
 
 // Guarantee plaintext credentials regardless of any CREDENTIALS_ENCRYPTION_PASSWORD
 // picked up from .env.e2e or a prior test (settings reads stay unaffected either way).
+// The original value is snapshotted and restored so this file never leaks env state
+// into another suite sharing the same worker.
+const ORIGINAL_ENCRYPTION_PASSWORD = process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
 beforeEach(() => { delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD; });
+afterEach(() => {
+  if (ORIGINAL_ENCRYPTION_PASSWORD === undefined) delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
+  else process.env.CREDENTIALS_ENCRYPTION_PASSWORD = ORIGINAL_ENCRYPTION_PASSWORD;
+});
 
 /**
  * Builds a deterministic seed: one known "discount" bank with a single target.
@@ -211,14 +218,19 @@ async function authedPage(server: IPortalServer): Promise<{ context: BrowserCont
 }
 
 /**
- * Tears down a context + server and removes the seeded temp dir.
- * @param server - The running portal server.
- * @param context - The browser context to close.
+ * Tears down a context + server and removes the seeded temp dir. Both handles
+ * are optional so a test that failed during setup can still call teardown safely.
+ * @param server - The running portal server, if it started.
+ * @param context - The browser context to close, if it opened.
  */
-async function teardown(server: IPortalServer, context: BrowserContext): Promise<void> {
-  await context.close();
-  await server.app.close();
-  rmSync(server.dir, { recursive: true, force: true });
+async function teardown(
+  server: IPortalServer | undefined, context: BrowserContext | undefined,
+): Promise<void> {
+  if (context) await context.close();
+  if (server) {
+    await server.app.close();
+    rmSync(server.dir, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -271,9 +283,13 @@ function expectSpendingWatch(
 
 describe('Portal buttons E2E', () => {
   it('logs in when Enter is pressed in the password field', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openLogin(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openLogin(server);
+      context = opened.context;
+      const { page } = opened;
       await page.locator('#pw').fill(PORTAL_PASSWORD);
       await page.locator('#pw').press('Enter');
       await page.waitForSelector('#app', { state: 'visible' });
@@ -284,9 +300,13 @@ describe('Portal buttons E2E', () => {
   }, 90_000);
 
   it('removes a bank target and persists the smaller targets array', async () => {
-    const server = await startSeededPortal(seedTwoTargets());
-    const { context, page } = await authedPage(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedTwoTargets());
+      const opened = await authedPage(server);
+      context = opened.context;
+      const { page } = opened;
       await gotoBanks(page);
       const targets = page.locator('[data-bank="discount"] .target');
       expect(await targets.count()).toBe(2);
@@ -303,9 +323,13 @@ describe('Portal buttons E2E', () => {
   }, 120_000);
 
   it('adds an optional bank field via the add-field dropdown and persists it', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await authedPage(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await authedPage(server);
+      context = opened.context;
+      const { page } = opened;
       await gotoBanks(page);
       const field = byPath(page, 'banks.discount.navigationRetryCount');
       expect(await field.count()).toBe(0);
@@ -322,9 +346,13 @@ describe('Portal buttons E2E', () => {
   }, 120_000);
 
   it('adds then removes a translation list item, persisting each change', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await authedPage(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await authedPage(server);
+      context = opened.context;
+      const { page } = opened;
       await gotoSection(page, 'categorization');
       const items = page.locator('[data-path="categorization.translations"] .list-item');
       expect(await items.count()).toBe(0);
@@ -346,9 +374,13 @@ describe('Portal buttons E2E', () => {
   }, 120_000);
 
   it('adds then removes a spendingWatch section card, persisting each change', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await authedPage(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await authedPage(server);
+      context = opened.context;
+      const { page } = opened;
       await gotoSection(page, 'spendingWatch');
       const cards = page.locator('[data-item^="spendingWatch."]');
       expect(await cards.count()).toBe(0);
@@ -369,9 +401,13 @@ describe('Portal buttons E2E', () => {
   }, 120_000);
 
   it('toggles a bank secret input between hidden and revealed', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await authedPage(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await authedPage(server);
+      context = opened.context;
+      const { page } = opened;
       await gotoBanks(page);
       const secret = byPath(page, 'banks.discount.password');
       const reveal = page.locator('[data-bank="discount"] .secret')
@@ -388,9 +424,13 @@ describe('Portal buttons E2E', () => {
   }, 120_000);
 
   it('renders a documentation link with safe external-link attributes', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await authedPage(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await authedPage(server);
+      context = opened.context;
+      const { page } = opened;
       await gotoBanks(page);
       const doc = page.locator('#view a.doc');
       await doc.waitFor({ state: 'visible' });
@@ -407,9 +447,13 @@ describe('Portal buttons E2E', () => {
 
   it('adds a bank via the dropdown, fills its fields + target, and persists it (secret split out)',
     async () => {
-      const server = await startSeededPortal(seedConfig());
-      const { context, page } = await authedPage(server);
+      let server: IPortalServer | undefined;
+      let context: BrowserContext | undefined;
       try {
+        server = await startSeededPortal(seedConfig());
+        const opened = await authedPage(server);
+        context = opened.context;
+        const { page } = opened;
         await gotoBanks(page);
         expect(await page.locator('[data-bank="leumi"]').count()).toBe(0);
 
@@ -435,9 +479,13 @@ describe('Portal buttons E2E', () => {
     }, 120_000);
 
   it('gives feedback and adds no card when Add bank is clicked with no selection', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await authedPage(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await authedPage(server);
+      context = opened.context;
+      const { page } = opened;
       await gotoBanks(page);
       const cards = page.locator('.card[data-bank]');
       const before = await cards.count();
@@ -453,9 +501,13 @@ describe('Portal buttons E2E', () => {
 
   it('surfaces which fields are missing when an incomplete bank is saved, persisting nothing',
     async () => {
-      const server = await startSeededPortal(seedConfig());
-      const { context, page } = await authedPage(server);
+      let server: IPortalServer | undefined;
+      let context: BrowserContext | undefined;
       try {
+        server = await startSeededPortal(seedConfig());
+        const opened = await authedPage(server);
+        context = opened.context;
+        const { page } = opened;
         await gotoBanks(page);
         await page.selectOption('#add-bank-select', 'leumi');
         await page.click('#add-bank-btn');
@@ -486,9 +538,13 @@ describe('Portal buttons E2E', () => {
     }, 120_000);
 
   it('persists a changed bank password as the new secret in credentials.json', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await authedPage(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await authedPage(server);
+      context = opened.context;
+      const { page } = opened;
       await gotoBanks(page);
       await byPath(page, 'banks.discount.password').fill('NEW-password-123');
       await save(page);

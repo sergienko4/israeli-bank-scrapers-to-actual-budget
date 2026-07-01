@@ -123,11 +123,13 @@ async function handleCallback(
 ): Promise<FastifyReply> {
   const resolved = resolveGoogle(ctx);
   if (isFail(resolved)) return await reply.code(503).send({ error: GOOGLE_UNCONFIGURED });
-  const { code, state } = req.query as { code?: string; state?: string };
-  if (!code || !state || state !== req.cookies[STATE_COOKIE]) {
+  const { code, error, state } = req.query as { code?: string; error?: string; state?: string };
+  if (!state || state !== req.cookies[STATE_COOKIE]) {
     return await reply.code(400).send({ error: 'Invalid state' });
   }
   reply.clearCookie(STATE_COOKIE, { path: '/' });
+  if (error) return await reply.code(400).send({ error: 'Google sign-in was cancelled' });
+  if (!code) return await reply.code(400).send({ error: 'Missing code' });
   return await finishCallback(resolved.data, ctx, { req, reply, code });
 }
 

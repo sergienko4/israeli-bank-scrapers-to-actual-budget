@@ -86,13 +86,27 @@ function isObject(value: unknown): value is Json {
 }
 
 /**
- * Maps an instance key under `banks` to the `*` placeholder.
+ * Collects section keys whose kind is `bankMap` (instances collapse to `*`).
+ * @returns The set of bankMap section keys declared by the manifest.
+ */
+function bankMapKeys(): Set<string> {
+  const keys = CONFIG_MANIFEST
+    .filter(section => section.kind === 'bankMap')
+    .map(section => section.key);
+  return new Set(keys);
+}
+
+/** Section keys whose entries are bank instances collapsed to `*`. */
+const BANK_MAP_KEYS = bankMapKeys();
+
+/**
+ * Maps an instance key under a bankMap section to the `*` placeholder.
  * @param prefix - Parent dotted path.
  * @param key - Child key.
- * @returns The child prefix (`banks.*` when descending a bank instance).
+ * @returns The child prefix (`<section>.*` when descending a bank instance).
  */
 function childPrefix(prefix: string, key: string): string {
-  return prefix === 'banks' ? 'banks.*' : join(prefix, key);
+  return BANK_MAP_KEYS.has(prefix) ? `${prefix}.*` : join(prefix, key);
 }
 
 /**

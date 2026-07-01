@@ -81,13 +81,25 @@ async function startBoth(): Promise<IBothFixture> {
   const fake = await startFakeGoogle();
   process.env.GOOGLE_AUTH_BASE = `${fake.base}/auth`;
   process.env.GOOGLE_TOKEN_URL = `${fake.base}/token`;
-  const server = await startSeededGooglePortal(seedConfig(), {
-    allowedEmails: [GOOGLE_TEST_EMAIL], authMode: 'both',
-  });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  const page = await context.newPage();
-  await page.goto(server.baseUrl);
-  return { server, fake, context, page };
+  let server: IGooglePortalServer | undefined;
+  let context: BrowserContext | undefined;
+  try {
+    server = await startSeededGooglePortal(seedConfig(), {
+      allowedEmails: [GOOGLE_TEST_EMAIL], authMode: 'both',
+    });
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await context.newPage();
+    await page.goto(server.baseUrl);
+    return { server, fake, context, page };
+  } catch (error: unknown) {
+    if (context) await context.close();
+    if (server) {
+      await server.app.close();
+      rmSync(server.dir, { recursive: true, force: true });
+    }
+    await fake.close();
+    throw error;
+  }
 }
 
 /**

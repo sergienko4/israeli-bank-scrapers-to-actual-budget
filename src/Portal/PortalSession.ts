@@ -50,14 +50,15 @@ export function createSession(data: Omit<ISessionPayload, 'expires'>, secret: st
  * that still carries a valid signature must be rejected before the `/api/*`
  * guard trusts it as a logged-in session.
  * @param value - Parsed JSON of unknown shape from the cookie body.
- * @returns True when the value carries boolean factor flags and a numeric expiry.
+ * @returns True when the value carries boolean factor flags, a numeric expiry, and a string/absent email.
  */
 function isSessionPayload(value: unknown): value is ISessionPayload {
   if (typeof value !== 'object' || value === null) return false;
   const payload = value as Record<string, unknown>;
   return typeof payload.expires === 'number'
     && typeof payload.google === 'boolean'
-    && typeof payload.password === 'boolean';
+    && typeof payload.password === 'boolean'
+    && (payload.email === undefined || typeof payload.email === 'string');
 }
 
 /**

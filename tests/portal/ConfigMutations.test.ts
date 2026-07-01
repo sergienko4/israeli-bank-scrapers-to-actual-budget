@@ -62,11 +62,11 @@ describe('ConfigMutations', () => {
   });
 
   describe('hashPlainPortalPassword', () => {
-    it('hashes a freshly-typed plaintext portal password so login works', () => {
+    it('hashes a freshly-typed plaintext portal password so login works', async () => {
       const config = fakeImporterConfig({ portal: { enabled: true, passwordHash: 'Sergienko-Portal-9182' } });
       const out = hashPlainPortalPassword(config);
       expect(out.portal?.passwordHash).toMatch(/^scrypt\$/);
-      expect(verifyPassword('Sergienko-Portal-9182', out.portal?.passwordHash ?? '')).toBe(true);
+      expect(await verifyPassword('Sergienko-Portal-9182', out.portal?.passwordHash ?? '')).toBe(true);
     });
 
     it('leaves an already-encoded scrypt hash untouched', () => {
@@ -75,11 +75,11 @@ describe('ConfigMutations', () => {
       expect(hashPlainPortalPassword(config).portal?.passwordHash).toBe(stored);
     });
 
-    it('hashes a plaintext that merely starts with scrypt$ but is not a real hash', () => {
+    it('hashes a plaintext that merely starts with scrypt$ but is not a real hash', async () => {
       const config = fakeImporterConfig({ portal: { enabled: true, passwordHash: 'scrypt$fake' } });
       const out = hashPlainPortalPassword(config);
       expect(out.portal?.passwordHash).not.toBe('scrypt$fake');
-      expect(verifyPassword('scrypt$fake', out.portal?.passwordHash ?? '')).toBe(true);
+      expect(await verifyPassword('scrypt$fake', out.portal?.passwordHash ?? '')).toBe(true);
     });
 
     it('leaves empty or absent passwords untouched', () => {

@@ -24,7 +24,7 @@ const PORTAL_SECTION: IManifestSection = {
     },
     {
       key: 'authMode', label: 'Auth mode', kind: 'select', options: PORTAL_AUTH_MODES,
-      help: 'password | google | both. Applies on the next login after you save — no restart needed.',
+      help: `${PORTAL_AUTH_MODES.join(' | ')}. Applies on the next login after you save — no restart needed.`,
     },
     {
       key: 'secureCookies', label: 'Secure cookies', kind: 'boolean',

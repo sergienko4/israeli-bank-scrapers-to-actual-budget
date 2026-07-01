@@ -13,6 +13,8 @@ describe('PortalSession', () => {
 
   describe('createSession', () => {
     it('returns a payload.sig token honouring the 12h TTL', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
       const before = Date.now();
       const token = createSession({ email: 'a@b.com', google: true, password: false }, SECRET);
       const [body, sig] = token.split('.');
@@ -23,6 +25,7 @@ describe('PortalSession', () => {
       expect(result.data.email).toBe('a@b.com');
       expect(result.data.google).toBe(true);
       expect(result.data.expires).toBeGreaterThanOrEqual(before + TWELVE_HOURS_MS);
+      expect(result.data.expires).toBeLessThanOrEqual(before + TWELVE_HOURS_MS);
     });
   });
 

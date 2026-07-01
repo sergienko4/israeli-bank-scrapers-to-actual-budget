@@ -112,7 +112,8 @@ function resolvePort(envPort?: string, configPort?: number): number {
  * @returns True when the secret is empty, too short, or a known placeholder.
  */
 export function isSessionSecretWeak(secret: string): boolean {
-  return secret.length < MIN_SECRET_LENGTH || KNOWN_WEAK_SECRETS.has(secret);
+  const normalized = secret.trim();
+  return normalized.length < MIN_SECRET_LENGTH || KNOWN_WEAK_SECRETS.has(normalized);
 }
 
 /**
@@ -237,7 +238,7 @@ export function isGoogleConfigComplete(
  */
 export function portalAuthConfigError(rt: IPortalRuntime): string {
   const mode = rt.authMode;
-  if ((mode === 'password' || mode === 'both') && !rt.portal.passwordHash) {
+  if ((mode === 'password' || mode === 'both') && !hasText(rt.portal.passwordHash)) {
     return 'set portal.passwordHash for password/both mode (type a password in the portal, then restart)';
   }
   if ((mode === 'google' || mode === 'both') && !isGoogleConfigComplete(rt.portal.google)) {

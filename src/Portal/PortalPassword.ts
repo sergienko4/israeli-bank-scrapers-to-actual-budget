@@ -3,10 +3,12 @@
  * Hash format: scrypt$<saltHex>$<hashHex>. Verify is timing-safe.
  */
 
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { type BinaryLike, randomBytes, scrypt, scryptSync, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 
 const SALT_BYTES = 16;
 const KEY_BYTES = 64;
+const SCRYPT_ASYNC = promisify<BinaryLike, BinaryLike, number, Buffer>(scrypt);
 const ENCODED_HASH = new RegExp(
   String.raw`^scrypt\$[0-9a-f]{${String(SALT_BYTES * 2)}}\$[0-9a-f]{${String(KEY_BYTES * 2)}}$`,
 );
@@ -23,15 +25,16 @@ export function hashPassword(password: string): string {
 }
 
 /**
- * Verifies a candidate password against a stored scrypt hash.
+ * Verifies a candidate password against a stored scrypt hash. Uses the async
+ * scrypt API so a login attempt never blocks the Fastify event loop.
  * @param password - Candidate plaintext password.
  * @param stored - Previously stored `scrypt$salt$hash` value.
- * @returns True when the candidate matches the stored hash.
+ * @returns Promise resolving true when the candidate matches the stored hash.
  */
-export function verifyPassword(password: string, stored: string): boolean {
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [scheme, salt, hash] = stored.split('$');
   if (scheme !== 'scrypt' || !salt || !hash) return false;
-  const candidate = scryptSync(password, salt, KEY_BYTES);
+  const candidate = await SCRYPT_ASYNC(password, salt, KEY_BYTES);
   const expected = Buffer.from(hash, 'hex');
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }

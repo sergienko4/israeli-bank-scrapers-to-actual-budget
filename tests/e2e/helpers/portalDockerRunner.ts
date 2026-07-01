@@ -106,9 +106,14 @@ export function startPortalContainer(opts: IStartPortalContainerOptions): IPorta
   const env = dockerEnv();
   const output = execFileSync('docker', args, { encoding: 'utf8', env });
   const id = output.trim();
-  const hostPort = mappedHostPort(id);
-  const baseUrl = `http://127.0.0.1:${String(hostPort)}`;
-  return { id, baseUrl };
+  try {
+    const hostPort = mappedHostPort(id);
+    const baseUrl = `http://127.0.0.1:${String(hostPort)}`;
+    return { id, baseUrl };
+  } catch (error: unknown) {
+    stopPortalContainer(id);
+    throw error;
+  }
 }
 
 /**
@@ -157,7 +162,7 @@ function hasExited(id: string): boolean {
  */
 async function portalServes(baseUrl: string): Promise<boolean> {
   try {
-    const response = await fetch(baseUrl);
+    const response = await fetch(baseUrl, { signal: AbortSignal.timeout(2_000) });
     return response.status === 200;
   } catch (error: unknown) {
     void errorMessage(error);

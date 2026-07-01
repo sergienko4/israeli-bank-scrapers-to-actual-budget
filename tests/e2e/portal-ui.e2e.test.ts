@@ -190,21 +190,30 @@ async function reopen(page: Page, server: IPortalServer): Promise<void> {
 }
 
 /**
- * Tears down a context + server and removes the seeded temp dir.
- * @param server - The running portal server.
- * @param context - The browser context to close.
+ * Tears down a context + server and removes the seeded temp dir. Both handles
+ * are optional so a test that failed during setup can still call teardown safely.
+ * @param server - The running portal server, if it started.
+ * @param context - The browser context to close, if it opened.
  */
-async function teardown(server: IPortalServer, context: BrowserContext): Promise<void> {
-  await context.close();
-  await server.app.close();
-  rmSync(server.dir, { recursive: true, force: true });
+async function teardown(
+  server: IPortalServer | undefined, context: BrowserContext | undefined,
+): Promise<void> {
+  if (context) await context.close();
+  if (server) {
+    await server.app.close();
+    rmSync(server.dir, { recursive: true, force: true });
+  }
 }
 
 describe('Portal UI E2E', () => {
   it('logs in, edits a field, adds a bank + target, saves, and persists', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openLogin(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openLogin(server);
+      context = opened.context;
+      const { page } = opened;
       await loginOk(page, PORTAL_PASSWORD);
       await gotoBanks(page);
       await expectValue(byPath(page, 'banks.discount.password'), MASK);
@@ -242,9 +251,13 @@ describe('Portal UI E2E', () => {
   }, 120_000);
 
   it('renders + persists a manifest-only field added with no UI changes', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openLogin(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openLogin(server);
+      context = opened.context;
+      const { page } = opened;
       await loginOk(page, PORTAL_PASSWORD);
 
       await gotoSection(page, '');
@@ -263,9 +276,13 @@ describe('Portal UI E2E', () => {
   }, 120_000);
 
   it('rejects an incorrect password and keeps the app hidden', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openLogin(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openLogin(server);
+      context = opened.context;
+      const { page } = opened;
       await fieldLogin(page, 'wrong-password');
       await page.waitForSelector('#login-err:has-text("Invalid")', { timeout: 15_000 });
       expect(await page.locator('#app').isHidden()).toBe(true);
@@ -275,9 +292,13 @@ describe('Portal UI E2E', () => {
   }, 90_000);
 
   it('encrypts credentials.json when CREDENTIALS_ENCRYPTION_PASSWORD is set', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openLogin(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openLogin(server);
+      context = opened.context;
+      const { page } = opened;
       await loginOk(page, PORTAL_PASSWORD);
       await gotoBanks(page);
       await byPath(page, 'banks.discount.daysBack').fill('21');
@@ -301,9 +322,13 @@ describe('Portal UI E2E', () => {
   }, 120_000);
 
   it('removes a bank and persists its deletion', async () => {
-    const server = await startSeededPortal(seedConfig());
-    const { context, page } = await openLogin(server);
+    let server: IPortalServer | undefined;
+    let context: BrowserContext | undefined;
     try {
+      server = await startSeededPortal(seedConfig());
+      const opened = await openLogin(server);
+      context = opened.context;
+      const { page } = opened;
       await loginOk(page, PORTAL_PASSWORD);
       await gotoBanks(page);
 

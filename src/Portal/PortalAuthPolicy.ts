@@ -61,6 +61,6 @@ export function isAuthorized(session: ISessionPayload, mode: PortalAuthMode): bo
  * @returns True when the email is permitted.
  */
 export function isEmailAllowed(email: string, allowed: string[]): boolean {
-  const target = email.toLowerCase();
-  return allowed.some(e => e.toLowerCase() === target);
+  const target = email.trim().toLowerCase();
+  return allowed.some(candidate => candidate.trim().toLowerCase() === target);
 }

@@ -11,26 +11,41 @@ import { hashPassword, isEncodedHash } from './PortalPassword.js';
 const MASK = '********';
 
 /**
- * Restores masked secrets in an incoming value from the previous values, so a
- * round-tripped MASK never overwrites a real secret. Arrays are recursed
- * element-wise (mirroring {@link maskSecrets}) so secrets nested inside list
- * items are restored too.
+ * Restores a single masked value from its previous value. The MASK sentinel is
+ * only honoured on secret leaves, so a literal `'********'` typed into a normal
+ * field persists and a freshly entered secret matching the sentinel is not
+ * silently replaced by the stored value.
  * @param next - Incoming (possibly masked) value from the UI.
  * @param prev - Previous stored value to restore from.
- * @returns next with MASK secrets replaced by prev's values.
+ * @param isSecret - Whether the value sits at a known secret key.
+ * @returns next with masked secrets replaced by prev's values.
  */
-export function restoreMasked<T>(next: T, prev: unknown): T {
+function restoreMaskedValue(next: unknown, prev: unknown, isSecret = false): unknown {
+  if (isSecret && next === MASK) return prev;
   if (Array.isArray(next)) {
     const prevArr = Array.isArray(prev) ? prev : [];
-    return next.map((v, i) => restoreMasked<unknown>(v, prevArr[i])) as unknown as T;
+    return next.map((v, i) => restoreMaskedValue(v, prevArr[i], isSecret));
   }
   if (!next || typeof next !== 'object') return next;
   const before = (prev ?? {}) as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(next)) {
-    out[k] = v === MASK ? before[k] : restoreMasked(v, before[k]);
+    const isSecretKey = SECRET_KEYS.includes(k);
+    out[k] = restoreMaskedValue(v, before[k], isSecretKey);
   }
-  return out as T;
+  return out;
+}
+
+/**
+ * Restores masked secrets in an incoming value from the previous values, so a
+ * round-tripped MASK never overwrites a real secret. Only secret-keyed leaves
+ * treat the MASK sentinel specially (via the internal `restoreMaskedValue`).
+ * @param next - Incoming (possibly masked) value from the UI.
+ * @param prev - Previous stored value to restore from.
+ * @returns next with MASK secrets replaced by prev's values.
+ */
+export function restoreMasked<T>(next: T, prev: unknown): T {
+  return restoreMaskedValue(next, prev) as T;
 }
 
 /**

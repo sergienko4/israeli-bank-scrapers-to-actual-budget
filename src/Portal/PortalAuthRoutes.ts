@@ -104,6 +104,27 @@ function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
 }
 
 /**
+ * Handles a password-login attempt: verifies the submitted password against the
+ * live hash and, on success, grants the password factor to the session cookie.
+ * @param req - Incoming login request.
+ * @param reply - Reply used to set the cookie or send an error.
+ * @param rt - Live portal runtime carrying the current password hash.
+ * @returns The reply after sending the login outcome.
+ */
+async function handleLogin(
+  req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime,
+): Promise<FastifyReply> {
+  const body = req.body as { password?: unknown } | null;
+  const password = typeof body?.password === 'string' ? body.password : '';
+  const hash = rt.portal.passwordHash ?? '';
+  if (!password || !hash || !(await verifyPassword(password, hash))) {
+    return await reply.code(401).send({ error: 'Invalid password' });
+  }
+  grant({ req, reply, rt, factor: { password: true } });
+  return await reply.send({ ok: true });
+}
+
+/**
  * Registers the password-login route with a strict per-route rate limit. The
  * password hash is read live per request so a password change saved via the UI
  * applies on the next login without a process restart.
@@ -113,16 +134,9 @@ function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
  */
 function registerLoginRoute(app: FastifyInstance, live: RuntimeAccessor): { registered: true } {
   const loginLimit = { config: { rateLimit: { max: LOGIN_MAX, timeWindow: RATE_WINDOW } } };
-  app.post('/auth/login', loginLimit, (req, reply) => {
+  app.post('/auth/login', loginLimit, async (req, reply) => {
     const rt = live();
-    const body = req.body as { password?: unknown } | null;
-    const password = typeof body?.password === 'string' ? body.password : '';
-    const hash = rt.portal.passwordHash ?? '';
-    if (!password || !hash || !verifyPassword(password, hash)) {
-      return reply.code(401).send({ error: 'Invalid password' });
-    }
-    grant({ req, reply, rt, factor: { password: true } });
-    return reply.send({ ok: true });
+    return await handleLogin(req, reply, rt);
   });
   return { registered: true };
 }

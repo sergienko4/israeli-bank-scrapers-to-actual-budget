@@ -27,11 +27,11 @@ export const NOTIFICATIONS_SECTION: IManifestSection = {
         { key: 'chatId', label: 'Chat id', kind: 'string', help: 'Target chat id.' },
         {
           key: 'messageFormat', label: 'Message format', kind: 'select', options: MESSAGE_FORMATS,
-          help: 'summary | compact | ledger | emoji.',
+          help: `${MESSAGE_FORMATS.join(' | ')}.`,
         },
         {
           key: 'showTransactions', label: 'Show transactions', kind: 'select',
-          options: SHOW_TRANSACTIONS_OPTIONS, help: 'new | all | none.',
+          options: SHOW_TRANSACTIONS_OPTIONS, help: `${SHOW_TRANSACTIONS_OPTIONS.join(' | ')}.`,
         },
         {
           key: 'listenForCommands', label: 'Listen for commands', kind: 'boolean',
@@ -48,7 +48,7 @@ export const NOTIFICATIONS_SECTION: IManifestSection = {
         { key: 'url', label: 'Webhook URL', kind: 'secret', help: 'Slack/Discord/custom URL.' },
         {
           key: 'format', label: 'Format', kind: 'select', options: WEBHOOK_FORMATS,
-          help: 'slack | discord | plain.',
+          help: `${WEBHOOK_FORMATS.join(' | ')}.`,
         },
       ],
     },
@@ -82,7 +82,7 @@ export const CATEGORIZATION_SECTION: IManifestSection = {
   fields: [
     {
       key: 'mode', label: 'Mode', kind: 'select', options: CATEGORIZATION_MODES,
-      help: 'none | history | translate.',
+      help: `${CATEGORIZATION_MODES.join(' | ')}.`,
     },
     {
       key: 'translations', label: 'Translations', kind: 'list',

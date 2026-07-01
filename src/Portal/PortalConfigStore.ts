@@ -120,7 +120,8 @@ export default class PortalConfigStore {
    */
   public validate(next: IImporterConfig): IValidationResult[] {
     const restored = restoreMasked(next, this._config);
-    return ConfigValidator.validateOffline(restored);
+    const coerced = coerceTargetAccounts(restored);
+    return ConfigValidator.validateOffline(coerced);
   }
 
   /**

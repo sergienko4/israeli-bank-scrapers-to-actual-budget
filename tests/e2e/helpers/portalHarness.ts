@@ -8,7 +8,7 @@
  * mocks: real browser, real Fastify routes, real file writes.
  */
 
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -111,8 +111,13 @@ async function startWithStore(
 ): Promise<{ app: FastifyInstance; store: PortalConfigStore }> {
   const store = new PortalConfigStore(configPath);
   const app = await buildPortal(runtime, store);
-  await app.listen({ host: runtime.host, port: runtime.port });
-  return { app, store };
+  try {
+    await app.listen({ host: runtime.host, port: runtime.port });
+    return { app, store };
+  } catch (error: unknown) {
+    await app.close();
+    throw error;
+  }
 }
 
 /**
@@ -125,9 +130,17 @@ async function startWithStore(
 export async function startSeededPortal(config: IImporterConfig): Promise<IPortalServer> {
   const runtime = passwordRuntime();
   const { dir, configPath } = seed({ ...config, portal: runtime.portal });
-  const { app } = await startWithStore(runtime, configPath);
-  const baseUrl = `http://127.0.0.1:${String(boundPort(app))}`;
-  return { app, baseUrl, dir, configPath, credsPath: join(dir, 'credentials.json') };
+  let app: FastifyInstance | undefined;
+  try {
+    const started = await startWithStore(runtime, configPath);
+    app = started.app;
+    const baseUrl = `http://127.0.0.1:${String(boundPort(app))}`;
+    return { app, baseUrl, dir, configPath, credsPath: join(dir, 'credentials.json') };
+  } catch (error: unknown) {
+    if (app) await app.close();
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 /** Email the fake-Google stub vouches for; allow-list it to log in. */
@@ -254,8 +267,16 @@ export async function startSeededGooglePortal(
 ): Promise<IGooglePortalServer> {
   const runtime = googleRuntime(opts);
   const { dir, configPath } = seed({ ...config, portal: runtime.portal });
-  const { app, store } = await startWithStore(runtime, configPath);
-  const baseUrl = `http://127.0.0.1:${String(boundPort(app))}`;
-  patchRedirectUri(store, runtime, `${baseUrl}/auth/google/callback`);
-  return { app, baseUrl, dir, configPath, credsPath: join(dir, 'credentials.json'), runtime };
+  let app: FastifyInstance | undefined;
+  try {
+    const started = await startWithStore(runtime, configPath);
+    app = started.app;
+    const baseUrl = `http://127.0.0.1:${String(boundPort(app))}`;
+    patchRedirectUri(started.store, runtime, `${baseUrl}/auth/google/callback`);
+    return { app, baseUrl, dir, configPath, credsPath: join(dir, 'credentials.json'), runtime };
+  } catch (error: unknown) {
+    if (app) await app.close();
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
+  }
 }

@@ -62,6 +62,26 @@ describe('PortalGoogleRoutes', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('reports a cancelled sign-in (not a CSRF failure) when Google returns an error', async () => {
+    const state = await startConsent();
+    const res = await app.inject({
+      method: 'GET', url: `/auth/google/callback?error=access_denied&state=${state}`,
+      cookies: { portal_oauth_state: state },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'Google sign-in was cancelled' });
+  });
+
+  it('returns a missing-code error when state matches but no code is present', async () => {
+    const state = await startConsent();
+    const res = await app.inject({
+      method: 'GET', url: `/auth/google/callback?state=${state}`,
+      cookies: { portal_oauth_state: state },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'Missing code' });
+  });
+
   it('grants a session and redirects when the email is allowed', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({ id_token: jwtWithEmail('allowed@example.com') }) }));
     const state = await startConsent();

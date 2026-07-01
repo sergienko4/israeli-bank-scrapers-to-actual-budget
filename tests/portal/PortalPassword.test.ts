@@ -21,24 +21,24 @@ describe('PortalPassword', () => {
   });
 
   describe('verifyPassword', () => {
-    it('returns true for the correct password', () => {
+    it('returns true for the correct password', async () => {
       const stored = hashPassword(TEST_CREDENTIAL);
-      expect(verifyPassword(TEST_CREDENTIAL, stored)).toBe(true);
+      expect(await verifyPassword(TEST_CREDENTIAL, stored)).toBe(true);
     });
 
-    it('returns false for the wrong password', () => {
+    it('returns false for the wrong password', async () => {
       const stored = hashPassword(TEST_CREDENTIAL);
-      expect(verifyPassword('wrong-password', stored)).toBe(false);
+      expect(await verifyPassword('wrong-password', stored)).toBe(false);
     });
 
-    it('returns false when the stored value is malformed', () => {
-      expect(verifyPassword(TEST_CREDENTIAL, 'not-a-hash')).toBe(false);
-      expect(verifyPassword(TEST_CREDENTIAL, 'sha256$abc$def')).toBe(false);
-      expect(verifyPassword(TEST_CREDENTIAL, 'scrypt$$')).toBe(false);
+    it('returns false when the stored value is malformed', async () => {
+      expect(await verifyPassword(TEST_CREDENTIAL, 'not-a-hash')).toBe(false);
+      expect(await verifyPassword(TEST_CREDENTIAL, 'sha256$abc$def')).toBe(false);
+      expect(await verifyPassword(TEST_CREDENTIAL, 'scrypt$$')).toBe(false);
     });
 
-    it('returns false when hash length differs from the candidate', () => {
-      expect(verifyPassword(TEST_CREDENTIAL, 'scrypt$abcd$00')).toBe(false);
+    it('returns false when hash length differs from the candidate', async () => {
+      expect(await verifyPassword(TEST_CREDENTIAL, 'scrypt$abcd$00')).toBe(false);
     });
   });
 
@@ -67,13 +67,13 @@ describe('PortalPassword', () => {
   });
 
   describe('scripts/hash-portal-password.js format compatibility', () => {
-    it('verifies a hash produced exactly like the standalone script', () => {
+    it('verifies a hash produced exactly like the standalone script', async () => {
       const salt = randomBytes(16).toString('hex');
       const hash = scryptSync(TEST_CREDENTIAL, salt, 64).toString('hex');
       const stored = `scrypt$${salt}$${hash}`;
       expect(isEncodedHash(stored)).toBe(true);
-      expect(verifyPassword(TEST_CREDENTIAL, stored)).toBe(true);
-      expect(verifyPassword('wrong-password', stored)).toBe(false);
+      expect(await verifyPassword(TEST_CREDENTIAL, stored)).toBe(true);
+      expect(await verifyPassword('wrong-password', stored)).toBe(false);
     });
   });
 });

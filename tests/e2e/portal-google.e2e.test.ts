@@ -26,6 +26,37 @@ import {
 
 let browser: Browser;
 
+/** Snapshot of the Google endpoint env vars a Google-mode test overrides. */
+interface IGoogleEnvBackup {
+  authBase: string | undefined;
+  tokenUrl: string | undefined;
+}
+
+/**
+ * Captures the current Google endpoint env vars before a test overrides them.
+ *
+ * Snapshotting first lets teardown restore (not erase) any value a surrounding
+ * worker had already set.
+ * @returns The pre-test values, each undefined when its var was unset.
+ */
+function backupGoogleEnv(): IGoogleEnvBackup {
+  return {
+    authBase: process.env.GOOGLE_AUTH_BASE,
+    tokenUrl: process.env.GOOGLE_TOKEN_URL,
+  };
+}
+
+/**
+ * Restores a Google endpoint env snapshot, unsetting vars that were unset.
+ * @param backup - The snapshot captured by {@link backupGoogleEnv}.
+ */
+function restoreGoogleEnv(backup: IGoogleEnvBackup): void {
+  if (backup.authBase === undefined) delete process.env.GOOGLE_AUTH_BASE;
+  else process.env.GOOGLE_AUTH_BASE = backup.authBase;
+  if (backup.tokenUrl === undefined) delete process.env.GOOGLE_TOKEN_URL;
+  else process.env.GOOGLE_TOKEN_URL = backup.tokenUrl;
+}
+
 beforeAll(async () => { browser = await launchPortalBrowser(); }, 120_000);
 afterAll(async () => { await browser?.close(); });
 
@@ -64,11 +95,11 @@ async function openGoogleLogin(
 }
 
 /**
- * Tears down whatever setup produced and clears the Google env seam.
+ * Tears down whatever setup produced the given resources.
  *
  * Each resource argument may be undefined when a test failed partway through
  * setup; the guards keep teardown a no-op for resources that were never
- * created, while the env seam is always cleared.
+ * created. The Google env seam is restored by the caller's {@link restoreGoogleEnv}.
  * @param server - The running portal, when one was started.
  * @param context - The browser context to close, when one was opened.
  * @param fake - The fake-Google stub to close, when one was started.
@@ -84,12 +115,11 @@ async function teardown(
     rmSync(server.dir, { recursive: true, force: true });
   }
   if (fake) await fake.close();
-  delete process.env.GOOGLE_AUTH_BASE;
-  delete process.env.GOOGLE_TOKEN_URL;
 }
 
 describe('Portal Google OAuth E2E', () => {
   it('signs in through the full Google consent flow and opens the app', async () => {
+    const envBackup = backupGoogleEnv();
     let fake: IFakeGoogle | undefined;
     let server: IGooglePortalServer | undefined;
     let context: BrowserContext | undefined;
@@ -114,11 +144,13 @@ describe('Portal Google OAuth E2E', () => {
       await page.waitForSelector('[data-bank="discount"]', { state: 'visible' });
       expect(await page.locator('[data-bank="discount"]').count()).toBe(1);
     } finally {
+      restoreGoogleEnv(envBackup);
       await teardown(server, context, fake);
     }
   }, 120_000);
 
   it('rejects a Google account that is not on the allow-list', async () => {
+    const envBackup = backupGoogleEnv();
     let fake: IFakeGoogle | undefined;
     let server: IGooglePortalServer | undefined;
     let context: BrowserContext | undefined;
@@ -143,6 +175,7 @@ describe('Portal Google OAuth E2E', () => {
       expect(await response.json()).toMatchObject({ error: 'Email not allowed' });
       expect(await page.locator('#app').count()).toBe(0);
     } finally {
+      restoreGoogleEnv(envBackup);
       await teardown(server, context, fake);
     }
   }, 120_000);
