@@ -15,6 +15,7 @@ import type { IImporterConfig, IPortalConfig } from '../../src/Types/Index.js';
 import { hashPassword } from '../../src/Portal/PortalPassword.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import { hasDockerImage } from './helpers/dockerRunner.js';
+import { field, node } from './helpers/portalDom.js';
 import { launchPortalBrowser } from './helpers/portalHarness.js';
 import {
   type IPortalContainer,
@@ -111,13 +112,13 @@ function readSplit(path: string): ISplitFile {
 }
 
 /**
- * Locates a portal field by manifest data path.
+ * Locates a jedison-rendered field control by its dotted config path.
  * @param page - Active portal page.
- * @param path - Manifest dotted field path.
+ * @param path - Dotted config field path.
  * @returns Locator for the matching form control.
  */
 function byPath(page: Page, path: string): Locator {
-  return page.locator(`[data-path="${path}"]`);
+  return field(page, path);
 }
 
 /**
@@ -140,7 +141,7 @@ async function login(page: Page, baseUrl: string): Promise<void> {
  */
 async function gotoBanks(page: Page): Promise<void> {
   await page.click('#nav button[data-section="banks"]');
-  await page.locator('[data-bank="discount"]').waitFor({ state: 'visible' });
+  await node(page, 'banks.discount').waitFor({ state: 'visible' });
 }
 
 /**

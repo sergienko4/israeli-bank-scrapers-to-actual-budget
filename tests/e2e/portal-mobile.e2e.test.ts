@@ -19,6 +19,7 @@ import type { IImporterConfig } from '../../src/Types/Index.js';
 import {
   type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, startSeededPortal,
 } from './helpers/portalHarness.js';
+import { field, node } from './helpers/portalDom.js';
 
 const MOBILE: [number, number] = [390, 844];
 const DISCOUNT_TARGET_ID = '11111111-1111-4111-8111-111111111111';
@@ -106,11 +107,11 @@ describe('Portal mobile E2E', () => {
       await page.click('#menu');
       expect(await navOpen(page)).toBe(true);
       await page.click('#nav button[data-section="banks"]');
-      await page.locator('[data-bank="discount"]').waitFor({ state: 'visible' });
+      await node(page, 'banks.discount').waitFor({ state: 'visible' });
       expect(await navOpen(page)).toBe(false);
 
       // Edit a value and save through the sticky top bar.
-      await page.locator('[data-path="banks.discount.daysBack"]').fill('25');
+      await field(page, 'banks.discount.daysBack').fill('25');
       await page.click('#save');
       await page.waitForSelector('#status:has-text("Saved")', { timeout: 15_000 });
 

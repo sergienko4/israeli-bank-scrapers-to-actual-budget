@@ -18,11 +18,12 @@
 
 import { rmSync } from 'node:fs';
 
-import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
+import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import { field, node } from './helpers/portalDom.js';
 import {
   type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, startSeededPortal,
 } from './helpers/portalHarness.js';
@@ -34,7 +35,9 @@ afterAll(async () => { await browser?.close(); });
 
 /**
  * Builds a deterministic, offline-valid seed whose portal section starts in
- * password auth mode, so the Google OAuth group is hidden until selected.
+ * password auth mode but carries a Google OAuth block, so jedison renders the
+ * `portal.google` group (jedison only renders a nested object present in the
+ * data) while the x-show-when rule keeps it hidden until Google is selected.
  * @returns An importer config the password-mode portal can serve.
  */
 function seedConfig(): IImporterConfig {
@@ -43,18 +46,13 @@ function seedConfig(): IImporterConfig {
     portal: {
       enabled: true, host: '127.0.0.1', port: 8080,
       authMode: 'password', sessionSecret: 'seed-portal-session-secret-0123456789',
+      google: {
+        clientId: 'seed-client-id', clientSecret: 'seed-client-secret',
+        redirectUri: 'https://example.test/auth/google/callback',
+        allowedEmails: ['seed@example.com'],
+      },
     },
   });
-}
-
-/**
- * Locates a manifest field/group by its dotted data-path attribute.
- * @param page - Active page.
- * @param path - Dotted config path (e.g. "portal.google.clientId").
- * @returns A locator for that node.
- */
-function byPath(page: Page, path: string): Locator {
-  return page.locator(`[data-path="${path}"]`);
 }
 
 /**
@@ -144,21 +142,22 @@ describe('Portal auth-affordance E2E', () => {
       const { page } = opened;
       await loginOk(page);
       await gotoSection(page, 'portal');
-      await byPath(page, 'portal.authMode').waitFor({ state: 'visible' });
+      await field(page, 'portal.authMode').waitFor({ state: 'visible' });
 
-      // Password mode: the Google group and its fields are not rendered at all.
-      expect(await byPath(page, 'portal.google').count()).toBe(0);
-      expect(await byPath(page, 'portal.google.clientId').count()).toBe(0);
+      // Password mode: the Google group is rendered from the seed but the
+      // x-show-when rule keeps it hidden (display:none + hidden attribute).
+      await node(page, 'portal.google').waitFor({ state: 'hidden' });
+      expect(await node(page, 'portal.google').isHidden()).toBe(true);
 
-      // Switch to Google: the group and its client-id field appear.
-      await byPath(page, 'portal.authMode').selectOption('google');
-      await byPath(page, 'portal.google.clientId').waitFor({ state: 'visible' });
-      expect(await byPath(page, 'portal.google').count()).toBe(1);
+      // Switch to Google: the group and its client-id field become visible.
+      await field(page, 'portal.authMode').selectOption('google');
+      await node(page, 'portal.google').waitFor({ state: 'visible' });
+      expect(await field(page, 'portal.google.clientId').isVisible()).toBe(true);
 
-      // Switch back to password: the group detaches again.
-      await byPath(page, 'portal.authMode').selectOption('password');
-      await byPath(page, 'portal.google').waitFor({ state: 'detached' });
-      expect(await byPath(page, 'portal.google.clientId').count()).toBe(0);
+      // Switch back to password: the group hides again (still present in the DOM).
+      await field(page, 'portal.authMode').selectOption('password');
+      await node(page, 'portal.google').waitFor({ state: 'hidden' });
+      expect(await node(page, 'portal.google').isHidden()).toBe(true);
     } finally {
       await teardown(server, context);
     }

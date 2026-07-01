@@ -23,6 +23,7 @@ import {
   GOOGLE_TEST_EMAIL, type IFakeGoogle, type IGooglePortalServer,
   launchPortalBrowser, startFakeGoogle, startSeededGooglePortal,
 } from './helpers/portalHarness.js';
+import { pathSelector } from './helpers/portalDom.js';
 
 let browser: Browser;
 
@@ -111,8 +112,8 @@ describe('Portal Google OAuth E2E', () => {
       await page.waitForSelector('#app', { state: 'visible' });
       await page.waitForSelector('#nav button[data-section="banks"]', { state: 'visible' });
       await page.click('#nav button[data-section="banks"]');
-      await page.waitForSelector('[data-bank="discount"]', { state: 'visible' });
-      expect(await page.locator('[data-bank="discount"]').count()).toBe(1);
+      await page.waitForSelector(pathSelector('banks.discount'), { state: 'visible' });
+      expect(await page.locator(pathSelector('banks.discount')).count()).toBe(1);
     } finally {
       await teardown(server, context, fake);
     }

@@ -18,6 +18,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import { appendArrayItem, field, node } from './helpers/portalDom.js';
 import {
   type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, startSeededPortal,
 } from './helpers/portalHarness.js';
@@ -50,11 +51,15 @@ afterAll(async () => { await browser?.close(); });
 beforeEach(() => { delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD; });
 
 /**
- * Builds a deterministic, offline-valid seed: one known "discount" bank.
+ * Builds a deterministic, offline-valid seed: one known "discount" bank plus a
+ * schema-only scalar (delayBetweenBanks) so the manifest-only field renders.
+ * jedison only renders properties present in the served data, so top-level
+ * optional fields must be seeded to appear.
  * @returns An importer config with pinned secret + target values.
  */
 function seedConfig(): IImporterConfig {
   return fakeImporterConfig({
+    delayBetweenBanks: 5000,
     banks: {
       discount: fakeBankConfig({
         password: DISCOUNT_PASSWORD,
@@ -75,13 +80,13 @@ function readSplit(path: string): ISplitFile {
 }
 
 /**
- * Locates a field input by its manifest dotted path (data-path attribute).
+ * Locates a jedison-rendered field control by its dotted config path.
  * @param page - Active page.
  * @param path - Dotted config path, e.g. "banks.discount.daysBack".
  * @returns A locator for that field's input/select.
  */
 function byPath(page: Page, path: string): Locator {
-  return page.locator(`[data-path="${path}"]`);
+  return field(page, path);
 }
 
 /**
@@ -103,45 +108,44 @@ async function expectSaved(page: Page): Promise<void> {
 }
 
 /**
- * Switches to a manifest section via the sidebar nav.
+ * Scrolls to a schema section via the sidebar nav (jump anchors).
  * @param page - Active page.
- * @param key - Section key (e.g. "banks"; "" for General).
+ * @param key - Top-level schema section key (e.g. "banks").
  */
 async function gotoSection(page: Page, key: string): Promise<void> {
   await page.click(`#nav button[data-section="${key}"]`);
 }
 
 /**
- * Navigates to the Banks section and waits for the seeded discount card.
+ * Scrolls to the Banks section and waits for the seeded discount card.
  * @param page - Active page on the authed app.
  */
 async function gotoBanks(page: Page): Promise<void> {
   await gotoSection(page, 'banks');
-  await page.locator('[data-bank="discount"]').waitFor({ state: 'visible' });
+  await node(page, 'banks.discount').waitFor({ state: 'visible' });
 }
 
 /**
- * Adds a bank through the manifest-driven dropdown + button.
- * @param page - Active page on the Banks section.
+ * Adds a bank through the constrained dropdown + button.
+ * @param page - Active page on the authed app.
  * @param bankId - Supported bank id to add.
  */
 async function addBank(page: Page, bankId: string): Promise<void> {
   await page.selectOption('#add-bank-select', bankId);
   await page.click('#add-bank-btn');
-  await page.locator(`[data-bank="${bankId}"]`).waitFor({ state: 'visible' });
+  await node(page, `banks.${bankId}`).waitFor({ state: 'visible' });
 }
 
 /**
- * Clicks a bank card's "+ Add target" and fills the new target's account id.
+ * Appends a target to a bank's targets array and fills its account id.
  * @param page - Active page.
- * @param bankId - Bank id whose card receives the target.
+ * @param bankId - Bank id whose targets array receives the item.
  * @param accountId - Valid UUID to write into the new target.
  */
 async function addTarget(page: Page, bankId: string, accountId: string): Promise<void> {
-  const card = page.locator(`[data-bank="${bankId}"]`);
-  await card.locator(`[data-add-target="${bankId}"]`).click();
-  await card.locator('.target').last()
-    .locator('input[data-path$=".actualAccountId"]').fill(accountId);
+  const targetsPath = `banks.${bankId}.targets`;
+  const index = await appendArrayItem(page, targetsPath);
+  await field(page, `${targetsPath}.${index}.actualAccountId`).fill(accountId);
 }
 
 /**
@@ -213,9 +217,10 @@ describe('Portal UI E2E', () => {
       await addTarget(page, 'discount', NEW_TARGET_ID);
 
       await addBank(page, 'leumi');
+      await byPath(page, 'banks.leumi.daysBack').fill('14');
       await byPath(page, 'banks.leumi.username').fill('leumi-user');
       await byPath(page, 'banks.leumi.password').fill('leumi-secret');
-      await byPath(page, 'banks.leumi.targets.0.actualAccountId').fill(LEUMI_TARGET_ID);
+      await addTarget(page, 'leumi', LEUMI_TARGET_ID);
 
       await page.click('#save');
       await expectSaved(page);
@@ -224,7 +229,7 @@ describe('Portal UI E2E', () => {
       await gotoBanks(page);
       await expectValue(byPath(page, 'banks.discount.daysBack'), '30');
       await expectValue(byPath(page, 'banks.discount.password'), MASK);
-      await page.locator('[data-bank="leumi"]').waitFor({ state: 'visible' });
+      await node(page, 'banks.leumi').waitFor({ state: 'visible' });
 
       const cfg = readSplit(server.configPath);
       const creds = readSplit(server.credsPath);
@@ -241,19 +246,17 @@ describe('Portal UI E2E', () => {
     }
   }, 120_000);
 
-  it('renders + persists a manifest-only field added with no UI changes', async () => {
+  it('renders + persists a schema-only field with no bespoke UI code', async () => {
     const server = await startSeededPortal(seedConfig());
     const { context, page } = await openLogin(server);
     try {
       await loginOk(page, PORTAL_PASSWORD);
 
-      await gotoSection(page, '');
       await byPath(page, 'delayBetweenBanks').fill('7000');
       await page.click('#save');
       await expectSaved(page);
 
       await reopen(page, server);
-      await gotoSection(page, '');
       await expectValue(byPath(page, 'delayBetweenBanks'), '7000');
 
       expect(readSplit(server.configPath).delayBetweenBanks).toBe(7000);
@@ -309,8 +312,8 @@ describe('Portal UI E2E', () => {
 
       await addBank(page, 'hapoalim');
       await page.click('[data-remove-bank="hapoalim"]');
-      await page.locator('[data-bank="hapoalim"]').waitFor({ state: 'detached' });
-      expect(await page.locator('[data-bank="hapoalim"]').count()).toBe(0);
+      await node(page, 'banks.hapoalim').waitFor({ state: 'detached' });
+      expect(await node(page, 'banks.hapoalim').count()).toBe(0);
 
       await page.click('#save');
       await expectSaved(page);

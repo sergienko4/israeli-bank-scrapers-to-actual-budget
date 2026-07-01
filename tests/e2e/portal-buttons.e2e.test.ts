@@ -1,5 +1,5 @@
 /**
- * Portal buttons E2E — per-button validation for the manifest-driven config
+ * Portal buttons E2E — per-button validation for the jedison-rendered config
  * portal, covering interactions NOT already exercised by portal-ui /
  * portal-google / portal-mobile.
  *
@@ -10,21 +10,18 @@
  *
  * Buttons / interactions covered (one focused test each):
  *  1. Enter key in #pw logs in (app.js binds keydown Enter → login()).
- *  2. A target row's "Remove target" button shrinks the targets array.
- *  3. The per-bank `select[data-add-field]` adds an optional catalog field.
- *  4. A list field's "+ Add" / "✕" buttons add and remove an item.
- *  5. A `list` section's "+ Add" primary button and a card's "Remove" button.
+ *  2. A target item's jedison "Delete item" button shrinks the targets array.
+ *  3. An optional bank field (navigationRetryCount) edits and persists.
+ *  4. A translations array's add / delete buttons add and remove an item.
+ *  5. A spendingWatch array's add / delete buttons add and remove a rule.
  *  6. A secret input's reveal toggle flips type password ⇄ text.
- *  7. A section `doc` renders a safe external "Read the documentation" link.
+ *  7. The bank-tools "Validate configuration" button reports a valid config.
  *
- * Design notes / no skips: every gap has real manifest support, so nothing is
- * skipped. For test 4 the representative non-Google list field is the OBJECT
- * list `categorization.translations` (reachable directly in the Categories
- * section): the only pure-scalar lists are the Google-only `allowedEmails`
- * (hidden unless authMode is google) and `spendingWatch.watchPayees` (nested in
- * the section-list already covered by test 5). The add/remove buttons share one
- * code path (`listFieldNode` / `listItemNode`) for scalar and object lists, so
- * the object list fully exercises the buttons under test.
+ * Design notes / no skips: jedison renders the whole form from the schema, so
+ * arrays expose `.jedi-array-add` / `.jedi-array-delete` buttons (deletion is
+ * guarded by `window.confirm`, auto-accepted via {@link acceptDialogs}). The
+ * translations and spendingWatch object arrays exercise the shared add/remove
+ * button path for both scalar and object array items.
  */
 
 import { readFileSync, rmSync } from 'node:fs';
@@ -35,12 +32,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
 import {
+  acceptDialogs, appendArrayItem, arrayDelete, arrayItems, field, node, secretReveal,
+} from './helpers/portalDom.js';
+import {
   type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, startSeededPortal,
 } from './helpers/portalHarness.js';
-
-/** Base GitHub docs URL the portal builds every section doc link from. */
-const DOC_BASE =
-  'https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/';
 
 const DISCOUNT_PASSWORD = 'discount-secret-xyz';
 const TARGET_A = '11111111-1111-4111-8111-111111111111';
@@ -69,7 +65,10 @@ afterAll(async () => { await browser?.close(); });
 beforeEach(() => { delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD; });
 
 /**
- * Builds a deterministic seed: one known "discount" bank with a single target.
+ * Builds a deterministic seed: one known "discount" bank with a single target,
+ * plus empty categorization/spendingWatch containers. jedison only renders
+ * properties present in the served data, so these arrays must be seeded (as
+ * empty) for their add/delete buttons to appear.
  * @returns An importer config with a pinned secret + target.
  */
 function seedConfig(): IImporterConfig {
@@ -81,6 +80,8 @@ function seedConfig(): IImporterConfig {
         targets: [fakeBankTarget({ actualAccountId: TARGET_A })],
       }),
     },
+    categorization: { translations: [] },
+    spendingWatch: [],
   });
 }
 
@@ -113,13 +114,13 @@ function readSplit(path: string): ISplitFile {
 }
 
 /**
- * Locates a field control by its manifest dotted path (data-path attribute).
+ * Locates a jedison-rendered field control by its dotted config path.
  * @param page - Active page.
  * @param path - Dotted config path, e.g. "banks.discount.password".
  * @returns A locator for that field's input/select.
  */
 function byPath(page: Page, path: string): Locator {
-  return page.locator(`[data-path="${path}"]`);
+  return field(page, path);
 }
 
 /**
@@ -151,31 +152,35 @@ async function save(page: Page): Promise<void> {
 }
 
 /**
- * Switches to a manifest section via the sidebar nav.
+ * Scrolls to a schema section via the sidebar nav (jump anchors).
  * @param page - Active page.
- * @param key - Section key (e.g. "banks"; "" for General).
+ * @param key - Top-level schema section key (e.g. "banks").
  */
 async function gotoSection(page: Page, key: string): Promise<void> {
   await page.click(`#nav button[data-section="${key}"]`);
 }
 
 /**
- * Navigates to the Banks section and waits for the seeded discount card.
+ * Scrolls to the Banks section and waits for the seeded discount card.
  * @param page - Active page on the authed app.
  */
 async function gotoBanks(page: Page): Promise<void> {
   await gotoSection(page, 'banks');
-  await page.locator('[data-bank="discount"]').waitFor({ state: 'visible' });
+  await node(page, 'banks.discount').waitFor({ state: 'visible' });
 }
 
 /**
  * Opens a fresh desktop context + page parked on the visible login form.
+ *
+ * Browser dialogs are auto-accepted so jedison's `window.confirm`-guarded array
+ * item deletions go through instead of being cancelled by Playwright's default.
  * @param server - The running portal server.
  * @returns The new context and page on the login screen.
  */
 async function openLogin(server: IPortalServer): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
+  acceptDialogs(page);
   await page.goto(server.baseUrl);
   await page.waitForSelector('#pw', { state: 'visible' });
   return { context, page };
@@ -215,13 +220,13 @@ async function teardown(server: IPortalServer, context: BrowserContext): Promise
 }
 
 /**
- * Clicks the translations "+ Add" button and fills the new item's payees.
+ * Appends a translations list item and fills the new item's payees.
  * @param page - Active page on the Categories section.
  */
 async function addTranslation(page: Page): Promise<void> {
-  await page.click('[data-add="categorization.translations"]');
-  await byPath(page, 'categorization.translations.0.fromPayee').fill(HEBREW_PAYEE);
-  await byPath(page, 'categorization.translations.0.toPayee').fill(ENGLISH_PAYEE);
+  const index = await appendArrayItem(page, 'categorization.translations');
+  await byPath(page, `categorization.translations.${index}.fromPayee`).fill(HEBREW_PAYEE);
+  await byPath(page, `categorization.translations.${index}.toPayee`).fill(ENGLISH_PAYEE);
 }
 
 /**
@@ -238,13 +243,13 @@ function expectTranslation(server: IPortalServer, fromPayee: string, toPayee: st
 }
 
 /**
- * Clicks "+ Add Watch" and fills the new rule's required amount + day window.
+ * Appends a spending-watch rule and fills its required amount + day window.
  * @param page - Active page on the spending-watch section.
  */
 async function addSpendingWatch(page: Page): Promise<void> {
-  await page.click('[data-add="spendingWatch"]');
-  await byPath(page, 'spendingWatch.0.alertFromAmount').fill('500');
-  await byPath(page, 'spendingWatch.0.numOfDayToCount').fill('7');
+  const index = await appendArrayItem(page, 'spendingWatch');
+  await byPath(page, `spendingWatch.${index}.alertFromAmount`).fill('500');
+  await byPath(page, `spendingWatch.${index}.numOfDayToCount`).fill('7');
 }
 
 /**
@@ -281,11 +286,11 @@ describe('Portal buttons E2E', () => {
     const { context, page } = await authedPage(server);
     try {
       await gotoBanks(page);
-      const targets = page.locator('[data-bank="discount"] .target');
+      const targets = arrayItems(page, 'banks.discount.targets');
       expect(await targets.count()).toBe(2);
 
-      await targets.last().locator('button:has-text("Remove target")').click();
-      await byPath(page, 'banks.discount.targets.1').waitFor({ state: 'detached' });
+      await arrayDelete(page, 'banks.discount.targets', 1).click();
+      await byPath(page, 'banks.discount.targets.1.actualAccountId').waitFor({ state: 'detached' });
       expect(await targets.count()).toBe(1);
 
       await save(page);
@@ -295,17 +300,14 @@ describe('Portal buttons E2E', () => {
     }
   }, 120_000);
 
-  it('adds an optional bank field via the add-field dropdown and persists it', async () => {
+  it('edits an optional bank field and persists it', async () => {
     const server = await startSeededPortal(seedConfig());
     const { context, page } = await authedPage(server);
     try {
       await gotoBanks(page);
-      const field = byPath(page, 'banks.discount.navigationRetryCount');
-      expect(await field.count()).toBe(0);
-
-      await page.selectOption('select[data-add-field="discount"]', 'navigationRetryCount');
-      await field.waitFor({ state: 'visible' });
-      await field.fill('2');
+      const retries = byPath(page, 'banks.discount.navigationRetryCount');
+      await retries.waitFor({ state: 'visible' });
+      await retries.fill('2');
 
       await save(page);
       expect(readSplit(server.configPath).banks?.discount?.navigationRetryCount).toBe(2);
@@ -319,7 +321,7 @@ describe('Portal buttons E2E', () => {
     const { context, page } = await authedPage(server);
     try {
       await gotoSection(page, 'categorization');
-      const items = page.locator('[data-path="categorization.translations"] .list-item');
+      const items = arrayItems(page, 'categorization.translations');
       expect(await items.count()).toBe(0);
 
       await addTranslation(page);
@@ -327,7 +329,7 @@ describe('Portal buttons E2E', () => {
       await save(page);
       expectTranslation(server, HEBREW_PAYEE, ENGLISH_PAYEE);
 
-      await items.first().locator('button.danger').click();
+      await arrayDelete(page, 'categorization.translations', 0).click();
       await byPath(page, 'categorization.translations.0.fromPayee').waitFor({ state: 'detached' });
       expect(await items.count()).toBe(0);
 
@@ -338,20 +340,20 @@ describe('Portal buttons E2E', () => {
     }
   }, 120_000);
 
-  it('adds then removes a spendingWatch section card, persisting each change', async () => {
+  it('adds then removes a spendingWatch rule, persisting each change', async () => {
     const server = await startSeededPortal(seedConfig());
     const { context, page } = await authedPage(server);
     try {
       await gotoSection(page, 'spendingWatch');
-      const cards = page.locator('[data-item^="spendingWatch."]');
+      const cards = arrayItems(page, 'spendingWatch');
       expect(await cards.count()).toBe(0);
 
       await addSpendingWatch(page);
       await save(page);
       expectSpendingWatch(server, 500, 7);
 
-      await page.locator('[data-item="spendingWatch.0"] .card-head button').click();
-      await page.locator('[data-item="spendingWatch.0"]').waitFor({ state: 'detached' });
+      await arrayDelete(page, 'spendingWatch', 0).click();
+      await byPath(page, 'spendingWatch.0.alertFromAmount').waitFor({ state: 'detached' });
       expect(await cards.count()).toBe(0);
 
       await save(page);
@@ -367,8 +369,7 @@ describe('Portal buttons E2E', () => {
     try {
       await gotoBanks(page);
       const secret = byPath(page, 'banks.discount.password');
-      const reveal = page.locator('[data-bank="discount"] .secret')
-        .filter({ has: secret }).locator('button.reveal');
+      const reveal = secretReveal(page, 'banks.discount.password');
 
       expect(await secret.getAttribute('type')).toBe('password');
       await reveal.click();
@@ -380,19 +381,13 @@ describe('Portal buttons E2E', () => {
     }
   }, 120_000);
 
-  it('renders a documentation link with safe external-link attributes', async () => {
+  it('validates the configuration and reports success in the status bar', async () => {
     const server = await startSeededPortal(seedConfig());
     const { context, page } = await authedPage(server);
     try {
-      await gotoBanks(page);
-      const doc = page.locator('#view a.doc');
-      await doc.waitFor({ state: 'visible' });
-
-      expect(await doc.getAttribute('target')).toBe('_blank');
-      expect(await doc.getAttribute('rel')).toBe('noopener');
-      const href = await doc.getAttribute('href');
-      expect(href?.startsWith(DOC_BASE)).toBe(true);
-      expect(href?.endsWith('configuration/banks.md')).toBe(true);
+      await page.click('#validate-btn');
+      await page.waitForSelector('#status:has-text("Configuration valid")', { timeout: 15_000 });
+      expect(await page.locator('#status').textContent()).toContain('valid');
     } finally {
       await teardown(server, context);
     }
