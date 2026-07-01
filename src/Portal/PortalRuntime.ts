@@ -86,7 +86,7 @@ function resolveHost(envHost?: string, configHost?: string): string {
   const envTrimmed = envHost?.trim() ?? '';
   if (envTrimmed !== '') return envTrimmed;
   const configTrimmed = configHost?.trim() ?? '';
-  return configTrimmed !== '' ? configTrimmed : DEFAULT_HOST;
+  return configTrimmed === '' ? DEFAULT_HOST : configTrimmed;
 }
 
 /**

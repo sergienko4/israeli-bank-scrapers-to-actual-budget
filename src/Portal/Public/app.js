@@ -326,8 +326,8 @@ function highlightInvalid(paths) {
   current = 'banks';
   render();
   clearInvalid();
-  const nodes = paths.map(markInvalidByPath).filter(Boolean);
-  if (nodes[0]) nodes[0].focus();
+  const firstInvalid = paths.map(markInvalidByPath).find(Boolean);
+  if (firstInvalid) firstInvalid.focus();
 }
 
 /**
@@ -1021,7 +1021,7 @@ function filterBankIds() {
 function orphanBankKeys() {
   const catalog = manifest.banks || [];
   return Object.keys(config.banks || {}).filter(
-    (key) => !catalog.some((id) => id === key.toLowerCase()),
+    (key) => !catalog.includes(key.toLowerCase()),
   );
 }
 
