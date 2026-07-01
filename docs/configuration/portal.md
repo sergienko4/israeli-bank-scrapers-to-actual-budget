@@ -20,10 +20,19 @@ reads those once at startup, so restart the portal for those to take effect.)
 ## Manifest-driven UI
 
 The portal renders entirely from the project's [config manifest](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/getting-started/configuration.md#config-manifest-single-source-of-truth),
-served at `GET /api/manifest`. Every section, field, bank option, and enum you
-see is generated from that single source — so when a new config option is added
-to the manifest it appears in the portal automatically, with no UI changes and
-nothing to maintain in two places.
+the single source of truth for every section, field, bank option, and enum. The
+manifest is compiled into a standard [JSON Schema](https://json-schema.org/) by
+`npm run schema:generate` — committed to `config/portal/config.schema.json` and
+served at `GET /api/schema` — and the form is rendered from that schema by
+[jedison](https://github.com/germanbisurgi/jedison), a schema-driven form library
+vendored offline into the SPA. So when a new config option is added to the
+manifest it flows through the generated schema into the portal automatically, with
+no UI changes and nothing to maintain in two places.
+
+The generated schema is never hand-edited. `npm run schema:check` regenerates it
+from the manifest and fails if the committed file is stale; that gate runs in both
+the pre-commit hook and CI, so the schema the portal renders always stays in
+lockstep with the manifest.
 
 ## Enable
 
