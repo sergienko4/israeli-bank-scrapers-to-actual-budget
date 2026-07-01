@@ -25,6 +25,24 @@ see is generated from that single source — so when a new config option is adde
 to the manifest it appears in the portal automatically, with no UI changes and
 nothing to maintain in two places.
 
+## Manage your banks
+
+The **Banks** section is a searchable master–detail, so a long list of banks
+never turns into an endless page scroll:
+
+- **Search + pick from the left.** A bounded, scrollable list shows the full
+  catalog of supported banks. Type in the search box to filter it.
+- **✓ marks the banks you already configured.** Configured banks are flagged
+  with a checkmark (matched case-insensitively, so a `oneZero`-style key still
+  lines up with its `onezero` catalog entry — no accidental duplicates). Click a
+  configured bank to review or edit it.
+- **Click an unconfigured bank to add it.** Selecting a bank you have not set up
+  yet templates its required fields and one empty target, then opens it for
+  editing.
+- **Edit on the right.** The detail pane shows only the selected bank's
+  credentials, optional fields, and Actual targets, plus a Remove button. The
+  first configured bank opens automatically when you enter the section.
+
 ## Enable
 
 Add a `portal` block to `config.json` (or set `PORTAL_ENABLED=true`):

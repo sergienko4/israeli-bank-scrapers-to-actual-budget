@@ -18,6 +18,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import { addBank, gotoBanks, removeBank, selectBank } from './helpers/banksPom.js';
 import {
   type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, startSeededPortal,
 } from './helpers/portalHarness.js';
@@ -109,26 +110,6 @@ async function expectSaved(page: Page): Promise<void> {
  */
 async function gotoSection(page: Page, key: string): Promise<void> {
   await page.click(`#nav button[data-section="${key}"]`);
-}
-
-/**
- * Navigates to the Banks section and waits for the seeded discount card.
- * @param page - Active page on the authed app.
- */
-async function gotoBanks(page: Page): Promise<void> {
-  await gotoSection(page, 'banks');
-  await page.locator('[data-bank="discount"]').waitFor({ state: 'visible' });
-}
-
-/**
- * Adds a bank through the manifest-driven dropdown + button.
- * @param page - Active page on the Banks section.
- * @param bankId - Supported bank id to add.
- */
-async function addBank(page: Page, bankId: string): Promise<void> {
-  await page.selectOption('#add-bank-select', bankId);
-  await page.click('#add-bank-btn');
-  await page.locator(`[data-bank="${bankId}"]`).waitFor({ state: 'visible' });
 }
 
 /**
@@ -233,7 +214,10 @@ describe('Portal UI E2E', () => {
       await gotoBanks(page);
       await expectValue(byPath(page, 'banks.discount.daysBack'), '30');
       await expectValue(byPath(page, 'banks.discount.password'), MASK);
-      await page.locator('[data-bank="leumi"]').waitFor({ state: 'visible' });
+      // leumi round-trips as an added master-list row; selecting it re-renders
+      // its detail card (only the selected bank's card is present at a time).
+      expect(await page.locator('[data-bank-row="leumi"][data-bank-added="true"]').count()).toBe(1);
+      await selectBank(page, 'leumi');
 
       const cfg = readSplit(server.configPath);
       const creds = readSplit(server.credsPath);
@@ -333,8 +317,7 @@ describe('Portal UI E2E', () => {
       await gotoBanks(page);
 
       await addBank(page, 'hapoalim');
-      await page.click('[data-remove-bank="hapoalim"]');
-      await page.locator('[data-bank="hapoalim"]').waitFor({ state: 'detached' });
+      await removeBank(page, 'hapoalim');
       expect(await page.locator('[data-bank="hapoalim"]').count()).toBe(0);
 
       await page.click('#save');

@@ -19,6 +19,8 @@ const EYE_SVG =
 let manifest = { sections: [], banks: [], bankRequirements: {} };
 let config = {};
 let current = '';
+let bankSelected = '';
+let bankQuery = '';
 
 /**
  * Looks up a DOM element by id.
@@ -311,18 +313,32 @@ function collectBankMissing(name, bank, out) {
 }
 
 /**
- * Flags the given field paths as invalid: navigates to the banks section (so the
- * offending inputs are rendered), marks each, and focuses the first so a rejected
- * save lands the user on the field(s) to fix.
+ * Flags the given field paths as invalid: navigates to the banks section and
+ * selects the first offending bank (so its inputs are rendered), marks each, and
+ * focuses the first so a rejected save lands the user on the field(s) to fix.
  * @param {string[]} paths dotted config paths to flag
  * @returns {void}
  */
 function highlightInvalid(paths) {
   if (!paths.length) return;
-  if (current !== 'banks') selectSection('banks');
+  const bank = firstBankKey(paths);
+  if (bank) bankSelected = bank;
+  current = 'banks';
+  render();
   clearInvalid();
   const nodes = paths.map(markInvalidByPath).filter(Boolean);
   if (nodes[0]) nodes[0].focus();
+}
+
+/**
+ * The bank key named by the first `banks.<key>.…` path, so a rejected save can
+ * select the offending bank whose fields must be rendered to be flagged.
+ * @param {string[]} paths dotted config paths
+ * @returns {string} the first bank key, or '' when no path targets a bank
+ */
+function firstBankKey(paths) {
+  const hit = paths.find((path) => path.startsWith('banks.'));
+  return hit ? hit.split('.')[1] : '';
 }
 
 /**
@@ -852,15 +868,171 @@ function listCard(sec, arr, idx) {
 // ---------- banks (bankMap) ----------
 
 /**
- * Renders the banks section: a card per bank plus an add-bank control.
+ * Renders the banks section as a searchable master–detail: a bounded, scrollable
+ * catalog list (added banks marked ✓, others addable) beside an editor for the
+ * one selected bank. Normalizes the selection so the first configured bank is
+ * auto-selected on entry and re-selected after a removal.
  * @param {object} sec banks section descriptor
  * @param {HTMLElement} view container
  * @returns {void}
  */
 function renderBanks(sec, view) {
   const banks = config.banks || (config.banks = {});
-  Object.keys(banks).forEach((name) => view.appendChild(bankCard(sec, name)));
-  view.appendChild(addBankControl(sec));
+  if (!Object.hasOwn(banks, bankSelected)) bankSelected = Object.keys(banks)[0] || '';
+  const wrap = el('div', 'banks');
+  wrap.append(bankMasterPanel(sec), bankDetailPanel(sec));
+  view.appendChild(wrap);
+}
+
+/**
+ * Builds the master panel: a labelled search box over a bounded, scrollable list
+ * of catalog rows. Typing re-renders only the row list, preserving search focus.
+ * @param {object} sec banks section descriptor
+ * @returns {HTMLDivElement} the master panel
+ */
+function bankMasterPanel(sec) {
+  const master = el('div', 'bank-master');
+  const search = el('input', 'bank-search');
+  search.id = 'bank-search';
+  search.type = 'search';
+  search.placeholder = 'Search banks…';
+  search.setAttribute('aria-label', 'Search banks');
+  search.value = bankQuery;
+  const list = el('ul', 'bank-list');
+  list.setAttribute('aria-label', 'Banks');
+  search.oninput = () => {
+    bankQuery = search.value;
+    renderBankRows(list, sec);
+  };
+  renderBankRows(list, sec);
+  master.append(search, list);
+  return master;
+}
+
+/**
+ * Rebuilds the catalog row list from the current search filter, one `<li>` per
+ * matching bank id.
+ * @param {HTMLUListElement} list the row container to fill
+ * @param {object} sec banks section descriptor
+ * @returns {void}
+ */
+function renderBankRows(list, sec) {
+  list.textContent = '';
+  filterBankIds().forEach((id) => {
+    const li = el('li');
+    li.appendChild(bankRow(sec, id));
+    list.appendChild(li);
+  });
+}
+
+/**
+ * Builds one interactive catalog row: an added bank selects itself for review;
+ * an addable bank is templated and then selected.
+ * @param {object} sec banks section descriptor
+ * @param {string} id catalog bank id, or a legacy config key
+ * @returns {HTMLButtonElement} the row button
+ */
+function bankRow(sec, id) {
+  const key = configKeyForBank(id);
+  const selected = Boolean(key) && key === bankSelected;
+  const b = button('', bankRowClass(Boolean(key), selected));
+  b.dataset.bankRow = id;
+  if (key) b.dataset.bankAdded = 'true';
+  if (selected) b.setAttribute('aria-current', 'true');
+  b.append(el('span', 'bank-row-name', id), bankRowStatus(Boolean(key)));
+  b.onclick = () => selectBankRow(id, key);
+  return b;
+}
+
+/**
+ * Composes a row's class list from its added and selected states.
+ * @param {boolean} added whether the bank is already configured
+ * @param {boolean} selected whether the row is the active selection
+ * @returns {string} the space-separated class list
+ */
+function bankRowClass(added, selected) {
+  const base = added ? 'bank-row added' : 'bank-row addable';
+  return selected ? `${base} active` : base;
+}
+
+/**
+ * Builds a row's status badge, pairing an icon with visually-hidden text so the
+ * added/addable state is conveyed without relying on color alone.
+ * @param {boolean} added whether the bank is already configured
+ * @returns {HTMLSpanElement} the status badge
+ */
+function bankRowStatus(added) {
+  const status = el('span', 'bank-row-status');
+  const glyph = el('span', null, added ? '✓' : '+');
+  glyph.setAttribute('aria-hidden', 'true');
+  status.append(glyph, el('span', 'visually-hidden', added ? 'added' : 'add'));
+  return status;
+}
+
+/**
+ * Selects a catalog row, adding the bank first when it is not yet configured,
+ * then re-renders so the detail pane shows that bank.
+ * @param {string} id catalog bank id, or a legacy config key
+ * @param {string} [key] the existing config key when the bank is already added
+ * @returns {void}
+ */
+function selectBankRow(id, key) {
+  if (key) {
+    bankSelected = key;
+  } else {
+    addBank(id);
+    bankSelected = id;
+  }
+  render();
+}
+
+/**
+ * Builds the detail pane: the selected bank's editor, or an empty-state prompt.
+ * @param {object} sec banks section descriptor
+ * @returns {HTMLDivElement} the detail pane
+ */
+function bankDetailPanel(sec) {
+  const detail = el('div', 'bank-detail');
+  if (bankSelected && Object.hasOwn(config.banks || {}, bankSelected)) {
+    detail.appendChild(bankCard(sec, bankSelected));
+  } else {
+    detail.appendChild(el('div', 'bank-empty',
+      'No bank selected — choose a bank to review it, or pick one to add.'));
+  }
+  return detail;
+}
+
+/**
+ * The bank ids to show in the master list: the full catalog plus any legacy
+ * config keys that match no catalog id, narrowed by the case-insensitive search.
+ * @returns {string[]} the visible row ids
+ */
+function filterBankIds() {
+  const query = bankQuery.trim().toLowerCase();
+  const ids = (manifest.banks || []).concat(orphanBankKeys());
+  return ids.filter((id) => id.toLowerCase().includes(query));
+}
+
+/**
+ * The configured bank keys that match no catalog id (legacy/unknown banks), so
+ * they stay reachable and removable from the list.
+ * @returns {string[]} orphan config keys
+ */
+function orphanBankKeys() {
+  const catalog = manifest.banks || [];
+  return Object.keys(config.banks || {}).filter(
+    (key) => !catalog.some((id) => id === key.toLowerCase()),
+  );
+}
+
+/**
+ * The actual config key backing a catalog id, matched case-insensitively so a
+ * camelCase alias (e.g. `oneZero`) resolves to its lowercase catalog id.
+ * @param {string} id catalog bank id, or a legacy config key
+ * @returns {string|undefined} the config key, or undefined when not configured
+ */
+function configKeyForBank(id) {
+  return Object.keys(config.banks || {}).find((key) => key.toLowerCase() === id.toLowerCase());
 }
 
 /**
@@ -1006,39 +1178,9 @@ function targetRow(sec, targets, idx, path) {
 }
 
 /**
- * Builds the "add a bank" dropdown + button from the supported bank list.
- * @param {object} sec banks section descriptor
- * @returns {HTMLDivElement} the add-bank control
- */
-function addBankControl(sec) {
-  const wrap = el('div', 'add-bank');
-  const sel = el('select');
-  sel.id = 'add-bank-select';
-  sel.setAttribute('aria-label', 'Select a bank to add');
-  const ph = el('option', null, 'Add a bank…');
-  ph.value = '';
-  sel.appendChild(ph);
-  const existing = config.banks || {};
-  (manifest.banks || [])
-    .filter((b) => !existing[b])
-    .forEach((b) => {
-      const o = el('option', null, b);
-      o.value = b;
-      sel.appendChild(o);
-    });
-  const add = button('+ Add bank', 'btn primary');
-  add.id = 'add-bank-btn';
-  add.onclick = () => {
-    if (sel.value) addBank(sel.value);
-    else toast('Select a bank to add first', 'err');
-  };
-  wrap.append(sel, add);
-  return wrap;
-}
-
-/**
  * Adds a bank, templating its required credential fields and one empty target.
- * @param {string} name bank id
+ * The caller is responsible for selecting it and re-rendering.
+ * @param {string} name canonical bank id
  * @returns {void}
  */
 function addBank(name) {
@@ -1052,8 +1194,6 @@ function addBank(name) {
     if (!(k in bank)) bank[k] = '';
   });
   (config.banks || (config.banks = {}))[name] = bank;
-  current = 'banks';
-  render();
 }
 
 // ---------- wiring ----------

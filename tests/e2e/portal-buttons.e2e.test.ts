@@ -16,9 +16,11 @@
  *  5. A `list` section's "+ Add" primary button and a card's "Remove" button.
  *  6. A secret input's reveal toggle flips type password ⇄ text.
  *  7. A section `doc` renders a safe external "Read the documentation" link.
- *  8. Add-bank happy path: select + add + fill required + valid target UUID +
- *     Save persists the bank with its secret split into credentials.json.
- *  9. Add-bank with no selection gives a toast and adds no card.
+ *  8. Add-bank happy path: click an addable master-list row + fill required +
+ *     valid target UUID + Save persists the bank with its secret split into
+ *     credentials.json.
+ *  9. Clicking an already-added bank row re-selects it (no duplicate card) and
+ *     the search box filters the master list.
  * 10. Saving an incomplete bank surfaces a per-field problem list, flags the
  *     offending inputs (aria-invalid), and persists nothing.
  * 11. Changing a bank password persists the NEW secret to credentials.json.
@@ -40,6 +42,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import { addBank, gotoBanks, selectBank } from './helpers/banksPom.js';
 import {
   type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, startSeededPortal,
 } from './helpers/portalHarness.js';
@@ -171,15 +174,6 @@ async function save(page: Page): Promise<void> {
  */
 async function gotoSection(page: Page, key: string): Promise<void> {
   await page.click(`#nav button[data-section="${key}"]`);
-}
-
-/**
- * Navigates to the Banks section and waits for the seeded discount card.
- * @param page - Active page on the authed app.
- */
-async function gotoBanks(page: Page): Promise<void> {
-  await gotoSection(page, 'banks');
-  await page.locator('[data-bank="discount"]').waitFor({ state: 'visible' });
 }
 
 /**
@@ -457,9 +451,7 @@ describe('Portal buttons E2E', () => {
         await gotoBanks(page);
         expect(await page.locator('[data-bank="leumi"]').count()).toBe(0);
 
-        await page.selectOption('#add-bank-select', 'leumi');
-        await page.click('#add-bank-btn');
-        await page.locator('[data-bank="leumi"]').waitFor({ state: 'visible' });
+        await addBank(page, 'leumi');
 
         await byPath(page, 'banks.leumi.username').fill('leumi-user');
         await byPath(page, 'banks.leumi.password').fill('leumi-secret-42');
@@ -478,7 +470,7 @@ describe('Portal buttons E2E', () => {
       }
     }, 120_000);
 
-  it('gives feedback and adds no card when Add bank is clicked with no selection', async () => {
+  it('selects an already-added bank row without creating a duplicate card', async () => {
     let server: IPortalServer | undefined;
     let context: BrowserContext | undefined;
     try {
@@ -487,13 +479,19 @@ describe('Portal buttons E2E', () => {
       context = opened.context;
       const { page } = opened;
       await gotoBanks(page);
-      const cards = page.locator('.card[data-bank]');
-      const before = await cards.count();
 
-      await page.click('#add-bank-btn'); // placeholder still selected
-      await page.waitForSelector('.toast.err', { state: 'visible' });
-      expect(await page.locator('.toast.err').first().textContent()).toContain('Select a bank');
-      expect(await cards.count()).toBe(before);
+      // The seeded discount bank shows as added; clicking its row re-selects it
+      // (for review/edit) rather than templating a second card.
+      const discountRow = page.locator('[data-bank-row="discount"]');
+      expect(await discountRow.getAttribute('data-bank-added')).toBe('true');
+      await selectBank(page, 'discount');
+      expect(await page.locator('.card[data-bank]').count()).toBe(1);
+      expect(await page.locator('[data-bank="discount"]').count()).toBe(1);
+
+      // The search box narrows the master list to matching rows.
+      await page.fill('#bank-search', 'discount');
+      await page.locator('[data-bank-row="leumi"]').waitFor({ state: 'detached' });
+      expect(await page.locator('[data-bank-row="discount"]').count()).toBe(1);
     } finally {
       await teardown(server, context);
     }
@@ -509,9 +507,7 @@ describe('Portal buttons E2E', () => {
         context = opened.context;
         const { page } = opened;
         await gotoBanks(page);
-        await page.selectOption('#add-bank-select', 'leumi');
-        await page.click('#add-bank-btn');
-        await page.locator('[data-bank="leumi"]').waitFor({ state: 'visible' });
+        await addBank(page, 'leumi');
 
         // Save with leumi's required credentials + target account left empty.
         await page.locator('#status').evaluate((node) => {

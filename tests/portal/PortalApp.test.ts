@@ -469,6 +469,33 @@ const asArray = (value: unknown): unknown[] => value as unknown[];
 const putSomePut = (): boolean =>
   (fetchMock.mock.calls as Array<[string, FetchInit | undefined]>).some((c) => c[0] === '/api/config' && c[1]?.method === 'PUT');
 
+/**
+ * Typed accessor for the harness config's banks map.
+ * @returns The banks record on the current fixture config.
+ */
+function configBanks(): Record<string, Record<string, unknown>> {
+  return state.config.banks as Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Reads a master-list row button by its bank id.
+ * @param id - Catalog bank id or legacy config key.
+ * @returns The row button element.
+ */
+function bankRow(id: string): HTMLElement {
+  return query(`[data-bank-row="${id}"]`);
+}
+
+/**
+ * The bank ids currently rendered in the master list, in order.
+ * @returns The data-bank-row values of every visible row.
+ */
+function bankRowIds(): string[] {
+  return Array.from(document.querySelectorAll('.bank-row')).map(
+    (row) => row.getAttribute('data-bank-row') ?? '',
+  );
+}
+
 beforeEach(() => {
   vi.resetModules();
   installHarness();
@@ -975,23 +1002,30 @@ describe('PortalApp list sections', () => {
 });
 
 describe('PortalApp banks section', () => {
-  it('renders a card per bank with present fields, dropdown and targets', async () => {
+  it('renders a searchable master list and auto-selects the first bank', async () => {
     await boot();
     clickNav('banks');
     expect(byId('subtitle').textContent).toBe('2 banks configured');
+    expect(maybe('#bank-search')).not.toBeNull();
+    // A row for every catalog bank, added ones marked, others addable.
+    expect(bankRowIds()).toEqual(['hapoalim', 'leumi', 'discount']);
+    expect(bankRow('hapoalim').dataset.bankAdded).toBe('true');
+    expect(bankRow('hapoalim').classList.contains('added')).toBe(true);
+    expect(query('[data-bank-row="hapoalim"] .visually-hidden').textContent).toBe('added');
+    expect(bankRow('discount').classList.contains('addable')).toBe(true);
+    expect(maybe('[data-bank-row="discount"][data-bank-added]')).toBeNull();
+    expect(query('[data-bank-row="discount"] .visually-hidden').textContent).toBe('add');
+    // The first configured bank is auto-selected: its detail card renders alone.
+    expect(bankRow('hapoalim').getAttribute('aria-current')).toBe('true');
+    expect(bankRow('hapoalim').classList.contains('active')).toBe(true);
     expect(inputId('banks.hapoalim.username').value).toBe('avi-cohen');
     expect(inputId('banks.hapoalim.password').value).toBe('bank-pass-1');
     expect(maybe('[data-add-field="hapoalim"]')).not.toBeNull();
     expect(inputId('banks.hapoalim.targets.0.actualAccountId').value).toBe('acct-1');
-    const addBank = selectId('add-bank-select');
-    const options = Array.from(addBank.options).map((o) => o.value);
-    expect(options).toContain('discount');
-    expect(options).not.toContain('hapoalim');
-    expect(maybe('[data-add-field="leumi"]')).toBeNull();
-    expect(maybe('[data-add-target="leumi"]')).not.toBeNull();
+    expect(document.querySelectorAll('.bank-detail [data-bank]')).toHaveLength(1);
   });
 
-  it('adds a numeric field to a bank defaulting to zero', async () => {
+  it('adds a numeric field to the selected bank defaulting to zero', async () => {
     await boot();
     clickNav('banks');
     changeSelect(query('[data-add-field="hapoalim"]'), 'daysBack');
@@ -1000,7 +1034,7 @@ describe('PortalApp banks section', () => {
     expect(dig(putBody(), 'banks', 'hapoalim', 'daysBack')).toBe(0);
   });
 
-  it('adds a boolean field to a bank defaulting to false', async () => {
+  it('adds a boolean field to the selected bank defaulting to false', async () => {
     await boot();
     clickNav('banks');
     changeSelect(query('[data-add-field="hapoalim"]'), 'twoFactorAuth');
@@ -1009,7 +1043,7 @@ describe('PortalApp banks section', () => {
     expect(dig(putBody(), 'banks', 'hapoalim', 'twoFactorAuth')).toBe(false);
   });
 
-  it('adds a string field to a bank defaulting to empty', async () => {
+  it('adds a string field to the selected bank defaulting to empty', async () => {
     await boot();
     clickNav('banks');
     changeSelect(query('[data-add-field="hapoalim"]'), 'userCode');
@@ -1025,22 +1059,61 @@ describe('PortalApp banks section', () => {
     expect(maybe('#banks\\.hapoalim\\.daysBack')).toBeNull();
   });
 
-  it('removes a bank', async () => {
+  it('switches the detail when an added row is selected, showing only that bank', async () => {
     await boot();
     clickNav('banks');
+    expect(maybe('[data-bank="hapoalim"]')).not.toBeNull();
+    bankRow('leumi').click();
+    expect(maybe('[data-bank="leumi"]')).not.toBeNull();
+    expect(maybe('[data-bank="hapoalim"]')).toBeNull();
+    expect(document.querySelectorAll('.bank-detail [data-bank]')).toHaveLength(1);
+    // leumi carries every catalog field, so its add-field control collapses.
+    expect(maybe('[data-add-field="leumi"]')).toBeNull();
+    expect(maybe('[data-add-target="leumi"]')).not.toBeNull();
+    expect(bankRow('leumi').getAttribute('aria-current')).toBe('true');
+  });
+
+  it('filters the master list by the search query', async () => {
+    await boot();
+    clickNav('banks');
+    expect(bankRowIds()).toHaveLength(3);
+    typeText('bank-search', 'leu');
+    expect(bankRowIds()).toEqual(['leumi']);
+    typeText('bank-search', 'zzz');
+    expect(bankRowIds()).toHaveLength(0);
+    // The search input itself survives keystroke re-renders.
+    expect(maybe('#bank-search')).not.toBeNull();
+  });
+
+  it('removes a bank and reselects a remaining one', async () => {
+    await boot();
+    clickNav('banks');
+    bankRow('leumi').click();
     query('[data-remove-bank="leumi"]').click();
     expect(maybe('[data-bank="leumi"]')).toBeNull();
+    expect(bankRow('leumi').dataset.bankAdded).toBeUndefined();
     expect(byId('subtitle').textContent).toBe('1 bank configured');
+    expect(maybe('[data-bank="hapoalim"]')).not.toBeNull();
     await saveConfig();
     expect(dig(putBody(), 'banks', 'leumi')).toBeUndefined();
   });
 
-  it('adds a bank, templating required fields and one target', async () => {
+  it('falls back to the empty state after removing the only bank', async () => {
+    delete configBanks().leumi;
     await boot();
     clickNav('banks');
-    selectId('add-bank-select').value = 'discount';
-    clickId('add-bank-btn');
+    query('[data-remove-bank="hapoalim"]').click();
+    expect(maybe('[data-bank]')).toBeNull();
+    expect(maybe('.bank-empty')).not.toBeNull();
+  });
+
+  it('adds a bank by clicking an addable row, templating fields and one target', async () => {
+    await boot();
+    clickNav('banks');
+    bankRow('discount').click();
     expect(maybe('[data-bank="discount"]')).not.toBeNull();
+    expect(bankRow('discount').dataset.bankAdded).toBe('true');
+    expect(byId('subtitle').textContent).toBe('3 banks configured');
     await saveConfig();
     expect(dig(putBody(), 'banks', 'discount', 'daysBack')).toBe(14);
     expect(dig(putBody(), 'banks', 'discount', 'twoFactorAuth')).toBe(false);
@@ -1052,22 +1125,49 @@ describe('PortalApp banks section', () => {
     state.manifest.banks.push('isracard');
     await boot();
     clickNav('banks');
-    selectId('add-bank-select').value = 'isracard';
-    clickId('add-bank-btn');
+    bankRow('isracard').click();
     expect(maybe('[data-bank="isracard"]')).not.toBeNull();
     await saveConfig();
     expect(dig(putBody(), 'banks', 'isracard', 'daysBack')).toBe(14);
     expect(asArray(dig(putBody(), 'banks', 'isracard', 'targets'))).toHaveLength(1);
   });
 
-  it('does nothing when adding a bank without a selection', async () => {
+  it('matches a camelCase config key to its lowercase catalog id without duplicating', async () => {
+    state.manifest.banks.push('onezero');
+    configBanks().oneZero = {
+      username: 'oz-user',
+      password: 'oz-pass',
+      targets: [fakeBankTarget({ actualAccountId: 'acct-oz', accounts: 'all', reconcile: false })],
+    };
     await boot();
     clickNav('banks');
-    clickId('add-bank-btn');
-    expect(maybe('[data-bank="discount"]')).toBeNull();
+    // The already-configured camelCase bank shows as added, not addable.
+    expect(bankRow('onezero').dataset.bankAdded).toBe('true');
+    expect(bankRow('onezero').classList.contains('added')).toBe(true);
+    expect(bankRow('onezero').classList.contains('addable')).toBe(false);
+    // Selecting it edits the existing camelCase entry — no lowercase duplicate.
+    bankRow('onezero').click();
+    expect(inputId('banks.oneZero.username').value).toBe('oz-user');
+    await saveConfig();
+    expect(dig(putBody(), 'banks', 'oneZero', 'username')).toBe('oz-user');
+    expect(dig(putBody(), 'banks', 'onezero')).toBeUndefined();
   });
 
-  it('adds a target to a bank', async () => {
+  it('lists an unknown/legacy config bank as an added, editable, removable row', async () => {
+    configBanks().legacybank = {
+      username: 'legacy-user',
+      targets: [fakeBankTarget({ actualAccountId: 'acct-legacy', accounts: 'all', reconcile: false })],
+    };
+    await boot();
+    clickNav('banks');
+    expect(bankRow('legacybank').dataset.bankAdded).toBe('true');
+    bankRow('legacybank').click();
+    expect(inputId('banks.legacybank.username').value).toBe('legacy-user');
+    query('[data-remove-bank="legacybank"]').click();
+    expect(maybe('[data-bank="legacybank"]')).toBeNull();
+  });
+
+  it('adds a target to the selected bank', async () => {
     await boot();
     clickNav('banks');
     query('[data-add-target="hapoalim"]').click();
@@ -1076,7 +1176,7 @@ describe('PortalApp banks section', () => {
     expect(asArray(dig(putBody(), 'banks', 'hapoalim', 'targets'))).toHaveLength(2);
   });
 
-  it('removes a target from a bank', async () => {
+  it('removes a target from the selected bank', async () => {
     await boot();
     clickNav('banks');
     query('[data-target="banks.hapoalim.targets.0"] .danger').click();
@@ -1084,13 +1184,16 @@ describe('PortalApp banks section', () => {
     expect(asArray(dig(putBody(), 'banks', 'hapoalim', 'targets'))).toHaveLength(0);
   });
 
-  it('renders only the add-bank control when no banks are configured', async () => {
+  it('renders the empty state and only addable rows when no banks are configured', async () => {
     delete state.config.banks;
     await boot();
     clickNav('banks');
     expect(byId('subtitle').textContent).toBe('0 banks configured');
     expect(maybe('[data-bank]')).toBeNull();
-    expect(byId('add-bank-select')).not.toBeNull();
+    expect(maybe('.bank-empty')).not.toBeNull();
+    expect(maybe('#bank-search')).not.toBeNull();
+    expect(document.querySelectorAll('.bank-row.addable')).toHaveLength(3);
+    expect(maybe('[data-bank-row][data-bank-added]')).toBeNull();
   });
 });
 

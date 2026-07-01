@@ -15,6 +15,7 @@ import type { IImporterConfig, IPortalConfig } from '../../src/Types/Index.js';
 import { hashPassword } from '../../src/Portal/PortalPassword.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import { hasDockerImage } from './helpers/dockerRunner.js';
+import { gotoBanks } from './helpers/banksPom.js';
 import { launchPortalBrowser } from './helpers/portalHarness.js';
 import {
   type IPortalContainer,
@@ -131,16 +132,6 @@ async function login(page: Page, baseUrl: string): Promise<void> {
   await page.fill('#pw', PASSWORD);
   await page.click('#pw-btn');
   await page.waitForSelector('#app', { state: 'visible' });
-}
-
-/**
- * Navigates to the seeded Discount bank card in the Banks section.
- * @param page - Authenticated portal page.
- * @returns Resolves after the Discount bank card is visible.
- */
-async function gotoBanks(page: Page): Promise<void> {
-  await page.click('#nav button[data-section="banks"]');
-  await page.locator('[data-bank="discount"]').waitFor({ state: 'visible' });
 }
 
 /**

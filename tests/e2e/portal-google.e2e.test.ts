@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import { selectBank } from './helpers/banksPom.js';
 import {
   GOOGLE_TEST_EMAIL, type IFakeGoogle, type IGooglePortalServer,
   launchPortalBrowser, startFakeGoogle, startSeededGooglePortal,
@@ -141,7 +142,7 @@ describe('Portal Google OAuth E2E', () => {
       await page.waitForSelector('#app', { state: 'visible' });
       await page.waitForSelector('#nav button[data-section="banks"]', { state: 'visible' });
       await page.click('#nav button[data-section="banks"]');
-      await page.waitForSelector('[data-bank="discount"]', { state: 'visible' });
+      await selectBank(page, 'discount');
       expect(await page.locator('[data-bank="discount"]').count()).toBe(1);
     } finally {
       restoreGoogleEnv(envBackup);

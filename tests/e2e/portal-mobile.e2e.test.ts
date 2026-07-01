@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import { selectBank } from './helpers/banksPom.js';
 import {
   type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, startSeededPortal,
 } from './helpers/portalHarness.js';
@@ -106,7 +107,7 @@ describe('Portal mobile E2E', () => {
       await page.click('#menu');
       expect(await navOpen(page)).toBe(true);
       await page.click('#nav button[data-section="banks"]');
-      await page.locator('[data-bank="discount"]').waitFor({ state: 'visible' });
+      await selectBank(page, 'discount');
       expect(await navOpen(page)).toBe(false);
 
       // Edit a value and save through the sticky top bar.
