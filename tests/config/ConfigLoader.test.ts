@@ -380,7 +380,7 @@ describe('ConfigLoader', () => {
   describe('bank-specific credential validation', () => {
     it.each([
       ['discount', { password: TEST_CREDENTIAL, num: 'ABC' }, 'Discount bank requires'],
-      ['leumi', { password: TEST_CREDENTIAL }, 'leumi requires: username, password'],
+      ['leumi', { password: TEST_CREDENTIAL }, 'Leumi requires: username, password'],
       ['hapoalim', { password: TEST_CREDENTIAL }, 'Hapoalim requires: userCode, password'],
       ['yahav', { password: TEST_CREDENTIAL }, 'Yahav requires: nationalID, password'],
       ['oneZero', { password: TEST_CREDENTIAL, phoneNumber: '0501234567' }, 'OneZero requires: email, password, phoneNumber'],

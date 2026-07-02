@@ -102,9 +102,9 @@ const REQUIRED_OVERRIDES: Readonly<Record<string, readonly (keyof IBankConfig)[]
   max: ['username', 'password', 'id'],
 };
 
-/** Display-name overrides preserving the importer's existing error strings. */
+/** Canonical title-cased bank display names, used in the UI and importer error strings. */
 const DISPLAY_NAME_OVERRIDES: Readonly<Record<string, string>> = {
-  discount: 'Discount bank', leumi: 'leumi', hapoalim: 'Hapoalim', yahav: 'Yahav',
+  discount: 'Discount bank', leumi: 'Leumi', hapoalim: 'Hapoalim', yahav: 'Yahav',
   onezero: 'OneZero', paybox: 'PayBox', pepper: 'Pepper', max: 'Max',
 };
 
