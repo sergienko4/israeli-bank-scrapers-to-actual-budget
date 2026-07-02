@@ -77,7 +77,9 @@ function aggregateChannelResults(
 }
 
 /**
- * Runs offline notification checks when notifications are enabled.
+ * Runs offline notification checks when notifications are enabled. Requires at
+ * least one channel (Telegram or webhook) once enabled, so an enabled block with
+ * no configured channel is reported as misconfigured rather than silently no-op.
  * @param notifications - Optional notifications config block to check.
  * @returns Array of IValidationResult objects for Telegram and webhook.
  */
@@ -85,5 +87,9 @@ export function checkNotificationsOffline(
   notifications?: IImporterConfig['notifications']
 ): IValidationResult[] {
   if (!notifications?.enabled) return [];
+  if (!notifications.telegram && !notifications.webhook) {
+    return [fail('notifications',
+      'Enable at least one notification channel (Telegram or webhook) when notifications are on')];
+  }
   return aggregateChannelResults(notifications);
 }

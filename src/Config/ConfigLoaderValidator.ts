@@ -66,6 +66,9 @@ export function validateServerUrl(url: string): Procedure<{ valid: true }> {
  * @returns Procedure with valid: true on success, or first channel failure.
  */
 export function validateNotifications(config: INotificationConfig): Procedure<{ valid: true }> {
+  if (!config.telegram && !config.webhook) {
+    return fail('Enable at least one notification channel (Telegram or webhook) when notifications are on.');
+  }
   for (const channel of NOTIFICATION_CHANNEL_VALIDATORS) {
     if (!channel.applies(config)) continue;
     const result = channel.validate(config);

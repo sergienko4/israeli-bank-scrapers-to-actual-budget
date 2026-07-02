@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { IImporterConfig } from '../../src/Types/Index.js';
 import {
   addBank, coerceAccounts, coerceTargetAccounts, hashPlainPortalPassword,
-  maskSecrets, pruneEmptyOptionalSections, removeBank, restoreMasked,
+  maskSecrets, pruneEmptyNotificationChannels, pruneEmptyOptionalSections, removeBank, restoreMasked,
 } from '../../src/Portal/ConfigMutations.js';
 import { hashPassword, verifyPassword } from '../../src/Portal/PortalPassword.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
@@ -179,6 +179,35 @@ describe('ConfigMutations', () => {
       expect('notifications' in pruned).toBe(false);
       expect('spendingWatch' in pruned).toBe(false);
       expect(pruned.banks).toEqual(base.banks);
+    });
+  });
+
+  describe('pruneEmptyNotificationChannels', () => {
+    it('drops an empty webhook sibling but keeps a configured telegram channel', () => {
+      const base = fakeImporterConfig();
+      const withEmptySibling = {
+        ...base,
+        notifications: { enabled: true, telegram: fakeTelegramConfig(), webhook: {} },
+      } as unknown as IImporterConfig;
+      const pruned = pruneEmptyNotificationChannels(withEmptySibling);
+      expect('webhook' in (pruned.notifications ?? {})).toBe(false);
+      expect(pruned.notifications?.telegram).toEqual(withEmptySibling.notifications?.telegram);
+      expect(pruned.notifications?.enabled).toBe(true);
+    });
+
+    it('empties both channels so a top-level prune can drop the whole block (dead-key fix)', () => {
+      const base = fakeImporterConfig();
+      const materialized = {
+        ...base,
+        notifications: { telegram: {}, webhook: {} },
+      } as unknown as IImporterConfig;
+      const pruned = pruneEmptyOptionalSections(pruneEmptyNotificationChannels(materialized));
+      expect('notifications' in pruned).toBe(false);
+    });
+
+    it('leaves a config without notifications untouched', () => {
+      const base = fakeImporterConfig();
+      expect(pruneEmptyNotificationChannels(base)).toEqual(base);
     });
   });
 });

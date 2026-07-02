@@ -60,6 +60,40 @@ describe('PortalConfigStore', () => {
     expect('proxy' in store.raw()).toBe(false);
   });
 
+  it('saves a single configured channel when the empty sibling channel is a nav artifact', () => {
+    const { store } = makeStore();
+    const next = {
+      ...store.masked(),
+      notifications: { enabled: true, telegram: fakeTelegramConfig(), webhook: {} },
+    } as unknown as IImporterConfig;
+    const result = save(store, next);
+    expect(isSuccess(result)).toBe(true);
+    expect('webhook' in (store.raw().notifications ?? {})).toBe(false);
+    expect(store.raw().notifications?.telegram?.botToken).toBeTruthy();
+  });
+
+  it('rejects enabled notifications with no channel instead of silently passing', () => {
+    const { store } = makeStore();
+    const next = {
+      ...store.masked(),
+      notifications: { enabled: true, telegram: {}, webhook: {} },
+    } as unknown as IImporterConfig;
+    const result = save(store, next);
+    expect(isFail(result)).toBe(true);
+    expect(isFail(result) && result.message).toContain('at least one notification channel');
+  });
+
+  it('does not false-flag an empty sibling channel in the validate preview (save/preview parity)', () => {
+    const { store } = makeStore();
+    const next = {
+      ...store.masked(),
+      notifications: { enabled: true, telegram: fakeTelegramConfig(), webhook: {} },
+    } as unknown as IImporterConfig;
+    const report = store.validate(next);
+    expect(report.find(result => result.check === 'webhook.url')).toBeUndefined();
+    expect(report.find(result => result.check === 'telegram.botToken')?.status).toBe('pass');
+  });
+
   it('validates restored secrets so a masked botToken is not false-flagged', () => {
     const config = fakeImporterConfig({
       notifications: { enabled: true, telegram: fakeTelegramConfig() },

@@ -141,6 +141,12 @@ describe('validateNotifications', () => {
     expect(result.success).toBe(false);
     expect(isFail(result) && result.message).toContain('Invalid messageFormat');
   });
+
+  it('throws when enabled with no channel configured', () => {
+    const result = validateNotifications({ enabled: true });
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('at least one notification channel');
+  });
 });
 
 // ─── validateSpendingWatch ────────────────────────────────────────────────────

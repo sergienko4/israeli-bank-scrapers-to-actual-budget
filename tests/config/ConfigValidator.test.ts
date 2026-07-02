@@ -529,6 +529,12 @@ describe('ConfigValidator', () => {
       const results = ConfigValidator.validateOffline(cfg);
       expectCheck(results, 'webhook.url', 'pass');
     });
+
+    it('fails when enabled with no channel configured', () => {
+      const cfg = makeConfig({ notifications: { enabled: true } });
+      const results = ConfigValidator.validateOffline(cfg);
+      expectCheck(results, 'notifications', 'fail');
+    });
   });
 
   // ─── No banks ───

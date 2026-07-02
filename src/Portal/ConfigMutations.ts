@@ -182,6 +182,27 @@ export function pruneEmptyOptionalSections(config: IImporterConfig): IImporterCo
   return Object.fromEntries(kept) as unknown as IImporterConfig;
 }
 
+/** Notification channel groups the portal may materialize empty on navigation. */
+const NOTIFICATION_CHANNEL_KEYS: readonly string[] = ['telegram', 'webhook'];
+
+/**
+ * Drops empty notification channel groups (telegram, webhook) that the portal
+ * materialized on navigation but the user left blank, so one configured channel
+ * is never blocked by an untouched empty sibling ("Webhook url is required…")
+ * nor persisted as a meaningless empty block. The notifications block itself is
+ * left intact (its `enabled` flag and any real channel survive).
+ * @param config - Shaped candidate config.
+ * @returns A new config with empty notification channel groups removed.
+ */
+export function pruneEmptyNotificationChannels(config: IImporterConfig): IImporterConfig {
+  const notifications = config.notifications;
+  if (notifications == null || typeof notifications !== 'object') return config;
+  const kept = Object.entries(notifications).filter(
+    ([key, value]) => !(NOTIFICATION_CHANNEL_KEYS.includes(key) && isEmptySection(value)),
+  );
+  return { ...config, notifications: Object.fromEntries(kept) } as unknown as IImporterConfig;
+}
+
 /**
  * Adds or replaces a bank entry, returning a new config.
  * @param config - Current config.
