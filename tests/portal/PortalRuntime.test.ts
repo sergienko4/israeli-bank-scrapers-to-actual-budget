@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  isNonLoopbackHost, isPortalEnabled, isSessionSecretWeak, portalAuthConfigError,
+  credentialFingerprint, isNonLoopbackHost, isPortalEnabled, isSessionSecretWeak, portalAuthConfigError,
   portalBootBlocker, portalCookieOptions, resolvePortalRuntime, resolveSecureCookies,
 } from '../../src/Portal/PortalRuntime.js';
 import type { PortalAuthMode } from '../../src/Types/Index.js';
@@ -219,6 +219,36 @@ describe('PortalRuntime', () => {
 
     it('returns empty when the runtime is fully configured', () => {
       expect(portalBootBlocker(fakePortalRuntime())).toBe('');
+    });
+  });
+
+  describe('credentialFingerprint', () => {
+    const FIXED_HASH = 'scrypt$fixed-salt$fixed-hash';
+
+    it('is stable for the same credentials', () => {
+      const rt = fakePortalRuntime();
+      expect(credentialFingerprint(rt)).toBe(credentialFingerprint(rt));
+    });
+
+    it('changes when the password hash rotates', () => {
+      const before = fakePortalConfig({ passwordHash: FIXED_HASH });
+      const after = fakePortalConfig({ passwordHash: 'scrypt$fixed-salt$rotated' });
+      expect(credentialFingerprint(fakePortalRuntime({ portal: after })))
+        .not.toBe(credentialFingerprint(fakePortalRuntime({ portal: before })));
+    });
+
+    it('changes when the Google allow-list changes', () => {
+      const base = fakePortalConfig({ passwordHash: FIXED_HASH, google: fakeGoogleConfig({ allowedEmails: ['a@x.com'] }) });
+      const widened = fakePortalConfig({ passwordHash: FIXED_HASH, google: fakeGoogleConfig({ allowedEmails: ['a@x.com', 'b@x.com'] }) });
+      expect(credentialFingerprint(fakePortalRuntime({ portal: widened })))
+        .not.toBe(credentialFingerprint(fakePortalRuntime({ portal: base })));
+    });
+
+    it('ignores the order of the allow-list', () => {
+      const forward = fakePortalConfig({ passwordHash: FIXED_HASH, google: fakeGoogleConfig({ allowedEmails: ['a@x.com', 'b@x.com'] }) });
+      const reversed = fakePortalConfig({ passwordHash: FIXED_HASH, google: fakeGoogleConfig({ allowedEmails: ['b@x.com', 'a@x.com'] }) });
+      expect(credentialFingerprint(fakePortalRuntime({ portal: forward })))
+        .toBe(credentialFingerprint(fakePortalRuntime({ portal: reversed })));
     });
   });
 });

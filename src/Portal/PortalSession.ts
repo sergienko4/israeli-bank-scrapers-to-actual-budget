@@ -1,7 +1,9 @@
 /**
  * Stateless signed-cookie session for the portal. A session is an HMAC-signed
- * JSON token (`base64(payload).sig`) carrying which factors are satisfied and
- * an expiry. No server store needed; the signing key is the portal secret.
+ * JSON token (`base64(payload).sig`) carrying which factors are satisfied, an
+ * expiry, and a credential fingerprint. No server store needed; the signing key
+ * is the portal secret. The fingerprint binds the session to the credentials in
+ * force when it was issued, so the guard can evict it once those change.
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -17,6 +19,8 @@ export interface ISessionPayload {
   google: boolean;
   password: boolean;
   expires: number;
+  /** Fingerprint of the credentials in force when the session was issued. */
+  fingerprint: string;
 }
 
 /**
@@ -31,7 +35,7 @@ function sign(payload: string, secret: string): string {
 
 /**
  * Encodes a session payload into a signed cookie token.
- * @param data - Factors + email to embed (expiry is added automatically).
+ * @param data - Factors, email, and credential fingerprint to embed (expiry is added automatically).
  * @param secret - Portal session secret.
  * @returns Signed `payload.sig` token string.
  */
@@ -58,6 +62,7 @@ function isSessionPayload(value: unknown): value is ISessionPayload {
   return typeof payload.expires === 'number'
     && typeof payload.google === 'boolean'
     && typeof payload.password === 'boolean'
+    && typeof payload.fingerprint === 'string'
     && (payload.email === undefined || typeof payload.email === 'string');
 }
 

@@ -325,3 +325,7 @@ locally the same way: `GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… GOOGLE_REDI
   credentials are re-encrypted when `CREDENTIALS_ENCRYPTION_PASSWORD` is set.
 - Session cookies are HMAC-signed with `sessionSecret`; the portal refuses to
   start on a missing/weak secret (under 16 chars or a known placeholder).
+- Sessions are bound to the credentials in force when you signed in: changing the
+  portal password or the Google `allowedEmails` list immediately invalidates every
+  existing session, so a rotated password or a revoked account cannot keep using an
+  already-issued cookie (users must sign in again).

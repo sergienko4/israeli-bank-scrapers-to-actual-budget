@@ -4,6 +4,8 @@
  * (merged config.json + credentials.json); env wins for host/port/enabled.
  */
 
+import { createHmac } from 'node:crypto';
+
 import type { IImporterConfig, IPortalConfig, IPortalGoogleConfig, PortalAuthMode } from '../Types/Index.js';
 import { PORTAL_AUTH_MODES } from '../Types/Index.js';
 import { isEncodedHash } from './PortalPassword.js';
@@ -119,6 +121,22 @@ function resolvePort(envPort?: string, configPort?: number): number {
 export function isSessionSecretWeak(secret: string): boolean {
   const normalized = secret.trim();
   return normalized.length < MIN_SECRET_LENGTH || KNOWN_WEAK_SECRETS.has(normalized);
+}
+
+/**
+ * Fingerprints the credentials that authenticate portal sessions — the password
+ * hash and the sorted Google allow-list — keyed by the session secret. It is
+ * embedded in each issued session and re-checked on every request, so rotating
+ * the password (a new hash, even for the same password) or changing the
+ * allow-list changes the fingerprint and evicts every prior session. Email order
+ * is normalized so a mere reordering does not needlessly log everyone out.
+ * @param rt - Resolved portal runtime carrying the live credentials + secret.
+ * @returns A hex fingerprint of the current portal credentials.
+ */
+export function credentialFingerprint(rt: IPortalRuntime): string {
+  const emails = [...(rt.portal.google?.allowedEmails ?? [])].sort().join(',');
+  const material = `${rt.portal.passwordHash ?? ''}\n${emails}`;
+  return createHmac('sha256', rt.sessionSecret).update(`fp:${material}`).digest('hex');
 }
 
 /**

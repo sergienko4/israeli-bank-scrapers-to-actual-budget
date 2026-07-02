@@ -14,7 +14,8 @@ import { type IGrantArgs, registerGoogleRoutes } from './PortalGoogleRoutes.js';
 import { verifyPassword } from './PortalPassword.js';
 import { LOGIN_MAX, RATE_WINDOW, STATUS_MAX } from './PortalRateLimit.js';
 import {
-  type IPortalRuntime, portalCookieOptions, resolveLiveRuntime, type RuntimeAccessor,
+  credentialFingerprint, type IPortalRuntime, portalCookieOptions,
+  resolveLiveRuntime, type RuntimeAccessor,
 } from './PortalRuntime.js';
 import { createSession, type ISessionPayload, readSession } from './PortalSession.js';
 
@@ -30,26 +31,36 @@ export interface IAuthStatus {
 }
 
 /**
- * Reads and verifies the session cookie from a request.
+ * Reads and verifies the session cookie from a request, then rejects it unless
+ * its embedded credential fingerprint still matches the live credentials — so a
+ * password rotation or allow-list change evicts every session issued before it.
  * @param req - Incoming request.
- * @param secret - Session signing secret.
- * @returns Procedure with the session payload, or failure when absent/invalid.
+ * @param rt - Live runtime carrying the session secret + current credentials.
+ * @returns Procedure with the session payload, or failure when absent/invalid/stale.
  */
-export function sessionOf(req: FastifyRequest, secret: string): Procedure<ISessionPayload> {
+export function sessionOf(req: FastifyRequest, rt: IPortalRuntime): Procedure<ISessionPayload> {
   const raw = req.cookies[COOKIE];
-  return raw ? readSession(raw, secret) : fail('No session cookie');
+  if (!raw) return fail('No session cookie');
+  const result = readSession(raw, rt.sessionSecret);
+  if (isFail(result)) return result;
+  return result.data.fingerprint === credentialFingerprint(rt)
+    ? result
+    : fail('Credentials changed');
 }
 
 /**
- * Writes a session cookie, merging the new factor onto any existing one.
+ * Writes a session cookie, merging the new factor onto any existing one and
+ * stamping it with the current credential fingerprint so a later credential
+ * change evicts it.
  * @param args - Request, reply, runtime, and partial factor flags to merge.
  * @returns Confirmation that the cookie was granted.
  */
 function grant(args: IGrantArgs): { granted: true } {
   const { req, reply, rt: runtime, factor } = args;
-  const prior = sessionOf(req, runtime.sessionSecret);
+  const prior = sessionOf(req, runtime);
   const base = isFail(prior) ? { google: false, password: false } : prior.data;
-  const token = createSession({ ...base, ...factor }, runtime.sessionSecret);
+  const fingerprint = credentialFingerprint(runtime);
+  const token = createSession({ ...base, ...factor, fingerprint }, runtime.sessionSecret);
   const cookieOpts = portalCookieOptions(runtime);
   reply.setCookie(COOKIE, token, cookieOpts);
   return { granted: true };
@@ -76,7 +87,7 @@ function isApiRoute(req: FastifyRequest): boolean {
  */
 function guardApi(req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime): boolean {
   if (!isApiRoute(req)) return true;
-  const result = sessionOf(req, rt.sessionSecret);
+  const result = sessionOf(req, rt);
   const isAllowed = isFail(result) ? false : isAuthorized(result.data, rt.authMode);
   if (!isAllowed) reply.code(401).send({ error: 'Unauthorized' });
   return isAllowed;
@@ -92,7 +103,7 @@ function guardApi(req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime):
  * @returns Auth mode, per-factor flags, email, and overall authorization.
  */
 function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
-  const result = sessionOf(req, rt.sessionSecret);
+  const result = sessionOf(req, rt);
   const session = isFail(result) ? null : result.data;
   return {
     authMode: rt.authMode,

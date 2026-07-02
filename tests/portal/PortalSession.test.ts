@@ -16,7 +16,7 @@ describe('PortalSession', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
       const before = Date.now();
-      const token = createSession({ email: 'a@b.com', google: true, password: false }, SECRET);
+      const token = createSession({ email: 'a@b.com', google: true, password: false, fingerprint: 'fp' }, SECRET);
       const [body, sig] = token.split('.');
       expect(body).toBeTruthy();
       expect(sig).toMatch(/^[0-9a-f]{64}$/);
@@ -31,7 +31,7 @@ describe('PortalSession', () => {
 
   describe('readSession', () => {
     it('succeeds for a freshly created token', () => {
-      const token = createSession({ google: false, password: true }, SECRET);
+      const token = createSession({ google: false, password: true, fingerprint: 'fp' }, SECRET);
       expect(isSuccess(readSession(token, SECRET))).toBe(true);
     });
 
@@ -42,7 +42,7 @@ describe('PortalSession', () => {
     });
 
     it('fails when the signature does not match', () => {
-      const token = createSession({ google: false, password: true }, SECRET);
+      const token = createSession({ google: false, password: true, fingerprint: 'fp' }, SECRET);
       const tampered = readSession(token, 'different-secret');
       expect(isFail(tampered)).toBe(true);
       if (isFail(tampered)) expect(tampered.message).toMatch(/Bad signature/);
@@ -64,8 +64,17 @@ describe('PortalSession', () => {
       if (isFail(result)) expect(result.message).toMatch(/Malformed/);
     });
 
+    it('rejects a validly-signed token that carries no credential fingerprint', () => {
+      const stale = { google: false, password: true, expires: Date.now() + 1000 };
+      const body = Buffer.from(JSON.stringify(stale)).toString('base64url');
+      const sig = createHmac('sha256', SECRET).update(body).digest('hex');
+      const result = readSession(`${body}.${sig}`, SECRET);
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/Malformed/);
+    });
+
     it('fails once the 12h TTL has elapsed', () => {
-      const token = createSession({ google: true, password: true }, SECRET);
+      const token = createSession({ google: true, password: true, fingerprint: 'fp' }, SECRET);
       vi.spyOn(Date, 'now').mockReturnValue(Date.now() + TWELVE_HOURS_MS + 1000);
       const result = readSession(token, SECRET);
       expect(isFail(result)).toBe(true);

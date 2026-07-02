@@ -42,6 +42,20 @@ describe('PortalServer routes (password mode)', () => {
     expect(res.json()).toMatchObject({ authMode: 'password', password: true, authorized: true });
   });
 
+  it('evicts an existing session once the portal password is changed', async () => {
+    const cookie = await loginCookie();
+    const ok = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });
+    expect(ok.statusCode).toBe(200);
+    const changed = ok.json();
+    changed.portal.passwordHash = 'a-brand-new-portal-password';
+    const put = await app.inject({ method: 'PUT', url: '/api/config', cookies: { portal_session: cookie }, payload: changed });
+    expect(put.statusCode).toBe(200);
+    const evicted = await app.inject({ method: 'GET', url: '/api/config', cookies: { portal_session: cookie } });
+    expect(evicted.statusCode).toBe(401);
+    const status = await app.inject({ method: 'GET', url: '/auth/status', cookies: { portal_session: cookie } });
+    expect(status.json()).toMatchObject({ authorized: false });
+  });
+
   it('rejects a bad password with 401', async () => {
     const res = await app.inject({ method: 'POST', url: '/auth/login', payload: { password: 'nope' } });
     expect(res.statusCode).toBe(401);
