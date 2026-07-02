@@ -237,7 +237,7 @@ output.status, output#login-hint { display: block; }
 .row input:focus, .row select:focus {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring);
 }
-.row input::placeholder { color: var(--faint); }
+.row input::placeholder { color: var(--muted); }
 .help { color: var(--muted); font-size: 12px; line-height: 1.4; }
 
 select {
@@ -317,8 +317,8 @@ select {
 
 /* ---------- add controls ---------- */
 
-.add-bank, .add-field { display: flex; gap: 8px; margin-top: 10px; }
-.add-bank select, .add-field select {
+.add-field { display: flex; gap: 8px; margin-top: 10px; }
+.add-field select {
   flex: 1; min-height: var(--tap); padding: 0 13px; border: 1px solid var(--line);
   border-radius: var(--r); background: var(--surface-2); color: var(--fg); font-size: 14px;
 }
@@ -339,7 +339,7 @@ select {
   transition: border-color .15s, box-shadow .15s;
 }
 .bank-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
-.bank-search::placeholder { color: var(--faint); }
+.bank-search::placeholder { color: var(--muted); }
 
 .bank-list {
   list-style: none; margin: 0; padding: 4px; max-height: 60vh; overflow-y: auto;
@@ -347,6 +347,7 @@ select {
   display: flex; flex-direction: column; gap: 2px;
 }
 .bank-list li { margin: 0; }
+.bank-empty-row { padding: 12px; color: var(--muted); font-size: 13px; text-align: center; }
 
 .bank-row {
   width: 100%; min-height: var(--tap); display: flex; align-items: center;

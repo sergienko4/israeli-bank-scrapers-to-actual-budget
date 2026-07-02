@@ -1085,6 +1085,39 @@ describe('PortalApp banks section', () => {
     expect(maybe('#bank-search')).not.toBeNull();
   });
 
+  it('shows an empty-result row and announces the count when no bank matches', async () => {
+    await boot();
+    clickNav('banks');
+    typeText('bank-search', 'zzz');
+    expect(bankRowIds()).toHaveLength(0);
+    expect(maybe('.bank-empty-row')?.textContent).toBe('No banks match your search.');
+    expect(byId('bank-list-status').textContent).toBe('0 banks match your search.');
+    typeText('bank-search', 'leu');
+    expect(maybe('.bank-empty-row')).toBeNull();
+    expect(byId('bank-list-status').textContent).toBe('1 bank matches your search.');
+  });
+
+  it('moves focus into the detail editor when a bank is selected (never <body>)', async () => {
+    await boot();
+    clickNav('banks');
+    bankRow('discount').click();
+    const active = document.activeElement;
+    expect(active).not.toBe(document.body);
+    expect(query('.bank-detail').contains(active)).toBe(true);
+    // Focus lands on an editable field, never the destructive Remove button.
+    expect(['INPUT', 'SELECT', 'TEXTAREA']).toContain(active?.tagName);
+    expect((active as HTMLElement).matches('[data-remove-bank]')).toBe(false);
+  });
+
+  it('moves focus to the search box after removing the only bank', async () => {
+    delete configBanks().leumi;
+    await boot();
+    clickNav('banks');
+    query('[data-remove-bank="hapoalim"]').click();
+    expect(maybe('.bank-empty')).not.toBeNull();
+    expect(document.activeElement).toBe(byId('bank-search'));
+  });
+
   it('removes a bank and reselects a remaining one', async () => {
     await boot();
     clickNav('banks');

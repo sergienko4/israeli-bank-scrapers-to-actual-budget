@@ -313,9 +313,11 @@ function collectBankMissing(name, bank, out) {
 }
 
 /**
- * Flags the given field paths as invalid: navigates to the banks section and
- * selects the first offending bank (so its inputs are rendered), marks each, and
- * focuses the first so a rejected save lands the user on the field(s) to fix.
+ * Flags rejected fields after a failed save: navigates to the banks section and
+ * selects the FIRST offending bank so its inputs are rendered, marks that bank's
+ * invalid fields, and focuses the first so the user lands on a field to fix. The
+ * complete list of offending fields across every bank is shown in the save-error
+ * status list, since only the selected bank's inputs are in the DOM to mark.
  * @param {string[]} paths dotted config paths to flag
  * @returns {void}
  */
@@ -331,8 +333,8 @@ function highlightInvalid(paths) {
 }
 
 /**
- * The bank key named by the first `banks.<key>.…` path, so a rejected save can
- * select the offending bank whose fields must be rendered to be flagged.
+ * Returns the bank key named by the first `banks.<key>.…` path, so a rejected
+ * save can select the offending bank whose fields must be rendered to be flagged.
  * @param {string[]} paths dotted config paths
  * @returns {string} the first bank key, or '' when no path targets a bank
  */
@@ -349,11 +351,14 @@ function clearInvalid() {
   document.querySelectorAll('.invalid').forEach((node) => {
     node.classList.remove('invalid');
     node.removeAttribute('aria-invalid');
+    node.removeAttribute('aria-describedby');
   });
 }
 
 /**
- * Marks the input at a dotted config path as invalid, if it is currently rendered.
+ * Marks the input at a dotted config path as invalid, if it is currently
+ * rendered, and ties it to the save-error status list via aria-describedby so a
+ * screen reader announces why the field was rejected (WCAG 3.3.1).
  * @param {string} path dotted config path
  * @returns {HTMLElement|null} the flagged element, or null when not rendered
  */
@@ -362,6 +367,7 @@ function markInvalidByPath(path) {
   if (!node) return null;
   node.classList.add('invalid');
   node.setAttribute('aria-invalid', 'true');
+  node.setAttribute('aria-describedby', 'status');
   return node;
 }
 
@@ -898,6 +904,9 @@ function bankMasterPanel(sec) {
   search.placeholder = 'Search banks…';
   search.setAttribute('aria-label', 'Search banks');
   search.value = bankQuery;
+  const status = el('p', 'bank-list-status visually-hidden');
+  status.id = 'bank-list-status';
+  status.setAttribute('aria-live', 'polite');
   const list = el('ul', 'bank-list');
   list.setAttribute('aria-label', 'Banks');
   search.oninput = () => {
@@ -905,24 +914,42 @@ function bankMasterPanel(sec) {
     renderBankRows(list, sec);
   };
   renderBankRows(list, sec);
-  master.append(search, list);
+  master.append(search, status, list);
   return master;
 }
 
 /**
  * Rebuilds the catalog row list from the current search filter, one `<li>` per
- * matching bank id.
+ * matching bank id, showing an explicit empty-result row when nothing matches and
+ * announcing the visible count on the polite live region for screen readers.
  * @param {HTMLUListElement} list the row container to fill
  * @param {object} sec banks section descriptor
  * @returns {void}
  */
 function renderBankRows(list, sec) {
   list.textContent = '';
-  filterBankIds().forEach((id) => {
+  const ids = filterBankIds();
+  ids.forEach((id) => {
     const li = el('li');
     li.appendChild(bankRow(sec, id));
     list.appendChild(li);
   });
+  if (!ids.length) list.appendChild(el('li', 'bank-empty-row', 'No banks match your search.'));
+  announceBankCount(ids.length);
+}
+
+/**
+ * Announces how many catalog rows are visible on the polite live region so a
+ * screen-reader user hears the result of a search that changed the list (WCAG
+ * 4.1.3). No-op before the region is mounted (initial off-DOM build).
+ * @param {number} count number of visible rows
+ * @returns {void}
+ */
+function announceBankCount(count) {
+  const status = document.getElementById('bank-list-status');
+  if (!status) return;
+  const noun = count === 1 ? 'bank matches' : 'banks match';
+  status.textContent = `${count} ${noun} your search.`;
 }
 
 /**
@@ -984,6 +1011,39 @@ function selectBankRow(id, key) {
     bankSelected = id;
   }
   render();
+  focusBankDetail();
+}
+
+/**
+ * Moves focus into the detail pane after a bank select/add/remove re-render —
+ * onto the first editable control, or the search box when no bank is selected —
+ * so keyboard and screen-reader users are never dropped to <body> (WCAG 2.4.3),
+ * and reveals the pane so a tapped bank is visible on a narrow single-column
+ * layout (where the detail renders below the list).
+ * @returns {void}
+ */
+function focusBankDetail() {
+  const detail = document.querySelector('.bank-detail');
+  const field = detail && detail.querySelector('input, select, textarea');
+  const target = field || document.getElementById('bank-search');
+  if (!target) return;
+  if (detail) revealDetail(detail);
+  target.focus();
+}
+
+/**
+ * Scrolls the detail pane into view, tolerating environments (jsdom) where
+ * scrollIntoView is unavailable or unimplemented.
+ * @param {HTMLElement} detail the detail pane element
+ * @returns {void}
+ */
+function revealDetail(detail) {
+  if (typeof detail.scrollIntoView !== 'function') return;
+  try {
+    detail.scrollIntoView({ block: 'nearest' });
+  } catch {
+    // jsdom stubs scrollIntoView as unimplemented — safe to ignore in tests.
+  }
 }
 
 /**
@@ -1003,8 +1063,9 @@ function bankDetailPanel(sec) {
 }
 
 /**
- * The bank ids to show in the master list: the full catalog plus any legacy
- * config keys that match no catalog id, narrowed by the case-insensitive search.
+ * Returns the bank ids to show in the master list: the full catalog plus any
+ * legacy config keys that match no catalog id, narrowed by the case-insensitive
+ * search query.
  * @returns {string[]} the visible row ids
  */
 function filterBankIds() {
@@ -1014,8 +1075,8 @@ function filterBankIds() {
 }
 
 /**
- * The configured bank keys that match no catalog id (legacy/unknown banks), so
- * they stay reachable and removable from the list.
+ * Returns the configured bank keys that match no catalog id (legacy/unknown
+ * banks), so they stay reachable and removable from the list.
  * @returns {string[]} orphan config keys
  */
 function orphanBankKeys() {
@@ -1026,8 +1087,8 @@ function orphanBankKeys() {
 }
 
 /**
- * The actual config key backing a catalog id, matched case-insensitively so a
- * camelCase alias (e.g. `oneZero`) resolves to its lowercase catalog id.
+ * Returns the actual config key backing a catalog id, matched case-insensitively
+ * so a camelCase alias (e.g. `oneZero`) resolves to its lowercase catalog id.
  * @param {string} id catalog bank id, or a legacy config key
  * @returns {string|undefined} the config key, or undefined when not configured
  */
@@ -1051,6 +1112,7 @@ function bankCard(sec, name) {
   del.onclick = () => {
     delete config.banks[name];
     render();
+    focusBankDetail();
   };
   head.appendChild(del);
   card.appendChild(head);
