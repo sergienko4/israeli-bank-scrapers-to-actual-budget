@@ -180,6 +180,16 @@ describe('ConfigMutations', () => {
       expect('spendingWatch' in pruned).toBe(false);
       expect(pruned.banks).toEqual(base.banks);
     });
+
+    it('drops an empty categorization block the UI materialized on navigation', () => {
+      const withEmpty = { ...fakeImporterConfig(), categorization: {} } as unknown as IImporterConfig;
+      expect('categorization' in pruneEmptyOptionalSections(withEmpty)).toBe(false);
+    });
+
+    it('keeps a categorization block that has a mode', () => {
+      const withMode = { ...fakeImporterConfig(), categorization: { mode: 'none' } } as unknown as IImporterConfig;
+      expect(pruneEmptyOptionalSections(withMode).categorization).toEqual({ mode: 'none' });
+    });
   });
 
   describe('pruneEmptyNotificationChannels', () => {

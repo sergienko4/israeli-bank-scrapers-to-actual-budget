@@ -151,7 +151,9 @@ export function coerceTargetAccounts(config: IImporterConfig): IImporterConfig {
 }
 
 /** Top-level optional sections the portal may materialize empty on navigation. */
-const OPTIONAL_SECTION_KEYS: ReadonlySet<string> = new Set(['proxy', 'notifications', 'spendingWatch']);
+const OPTIONAL_SECTION_KEYS: ReadonlySet<string> = new Set([
+  'proxy', 'notifications', 'spendingWatch', 'categorization',
+]);
 
 /**
  * Whether a top-level optional section arrived "empty" — an empty array or a
@@ -167,11 +169,11 @@ function isEmptySection(value: unknown): boolean {
 }
 
 /**
- * Drops top-level optional sections (proxy, notifications, spendingWatch) that
- * arrived empty, so an untouched `proxy: {}` the UI materialized on navigation
- * neither trips the save gate ("proxy.server is required when proxy is
- * configured") nor persists as a meaningless empty block. Required sections are
- * never touched.
+ * Drops top-level optional sections (proxy, notifications, spendingWatch,
+ * categorization) that arrived empty, so an untouched `proxy: {}` the UI
+ * materialized on navigation neither trips the save gate ("proxy.server is
+ * required when proxy is configured") nor persists as a meaningless empty
+ * block. Required sections are never touched.
  * @param config - Shaped candidate config.
  * @returns A new config without empty optional sections.
  */
