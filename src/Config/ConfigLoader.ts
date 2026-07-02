@@ -41,9 +41,8 @@ export class ConfigLoader implements IConfigLoader {
    * @returns Procedure containing the validated IImporterConfig or a failure message.
    */
   public load(): Procedure<IImporterConfig> {
-    const merged = this.mergeFileOrEnv();
+    const merged = this.mergeWithEnvOverrides();
     if (isFail(merged)) return merged;
-    ConfigLoader.applyEnvOverrides(merged.data);
     return ConfigLoader.validate(merged.data);
   }
 
@@ -52,10 +51,7 @@ export class ConfigLoader implements IConfigLoader {
    * @returns Procedure containing the merged IImporterConfig or a failure message.
    */
   public loadRaw(): Procedure<IImporterConfig> {
-    const merged = this.mergeFileOrEnv();
-    if (isFail(merged)) return merged;
-    ConfigLoader.applyEnvOverrides(merged.data);
-    return merged;
+    return this.mergeWithEnvOverrides();
   }
 
   /**
@@ -68,6 +64,19 @@ export class ConfigLoader implements IConfigLoader {
    */
   public loadWithoutEnvOverrides(): Procedure<IImporterConfig> {
     return this.mergeFileOrEnv();
+  }
+
+  /**
+   * Merges the on-disk (or env-only) config and folds in runtime environment
+   * overrides, so {@link load} and {@link loadRaw} share one override path and
+   * cannot drift. A file/config failure is returned unchanged.
+   * @returns Procedure with the env-overridden config, or a merge failure.
+   */
+  private mergeWithEnvOverrides(): Procedure<IImporterConfig> {
+    const merged = this.mergeFileOrEnv();
+    if (isFail(merged)) return merged;
+    ConfigLoader.applyEnvOverrides(merged.data);
+    return merged;
   }
 
   /**

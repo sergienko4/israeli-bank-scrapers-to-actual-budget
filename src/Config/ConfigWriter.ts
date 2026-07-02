@@ -39,6 +39,22 @@ function stageWrite(item: IPendingWrite): string {
 }
 
 /**
+ * Removes one staged temp file best-effort, swallowing any error so the
+ * original write failure still propagates to the caller.
+ * @param tmp - Temp path to remove; an already-renamed or missing path is a no-op.
+ * @returns True when the file was removed, false when the removal was swallowed.
+ */
+function removeTemp(tmp: string): boolean {
+  try {
+    rmSync(tmp, { force: true });
+    return true;
+  } catch {
+    // Best-effort cleanup: ignore so the original write error still propagates.
+    return false;
+  }
+}
+
+/**
  * Deletes staged temp files best-effort after a failed commit so no
  * partially-written (and possibly secret-bearing) artifact is left behind.
  * @param tmps - Temp paths to remove; already-renamed or missing paths are ignored.
@@ -47,12 +63,7 @@ function stageWrite(item: IPendingWrite): string {
 function cleanupTemps(tmps: readonly string[]): { removed: number } {
   let removed = 0;
   for (const tmp of tmps) {
-    try {
-      rmSync(tmp, { force: true });
-      removed += 1;
-    } catch {
-      // Best-effort cleanup: ignore so the original write error still propagates.
-    }
+    if (removeTemp(tmp)) removed += 1;
   }
   return { removed };
 }
