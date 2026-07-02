@@ -78,4 +78,24 @@ describe('ConfigWriter.write', () => {
     expect(readFileSync(configPath, 'utf8')).toContain(inlineSecret);
     expect(existsSync(credPath)).toBe(false);
   });
+
+  it('cleans up the staged secret temp when a later write fails (no plaintext .tmp left behind)', () => {
+    const stagedSecret = 'staged-secret-pw';
+    // credentials.json stages first; force the SECOND stage (config.json) to throw
+    // by making its temp path an existing directory, so cleanup runs on a
+    // non-empty staged list and must remove the already-staged secret temp.
+    mkdirSync(`${configPath}.tmp`);
+    const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ id: '1', password: stagedSecret }) } });
+    const result = new ConfigWriter(configPath).write(config);
+    expect(isSuccess(result)).toBe(false);
+    // The secret-bearing credentials temp was staged, then cleaned up on failure.
+    expect(existsSync(`${credPath}.tmp`)).toBe(false);
+    // Neither real file was left as a partial write.
+    expect(existsSync(credPath)).toBe(false);
+    expect(existsSync(configPath)).toBe(false);
+    // No file left on disk leaks the plaintext secret.
+    const onDisk = readdirSync(dir).filter(name => statSync(join(dir, name)).isFile());
+    const leaking = onDisk.filter(name => readFileSync(join(dir, name), 'utf8').includes(stagedSecret));
+    expect(leaking).toEqual([]);
+  });
 });
