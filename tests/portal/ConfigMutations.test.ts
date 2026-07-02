@@ -64,34 +64,34 @@ describe('ConfigMutations', () => {
   describe('hashPlainPortalPassword', () => {
     it('hashes a freshly-typed plaintext portal password so login works', async () => {
       const config = fakeImporterConfig({ portal: { enabled: true, passwordHash: 'Sergienko-Portal-9182' } });
-      const out = hashPlainPortalPassword(config);
+      const out = await hashPlainPortalPassword(config);
       expect(out.portal?.passwordHash).toMatch(/^scrypt\$/);
       expect(await verifyPassword('Sergienko-Portal-9182', out.portal?.passwordHash ?? '')).toBe(true);
     });
 
-    it('leaves an already-encoded scrypt hash untouched', () => {
+    it('leaves an already-encoded scrypt hash untouched', async () => {
       const stored = hashPassword('Already-Hashed-7766');
       const config = fakeImporterConfig({ portal: { enabled: true, passwordHash: stored } });
-      expect(hashPlainPortalPassword(config).portal?.passwordHash).toBe(stored);
+      expect((await hashPlainPortalPassword(config)).portal?.passwordHash).toBe(stored);
     });
 
     it('hashes a plaintext that merely starts with scrypt$ but is not a real hash', async () => {
       const config = fakeImporterConfig({ portal: { enabled: true, passwordHash: 'scrypt$fake' } });
-      const out = hashPlainPortalPassword(config);
+      const out = await hashPlainPortalPassword(config);
       expect(out.portal?.passwordHash).not.toBe('scrypt$fake');
       expect(await verifyPassword('scrypt$fake', out.portal?.passwordHash ?? '')).toBe(true);
     });
 
-    it('leaves empty or absent passwords untouched', () => {
+    it('leaves empty or absent passwords untouched', async () => {
       const empty = fakeImporterConfig({ portal: { enabled: true, passwordHash: '' } });
-      expect(hashPlainPortalPassword(empty).portal?.passwordHash).toBe('');
+      expect((await hashPlainPortalPassword(empty)).portal?.passwordHash).toBe('');
       const none = fakeImporterConfig({ portal: { enabled: true } });
-      expect(hashPlainPortalPassword(none).portal?.passwordHash).toBeUndefined();
+      expect((await hashPlainPortalPassword(none)).portal?.passwordHash).toBeUndefined();
     });
 
-    it('returns the same config when there is no portal block', () => {
+    it('returns the same config when there is no portal block', async () => {
       const config = fakeImporterConfig();
-      expect(hashPlainPortalPassword(config)).toBe(config);
+      expect(await hashPlainPortalPassword(config)).toBe(config);
     });
   });
 

@@ -30,8 +30,10 @@ function makeStore(config = fakeImporterConfig()): { store: PortalConfigStore; p
  * @param next - Candidate config to persist.
  * @returns The prepare failure, or the commit result.
  */
-function save(store: PortalConfigStore, next: IImporterConfig): Procedure<{ saved: true }> {
-  const prepared = store.prepare(next);
+async function save(
+  store: PortalConfigStore, next: IImporterConfig,
+): Promise<Procedure<{ saved: true }>> {
+  const prepared = await store.prepare(next);
   return isFail(prepared) ? prepared : store.commit(prepared.data);
 }
 
@@ -44,41 +46,41 @@ describe('PortalConfigStore', () => {
     expect(store.raw().banks.discount.password).toBe('pw');
   });
 
-  it('saves a valid config and restores masked secrets', () => {
+  it('saves a valid config and restores masked secrets', async () => {
     const { store } = makeStore();
     const next = store.masked();
-    const result = save(store, next);
+    const result = await save(store, next);
     expect(isSuccess(result)).toBe(true);
     expect(store.raw().banks.discount.password).not.toBe('********');
   });
 
-  it('saves when an untouched empty proxy block is present (UI navigation artifact)', () => {
+  it('saves when an untouched empty proxy block is present (UI navigation artifact)', async () => {
     const { store } = makeStore();
     const next = { ...store.masked(), proxy: {} } as unknown as IImporterConfig;
-    const result = save(store, next);
+    const result = await save(store, next);
     expect(isSuccess(result)).toBe(true);
     expect('proxy' in store.raw()).toBe(false);
   });
 
-  it('saves a single configured channel when the empty sibling channel is a nav artifact', () => {
+  it('saves a single configured channel when the empty sibling channel is a nav artifact', async () => {
     const { store } = makeStore();
     const next = {
       ...store.masked(),
       notifications: { enabled: true, telegram: fakeTelegramConfig(), webhook: {} },
     } as unknown as IImporterConfig;
-    const result = save(store, next);
+    const result = await save(store, next);
     expect(isSuccess(result)).toBe(true);
     expect('webhook' in (store.raw().notifications ?? {})).toBe(false);
     expect(store.raw().notifications?.telegram?.botToken).toBeTruthy();
   });
 
-  it('rejects enabled notifications with no channel instead of silently passing', () => {
+  it('rejects enabled notifications with no channel instead of silently passing', async () => {
     const { store } = makeStore();
     const next = {
       ...store.masked(),
       notifications: { enabled: true, telegram: {}, webhook: {} },
     } as unknown as IImporterConfig;
-    const result = save(store, next);
+    const result = await save(store, next);
     expect(isFail(result)).toBe(true);
     expect(isFail(result) && result.message).toContain('at least one notification channel');
   });
@@ -104,33 +106,33 @@ describe('PortalConfigStore', () => {
     expect(tokenCheck?.status).toBe('pass');
   });
 
-  it('rejects an invalid config without persisting', () => {
+  it('rejects an invalid config without persisting', async () => {
     const { store } = makeStore();
-    const result = save(store, fakeImporterConfig({ banks: {} }));
+    const result = await save(store, fakeImporterConfig({ banks: {} }));
     expect(isFail(result)).toBe(true);
   });
 
-  it('coerces a comma-separated target accounts string into an array on save', () => {
+  it('coerces a comma-separated target accounts string into an array on save', async () => {
     const bank = fakeBankConfig({
       targets: [fakeBankTarget({ accounts: '123, 456' as unknown as string[] })],
     });
     const { store } = makeStore(fakeImporterConfig({ banks: { discount: bank } }));
-    const result = save(store, store.masked());
+    const result = await save(store, store.masked());
     expect(isSuccess(result)).toBe(true);
     expect(store.raw().banks.discount.targets?.[0].accounts).toEqual(['123', '456']);
   });
 
-  it('returns a failure instead of throwing on a malformed config', () => {
+  it('returns a failure instead of throwing on a malformed config', async () => {
     const { store } = makeStore();
     const malformed = { actual: {}, banks: {} } as unknown as IImporterConfig;
-    const result = save(store, malformed);
+    const result = await save(store, malformed);
     expect(isFail(result)).toBe(true);
   });
 
-  it('reports a failure (not a throw) when shaping a structurally broken body', () => {
+  it('reports a failure (not a throw) when shaping a structurally broken body', async () => {
     const { store } = makeStore();
     const broken = { actual: {}, banks: undefined } as unknown as IImporterConfig;
-    const result = save(store, broken);
+    const result = await save(store, broken);
     expect(isFail(result)).toBe(true);
   });
 
@@ -142,9 +144,9 @@ describe('PortalConfigStore', () => {
     expect(() => new PortalConfigStore(path)).toThrow(/did not load cleanly/);
   });
 
-  it('commit fails (server error) when the config directory is removed before write', () => {
+  it('commit fails (server error) when the config directory is removed before write', async () => {
     const { store, path } = makeStore();
-    const prepared = store.prepare(store.masked());
+    const prepared = await store.prepare(store.masked());
     expect(isSuccess(prepared)).toBe(true);
     if (isFail(prepared)) return;
     rmSync(dirname(path), { recursive: true, force: true });

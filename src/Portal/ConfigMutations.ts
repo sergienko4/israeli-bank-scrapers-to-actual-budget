@@ -6,7 +6,7 @@
 
 import SECRET_KEYS from '../Config/SecretKeys.js';
 import type { IBankConfig, IBankTarget, IImporterConfig } from '../Types/Index.js';
-import { hashPassword, isEncodedHash } from './PortalPassword.js';
+import { hashPasswordAsync, isEncodedHash } from './PortalPassword.js';
 
 const MASK = '********';
 
@@ -57,11 +57,11 @@ export function restoreMasked<T>(next: T, prev: unknown): T {
  * @param config - Config whose `portal.passwordHash` may be plaintext.
  * @returns A new config with `portal.passwordHash` encoded when applicable.
  */
-export function hashPlainPortalPassword(config: IImporterConfig): IImporterConfig {
+export async function hashPlainPortalPassword(config: IImporterConfig): Promise<IImporterConfig> {
   const { portal } = config;
   const value = portal?.passwordHash;
   if (!portal || !value || isEncodedHash(value)) return config;
-  return { ...config, portal: { ...portal, passwordHash: hashPassword(value) } };
+  return { ...config, portal: { ...portal, passwordHash: await hashPasswordAsync(value) } };
 }
 
 /**

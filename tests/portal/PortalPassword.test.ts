@@ -2,7 +2,7 @@ import { randomBytes, scryptSync } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { hashPassword, isEncodedHash, verifyPassword } from '../../src/Portal/PortalPassword.js';
+import { hashPassword, hashPasswordAsync, isEncodedHash, verifyPassword } from '../../src/Portal/PortalPassword.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 describe('PortalPassword', () => {
@@ -17,6 +17,19 @@ describe('PortalPassword', () => {
 
     it('produces a different salt+hash each call', () => {
       expect(hashPassword(TEST_CREDENTIAL)).not.toBe(hashPassword(TEST_CREDENTIAL));
+    });
+  });
+
+  describe('hashPasswordAsync', () => {
+    it('returns a scrypt$salt$hash encoded string verifiable by verifyPassword', async () => {
+      const stored = await hashPasswordAsync(TEST_CREDENTIAL);
+      expect(isEncodedHash(stored)).toBe(true);
+      expect(await verifyPassword(TEST_CREDENTIAL, stored)).toBe(true);
+      expect(await verifyPassword('wrong-password', stored)).toBe(false);
+    });
+
+    it('produces a different salt+hash each call', async () => {
+      expect(await hashPasswordAsync(TEST_CREDENTIAL)).not.toBe(await hashPasswordAsync(TEST_CREDENTIAL));
     });
   });
 

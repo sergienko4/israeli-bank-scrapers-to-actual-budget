@@ -56,20 +56,20 @@ export default function registerApiRoutes(
  * @param reply - Fastify reply to send the outcome on.
  * @returns The Fastify reply, sent with the appropriate status.
  */
-function persistConfig(
+async function persistConfig(
   store: PortalConfigStore, next: IImporterConfig, reply: FastifyReply,
-): FastifyReply {
-  const prepared = store.prepare(next);
+): Promise<FastifyReply> {
+  const prepared = await store.prepare(next);
   if (isFail(prepared)) {
     const errors = prepared.details ?? [prepared.message];
-    return reply.code(400).send({ error: prepared.message, errors });
+    return await reply.code(400).send({ error: prepared.message, errors });
   }
   const committed = store.commit(prepared.data);
   if (isFail(committed)) {
     getLogger().error(`Portal config persist failed: ${committed.message}`);
-    return reply.code(500).send({ error: 'Failed to persist configuration' });
+    return await reply.code(500).send({ error: 'Failed to persist configuration' });
   }
-  return reply.send({ ok: true });
+  return await reply.send({ ok: true });
 }
 
 /**

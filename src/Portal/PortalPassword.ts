@@ -14,14 +14,40 @@ const ENCODED_HASH = new RegExp(
 );
 
 /**
- * Hashes a plaintext password with a random salt for storage in credentials.json.
+ * Encodes a scrypt-derived key and its salt into the stored hash string.
+ * @param salt - Hex-encoded random salt.
+ * @param derivedKey - Raw scrypt-derived key bytes.
+ * @returns The `scrypt$salt$hash` encoded value.
+ */
+function encodeHash(salt: string, derivedKey: Buffer): string {
+  return `scrypt$${salt}$${derivedKey.toString('hex')}`;
+}
+
+/**
+ * Hashes a plaintext password synchronously. Intended for setup contexts —
+ * tests, factories, one-off scripts — where blocking the current tick is
+ * harmless. Request handlers must use {@link hashPasswordAsync} so a config
+ * save never blocks the Fastify event loop.
  * @param password - Plaintext portal password.
  * @returns Encoded `scrypt$salt$hash` string.
  */
 export function hashPassword(password: string): string {
   const salt = randomBytes(SALT_BYTES).toString('hex');
-  const hash = scryptSync(password, salt, KEY_BYTES).toString('hex');
-  return `scrypt$${salt}$${hash}`;
+  const derived = scryptSync(password, salt, KEY_BYTES);
+  return encodeHash(salt, derived);
+}
+
+/**
+ * Hashes a plaintext password without blocking the event loop, for the portal
+ * save path. Uses the async scrypt API so hashing a freshly-typed password
+ * never stalls concurrent requests.
+ * @param password - Plaintext portal password.
+ * @returns Promise resolving to the encoded `scrypt$salt$hash` string.
+ */
+export async function hashPasswordAsync(password: string): Promise<string> {
+  const salt = randomBytes(SALT_BYTES).toString('hex');
+  const derived = await SCRYPT_ASYNC(password, salt, KEY_BYTES);
+  return encodeHash(salt, derived);
 }
 
 /**

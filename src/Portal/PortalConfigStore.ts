@@ -74,9 +74,11 @@ function shapeForValidation(config: IImporterConfig): IImporterConfig {
  * @param current - Live config used to restore round-tripped masked secrets.
  * @returns The validated config, or a failure naming every gate violation.
  */
-function shapeAndGate(next: IImporterConfig, current: IImporterConfig): Procedure<IImporterConfig> {
+async function shapeAndGate(
+  next: IImporterConfig, current: IImporterConfig,
+): Promise<Procedure<IImporterConfig>> {
   const restored = restoreMasked(next, current);
-  const hashed = hashPlainPortalPassword(restored);
+  const hashed = await hashPlainPortalPassword(restored);
   const merged = shapeForValidation(hashed);
   const errors = collectGateErrors(merged);
   if (errors.length === 0) return succeed(merged);
@@ -151,9 +153,9 @@ export default class PortalConfigStore {
    * @param next - Replacement config from the portal UI.
    * @returns The validated config ready to {@link commit}, or a 400-class failure.
    */
-  public prepare(next: IImporterConfig): Procedure<IImporterConfig> {
+  public async prepare(next: IImporterConfig): Promise<Procedure<IImporterConfig>> {
     try {
-      return shapeAndGate(next, this._config);
+      return await shapeAndGate(next, this._config);
     } catch (error: unknown) {
       return fail(`Invalid config: ${errorMessage(error)}`);
     }
