@@ -3,7 +3,6 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { createServer } from 'node:net';
 import { setTimeout } from 'node:timers/promises';
 
 import { errorMessage } from '../../../src/Utils/Index.js';
@@ -24,8 +23,6 @@ export interface IPortalContainer {
 /** Options for starting the Dockerized portal. */
 interface IStartPortalContainerOptions {
   dir: string;
-  /** Retained for the existing caller; Docker now assigns the actual host port. */
-  hostPort: number;
   mode: 'ro' | 'rw';
 }
 
@@ -206,24 +203,4 @@ export function stopPortalContainer(id: string): void {
   } catch (error: unknown) {
     void errorMessage(error);
   }
-}
-
-/**
- * Allocates an unused host TCP port by briefly binding port 0.
- *
- * Retained for the existing caller; {@link startPortalContainer} no longer
- * binds to this number (Docker assigns the host port), so the prior
- * probe-then-reuse race no longer affects container startup.
- * @returns A port number that was free when probed.
- */
-export async function freeHostPort(): Promise<number> {
-  const server = createServer();
-  return await new Promise<number>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-      server.close(() => { resolve(port); });
-    });
-  });
 }

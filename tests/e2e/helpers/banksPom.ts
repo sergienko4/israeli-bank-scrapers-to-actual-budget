@@ -7,15 +7,18 @@
 import type { Page } from 'playwright-core';
 
 /**
- * Selects a bank in the master list and waits for its detail card. Works for
- * both already-added rows (review/edit) and freshly-templated ones.
+ * Selects a bank in the master list and waits for the detail card the click
+ * renders. Waits for the single card in the detail pane rather than a
+ * key-specific selector, so a row id that differs in case from the bank's real
+ * config key (e.g. row `onezero` vs card `oneZero`) still resolves instead of
+ * timing out. Works for already-added rows and freshly-templated ones.
  * @param page - Authenticated portal page on the Banks section.
  * @param id - Catalog bank id (or legacy config key) shown on the row.
  * @returns Resolves once the bank's detail card is visible.
  */
 export async function selectBank(page: Page, id: string): Promise<void> {
   await page.click(`[data-bank-row="${id}"]`);
-  await page.locator(`[data-bank="${id}"]`).waitFor({ state: 'visible' });
+  await page.locator('.bank-detail [data-bank]').waitFor({ state: 'visible' });
 }
 
 /**

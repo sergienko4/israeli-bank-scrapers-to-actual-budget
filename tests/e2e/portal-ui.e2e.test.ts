@@ -14,7 +14,7 @@
 import { readFileSync, rmSync } from 'node:fs';
 
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
@@ -47,8 +47,14 @@ beforeAll(async () => { browser = await launchPortalBrowser(); }, 120_000);
 afterAll(async () => { await browser?.close(); });
 
 // Guarantee plaintext credentials for non-encryption tests regardless of any
-// CREDENTIALS_ENCRYPTION_PASSWORD picked up from .env.e2e or a prior test.
+// CREDENTIALS_ENCRYPTION_PASSWORD picked up from .env.e2e or a prior test, then
+// restore the original so this suite never pollutes sibling E2E suites.
+const ORIGINAL_ENCRYPTION_PASSWORD = process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
 beforeEach(() => { delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD; });
+afterEach(() => {
+  if (ORIGINAL_ENCRYPTION_PASSWORD === undefined) delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
+  else process.env.CREDENTIALS_ENCRYPTION_PASSWORD = ORIGINAL_ENCRYPTION_PASSWORD;
+});
 
 /**
  * Builds a deterministic, offline-valid seed: one known "discount" bank.

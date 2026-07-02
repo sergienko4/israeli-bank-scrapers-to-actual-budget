@@ -19,7 +19,6 @@ import { gotoBanks } from './helpers/banksPom.js';
 import { launchPortalBrowser } from './helpers/portalHarness.js';
 import {
   type IPortalContainer,
-  freeHostPort,
   startPortalContainer,
   stopPortalContainer,
   waitForPortal,
@@ -184,8 +183,7 @@ async function persistsPortalEdit(): Promise<void> {
   let container: IPortalContainer | undefined;
   let context: BrowserContext | undefined;
   try {
-    const port = await freeHostPort();
-    container = startPortalContainer({ dir: seeded.dir, hostPort: port, mode: 'rw' });
+    container = startPortalContainer({ dir: seeded.dir, mode: 'rw' });
     await waitForPortal(container);
     const opened = await openPortal(container.baseUrl);
     context = opened.context;
@@ -224,8 +222,7 @@ async function blocksReadOnlyWrites(): Promise<void> {
   let container: IPortalContainer | undefined;
   let context: BrowserContext | undefined;
   try {
-    const port = await freeHostPort();
-    container = startPortalContainer({ dir: seeded.dir, hostPort: port, mode: 'ro' });
+    container = startPortalContainer({ dir: seeded.dir, mode: 'ro' });
     await waitForPortal(container);
     const opened = await openPortal(container.baseUrl);
     context = opened.context;
