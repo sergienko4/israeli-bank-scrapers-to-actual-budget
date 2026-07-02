@@ -124,17 +124,34 @@ export function isSessionSecretWeak(secret: string): boolean {
 }
 
 /**
+ * Compares two strings by UTF-16 code point — a locale-independent, stable order
+ * (unlike localeCompare, whose collation shifts with the runtime locale/ICU). The
+ * credential fingerprint sorts the allow-list with this so an identical config
+ * hashes identically across hosts, while still giving `Array.prototype.sort` a
+ * deterministic comparator.
+ * @param a - First string to compare.
+ * @param b - Second string to compare.
+ * @returns -1 when a<b, 1 when a>b, and 0 when equal (by code point).
+ */
+function byCodePoint(a: string, b: string): number {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
+
+/**
  * Fingerprints the credentials that authenticate portal sessions — the password
  * hash and the sorted Google allow-list — keyed by the session secret. It is
  * embedded in each issued session and re-checked on every request, so rotating
  * the password (a new hash, even for the same password) or changing the
  * allow-list changes the fingerprint and evicts every prior session. Email order
- * is normalized so a mere reordering does not needlessly log everyone out.
+ * is normalized by code point (locale-independent) so a mere reordering does not
+ * needlessly log everyone out, and an identical config fingerprints identically
+ * across hosts.
  * @param rt - Resolved portal runtime carrying the live credentials + secret.
  * @returns A hex fingerprint of the current portal credentials.
  */
 export function credentialFingerprint(rt: IPortalRuntime): string {
-  const emails = [...(rt.portal.google?.allowedEmails ?? [])].sort((a, b) => a.localeCompare(b)).join(',');
+  const emails = [...(rt.portal.google?.allowedEmails ?? [])].sort(byCodePoint).join(',');
   const material = `${rt.portal.passwordHash ?? ''}\n${emails}`;
   return createHmac('sha256', rt.sessionSecret).update(`fp:${material}`).digest('hex');
 }
