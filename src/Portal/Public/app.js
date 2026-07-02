@@ -16,6 +16,10 @@ const EYE_SVG =
   ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
   '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
 
+// Sentinel the server sends for an existing secret and honours on save: an
+// untouched masked field is re-sent unchanged so the stored secret is kept.
+const MASK = '********';
+
 let manifest = { sections: [], banks: [], bankRequirements: {} };
 let config = {};
 let current = '';
@@ -222,9 +226,34 @@ async function load() {
  * @returns {void}
  */
 function focusApp() {
+  focusTitle();
+}
+
+/**
+ * Makes the section heading programmatically focusable and moves focus to it, so
+ * a re-render that rebuilds the view never drops keyboard focus to <body>
+ * (WCAG 2.4.3) and screen readers announce the current section.
+ * @returns {void}
+ */
+function focusTitle() {
   const title = $('title');
   title.setAttribute('tabindex', '-1');
   title.focus();
+}
+
+/**
+ * Re-renders the current section, then restores keyboard focus to the first
+ * control matching `selector` within the view, falling back to the heading when
+ * that control no longer exists so focus is never lost to <body> (WCAG 2.4.3).
+ * @param {string} selector CSS selector, evaluated inside #view, of the control
+ *   to focus after the re-render
+ * @returns {void}
+ */
+function renderFocus(selector) {
+  render();
+  const target = $('view').querySelector(selector);
+  if (target && typeof target.focus === 'function') target.focus();
+  else focusTitle();
 }
 
 /**
@@ -424,6 +453,7 @@ function selectSection(key) {
   current = key;
   closeDrawer();
   render();
+  focusTitle();
 }
 
 /**
@@ -653,7 +683,7 @@ function selectNode(field, obj, path) {
   s.value = obj[field.key] == null ? '' : String(obj[field.key]);
   s.onchange = () => {
     obj[field.key] = s.value;
-    render();
+    renderFocus(`[data-path="${path}"]`);
   };
   return s;
 }
@@ -707,9 +737,15 @@ function secretNode(field, obj, path) {
   i.dataset.path = path;
   i.type = 'password';
   i.autocomplete = 'off';
-  i.value = obj[field.key] == null ? '' : String(obj[field.key]);
+  const masked = obj[field.key] === MASK;
+  if (masked) {
+    i.value = '';
+    i.placeholder = '•••••••• (unchanged)';
+  } else {
+    i.value = obj[field.key] == null ? '' : String(obj[field.key]);
+  }
   i.oninput = () => {
-    obj[field.key] = i.value;
+    obj[field.key] = masked && i.value === '' ? MASK : i.value;
   };
   const eye = button('', 'btn ghost reveal');
   eye.innerHTML = EYE_SVG;
@@ -774,8 +810,9 @@ function listFieldNode(field, obj, path) {
   const add = button(`+ Add ${field.label}`, 'btn');
   add.dataset.add = path;
   add.onclick = () => {
+    const idx = arr.length;
     arr.push(field.fields ? {} : '');
-    render();
+    renderFocus(`[data-path="${path}.${idx}"], [data-path^="${path}.${idx}."]`);
   };
   wrap.appendChild(add);
   return wrap;
@@ -800,7 +837,7 @@ function listItemNode(field, arr, idx, path) {
   del.setAttribute('aria-label', `Remove ${field.label} ${idx + 1}`);
   del.onclick = () => {
     arr.splice(idx, 1);
-    render();
+    renderFocus(`[data-add="${path.slice(0, path.lastIndexOf('.'))}"]`);
   };
   row.appendChild(del);
   return row;
@@ -840,8 +877,9 @@ function renderSectionList(sec, view) {
   const add = button(`+ Add ${sec.label}`, 'btn primary');
   add.dataset.add = sec.key;
   add.onclick = () => {
+    const idx = arr.length;
     arr.push({});
-    render();
+    renderFocus(`[data-item="${sec.key}.${idx}"] input, [data-item="${sec.key}.${idx}"] select, [data-item="${sec.key}.${idx}"] textarea`);
   };
   view.appendChild(add);
 }
@@ -861,7 +899,7 @@ function listCard(sec, arr, idx) {
   const del = button('Remove', 'btn danger');
   del.onclick = () => {
     arr.splice(idx, 1);
-    render();
+    renderFocus(`[data-add="${sec.key}"]`);
   };
   head.appendChild(del);
   card.appendChild(head);
@@ -966,7 +1004,7 @@ function bankRow(sec, id) {
   b.dataset.bankRow = id;
   if (key) b.dataset.bankAdded = 'true';
   if (selected) b.setAttribute('aria-current', 'true');
-  b.append(el('span', 'bank-row-name', id), bankRowStatus(Boolean(key)));
+  b.append(el('span', 'bank-row-name', bankDisplayName(id)), bankRowStatus(Boolean(key)));
   b.onclick = () => selectBankRow(id, key);
   return b;
 }
@@ -1097,6 +1135,16 @@ function configKeyForBank(id) {
 }
 
 /**
+ * The human-facing label for a bank id, taken from the manifest's per-bank
+ * requirements, with the raw id as a fallback for unknown/legacy keys.
+ * @param {string} id bank id (catalog id or config key)
+ * @returns {string} the display name
+ */
+function bankDisplayName(id) {
+  return manifest.bankRequirements?.[id]?.displayName || id;
+}
+
+/**
  * Renders one bank card with its present fields, an add-field menu, and targets.
  * @param {object} sec banks section descriptor
  * @param {string} name bank id
@@ -1106,7 +1154,7 @@ function bankCard(sec, name) {
   const card = el('div', 'card');
   card.dataset.bank = name;
   const head = el('div', 'card-head');
-  head.appendChild(el('h3', null, name));
+  head.appendChild(el('h3', null, bankDisplayName(name)));
   const del = button('Remove', 'btn danger');
   del.dataset.removeBank = name;
   del.onclick = () => {
@@ -1163,8 +1211,9 @@ function addFieldControl(sec, bank, name) {
   });
   sel.onchange = () => {
     if (!sel.value) return;
-    bank[sel.value] = defaultFor(fieldByKey(sec.bankFields, sel.value));
-    render();
+    const added = sel.value;
+    bank[added] = defaultFor(fieldByKey(sec.bankFields, added));
+    renderFocus(`[data-path="banks.${name}.${added}"]`);
   };
   wrap.appendChild(sel);
   return wrap;
@@ -1188,7 +1237,7 @@ function fieldByKey(fields, key) {
 function defaultFor(field) {
   if (!field) return '';
   if (field.kind === 'boolean') return false;
-  if (field.kind === 'number') return 0;
+  if (field.kind === 'number') return field.min == null ? 0 : field.min;
   return '';
 }
 
@@ -1209,8 +1258,9 @@ function targetsEditor(sec, bank, name) {
   const add = button('+ Add target', 'btn');
   add.dataset.addTarget = name;
   add.onclick = () => {
+    const idx = targets.length;
     targets.push({ actualAccountId: '', accounts: 'all', reconcile: false });
-    render();
+    renderFocus(`[data-target="banks.${name}.targets.${idx}"] input, [data-target="banks.${name}.targets.${idx}"] select`);
   };
   wrap.appendChild(add);
   return wrap;
@@ -1233,7 +1283,7 @@ function targetRow(sec, targets, idx, path) {
   const del = button('Remove target', 'btn danger');
   del.onclick = () => {
     targets.splice(idx, 1);
-    render();
+    renderFocus(`[data-add-target="${path.split('.')[1]}"]`);
   };
   row.appendChild(del);
   return row;

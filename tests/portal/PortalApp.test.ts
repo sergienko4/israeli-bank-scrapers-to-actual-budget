@@ -52,7 +52,7 @@ interface SectionDef {
 interface ManifestDef {
   sections: SectionDef[];
   banks: string[];
-  bankRequirements: Record<string, { required: string[] }>;
+  bankRequirements: Record<string, { required: string[]; displayName?: string }>;
 }
 
 interface FailSpec {
@@ -1278,5 +1278,112 @@ describe('PortalApp SPA shell module contract', () => {
     const buttons = [...shell.querySelectorAll('button')];
     expect(buttons.length).toBeGreaterThan(0);
     expect(buttons.every(button => button.getAttribute('type') === 'button')).toBe(true);
+  });
+});
+
+describe('PortalApp secret mask handling', () => {
+  const MASK = '********';
+
+  it('renders an existing masked secret as an empty field with an unchanged hint', async () => {
+    configBanks().hapoalim.password = MASK;
+    await boot();
+    clickNav('banks');
+    const pw = inputId('banks.hapoalim.password');
+    expect(pw.value).toBe('');
+    expect(pw.placeholder).toContain('unchanged');
+  });
+
+  it('preserves a masked secret left untouched by re-sending the sentinel', async () => {
+    configBanks().hapoalim.password = MASK;
+    await boot();
+    clickNav('banks');
+    await saveConfig();
+    expect(dig(putBody(), 'banks', 'hapoalim', 'password')).toBe(MASK);
+  });
+
+  it('preserves a masked secret when a typed value is cleared back to empty', async () => {
+    configBanks().hapoalim.password = MASK;
+    await boot();
+    clickNav('banks');
+    typeText('banks.hapoalim.password', 'temp');
+    typeText('banks.hapoalim.password', '');
+    await saveConfig();
+    expect(dig(putBody(), 'banks', 'hapoalim', 'password')).toBe(MASK);
+  });
+
+  it('stores a freshly typed secret over a masked field without corruption', async () => {
+    configBanks().hapoalim.password = MASK;
+    await boot();
+    clickNav('banks');
+    typeText('banks.hapoalim.password', 'rotated-secret');
+    await saveConfig();
+    expect(dig(putBody(), 'banks', 'hapoalim', 'password')).toBe('rotated-secret');
+  });
+});
+
+describe('PortalApp bank display names', () => {
+  it('shows the manifest display name instead of the raw bank id', async () => {
+    state.manifest.bankRequirements.discount = { required: ['daysBack', 'id'], displayName: 'Discount bank' };
+    state.manifest.bankRequirements.hapoalim = { required: ['username', 'password'], displayName: 'Hapoalim' };
+    await boot();
+    clickNav('banks');
+    expect(query('[data-bank-row="discount"] .bank-row-name').textContent).toBe('Discount bank');
+    expect(query('.bank-detail [data-bank="hapoalim"] h3').textContent).toBe('Hapoalim');
+  });
+
+  it('falls back to the raw id when no display name is declared', async () => {
+    await boot();
+    clickNav('banks');
+    expect(query('[data-bank-row="discount"] .bank-row-name').textContent).toBe('discount');
+  });
+});
+
+describe('PortalApp focus management (WCAG 2.4.3)', () => {
+  it('moves focus to the section heading after switching sections', async () => {
+    await boot();
+    inputId('general.note').focus();
+    expect(document.activeElement).toBe(inputId('general.note'));
+    clickNav('watch');
+    expect(document.activeElement).toBe(byId('title'));
+  });
+
+  it('keeps focus on an enum select after changing its value', async () => {
+    await boot();
+    selectId('general.mode').focus();
+    changeSelect('general.mode', 'fast');
+    const active = document.activeElement as HTMLElement;
+    expect(active.tagName).toBe('SELECT');
+    expect(active.dataset.path).toBe('general.mode');
+  });
+
+  it('focuses the newly added target row rather than dropping focus', async () => {
+    await boot();
+    clickNav('banks');
+    query('[data-add-target="hapoalim"]').click();
+    const active = document.activeElement as HTMLElement;
+    expect(query('[data-target="banks.hapoalim.targets.1"]').contains(active)).toBe(true);
+    expect(['INPUT', 'SELECT']).toContain(active.tagName);
+  });
+
+  it('focuses the add-target button after removing a target', async () => {
+    await boot();
+    clickNav('banks');
+    query('[data-add-target="hapoalim"]').click();
+    const removeButtons = document.querySelectorAll('[data-target] .danger');
+    (removeButtons[0] as HTMLElement).click();
+    expect((document.activeElement as HTMLElement).dataset.addTarget).toBe('hapoalim');
+  });
+});
+
+describe('PortalApp added-field defaults', () => {
+  it('defaults an added numeric field to its manifest minimum', async () => {
+    const banksSection = state.manifest.sections.find((section) => section.key === 'banks');
+    banksSection?.bankFields?.push({ key: 'sessionTtl', label: 'Session TTL', kind: 'number', min: 5 });
+    await boot();
+    clickNav('banks');
+    changeSelect(query('[data-add-field="hapoalim"]'), 'sessionTtl');
+    expect(inputId('banks.hapoalim.sessionTtl').value).toBe('5');
+    await saveConfig();
+    expect(dig(putBody(), 'banks', 'hapoalim', 'sessionTtl')).toBe(5);
   });
 });
