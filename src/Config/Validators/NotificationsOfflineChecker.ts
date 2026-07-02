@@ -6,6 +6,7 @@
  * to guard against that case.
  */
 import type { IImporterConfig, INotificationConfig } from '../../Types/Index.js';
+import { hasNotificationChannel, NO_NOTIFICATION_CHANNEL_MESSAGE } from './NotificationChannel.js';
 import { fail, type IValidationResult,pass } from './ValidationResult.js';
 
 export type { IValidationResult } from './ValidationResult.js';
@@ -87,9 +88,8 @@ export function checkNotificationsOffline(
   notifications?: IImporterConfig['notifications']
 ): IValidationResult[] {
   if (!notifications?.enabled) return [];
-  if (!notifications.telegram && !notifications.webhook) {
-    return [fail('notifications',
-      'Enable at least one notification channel (Telegram or webhook) when notifications are on')];
+  if (!hasNotificationChannel(notifications)) {
+    return [fail('notifications', NO_NOTIFICATION_CHANNEL_MESSAGE)];
   }
   return aggregateChannelResults(notifications);
 }
