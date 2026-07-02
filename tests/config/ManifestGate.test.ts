@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 import { BANK_REQUIREMENTS, deriveSecretKeys } from '../../src/Config/ConfigManifest.js';
 import { BANKS_SECTION } from '../../src/Config/Manifest/BankManifest.js';
-import type { IManifestSection } from '../../src/Config/Manifest/ManifestTypes.js';
+import type { IManifestField, IManifestSection } from '../../src/Config/Manifest/ManifestTypes.js';
 import {
   checkManifest, enumCoverageErrors, listSecretErrors,
-  registryCoverageErrors, sectionListSecrets,
+  registryCoverageErrors, sectionListSecrets, secretNameCollisionErrors, secretNameCollisions,
 } from '../../src/Config/ManifestGate.js';
 import { flattenConfigPaths, manifestKnownPaths } from '../../src/Config/ManifestPaths.js';
 import { DEFAULT_BANK_REGISTRY } from '../../src/Scraper/BankRegistry.js';
@@ -93,6 +93,27 @@ describe('Config manifest completeness gate', () => {
 
   it('declares no secret field inside any list/array container', () => {
     expect(listSecretErrors()).toEqual([]);
+  });
+
+  it('keeps every secret leaf-name exclusive to secret fields (no collisions today)', () => {
+    expect(secretNameCollisionErrors()).toEqual([]);
+  });
+
+  it('detects a non-secret field reusing a secret leaf-name', () => {
+    const fields: IManifestField[] = [
+      { key: 'url', label: 'Webhook URL', kind: 'secret' },
+      { key: 'url', label: 'Public URL', kind: 'string' },
+      { key: 'daysBack', label: 'Days back', kind: 'number' },
+    ];
+    expect(secretNameCollisions(fields)).toEqual(['url']);
+  });
+
+  it('reports no collision when secret and non-secret names are disjoint', () => {
+    const fields: IManifestField[] = [
+      { key: 'password', label: 'Password', kind: 'secret' },
+      { key: 'daysBack', label: 'Days back', kind: 'number' },
+    ];
+    expect(secretNameCollisions(fields)).toEqual([]);
   });
 
   it('caps the daysBack manifest bound at the offline validator maximum (1-30)', () => {

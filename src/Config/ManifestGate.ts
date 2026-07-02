@@ -167,6 +167,36 @@ export function listSecretErrors(): string[] {
 }
 
 /**
+ * Finds leaf-key-names a field set classifies as BOTH secret and non-secret.
+ * @param fields - Flattened manifest fields to inspect.
+ * @returns The distinct leaf-names used by a secret and a non-secret field.
+ */
+export function secretNameCollisions(fields: readonly IManifestField[]): string[] {
+  const secretNames = new Set(
+    fields.filter(field => field.kind === 'secret').map(field => field.key),
+  );
+  const collided = fields.filter(field => field.kind !== 'secret' && secretNames.has(field.key));
+  return [...new Set(collided.map(field => field.key))];
+}
+
+/**
+ * Returns errors for secret leaf-names a non-secret field also uses. Secret
+ * classification (`deriveSecretKeys` feeding the splitter and `maskSecrets`)
+ * matches by bare leaf-name anywhere in the config tree, so a non-secret field
+ * reusing a secret's name would be silently masked and relocated into
+ * credentials.json. This gate keeps every secret leaf-name exclusive to secret
+ * fields, failing the build the moment that 1:1 mapping is broken.
+ * @returns One error per secret leaf-name reused by a non-secret field.
+ */
+export function secretNameCollisionErrors(): string[] {
+  const all = CONFIG_MANIFEST.flatMap(sectionAllFields);
+  return secretNameCollisions(all).map(
+    name => `Non-secret field reuses secret leaf-name "${name}"; `
+      + 'it would be masked and split into credentials.json',
+  );
+}
+
+/**
  * Validates the example config + credentials against the manifest SSoT, the
  * enum-coverage rule, and registry/manifest bank coverage.
  * @param examples - Parsed config.json.example + credentials.json.example.
@@ -179,6 +209,6 @@ export function checkManifest(examples: IManifestExamples): string[] {
   const enumErrors = enumCoverageErrors();
   return [
     ...configErrors, ...credErrors, ...enumErrors,
-    ...registryCoverageErrors(), ...listSecretErrors(),
+    ...registryCoverageErrors(), ...listSecretErrors(), ...secretNameCollisionErrors(),
   ];
 }
