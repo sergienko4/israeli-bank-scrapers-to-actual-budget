@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { BANK_REQUIREMENTS, deriveSecretKeys } from '../../src/Config/ConfigManifest.js';
+import { BANKS_SECTION } from '../../src/Config/Manifest/BankManifest.js';
 import type { IManifestSection } from '../../src/Config/Manifest/ManifestTypes.js';
 import {
   checkManifest, enumCoverageErrors, listSecretErrors,
@@ -92,6 +93,12 @@ describe('Config manifest completeness gate', () => {
 
   it('declares no secret field inside any list/array container', () => {
     expect(listSecretErrors()).toEqual([]);
+  });
+
+  it('caps the daysBack manifest bound at the offline validator maximum (1-30)', () => {
+    const daysBack = BANKS_SECTION.bankFields?.find((field) => field.key === 'daysBack');
+    expect(daysBack?.min).toBe(1);
+    expect(daysBack?.max).toBe(30);
   });
 
   it('flags a secret declared in a list section, a target, or a nested list', () => {

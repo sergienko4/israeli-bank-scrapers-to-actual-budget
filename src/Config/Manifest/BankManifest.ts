@@ -19,8 +19,8 @@ import type { IBankRequirement, IManifestField, IManifestSection } from './Manif
  */
 const BANK_FIELDS: readonly IManifestField[] = [
   {
-    key: 'daysBack', label: 'Days back', kind: 'number', min: 1, max: 365,
-    help: 'Import the last N days (1-30 typical). Cannot combine with start date.',
+    key: 'daysBack', label: 'Days back', kind: 'number', min: 1, max: 30,
+    help: 'Import the last N days (1-30). Cannot combine with start date.',
   },
   {
     key: 'startDate', label: 'Start date', kind: 'date',
