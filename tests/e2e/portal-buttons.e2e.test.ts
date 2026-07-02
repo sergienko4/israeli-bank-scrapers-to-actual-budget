@@ -184,6 +184,9 @@ async function gotoSection(page: Page, key: string): Promise<void> {
 async function openLogin(server: IPortalServer): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
+  // Destructive actions (remove target/list item/section card) are confirm()-guarded;
+  // auto-accept so removal flows proceed (Playwright dismisses dialogs otherwise).
+  page.on('dialog', (dialog) => { dialog.accept().catch((_err: unknown) => { /* already handled */ }); });
   await page.goto(server.baseUrl);
   await page.waitForSelector('#pw', { state: 'visible' });
   return { context, page };

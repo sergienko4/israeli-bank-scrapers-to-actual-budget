@@ -93,6 +93,21 @@ function joinPath(prefix, key) {
   return prefix ? `${prefix}.${key}` : key;
 }
 
+/**
+ * Escapes a dynamic value for safe interpolation into a quoted CSS attribute
+ * selector, so a config key containing `"`, `\`, `]` or other special characters
+ * cannot make querySelector throw a SyntaxError. Uses the platform CSS.escape
+ * when available, with a minimal quote/backslash fallback for environments
+ * (e.g. jsdom) that do not implement it.
+ * @param {string} value the raw dynamic segment (e.g. a bank key or dotted path)
+ * @returns {string} the escaped value, safe inside a double-quoted attribute selector
+ */
+function esc(value) {
+  const str = String(value);
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(str);
+  return str.replace(/["\\]/g, '\\$&');
+}
+
 // ---------- auth / bootstrap ----------
 
 /**
@@ -189,6 +204,7 @@ async function login() {
   const btn = $('pw-btn');
   if (btn.disabled) return;
   const label = btn.textContent;
+  const wasFocused = document.activeElement === btn;
   $('login-err').textContent = '';
   btn.disabled = true;
   btn.textContent = 'Signing in…';
@@ -203,6 +219,9 @@ async function login() {
   } finally {
     btn.disabled = false;
     btn.textContent = label;
+    // Restore focus only when the login view is still shown (a failed attempt);
+    // on success load() has already moved focus onto the app heading.
+    if (wasFocused && !$('login').classList.contains('hidden')) restoreActionFocus(btn);
   }
 }
 
@@ -257,12 +276,31 @@ function renderFocus(selector) {
 }
 
 /**
+ * Restores keyboard focus after an async action re-enables its trigger button,
+ * so disabling the focused button never strands focus on <body> (WCAG 2.4.3):
+ * returns focus to the button when it is still present and enabled, otherwise to
+ * the status region (made programmatically focusable) as a safe fallback.
+ * @param {HTMLElement} btn the action button that was focused before disabling
+ * @returns {void}
+ */
+function restoreActionFocus(btn) {
+  if (btn && btn.isConnected && !btn.disabled) {
+    btn.focus();
+    return;
+  }
+  const status = $('status');
+  status.setAttribute('tabindex', '-1');
+  status.focus();
+}
+
+/**
  * Persists the whole config via PUT /api/config.
  * @returns {Promise<void>} resolves when saved
  */
 async function save() {
   const btn = $('save');
   const label = btn.textContent;
+  const wasFocused = document.activeElement === btn;
   btn.disabled = true;
   btn.textContent = 'Saving…';
   $('status').textContent = 'Saving…';
@@ -279,7 +317,21 @@ async function save() {
   } finally {
     btn.disabled = false;
     btn.textContent = label;
+    // A rejected save may have moved focus onto the first invalid field; only
+    // rescue focus back to the button when nothing inside the view claimed it.
+    if (wasFocused && !viewHasFocus()) restoreActionFocus(btn);
   }
+}
+
+/**
+ * Whether keyboard focus currently rests on a control inside the rendered view,
+ * used so a post-save focus restore does not steal focus from an invalid field
+ * the save-failure highlighter just focused.
+ * @returns {boolean} true when the active element is within #view
+ */
+function viewHasFocus() {
+  const view = $('view');
+  return Boolean(view) && view.contains(document.activeElement);
 }
 
 /**
@@ -332,7 +384,8 @@ function missingBankPaths() {
  * @returns {void}
  */
 function collectBankMissing(name, bank, out) {
-  const required = manifest.bankRequirements?.[name]?.required || [];
+  const req = manifest.bankRequirements?.[name] ?? manifest.bankRequirements?.[name.toLowerCase()];
+  const required = req?.required || [];
   required.forEach((key) => {
     if (isBlank(bank[key])) out.push(`banks.${name}.${key}`);
   });
@@ -392,7 +445,7 @@ function clearInvalid() {
  * @returns {HTMLElement|null} the flagged element, or null when not rendered
  */
 function markInvalidByPath(path) {
-  const node = document.querySelector(`[data-path="${path}"]`);
+  const node = document.querySelector(`[data-path="${esc(path)}"]`);
   if (!node) return null;
   node.classList.add('invalid');
   node.setAttribute('aria-invalid', 'true');
@@ -683,7 +736,7 @@ function selectNode(field, obj, path) {
   s.value = obj[field.key] == null ? '' : String(obj[field.key]);
   s.onchange = () => {
     obj[field.key] = s.value;
-    renderFocus(`[data-path="${path}"]`);
+    renderFocus(`[data-path="${esc(path)}"]`);
   };
   return s;
 }
@@ -747,18 +800,72 @@ function secretNode(field, obj, path) {
   i.oninput = () => {
     obj[field.key] = masked && i.value === '' ? MASK : i.value;
   };
+  const eye = secretReveal(field, i);
+  wrap.append(i, eye);
+  // A masked field carries an explicit clear affordance plus a persistent,
+  // announced hint — without them a stored secret can be changed but never
+  // cleared, and the keep-on-blank cue vanishes on focus.
+  if (masked) {
+    const hint = secretHint(path);
+    i.setAttribute('aria-describedby', hint.id);
+    wrap.append(secretClear(field, obj, path), hint);
+  }
+  return wrap;
+}
+
+/**
+ * Builds the reveal toggle for a secret input, labelled with the field name so a
+ * card with several secrets exposes distinct controls to assistive tech
+ * (WCAG 2.4.6 / 4.1.2) rather than a generic "Show secret".
+ * @param {object} field the secret field descriptor (for its label)
+ * @param {HTMLInputElement} input the secret input the toggle controls
+ * @returns {HTMLButtonElement} the reveal toggle
+ */
+function secretReveal(field, input) {
   const eye = button('', 'btn ghost reveal');
   eye.innerHTML = EYE_SVG;
-  eye.setAttribute('aria-label', 'Show secret');
+  eye.setAttribute('aria-label', `Show ${field.label}`);
   eye.setAttribute('aria-pressed', 'false');
   eye.onclick = () => {
-    const reveal = i.type === 'password';
-    i.type = reveal ? 'text' : 'password';
+    const reveal = input.type === 'password';
+    input.type = reveal ? 'text' : 'password';
     eye.setAttribute('aria-pressed', String(reveal));
-    eye.setAttribute('aria-label', reveal ? 'Hide secret' : 'Show secret');
+    eye.setAttribute('aria-label', `${reveal ? 'Hide' : 'Show'} ${field.label}`);
   };
-  wrap.append(i, eye);
-  return wrap;
+  return eye;
+}
+
+/**
+ * Builds the persistent "keep the current secret" hint for a masked field,
+ * referenced via aria-describedby so the keep-on-blank behavior is announced
+ * reliably instead of relying on a placeholder that disappears on focus.
+ * @param {string} path dotted config path of the secret field
+ * @returns {HTMLElement} the hint element (id = `${path}-hint`)
+ */
+function secretHint(path) {
+  const hint = el('small', 'secret-hint', 'Leave blank to keep the current secret.');
+  hint.id = `${path}-hint`;
+  return hint;
+}
+
+/**
+ * Builds a clear button for a masked secret, letting the user erase a stored
+ * value: it writes a real empty string (not the MASK sentinel the server maps
+ * back to the existing secret) and re-renders so the field becomes a normal
+ * empty input that persists as cleared.
+ * @param {object} field the secret field descriptor (for its label)
+ * @param {object} obj the object holding the secret value
+ * @param {string} path dotted config path of the secret field
+ * @returns {HTMLButtonElement} the clear button
+ */
+function secretClear(field, obj, path) {
+  const clear = button('✕', 'btn ghost secret-clear');
+  clear.setAttribute('aria-label', `Clear ${field.label}`);
+  clear.onclick = () => {
+    obj[field.key] = '';
+    renderFocus(`[data-path="${esc(path)}"]`);
+  };
+  return clear;
 }
 
 /**
@@ -812,7 +919,8 @@ function listFieldNode(field, obj, path) {
   add.onclick = () => {
     const idx = arr.length;
     arr.push(field.fields ? {} : '');
-    renderFocus(`[data-path="${path}.${idx}"], [data-path^="${path}.${idx}."]`);
+    const p = esc(`${path}.${idx}`);
+    renderFocus(`[data-path="${p}"], [data-path^="${p}."]`);
   };
   wrap.appendChild(add);
   return wrap;
@@ -836,8 +944,9 @@ function listItemNode(field, arr, idx, path) {
   const del = button('✕', 'btn danger');
   del.setAttribute('aria-label', `Remove ${field.label} ${idx + 1}`);
   del.onclick = () => {
+    if (!confirm(`Remove ${field.label} ${idx + 1}?`)) return;
     arr.splice(idx, 1);
-    renderFocus(`[data-add="${path.slice(0, path.lastIndexOf('.'))}"]`);
+    renderFocus(`[data-add="${esc(path.slice(0, path.lastIndexOf('.')))}"]`);
   };
   row.appendChild(del);
   return row;
@@ -879,7 +988,8 @@ function renderSectionList(sec, view) {
   add.onclick = () => {
     const idx = arr.length;
     arr.push({});
-    renderFocus(`[data-item="${sec.key}.${idx}"] input, [data-item="${sec.key}.${idx}"] select, [data-item="${sec.key}.${idx}"] textarea`);
+    const it = esc(`${sec.key}.${idx}`);
+    renderFocus(`[data-item="${it}"] input, [data-item="${it}"] select, [data-item="${it}"] textarea`);
   };
   view.appendChild(add);
 }
@@ -897,9 +1007,11 @@ function listCard(sec, arr, idx) {
   const head = el('div', 'card-head');
   head.appendChild(el('h3', null, `${sec.label} ${idx + 1}`));
   const del = button('Remove', 'btn danger');
+  del.setAttribute('aria-label', `Remove ${sec.label} ${idx + 1}`);
   del.onclick = () => {
+    if (!confirm(`Remove ${sec.label} ${idx + 1}?`)) return;
     arr.splice(idx, 1);
-    renderFocus(`[data-add="${sec.key}"]`);
+    renderFocus(`[data-add="${esc(sec.key)}"]`);
   };
   head.appendChild(del);
   card.appendChild(head);
@@ -1141,7 +1253,8 @@ function configKeyForBank(id) {
  * @returns {string} the display name
  */
 function bankDisplayName(id) {
-  return manifest.bankRequirements?.[id]?.displayName || id;
+  const req = manifest.bankRequirements?.[id] ?? manifest.bankRequirements?.[id.toLowerCase()];
+  return req?.displayName || id;
 }
 
 /**
@@ -1158,6 +1271,7 @@ function bankCard(sec, name) {
   const del = button('Remove', 'btn danger');
   del.dataset.removeBank = name;
   del.onclick = () => {
+    if (!confirm(`Remove ${bankDisplayName(name)} and its saved credentials and targets?`)) return;
     delete config.banks[name];
     render();
     focusBankDetail();
@@ -1213,7 +1327,7 @@ function addFieldControl(sec, bank, name) {
     if (!sel.value) return;
     const added = sel.value;
     bank[added] = defaultFor(fieldByKey(sec.bankFields, added));
-    renderFocus(`[data-path="banks.${name}.${added}"]`);
+    renderFocus(`[data-path="${esc(`banks.${name}.${added}`)}"]`);
   };
   wrap.appendChild(sel);
   return wrap;
@@ -1260,7 +1374,8 @@ function targetsEditor(sec, bank, name) {
   add.onclick = () => {
     const idx = targets.length;
     targets.push({ actualAccountId: '', accounts: 'all', reconcile: false });
-    renderFocus(`[data-target="banks.${name}.targets.${idx}"] input, [data-target="banks.${name}.targets.${idx}"] select`);
+    const t = esc(`banks.${name}.targets.${idx}`);
+    renderFocus(`[data-target="${t}"] input, [data-target="${t}"] select`);
   };
   wrap.appendChild(add);
   return wrap;
@@ -1277,13 +1392,16 @@ function targetsEditor(sec, bank, name) {
 function targetRow(sec, targets, idx, path) {
   const row = el('div', 'card target');
   row.dataset.target = path;
+  row.appendChild(el('h4', 'target-head', `Target ${idx + 1}`));
   (sec.targetFields || []).forEach((f) =>
     row.appendChild(fieldNode(f, targets[idx], path)),
   );
   const del = button('Remove target', 'btn danger');
+  del.setAttribute('aria-label', `Remove target ${idx + 1}`);
   del.onclick = () => {
+    if (!confirm(`Remove target ${idx + 1}?`)) return;
     targets.splice(idx, 1);
-    renderFocus(`[data-add-target="${path.split('.')[1]}"]`);
+    renderFocus(`[data-add-target="${esc(path.split('.')[1])}"]`);
   };
   row.appendChild(del);
   return row;

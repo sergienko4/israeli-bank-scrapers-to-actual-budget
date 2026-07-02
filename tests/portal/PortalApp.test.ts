@@ -331,6 +331,9 @@ function installHarness(): void {
   })) as unknown as typeof window.matchMedia;
   fetchMock = vi.fn((input: string, init: FetchInit = {}) => Promise.resolve(route(String(input), init.method ?? 'GET')));
   globalThis.fetch = fetchMock as unknown as typeof fetch;
+  // Destructive removals are gated behind window.confirm; default to accept so
+  // existing removal tests exercise the happy path. #12 tests override this.
+  window.confirm = vi.fn(() => true) as unknown as typeof window.confirm;
 }
 
 /* ── Async + DOM helpers ────────────────────────────────────────────── */
@@ -863,11 +866,11 @@ describe('PortalApp object section fields', () => {
     eye.click();
     expect(secret.type).toBe('text');
     expect(eye.getAttribute('aria-pressed')).toBe('true');
-    expect(eye.getAttribute('aria-label')).toBe('Hide secret');
+    expect(eye.getAttribute('aria-label')).toBe('Hide API key');
     eye.click();
     expect(secret.type).toBe('password');
     expect(eye.getAttribute('aria-pressed')).toBe('false');
-    expect(eye.getAttribute('aria-label')).toBe('Show secret');
+    expect(eye.getAttribute('aria-label')).toBe('Show API key');
   });
 
   it('renders empty controls for a section with no stored values', async () => {
@@ -1385,5 +1388,199 @@ describe('PortalApp added-field defaults', () => {
     expect(inputId('banks.hapoalim.sessionTtl').value).toBe('5');
     await saveConfig();
     expect(dig(putBody(), 'banks', 'hapoalim', 'sessionTtl')).toBe(5);
+  });
+});
+
+describe('PortalApp case-insensitive bank requirements (#19)', () => {
+  it('uses the manifest display override for a camelCase config key', async () => {
+    state.manifest.banks.push('onezero');
+    state.manifest.bankRequirements.onezero = { required: ['username', 'password'], displayName: 'OneZero' };
+    configBanks().oneZero = {
+      username: 'oz-user',
+      password: 'oz-pass',
+      targets: [fakeBankTarget({ actualAccountId: 'acct-oz', accounts: 'all', reconcile: false })],
+    };
+    await boot();
+    clickNav('banks');
+    bankRow('onezero').click();
+    expect(query('.bank-detail [data-bank="oneZero"] h3').textContent).toBe('OneZero');
+  });
+
+  it('flags a missing required field on a camelCase bank after a rejected save', async () => {
+    state.saveOk = false;
+    state.manifest.banks.push('onezero');
+    state.manifest.bankRequirements.onezero = { required: ['username', 'password'] };
+    configBanks().oneZero = { username: '', password: 'p', targets: [] };
+    await boot();
+    clickNav('banks');
+    await saveConfig();
+    const user = inputId('banks.oneZero.username');
+    expect(user.classList.contains('invalid')).toBe(true);
+    expect(user.getAttribute('aria-invalid')).toBe('true');
+  });
+});
+
+describe('PortalApp secret clear affordance (#3)', () => {
+  const MASK = '********';
+
+  it('clears a stored secret to a real empty value and persists it', async () => {
+    configBanks().hapoalim.password = MASK;
+    await boot();
+    clickNav('banks');
+    const wrap = inputId('banks.hapoalim.password').closest('.secret') as HTMLElement;
+    const clear = wrap.querySelector('.secret-clear') as HTMLElement;
+    expect(clear).not.toBeNull();
+    clear.click();
+    expect(configBanks().hapoalim.password).toBe('');
+    // The field is now a normal empty (non-masked) input with no keep-hint.
+    const pw = inputId('banks.hapoalim.password');
+    expect(pw.value).toBe('');
+    expect(pw.placeholder).not.toContain('unchanged');
+    expect(pw.getAttribute('aria-describedby')).toBeNull();
+    await saveConfig();
+    expect(dig(putBody(), 'banks', 'hapoalim', 'password')).toBe('');
+  });
+
+  it('offers no clear button for a non-masked secret', async () => {
+    await boot();
+    clickNav('banks');
+    const wrap = inputId('banks.hapoalim.password').closest('.secret') as HTMLElement;
+    expect(wrap.querySelector('.secret-clear')).toBeNull();
+  });
+});
+
+describe('PortalApp secret reveal labelling (#7)', () => {
+  it('gives each reveal toggle a field-specific, state-aware aria-label', async () => {
+    const general = state.manifest.sections.find((section) => section.key === 'general');
+    general?.fields?.push({ key: 'backupKey', label: 'Backup key', kind: 'secret' });
+    (state.config.general as Record<string, unknown>).backupKey = 'bk';
+    await boot();
+    const reveal = (id: string): HTMLElement =>
+      (inputId(id).closest('.secret') as HTMLElement).querySelector('.reveal') as HTMLElement;
+    expect(reveal('general.apiKey').getAttribute('aria-label')).toBe('Show API key');
+    expect(reveal('general.backupKey').getAttribute('aria-label')).toBe('Show Backup key');
+    reveal('general.apiKey').click();
+    expect(reveal('general.apiKey').getAttribute('aria-label')).toBe('Hide API key');
+  });
+});
+
+describe('PortalApp masked-secret hint (#8)', () => {
+  const MASK = '********';
+
+  it('describes a masked field with a persistent keep-current hint', async () => {
+    configBanks().hapoalim.password = MASK;
+    await boot();
+    clickNav('banks');
+    const pw = inputId('banks.hapoalim.password');
+    const hintId = pw.getAttribute('aria-describedby');
+    expect(hintId).toBeTruthy();
+    const hint = byId(hintId as string);
+    expect(hint.textContent).toContain('Leave blank to keep the current secret');
+  });
+});
+
+describe('PortalApp target numbering (#9)', () => {
+  it('numbers each target row and indexes its remove button', async () => {
+    await boot();
+    clickNav('banks');
+    query('[data-add-target="hapoalim"]').click();
+    const r0 = query('[data-target="banks.hapoalim.targets.0"]');
+    const r1 = query('[data-target="banks.hapoalim.targets.1"]');
+    expect(r0.querySelector('.target-head')?.textContent).toBe('Target 1');
+    expect(r1.querySelector('.target-head')?.textContent).toBe('Target 2');
+    expect(r0.querySelector('.danger')?.getAttribute('aria-label')).toBe('Remove target 1');
+    expect(r1.querySelector('.danger')?.getAttribute('aria-label')).toBe('Remove target 2');
+  });
+});
+
+describe('PortalApp action-button focus recovery (#6 WCAG 2.4.3)', () => {
+  it('keeps focus off <body> after a successful save', async () => {
+    await boot();
+    byId('save').focus();
+    expect(document.activeElement).toBe(byId('save'));
+    await saveConfig();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(byId('save'));
+  });
+
+  it('keeps focus off <body> after a failed sign-in', async () => {
+    unauth({ authMode: 'password', password: false });
+    state.loginOk = false;
+    await boot();
+    typeText('pw', 'wrong-pass');
+    byId('pw-btn').focus();
+    clickId('pw-btn');
+    await settle();
+    await settle();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(byId('pw-btn'));
+  });
+});
+
+describe('PortalApp destructive-removal confirmation (#12)', () => {
+  it('keeps the bank when the confirm dialog is dismissed', async () => {
+    window.confirm = vi.fn(() => false) as unknown as typeof window.confirm;
+    await boot();
+    clickNav('banks');
+    query('[data-remove-bank="hapoalim"]').click();
+    expect(maybe('[data-bank="hapoalim"]')).not.toBeNull();
+    expect(configBanks().hapoalim).toBeDefined();
+  });
+
+  it('removes the bank when the confirm dialog is accepted', async () => {
+    window.confirm = vi.fn(() => true) as unknown as typeof window.confirm;
+    await boot();
+    clickNav('banks');
+    query('[data-remove-bank="hapoalim"]').click();
+    expect(configBanks().hapoalim).toBeUndefined();
+  });
+
+  it('keeps a target when its removal is dismissed', async () => {
+    window.confirm = vi.fn(() => false) as unknown as typeof window.confirm;
+    await boot();
+    clickNav('banks');
+    query('[data-target="banks.hapoalim.targets.0"] .danger').click();
+    expect(maybe('[data-target="banks.hapoalim.targets.0"]')).not.toBeNull();
+  });
+});
+
+describe('PortalApp selector safety for special-char keys (#18)', () => {
+  it('focuses a new target for a bank key containing CSS-special characters', async () => {
+    configBanks()['a"b'] = {
+      username: 'weird-user',
+      password: 'weird-pass',
+      targets: [fakeBankTarget({ actualAccountId: 'acct-weird', accounts: 'all', reconcile: false })],
+    };
+    await boot();
+    clickNav('banks');
+    const row = (Array.from(document.querySelectorAll('.bank-row')) as HTMLElement[])
+      .find((node) => node.dataset.bankRow === 'a"b');
+    expect(row).toBeTruthy();
+    row?.click();
+    const addTarget = (Array.from(document.querySelectorAll('[data-add-target]')) as HTMLElement[])
+      .find((node) => node.dataset.addTarget === 'a"b');
+    expect(addTarget).toBeTruthy();
+    addTarget?.click();
+    const newRow = (Array.from(document.querySelectorAll('[data-target]')) as HTMLElement[])
+      .find((node) => node.dataset.target === 'banks.a"b.targets.1');
+    expect(newRow).toBeTruthy();
+    const active = document.activeElement as HTMLElement;
+    expect(newRow?.contains(active)).toBe(true);
+    expect(['INPUT', 'SELECT']).toContain(active.tagName);
+  });
+});
+
+describe('PortalApp post-save invalid highlighting (#14 WCAG 3.3.1)', () => {
+  it('marks a rejected required bank field with aria-invalid and aria-describedby', async () => {
+    state.saveOk = false;
+    configBanks().hapoalim.password = '';
+    await boot();
+    clickNav('banks');
+    await saveConfig();
+    const pw = inputId('banks.hapoalim.password');
+    expect(pw.classList.contains('invalid')).toBe(true);
+    expect(pw.getAttribute('aria-invalid')).toBe('true');
+    expect(pw.getAttribute('aria-describedby')).toBe('status');
+    expect(document.activeElement).toBe(pw);
   });
 });

@@ -27,7 +27,6 @@ const DISCOUNT_PASSWORD = 'discount-secret-xyz';
 const DISCOUNT_TARGET_ID = '11111111-1111-4111-8111-111111111111';
 const NEW_TARGET_ID = '22222222-2222-4222-8222-222222222222';
 const LEUMI_TARGET_ID = '33333333-3333-4333-8333-333333333333';
-const MASK = '********';
 
 /** Minimal typed view of the split config/credentials files on disk. */
 interface ISplitFile {
@@ -102,6 +101,19 @@ async function expectValue(locator: Locator, value: string): Promise<void> {
 }
 
 /**
+ * Asserts a secret field renders in its masked "keep current" state: an empty
+ * input carrying the unchanged-secret placeholder. The server never sends the
+ * real secret to the browser; leaving the field blank preserves it on save
+ * (the preserved value is separately asserted from disk).
+ * @param locator - Locator resolving to the secret input.
+ */
+async function expectMaskedSecret(locator: Locator): Promise<void> {
+  await locator.waitFor({ state: 'visible' });
+  expect(await locator.inputValue()).toBe('');
+  expect(await locator.getAttribute('placeholder')).toContain('unchanged');
+}
+
+/**
  * Waits until the status bar reports a successful save.
  * @param page - Active page.
  */
@@ -139,6 +151,9 @@ async function addTarget(page: Page, bankId: string, accountId: string): Promise
 async function openLogin(server: IPortalServer): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await context.newPage();
+  // Destructive actions (remove bank/target/list item) are confirm()-guarded;
+  // auto-accept so removal flows proceed (Playwright dismisses dialogs otherwise).
+  page.on('dialog', (dialog) => { dialog.accept().catch((_err: unknown) => { /* already handled */ }); });
   await page.goto(server.baseUrl);
   await page.waitForSelector('#pw', { state: 'visible' });
   return { context, page };
@@ -203,7 +218,7 @@ describe('Portal UI E2E', () => {
       const { page } = opened;
       await loginOk(page, PORTAL_PASSWORD);
       await gotoBanks(page);
-      await expectValue(byPath(page, 'banks.discount.password'), MASK);
+      await expectMaskedSecret(byPath(page, 'banks.discount.password'));
 
       await byPath(page, 'banks.discount.daysBack').fill('30');
       await addTarget(page, 'discount', NEW_TARGET_ID);
@@ -219,7 +234,7 @@ describe('Portal UI E2E', () => {
       await reopen(page, server);
       await gotoBanks(page);
       await expectValue(byPath(page, 'banks.discount.daysBack'), '30');
-      await expectValue(byPath(page, 'banks.discount.password'), MASK);
+      await expectMaskedSecret(byPath(page, 'banks.discount.password'));
       // leumi round-trips as an added master-list row; selecting it re-renders
       // its detail card (only the selected bank's card is present at a time).
       expect(await page.locator('[data-bank-row="leumi"][data-bank-added="true"]').count()).toBe(1);
