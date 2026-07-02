@@ -134,7 +134,7 @@ export function isSessionSecretWeak(secret: string): boolean {
  * @returns A hex fingerprint of the current portal credentials.
  */
 export function credentialFingerprint(rt: IPortalRuntime): string {
-  const emails = [...(rt.portal.google?.allowedEmails ?? [])].sort().join(',');
+  const emails = [...(rt.portal.google?.allowedEmails ?? [])].sort((a, b) => a.localeCompare(b)).join(',');
   const material = `${rt.portal.passwordHash ?? ''}\n${emails}`;
   return createHmac('sha256', rt.sessionSecret).update(`fp:${material}`).digest('hex');
 }

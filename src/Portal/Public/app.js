@@ -105,7 +105,7 @@ function joinPath(prefix, key) {
 function esc(value) {
   const str = String(value);
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(str);
-  return str.replace(/["\\]/g, '\\$&');
+  return str.replace(/["\\]/g, String.raw`\$&`);
 }
 
 // ---------- auth / bootstrap ----------
@@ -1327,7 +1327,8 @@ function addFieldControl(sec, bank, name) {
     if (!sel.value) return;
     const added = sel.value;
     bank[added] = defaultFor(fieldByKey(sec.bankFields, added));
-    renderFocus(`[data-path="${esc(`banks.${name}.${added}`)}"]`);
+    const p = esc(`banks.${name}.${added}`);
+    renderFocus(`[data-path="${p}"]`);
   };
   wrap.appendChild(sel);
   return wrap;

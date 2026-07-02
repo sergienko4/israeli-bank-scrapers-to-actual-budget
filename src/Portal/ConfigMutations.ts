@@ -151,7 +151,7 @@ export function coerceTargetAccounts(config: IImporterConfig): IImporterConfig {
 }
 
 /** Top-level optional sections the portal may materialize empty on navigation. */
-const OPTIONAL_SECTION_KEYS: readonly string[] = ['proxy', 'notifications', 'spendingWatch'];
+const OPTIONAL_SECTION_KEYS: ReadonlySet<string> = new Set(['proxy', 'notifications', 'spendingWatch']);
 
 /**
  * Whether a top-level optional section arrived "empty" — an empty array or a
@@ -177,13 +177,13 @@ function isEmptySection(value: unknown): boolean {
  */
 export function pruneEmptyOptionalSections(config: IImporterConfig): IImporterConfig {
   const kept = Object.entries(config).filter(
-    ([key, value]) => !(OPTIONAL_SECTION_KEYS.includes(key) && isEmptySection(value)),
+    ([key, value]) => !(OPTIONAL_SECTION_KEYS.has(key) && isEmptySection(value)),
   );
   return Object.fromEntries(kept) as unknown as IImporterConfig;
 }
 
 /** Notification channel groups the portal may materialize empty on navigation. */
-const NOTIFICATION_CHANNEL_KEYS: readonly string[] = ['telegram', 'webhook'];
+const NOTIFICATION_CHANNEL_KEYS: ReadonlySet<string> = new Set(['telegram', 'webhook']);
 
 /**
  * Drops empty notification channel groups (telegram, webhook) that the portal
@@ -198,7 +198,7 @@ export function pruneEmptyNotificationChannels(config: IImporterConfig): IImport
   const notifications = config.notifications;
   if (notifications == null || typeof notifications !== 'object') return config;
   const kept = Object.entries(notifications).filter(
-    ([key, value]) => !(NOTIFICATION_CHANNEL_KEYS.includes(key) && isEmptySection(value)),
+    ([key, value]) => !(NOTIFICATION_CHANNEL_KEYS.has(key) && isEmptySection(value)),
   );
   return { ...config, notifications: Object.fromEntries(kept) } as unknown as IImporterConfig;
 }
