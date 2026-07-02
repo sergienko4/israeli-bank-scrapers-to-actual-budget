@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Importer Config Portal</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <section id="login" class="login hidden">
+    <div class="card login-card">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">🏦</span>
+        <div class="brand-text">
+          <h1>Config Portal</h1>
+          <p class="brand-sub">Israeli Bank → Actual Budget</p>
+        </div>
+      </div>
+      <output id="login-hint" class="muted">Sign in to manage your importer configuration.</output>
+      <a id="google-btn" class="btn google hidden" href="/auth/google">
+        <span class="g-mark" aria-hidden="true">G</span> Continue with Google
+      </a>
+      <label for="pw" class="visually-hidden">Portal password</label>
+      <input id="pw" class="hidden" type="password" placeholder="Portal password" autocomplete="current-password" />
+      <button type="button" id="pw-btn" class="btn primary block hidden">Sign in</button>
+      <button type="button" id="reload-btn" class="btn ghost block hidden">Reload</button>
+      <p id="login-err" class="err" role="alert"></p>
+    </div>
+    <p class="login-foot muted">🔒 Your credentials never leave this server.</p>
+  </section>
+
+  <div id="app" class="app hidden">
+    <div id="scrim" class="scrim"></div>
+    <aside class="sidebar">
+      <div class="brand sidebar-brand">
+        <span class="brand-mark" aria-hidden="true">🏦</span>
+        <div class="brand-text">
+          <strong>Config Portal</strong>
+          <span class="brand-sub">Importer settings</span>
+        </div>
+      </div>
+      <nav id="nav" aria-label="Configuration sections"></nav>
+      <button type="button" id="logout" class="btn ghost block">Log out</button>
+    </aside>
+    <main id="main">
+      <header class="topbar">
+        <button type="button" id="menu" class="icon-btn menu" aria-label="Open navigation" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="topbar-title">
+          <h1 id="title">Banks</h1>
+          <span id="subtitle" class="subtitle"></span>
+        </div>
+        <button type="button" id="save" class="btn primary">Save changes</button>
+      </header>
+      <output id="status" class="status"></output>
+      <div id="view" class="view"></div>
+    </main>
+  </div>
+  <div id="toast" class="toast-wrap" aria-live="polite"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

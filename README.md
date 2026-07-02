@@ -75,6 +75,7 @@ See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scra
 - 🏷️ Auto-categorization (`history` / `translate` Hebrew → English)
 - 🚨 Spending watch with payee filters and threshold alerts
 - 🔐 Encrypted config (AES-256-GCM + PBKDF2 derivation)
+- 🖥️ Optional web config portal (mobile + desktop; password/Google/both auth)
 - 📤 OTP auto-forward (Android MacroDroid + iPhone Shortcuts guides)
 - ⏰ Cron-based scheduling (Docker, VM, Synology, Oracle Cloud, Kubernetes)
 - 🦊 Camoufox stealth browser (Firefox + C++-level fingerprint masking)
@@ -227,10 +228,12 @@ npm run build
 npm test                # unit tests + coverage (config/vitest.config.ts)
 npm run test:unit       # explicit unit run
 npm run test:e2e:mock   # Dockerized mocked E2E (no real banks)
+npm run camoufox:install # one-time: fetch the Camoufox browser binary (required before portal E2E)
+npm run test:e2e:portal # real-browser portal E2E suite (Camoufox)
 npm run docs:serve      # http://127.0.0.1:8000 — MkDocs Material preview
 ```
 
-Pre-commit runs a 21-gate hook (type-check, lint, build, audit, tests, Docker build, Trivy, mocked E2E, Telegram smoke, ESLint canaries, runtime circular-dep check, coupling regression). Plan PRs accordingly. The decoupling baseline is captured at `tests/coupling-baseline.json` and regenerated via `npm run coupling:report`; CI fails on any new file scoring >= 8 (see `scripts/coupling-scanner.cjs`).
+Pre-commit runs an 18-gate hook (type-check ×3, audit, build, TypeDoc, unit tests, ESLint, Biome, Semgrep, markdownlint, config-structure, manifest, link-check, circular-dep, PII scan, ESLint canaries, coupling regression); the heavier Docker image build, Trivy, mocked + Telegram E2E, and CodeQL gates run in CI only, not in the hook. Plan PRs accordingly. The decoupling baseline is captured at `tests/coupling-baseline.json` and regenerated via `npm run coupling:report`; CI fails on any new file scoring >= 8 (see `scripts/coupling-scanner.cjs`).
 
 </details>
 
@@ -243,6 +246,7 @@ Pre-commit runs a 21-gate hook (type-check, lint, build, audit, tests, Docker bu
 | Quick start | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/getting-started/quick-start/> |
 | Per-bank options | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/banks/> |
 | Configuration reference | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/getting-started/configuration/> |
+| Config portal | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/configuration/portal/> |
 | Telegram & webhooks | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/notifications/telegram/> |
 | Deployment guides | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/deployment/docker-compose/> |
 | Architecture | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/architecture/> |

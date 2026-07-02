@@ -57,6 +57,8 @@ jobs:
           name: dist
           path: dist/
       - run: npm run validate:ci
+      - name: Check config manifest completeness (SSoT gate)
+        run: npm run lint:manifest
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -202,6 +204,9 @@ jobs:
     secrets:
       E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
       E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
 
   # ─── AGGREGATOR ────────────────────────────────────
   # Single status that reflects the entire DAG. Not in the required

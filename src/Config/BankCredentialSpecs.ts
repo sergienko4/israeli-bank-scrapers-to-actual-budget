@@ -1,17 +1,16 @@
 /**
- * Per-bank credential requirements — the single source of truth for which
- * IBankConfig fields are mandatory for each supported bank.
+ * Per-bank credential specs, DERIVED from the Config Manifest.
  *
- * Kept separate from ConfigLoaderValidator so that:
- *  - the validator file stays under its 300-line cap, and
- *  - tests can iterate over the specs without pulling in the validator
- *    surface, avoiding accidental coupling between fixtures and runtime
- *    helpers.
+ * The manifest (`Manifest/BankManifest.ts` → `BANK_REQUIREMENTS`) is the single
+ * source of truth for which IBankConfig fields are mandatory per bank. This
+ * module shapes that data into the `ICredentialSpec` map the validator and the
+ * tests already consume, computing `label` as the comma-joined required list.
  *
- * OCP: add new banks by adding entries — no if/else changes needed.
+ * OCP: add new banks by adding a manifest entry — no changes needed here.
  */
 
 import type { IBankConfig } from '../Types/Index.js';
+import { BANK_REQUIREMENTS } from './Manifest/BankManifest.js';
 
 /** Per-bank credential requirements used by `validateRequiredCredentials`. */
 export interface ICredentialSpec {
@@ -23,22 +22,20 @@ export interface ICredentialSpec {
   readonly label: string;
 }
 
+/**
+ * Builds the frozen credential-spec map from the manifest bank requirements.
+ * @returns Per-bank credential specs keyed by lowercased bank id.
+ */
+function buildCredentialSpecs(): Readonly<Record<string, ICredentialSpec>> {
+  const entries = Object.entries(BANK_REQUIREMENTS).map(([bankId, req]) => [
+    bankId,
+    Object.freeze({
+      displayName: req.displayName, required: req.required, label: req.required.join(', '),
+    }),
+  ] as const);
+  const specs = Object.fromEntries(entries);
+  return Object.freeze(specs);
+}
+
 /** Frozen credential spec map keyed by lowercased bank id. */
-export const CREDENTIAL_SPECS: Readonly<Record<string, ICredentialSpec>> = Object.freeze({
-  discount:  { displayName: 'Discount bank', required: ['id', 'password', 'num'],
-    label: 'id, password, num' },
-  leumi:     { displayName: 'leumi',         required: ['username', 'password'],
-    label: 'username, password' },
-  hapoalim:  { displayName: 'Hapoalim',      required: ['userCode', 'password'],
-    label: 'userCode, password' },
-  yahav:     { displayName: 'Yahav',         required: ['nationalID', 'password'],
-    label: 'nationalID, password' },
-  onezero:   { displayName: 'OneZero',       required: ['email', 'password', 'phoneNumber'],
-    label: 'email, password, phoneNumber' },
-  paybox:    { displayName: 'PayBox',        required: ['phoneNumber'],
-    label: 'phoneNumber' },
-  pepper:    { displayName: 'Pepper',        required: ['phoneNumber', 'password'],
-    label: 'phoneNumber, password' },
-  max:       { displayName: 'Max',           required: ['username', 'password', 'id'],
-    label: 'username, password, id' },
-});
+export const CREDENTIAL_SPECS: Readonly<Record<string, ICredentialSpec>> = buildCredentialSpecs();

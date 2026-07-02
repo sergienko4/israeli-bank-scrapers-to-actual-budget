@@ -126,6 +126,7 @@ nav:
       - Categorization: configuration/categorization.md
       - Spending Watch: configuration/spending-watch.md
       - Encrypted Config: configuration/encrypted-config.md
+      - Config Portal: configuration/portal.md
       - Proxy: configuration/proxy.md
       - Rate Limiting: configuration/rate-limiting.md
   - Deployment:

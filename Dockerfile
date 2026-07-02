@@ -145,8 +145,8 @@ RUN chmod -R a-w /app/dist /app/node_modules 2>/dev/null || true
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
   CMD ps aux | grep -q "[n]ode dist/Scheduler.js" || exit 1
 
-# Expose no ports (all communication via volumes and external APIs)
-# This reduces attack surface
+# Expose the optional config-portal port (only used when portal.enabled/PORTAL_ENABLED)
+EXPOSE 8080
 
 # Start the scheduler (which will run dist/Index.js based on SCHEDULE env var)
 CMD ["node", "dist/Scheduler.js"]

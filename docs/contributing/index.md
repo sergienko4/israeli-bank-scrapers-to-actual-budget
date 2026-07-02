@@ -14,7 +14,7 @@ Welcome — contributions are very welcome.
 
 - **Branch naming:** `feat/<short-desc>`, `fix/<short-desc>`, `docs/<short-desc>`, `chore/<short-desc>`, `refactor/<short-desc>`.
 - **Conventional commits:** `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`. The squash-merge title becomes the commit message — keep it conventional so [release-please](https://github.com/googleapis/release-please) versions correctly.
-- **Pre-commit hook:** the project ships an 18-gate Husky hook. `git commit` runs type-check, lint, build, audit, unit tests, Docker build, Trivy, markdown lint, lychee, and mocked E2E. Plan accordingly — first commit is slow.
+- **Pre-commit hook:** the project ships an 18-gate Husky hook. `git commit` runs type-check (×3), audit, build, TypeDoc, unit tests, ESLint, Biome, Semgrep, markdownlint, a config-structure check, the manifest gate, a link-check, a circular-dependency check, a PII scan, ESLint canaries, and a coupling-regression check. Semgrep and the link-check run via Docker, so Docker must be running; the heavier Docker image build, Trivy, mocked + Telegram E2E, and CodeQL gates run in CI, not the hook. Plan accordingly — the first commit is slow.
 - **PRs:** open a draft PR early. CI runs `pr.yml` automatically. Squash-merge after the required checks are green.
 
 ## First time?
