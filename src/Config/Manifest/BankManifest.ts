@@ -93,7 +93,8 @@ export const BANKS_SECTION: IManifestSection = {
 /**
  * Required login fields this importer enforces beyond (or instead of) the
  * scraper's declared `loginFields`, keyed by registry bankId. OneZero needs a
- * phone number for OTP; Max needs an id; Yahav logs in with nationalID only.
+ * phone number for OTP; Max needs an id; Yahav logs in with a nationalID and
+ * password.
  */
 const REQUIRED_OVERRIDES: Readonly<Record<string, readonly (keyof IBankConfig)[]>> = {
   yahav: ['nationalID', 'password'],
@@ -108,12 +109,13 @@ const DISPLAY_NAME_OVERRIDES: Readonly<Record<string, string>> = {
 };
 
 /**
- * Reads the scraper's declared login fields for a company type.
+ * Resolves the scraper metadata entry (name + declared loginFields) for a
+ * company type, centralising the single `keyof typeof SCRAPERS` cast.
  * @param companyType - CompanyTypes value (also the SCRAPERS key).
- * @returns The login field keys the scraper requires for that company.
+ * @returns The scraper descriptor for that company.
  */
-function scraperLoginFields(companyType: CompanyTypes): readonly (keyof IBankConfig)[] {
-  return SCRAPERS[companyType as keyof typeof SCRAPERS].loginFields;
+function scraperFor(companyType: CompanyTypes): (typeof SCRAPERS)[keyof typeof SCRAPERS] {
+  return SCRAPERS[companyType as keyof typeof SCRAPERS];
 }
 
 /**
@@ -123,9 +125,9 @@ function scraperLoginFields(companyType: CompanyTypes): readonly (keyof IBankCon
  * @returns The derived per-bank credential requirement.
  */
 function bankRequirement(bankId: string, companyType: CompanyTypes): IBankRequirement {
-  const scraperName = SCRAPERS[companyType as keyof typeof SCRAPERS].name;
-  const required = REQUIRED_OVERRIDES[bankId] ?? scraperLoginFields(companyType);
-  return { displayName: DISPLAY_NAME_OVERRIDES[bankId] ?? scraperName, required };
+  const scraper = scraperFor(companyType);
+  const required = REQUIRED_OVERRIDES[bankId] ?? scraper.loginFields;
+  return { displayName: DISPLAY_NAME_OVERRIDES[bankId] ?? scraper.name, required };
 }
 
 /**

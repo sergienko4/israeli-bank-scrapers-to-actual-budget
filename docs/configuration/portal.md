@@ -204,10 +204,14 @@ With this in place:
 
 ### Password
 
-Generate a hash:
+Generate a hash (the plaintext is read from `PORTAL_PASSWORD` or piped stdin —
+never from a command-line argument, so it can't leak via shell history or the
+process list):
 
 ```bash
-node scripts/hash-portal-password.js "your-password"
+PORTAL_PASSWORD='your-password' node scripts/hash-portal-password.js
+# or, to keep it out of the environment as well:
+printf '%s' 'your-password' | node scripts/hash-portal-password.js
 ```
 
 Put the printed `scrypt$…` value in `credentials.json` under

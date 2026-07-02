@@ -71,7 +71,9 @@ services:
       - importer-data:/app/data             # Actual Budget sync data
       - importer-cache:/app/cache           # App cache
     healthcheck:
-      test: ["CMD", "ps", "aux"]
+      # Verify the scheduler node process is alive (mirrors the image default and
+      # the portal override below); a bare `ps aux` always exits 0 and proves nothing.
+      test: ["CMD", "sh", "-c", "ps aux | grep -q '[n]ode dist/Scheduler.js'"]
       interval: 5m
       timeout: 10s
       start_period: 30s
@@ -81,8 +83,10 @@ services:
   # Enable by uncommenting. It shares the SAME ./config directory as the importer
   # but mounts it READ-WRITE — least privilege: importer ro (reader), portal rw
   # (the only writer). Saves propagate to the importer on its next run. Set a
-  # password:
-  #   node scripts/hash-portal-password.js "yourpass"  → credentials.json portal.passwordHash
+  # password (the plaintext is read from PORTAL_PASSWORD/stdin, never argv, so it
+  # can't leak via shell history or the process list):
+  #   PORTAL_PASSWORD='yourpass' node scripts/hash-portal-password.js
+  #   → copy the printed value into credentials.json portal.passwordHash
   # The portal also REQUIRES a strong portal.sessionSecret (>=16 chars) in
   # credentials.json or it refuses to boot (cookie-forgery guard). Generate one:
   #   node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
