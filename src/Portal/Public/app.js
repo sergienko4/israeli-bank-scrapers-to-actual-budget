@@ -1024,7 +1024,7 @@ function selectBankRow(id, key) {
  */
 function focusBankDetail() {
   const detail = document.querySelector('.bank-detail');
-  const field = detail && detail.querySelector('input, select, textarea');
+  const field = detail?.querySelector('input, select, textarea');
   const target = field || document.getElementById('bank-search');
   if (!target) return;
   if (detail) revealDetail(detail);

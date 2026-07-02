@@ -319,10 +319,9 @@ select {
 
 .add-field { display: flex; gap: 8px; margin-top: 10px; }
 .add-field select {
-  flex: 1; min-height: var(--tap); padding: 0 13px; border: 1px solid var(--line);
+  flex: 1; min-height: var(--tap); padding: 0 13px; border: 1px dashed var(--line);
   border-radius: var(--r); background: var(--surface-2); color: var(--fg); font-size: 14px;
 }
-.add-field select { border-style: dashed; }
 
 /* ---------- banks (searchable master–detail) ---------- */
 
