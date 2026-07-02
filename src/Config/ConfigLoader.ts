@@ -41,11 +41,10 @@ export class ConfigLoader implements IConfigLoader {
    * @returns Procedure containing the validated IImporterConfig or a failure message.
    */
   public load(): Procedure<IImporterConfig> {
-    const fileResult = this.loadFromFile();
-    if (isFail(fileResult) && fileResult.status !== 'not-found') return fileResult;
-    const config = isFail(fileResult) ? loadFromEnvironment() : fileResult.data;
-    ConfigLoader.applyEnvOverrides(config);
-    return ConfigLoader.validate(config);
+    const merged = this.mergeFileOrEnv();
+    if (isFail(merged)) return merged;
+    ConfigLoader.applyEnvOverrides(merged.data);
+    return ConfigLoader.validate(merged.data);
   }
 
   /**
@@ -53,11 +52,36 @@ export class ConfigLoader implements IConfigLoader {
    * @returns Procedure containing the merged IImporterConfig or a failure message.
    */
   public loadRaw(): Procedure<IImporterConfig> {
+    const merged = this.mergeFileOrEnv();
+    if (isFail(merged)) return merged;
+    ConfigLoader.applyEnvOverrides(merged.data);
+    return merged;
+  }
+
+  /**
+   * Loads and merges the on-disk config (config.json + credentials.json) WITHOUT
+   * applying runtime environment overrides, so an ephemeral variable such as
+   * `PROXY_SERVER` is never folded in and then baked into the file. The portal
+   * store — which edits this config and writes it back — uses this so a runtime
+   * override can never be silently persisted over the operator's real config.
+   * @returns Procedure containing the file-merged IImporterConfig or a failure.
+   */
+  public loadWithoutEnvOverrides(): Procedure<IImporterConfig> {
+    return this.mergeFileOrEnv();
+  }
+
+  /**
+   * Loads config.json (+ credentials.json), falling back to environment-only
+   * config when no config file exists. A parse/config error is returned as-is;
+   * a missing file is not an error (environment config is used instead).
+   * @returns Procedure with the merged config, or a file parse/config failure.
+   */
+  private mergeFileOrEnv(): Procedure<IImporterConfig> {
     const fileResult = this.loadFromFile();
     if (isFail(fileResult) && fileResult.status !== 'not-found') return fileResult;
-    const config = isFail(fileResult) ? loadFromEnvironment() : fileResult.data;
-    ConfigLoader.applyEnvOverrides(config);
-    return succeed(config);
+    if (!isFail(fileResult)) return fileResult;
+    const envConfig = loadFromEnvironment();
+    return succeed(envConfig);
   }
 
   /**

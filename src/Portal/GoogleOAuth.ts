@@ -5,7 +5,7 @@
  */
 
 import type { IPortalGoogleConfig, Procedure } from '../Types/Index.js';
-import { fail, succeed } from '../Types/Index.js';
+import { fail, isSuccess, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 
 const DEFAULT_AUTH_BASE = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -51,29 +51,68 @@ export function buildAuthUrl(google: IPortalGoogleConfig, state: string): string
   return `${resolveAuthBase()}?${params.toString()}`;
 }
 
+/** Trusted Google id_token issuers (current + legacy spellings). */
+const GOOGLE_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
+
 /** Claims this helper consumes from a Google id_token payload. */
 interface IIdTokenClaims {
   email: string;
   emailVerified: boolean;
 }
 
+/** Raw fields read from an id_token payload for verification + claims. */
+interface IIdTokenPayload {
+  iss?: string;
+  aud?: string;
+  exp?: number;
+  email?: string;
+  email_verified?: boolean | string;
+}
+
 /**
- * Decodes the email + email_verified claims from a Google id_token JWT. The
- * signature is not re-checked here (the token came straight from Google over
- * HTTPS); the caller additionally enforces the email allow-list.
+ * Base64url-decodes the id_token payload segment into its raw claims.
  * @param idToken - Compact JWT returned by the token endpoint.
- * @returns The email claim and whether Google marked it verified.
+ * @returns The decoded payload (fields are validated by the caller).
  */
-function claimsFromIdToken(idToken: string): IIdTokenClaims {
+function decodeIdToken(idToken: string): IIdTokenPayload {
   const part = idToken.split('.')[1] ?? '';
   const json = Buffer.from(part, 'base64url').toString();
-  const payload = JSON.parse(json) as {
-    email?: string;
-    email_verified?: boolean | string;
-  };
+  return JSON.parse(json) as IIdTokenPayload;
+}
+
+/**
+ * Returns a human-readable reason when the id_token's issuer, audience, or
+ * expiry cannot be trusted, or an empty string when every check passes. The JWT
+ * signature is not re-checked (the token is fetched directly from Google's token
+ * endpoint over TLS using our client secret), but Google requires validating
+ * `iss` and `aud` even server-to-server: without the `aud` check a token minted
+ * for another application could be replayed against this backend.
+ * @param payload - Decoded id_token payload.
+ * @param clientId - The portal's Google client id the token must be issued to.
+ * @returns The validation error message, or '' when the token is trusted.
+ */
+function tokenTrustError(payload: IIdTokenPayload, clientId: string): string {
+  if (!payload.iss || !GOOGLE_ISSUERS.has(payload.iss)) return 'untrusted id_token issuer';
+  if (payload.aud !== clientId) return 'id_token audience mismatch';
+  if (typeof payload.exp !== 'number' || payload.exp * 1000 <= Date.now()) return 'id_token has expired';
+  return '';
+}
+
+/**
+ * Verifies then reads the email + email_verified claims from a Google id_token.
+ * Issuer/audience/expiry are validated first (see {@link tokenTrustError}); the
+ * caller additionally enforces the email allow-list.
+ * @param idToken - Compact JWT returned by the token endpoint.
+ * @param clientId - The portal's Google client id (the expected `aud`).
+ * @returns Procedure with the email claims, or failure when the token is untrusted.
+ */
+function claimsFromIdToken(idToken: string, clientId: string): Procedure<IIdTokenClaims> {
+  const payload = decodeIdToken(idToken);
+  const trustError = tokenTrustError(payload, clientId);
+  if (trustError) return fail(trustError);
   const verified = payload.email_verified;
   const isVerified = verified === true || verified === 'true';
-  return { email: payload.email ?? '', emailVerified: isVerified };
+  return succeed({ email: payload.email ?? '', emailVerified: isVerified });
 }
 
 /**
@@ -107,7 +146,9 @@ export async function exchangeCode(
     const res = await postToken(body);
     if (!res.ok) return fail(`Google token exchange failed: ${String(res.status)}`);
     const data = (await res.json()) as { id_token?: string };
-    const claims = claimsFromIdToken(data.id_token ?? '');
+    const claimsResult = claimsFromIdToken(data.id_token ?? '', google.clientId);
+    if (!isSuccess(claimsResult)) return fail(claimsResult.message);
+    const claims = claimsResult.data;
     if (!claims.emailVerified) return fail('Google did not verify the account email');
     return succeed(claims.email);
   } catch (error: unknown) {

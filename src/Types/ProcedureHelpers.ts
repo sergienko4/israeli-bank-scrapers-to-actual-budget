@@ -35,7 +35,7 @@ export function fail(message: string, opts: IFailOptions = {}): IProcedureFailur
     status,
     message,
     ...(opts.error ? { error: opts.error } : {}),
-    ...(opts.details ? { details: opts.details } : {}),
+    ...(opts.details ? { details: Object.freeze([...opts.details]) } : {}),
   };
   return Object.freeze(result);
 }

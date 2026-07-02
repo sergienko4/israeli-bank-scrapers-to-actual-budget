@@ -61,23 +61,35 @@ function resolveGoogle(ctx: IGoogleRouteCtx): Procedure<IResolvedGoogle> {
 }
 
 /**
+ * Starts the Google consent flow: mints a CSRF state, sets it as a signed
+ * cookie, and redirects to Google's consent screen; 503s when Google sign-in is
+ * not configured for the live runtime.
+ * @param ctx - Live-runtime accessor and grant callback.
+ * @param reply - Reply used to set the state cookie and redirect.
+ * @returns The Fastify reply outcome.
+ */
+function startConsent(ctx: IGoogleRouteCtx, reply: FastifyReply): FastifyReply {
+  const resolved = resolveGoogle(ctx);
+  if (isFail(resolved)) return reply.code(503).send({ error: GOOGLE_UNCONFIGURED });
+  const { google, rt: runtime } = resolved.data;
+  const state = randomBytes(16).toString('hex');
+  const cookieOptions = portalCookieOptions(runtime, STATE_MAX_AGE);
+  reply.setCookie(STATE_COOKIE, state, cookieOptions);
+  const authUrl = buildAuthUrl(google, state);
+  return reply.redirect(authUrl);
+}
+
+/**
  * Registers the consent-start route that redirects to Google's OAuth screen.
  * @param app - Fastify instance.
  * @param ctx - Live-runtime accessor and grant callback.
  * @returns Confirmation that the consent route is registered.
  */
 function registerConsentRoute(app: FastifyInstance, ctx: IGoogleRouteCtx): { registered: true } {
+  // Declared inline at the call site (not hoisted/shared) so CodeQL's per-route
+  // rate-limit taint tracking (js/missing-rate-limiting) follows it into app.get.
   const oauthLimit = { config: { rateLimit: { max: OAUTH_MAX, timeWindow: RATE_WINDOW } } };
-  app.get('/auth/google', oauthLimit, (_req, reply) => {
-    const resolved = resolveGoogle(ctx);
-    if (isFail(resolved)) return reply.code(503).send({ error: GOOGLE_UNCONFIGURED });
-    const { google } = resolved.data;
-    const state = randomBytes(16).toString('hex');
-    const cookieOpts = portalCookieOptions(resolved.data.rt, STATE_MAX_AGE);
-    reply.setCookie(STATE_COOKIE, state, cookieOpts);
-    const url = buildAuthUrl(google, state);
-    return reply.redirect(url);
-  });
+  app.get('/auth/google', oauthLimit, (_req, reply) => startConsent(ctx, reply));
   return { registered: true };
 }
 
@@ -140,6 +152,8 @@ async function handleCallback(
  * @returns Confirmation that the callback route is registered.
  */
 function registerCallbackRoute(app: FastifyInstance, ctx: IGoogleRouteCtx): { registered: true } {
+  // Declared inline at the call site (not hoisted/shared) so CodeQL's per-route
+  // rate-limit taint tracking (js/missing-rate-limiting) follows it into app.get.
   const oauthLimit = { config: { rateLimit: { max: OAUTH_MAX, timeWindow: RATE_WINDOW } } };
   app.get('/auth/google/callback', oauthLimit, (req, reply) => handleCallback(ctx, req, reply));
   return { registered: true };

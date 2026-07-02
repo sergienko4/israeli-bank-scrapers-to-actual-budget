@@ -12,12 +12,16 @@ let app: FastifyInstance;
 let dir: string;
 
 /**
- * Builds an id_token JWT carrying the email + verified claim for exchange mocks.
+ * Builds an id_token JWT carrying the email + verified claim (plus the
+ * issuer/audience/expiry the portal verifies) for exchange mocks.
  * @param email - Email claim to embed.
  * @returns Compact JWT string (email marked verified).
  */
 function jwtWithEmail(email: string): string {
-  const claims = { email, email_verified: true };
+  const claims = {
+    email, email_verified: true, iss: 'https://accounts.google.com',
+    aud: fakeGoogleConfig().clientId, exp: Math.floor(Date.now() / 1000) + 3600,
+  };
   return `h.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.s`;
 }
 

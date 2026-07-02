@@ -7,15 +7,26 @@ import {
 import { fakeGoogleConfig } from '../helpers/portalFactories.js';
 
 /**
- * Builds a fake Google id_token JWT carrying the given email + verified flag.
+ * Builds a fake Google id_token JWT from an explicit claims object.
+ * @param claims - Arbitrary payload claims to embed.
+ * @returns Compact `header.payload.sig` token string.
+ */
+function jwtWithClaims(claims: object): string {
+  return `header.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
+}
+
+/**
+ * Builds a fake Google id_token JWT carrying the given email + verified flag,
+ * plus the issuer/audience/expiry the portal now verifies.
  * @param email - Email claim to embed in the payload.
  * @param verified - Whether Google marked the email verified (default true).
  * @returns Compact `header.payload.sig` token string.
  */
 function jwtWithEmail(email: string, verified: boolean | string = true): string {
-  const claims = { email, email_verified: verified };
-  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
-  return `header.${payload}.signature`;
+  return jwtWithClaims({
+    email, email_verified: verified, iss: 'https://accounts.google.com',
+    aud: fakeGoogleConfig().clientId, exp: Math.floor(Date.now() / 1000) + 3600,
+  });
 }
 
 describe('GoogleOAuth', () => {
@@ -152,6 +163,71 @@ describe('GoogleOAuth', () => {
       const result = await exchangeCode(fakeGoogleConfig(), 'auth-code');
       expect(isSuccess(result)).toBe(true);
       if (isSuccess(result)) expect(result.data).toBe('str@example.com');
+    });
+
+    it('rejects an id_token from an untrusted issuer', async () => {
+      const token = jwtWithClaims({
+        email: 'a@b.com', email_verified: true, iss: 'https://evil.example',
+        aud: fakeGoogleConfig().clientId, exp: Math.floor(Date.now() / 1000) + 3600,
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true, status: 200, json: () => Promise.resolve({ id_token: token }),
+      }));
+      const result = await exchangeCode(fakeGoogleConfig(), 'auth-code');
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/issuer/i);
+    });
+
+    it('rejects an id_token minted for a different client (aud mismatch)', async () => {
+      const token = jwtWithClaims({
+        email: 'a@b.com', email_verified: true, iss: 'https://accounts.google.com',
+        aud: 'someone-else.apps.googleusercontent.com', exp: Math.floor(Date.now() / 1000) + 3600,
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true, status: 200, json: () => Promise.resolve({ id_token: token }),
+      }));
+      const result = await exchangeCode(fakeGoogleConfig(), 'auth-code');
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/audience/i);
+    });
+
+    it('rejects an expired id_token', async () => {
+      const token = jwtWithClaims({
+        email: 'a@b.com', email_verified: true, iss: 'https://accounts.google.com',
+        aud: fakeGoogleConfig().clientId, exp: Math.floor(Date.now() / 1000) - 60,
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true, status: 200, json: () => Promise.resolve({ id_token: token }),
+      }));
+      const result = await exchangeCode(fakeGoogleConfig(), 'auth-code');
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/expired/i);
+    });
+
+    it('rejects an id_token that carries no issuer claim', async () => {
+      const token = jwtWithClaims({
+        email: 'a@b.com', email_verified: true,
+        aud: fakeGoogleConfig().clientId, exp: Math.floor(Date.now() / 1000) + 3600,
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true, status: 200, json: () => Promise.resolve({ id_token: token }),
+      }));
+      const result = await exchangeCode(fakeGoogleConfig(), 'auth-code');
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/issuer/i);
+    });
+
+    it('rejects an id_token that carries no expiry claim', async () => {
+      const token = jwtWithClaims({
+        email: 'a@b.com', email_verified: true, iss: 'https://accounts.google.com',
+        aud: fakeGoogleConfig().clientId,
+      });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true, status: 200, json: () => Promise.resolve({ id_token: token }),
+      }));
+      const result = await exchangeCode(fakeGoogleConfig(), 'auth-code');
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/expired/i);
     });
   });
 });

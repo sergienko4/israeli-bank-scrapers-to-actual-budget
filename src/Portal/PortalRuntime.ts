@@ -6,9 +6,11 @@
 
 import type { IImporterConfig, IPortalConfig, IPortalGoogleConfig, PortalAuthMode } from '../Types/Index.js';
 import { PORTAL_AUTH_MODES } from '../Types/Index.js';
+import { isEncodedHash } from './PortalPassword.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 8080;
+const MAX_PORT = 65535;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 const MIN_SECRET_LENGTH = 16;
 const KNOWN_WEAK_SECRETS = new Set(['change-me-portal-secret']);
@@ -64,13 +66,16 @@ export function isPortalEnabled(config: IImporterConfig): boolean {
 }
 
 /**
- * Coerces an env/config port into a valid positive integer, else the default.
+ * Coerces an env/config port into a valid listen port in [1, 65535], else the
+ * default. An out-of-range value (0, negative, non-integer, or above 65535)
+ * would otherwise make `app.listen` throw a RangeError at boot, so it falls
+ * back to {@link DEFAULT_PORT}.
  * @param value - Raw port from env (string) or config (number), possibly unset.
  * @returns A valid listen port, falling back to {@link DEFAULT_PORT}.
  */
 function normalizePort(value?: string | number): number {
   const port = Number(value);
-  return Number.isInteger(port) && port > 0 ? port : DEFAULT_PORT;
+  return Number.isInteger(port) && port > 0 && port <= MAX_PORT ? port : DEFAULT_PORT;
 }
 
 /**
@@ -231,15 +236,16 @@ export function isGoogleConfigComplete(
 /**
  * Validates that the resolved auth mode has the credential(s) it needs to log
  * in, so the portal never boots into an un-loginable state — e.g. `password`/
- * `both` with no passwordHash, or `google`/`both` with an incomplete Google
- * client. This closes the silent lockout users hit as "both doesn't work".
+ * `both` with no passwordHash (or a plaintext/malformed one that could never
+ * match), or `google`/`both` with an incomplete Google client. This closes the
+ * silent lockout users hit as "both doesn't work".
  * @param rt - Resolved portal runtime.
  * @returns An actionable error message, or '' when the auth config is bootable.
  */
 export function portalAuthConfigError(rt: IPortalRuntime): string {
   const mode = rt.authMode;
-  if ((mode === 'password' || mode === 'both') && !hasText(rt.portal.passwordHash)) {
-    return 'set portal.passwordHash for password/both mode (type a password in the portal, then restart)';
+  if ((mode === 'password' || mode === 'both') && !isEncodedHash(rt.portal.passwordHash ?? '')) {
+    return 'set portal.passwordHash to an encoded scrypt hash for password/both mode (type a password in the portal, then restart)';
   }
   if ((mode === 'google' || mode === 'both') && !isGoogleConfigComplete(rt.portal.google)) {
     return 'set portal.google.clientId, clientSecret, redirectUri, and at least one allowedEmails entry for google/both mode';

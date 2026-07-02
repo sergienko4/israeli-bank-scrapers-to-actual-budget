@@ -83,7 +83,7 @@ export default class PortalConfigStore {
    * @throws Error when the existing config cannot be loaded/parsed.
    */
   constructor(configPath = '/app/config.json') {
-    const loaded = new ConfigLoader(configPath).loadRaw();
+    const loaded = new ConfigLoader(configPath).loadWithoutEnvOverrides();
     if (isFail(loaded)) {
       const reason = `Portal refused to start; config did not load cleanly: ${loaded.message}`;
       throw new ConfigurationError(reason);

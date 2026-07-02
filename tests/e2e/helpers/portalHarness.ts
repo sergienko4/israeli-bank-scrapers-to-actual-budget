@@ -163,17 +163,24 @@ export interface IGooglePortalOptions {
   authMode?: 'google' | 'both';
 }
 
+/** Google client id the fake OAuth server issues tokens for (matches the runtime). */
+const GOOGLE_CLIENT_ID = 'e2e-client-id';
+
 /**
  * Builds a fake Google id_token JWT (`header.payload.sig`) vouching for an
- * email. The portal only base64url-decodes the payload (the token arrives over
- * a trusted channel), so no real signature is needed for the stub.
+ * email. Carries the issuer/audience/expiry the portal now verifies (the
+ * signature is still unsigned — the token arrives over a trusted channel — so
+ * no real key is needed for the stub).
  * @param email - Email claim to embed, marked verified.
  * @returns A compact JWT string.
  */
 function makeIdToken(email: string): string {
   const enc = (value: object): string => Buffer.from(JSON.stringify(value)).toString('base64url');
   const header = enc({ alg: 'none', typ: 'JWT' });
-  const payload = enc({ email, email_verified: true });
+  const payload = enc({
+    email, email_verified: true, iss: 'https://accounts.google.com',
+    aud: GOOGLE_CLIENT_ID, exp: Math.floor(Date.now() / 1000) + 3600,
+  });
   return `${header}.${payload}.sig`;
 }
 
@@ -224,7 +231,7 @@ export async function startFakeGoogle(email: string = GOOGLE_TEST_EMAIL): Promis
 function googleRuntime(opts: IGooglePortalOptions): IPortalRuntime {
   const authMode = opts.authMode ?? 'google';
   const google: IPortalGoogleConfig = {
-    clientId: 'e2e-client-id', clientSecret: 'e2e-client-secret',
+    clientId: GOOGLE_CLIENT_ID, clientSecret: 'e2e-client-secret',
     redirectUri: 'http://127.0.0.1:0/auth/google/callback', allowedEmails: opts.allowedEmails,
   };
   const portal: IPortalConfig = {

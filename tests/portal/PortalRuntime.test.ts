@@ -96,6 +96,11 @@ describe('PortalRuntime', () => {
       expect(resolvePortalRuntime(fakeImporterConfig()).port).toBe(8080);
     });
 
+    it('falls back to the default port when the configured port exceeds 65535', () => {
+      const config = fakeImporterConfig({ portal: { enabled: true, port: 70000 } });
+      expect(resolvePortalRuntime(config).port).toBe(8080);
+    });
+
     it('coerces an unknown auth mode to password', () => {
       const config = fakeImporterConfig({ portal: { enabled: true, authMode: 'bogus' as PortalAuthMode } });
       expect(resolvePortalRuntime(config).authMode).toBe('password');
@@ -167,6 +172,11 @@ describe('PortalRuntime', () => {
     it('flags password/both mode that has no passwordHash', () => {
       const portal = fakePortalConfig({ authMode: 'both', passwordHash: undefined });
       expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'both', portal }))).toMatch(/passwordHash/);
+    });
+
+    it('flags password/both mode whose passwordHash is plaintext, not an encoded scrypt hash', () => {
+      const portal = fakePortalConfig({ authMode: 'password', passwordHash: 'plaintext-never-matches' });
+      expect(portalAuthConfigError(fakePortalRuntime({ authMode: 'password', portal }))).toMatch(/scrypt|passwordHash/);
     });
 
     it('flags google/both mode with an incomplete google client', () => {

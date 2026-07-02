@@ -45,8 +45,16 @@ function stageWrite(item: IPendingWrite): string {
  * @returns Status object with the count of temp files removed.
  */
 function cleanupTemps(tmps: readonly string[]): { removed: number } {
-  for (const tmp of tmps) rmSync(tmp, { force: true });
-  return { removed: tmps.length };
+  let removed = 0;
+  for (const tmp of tmps) {
+    try {
+      rmSync(tmp, { force: true });
+      removed += 1;
+    } catch {
+      // Best-effort cleanup: ignore so the original write error still propagates.
+    }
+  }
+  return { removed };
 }
 
 /**
