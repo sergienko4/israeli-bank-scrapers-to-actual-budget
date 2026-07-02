@@ -624,22 +624,28 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig();
       mockFileConfig(config);
       process.env.PROXY_SERVER = 'socks5://env-proxy:1080';
-      const result = new ConfigLoader('/test/config.json').load();
-      expect(result.success).toBe(true);
-      if (!isSuccess(result)) return;
-      expect(result.data.proxy?.server).toBe('socks5://env-proxy:1080');
-      delete process.env.PROXY_SERVER;
+      try {
+        const result = new ConfigLoader('/test/config.json').load();
+        expect(result.success).toBe(true);
+        if (!isSuccess(result)) return;
+        expect(result.data.proxy?.server).toBe('socks5://env-proxy:1080');
+      } finally {
+        delete process.env.PROXY_SERVER;
+      }
     });
 
     it('loadWithoutEnvOverrides ignores PROXY_SERVER so a runtime env var is never persisted', () => {
       const config = makeValidConfig();
       mockFileConfig(config);
       process.env.PROXY_SERVER = 'socks5://env-proxy:1080';
-      const result = new ConfigLoader('/test/config.json').loadWithoutEnvOverrides();
-      expect(result.success).toBe(true);
-      if (!isSuccess(result)) return;
-      expect(result.data.proxy?.server).not.toBe('socks5://env-proxy:1080');
-      delete process.env.PROXY_SERVER;
+      try {
+        const result = new ConfigLoader('/test/config.json').loadWithoutEnvOverrides();
+        expect(result.success).toBe(true);
+        if (!isSuccess(result)) return;
+        expect(result.data.proxy?.server).not.toBe('socks5://env-proxy:1080');
+      } finally {
+        delete process.env.PROXY_SERVER;
+      }
     });
   });
 
