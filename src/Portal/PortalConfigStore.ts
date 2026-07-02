@@ -11,7 +11,7 @@ import ConfigurationError from '../Errors/ConfigurationError.js';
 import type { IImporterConfig, Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
-import { coerceTargetAccounts, hashPlainPortalPassword, maskSecrets, restoreMasked } from './ConfigMutations.js';
+import { coerceTargetAccounts, hashPlainPortalPassword, maskSecrets, pruneEmptyOptionalSections, restoreMasked } from './ConfigMutations.js';
 import { isPortalEnabled, portalBootBlocker, resolvePortalRuntime } from './PortalRuntime.js';
 
 /**
@@ -62,7 +62,8 @@ function collectGateErrors(merged: IImporterConfig): string[] {
 function shapeAndGate(next: IImporterConfig, current: IImporterConfig): Procedure<IImporterConfig> {
   const restored = restoreMasked(next, current);
   const hashed = hashPlainPortalPassword(restored);
-  const merged = coerceTargetAccounts(hashed);
+  const coerced = coerceTargetAccounts(hashed);
+  const merged = pruneEmptyOptionalSections(coerced);
   const errors = collectGateErrors(merged);
   if (errors.length === 0) return succeed(merged);
   const reason = errors.join('\n');

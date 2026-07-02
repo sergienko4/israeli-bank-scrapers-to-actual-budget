@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { IImporterConfig } from '../../src/Types/Index.js';
 import {
   addBank, coerceAccounts, coerceTargetAccounts, hashPlainPortalPassword,
-  maskSecrets, removeBank, restoreMasked,
+  maskSecrets, pruneEmptyOptionalSections, removeBank, restoreMasked,
 } from '../../src/Portal/ConfigMutations.js';
 import { hashPassword, verifyPassword } from '../../src/Portal/PortalPassword.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
@@ -158,6 +158,27 @@ describe('ConfigMutations', () => {
       const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ targets: undefined }) } });
       const out = coerceTargetAccounts(config);
       expect(out.banks.discount.targets).toBeUndefined();
+    });
+  });
+
+  describe('pruneEmptyOptionalSections', () => {
+    it('drops an empty proxy block the UI materialized on navigation', () => {
+      const withEmpty = { ...fakeImporterConfig(), proxy: {} } as unknown as IImporterConfig;
+      expect('proxy' in pruneEmptyOptionalSections(withEmpty)).toBe(false);
+    });
+
+    it('keeps a proxy block that has a server', () => {
+      const withProxy = { ...fakeImporterConfig(), proxy: { server: 'http://p:8080' } } as unknown as IImporterConfig;
+      expect(pruneEmptyOptionalSections(withProxy).proxy).toEqual({ server: 'http://p:8080' });
+    });
+
+    it('drops empty notifications and spendingWatch but keeps required banks', () => {
+      const base = fakeImporterConfig();
+      const withEmpties = { ...base, notifications: {}, spendingWatch: [] } as unknown as IImporterConfig;
+      const pruned = pruneEmptyOptionalSections(withEmpties);
+      expect('notifications' in pruned).toBe(false);
+      expect('spendingWatch' in pruned).toBe(false);
+      expect(pruned.banks).toEqual(base.banks);
     });
   });
 });

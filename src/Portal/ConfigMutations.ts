@@ -150,6 +150,38 @@ export function coerceTargetAccounts(config: IImporterConfig): IImporterConfig {
   return { ...config, banks: Object.fromEntries(entries) };
 }
 
+/** Top-level optional sections the portal may materialize empty on navigation. */
+const OPTIONAL_SECTION_KEYS: readonly string[] = ['proxy', 'notifications', 'spendingWatch'];
+
+/**
+ * Whether a top-level optional section arrived "empty" — an empty array or a
+ * plain object with no own keys — i.e. a section the portal eagerly created on
+ * navigation but the user never filled in.
+ * @param value - A top-level optional-section value.
+ * @returns True when the value is an empty array or empty object.
+ */
+function isEmptySection(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length === 0;
+  if (value !== null && typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
+}
+
+/**
+ * Drops top-level optional sections (proxy, notifications, spendingWatch) that
+ * arrived empty, so an untouched `proxy: {}` the UI materialized on navigation
+ * neither trips the save gate ("proxy.server is required when proxy is
+ * configured") nor persists as a meaningless empty block. Required sections are
+ * never touched.
+ * @param config - Shaped candidate config.
+ * @returns A new config without empty optional sections.
+ */
+export function pruneEmptyOptionalSections(config: IImporterConfig): IImporterConfig {
+  const kept = Object.entries(config).filter(
+    ([key, value]) => !(OPTIONAL_SECTION_KEYS.includes(key) && isEmptySection(value)),
+  );
+  return Object.fromEntries(kept) as unknown as IImporterConfig;
+}
+
 /**
  * Adds or replaces a bank entry, returning a new config.
  * @param config - Current config.

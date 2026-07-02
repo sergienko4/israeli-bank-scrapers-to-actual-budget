@@ -52,6 +52,14 @@ describe('PortalConfigStore', () => {
     expect(store.raw().banks.discount.password).not.toBe('********');
   });
 
+  it('saves when an untouched empty proxy block is present (UI navigation artifact)', () => {
+    const { store } = makeStore();
+    const next = { ...store.masked(), proxy: {} } as unknown as IImporterConfig;
+    const result = save(store, next);
+    expect(isSuccess(result)).toBe(true);
+    expect('proxy' in store.raw()).toBe(false);
+  });
+
   it('validates restored secrets so a masked botToken is not false-flagged', () => {
     const config = fakeImporterConfig({
       notifications: { enabled: true, telegram: fakeTelegramConfig() },
