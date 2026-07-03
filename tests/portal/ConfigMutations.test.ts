@@ -5,7 +5,7 @@ import {
   addBank, coerceAccounts, coerceTargetAccounts, hashPlainPortalPassword,
   maskSecrets, pruneEmptyNotificationChannels, pruneEmptyOptionalSections, removeBank, restoreMasked,
 } from '../../src/Portal/ConfigMutations.js';
-import { hashPassword, verifyPassword } from '../../src/Portal/PortalPassword.js';
+import { hashPassword, isEncodedHash, verifyPassword } from '../../src/Portal/PortalPassword.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
 
 const MASK = '********';
@@ -87,6 +87,13 @@ describe('ConfigMutations', () => {
       expect((await hashPlainPortalPassword(empty)).portal?.passwordHash).toBe('');
       const none = fakeImporterConfig({ portal: { enabled: true } });
       expect((await hashPlainPortalPassword(none)).portal?.passwordHash).toBeUndefined();
+    });
+
+    it('leaves a whitespace-only password unhashed so the auth gate rejects it', async () => {
+      const blank = fakeImporterConfig({ portal: { enabled: true, passwordHash: '   ' } });
+      const out = await hashPlainPortalPassword(blank);
+      expect(out.portal?.passwordHash).toBe('   ');
+      expect(isEncodedHash(out.portal?.passwordHash ?? '')).toBe(false);
     });
 
     it('returns the same config when there is no portal block', async () => {

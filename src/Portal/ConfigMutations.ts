@@ -50,17 +50,19 @@ export function restoreMasked<T>(next: T, prev: unknown): T {
 
 /**
  * Hashes a freshly-typed plaintext portal password. The UI password field
- * accepts a plaintext value; when it is not already an encoded scrypt hash (and
- * not empty), it is hashed here on save so password/`both` auth works without
- * the user pre-computing a hash. An untouched field arrives as the MASK and has
- * already been restored to the stored hash by {@link restoreMasked}.
+ * accepts a plaintext value; when it is not already an encoded scrypt hash and
+ * carries a non-blank value, it is hashed here on save so password/`both` auth
+ * works without the user pre-computing a hash. A blank or whitespace-only entry
+ * is left untouched so the auth gate rejects it instead of minting a valid hash
+ * for an effectively empty password. An untouched field arrives as the MASK and
+ * has already been restored to the stored hash by {@link restoreMasked}.
  * @param config - Config whose `portal.passwordHash` may be plaintext.
  * @returns A new config with `portal.passwordHash` encoded when applicable.
  */
 export async function hashPlainPortalPassword(config: IImporterConfig): Promise<IImporterConfig> {
   const { portal } = config;
   const value = portal?.passwordHash;
-  if (!portal || !value || isEncodedHash(value)) return config;
+  if (!portal || !value?.trim() || isEncodedHash(value)) return config;
   return { ...config, portal: { ...portal, passwordHash: await hashPasswordAsync(value) } };
 }
 

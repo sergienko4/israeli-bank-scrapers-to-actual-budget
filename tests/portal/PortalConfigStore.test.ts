@@ -8,7 +8,7 @@ import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import type { IImporterConfig, Procedure } from '../../src/Types/Index.js';
 import { isFail, isSuccess } from '../../src/Types/Index.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
-import { seedConfigDir } from '../helpers/portalFactories.js';
+import { fakePortalConfig, seedConfigDir } from '../helpers/portalFactories.js';
 
 const dirs: string[] = [];
 
@@ -83,6 +83,17 @@ describe('PortalConfigStore', () => {
     const result = await save(store, next);
     expect(isFail(result)).toBe(true);
     expect(isFail(result) && result.message).toContain('at least one notification channel');
+  });
+
+  it('rejects a whitespace-only portal password instead of hashing a blank credential', async () => {
+    const { store } = makeStore(fakeImporterConfig({ portal: fakePortalConfig() }));
+    const next = {
+      ...store.masked(),
+      portal: { ...fakePortalConfig(), passwordHash: '   ' },
+    } as unknown as IImporterConfig;
+    const result = await save(store, next);
+    expect(isFail(result)).toBe(true);
+    expect(isFail(result) && result.message).toContain('encoded scrypt hash');
   });
 
   it('does not false-flag an empty sibling channel in the validate preview (save/preview parity)', () => {
