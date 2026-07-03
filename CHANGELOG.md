@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.39.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.7...v1.39.0) (2026-07-03)
+
+
+### Added
+
+* add config web portal (mobile + desktop) ([#492](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/492)) ([2cffdcd](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/2cffdcdaf35ef013972fd0f19537ffb67948b513))
+
+
+### Fixed
+
+* **deps:** update critical dependencies ([#495](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/495)) ([d553381](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d553381a3acb941eafcb4dd325fed0e2fa5cdcd6))
+
 ## [1.38.7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.38.6...v1.38.7) (2026-06-19)
 
 
