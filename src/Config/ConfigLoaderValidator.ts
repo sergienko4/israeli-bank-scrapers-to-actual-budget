@@ -11,6 +11,7 @@ import type {
 IImporterConfig, INotificationConfig, IProxyConfig,
 ISpendingWatchRule, Procedure} from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
+import { hasNotificationChannel, NO_NOTIFICATION_CHANNEL_MESSAGE } from './Validators/NotificationChannel.js';
 import NOTIFICATION_CHANNEL_VALIDATORS from './Validators/NotificationChannelValidators.js';
 import { isValidUUID } from './Validators/ValidationResult.js';
 
@@ -59,13 +60,24 @@ export function validateServerUrl(url: string): Procedure<{ valid: true }> {
 /**
  * Validates notification settings (Telegram and webhook) when notifications are enabled.
  *
+ * Returns success immediately when the block is disabled — a "notifications off"
+ * config needs no channel — mirroring `checkNotificationsOffline` so the two
+ * validators agree on the `enabled` gate.
+ *
  * Iterates {@link NOTIFICATION_CHANNEL_VALIDATORS} instead of an if-chain so
  * adding a new channel (e.g., Slack) does not modify this dispatcher.
+ *
+ * Disabled notifications are a no-op: the channel requirement only applies when
+ * `enabled` is true, so users can persist a "notifications off" block.
  *
  * @param config - The INotificationConfig block to validate.
  * @returns Procedure with valid: true on success, or first channel failure.
  */
 export function validateNotifications(config: INotificationConfig): Procedure<{ valid: true }> {
+  if (!config.enabled) return succeed({ valid: true as const });
+  if (!hasNotificationChannel(config)) {
+    return fail(NO_NOTIFICATION_CHANNEL_MESSAGE);
+  }
   for (const channel of NOTIFICATION_CHANNEL_VALIDATORS) {
     if (!channel.applies(config)) continue;
     const result = channel.validate(config);

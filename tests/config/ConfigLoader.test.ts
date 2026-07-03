@@ -380,7 +380,7 @@ describe('ConfigLoader', () => {
   describe('bank-specific credential validation', () => {
     it.each([
       ['discount', { password: TEST_CREDENTIAL, num: 'ABC' }, 'Discount bank requires'],
-      ['leumi', { password: TEST_CREDENTIAL }, 'leumi requires: username, password'],
+      ['leumi', { password: TEST_CREDENTIAL }, 'Leumi requires: username, password'],
       ['hapoalim', { password: TEST_CREDENTIAL }, 'Hapoalim requires: userCode, password'],
       ['yahav', { password: TEST_CREDENTIAL }, 'Yahav requires: nationalID, password'],
       ['oneZero', { password: TEST_CREDENTIAL, phoneNumber: '0501234567' }, 'OneZero requires: email, password, phoneNumber'],
@@ -624,11 +624,45 @@ describe('ConfigLoader', () => {
       const config = makeValidConfig();
       mockFileConfig(config);
       process.env.PROXY_SERVER = 'socks5://env-proxy:1080';
-      const result = new ConfigLoader('/test/config.json').load();
-      expect(result.success).toBe(true);
-      if (!isSuccess(result)) return;
-      expect(result.data.proxy?.server).toBe('socks5://env-proxy:1080');
-      delete process.env.PROXY_SERVER;
+      try {
+        const result = new ConfigLoader('/test/config.json').load();
+        expect(result.success).toBe(true);
+        if (!isSuccess(result)) return;
+        expect(result.data.proxy?.server).toBe('socks5://env-proxy:1080');
+      } finally {
+        delete process.env.PROXY_SERVER;
+      }
+    });
+
+    it('loadWithoutEnvOverrides ignores PROXY_SERVER so a runtime env var is never persisted', () => {
+      const config = makeValidConfig();
+      mockFileConfig(config);
+      process.env.PROXY_SERVER = 'socks5://env-proxy:1080';
+      try {
+        const result = new ConfigLoader('/test/config.json').loadWithoutEnvOverrides();
+        expect(result.success).toBe(true);
+        if (!isSuccess(result)) return;
+        expect(result.data.proxy?.server).not.toBe('socks5://env-proxy:1080');
+      } finally {
+        delete process.env.PROXY_SERVER;
+      }
+    });
+  });
+
+  describe('validateBootable', () => {
+    it('accepts a fully valid config (boot-gate parity seam)', () => {
+      const result = ConfigLoader.validateBootable(makeValidConfig());
+      expect(isSuccess(result)).toBe(true);
+    });
+
+    it('rejects a malformed serverURL the importer would refuse to boot on', () => {
+      const config = makeValidConfig({ init: { serverURL: 'httptypo://localhost:5006' } });
+      expect(isFail(ConfigLoader.validateBootable(config))).toBe(true);
+    });
+
+    it('rejects a bank missing a required credential', () => {
+      const config = makeValidConfig({ banks: { discount: { num: 'AB12CD', targets: [DEFAULT_TARGET] } as IBankConfig } });
+      expect(isFail(ConfigLoader.validateBootable(config))).toBe(true);
     });
   });
 

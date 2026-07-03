@@ -1,0 +1,79 @@
+/**
+ * Portal password hashing/verification using Node's scrypt. No external deps.
+ * Hash format: scrypt$<saltHex>$<hashHex>. Verify is timing-safe.
+ */
+
+import { type BinaryLike, randomBytes, scrypt, scryptSync, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
+
+const SALT_BYTES = 16;
+const KEY_BYTES = 64;
+const SCRYPT_ASYNC = promisify<BinaryLike, BinaryLike, number, Buffer>(scrypt);
+const ENCODED_HASH = new RegExp(
+  String.raw`^scrypt\$[0-9a-f]{${String(SALT_BYTES * 2)}}\$[0-9a-f]{${String(KEY_BYTES * 2)}}$`,
+);
+
+/**
+ * Encodes a scrypt-derived key and its salt into the stored hash string.
+ * @param salt - Hex-encoded random salt.
+ * @param derivedKey - Raw scrypt-derived key bytes.
+ * @returns The `scrypt$salt$hash` encoded value.
+ */
+function encodeHash(salt: string, derivedKey: Buffer): string {
+  return `scrypt$${salt}$${derivedKey.toString('hex')}`;
+}
+
+/**
+ * Hashes a plaintext password synchronously. Intended for setup contexts —
+ * tests, factories, one-off scripts — where blocking the current tick is
+ * harmless. Request handlers must use {@link hashPasswordAsync} so a config
+ * save never blocks the Fastify event loop.
+ * @param password - Plaintext portal password.
+ * @returns Encoded `scrypt$salt$hash` string.
+ */
+export function hashPassword(password: string): string {
+  const salt = randomBytes(SALT_BYTES).toString('hex');
+  const derived = scryptSync(password, salt, KEY_BYTES);
+  return encodeHash(salt, derived);
+}
+
+/**
+ * Hashes a plaintext password without blocking the event loop, for the portal
+ * save path. Uses the async scrypt API so hashing a freshly-typed password
+ * never stalls concurrent requests.
+ * @param password - Plaintext portal password.
+ * @returns Promise resolving to the encoded `scrypt$salt$hash` string.
+ */
+export async function hashPasswordAsync(password: string): Promise<string> {
+  const salt = randomBytes(SALT_BYTES).toString('hex');
+  const derived = await SCRYPT_ASYNC(password, salt, KEY_BYTES);
+  return encodeHash(salt, derived);
+}
+
+/**
+ * Verifies a candidate password against a stored scrypt hash. Uses the async
+ * scrypt API so a login attempt never blocks the Fastify event loop.
+ * @param password - Candidate plaintext password.
+ * @param stored - Previously stored `scrypt$salt$hash` value.
+ * @returns Promise resolving true when the candidate matches the stored hash.
+ */
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const [scheme, salt, hash] = stored.split('$');
+  if (scheme !== 'scrypt' || !salt || !hash) return false;
+  const candidate = await SCRYPT_ASYNC(password, salt, KEY_BYTES);
+  const expected = Buffer.from(hash, 'hex');
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+}
+
+/**
+ * Whether a value is already an encoded scrypt hash rather than a plaintext
+ * password, so a freshly typed password — even one that merely starts with
+ * "scrypt$" or contains malformed/short hex — is hashed on save and never stored
+ * verbatim. Only the exact `scrypt$<32-hex salt>$<128-hex hash>` shape produced
+ * by {@link hashPassword} is treated as already encoded.
+ * @param value - Candidate stored value.
+ * @returns True when the value matches the exact encoded-hash structure.
+ */
+export function isEncodedHash(value: string): boolean {
+  return ENCODED_HASH.test(value);
+}

@@ -41,11 +41,9 @@ export class ConfigLoader implements IConfigLoader {
    * @returns Procedure containing the validated IImporterConfig or a failure message.
    */
   public load(): Procedure<IImporterConfig> {
-    const fileResult = this.loadFromFile();
-    if (isFail(fileResult) && fileResult.status !== 'not-found') return fileResult;
-    const config = isFail(fileResult) ? loadFromEnvironment() : fileResult.data;
-    ConfigLoader.applyEnvOverrides(config);
-    return ConfigLoader.validate(config);
+    const merged = this.mergeWithEnvOverrides();
+    if (isFail(merged)) return merged;
+    return ConfigLoader.validate(merged.data);
   }
 
   /**
@@ -53,11 +51,46 @@ export class ConfigLoader implements IConfigLoader {
    * @returns Procedure containing the merged IImporterConfig or a failure message.
    */
   public loadRaw(): Procedure<IImporterConfig> {
+    return this.mergeWithEnvOverrides();
+  }
+
+  /**
+   * Loads and merges the on-disk config (config.json + credentials.json) WITHOUT
+   * applying runtime environment overrides, so an ephemeral variable such as
+   * `PROXY_SERVER` is never folded in and then baked into the file. The portal
+   * store — which edits this config and writes it back — uses this so a runtime
+   * override can never be silently persisted over the operator's real config.
+   * @returns Procedure containing the file-merged IImporterConfig or a failure.
+   */
+  public loadWithoutEnvOverrides(): Procedure<IImporterConfig> {
+    return this.mergeFileOrEnv();
+  }
+
+  /**
+   * Merges the on-disk (or env-only) config and folds in runtime environment
+   * overrides, so {@link load} and {@link loadRaw} share one override path and
+   * cannot drift. A file/config failure is returned unchanged.
+   * @returns Procedure with the env-overridden config, or a merge failure.
+   */
+  private mergeWithEnvOverrides(): Procedure<IImporterConfig> {
+    const merged = this.mergeFileOrEnv();
+    if (isFail(merged)) return merged;
+    ConfigLoader.applyEnvOverrides(merged.data);
+    return merged;
+  }
+
+  /**
+   * Loads config.json (+ credentials.json), falling back to environment-only
+   * config when no config file exists. A parse/config error is returned as-is;
+   * a missing file is not an error (environment config is used instead).
+   * @returns Procedure with the merged config, or a file parse/config failure.
+   */
+  private mergeFileOrEnv(): Procedure<IImporterConfig> {
     const fileResult = this.loadFromFile();
     if (isFail(fileResult) && fileResult.status !== 'not-found') return fileResult;
-    const config = isFail(fileResult) ? loadFromEnvironment() : fileResult.data;
-    ConfigLoader.applyEnvOverrides(config);
-    return succeed(config);
+    if (!isFail(fileResult)) return fileResult;
+    const envConfig = loadFromEnvironment();
+    return succeed(envConfig);
   }
 
   /**
@@ -109,6 +142,19 @@ export class ConfigLoader implements IConfigLoader {
   }
 
   // ─── Validation ───
+
+  /**
+   * Boot-gate validation seam: enforces the exact "is this config bootable?"
+   * rules the importer applies at startup, without file loading. The portal
+   * write-gate calls this so a saved config can never pass the portal yet make
+   * the importer exit(1). Delegates to the loader's own private validation, the
+   * same check the loader runs after merging files, so the two cannot drift.
+   * @param config - The merged IImporterConfig to validate.
+   * @returns Procedure with the validated config, or a config-error failure.
+   */
+  public static validateBootable(config: IImporterConfig): Procedure<IImporterConfig> {
+    return ConfigLoader.validate(config);
+  }
 
   /**
    * Validates the fully merged config, returning a Procedure with the config or failure.

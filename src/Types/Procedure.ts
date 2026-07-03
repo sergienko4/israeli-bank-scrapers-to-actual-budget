@@ -11,12 +11,19 @@ export interface IProcedureSuccess<T> {
   readonly data: T;
 }
 
-/** Failed outcome carrying an error message and optional Error. */
+/**
+ * Failed outcome carrying an error message, an optional original Error, and an
+ * optional structured breakdown ({@link IProcedureFailure.details}) of the
+ * distinct reasons behind a composite failure (e.g. one entry per validation
+ * gate violation), so callers can present them individually instead of parsing
+ * the joined `message`.
+ */
 export interface IProcedureFailure {
   readonly success: false;
   readonly status: string;
   readonly message: string;
   readonly error?: Error;
+  readonly details?: readonly string[];
 }
 
 /**

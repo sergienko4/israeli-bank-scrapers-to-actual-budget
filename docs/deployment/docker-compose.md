@@ -6,7 +6,7 @@ The recommended way to run the importer. The repo ships a `docker-compose.yml` t
 
 ```text
 docker-compose.yml          # Actual Budget + importer
-config.json.example         # template — copy to config.json
+config.json.example         # template — copy to config/config.json
 ```
 
 ## First-time setup
@@ -20,7 +20,7 @@ docker compose up -d actual-server
 #    - Create a budget
 #    - Settings → Show Advanced Settings → Sync ID → copy
 
-# 3. Edit config.json:
+# 3. Put config.json in ./config/ and edit it (config/config.json):
 #      "serverURL": "http://actual-server:5006"   ← internal service name
 #      "syncId": "<your Sync ID>"
 
@@ -60,12 +60,12 @@ Named volumes are used by default — data survives container recreation. To use
 
 ```yaml
 volumes:
-  - ./config.json:/app/config.json:ro
+  - ./config:/app/config:ro     # config DIRECTORY (config.json + optional credentials.json) — importer is read-only
   - ./data:/app/data
   - ./cache:/app/cache
-  - ./chrome-data:/app/chrome-data
-  - ./logs:/app/logs
 ```
+
+`:ro` is correct for the **importer** — it never writes its config. If you enable the optional config portal (see `docs/configuration/portal.md`), the portal service must mount the **same `./config` directory read-write** (`./config:/app/config:rw`): the portal saves atomically (write a temp file, then rename), which a read-only — or single-file — mount breaks. Always bind-mount the **directory**, never a single `config.json` file.
 
 ## Health
 

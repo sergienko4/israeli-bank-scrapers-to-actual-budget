@@ -7,10 +7,11 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     exclude: ['tests/e2e/**'],
+    hookTimeout: 30_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
-      include: ['src/**/*.ts'],
+      include: ['src/**/*.ts', 'src/Portal/Public/app.js'],
       exclude: [
         'src/Index.ts',
       ],

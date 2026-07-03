@@ -187,6 +187,22 @@ const CANARIES = {
     description:
       'Global src/** default max-lines tightened 300 -> 200 (size/cohesion Track B); this canary exceeds 200 LoC',
   },
+  'tests/eslint-canaries/UnneededTernary.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 492 — no-unneeded-ternary (SonarCloud S6644): `x ? x : y` must be `x || y`',
+  },
+  'tests/eslint-canaries/RegExpTemplateRaw.canary.ts': {
+    minErrors: 1,
+    description:
+      'PR 492 — RegExp-from-template must use String.raw (SonarCloud S7780): no doubled backslashes',
+  },
+  'tests/eslint-canaries/portal/TopLevelAwait.canary.js': {
+    minErrors: 1,
+    config: 'config/eslint.portal-public.mjs',
+    description:
+      'PR 492 — portal SPA top-level call must be awaited (SonarCloud S7785): app.js loads as <script type="module"> with `await init()`',
+  },
 };
 
 let allPassed = true;
@@ -194,8 +210,9 @@ let passCount = 0;
 let failCount = 0;
 
 for (const [file, expected] of Object.entries(CANARIES)) {
+  const configFlag = expected.config ? `--config "${expected.config}" ` : '';
   try {
-    execSync(`npx eslint "${file}" --format json`, {
+    execSync(`npx eslint ${configFlag}"${file}" --format json`, {
       encoding: 'utf8',
       cwd: process.cwd(),
     });

@@ -133,6 +133,16 @@ const RESTRICTED_SYNTAX_RULES = [
     message: "🚫 Use errorMessage() utility instead of manual error.message access in catch blocks.",
   },
 
+  // 11. RegExp built from a template literal must use String.raw (SonarCloud
+  // S7780). A plain template doubles every regex backslash (`\\d`), which is
+  // noisy and error-prone; `String.raw` keeps the pattern readable (`\d`). The
+  // selector targets a NON-tagged TemplateLiteral passed directly to
+  // `new RegExp(...)` whose raw text contains a backslash; the `String.raw`
+  // fix is a TaggedTemplateExpression, so corrected code is never flagged.
+  {
+    selector: "NewExpression[callee.name='RegExp'] > TemplateLiteral > TemplateElement[value.raw=/\\\\/]",
+    message: '🚫 REGEXP: Build RegExp from a template literal with String.raw (e.g. new RegExp(String.raw`\\d+`)) so backslashes are not doubled — SonarCloud S7780.',
+  },
 
 ];
 
@@ -218,6 +228,8 @@ export default tseslint.config(
       }],
       '@typescript-eslint/return-await': ['error', 'always'],
       'no-nested-ternary': 'error',
+      // `x ? x : y` is a redundant ternary — use `x || y` (SonarCloud S6644).
+      'no-unneeded-ternary': ['error', { defaultAssignment: false }],
       'class-methods-use-this': 'error',
       'arrow-body-style': 'off',
       'no-shadow': 'off',
@@ -602,6 +614,8 @@ export default tseslint.config(
       '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
       'no-console': 'error',
+      // Mirrors the src/ guardrail so the UnneededTernary canary stays alive.
+      'no-unneeded-ternary': ['error', { defaultAssignment: false }],
     },
   },
 

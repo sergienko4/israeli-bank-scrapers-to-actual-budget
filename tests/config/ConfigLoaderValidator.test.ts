@@ -141,6 +141,22 @@ describe('validateNotifications', () => {
     expect(result.success).toBe(false);
     expect(isFail(result) && result.message).toContain('Invalid messageFormat');
   });
+
+  it('fails when enabled with no channel configured', () => {
+    const result = validateNotifications({ enabled: true });
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).toContain('at least one notification channel');
+  });
+
+  it('passes when notifications are disabled with no channel', () => {
+    const result = validateNotifications({ enabled: false });
+    expect(result.success).toBe(true);
+  });
+
+  it('skips channel validation when notifications are disabled', () => {
+    const result = validateNotifications({ enabled: false, telegram: { botToken: '', chatId: '' } });
+    expect(result.success).toBe(true);
+  });
 });
 
 // ─── validateSpendingWatch ────────────────────────────────────────────────────

@@ -53,3 +53,11 @@ Separate secrets from settings by creating two files:
 `credentials.json` is deep-merged into `config.json` at startup. A single `config.json` with everything still works (fully backward compatible).
 
 See [Encrypted config](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/encrypted-config.md) for the encryption workflow.
+
+## Config manifest (single source of truth)
+
+Every configuration section and field is described once in a **Config Manifest** ([`src/Config/ConfigManifest.ts`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/src/Config/ConfigManifest.ts)). It is the single source of truth for the whole project: the [config portal](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md) UI, the secret-key list, the per-bank credential specs, and the supported-bank list all derive from it instead of repeating the same field definitions in many places.
+
+Adding a new config option is therefore a **one-entry change**: add its field to the manifest. The portal then renders the new field automatically (no UI code), and — if it is declared as a `secret` — it is split into `credentials.json` on save with no extra wiring.
+
+A CI gate keeps the manifest honest. `npm run lint:manifest` flattens [`config.json.example`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/config.json.example) and [`credentials.json.example`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/credentials.json.example) to dotted paths and fails if any example key has no matching manifest entry (it also checks that every enum's options are declared). The same check runs in the pre-commit hook and the PR workflow, so **a new config field that is missing from the manifest fails CI.**

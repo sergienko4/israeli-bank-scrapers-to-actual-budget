@@ -10,6 +10,7 @@ import { getLogger } from '../Logger/Index.js';
 import type { IImporterConfig } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
 import { ConfigLoader } from './ConfigLoader.js';
+import { resolveConfigPath } from './ConfigPath.js';
 import { checkActualOffline } from './Validators/ActualOfflineChecker.js';
 import { checkBanksOffline } from './Validators/BanksOfflineChecker.js';
 import {
@@ -35,7 +36,11 @@ export class ConfigValidator {
   private readonly _skipOnlineOnFailure = true;
 
   /**
-   * Runs all offline validation checks (no network calls).
+   * Runs all offline validation checks (no network calls): the required
+   * actual/banks/notifications sections, surfacing every issue at once with
+   * bank-name typo suggestions. This is a human-readable report, not the boot
+   * gate — the portal write-gate additionally runs
+   * {@link ConfigLoader.validateBootable} for full importer-boot parity.
    * @param config - The IImporterConfig to validate.
    * @returns Array of IValidationResult objects for each check.
    */
@@ -91,7 +96,7 @@ export class ConfigValidator {
  * @returns Exit code: 0 if all checks pass, 1 if any check fails.
  */
 export async function runValidateMode(): Promise<number> {
-  const loader = new ConfigLoader();
+  const loader = new ConfigLoader(resolveConfigPath());
   const rawResult = loader.loadRaw();
   if (isFail(rawResult)) {
     getLogger().info(`[FAIL] Cannot load config: ${rawResult.message}`);

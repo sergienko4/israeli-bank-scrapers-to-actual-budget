@@ -48,6 +48,14 @@ describe('Procedure Result Pattern', () => {
       const result = fail('frozen');
       expect(Object.isFrozen(result)).toBe(true);
     });
+
+    it('freezes a copy of the details array so neither the result nor the caller can mutate it', () => {
+      const source = ['first reason', 'second reason'];
+      const result = fail('multi', { details: source });
+      expect(Object.isFrozen(result.details)).toBe(true);
+      source.push('late reason');
+      expect(result.details).toEqual(['first reason', 'second reason']);
+    });
   });
 
   describe('fromPromise', () => {
