@@ -28,6 +28,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/ci/setup
+      # portal-ui.e2e.test.ts launches the product's own Camoufox browser and is
+      # designed to never skip ("a missing browser fails the test loudly"), so
+      # the E2E badge count below must provision the browser exactly like the
+      # real E2E job (_e2e-suite.yml). Without this the E2E run exits 1 and the
+      # whole Release Please workflow shows red on every push to main, even
+      # though the release itself succeeds. Docker-image-gated E2Es still skip
+      # here (no israeli-bank-importer:e2e image is built in this counting job).
+      - name: Ensure Camoufox browser for portal E2E
+        uses: ./.github/actions/docker/camoufox-cache
       - name: Run unit tests with JSON reporter
         run: npx vitest run --config config/vitest.config.ts --reporter=json --outputFile=test-results.json
       - name: Run E2E tests with JSON reporter
