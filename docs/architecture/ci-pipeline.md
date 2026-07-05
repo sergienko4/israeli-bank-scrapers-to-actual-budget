@@ -12,6 +12,11 @@ workflows (`release.yml`, `e2e-schedule.yml`, etc.) compose the same logic via
 `_e2e-suite.yml`, which is shared by `pr.yml` (per-PR) and `e2e-schedule.yml`
 (weekly cron).
 
+> **Looking for the release → deploy flow** (merge → `release-please` → tag →
+> `release.yml` images + `docs.yml` site)? That end-to-end journey has its own
+> page: [Release &amp; Deployment Pipeline](release-pipeline.md). This page
+> covers the **PR gate** that precedes it.
+
 ```mermaid
 graph TD
   subgraph Workflows["Workflows (triggers + jobs)"]

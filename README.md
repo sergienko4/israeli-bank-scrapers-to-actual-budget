@@ -250,6 +250,7 @@ Pre-commit runs an 18-gate hook (type-check ×3, audit, build, TypeDoc, unit tes
 | Telegram & webhooks | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/notifications/telegram/> |
 | Deployment guides | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/deployment/docker-compose/> |
 | Architecture | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/architecture/> |
+| Release &amp; deployment | [docs/architecture/release-pipeline.md](docs/architecture/release-pipeline.md) |
 | Troubleshooting | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/troubleshooting/> |
 | Security | [docs/SECURITY.md](docs/SECURITY.md) |
 | Contributing | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) |

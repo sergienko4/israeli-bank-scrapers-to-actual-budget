@@ -141,7 +141,10 @@ nav:
       - Webhooks: notifications/webhooks.md
       - Message Formats: notifications/message-formats.md
       - OTP Auto-Forward: OTP-AUTOFORWARD.md
-  - Architecture: architecture.md
+  - Architecture:
+      - Overview: architecture.md
+      - CI/CD Pipeline: architecture/ci-pipeline.md
+      - "Release & Deployment": architecture/release-pipeline.md
   - Troubleshooting: troubleshooting.md
   - Security: SECURITY.md
   - Contributing:
