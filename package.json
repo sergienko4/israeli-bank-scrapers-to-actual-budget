@@ -82,7 +82,7 @@
     "lint-staged": "^17.0.8",
     "markdownlint-cli2": "^0.23.0",
     "playwright-core": "~1.59.1",
-    "typedoc": "^0.28.19",
+    "typedoc": "^0.28.20",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.1",
     "vite": "^8.1.3",
