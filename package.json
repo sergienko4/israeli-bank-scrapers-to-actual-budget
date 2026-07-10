@@ -81,7 +81,7 @@
     "license-compliance": "^3.0.1",
     "lint-staged": "^17.0.8",
     "markdownlint-cli2": "^0.23.0",
-    "playwright-core": "~1.59.1",
+    "playwright-core": "~1.61.1",
     "typedoc": "^0.28.20",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.63.0",
