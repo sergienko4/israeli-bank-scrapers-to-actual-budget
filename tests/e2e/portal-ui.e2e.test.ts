@@ -154,6 +154,13 @@ async function openLogin(server: IPortalServer): Promise<{ context: BrowserConte
   // Destructive actions (remove bank/target/list item) are confirm()-guarded;
   // auto-accept so removal flows proceed (Playwright dismisses dialogs otherwise).
   page.on('dialog', (dialog) => { dialog.accept().catch((_err: unknown) => { /* already handled */ }); });
+  // Diagnostic (save-hang): surface browser console, page errors, and the
+  // /api/ request lifecycle timing to stderr so CI reveals why a save stalls.
+  page.on('console', (m) => process.stderr.write(`[BROWSER console.${m.type()}] ${m.text()}\n`));
+  page.on('pageerror', (e) => process.stderr.write(`[BROWSER pageerror] ${e.message}\n`));
+  page.on('requestfailed', (r) => process.stderr.write(`[BROWSER reqfail] ${r.method()} ${r.url()} :: ${String(r.failure()?.errorText)}\n`));
+  page.on('request', (r) => { if (r.url().includes('/api/')) process.stderr.write(`[BROWSER req->] ${r.method()} ${r.url()} @${String(Date.now())}\n`); });
+  page.on('response', (r) => { if (r.url().includes('/api/')) process.stderr.write(`[BROWSER res<-] ${String(r.status())} ${r.url()} @${String(Date.now())}\n`); });
   await page.goto(server.baseUrl);
   await page.waitForSelector('#pw', { state: 'visible' });
   return { context, page };
