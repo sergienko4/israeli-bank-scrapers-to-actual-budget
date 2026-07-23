@@ -103,7 +103,7 @@ After creating every PR:
 - Node.js 22+, TypeScript 5.9.3 (strict), ES2022 modules
 - Vitest for testing, v8 coverage provider
 - Dependencies: @actual-app/api, @sergienko4/israeli-bank-scrapers (fork), cron-parser, pino, pino-pretty
-- devDependency: `@faker-js/faker` v10.3 — typed test factories
+- devDependency: `@faker-js/faker` v10.5 — typed test factories
 - Camoufox (Firefox anti-detect) replaces Chromium+Stealth (scraper v7.9.0+)
 
 ## Test Factories

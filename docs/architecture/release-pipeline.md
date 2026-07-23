@@ -10,7 +10,7 @@ files you have to read side-by-side.
 - **Deployment (docs):** [`docs.yml`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/.github/workflows/docs.yml)
 
 For the **PR-check DAG** (the 8 required checks that gate a merge) see the
-companion [CI/CD Pipeline](ci-pipeline.md) page — this page picks up **after**
+companion [CI/CD Pipeline](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md) page — this page picks up **after**
 a PR is green and merged.
 
 ---
@@ -21,15 +21,13 @@ a PR is green and merged.
 flowchart TD
     %% ---------- 1 · change sources ----------
     subgraph S1["1 · Change sources"]
-      DB["Dependabot<br/>weekly, grouped"]
-      DC["dependency-check.yml<br/>daily 06:00 · critical deps"]
+      DB["Dependabot<br/>weekly, grouped · incl. critical deps"]
       HUM["Human PR"]
     end
 
     %% ---------- 2 · PR gate ----------
     PR{{"pr.yml · PR gate<br/>8 required checks:<br/>Build · Test · Docs · CodeQL<br/>Trivy · Licenses · Sonar · E2E"}}
     DB --> PR
-    DC --> PR
     HUM --> PR
     PR -->|squash merge| MAIN[("main")]
 
@@ -84,8 +82,7 @@ output.
 
 | # | Stage | Workflow | Trigger | Key jobs / steps | Produces |
 |---|-------|----------|---------|------------------|----------|
-| 1 | Feed | `dependency-check.yml` | daily 06:00 UTC | `npm outdated`/`update` critical deps → type-check → draft PR | dep PR |
-| 1 | Feed | Dependabot | weekly (Mon 06:00) | grouped npm / docker / actions PRs | dep PRs |
+| 1 | Feed | Dependabot | weekly (Mon 06:00) | grouped npm / docker / actions PRs (incl. critical `@actual-app/api` + scraper) | dep PRs |
 | 2 | Gate | `pr.yml` | PR + push to `main` | 8 required checks + `CI Pass` aggregator | green merge |
 | 3 | Release PR | `release-please.yml` → `release-please` | push to `main` | create/update Release PR (version + CHANGELOG) | Release PR |
 | 3 | Badges | `release-please.yml` → `update-badge` | push to `main` | run unit + E2E, push counts to gist | 2 shields badges |
@@ -104,7 +101,7 @@ other jobs. Steps, in order:
 1. **Checkout** at the tag (`fetch-depth: 0` for changelog stats).
 2. **Overlay CI tooling** — only on `workflow_dispatch`, so a re-published old
    tag uses today's composite actions while keeping the tag's image content.
-3. **Determine tag** → `verify tag matches `config/release-please/manifest.json`` →
+3. **Determine tag** → verify tag matches `config/release-please/manifest.json` →
    **verify CHANGELOG entry**.
 4. **Login** to Docker Hub (best-effort) and **GHCR** (required).
 5. **Extract metadata** for both registries.
@@ -151,7 +148,6 @@ flowchart LR
     RPB["release-please.yml<br/>update-badge"] --> SETUP
     RPB --> CAM
     DOCSW["docs.yml"] --> SETUP
-    DCW["dependency-check.yml"] --> SETUP
 ```
 
 `_e2e-suite.yml` is the only **reusable workflow** (called by `pr.yml` and
@@ -167,7 +163,7 @@ Camoufox browser and never skips.
 | Secret | Used by |
 |--------|---------|
 | `GITHUB_TOKEN` (built-in) | GHCR login, Pages, SBOM |
-| `RELEASE_TOKEN` | `release-please.yml`, `release.yml` (release edits), `dependency-check.yml` |
+| `RELEASE_TOKEN` | `release-please.yml`, `release.yml` (release edits) |
 | `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` | `release.yml` (Docker Hub mirror + description) |
 | `GIST_SECRET` | `release-please.yml` → `update-badge` |
 | `SONAR_TOKEN` / `SONAR_ORG` / `SONAR_PROJECT_KEY` | `pr.yml` → sonar |

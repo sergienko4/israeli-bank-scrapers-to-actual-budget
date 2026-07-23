@@ -21,6 +21,17 @@ export default async function execute(
 }
 
 /**
+ * Builds a cause suffix from a failed step's underlying error so the real
+ * error surfaces in logs instead of being hidden behind the step message.
+ * @param error - Optional original error carried by the failure.
+ * @returns A ' | cause: <stack>' suffix, or '' when no error is present.
+ */
+function formatCause(error?: Error): string {
+  if (!error) return '';
+  return ` | cause: ${error.stack ?? error.message}`;
+}
+
+/**
  * Recursively executes one step at the given index.
  * @param steps - Full step array.
  * @param ctx - Current context from previous step.
@@ -43,7 +54,8 @@ async function executeStep(
   const result = await step.execute(ctx);
 
   if (isFail(result)) {
-    ctx.logger.error(`✖ Step [${step.meta.name}] failed: ${result.message}`);
+    const cause = formatCause(result.error);
+    ctx.logger.error(`✖ Step [${step.meta.name}] failed: ${result.message}${cause}`);
     return fail(result.message, { status: `step-failed:${step.meta.name}`, error: result.error });
   }
 
