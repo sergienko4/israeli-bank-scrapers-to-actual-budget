@@ -1,5 +1,6 @@
 version: 2
-# Dependabot grouped weekly updates — one PR per ecosystem instead of many
+# Dependabot grouped weekly updates — related packages are batched into
+# per-group PRs (bounded by open-pull-requests-limit) instead of many
 # ungrouped daily PRs. Dependabot owns ALL npm dependencies, including the
 # critical @actual-app/api and @sergienko4/israeli-bank-scrapers packages.
 # The previous daily dependency-check.yml workflow was retired: its

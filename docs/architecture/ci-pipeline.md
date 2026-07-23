@@ -203,8 +203,9 @@ mappings.
 
 ## Dependabot grouping
 
-`.github/dependabot.yml` groups updates into 3 weekly PRs per ecosystem
-(Monday 06:00 Asia/Jerusalem):
+`.github/dependabot.yml` batches related updates into per-group PRs
+(Monday 06:00 Asia/Jerusalem), bounded by each ecosystem’s
+`open-pull-requests-limit`:
 
 - **npm** — 5 groups (eslint, vitest, typescript-tooling, pino, individual);
   Dependabot owns ALL npm deps, including the critical `@actual-app/api` and
