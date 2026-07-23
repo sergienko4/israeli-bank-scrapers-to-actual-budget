@@ -14,7 +14,7 @@ workflows (`release.yml`, `e2e-schedule.yml`, etc.) compose the same logic via
 
 > **Looking for the release → deploy flow** (merge → `release-please` → tag →
 > `release.yml` images + `docs.yml` site)? That end-to-end journey has its own
-> page: [Release &amp; Deployment Pipeline](release-pipeline.md). This page
+> page: [Release &amp; Deployment Pipeline](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/release-pipeline.md). This page
 > covers the **PR gate** that precedes it.
 
 ```mermaid

@@ -10,7 +10,7 @@ files you have to read side-by-side.
 - **Deployment (docs):** [`docs.yml`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/.github/workflows/docs.yml)
 
 For the **PR-check DAG** (the 8 required checks that gate a merge) see the
-companion [CI/CD Pipeline](ci-pipeline.md) page — this page picks up **after**
+companion [CI/CD Pipeline](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md) page — this page picks up **after**
 a PR is green and merged.
 
 ---
@@ -101,7 +101,7 @@ other jobs. Steps, in order:
 1. **Checkout** at the tag (`fetch-depth: 0` for changelog stats).
 2. **Overlay CI tooling** — only on `workflow_dispatch`, so a re-published old
    tag uses today's composite actions while keeping the tag's image content.
-3. **Determine tag** → `verify tag matches `config/release-please/manifest.json`` →
+3. **Determine tag** → verify tag matches `config/release-please/manifest.json` →
    **verify CHANGELOG entry**.
 4. **Login** to Docker Hub (best-effort) and **GHCR** (required).
 5. **Extract metadata** for both registries.
