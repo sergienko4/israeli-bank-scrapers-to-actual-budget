@@ -52,7 +52,7 @@
     "@fastify/rate-limit": "^11.1.0",
     "@fastify/static": "^10.1.0",
     "@sergienko4/israeli-bank-scrapers": "^8.6.0",
-    "cron-parser": "^5.6.1",
+    "cron-parser": "^5.6.2",
     "fastify": "^5.10.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
