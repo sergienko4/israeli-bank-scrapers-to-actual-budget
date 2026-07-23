@@ -18,7 +18,7 @@ import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/f
 import type { IImporterConfig } from '../../src/Types/Index.js';
 import { selectBank } from './helpers/banksPom.js';
 import {
-  type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, startSeededPortal,
+  type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, setValue, startSeededPortal,
 } from './helpers/portalHarness.js';
 
 const MOBILE: [number, number] = [390, 844];
@@ -111,7 +111,7 @@ describe('Portal mobile E2E', () => {
       expect(await navOpen(page)).toBe(false);
 
       // Edit a value and save through the sticky top bar.
-      await page.locator('[data-path="banks.discount.daysBack"]').fill('25');
+      await setValue(page.locator('[data-path="banks.discount.daysBack"]'), '25');
       await page.click('#save');
       await page.waitForSelector('#status:has-text("Saved")', { timeout: 15_000 });
 

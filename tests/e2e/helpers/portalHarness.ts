@@ -14,7 +14,7 @@ import { join } from 'node:path';
 
 import { Camoufox } from '@hieutran094/camoufox-js';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { Browser } from 'playwright-core';
+import type { Browser, Locator } from 'playwright-core';
 
 import { hashPassword } from '../../../src/Portal/PortalPassword.js';
 import type { IPortalRuntime } from '../../../src/Portal/PortalRuntime.js';
@@ -59,6 +59,22 @@ export async function launchPortalBrowser(
   window: [number, number] = [1280, 900],
 ): Promise<Browser> {
   return await Camoufox({ headless: true, window });
+}
+
+/**
+ * Sets an input's value reliably under the Camoufox Juggler. Playwright's
+ * `fill()` appends to a pre-filled input here instead of replacing it (filling
+ * "30" over a seeded "10" yields "1030", which then fails save-gate
+ * validation). Clears via keyboard select-all + delete, then types the value.
+ * @param locator - Input locator to set.
+ * @param value - Value to type after clearing.
+ * @returns Resolves once the value has been typed.
+ */
+export async function setValue(locator: Locator, value: string): Promise<void> {
+  await locator.click();
+  await locator.press('ControlOrMeta+a');
+  await locator.press('Backspace');
+  await locator.pressSequentially(value);
 }
 
 /**
