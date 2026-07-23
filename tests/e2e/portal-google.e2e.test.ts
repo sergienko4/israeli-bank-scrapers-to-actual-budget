@@ -88,7 +88,7 @@ function useFakeGoogle(fake: IFakeGoogle): void {
 async function openGoogleLogin(
   server: IGooglePortalServer,
 ): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: null });
   const page = await context.newPage();
   await page.goto(server.baseUrl);
   await page.waitForSelector('#google-btn', { state: 'visible' });
