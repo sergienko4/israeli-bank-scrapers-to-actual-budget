@@ -1,0 +1,63 @@
+name: Deps Lockfile Sync 2 (one-shot)
+
+# TEMPORARY one-shot workflow. Regenerates package-lock.json on GitHub's
+# clean-npm runner so it matches the consolidated package.json bumps
+# (cron-parser, @fastify/cookie, eslint-plugin-jsdoc) that the author's
+# corporate npm proxy cannot fetch. It then self-deletes and commits the
+# synced lockfile. Delete-after-use is built in; must NOT survive into main.
+
+on:
+  push:
+    branches:
+      - chore/deps-consolidated-2-2026-07-23
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deps-lockfile-sync-2
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Regenerate lockfile
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+
+      - name: Reset lockfile to main baseline (holds @fastify/cookie at 11.0.2)
+        run: |
+          git fetch origin main
+          git checkout FETCH_HEAD -- package-lock.json
+
+      - name: Apply only range-forced bumps (cron-parser, jsdoc) + find-my-way override
+        run: npm install --no-audit --no-fund
+
+      - name: Verify audit is clean
+        run: npm audit --audit-level=moderate
+
+      - name: Self-delete this one-shot workflow
+        run: git rm .github/workflows/deps-lockfile-sync-2.yml
+
+      - name: Commit synced lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore(deps): sync lockfile (find-my-way 9.7.0, hold playwright/cookie)
+
+          playwright-core stays <1.61 (1.61 breaks Camoufox Juggler via
+          viewport.isMobile) and @fastify/cookie stays 11.0.2. Applies
+          cron-parser 5.6.2, eslint-plugin-jsdoc 63.2.1, and the find-my-way
+          ^9.7.0 security override. Removes the one-shot sync workflow.
+
+          Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+          git push origin ${{ github.ref_name }}
