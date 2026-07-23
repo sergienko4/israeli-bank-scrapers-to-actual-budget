@@ -52,7 +52,7 @@ function seedConfig(): IImporterConfig {
 async function openMobileApp(
   server: IPortalServer,
 ): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext({ viewport: null });
   const page = await context.newPage();
   await page.goto(server.baseUrl);
   await page.waitForSelector('#pw', { state: 'visible' });

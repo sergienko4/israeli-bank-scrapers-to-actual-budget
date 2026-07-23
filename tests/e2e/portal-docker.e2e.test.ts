@@ -139,7 +139,7 @@ async function login(page: Page, baseUrl: string): Promise<void> {
  * @returns Browser context and page ready for portal interactions.
  */
 async function openPortal(baseUrl: string): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: null });
   const page = await context.newPage();
   await login(page, baseUrl);
   return { context, page };

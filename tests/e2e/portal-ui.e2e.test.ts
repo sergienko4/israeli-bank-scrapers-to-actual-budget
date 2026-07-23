@@ -149,7 +149,7 @@ async function addTarget(page: Page, bankId: string, accountId: string): Promise
  * @returns The new context and page (page parked on the visible login form).
  */
 async function openLogin(server: IPortalServer): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: null });
   const page = await context.newPage();
   // Destructive actions (remove bank/target/list item) are confirm()-guarded;
   // auto-accept so removal flows proceed (Playwright dismisses dialogs otherwise).

@@ -47,7 +47,11 @@ export interface IPortalServer {
  * skipped — a missing browser fails the test loudly. A fixed window size is
  * passed because Camoufox derives the CSS layout viewport (and thus responsive
  * breakpoints) from the real window, not from Playwright's per-context viewport;
- * pinning it keeps desktop vs. mobile flows deterministic.
+ * pinning it keeps desktop vs. mobile flows deterministic. Tests therefore open
+ * contexts with `viewport: null` (no Playwright viewport emulation): Camoufox
+ * uses this window instead, and it avoids the Firefox `Browser.setDefaultViewport`
+ * call whose `isMobile` field Playwright >=1.61 sends and the Camoufox Juggler
+ * rejects ("viewport.isMobile ... not described in this scheme").
  * @param window - Fixed `[width, height]` window size (default desktop).
  * @returns A Playwright Browser instance ready to open pages.
  */
