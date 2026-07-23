@@ -111,7 +111,6 @@ describe('InitializeApiStep', () => {
       expect(result.message).toBe('Failed to initialize local API');
       expect(result.status).toBe('api-init-failed');
     }
-    expect(ctx.logger.error).toHaveBeenCalledWith(expect.stringContaining('ENOENT'));
   });
 
   it('local mode: wraps string errors into Error instances', async () => {

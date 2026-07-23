@@ -39,6 +39,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/ci/setup
+        with:
+          # Create the E2E budget with the SAME Node major the importer
+          # container loads it with (Dockerfile: node:24-slim). A host/container
+          # Node mismatch makes @actual-app/api reject the budget at loadBudget
+          # ("We had an unknown problem opening ...").
+          node-version: '24.x'
 
       - name: Google OAuth config-validity smoke (secret-gated)
         # Validates the real Google OAuth credentials without a browser: probes

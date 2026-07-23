@@ -79,8 +79,8 @@ SHELL ["/bin/sh", "-c"]
 
 # Install ALL project dependencies (devDependencies included for build).
 # npm ci installs exact versions from package-lock.json, giving reproducible
-# builds. Dependency updates are managed explicitly via dependency-check.yml
-# (daily automated PRs with full CI validation before merge).
+# builds. Dependency updates are managed by Dependabot (weekly grouped PRs
+# with full CI validation before merge).
 RUN npm ci
 
 # Install Camoufox browser (Firefox-based anti-detect)
