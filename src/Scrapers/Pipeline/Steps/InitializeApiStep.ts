@@ -3,6 +3,8 @@
  * Connects in local mode (E2E) or server mode based on environment.
  */
 
+import { inspect } from 'node:util';
+
 import type { IPipelineContext, PipelineStep, Procedure } from '../Index.js';
 import { fail, succeed } from '../Index.js';
 
@@ -103,6 +105,7 @@ async function initLocal(
     await api.loadBudget(budgetId);
     return apiInitialized(ctx);
   } catch (err) {
+    ctx.logger.error(`Local API init failed: ${inspect(err, { depth: 4 })}`);
     return fail('Failed to initialize local API', {
       status: 'api-init-failed',
       error: toError(err as Error),

@@ -101,4 +101,15 @@ describe('PipelineRunner', () => {
     await execute(steps, ctx);
     expect(ctx.logger.error).toHaveBeenCalledWith(expect.stringContaining('[broken] failed'));
   });
+
+  it('logs the underlying cause when a failure carries an error', async () => {
+    const ctx = makeCtx();
+    const cause = new Error('boom-root-cause');
+    const steps: INamedStep[] = [
+      makeStep('broken', async () => fail('wrapped', { status: 'x', error: cause })),
+    ];
+
+    await execute(steps, ctx);
+    expect(ctx.logger.error).toHaveBeenCalledWith(expect.stringContaining('boom-root-cause'));
+  });
 });
