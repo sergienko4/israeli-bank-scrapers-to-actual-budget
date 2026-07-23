@@ -63,7 +63,7 @@ function byPath(page: Page, path: string): Locator {
  * @returns The new context and page.
  */
 async function openLogin(server: IPortalServer): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: null });
   const page = await context.newPage();
   await page.goto(server.baseUrl);
   await page.waitForSelector('#pw', { state: 'visible' });
@@ -140,9 +140,11 @@ describe('Portal auth-affordance E2E', () => {
       ]);
       expect(res.status()).toBe(200);
 
-      // A fresh visit must land on the login form: a still-valid session cookie
-      // would auto-load the app shell instead of the password prompt.
-      await page.goto(server.baseUrl, { waitUntil: 'domcontentloaded' });
+      // app.js reloads the page after a successful logout; that reload is itself
+      // the fresh, cookie-cleared visit we assert on. Waiting for it (rather than
+      // racing it with a second page.goto, which aborts as NS_BINDING_ABORTED)
+      // lands on the login form — a still-valid cookie would auto-load the app
+      // shell instead of the password prompt.
       await page.waitForSelector('#pw', { state: 'visible' });
       expect(await page.locator('#app').isHidden()).toBe(true);
     } finally {

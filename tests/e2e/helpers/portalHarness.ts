@@ -14,7 +14,7 @@ import { join } from 'node:path';
 
 import { Camoufox } from '@hieutran094/camoufox-js';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { Browser } from 'playwright-core';
+import type { Browser, Locator } from 'playwright-core';
 
 import { hashPassword } from '../../../src/Portal/PortalPassword.js';
 import type { IPortalRuntime } from '../../../src/Portal/PortalRuntime.js';
@@ -47,7 +47,11 @@ export interface IPortalServer {
  * skipped — a missing browser fails the test loudly. A fixed window size is
  * passed because Camoufox derives the CSS layout viewport (and thus responsive
  * breakpoints) from the real window, not from Playwright's per-context viewport;
- * pinning it keeps desktop vs. mobile flows deterministic.
+ * pinning it keeps desktop vs. mobile flows deterministic. Tests therefore open
+ * contexts with `viewport: null` (no Playwright viewport emulation): Camoufox
+ * uses this window instead, and it avoids the Firefox `Browser.setDefaultViewport`
+ * call whose `isMobile` field Playwright >=1.61 sends and the Camoufox Juggler
+ * rejects ("viewport.isMobile ... not described in this scheme").
  * @param window - Fixed `[width, height]` window size (default desktop).
  * @returns A Playwright Browser instance ready to open pages.
  */
@@ -55,6 +59,22 @@ export async function launchPortalBrowser(
   window: [number, number] = [1280, 900],
 ): Promise<Browser> {
   return await Camoufox({ headless: true, window });
+}
+
+/**
+ * Sets an input's value reliably under the Camoufox Juggler. Playwright's
+ * `fill()` appends to a pre-filled input here instead of replacing it (filling
+ * "30" over a seeded "10" yields "1030", which then fails save-gate
+ * validation). Clears via keyboard select-all + delete, then types the value.
+ * @param locator - Input locator to set.
+ * @param value - Value to type after clearing.
+ * @returns Resolves once the value has been typed.
+ */
+export async function setValue(locator: Locator, value: string): Promise<void> {
+  await locator.click();
+  await locator.press('ControlOrMeta+a');
+  await locator.press('Backspace');
+  await locator.pressSequentially(value);
 }
 
 /**

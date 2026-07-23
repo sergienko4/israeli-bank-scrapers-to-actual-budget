@@ -20,7 +20,7 @@ import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/f
 import type { IImporterConfig } from '../../src/Types/Index.js';
 import { addBank, gotoBanks, removeBank, selectBank } from './helpers/banksPom.js';
 import {
-  type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, startSeededPortal,
+  type IPortalServer, launchPortalBrowser, PORTAL_PASSWORD, setValue, startSeededPortal,
 } from './helpers/portalHarness.js';
 
 const DISCOUNT_PASSWORD = 'discount-secret-xyz';
@@ -149,7 +149,7 @@ async function addTarget(page: Page, bankId: string, accountId: string): Promise
  * @returns The new context and page (page parked on the visible login form).
  */
 async function openLogin(server: IPortalServer): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: null });
   const page = await context.newPage();
   // Destructive actions (remove bank/target/list item) are confirm()-guarded;
   // auto-accept so removal flows proceed (Playwright dismisses dialogs otherwise).
@@ -220,7 +220,7 @@ describe('Portal UI E2E', () => {
       await gotoBanks(page);
       await expectMaskedSecret(byPath(page, 'banks.discount.password'));
 
-      await byPath(page, 'banks.discount.daysBack').fill('30');
+      await setValue(byPath(page, 'banks.discount.daysBack'), '30');
       await addTarget(page, 'discount', NEW_TARGET_ID);
 
       await addBank(page, 'leumi');
@@ -306,7 +306,7 @@ describe('Portal UI E2E', () => {
       const { page } = opened;
       await loginOk(page, PORTAL_PASSWORD);
       await gotoBanks(page);
-      await byPath(page, 'banks.discount.daysBack').fill('21');
+      await setValue(byPath(page, 'banks.discount.daysBack'), '21');
 
       process.env.CREDENTIALS_ENCRYPTION_PASSWORD = 'e2e-encrypt-pass';
       try {

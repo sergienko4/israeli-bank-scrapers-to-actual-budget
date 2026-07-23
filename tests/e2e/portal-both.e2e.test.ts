@@ -87,7 +87,7 @@ async function startBoth(): Promise<IBothFixture> {
     server = await startSeededGooglePortal(seedConfig(), {
       allowedEmails: [GOOGLE_TEST_EMAIL], authMode: 'both',
     });
-    context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    context = await browser.newContext({ viewport: null });
     const page = await context.newPage();
     await page.goto(server.baseUrl);
     return { server, fake, context, page };

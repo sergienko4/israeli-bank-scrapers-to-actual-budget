@@ -16,7 +16,7 @@ import { hashPassword } from '../../src/Portal/PortalPassword.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 import { hasDockerImage } from './helpers/dockerRunner.js';
 import { gotoBanks } from './helpers/banksPom.js';
-import { launchPortalBrowser } from './helpers/portalHarness.js';
+import { launchPortalBrowser, setValue } from './helpers/portalHarness.js';
 import {
   type IPortalContainer,
   startPortalContainer,
@@ -139,7 +139,7 @@ async function login(page: Page, baseUrl: string): Promise<void> {
  * @returns Browser context and page ready for portal interactions.
  */
 async function openPortal(baseUrl: string): Promise<{ context: BrowserContext; page: Page }> {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: null });
   const page = await context.newPage();
   await login(page, baseUrl);
   return { context, page };
@@ -189,7 +189,7 @@ async function persistsPortalEdit(): Promise<void> {
     context = opened.context;
     await gotoBanks(opened.page);
     const daysBack = byPath(opened.page, 'banks.discount.daysBack');
-    await daysBack.fill('28');
+    await setValue(daysBack, '28');
     await saveOk(opened.page);
     assertPersistedEdit(seeded);
   } finally {
@@ -247,7 +247,7 @@ async function attemptReadOnlySave(page: Page): Promise<void> {
   // Use a value that passes offline validation (daysBack must be 1-30) so the
   // save reaches the disk write the read-only mount is meant to block; an
   // out-of-range value would fail validation (400) before any write attempt.
-  await daysBack.fill('29');
+  await setValue(daysBack, '29');
   await page.click('#save');
   await page.waitForSelector('#status:has-text("Failed to persist configuration")', { timeout: 15_000 });
   const statusText = await page.locator('#status').textContent();
