@@ -126,20 +126,6 @@ RUN npm run build
 # Remove devDependencies to reduce image size
 RUN npm prune --omit=dev
 
-# Rebuild better-sqlite3's native binding after prune. @actual-app/api opens
-# the local budget DB through better-sqlite3, whose compiled
-# `better_sqlite3.node` must exist at runtime. node:24-slim ships no toolchain
-# and better-sqlite3 has no prebuilt for this platform, so npm ci/prune leave
-# the binding missing ("Could not locate the bindings file" -> loadBudget fails
-# with "unknown problem opening"). Build from source, then purge the toolchain
-# to keep the runtime image slim.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 make g++ \
-    && npm rebuild better-sqlite3 \
-    && apt-get purge -y --auto-remove python3 make g++ \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
 # Note: config.json should be mounted as a volume at runtime, not copied into the image
 # This prevents credentials from being baked into the Docker image
 
