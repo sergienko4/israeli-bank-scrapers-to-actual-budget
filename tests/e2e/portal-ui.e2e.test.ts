@@ -160,7 +160,7 @@ async function openLogin(server: IPortalServer): Promise<{ context: BrowserConte
   page.on('pageerror', (e) => process.stderr.write(`[BROWSER pageerror] ${e.message}\n`));
   page.on('requestfailed', (r) => process.stderr.write(`[BROWSER reqfail] ${r.method()} ${r.url()} :: ${String(r.failure()?.errorText)}\n`));
   page.on('request', (r) => { if (r.url().includes('/api/')) process.stderr.write(`[BROWSER req->] ${r.method()} ${r.url()} @${String(Date.now())}\n`); });
-  page.on('response', (r) => { if (r.url().includes('/api/')) process.stderr.write(`[BROWSER res<-] ${String(r.status())} ${r.url()} @${String(Date.now())}\n`); });
+  page.on('response', (r) => { if (r.url().includes('/api/')) { process.stderr.write(`[BROWSER res<-] ${String(r.status())} ${r.url()} @${String(Date.now())}\n`); if (r.status() >= 400) r.text().then((b) => process.stderr.write(`[BROWSER res-body ${String(r.status())}] ${b}\n`)).catch(() => { /* ignore */ }); } });
   await page.goto(server.baseUrl);
   await page.waitForSelector('#pw', { state: 'visible' });
   return { context, page };
