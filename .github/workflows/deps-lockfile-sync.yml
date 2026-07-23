@@ -7,7 +7,9 @@ name: Deps Lockfile Sync (one-shot)
 # lockfile. Delete-after-use is built in; this file must NOT survive into main.
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - chore/deps-consolidated-2026-07-23
 
 permissions:
   contents: write
