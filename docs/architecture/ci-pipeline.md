@@ -23,7 +23,6 @@ graph TD
     PR[pr.yml<br/>PR + push to main]
     REL[release.yml<br/>tag push v*]
     SCH[release-please.yml<br/>push to main]
-    DEP[dependency-check.yml<br/>daily 06:00]
     DOCS[docs.yml<br/>tag push v*]
     E2ES[e2e-schedule.yml<br/>weekly]
   end
@@ -49,7 +48,6 @@ graph TD
   E2E -.uses.-> SETUP
   E2E -.uses.-> BUILD
   SCH -.uses.-> SETUP
-  DEP -.uses.-> SETUP
   DOCS -.uses.-> SETUP
   BUILD -.includes.-> FREE
   BUILD -.includes.-> CAM
@@ -209,8 +207,8 @@ mappings.
 (Monday 06:00 Asia/Jerusalem):
 
 - **npm** — 5 groups (eslint, vitest, typescript-tooling, pino, individual);
-  IGNORES `@actual-app/api` and `@sergienko4/israeli-bank-scrapers` (those
-  are handled daily by `dependency-check.yml`).
+  Dependabot owns ALL npm deps, including the critical `@actual-app/api` and
+  `@sergienko4/israeli-bank-scrapers` packages.
 - **docker** — base image bumps only.
 - **github-actions** — 4 groups (actions-core, docker-actions, codeql,
   security-actions).
@@ -238,7 +236,7 @@ If `pr.yml` breaks post-merge (e.g., required check name not emitting):
 
 1. Revert the squash-merge commit.
 2. Restore the pre-PR state of: `pr.yml`, `release.yml`, `release-please.yml`,
-   `dependency-check.yml`, `docs.yml`, `_e2e-suite.yml`, `package.json`.
+   `docs.yml`, `_e2e-suite.yml`, `package.json`.
 3. Delete the new infra: `.github/config/`,
    `.github/actions/docker/build-image/`, `scripts/render-readme-meta.mjs`,
    `scripts/check-readme-markers.sh`, `tests/render-readme-meta.test.ts`,

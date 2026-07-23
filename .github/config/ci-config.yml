@@ -94,7 +94,7 @@ actions:
     - peter-evans/dockerhub-description@v5
     - peter-evans/create-pull-request@v8
     - googleapis/release-please-action@v5
-    - schneegans/dynamic-badges-action@v1.8.0
+    - schneegans/dynamic-badges-action@v1.9.0
     - jlumbroso/free-disk-space@v1.3.1
     - anchore/sbom-action@v0
     - lycheeverse/lychee-action@v2

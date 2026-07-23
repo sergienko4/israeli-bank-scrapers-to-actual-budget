@@ -1,9 +1,12 @@
 version: 2
 # Dependabot grouped weekly updates — one PR per ecosystem instead of many
-# ungrouped daily PRs. Critical npm deps (@actual-app/api and
-# @sergienko4/israeli-bank-scrapers) are already auto-bumped daily by
-# .github/workflows/dependency-check.yml, so we IGNORE their major bumps
-# here to avoid stepping on that workflow.
+# ungrouped daily PRs. Dependabot owns ALL npm dependencies, including the
+# critical @actual-app/api and @sergienko4/israeli-bank-scrapers packages.
+# The previous daily dependency-check.yml workflow was retired: its
+# `npm update` step could not cross major versions and crashed on the
+# scraper's patch-package postinstall (added in 8.6.0), so scraper updates
+# never reached this repo. patch-package is now a devDependency so the
+# scraper's postinstall no-ops cleanly on install.
 
 updates:
   # ── npm ──────────────────────────────────────────────────
@@ -19,10 +22,6 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: scope
-    ignore:
-      # Owned by dependency-check.yml (daily auto-bump).
-      - dependency-name: "@actual-app/api"
-      - dependency-name: "@sergienko4/israeli-bank-scrapers"
     groups:
       eslint:
         patterns:

@@ -1,0 +1,54 @@
+name: Deps Lockfile Sync (one-shot)
+
+# TEMPORARY one-shot workflow. Regenerates package-lock.json on GitHub's
+# clean-npm runner so it matches the consolidated package.json (which pins
+# security overrides incl. the patched fast-uri that the author's corporate
+# npm proxy could not fetch). It then self-deletes and commits the synced
+# lockfile. Delete-after-use is built in; this file must NOT survive into main.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deps-lockfile-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Regenerate lockfile
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+
+      - name: Regenerate lockfile (fetches patched deps from public npm)
+        run: npm install --no-audit --no-fund
+
+      - name: Verify audit is clean
+        run: npm audit --audit-level=moderate
+
+      - name: Self-delete this one-shot workflow
+        run: git rm .github/workflows/deps-lockfile-sync.yml
+
+      - name: Commit synced lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore(deps): sync lockfile with security overrides
+
+          Regenerated on a clean-npm runner to pin the patched fast-uri and
+          the other security overrides. Removes the one-shot sync workflow.
+
+          Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
+          git push origin ${{ github.ref_name }}
