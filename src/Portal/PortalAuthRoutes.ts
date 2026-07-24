@@ -17,7 +17,8 @@ import {
   credentialFingerprint, type IPortalRuntime, portalCookieOptions,
   resolveLiveRuntime, type RuntimeAccessor,
 } from './PortalRuntime.js';
-import { createSession, type ISessionPayload, readSession } from './PortalSession.js';
+import { createSession, type ISessionPayload } from './PortalSession.js';
+import { bearerSessionOf, verifyToken } from './PortalTokenAuth.js';
 
 const COOKIE = 'portal_session';
 
@@ -41,11 +42,21 @@ export interface IAuthStatus {
 export function sessionOf(req: FastifyRequest, rt: IPortalRuntime): Procedure<ISessionPayload> {
   const raw = req.cookies[COOKIE];
   if (!raw) return fail('No session cookie');
-  const result = readSession(raw, rt.sessionSecret);
-  if (isFail(result)) return result;
-  return result.data.fingerprint === credentialFingerprint(rt)
-    ? result
-    : fail('Credentials changed');
+  return verifyToken(raw, rt);
+}
+
+/**
+ * Resolves the request's session from either transport: the `portal_session`
+ * cookie (web SPA) first, then an `Authorization: Bearer` token (native/API
+ * clients). Both carry the same signed payload + credential fingerprint, so
+ * either proves the same factors to the guard.
+ * @param req - Incoming request.
+ * @param rt - Live runtime carrying the session secret + current credentials.
+ * @returns Procedure with the session payload, or failure when neither is valid.
+ */
+function resolveSession(req: FastifyRequest, rt: IPortalRuntime): Procedure<ISessionPayload> {
+  const cookie = sessionOf(req, rt);
+  return isFail(cookie) ? bearerSessionOf(req, rt) : cookie;
 }
 
 /**
@@ -87,7 +98,7 @@ function isApiRoute(req: FastifyRequest): boolean {
  */
 function guardApi(req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime): boolean {
   if (!isApiRoute(req)) return true;
-  const result = sessionOf(req, rt);
+  const result = resolveSession(req, rt);
   const isAllowed = isFail(result) ? false : isAuthorized(result.data, rt.authMode);
   if (!isAllowed) reply.code(401).send({ error: 'Unauthorized' });
   return isAllowed;
@@ -103,7 +114,7 @@ function guardApi(req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime):
  * @returns Auth mode, per-factor flags, email, and overall authorization.
  */
 function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
-  const result = sessionOf(req, rt);
+  const result = resolveSession(req, rt);
   const session = isFail(result) ? null : result.data;
   return {
     authMode: rt.authMode,
@@ -115,8 +126,25 @@ function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
 }
 
 /**
- * Handles a password-login attempt: verifies the submitted password against the
- * live hash and, on success, grants the password factor to the session cookie.
+ * Verifies the submitted password against the live portal hash.
+ *
+ * A missing hash or a non-string/empty password can never match, so both short-
+ * circuit to false before the (costly) scrypt comparison runs.
+ * @param req - Incoming request carrying the JSON `{ password }` body.
+ * @param rt - Live portal runtime carrying the current password hash.
+ * @returns True when the password verifies against the live hash.
+ */
+async function passwordMatches(req: FastifyRequest, rt: IPortalRuntime): Promise<boolean> {
+  const body = req.body as { password?: unknown } | null;
+  const password = typeof body?.password === 'string' ? body.password : '';
+  const hash = rt.portal.passwordHash ?? '';
+  if (!password || !hash) return false;
+  return await verifyPassword(password, hash);
+}
+
+/**
+ * Handles a password-login attempt: on success grants the password factor to the
+ * session cookie (web SPA flow).
  * @param req - Incoming login request.
  * @param reply - Reply used to set the cookie or send an error.
  * @param rt - Live portal runtime carrying the current password hash.
@@ -125,14 +153,33 @@ function authStatus(req: FastifyRequest, rt: IPortalRuntime): IAuthStatus {
 async function handleLogin(
   req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime,
 ): Promise<FastifyReply> {
-  const body = req.body as { password?: unknown } | null;
-  const password = typeof body?.password === 'string' ? body.password : '';
-  const hash = rt.portal.passwordHash ?? '';
-  if (!password || !hash || !(await verifyPassword(password, hash))) {
+  if (!(await passwordMatches(req, rt))) {
     return await reply.code(401).send({ error: 'Invalid password' });
   }
   grant({ req, reply, rt, factor: { password: true } });
   return await reply.send({ ok: true });
+}
+
+/**
+ * Issues a bearer token for native/API clients: verifies the password and returns
+ * the signed session token (password factor + current credential fingerprint) in
+ * the JSON body instead of a cookie. In `both` mode the token proves only the
+ * password factor, so the `/api` guard still withholds access until the Google
+ * factor is satisfied too.
+ * @param req - Incoming token request carrying the JSON `{ password }` body.
+ * @param reply - Reply used to send the token or an error.
+ * @param rt - Live portal runtime carrying the current password hash + secret.
+ * @returns The reply after sending `{ token }` or a 401.
+ */
+async function handleToken(
+  req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime,
+): Promise<FastifyReply> {
+  if (!(await passwordMatches(req, rt))) {
+    return await reply.code(401).send({ error: 'Invalid password' });
+  }
+  const payload = { google: false, password: true, fingerprint: credentialFingerprint(rt) };
+  const token = createSession(payload, rt.sessionSecret);
+  return await reply.send({ token });
 }
 
 /**
@@ -148,6 +195,23 @@ function registerLoginRoute(app: FastifyInstance, live: RuntimeAccessor): { regi
   app.post('/auth/login', loginLimit, async (req, reply) => {
     const rt = live();
     return await handleLogin(req, reply, rt);
+  });
+  return { registered: true };
+}
+
+/**
+ * Registers the bearer-token issuance route (`POST /auth/token`) under the same
+ * strict rate limit as password login. The password hash is read live per
+ * request so a UI password change applies to new tokens without a restart.
+ * @param app - Fastify instance.
+ * @param live - Accessor returning the current per-request portal runtime.
+ * @returns Confirmation that the token route is registered.
+ */
+function registerTokenRoute(app: FastifyInstance, live: RuntimeAccessor): { registered: true } {
+  const tokenLimit = { config: { rateLimit: { max: LOGIN_MAX, timeWindow: RATE_WINDOW } } };
+  app.post('/auth/token', tokenLimit, async (req, reply) => {
+    const rt = live();
+    return await handleToken(req, reply, rt);
   });
   return { registered: true };
 }
@@ -214,6 +278,7 @@ export function registerAuthRoutes(
   const live = liveAccessor(boot, store);
   registerStatusRoute(app, live);
   registerLoginRoute(app, live);
+  registerTokenRoute(app, live);
   app.post('/auth/logout', (_req, reply) => reply.clearCookie(COOKIE, { path: '/' }).send({ ok: true }));
   registerGoogleRoutes(app, live, grant);
   registerGuardHook(app, live);
