@@ -316,6 +316,66 @@ turn it on; when any is missing the smoke self-skips so forks stay green:
 The client secret is read only from the environment and is never printed. Run it
 locally the same way: `GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… GOOGLE_REDIRECT_URI=… npm run smoke:google-config`.
 
+## API access for apps and scripts (bearer tokens)
+
+The portal's REST API (`/api/*`) powers the web UI, but it is also a stable
+surface for **native apps and scripts** — including the companion mobile config
+app. Browsers authenticate with a session **cookie**; a non-browser client
+authenticates with a **bearer token** instead. The `/api` guard accepts either.
+
+### Get a token
+
+`POST /auth/token` with the portal password returns a signed token:
+
+```bash
+curl -sX POST http://127.0.0.1:8080/auth/token \
+  -H 'content-type: application/json' \
+  -d '{"password":"your-portal-password"}'
+# → {"token":"<opaque-token>"}
+```
+
+A wrong, empty, or non-string password returns `401`, and the route is
+rate-limited exactly like `/auth/login`.
+
+### Use the token
+
+Send it as an `Authorization: Bearer` header on any `/api/*` request:
+
+```bash
+TOKEN=...   # the value returned by /auth/token
+curl -s http://127.0.0.1:8080/api/config -H "authorization: Bearer $TOKEN"
+```
+
+`GET /auth/status` accepts the same header, so a client can check whether its
+token is still valid before making a call.
+
+### Token lifetime and security
+
+- **Same token as the cookie.** A bearer token is the portal's stateless,
+  HMAC-signed session token; it expires after 12 hours.
+- **Rotation evicts tokens.** The token embeds a fingerprint of the credentials
+  in force when it was issued, so changing the portal password (or the Google
+  allow-list) immediately invalidates every outstanding token — the client must
+  request a new one.
+- **`password` mode is the right fit.** In `both` mode a token proves only the
+  password factor, so the guard still withholds `/api` until the Google factor is
+  satisfied — which a header-only client cannot provide. Use
+  `authMode: "password"` for app/script access.
+- Store the token in the platform secret store (Keychain / Keystore), never in
+  plain text.
+
+### Reaching a self-hosted portal from a phone
+
+The API can edit bank secrets, so **never publish its port to the internet**.
+Reach your own importer over a **private tunnel** instead:
+
+- **Tailscale (recommended):** install it on the importer host and on your phone,
+  then reach the portal at the host's Tailscale address (bind with `PORTAL_HOST`
+  or keep the default and connect over the tunnel). Traffic is encrypted
+  end-to-end with no publicly exposed ports.
+- **TLS reverse proxy:** if you must expose it, front it with HTTPS (see *Expose
+  over HTTPS* above) and set `PORTAL_SECURE_COOKIES=true`.
+
 ## Security
 
 - Binds `127.0.0.1` by default; set `host`/`PORTAL_HOST=0.0.0.0` to expose, and
@@ -329,3 +389,7 @@ locally the same way: `GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… GOOGLE_REDI
   portal password or the Google `allowedEmails` list immediately invalidates every
   existing session, so a rotated password or a revoked account cannot keep using an
   already-issued cookie (users must sign in again).
+- The `/api` also accepts **bearer tokens** (`POST /auth/token`) for native apps
+  and scripts — see *API access for apps and scripts* above. Expose that surface
+  only over a private tunnel (Tailscale) or a TLS proxy; never publish it to the
+  internet.
