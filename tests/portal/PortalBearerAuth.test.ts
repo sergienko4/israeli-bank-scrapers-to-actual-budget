@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
-import { fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
+import { fakeImporterConfig } from '../helpers/factories.js';
+import {
+  fakePortalConfig, fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir,
+} from '../helpers/portalFactories.js';
 
 let app: FastifyInstance;
 let dir: string;
@@ -124,5 +127,21 @@ describe('Portal bearer-token auth (native/API clients)', () => {
     ));
     const codes = (await Promise.all(attempts)).map((res) => res.statusCode);
     expect(codes).toContain(429);
+  });
+
+  it('does not authorize a bearer-only session when authMode is both', async () => {
+    await app.close();
+    rmSync(dir, { recursive: true, force: true });
+    const seed = seedConfigDir(fakeImporterConfig({ portal: fakePortalConfig({ authMode: 'both' }) }));
+    dir = seed.dir;
+    app = await buildPortal(
+      fakePortalRuntime({ portal: fakePortalConfig({ authMode: 'both' }) }),
+      new PortalConfigStore(seed.path),
+    );
+    const token = await issueToken();
+    const res = await app.inject({
+      method: 'GET', url: '/api/config', headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(401);
   });
 });
