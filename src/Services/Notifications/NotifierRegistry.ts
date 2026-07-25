@@ -6,6 +6,7 @@
  * notifier (e.g., Slack) is one new factory + one registry entry — no edits
  * to NotificationService.
  */
+import EXPO_PUSH_NOTIFIER_FACTORY from './ExpoPushNotifierFactory.js';
 import type { INotifierFactory } from './INotifierFactory.js';
 import TELEGRAM_NOTIFIER_FACTORY from './TelegramNotifierFactory.js';
 import WEBHOOK_NOTIFIER_FACTORY from './WebhookNotifierFactory.js';
@@ -14,11 +15,12 @@ import WEBHOOK_NOTIFIER_FACTORY from './WebhookNotifierFactory.js';
  * Registry of notifier factories iterated by NotificationService.
  *
  * Legacy order preserved (telegram → webhook) so log line order and
- * summary-broadcast order remain stable.
+ * summary-broadcast order remain stable; Expo push (mobile app) is appended.
  */
 const NOTIFIER_REGISTRY: readonly INotifierFactory[] = [
   TELEGRAM_NOTIFIER_FACTORY,
   WEBHOOK_NOTIFIER_FACTORY,
+  EXPO_PUSH_NOTIFIER_FACTORY,
 ];
 
 export default NOTIFIER_REGISTRY;

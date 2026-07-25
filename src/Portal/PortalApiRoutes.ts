@@ -4,12 +4,13 @@
  * masked secrets and persist via PortalConfigStore.
  */
 
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { BANK_REQUIREMENTS, CONFIG_MANIFEST } from '../Config/ConfigManifest.js';
 import { getLogger } from '../Logger/Index.js';
 import { DEFAULT_BANK_REGISTRY } from '../Scraper/BankRegistry.js';
 import { AuditLogService } from '../Services/AuditLogService.js';
+import DeviceTokenStore from '../Services/Notifications/DeviceTokenStore.js';
 import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
@@ -26,6 +27,9 @@ const MANIFEST_PAYLOAD = {
 /** How many recent import runs the status endpoint returns. */
 const STATUS_HISTORY = 10;
 
+/** Matches a well-formed Expo push token, e.g. ExponentPushToken[xxxx]. */
+const EXPO_TOKEN_RE = /^Expo(?:nent)?PushToken\[[^\]]+\]$/;
+
 /**
  * Registers the manifest probe + guarded config API routes.
  * @param app - Fastify instance.
@@ -38,10 +42,34 @@ export default function registerApiRoutes(
   app.get('/api/manifest', (_req, reply) => reply.send(MANIFEST_PAYLOAD));
   registerConfigRoutes(app, store);
   registerBankRoutes(app, store);
+  registerStatusRoute(app);
+  registerDeviceRoutes(app);
+  registerValidateRoute(app, store);
+  return { registered: true };
+}
+
+/**
+ * Registers the read-only import-status route (recent redacted run summaries).
+ * @param app - Fastify instance.
+ * @returns Confirmation that the status route is registered.
+ */
+function registerStatusRoute(app: FastifyInstance): { registered: true } {
   app.get('/api/status', (_req, reply) => {
     const recent = new AuditLogService().getRecent(STATUS_HISTORY);
     return reply.send({ runs: isFail(recent) ? [] : recent.data });
   });
+  return { registered: true };
+}
+
+/**
+ * Registers the config validation route (validate without persisting).
+ * @param app - Fastify instance.
+ * @param store - Shared config store.
+ * @returns Confirmation that the validate route is registered.
+ */
+function registerValidateRoute(
+  app: FastifyInstance, store: PortalConfigStore,
+): { registered: true } {
   app.post('/api/validate', (req, reply) => {
     try {
       const report = store.validate(req.body as IImporterConfig);
@@ -50,6 +78,38 @@ export default function registerApiRoutes(
       return reply.code(400).send({ error: errorMessage(error) });
     }
   });
+  return { registered: true };
+}
+
+/**
+ * Adds or removes an Expo push token for the mobile app, validating its format.
+ * @param req - Request carrying a JSON `{ token }` body.
+ * @param reply - Fastify reply.
+ * @param action - Whether to register or unregister the token.
+ * @returns The reply after sending the outcome.
+ */
+function handleDevice(
+  req: FastifyRequest, reply: FastifyReply, action: 'add' | 'remove',
+): FastifyReply {
+  const body = req.body as { token?: unknown } | null;
+  const token = typeof body?.token === 'string' ? body.token : '';
+  if (!EXPO_TOKEN_RE.test(token)) {
+    return reply.code(400).send({ error: 'Invalid Expo push token' });
+  }
+  const store = new DeviceTokenStore();
+  if (action === 'add') store.add(token);
+  else store.remove(token);
+  return reply.send({ ok: true });
+}
+
+/**
+ * Registers the mobile-app device-registration routes (POST/DELETE /api/devices).
+ * @param app - Fastify instance.
+ * @returns Confirmation that the device routes are registered.
+ */
+function registerDeviceRoutes(app: FastifyInstance): { registered: true } {
+  app.post('/api/devices', (req, reply) => handleDevice(req, reply, 'add'));
+  app.delete('/api/devices', (req, reply) => handleDevice(req, reply, 'remove'));
   return { registered: true };
 }
 

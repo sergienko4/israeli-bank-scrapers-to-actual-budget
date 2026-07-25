@@ -365,6 +365,15 @@ the file. Set **`AUDIT_LOG_PATH`** to a path on a **shared volume** (for example
 defaults to `/app/data/audit-log.json`. The payload is a redacted summary — no
 account numbers, transaction details, or credentials.
 
+### Register for push notifications
+
+`POST /api/devices` with `{ "token": "ExponentPushToken[…]" }` registers the
+mobile app for push; `DELETE /api/devices` with the same body unregisters it.
+On each import the importer sends a redacted result to every registered device
+via Expo Push. Set **`DEVICE_TOKENS_PATH`** to a shared-volume path (for example
+`/app/config/devices.json`) on both the portal (writer) and the importer
+(reader), and keep `notifications.enabled: true`.
+
 ### Token lifetime and security
 
 - **Same token as the cookie.** A bearer token is the portal's stateless,
