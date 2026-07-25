@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { BANK_REQUIREMENTS, CONFIG_MANIFEST } from '../Config/ConfigManifest.js';
 import { getLogger } from '../Logger/Index.js';
 import { DEFAULT_BANK_REGISTRY } from '../Scraper/BankRegistry.js';
+import { AuditLogService } from '../Services/AuditLogService.js';
 import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
@@ -22,6 +23,9 @@ const MANIFEST_PAYLOAD = {
   bankRequirements: BANK_REQUIREMENTS,
 };
 
+/** How many recent import runs the status endpoint returns. */
+const STATUS_HISTORY = 10;
+
 /**
  * Registers the manifest probe + guarded config API routes.
  * @param app - Fastify instance.
@@ -34,6 +38,10 @@ export default function registerApiRoutes(
   app.get('/api/manifest', (_req, reply) => reply.send(MANIFEST_PAYLOAD));
   registerConfigRoutes(app, store);
   registerBankRoutes(app, store);
+  app.get('/api/status', (_req, reply) => {
+    const recent = new AuditLogService().getRecent(STATUS_HISTORY);
+    return reply.send({ runs: isFail(recent) ? [] : recent.data });
+  });
   app.post('/api/validate', (req, reply) => {
     try {
       const report = store.validate(req.body as IImporterConfig);

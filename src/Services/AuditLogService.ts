@@ -7,6 +7,7 @@ import { existsSync,readFileSync, writeFileSync } from 'node:fs';
 
 import type { Procedure } from '../Types/Index.js';
 import { fail,succeed } from '../Types/Index.js';
+import resolveAuditLogPath from './AuditLogPath.js';
 import type { IBankMetrics,IImportSummary } from './MetricsService.js';
 
 export interface IAuditEntry {
@@ -41,7 +42,7 @@ export class AuditLogService implements IAuditLog {
    * @param maxEntries - Maximum number of entries to retain in the log.
    */
   constructor(
-    private readonly filePath = '/app/data/audit-log.json',
+    private readonly filePath = resolveAuditLogPath(),
     private readonly maxEntries: number = DEFAULT_MAX_ENTRIES
   ) {}
 
