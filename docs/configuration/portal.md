@@ -349,6 +349,22 @@ curl -s http://127.0.0.1:8080/api/config -H "authorization: Bearer $TOKEN"
 `GET /auth/status` accepts the same header, so a client can check whether its
 token is still valid before making a call.
 
+### Read import status
+
+`GET /api/status` returns the recent import runs (per-bank outcome, transaction
+count, duration, and timestamp) from the importer's audit log:
+
+```bash
+curl -s http://127.0.0.1:8080/api/status -H "authorization: Bearer $TOKEN"
+# → {"runs":[{"timestamp":"…","banks":[{"name":"leumi","status":"success","txns":3}]}]}
+```
+
+The importer writes the audit log and the portal reads it, so both must agree on
+the file. Set **`AUDIT_LOG_PATH`** to a path on a **shared volume** (for example
+`/app/config/audit-log.json`) on both the importer and the portal service; it
+defaults to `/app/data/audit-log.json`. The payload is a redacted summary — no
+account numbers, transaction details, or credentials.
+
 ### Token lifetime and security
 
 - **Same token as the cookie.** A bearer token is the portal's stateless,
