@@ -2,6 +2,44 @@
 
 Automatically forward bank OTP codes from your phone to Telegram so your bank scraper can read them without manual input.
 
+## Alternative: native app OTP (no Telegram)
+
+The [mobile app](https://github.com/sergienko4/israeli-bank-importer-app) can collect OTP codes directly, so you do not need Telegram or an SMS-forwarding automation. Set the OTP delivery channel to `app` **from the mobile app** — this setting is app-only and is intentionally not exposed in the web portal.
+
+How it works:
+
+```text
+Bank login needs an OTP
+        ↓
+Importer records a pending request and pushes a prompt to the app
+        ↓
+You open the app and enter the code (it also polls for pending requests)
+        ↓
+App submits the code to the importer, which continues the login
+```
+
+When the channel is `app` and Telegram is also configured, a timed-out app OTP automatically falls back to Telegram.
+
+### Configuration
+
+- Choose the channel from the mobile app (OTP delivery → App). It is stored server-side, outside the config manifest, so the web portal never shows it.
+- The importer and portal coordinate through two files on the shared data volume (defaults shown; override via environment):
+  - `OTP_REQUESTS_PATH` — pending OTP requests (default `/app/data/otp-requests.json`)
+  - `OTP_SETTINGS_PATH` — the selected channel (default `/app/data/otp-settings.json`)
+
+### Portal endpoints (used by the app)
+
+- `GET /api/otp/pending` — list pending OTP requests (never returns codes)
+- `POST /api/otp/:id` — submit a 4–8 digit code for a request
+- `GET /api/otp/settings` / `PUT /api/otp/settings` — read or set the channel
+
+### Security
+
+- Codes are written to the shared request file only briefly between submission and use, are single-use, expire with the request (default 5 minutes), and are never logged.
+- All OTP endpoints sit behind the portal's authentication, and request ids are unguessable UUIDs.
+
+---
+
 ## What it does
 
 ```text
