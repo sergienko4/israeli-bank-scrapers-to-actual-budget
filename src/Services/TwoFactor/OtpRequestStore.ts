@@ -8,9 +8,15 @@
  * in the file only briefly, between submit and consumption, and are never logged
  * by this module. Corrupt or missing files read as an empty list, mirroring
  * {@link DeviceTokenStore}.
+ *
+ * Every write replaces the file atomically (temp file + rename) so a concurrent
+ * reader never observes a partial file. The importer scrapes banks sequentially,
+ * so at most one OTP request is active per importer at a time, and the portal
+ * attaches a code only once per request; concurrent read-modify-write conflicts
+ * on the shared file therefore do not arise in normal single-importer operation.
  */
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
 import resolveOtpRequestsPath from './OtpRequestPath.js';
 
@@ -114,12 +120,15 @@ export default class OtpRequestStore {
   }
 
   /**
-   * Serialises and writes the request list.
+   * Serialises and atomically replaces the request file (temp file + rename).
    * @param requests - The full request list to persist.
    */
   private write(requests: IOtpRequest[]): void {
     const serialized = JSON.stringify(requests, null, 2);
-    writeFileSync(this.filePath, serialized);
+    const token = randomUUID();
+    const tempPath = `${this.filePath}.${token}.tmp`;
+    writeFileSync(tempPath, serialized);
+    renameSync(tempPath, this.filePath);
   }
 
   /**

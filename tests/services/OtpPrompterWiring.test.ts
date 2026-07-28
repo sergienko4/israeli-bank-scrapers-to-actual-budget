@@ -9,15 +9,15 @@ import AppOtpPrompter from '../../src/Services/TwoFactor/AppOtpPrompter.js';
 import FallbackOtpPrompter from '../../src/Services/TwoFactor/FallbackOtpPrompter.js';
 import OtpSettingsStore from '../../src/Services/TwoFactor/OtpSettingsStore.js';
 import TwoFactorService from '../../src/Services/TwoFactorService.js';
-import type { IImporterConfig } from '../../src/Types/Index.js';
+import { fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
 
 let dir: string;
 const originalSettingsPath = process.env.OTP_SETTINGS_PATH;
 
-const withTelegram = {
-  notifications: { telegram: { botToken: 'token', chatId: 'chat' } },
-} as unknown as IImporterConfig;
-const withoutTelegram = { notifications: {} } as unknown as IImporterConfig;
+const withTelegram = fakeImporterConfig({
+  notifications: { enabled: true, telegram: fakeTelegramConfig() },
+});
+const withoutTelegram = fakeImporterConfig({ notifications: { enabled: false } });
 
 describe('new OtpPrompterWiring().resolve', () => {
   beforeEach(() => {

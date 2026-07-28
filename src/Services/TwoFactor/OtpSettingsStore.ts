@@ -1,12 +1,17 @@
 /**
- * File-backed store of the app-only OTP delivery channel. The portal writes the
- * channel the user selects in the mobile app; the import child reads it to pick
- * the OTP prompter. Deliberately separate from the main config (and the config
- * manifest) so the channel is set exclusively from the app, never the web
- * portal. Defaults to `telegram` when unset or unreadable.
+ * File-backed store of the OTP delivery channel. The portal writes the channel
+ * the user selects in the mobile app; the import child reads it to pick the OTP
+ * prompter. Deliberately separate from the main config (and the config manifest)
+ * so the web portal UI never surfaces the channel; it is intended to be set from
+ * the mobile app. Both clients share the same portal API, so this is UI-level
+ * scoping, not a separate authorization boundary. Defaults to `telegram` when
+ * unset or unreadable.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
+import { getLogger } from '../../Logger/Index.js';
+import { errorMessage } from '../../Utils/Index.js';
 import resolveOtpSettingsPath from './OtpSettingsPath.js';
 
 /** The OTP delivery channel: Telegram (default) or the mobile app. */
@@ -35,18 +40,22 @@ export default class OtpSettingsStore {
       const raw = readFileSync(this.filePath, 'utf8');
       const parsed = JSON.parse(raw) as unknown;
       return { channel: OtpSettingsStore.readChannel(parsed) };
-    } catch {
+    } catch (error: unknown) {
+      getLogger().warn(`Unreadable OTP settings; defaulting to telegram: ${errorMessage(error)}`);
       return { channel: 'telegram' };
     }
   }
 
   /**
-   * Persists the OTP delivery channel.
+   * Persists the OTP delivery channel atomically.
    * @param channel - The channel to store.
    */
   public set(channel: OtpChannel): void {
     const serialized = JSON.stringify({ channel }, null, 2);
-    writeFileSync(this.filePath, serialized);
+    const token = randomUUID();
+    const tempPath = `${this.filePath}.${token}.tmp`;
+    writeFileSync(tempPath, serialized);
+    renameSync(tempPath, this.filePath);
   }
 
   /**

@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
+import { OTP_SUBMIT_MAX } from '../../src/Portal/PortalRateLimit.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
 import OtpRequestStore from '../../src/Services/TwoFactor/OtpRequestStore.js';
 import { fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
@@ -99,6 +100,17 @@ describe('Portal /api/otp', () => {
       method: 'POST', url: '/api/otp/missing', cookies: { portal_session: cookie }, payload: { code: '123456' },
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it('rate-limits repeated OTP submissions once the per-route maximum is exceeded', async () => {
+    const cookie = await loginCookie();
+    const attempts = Array.from({ length: OTP_SUBMIT_MAX + 5 }, () => (
+      app.inject({
+        method: 'POST', url: '/api/otp/missing', cookies: { portal_session: cookie }, payload: { code: '123456' },
+      })
+    ));
+    const codes = (await Promise.all(attempts)).map((res) => res.statusCode);
+    expect(codes).toContain(429);
   });
 
   it('defaults settings to the telegram channel', async () => {
