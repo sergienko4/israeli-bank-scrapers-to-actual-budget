@@ -110,6 +110,8 @@ describe('Portal /api/otp', () => {
       })
     ));
     const codes = (await Promise.all(attempts)).map((res) => res.statusCode);
+    const accepted = codes.filter((code) => code !== 429);
+    expect(accepted.length).toBeLessThanOrEqual(OTP_SUBMIT_MAX);
     expect(codes).toContain(429);
   });
 

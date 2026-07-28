@@ -122,6 +122,7 @@ export default class OtpRequestStore {
   /**
    * Serialises and atomically replaces the request file (temp file + rename).
    * @param requests - The full request list to persist.
+   * @returns Nothing; the file is replaced before returning.
    */
   private write(requests: IOtpRequest[]): void {
     const serialized = JSON.stringify(requests, null, 2);
