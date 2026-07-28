@@ -68,6 +68,14 @@ No manual CSV downloads. Everything automated.
 
     [:octicons-arrow-right-24: Security](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/SECURITY.md)
 
+-   :material-cellphone-cog: **Portal & mobile app**
+
+    ---
+
+    Edit config in the browser portal, or from the native mobile app — which can also approve bank OTP codes without Telegram.
+
+    [:octicons-arrow-right-24: Mobile app](https://github.com/sergienko4/israeli-bank-importer-app)
+
 </div>
 
 ---
@@ -79,6 +87,7 @@ No manual CSV downloads. Everything automated.
 - **Auto-categorization** — `history`, `translate` (Hebrew → English), or off
 - **Spending watch** — alert on budget thresholds with payee filters
 - **Encrypted config** — AES-256-GCM + PBKDF2 for credentials at rest
+- **Config portal + mobile app** — edit config in a browser or the native [mobile app](https://github.com/sergienko4/israeli-bank-importer-app), which can also approve bank OTP codes
 - **OTP auto-forward** — Android (MacroDroid) and iPhone (Shortcuts) guides
 - **Scheduled** — cron-based, runs on Docker Compose / Synology / Oracle Cloud / Kubernetes
 

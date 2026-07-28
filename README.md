@@ -76,10 +76,20 @@ See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scra
 - 🚨 Spending watch with payee filters and threshold alerts
 - 🔐 Encrypted config (AES-256-GCM + PBKDF2 derivation)
 - 🖥️ Optional web config portal (mobile + desktop; password/Google/both auth)
-- 📤 OTP auto-forward (Android MacroDroid + iPhone Shortcuts guides)
+- 📱 Companion [mobile app](https://github.com/sergienko4/israeli-bank-importer-app) — edit config and approve bank OTP codes from your phone
+- 📤 OTP delivery via the mobile app (no Telegram) or SMS auto-forward (Android MacroDroid / iPhone Shortcuts)
 - ⏰ Cron-based scheduling (Docker, VM, Synology, Oracle Cloud, Kubernetes)
 - 🦊 Camoufox stealth browser (Firefox + C++-level fingerprint masking)
 - 🛡️ Read-only config mounts, non-root container, zero telemetry
+
+---
+
+## Config clients: web portal & mobile app
+
+Manage your importer without hand-editing `config.json`:
+
+- **Web config portal** — a browser UI the importer serves when `portal.enabled` is set (password / Google / both auth), for editing config, banks, and targets on desktop or mobile. See the [Config portal docs](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/configuration/portal/).
+- **Mobile app** ([`israeli-bank-importer-app`](https://github.com/sergienko4/israeli-bank-importer-app)) — a native iOS/Android client that talks to your importer's portal API over a private network (Tailscale/VPN). It edits the same config **and can receive bank OTP codes directly**, so you can retire the Telegram OTP relay. Switch the OTP channel to **App** from the app itself; see [OTP delivery](docs/OTP-AUTOFORWARD.md#alternative-native-app-otp-no-telegram).
 
 ---
 
@@ -247,6 +257,8 @@ Pre-commit runs an 18-gate hook (type-check ×3, audit, build, TypeDoc, unit tes
 | Per-bank options | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/banks/> |
 | Configuration reference | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/getting-started/configuration/> |
 | Config portal | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/configuration/portal/> |
+| Mobile app (config + OTP) | <https://github.com/sergienko4/israeli-bank-importer-app> |
+| OTP delivery (app or Telegram) | [docs/OTP-AUTOFORWARD.md](docs/OTP-AUTOFORWARD.md) |
 | Telegram & webhooks | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/notifications/telegram/> |
 | Deployment guides | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/deployment/docker-compose/> |
 | Architecture | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/architecture/> |

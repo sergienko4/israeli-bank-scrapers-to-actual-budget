@@ -18,6 +18,7 @@ interface IExpoMessage {
   title: string;
   body: string;
   sound: 'default';
+  data?: Record<string, string>;
 }
 
 /** Sends import notifications to the mobile app via Expo Push. */
@@ -57,15 +58,46 @@ export default class ExpoPushNotifier implements INotifier {
   }
 
   /**
+   * Sends an OTP prompt to every registered device, carrying the request id in
+   * the data payload so the app can deep-link straight to the OTP entry screen.
+   * @param bankId - The bank the OTP is for.
+   * @param requestId - The pending OTP request id.
+   */
+  public async sendOtpRequest(bankId: string, requestId: string): Promise<void> {
+    const body = `Enter the SMS code for ${bankId}`;
+    await this.send('OTP required', body, { type: 'otp', requestId, bankId });
+  }
+
+  /**
    * Reads the registered tokens and posts one message to each via Expo Push.
    * @param title - Notification title.
    * @param body - Notification body.
+   * @param data - Optional data payload delivered with the notification.
    */
-  private async send(title: string, body: string): Promise<void> {
+  private async send(title: string, body: string, data?: Record<string, string>): Promise<void> {
     const tokens = this.store.list();
     if (tokens.length === 0) return;
-    const messages = tokens.map((token): IExpoMessage => ({ to: token, title, body, sound: 'default' }));
+    const content = { title, body, data };
+    const messages = tokens.map(
+      (token): IExpoMessage => ExpoPushNotifier.buildMessage(token, content),
+    );
     await ExpoPushNotifier.post(messages);
+  }
+
+  /**
+   * Builds one Expo push message, attaching the data payload only when present.
+   * @param token - The device push token.
+   * @param content - The message content.
+   * @param content.title - Notification title.
+   * @param content.body - Notification body.
+   * @param content.data - Optional data payload.
+   * @returns The Expo push message.
+   */
+  private static buildMessage(
+    token: string, content: { title: string; body: string; data?: Record<string, string> },
+  ): IExpoMessage {
+    const base: IExpoMessage = { to: token, title: content.title, body: content.body, sound: 'default' };
+    return content.data ? { ...base, data: content.data } : base;
   }
 
   /**

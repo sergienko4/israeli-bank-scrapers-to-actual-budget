@@ -688,6 +688,7 @@ export default tseslint.config(
       'src/Services/TelegramUpdateDispatcher.ts',
       'src/Services/Notifications/TelegramNotifier.ts',
       'src/Services/Notifications/TelegramOtpPoller.ts',
+      'src/Services/TwoFactor/AppOtpPrompter.ts',
       'src/Resilience/GracefulShutdown.ts',
       'src/Resilience/RetryStrategy.ts',
       'src/Services/AccountImporter.ts',

@@ -21,14 +21,13 @@ import HistoryCategoryResolver from '../Services/HistoryCategoryResolver.js';
 import type { ICategoryResolver } from '../Services/ICategoryResolver.js';
 import type { ITwoFactorPrompter } from '../Services/ITwoFactorPrompter.js';
 import { MetricsService } from '../Services/MetricsService.js';
-import TelegramNotifier from '../Services/Notifications/TelegramNotifier.js';
 import NotificationService from '../Services/NotificationService.js';
 import { ReconciliationService } from '../Services/ReconciliationService.js';
 import { TransactionService } from '../Services/TransactionService.js';
 import TranslateCategoryResolver from '../Services/TranslateCategoryResolver.js';
-import TwoFactorService from '../Services/TwoFactorService.js';
 import type { CategorizationMode, IImporterConfig, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
+import OtpPrompterWiring from './OtpPrompterWiring.js';
 import type { IResilienceComponents } from './ResilienceWiring.js';
 
 /**
@@ -91,8 +90,8 @@ export function buildCoreServices(config: IImporterConfig): ICoreServices {
   const categoryResult = resolveCategoryResolver(config);
   const hasResolver = categoryResult.success && categoryResult.data !== false;
   const categoryResolver = hasResolver ? categoryResult.data : void 0;
-  const telegramCfg = config.notifications?.telegram;
-  const telegramNotifier = telegramCfg ? new TelegramNotifier(telegramCfg) : null;
+  const otpWiring = new OtpPrompterWiring();
+  const twoFactorPrompter = otpWiring.resolve(config);
   return {
     isDryRun: process.env.DRY_RUN === 'true',
     dryRunCollector: new DryRunCollector(),
@@ -102,7 +101,7 @@ export function buildCoreServices(config: IImporterConfig): ICoreServices {
     metrics: new MetricsService(),
     auditLog: new AuditLogService(),
     notificationService: new NotificationService(config.notifications),
-    twoFactorPrompter: telegramNotifier ? new TwoFactorService(telegramNotifier) : null,
+    twoFactorPrompter,
   };
 }
 

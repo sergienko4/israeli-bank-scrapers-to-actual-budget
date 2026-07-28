@@ -16,6 +16,7 @@ import { isFail } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import { addBank, removeBank } from './ConfigMutations.js';
 import type PortalConfigStore from './PortalConfigStore.js';
+import registerOtpRoutes from './PortalOtpRoutes.js';
 
 /** Static manifest payload (sections, supported bank ids, per-bank required keys), built once. */
 const MANIFEST_PAYLOAD = {
@@ -45,6 +46,7 @@ export default function registerApiRoutes(
   registerStatusRoute(app);
   registerDeviceRoutes(app);
   registerValidateRoute(app, store);
+  registerOtpRoutes(app);
   return { registered: true };
 }
 
