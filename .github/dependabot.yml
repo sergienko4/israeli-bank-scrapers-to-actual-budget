@@ -1,7 +1,8 @@
 version: 2
-# Dependabot grouped weekly updates — related packages are batched into
-# per-group PRs (bounded by open-pull-requests-limit) instead of many
-# ungrouped daily PRs. Dependabot owns ALL npm dependencies, including the
+# Dependabot grouped weekly updates — dev tooling is batched into one PR
+# so the bounded open-pull-requests-limit is never exhausted by low-risk
+# churn, while production packages stay ungrouped and individually
+# reviewable. Dependabot owns ALL npm dependencies, including the
 # critical @actual-app/api and @sergienko4/israeli-bank-scrapers packages.
 # The previous daily dependency-check.yml workflow was retired: its
 # `npm update` step could not cross major versions and crashed on the
@@ -18,29 +19,21 @@ updates:
       day: monday
       time: "06:00"
       timezone: Asia/Jerusalem
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels: ["dependencies", "npm"]
     commit-message:
       prefix: "chore(deps)"
       include: scope
     groups:
-      eslint:
-        patterns:
-          - "eslint*"
-          - "@eslint/*"
-          - "typescript-eslint*"
-          - "eslint-plugin-*"
-          - "eslint-config-*"
-      vitest:
-        patterns:
-          - "vitest*"
-          - "@vitest/*"
-          - "vite*"
-      typescript-tooling:
-        patterns:
-          - "typescript"
-          - "typedoc*"
-          - "@biomejs/*"
+      # Dev tooling churns weekly and used to consume every available PR
+      # slot (5 open dev PRs at once), starving runtime dependencies such
+      # as @sergienko4/israeli-bank-scrapers: its 8.6.1 release was never
+      # proposed because no slot was free. Collapsing every devDependency
+      # into a single PR keeps slots reserved for production packages,
+      # which stay ungrouped so each one remains individually reviewable
+      # and revertible.
+      dev-dependencies:
+        dependency-type: development
       pino:
         patterns:
           - "pino*"
