@@ -1,8 +1,9 @@
 version: 2
 # Dependabot grouped weekly updates — dev tooling is batched into one PR
 # so the bounded open-pull-requests-limit is never exhausted by low-risk
-# churn, while production packages stay ungrouped and individually
-# reviewable. Dependabot owns ALL npm dependencies, including the
+# churn. Production packages remain individually reviewable, except for
+# the retained pino group below, which is the single deliberate
+# exception. Dependabot owns ALL npm dependencies, including the
 # critical @actual-app/api and @sergienko4/israeli-bank-scrapers packages.
 # The previous daily dependency-check.yml workflow was retired: its
 # `npm update` step could not cross major versions and crashed on the
@@ -29,11 +30,14 @@ updates:
       # slot (5 open dev PRs at once), starving runtime dependencies such
       # as @sergienko4/israeli-bank-scrapers: its 8.6.1 release was never
       # proposed because no slot was free. Collapsing every devDependency
-      # into a single PR keeps slots reserved for production packages,
-      # which stay ungrouped so each one remains individually reviewable
-      # and revertible.
+      # into a single PR keeps slots reserved for production packages.
       dev-dependencies:
         dependency-type: development
+      # The one grouped production entry: pino and pino-pretty are both
+      # runtime dependencies, and pino-pretty consumes pino's log format,
+      # so they are bumped together to stop the logger and its transport
+      # drifting apart. Every OTHER production package stays ungrouped so
+      # it remains individually reviewable and revertible.
       pino:
         patterns:
           - "pino*"
