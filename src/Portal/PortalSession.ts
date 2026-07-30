@@ -35,6 +35,8 @@ export interface ISessionPayload {
   fingerprint: string;
   /** Transport this token may be presented on. */
   typ: SessionType;
+  /** Refresh-token family an app access token was minted from, when it was. */
+  family?: string;
 }
 
 /**
@@ -74,6 +76,15 @@ function isSessionType(value: unknown): value is SessionType {
 }
 
 /**
+ * Narrows an untrusted value to a string that may be absent.
+ * @param value - Candidate claim from a parsed token body.
+ * @returns True when the value is a string or was never set.
+ */
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+/**
  * Narrows untrusted parsed JSON to a well-formed session payload.
  *
  * The cookie body is attacker-controllable, so a tampered or truncated payload
@@ -90,7 +101,8 @@ function isSessionPayload(value: unknown): value is ISessionPayload {
     && typeof payload.password === 'boolean'
     && typeof payload.fingerprint === 'string'
     && isSessionType(payload.typ)
-    && (payload.email === undefined || typeof payload.email === 'string');
+    && isOptionalString(payload.family)
+    && isOptionalString(payload.email);
 }
 
 /**

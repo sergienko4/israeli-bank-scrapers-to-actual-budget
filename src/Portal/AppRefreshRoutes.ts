@@ -64,6 +64,7 @@ function sessionOfRecord(record: IAppTokenRecord, expires: number): ISessionPayl
     expires,
     fingerprint: record.fingerprint,
     typ: 'access',
+    family: record.familyId,
   };
 }
 

@@ -196,7 +196,7 @@ function issueTokens(
   };
   const issued = deps.tokens.issue(grant);
   deps.codes.bindFamily(record.code, issued.record.familyId);
-  const claims = sessionOfCode(record);
+  const claims = { ...sessionOfCode(record), family: issued.record.familyId };
   const ttlMs = minutes * MINUTE_MS;
   const accessToken = createSession(claims, runtime.sessionSecret, ttlMs);
   return tokenResponse(issued, accessToken, minutes);

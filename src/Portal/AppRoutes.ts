@@ -10,6 +10,7 @@ import type { FastifyInstance } from 'fastify';
 import { AppAuthCodes } from './AppAuthCodes.js';
 import { registerAppAuthRoutes, type SessionResolver } from './AppAuthRoutes.js';
 import { registerAppRefreshRoutes } from './AppRefreshRoutes.js';
+import { registerAppSessionRoutes } from './AppSessionRoutes.js';
 import { registerAppTokenRoutes } from './AppTokenRoutes.js';
 import { AppTokenStore } from './AppTokenStore.js';
 import type { RuntimeAccessor } from './PortalRuntime.js';
@@ -32,5 +33,6 @@ export default function registerAppRoutes(
   registerAppAuthRoutes(app, { live, codes, sessionOf });
   registerAppTokenRoutes(app, { live, codes, tokens });
   registerAppRefreshRoutes(app, { live, tokens });
+  registerAppSessionRoutes(app, { live, tokens });
   return { registered: true };
 }
