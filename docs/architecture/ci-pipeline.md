@@ -25,7 +25,7 @@ graph TD
     SCH[release-please.yml<br/>push to main]
     DOCS[docs.yml<br/>tag push v*]
     E2ES[e2e-schedule.yml<br/>weekly]
-    DMR[dependabot-meta-render.yml<br/>Dependabot PR]
+    DMR[dependabot-meta-render.yml<br/>after PR Pipeline]
   end
 
   subgraph Reusable["Reusable workflows"]
@@ -41,6 +41,7 @@ graph TD
   end
 
   PR --> E2E
+  PR -.triggers.-> DMR
   E2ES --> E2E
   PR -.uses.-> SETUP
   PR -.uses.-> BUILD
@@ -164,20 +165,38 @@ The renderer is **idempotent** (running twice produces identical bytes) and
 `vitest`, `engines.node`), and Dependabot cannot run `meta:render` itself, so
 every such bump used to fail `Documentation Quality` on drift.
 
-`dependabot-meta-render.yml` closes that gap: on a Dependabot pull request
-that touches `package.json` it re-renders the fragments and commits them onto
-the Dependabot branch, keeping the gate strict rather than relaxing it. The
-workflow runs on `pull_request_target` (a `pull_request` run by Dependabot
-gets a read-only token and no Actions secrets) and pushes with `RELEASE_TOKEN`
-(a `GITHUB_TOKEN` push would not re-trigger the PR checks). Its commit subject
-carries `[dependabot skip]` so Dependabot keeps rebasing the branch.
+`dependabot-meta-render.yml` closes that gap: after `PR Pipeline` finishes on a
+Dependabot pull request, it re-renders the fragments and commits them onto the
+Dependabot branch, keeping the gate strict rather than relaxing it. It also
+accepts a `workflow_dispatch` with a PR number, for pull requests opened before
+the workflow existed.
 
-Privilege containment: the job checks out the **base** commit, installs from
-the **base** lockfile with `--ignore-scripts`, overlays only data files
-(`package.json`, `README.md`, `README.docker-hub.md`) from the head, invokes
-the renderer through `node` rather than `npm run`, and aborts when the pull
-request touches anything beyond the npm manifest. No head-supplied code ever
-executes.
+Two constraints shape the trigger and the token:
+
+- **`workflow_run`, not `pull_request`/`pull_request_target`.** A workflow
+  initiated by Dependabot through `pull_request` gets a read-only
+  `GITHUB_TOKEN` and no Actions secrets, and `pull_request_target` is
+  restricted identically when the PR was *created by* Dependabot. `workflow_run`
+  is GitHub's documented two-step handoff: it runs from the default branch,
+  outside Dependabot's context, with normal secret access.
+- **`RELEASE_TOKEN`, not `GITHUB_TOKEN`, for the push.** A `GITHUB_TOKEN` push
+  does not start new workflow runs, which would leave the PR head with no
+  status checks at all.
+
+The commit subject carries `[dependabot skip]` so Dependabot keeps rebasing the
+branch.
+
+Privilege containment — the job is privileged, so **no head-supplied code
+executes**. It checks out the default branch, installs from the default
+branch's lockfile with `--ignore-scripts`, overlays only data files
+(`package.json`, `README.md`, `README.docker-hub.md`) from the head, and invokes
+the renderer through `node` rather than `npm run`. The head tree is restored
+only after the last step that executes anything, purely to parent the commit.
+The job skips (successfully, without rendering) unless the PR is open, authored
+by `dependabot[bot]`, headed in this repository, changes `package.json`, and
+changes nothing outside the manifest and the two rendered documents. The push
+is never forced, so a concurrent Dependabot rebase rejects it and the next run
+renders the newer head.
 
 ## Pinning policy
 
