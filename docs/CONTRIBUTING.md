@@ -55,6 +55,48 @@ All contributors must follow [GUIDELINES.md](https://github.com/sergienko4/israe
 
 ---
 
+## Dependency install scripts (`allowScripts`)
+
+`package.json` contains an `allowScripts` block. **Do not delete it** — it is
+live configuration read by npm itself, not by any code in this repository. A
+plain text search finds no consumer, which makes it look like dead config; the
+consumer is the npm CLI.
+
+Since npm v12, dependency install scripts do **not** run by default.
+`allowScripts` is npm's allowlist of the four dependencies that legitimately
+need one:
+
+| Package | Why it needs an install script |
+| --- | --- |
+| `better-sqlite3` | `prebuild-install` downloads the prebuilt native binary |
+| `tesseract.js` | OCR asset setup |
+| `unrs-resolver` | native resolver binary |
+| `@sergienko4/israeli-bank-scrapers` | scraper postinstall |
+
+If `better-sqlite3` is not built, `@actual-app/api` cannot open the budget and
+every E2E import fails.
+
+### Why each entry is pinned to an exact version
+
+Entries are written as `<name>@<version>`, not bare names. A bare name would
+trust the install script of **every future version**, so a dependency bump
+could execute an unreviewed install script during `npm ci`. Pinning means a new
+version is not pre-approved: CI fails loudly instead of running the script
+silently.
+
+The pins are therefore **expected to change on every bump of these four
+packages** — that is the control working, not drift.
+
+When Dependabot bumps one of them, re-approve the new version:
+
+```bash
+npm approve-scripts <pkg>@<new-version>
+```
+
+Then commit the updated `allowScripts` entry alongside the bump.
+
+---
+
 ## Pull Request Process
 
 1. Use a **conventional commit** title (e.g., `feat: Add health check endpoint`)

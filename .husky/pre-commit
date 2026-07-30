@@ -51,11 +51,38 @@ wait_gates() {
     echo ""
     echo "❌ FAILED GATES:${_failed}"
     echo ""
+    # Preserve logs before the EXIT trap removes GATE_DIR. Without this the
+    # only copy is the scrollback below, which is unrecoverable after a
+    # 16-gate parallel run — losing the evidence for intermittent failures.
+    # mktemp -d guarantees uniqueness: concurrent hook runs (or a rapid
+    # amend/retry) can share a whole-second timestamp and would otherwise
+    # overwrite each other's logs. The timestamp is kept only for readability.
+    _keep_dir=""
+    if mkdir -p .git/precommit-failures 2>/dev/null; then
+      _keep_dir=$(mktemp -d ".git/precommit-failures/$(date +%Y%m%d-%H%M%S)-XXXXXX" 2>/dev/null) || _keep_dir=""
+    fi
+
+    # Track per-gate copy results so the summary never claims a log was
+    # preserved when mkdir/mktemp/cp actually failed.
+    _kept=""
+    _keep_failed=""
     for _id in $_failed; do
+      if [ -n "$_keep_dir" ] && cp "$GATE_DIR/${_id}.log" "$_keep_dir/${_id}.log" 2>/dev/null; then
+        _kept="${_kept} ${_id}"
+      else
+        _keep_failed="${_keep_failed} ${_id}"
+      fi
       echo "── Output of $_id ──"
       cat "$GATE_DIR/${_id}.log" 2>/dev/null
       echo ""
     done
+
+    if [ -n "$_kept" ]; then
+      echo "📁 Logs preserved in ${_keep_dir}:${_kept}"
+    fi
+    if [ -n "$_keep_failed" ]; then
+      echo "⚠️  Could not preserve logs for:${_keep_failed} — see output above."
+    fi
     exit 1
   fi
 }
