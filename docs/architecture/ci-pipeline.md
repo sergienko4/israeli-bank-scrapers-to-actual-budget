@@ -25,6 +25,7 @@ graph TD
     SCH[release-please.yml<br/>push to main]
     DOCS[docs.yml<br/>tag push v*]
     E2ES[e2e-schedule.yml<br/>weekly]
+    DMR[dependabot-meta-render.yml<br/>Dependabot PR]
   end
 
   subgraph Reusable["Reusable workflows"]
@@ -156,6 +157,28 @@ npm run meta:markers  # bash-validate marker pair structure
 The renderer is **idempotent** (running twice produces identical bytes) and
 **refuses** to run on malformed markers or unknown marker names.
 
+### Dependabot auto-render
+
+`tech-stack` embeds versions Dependabot bumps
+(`@sergienko4/israeli-bank-scrapers`, `@actual-app/api`, `typescript`,
+`vitest`, `engines.node`), and Dependabot cannot run `meta:render` itself, so
+every such bump used to fail `Documentation Quality` on drift.
+
+`dependabot-meta-render.yml` closes that gap: on a Dependabot pull request
+that touches `package.json` it re-renders the fragments and commits them onto
+the Dependabot branch, keeping the gate strict rather than relaxing it. The
+workflow runs on `pull_request_target` (a `pull_request` run by Dependabot
+gets a read-only token and no Actions secrets) and pushes with `RELEASE_TOKEN`
+(a `GITHUB_TOKEN` push would not re-trigger the PR checks). Its commit subject
+carries `[dependabot skip]` so Dependabot keeps rebasing the branch.
+
+Privilege containment: the job checks out the **base** commit, installs from
+the **base** lockfile with `--ignore-scripts`, overlays only data files
+(`package.json`, `README.md`, `README.docker-hub.md`) from the head, invokes
+the renderer through `node` rather than `npm run`, and aborts when the pull
+request touches anything beyond the npm manifest. No head-supplied code ever
+executes.
+
 ## Pinning policy
 
 - **GitHub Actions:** pinned to the **major tag** (e.g., `actions/checkout@v7`).
@@ -191,7 +214,7 @@ mappings.
 | Secret                  | Used by                                  |
 |-------------------------|------------------------------------------|
 | `GITHUB_TOKEN` (built-in) | many                                   |
-| `RELEASE_TOKEN`         | release.yml, release-please.yml          |
+| `RELEASE_TOKEN`         | release.yml, release-please.yml, dependabot-meta-render.yml |
 | `SONAR_TOKEN`           | `pr.yml` → sonar job                     |
 | `SONAR_ORG`             | `pr.yml` → sonar job                     |
 | `SONAR_PROJECT_KEY`     | `pr.yml` → sonar job                     |
@@ -207,8 +230,10 @@ mappings.
 (Monday 06:00 Asia/Jerusalem), bounded by each ecosystem’s
 `open-pull-requests-limit`:
 
-- **npm** — 5 groups (eslint, vitest, typescript-tooling, pino, individual);
-  Dependabot owns ALL npm deps, including the critical `@actual-app/api` and
+- **npm** — 2 groups (`dev-dependencies` covering every development
+  dependency, and `pino` covering the `pino` + `pino-pretty` production pair);
+  all other production dependencies stay individually reviewable. Dependabot
+  owns ALL npm deps, including the critical `@actual-app/api` and
   `@sergienko4/israeli-bank-scrapers` packages.
 - **docker** — base image bumps only.
 - **github-actions** — 4 groups (actions-core, docker-actions, codeql,
