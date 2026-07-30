@@ -19,6 +19,14 @@ export interface IPortalGoogleConfig {
   allowedEmails?: string[]; // Optional in JSON; absent/empty blocks every google login (see PortalRuntime).
 }
 
+/** Mobile-app sign-in settings; see PortalAppConfig for resolution + defaults. */
+export interface IPortalAppConfig {
+  enabled?: boolean;              // Default: false
+  redirectUris?: string[];        // Exact-match allow-list, e.g. ['bankimporter://auth']
+  accessTokenTtlMinutes?: number; // 1-60. Default: 15
+  refreshTokenTtlDays?: number;   // 1-365. Default: 60
+}
+
 /** Root portal configuration; merged from config.json + credentials.json. */
 export interface IPortalConfig {
   enabled: boolean;
@@ -29,4 +37,5 @@ export interface IPortalConfig {
   passwordHash?: string;     // scrypt hash for password auth (secret)
   sessionSecret?: string;    // signing key for session cookies (secret)
   google?: IPortalGoogleConfig;
+  app?: IPortalAppConfig;
 }

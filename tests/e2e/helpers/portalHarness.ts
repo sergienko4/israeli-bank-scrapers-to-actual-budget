@@ -16,6 +16,7 @@ import { Camoufox } from '@hieutran094/camoufox-js';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Browser, Locator } from 'playwright-core';
 
+import { resolvePortalApp } from '../../../src/Portal/PortalAppConfig.js';
 import { hashPassword } from '../../../src/Portal/PortalPassword.js';
 import type { IPortalRuntime } from '../../../src/Portal/PortalRuntime.js';
 import PortalConfigStore from '../../../src/Portal/PortalConfigStore.js';
@@ -92,7 +93,8 @@ function passwordRuntime(): IPortalRuntime {
   };
   return {
     host: '127.0.0.1', port: 0, authMode: 'password',
-    sessionSecret: SESSION_SECRET, secureCookies: false, portal,
+    sessionSecret: SESSION_SECRET, secureCookies: false,
+    app: resolvePortalApp(portal), portal,
   };
 }
 
@@ -261,7 +263,8 @@ function googleRuntime(opts: IGooglePortalOptions): IPortalRuntime {
   if (authMode === 'both') portal.passwordHash = hashPassword(PORTAL_PASSWORD);
   return {
     host: '127.0.0.1', port: 0, authMode,
-    sessionSecret: SESSION_SECRET, secureCookies: false, portal,
+    sessionSecret: SESSION_SECRET, secureCookies: false,
+    app: resolvePortalApp(portal), portal,
   };
 }
 

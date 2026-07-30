@@ -76,7 +76,7 @@ export type { IImporterConfig, IProxyConfig, IResilienceConfig } from './Importe
 export { DEFAULT_RESILIENCE_CONFIG } from './Importer.js';
 
 // Config web-portal settings (see ./Portal.ts)
-export type { IPortalConfig, IPortalGoogleConfig, PortalAuthMode } from './Portal.js';
+export type { IPortalAppConfig, IPortalConfig, IPortalGoogleConfig, PortalAuthMode } from './Portal.js';
 export { PORTAL_AUTH_MODES } from './Portal.js';
 
 // Telegram Bot API wire types + receipt (see ./Telegram.ts)

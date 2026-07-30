@@ -8,6 +8,8 @@ import { createHmac } from 'node:crypto';
 
 import type { IImporterConfig, IPortalConfig, IPortalGoogleConfig, PortalAuthMode } from '../Types/Index.js';
 import { PORTAL_AUTH_MODES } from '../Types/Index.js';
+import type { IPortalAppRuntime } from './PortalAppConfig.js';
+import { resolvePortalApp } from './PortalAppConfig.js';
 import { isEncodedHash } from './PortalPassword.js';
 
 const DEFAULT_HOST = '127.0.0.1';
@@ -24,6 +26,7 @@ export interface IPortalRuntime {
   authMode: PortalAuthMode;
   sessionSecret: string;
   secureCookies: boolean;
+  app: IPortalAppRuntime;
   portal: IPortalConfig;
 }
 
@@ -203,12 +206,14 @@ function normalizeAuthMode(mode?: string): PortalAuthMode {
  */
 export function resolvePortalRuntime(config: IImporterConfig): IPortalRuntime {
   const portal = config.portal ?? { enabled: false };
+  const app = resolvePortalApp(portal);
   return {
     host: resolveHost(process.env.PORTAL_HOST, portal.host),
     port: resolvePort(process.env.PORTAL_PORT, portal.port),
     authMode: normalizeAuthMode(portal.authMode),
     sessionSecret: portal.sessionSecret ?? '',
     secureCookies: resolveSecureCookies(portal),
+    app,
     portal,
   };
 }
@@ -232,6 +237,7 @@ export function resolveLiveRuntime(boot: IPortalRuntime, config: IImporterConfig
     authMode: live.authMode,
     sessionSecret: boot.sessionSecret,
     secureCookies: boot.secureCookies,
+    app: live.app,
     portal: live.portal,
   };
 }
