@@ -50,10 +50,15 @@ export interface IAuthCodeRecord {
   deviceName: string;
   expiresAt: number;
   used: boolean;
+  /** Token family created when this code was redeemed, once one exists. */
+  familyId?: string;
 }
 
 /** The caller-supplied half of a code record, before minting fills the rest. */
-export type AuthCodeInput = Omit<IAuthCodeRecord, 'code' | 'expiresAt' | 'used'>;
+export type AuthCodeInput = Omit<
+  IAuthCodeRecord,
+  'code' | 'expiresAt' | 'used' | 'familyId'
+>;
 
 /**
  * Whether a character is safe to keep in a device label. Control characters
@@ -146,5 +151,29 @@ export class AppAuthCodes {
    */
   public get size(): number {
     return this._codes.size;
+  }
+
+  /**
+   * Remembers the token family a redemption created so a later reuse of the
+   * same code can revoke everything that redemption handed out.
+   * @param code - The code that was just redeemed.
+   * @param familyId - Family id of the refresh token issued for it.
+   * @returns Nothing.
+   */
+  public bindFamily(code: string, familyId: string): void {
+    const record = this._codes.get(code);
+    if (record) record.familyId = familyId;
+  }
+
+  /**
+   * Looks up the token family a code created.
+   * @param code - The code presented at the token endpoint.
+   * @returns Procedure with the family id, or a failure when none was bound.
+   */
+  public familyOf(code: string): Procedure<string> {
+    const record = this._codes.get(code);
+    const familyId = record?.familyId;
+    if (familyId === undefined) return fail('No token family for this code');
+    return succeed(familyId);
   }
 }
