@@ -26,6 +26,7 @@ export interface IPortalRuntime {
   authMode: PortalAuthMode;
   sessionSecret: string;
   secureCookies: boolean;
+  trustProxy: boolean | number;
   app: IPortalAppRuntime;
   portal: IPortalConfig;
 }
@@ -175,6 +176,24 @@ export function resolveSecureCookies(portal: IPortalConfig): boolean {
 }
 
 /**
+ * Resolves how far the portal should trust `X-Forwarded-*` headers, from
+ * `PORTAL_TRUST_PROXY`.
+ *
+ * This decides which address the rate limiter and the logs attribute a request
+ * to. Trusting the header when nothing rewrites it lets any caller forge its
+ * own client address and slip the per-IP limits, so the default is to trust
+ * nothing and anything unparseable falls back to that default. Set it to the
+ * number of proxy hops in front of the portal (`1` behind `tailscale serve`).
+ * @returns `false` to trust no forwarded header, or the hop count to trust.
+ */
+export function resolveTrustProxy(): boolean | number {
+  const raw = process.env.PORTAL_TRUST_PROXY?.trim() ?? '';
+  if (raw === 'true') return true;
+  const hops = Number(raw);
+  return Number.isInteger(hops) && hops > 0 ? hops : false;
+}
+
+/**
  * Whether the resolved bind host exposes the portal beyond loopback.
  *
  * A non-loopback bind (e.g. `0.0.0.0` or a LAN address) makes the portal
@@ -213,6 +232,7 @@ export function resolvePortalRuntime(config: IImporterConfig): IPortalRuntime {
     authMode: normalizeAuthMode(portal.authMode),
     sessionSecret: portal.sessionSecret ?? '',
     secureCookies: resolveSecureCookies(portal),
+    trustProxy: resolveTrustProxy(),
     app,
     portal,
   };
@@ -237,6 +257,7 @@ export function resolveLiveRuntime(boot: IPortalRuntime, config: IImporterConfig
     authMode: live.authMode,
     sessionSecret: boot.sessionSecret,
     secureCookies: boot.secureCookies,
+    trustProxy: boot.trustProxy,
     app: live.app,
     portal: live.portal,
   };

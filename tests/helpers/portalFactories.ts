@@ -64,6 +64,7 @@ export function fakePortalRuntime(overrides: Partial<IPortalRuntime> = {}): IPor
     authMode: portal.authMode ?? 'password',
     sessionSecret: portal.sessionSecret ?? 'portal-test-secret',
     secureCookies: portal.secureCookies ?? false,
+    trustProxy: false,
     app,
     portal,
     ...overrides,

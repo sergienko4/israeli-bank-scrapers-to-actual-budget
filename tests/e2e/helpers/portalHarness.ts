@@ -93,7 +93,7 @@ function passwordRuntime(): IPortalRuntime {
   };
   return {
     host: '127.0.0.1', port: 0, authMode: 'password',
-    sessionSecret: SESSION_SECRET, secureCookies: false,
+    sessionSecret: SESSION_SECRET, secureCookies: false, trustProxy: false,
     app: resolvePortalApp(portal), portal,
   };
 }
@@ -263,7 +263,7 @@ function googleRuntime(opts: IGooglePortalOptions): IPortalRuntime {
   if (authMode === 'both') portal.passwordHash = hashPassword(PORTAL_PASSWORD);
   return {
     host: '127.0.0.1', port: 0, authMode,
-    sessionSecret: SESSION_SECRET, secureCookies: false,
+    sessionSecret: SESSION_SECRET, secureCookies: false, trustProxy: false,
     app: resolvePortalApp(portal), portal,
   };
 }

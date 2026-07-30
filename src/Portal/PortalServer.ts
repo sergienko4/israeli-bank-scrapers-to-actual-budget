@@ -52,6 +52,21 @@ function isSpaShellRequest(req: FastifyRequest): boolean {
 }
 
 /**
+ * Keys the rate limiter on the request's client address.
+ *
+ * Fastify resolves `req.ip` from `X-Forwarded-For` only as far as the runtime's
+ * `trustProxy` setting allows, so a portal behind `tailscale serve` limits the
+ * real caller while a directly-exposed portal cannot be tricked by a forged
+ * header. Declaring it explicitly keeps that decision visible instead of
+ * leaving it to the plugin default.
+ * @param req - The incoming request being counted.
+ * @returns The address the limiter counts this request against.
+ */
+function limiterKey(req: FastifyRequest): string {
+  return req.ip;
+}
+
+/**
  * Assembles the Fastify app with plugins, routes, and SPA fallback.
  * @param rt - Resolved portal runtime.
  * @param store - Config store backing the API.
@@ -60,8 +75,10 @@ function isSpaShellRequest(req: FastifyRequest): boolean {
 export async function buildPortal(
   rt: IPortalRuntime, store: PortalConfigStore,
 ): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
-  await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+  const app = Fastify({ logger: false, trustProxy: rt.trustProxy });
+  await app.register(rateLimit, {
+    max: 100, timeWindow: '1 minute', keyGenerator: limiterKey,
+  });
   await app.register(cookie, { secret: rt.sessionSecret });
   await app.register(fstatic, { root: publicDir() });
   registerAuthRoutes(app, rt, store);
