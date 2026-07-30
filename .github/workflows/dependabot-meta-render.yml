@@ -1,0 +1,152 @@
+name: Dependabot Meta Render
+
+# Keeps Dependabot pull requests green against the README marker gate.
+#
+# `scripts/render-readme-meta.mjs` renders the `meta:tech-stack` fragment from
+# `package.json`, so every Dependabot bump of a version the README advertises
+# (`@sergienko4/israeli-bank-scrapers`, `@actual-app/api`, `typescript`,
+# `vitest`, `engines.node`) leaves the rendered fragment stale and fails the
+# `Documentation Quality` gate. Dependabot cannot run `npm run meta:render`
+# itself, so this workflow renders the fragments and commits them back to the
+# Dependabot branch instead of relaxing the gate.
+#
+# Design decisions, each backed by GitHub documentation:
+#
+# 1. `pull_request_target`, not `pull_request` — workflows triggered by
+#    Dependabot `pull_request` events receive a read-only `GITHUB_TOKEN` and
+#    cannot read Actions secrets, so they cannot push. `pull_request_target` is
+#    the documented workaround and always runs the workflow definition from the
+#    base branch, so a pull request can never alter what executes here.
+#    https://docs.github.com/en/code-security/reference/supply-chain-security/troubleshoot-dependabot/dependabot-on-actions
+#
+# 2. `RELEASE_TOKEN`, not `GITHUB_TOKEN`, for the commit — pushes authenticated
+#    with `GITHUB_TOKEN` do not start new workflow runs, which would leave the
+#    pull request head with no status checks at all: worse than the failure
+#    being fixed.
+#    https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#example-passing-secrets-to-a-reusable-workflow
+#
+# 3. `[dependabot skip]` in the commit subject — by default Dependabot stops
+#    rebasing a branch once anyone else pushes to it. The marker keeps
+#    Dependabot in control of the branch.
+#    https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-pull-requests-for-dependency-updates
+#
+# Because `pull_request_target` runs privileged, no executable file from the
+# pull request head is ever run here: the checkout, the lockfile and the
+# renderer all come from the trusted base commit, and only data files are
+# overlaid from the head.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - package.json
+
+# Deliberately read-only: the write path uses `RELEASE_TOKEN` rather than an
+# elevated `GITHUB_TOKEN`, so a bug here cannot escalate into repo writes.
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: dependabot-meta-render-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  render:
+    name: Render README meta
+    # Dependabot pushes its branches into this repository rather than a fork.
+    # Requiring both conditions means the head branch is only ever writable by
+    # accounts that already hold push access.
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the trusted base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Confirm the pull request only touches the npm manifest
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          changed=$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --jq '.[].filename')
+          unexpected=$(printf '%s\n' "${changed}" \
+            | grep -vxE 'package\.json|package-lock\.json' || true)
+          if [ -n "${unexpected}" ]; then
+            echo "::notice::Skipping auto-render; unexpected files changed:"
+            printf '%s\n' "${unexpected}"
+            echo 'skip=true' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'skip=false' >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Set up Node.js
+        if: steps.guard.outputs.skip == 'false'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+
+      # `--ignore-scripts`: the renderer only needs the `yaml` package, and the
+      # lifecycle scripts of a freshly bumped dependency must never execute in a
+      # privileged job.
+      - name: Install renderer dependencies from the base lockfile
+        if: steps.guard.outputs.skip == 'false'
+        run: npm ci --ignore-scripts
+
+      # Only data files are taken from the head: the manifest the renderer reads
+      # and the documents it rewrites. Every executable file stays at the base
+      # commit checked out above.
+      - name: Overlay the head manifest and documents
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "${HEAD_SHA}"
+          git checkout "${HEAD_SHA}" -- \
+            package.json README.md README.docker-hub.md
+
+      # Invoked through `node` rather than `npm run` so the overlaid
+      # `package.json` cannot inject a script of its own into this job.
+      - name: Re-render the marker fragments
+        if: steps.guard.outputs.skip == 'false'
+        run: node scripts/render-readme-meta.mjs
+
+      - name: Commit rendered documents to the Dependabot branch
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          drifted=$(git diff --name-only -- README.md README.docker-hub.md)
+          if [ -z "${drifted}" ]; then
+            echo 'Marker fragments already in sync; nothing to commit.'
+            exit 0
+          fi
+          if [ -z "${GH_TOKEN}" ]; then
+            echo '::error::RELEASE_TOKEN is unset; cannot push the rendered docs.'
+            exit 1
+          fi
+          # The Contents API commits as the token owner, which re-triggers the
+          # pull request checks that a GITHUB_TOKEN push would suppress.
+          printf '%s\n' "${drifted}" | while IFS= read -r file; do
+            blob=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/contents/${file}?ref=${HEAD_REF}" \
+              --jq '.sha')
+            gh api --method PUT \
+              "repos/${GITHUB_REPOSITORY}/contents/${file}" \
+              --raw-field "message=docs: re-render ${file} meta markers [dependabot skip]" \
+              --raw-field "branch=${HEAD_REF}" \
+              --raw-field "sha=${blob}" \
+              --raw-field "content=$(base64 -w0 "${file}")"
+            echo "Committed rendered ${file} to ${HEAD_REF}."
+          done
