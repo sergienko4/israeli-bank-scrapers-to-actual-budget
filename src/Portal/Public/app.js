@@ -119,6 +119,18 @@ async function init() {
 }
 
 /**
+ * Reads the `next` query parameter, but only when it points back into the app
+ * sign-in flow. Anything else is discarded: the value arrives from the address
+ * bar, so an unchecked redirect would let a crafted link bounce the browser to
+ * an attacker's site carrying a freshly authorized session.
+ * @returns {string} the safe destination, or an empty string when there is none
+ */
+function safeNext() {
+  const raw = new URLSearchParams(window.location.search).get('next') || '';
+  return raw.startsWith('/auth/app/') ? raw : '';
+}
+
+/**
  * Re-reads auth status and either opens the app (when every required factor is
  * satisfied) or shows the remaining login step. Called on boot, after returning
  * from Google, and after a password submit so `both` mode advances cleanly.
@@ -127,6 +139,11 @@ async function init() {
 async function refreshAuth() {
   const status = await api('/auth/status').catch(() => ({ authMode: 'password' }));
   if (status.authorized) {
+    const next = safeNext();
+    if (next) {
+      window.location.replace(next);
+      return;
+    }
     try {
       await load();
       return;
