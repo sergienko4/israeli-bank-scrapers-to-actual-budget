@@ -24,11 +24,16 @@ import { createSession, type ISessionPayload } from './PortalSession.js';
 
 /** Longest value accepted in any request field, well above every real one. */
 const MAX_FIELD = 512;
-const INVALID_REQUEST = 'invalid_request';
-const INVALID_GRANT = 'invalid_grant';
-const APP_UNCONFIGURED = 'App sign-in is not configured';
-const MINUTE_MS = 60_000;
-const SECONDS_PER_MINUTE = 60;
+/** Error body for a malformed request. */
+export const INVALID_REQUEST = 'invalid_request';
+/** Error body for anything the caller is not entitled to. */
+export const INVALID_GRANT = 'invalid_grant';
+/** Body returned whenever app sign-in is switched off. */
+export const APP_UNCONFIGURED = 'App sign-in is not configured';
+/** One minute, in milliseconds. */
+export const MINUTE_MS = 60_000;
+/** Seconds in a minute, for the `expiresIn` field. */
+export const SECONDS_PER_MINUTE = 60;
 
 /** Collaborators the token endpoint needs, injected to avoid an import cycle. */
 export interface IAppTokenDeps {
@@ -58,7 +63,7 @@ export interface IGrantedTokens {
  * @param value - The raw field taken off the request body.
  * @returns True when the field can be used as-is.
  */
-function isField(value: unknown): value is string {
+export function isField(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_FIELD;
 }
 
@@ -156,7 +161,7 @@ function redeemCode(
  * @param minutes - Access token lifetime in minutes.
  * @returns The response body handed to the app.
  */
-function tokenResponse(
+export function tokenResponse(
   issued: IIssuedToken,
   accessToken: string,
   minutes: number,

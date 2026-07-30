@@ -15,5 +15,7 @@ export const STATUS_MAX = 60;
 export const OAUTH_MAX = 20;
 /** Requests per {@link RATE_WINDOW} allowed on the app OTP-code submit route. */
 export const OTP_SUBMIT_MAX = 10;
+/** Requests per {@link RATE_WINDOW} allowed on the app refresh route. */
+export const REFRESH_MAX = 30;
 /** Shared sliding window applied to every portal auth rate limit. */
 export const RATE_WINDOW = '1 minute';
