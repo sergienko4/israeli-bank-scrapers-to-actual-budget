@@ -25,6 +25,10 @@ import { bearerSessionOf, verifyToken } from './PortalTokenAuth.js';
 
 const COOKIE = 'portal_session';
 
+/** What the legacy token route says when a password alone cannot be enough. */
+export const BOTH_MODE_REFUSAL =
+  "Password alone cannot satisfy authMode 'both'. Use /auth/app/authorize.";
+
 /** Public auth status for the login UI: configured mode + satisfied factors. */
 export interface IAuthStatus {
   authMode: PortalAuthMode;
@@ -169,17 +173,23 @@ async function handleLogin(
 /**
  * Issues a bearer token for native/API clients: verifies the password and returns
  * the signed session token (password factor + current credential fingerprint) in
- * the JSON body instead of a cookie. In `both` mode the token proves only the
- * password factor, so the `/api` guard still withholds access until the Google
- * factor is satisfied too.
+ * the JSON body instead of a cookie.
+ *
+ * In `both` mode the password alone can never open the `/api` guard, so this
+ * route refuses rather than handing back a token that would 401 on every call
+ * afterwards. A caller that needs `both` has to come through
+ * `/auth/app/authorize`, where the second factor can actually be collected.
  * @param req - Incoming token request carrying the JSON `{ password }` body.
  * @param reply - Reply used to send the token or an error.
  * @param rt - Live portal runtime carrying the current password hash + secret.
- * @returns The reply after sending `{ token }` or a 401.
+ * @returns The reply after sending `{ token }`, a 401, or a 409.
  */
 async function handleToken(
   req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime,
 ): Promise<FastifyReply> {
+  if (rt.authMode === 'both') {
+    return await reply.code(409).send({ error: BOTH_MODE_REFUSAL });
+  }
   if (!(await passwordMatches(req, rt))) {
     return await reply.code(401).send({ error: 'Invalid password' });
   }
