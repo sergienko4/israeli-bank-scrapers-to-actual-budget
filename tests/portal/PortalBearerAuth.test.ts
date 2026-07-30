@@ -93,6 +93,14 @@ describe('Portal bearer-token auth (native/API clients)', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('rejects an access token pasted into the session cookie with 401', async () => {
+    const token = await issueToken();
+    const res = await app.inject({
+      method: 'GET', url: '/api/config', cookies: { portal_session: token },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
   it('accepts a bearer token on a write (PUT /api/config)', async () => {
     const token = await issueToken();
     const masked = await app.inject({

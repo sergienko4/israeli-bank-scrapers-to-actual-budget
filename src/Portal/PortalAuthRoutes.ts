@@ -35,8 +35,10 @@ export interface IAuthStatus {
 
 /**
  * Reads and verifies the session cookie from a request, then rejects it unless
- * its embedded credential fingerprint still matches the live credentials — so a
- * password rotation or allow-list change evicts every session issued before it.
+ * it was minted as a cookie session and its embedded credential fingerprint
+ * still matches the live credentials — so a password rotation or allow-list
+ * change evicts every session issued before it, and an API access token cannot
+ * be pasted into the cookie to impersonate one.
  * @param req - Incoming request.
  * @param rt - Live runtime carrying the session secret + current credentials.
  * @returns Procedure with the session payload, or failure when absent/invalid/stale.
@@ -44,14 +46,14 @@ export interface IAuthStatus {
 export function sessionOf(req: FastifyRequest, rt: IPortalRuntime): Procedure<ISessionPayload> {
   const raw = req.cookies[COOKIE];
   if (!raw) return fail('No session cookie');
-  return verifyToken(raw, rt);
+  return verifyToken(raw, rt, 'cookie');
 }
 
 /**
  * Resolves the request's session from either transport: the `portal_session`
  * cookie (web SPA) first, then an `Authorization: Bearer` token (native/API
- * clients). Both carry the same signed payload + credential fingerprint, so
- * either proves the same factors to the guard.
+ * clients). Each transport only accepts a token minted for it, but both prove
+ * the same factors to the guard.
  * @param req - Incoming request.
  * @param rt - Live runtime carrying the session secret + current credentials.
  * @returns Procedure with the session payload, or failure when neither is valid.
