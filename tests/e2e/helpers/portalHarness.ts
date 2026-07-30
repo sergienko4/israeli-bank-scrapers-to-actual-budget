@@ -22,7 +22,7 @@ import type { IPortalRuntime } from '../../../src/Portal/PortalRuntime.js';
 import PortalConfigStore from '../../../src/Portal/PortalConfigStore.js';
 import { buildPortal } from '../../../src/Portal/PortalServer.js';
 import type {
-  IImporterConfig, IPortalConfig, IPortalGoogleConfig,
+  IImporterConfig, IPortalAppConfig, IPortalConfig, IPortalGoogleConfig,
 } from '../../../src/Types/Index.js';
 
 /** Known plaintext portal password seeded for the login flow. */
@@ -38,6 +38,8 @@ export interface IPortalServer {
   dir: string;
   configPath: string;
   credsPath: string;
+  /** The live config the routes read per request, so tests can change it. */
+  store: PortalConfigStore;
 }
 
 /**
@@ -80,9 +82,10 @@ export async function setValue(locator: Locator, value: string): Promise<void> {
 
 /**
  * Builds a password-mode portal runtime seeded with a known hashed password.
+ * @param app - Optional `portal.app` block enabling mobile-app sign-in.
  * @returns Resolved runtime bound to an ephemeral localhost port.
  */
-function passwordRuntime(): IPortalRuntime {
+function passwordRuntime(app?: IPortalAppConfig): IPortalRuntime {
   const portal: IPortalConfig = {
     enabled: true,
     host: '127.0.0.1',
@@ -91,6 +94,7 @@ function passwordRuntime(): IPortalRuntime {
     passwordHash: hashPassword(PORTAL_PASSWORD),
     sessionSecret: SESSION_SECRET,
   };
+  if (app) portal.app = app;
   return {
     host: '127.0.0.1', port: 0, authMode: 'password',
     sessionSecret: SESSION_SECRET, secureCookies: false, trustProxy: false,
@@ -100,6 +104,10 @@ function passwordRuntime(): IPortalRuntime {
 
 /**
  * Writes the given config to a fresh temp dir as config.json.
+ *
+ * The app refresh-token store is repointed into the same dir before any portal
+ * is built, because the routes construct it at registration time and its
+ * default path (`/app/data`) belongs to the container, not to a test run.
  * @param config - Importer config to seed on disk.
  * @returns The temp dir and the config.json path inside it.
  */
@@ -107,6 +115,7 @@ function seed(config: IImporterConfig): { dir: string; configPath: string } {
   const dir = mkdtempSync(join(tmpdir(), 'portal-e2e-'));
   const configPath = join(dir, 'config.json');
   writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+  process.env.APP_TOKENS_PATH = join(dir, 'app-tokens.json');
   return { dir, configPath };
 }
 
@@ -147,19 +156,24 @@ async function startWithStore(
  * runtime's portal block is written into the seeded config so the live auth
  * routes (which read the store's config, not the boot runtime) log in cleanly.
  * @param config - Importer config to seed and edit through the UI.
+ * @param app - Optional `portal.app` block enabling mobile-app sign-in.
  * @returns The running server handle (app, baseUrl, on-disk paths).
  */
-export async function startSeededPortal(config: IImporterConfig): Promise<IPortalServer> {
-  const runtime = passwordRuntime();
+export async function startSeededPortal(
+  config: IImporterConfig, app?: IPortalAppConfig,
+): Promise<IPortalServer> {
+  const runtime = passwordRuntime(app);
   const { dir, configPath } = seed({ ...config, portal: runtime.portal });
-  let app: FastifyInstance | undefined;
+  let started: { app: FastifyInstance; store: PortalConfigStore } | undefined;
   try {
-    const started = await startWithStore(runtime, configPath);
-    app = started.app;
-    const baseUrl = `http://127.0.0.1:${String(boundPort(app))}`;
-    return { app, baseUrl, dir, configPath, credsPath: join(dir, 'credentials.json') };
+    started = await startWithStore(runtime, configPath);
+    const baseUrl = `http://127.0.0.1:${String(boundPort(started.app))}`;
+    return {
+      app: started.app, baseUrl, dir, configPath,
+      credsPath: join(dir, 'credentials.json'), store: started.store,
+    };
   } catch (error: unknown) {
-    if (app) await app.close();
+    if (started) await started.app.close();
     rmSync(dir, { recursive: true, force: true });
     throw error;
   }
@@ -183,6 +197,8 @@ export interface IFakeGoogle {
 export interface IGooglePortalOptions {
   allowedEmails: string[];
   authMode?: 'google' | 'both';
+  /** Seeded `portal.app` block, for tests that drive mobile-app sign-in. */
+  app?: IPortalAppConfig;
 }
 
 /** Google client id the fake OAuth server issues tokens for (matches the runtime). */
@@ -261,6 +277,7 @@ function googleRuntime(opts: IGooglePortalOptions): IPortalRuntime {
     sessionSecret: SESSION_SECRET, google,
   };
   if (authMode === 'both') portal.passwordHash = hashPassword(PORTAL_PASSWORD);
+  if (opts.app) portal.app = opts.app;
   return {
     host: '127.0.0.1', port: 0, authMode,
     sessionSecret: SESSION_SECRET, secureCookies: false, trustProxy: false,
@@ -303,7 +320,10 @@ export async function startSeededGooglePortal(
     app = started.app;
     const baseUrl = `http://127.0.0.1:${String(boundPort(app))}`;
     patchRedirectUri(started.store, runtime, `${baseUrl}/auth/google/callback`);
-    return { app, baseUrl, dir, configPath, credsPath: join(dir, 'credentials.json'), runtime };
+    return {
+      app, baseUrl, dir, configPath, credsPath: join(dir, 'credentials.json'),
+      store: started.store, runtime,
+    };
   } catch (error: unknown) {
     if (app) await app.close();
     rmSync(dir, { recursive: true, force: true });
