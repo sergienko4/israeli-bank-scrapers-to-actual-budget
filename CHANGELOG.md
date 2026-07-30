@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.40.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.40.0...v1.40.1) (2026-07-30)
+
+
+### Fixed
+
+* **docs:** bump pymdown-extensions to 11.0.1 for GHSA path traversal ([#558](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/558)) ([d0d3e26](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d0d3e260af5811404a8024fef91cba9952e84686))
+
 ## [1.40.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.39.2...v1.40.0) (2026-07-30)
 
 
