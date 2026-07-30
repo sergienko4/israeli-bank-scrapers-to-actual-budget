@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.40.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.39.2...v1.40.0) (2026-07-30)
+
+
+### Added
+
+* add bearer-token auth to the portal API ([b5a2c7f](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b5a2c7f35fad26ad9bd6840913ecead041afc4f5))
+* add Expo push notifier + device registry ([469e14f](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/469e14fa7d312c0157903c1414945fb63c83bb60))
+* add portal /api/status import-run endpoint ([ff7dcea](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ff7dcea3f5e1f45aeb2c65e4fc1a967303509764))
+* **otp:** app-based OTP delivery channel ([#537](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/537)) ([9052cac](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/9052cac97cd38303462d875309eb50641e66451a))
+
+
+### Fixed
+
+* **deps:** bump israeli-bank-scrapers to 8.6.1 ([#554](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/554)) ([91d959d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/91d959da461d1d592e0792d006618ae36b70c65b))
+* **deps:** bump postcss override to 8.5.18 ([#528](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/528)) ([28f70d4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/28f70d4bbfc43c37c8530e5cbed7227259f00735))
+
 ## [1.39.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.39.1...v1.39.2) (2026-07-23)
 
 
