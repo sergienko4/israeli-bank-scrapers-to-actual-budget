@@ -17,7 +17,9 @@ import {
   credentialFingerprint, type IPortalRuntime, portalCookieOptions,
   resolveLiveRuntime, type RuntimeAccessor,
 } from './PortalRuntime.js';
-import { createSession, type ISessionPayload } from './PortalSession.js';
+import {
+  ACCESS_TTL_MS, COOKIE_TTL_MS, createSession, type ISessionPayload,
+} from './PortalSession.js';
 import { bearerSessionOf, verifyToken } from './PortalTokenAuth.js';
 
 const COOKIE = 'portal_session';
@@ -71,7 +73,8 @@ function grant(args: IGrantArgs): { granted: true } {
   const prior = sessionOf(req, runtime);
   const base = isFail(prior) ? { google: false, password: false } : prior.data;
   const fingerprint = credentialFingerprint(runtime);
-  const token = createSession({ ...base, ...factor, fingerprint }, runtime.sessionSecret);
+  const payload = { ...base, ...factor, fingerprint, typ: 'cookie' as const };
+  const token = createSession(payload, runtime.sessionSecret, COOKIE_TTL_MS);
   const cookieOpts = portalCookieOptions(runtime);
   reply.setCookie(COOKIE, token, cookieOpts);
   return { granted: true };
@@ -177,8 +180,13 @@ async function handleToken(
   if (!(await passwordMatches(req, rt))) {
     return await reply.code(401).send({ error: 'Invalid password' });
   }
-  const payload = { google: false, password: true, fingerprint: credentialFingerprint(rt) };
-  const token = createSession(payload, rt.sessionSecret);
+  const payload = {
+    google: false,
+    password: true,
+    fingerprint: credentialFingerprint(rt),
+    typ: 'access' as const,
+  };
+  const token = createSession(payload, rt.sessionSecret, ACCESS_TTL_MS);
   return await reply.send({ token });
 }
 

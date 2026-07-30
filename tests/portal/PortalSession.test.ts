@@ -3,7 +3,9 @@ import { createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { isFail, isSuccess } from '../../src/Types/Index.js';
-import { createSession, readSession } from '../../src/Portal/PortalSession.js';
+import {
+  ACCESS_TTL_MS, COOKIE_TTL_MS, createSession, readSession,
+} from '../../src/Portal/PortalSession.js';
 
 const SECRET = 'portal-test-secret';
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
@@ -16,7 +18,7 @@ describe('PortalSession', () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
       const before = Date.now();
-      const token = createSession({ email: 'a@b.com', google: true, password: false, fingerprint: 'fp' }, SECRET);
+      const token = createSession({ email: 'a@b.com', google: true, password: false, fingerprint: 'fp', typ: 'cookie' }, SECRET, COOKIE_TTL_MS);
       const [body, sig] = token.split('.');
       expect(body).toBeTruthy();
       expect(sig).toMatch(/^[0-9a-f]{64}$/);
@@ -24,14 +26,26 @@ describe('PortalSession', () => {
       if (!isSuccess(result)) throw new Error(result.message);
       expect(result.data.email).toBe('a@b.com');
       expect(result.data.google).toBe(true);
+      expect(result.data.typ).toBe('cookie');
       expect(result.data.expires).toBeGreaterThanOrEqual(before + TWELVE_HOURS_MS);
       expect(result.data.expires).toBeLessThanOrEqual(before + TWELVE_HOURS_MS);
+    });
+
+    it('honours the shorter access-token TTL', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      const before = Date.now();
+      const token = createSession({ google: true, password: true, fingerprint: 'fp', typ: 'access' }, SECRET, ACCESS_TTL_MS);
+      const result = readSession(token, SECRET);
+      if (!isSuccess(result)) throw new Error(result.message);
+      expect(result.data.typ).toBe('access');
+      expect(result.data.expires).toBe(before + ACCESS_TTL_MS);
     });
   });
 
   describe('readSession', () => {
     it('succeeds for a freshly created token', () => {
-      const token = createSession({ google: false, password: true, fingerprint: 'fp' }, SECRET);
+      const token = createSession({ google: false, password: true, fingerprint: 'fp', typ: 'cookie' }, SECRET, COOKIE_TTL_MS);
       expect(isSuccess(readSession(token, SECRET))).toBe(true);
     });
 
@@ -42,7 +56,7 @@ describe('PortalSession', () => {
     });
 
     it('fails when the signature does not match', () => {
-      const token = createSession({ google: false, password: true, fingerprint: 'fp' }, SECRET);
+      const token = createSession({ google: false, password: true, fingerprint: 'fp', typ: 'cookie' }, SECRET, COOKIE_TTL_MS);
       const tampered = readSession(token, 'different-secret');
       expect(isFail(tampered)).toBe(true);
       if (isFail(tampered)) expect(tampered.message).toMatch(/Bad signature/);
@@ -65,7 +79,7 @@ describe('PortalSession', () => {
     });
 
     it('rejects a validly-signed token that carries no credential fingerprint', () => {
-      const stale = { google: false, password: true, expires: Date.now() + 1000 };
+      const stale = { google: false, password: true, expires: Date.now() + 1000, typ: 'cookie' };
       const body = Buffer.from(JSON.stringify(stale)).toString('base64url');
       const sig = createHmac('sha256', SECRET).update(body).digest('hex');
       const result = readSession(`${body}.${sig}`, SECRET);
@@ -73,8 +87,26 @@ describe('PortalSession', () => {
       if (isFail(result)) expect(result.message).toMatch(/Malformed/);
     });
 
+    it('rejects a validly-signed token minted before the transport claim existed', () => {
+      const legacy = { google: true, password: true, expires: Date.now() + 1000, fingerprint: 'fp' };
+      const body = Buffer.from(JSON.stringify(legacy)).toString('base64url');
+      const sig = createHmac('sha256', SECRET).update(body).digest('hex');
+      const result = readSession(`${body}.${sig}`, SECRET);
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/Malformed/);
+    });
+
+    it('rejects a validly-signed token carrying an unknown transport', () => {
+      const forged = { google: true, password: true, expires: Date.now() + 1000, fingerprint: 'fp', typ: 'refresh' };
+      const body = Buffer.from(JSON.stringify(forged)).toString('base64url');
+      const sig = createHmac('sha256', SECRET).update(body).digest('hex');
+      const result = readSession(`${body}.${sig}`, SECRET);
+      expect(isFail(result)).toBe(true);
+      if (isFail(result)) expect(result.message).toMatch(/Malformed/);
+    });
+
     it('fails once the 12h TTL has elapsed', () => {
-      const token = createSession({ google: true, password: true, fingerprint: 'fp' }, SECRET);
+      const token = createSession({ google: true, password: true, fingerprint: 'fp', typ: 'cookie' }, SECRET, COOKIE_TTL_MS);
       vi.spyOn(Date, 'now').mockReturnValue(Date.now() + TWELVE_HOURS_MS + 1000);
       const result = readSession(token, SECRET);
       expect(isFail(result)).toBe(true);

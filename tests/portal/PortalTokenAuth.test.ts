@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { credentialFingerprint, type IPortalRuntime } from '../../src/Portal/PortalRuntime.js';
 import { hashPassword } from '../../src/Portal/PortalPassword.js';
-import { createSession } from '../../src/Portal/PortalSession.js';
+import { ACCESS_TTL_MS, createSession } from '../../src/Portal/PortalSession.js';
 import { bearerSessionOf, verifyToken } from '../../src/Portal/PortalTokenAuth.js';
 import { isFail } from '../../src/Types/Index.js';
 import { fakePortalConfig, fakePortalRuntime } from '../helpers/portalFactories.js';
@@ -24,8 +24,13 @@ function reqWith(authorization?: string): FastifyRequest {
  * @returns A `payload.sig` token string.
  */
 function tokenFor(rt: IPortalRuntime): string {
-  const payload = { google: false, password: true, fingerprint: credentialFingerprint(rt) };
-  return createSession(payload, rt.sessionSecret);
+  const payload = {
+    google: false,
+    password: true,
+    fingerprint: credentialFingerprint(rt),
+    typ: 'access' as const,
+  };
+  return createSession(payload, rt.sessionSecret, ACCESS_TTL_MS);
 }
 
 describe('verifyToken', () => {
