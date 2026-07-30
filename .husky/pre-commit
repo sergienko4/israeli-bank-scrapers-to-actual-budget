@@ -51,11 +51,18 @@ wait_gates() {
     echo ""
     echo "❌ FAILED GATES:${_failed}"
     echo ""
+    # Preserve logs before the EXIT trap removes GATE_DIR. Without this the
+    # only copy is the scrollback below, which is unrecoverable after a
+    # 16-gate parallel run — losing the evidence for intermittent failures.
+    _keep_dir=".git/precommit-failures/$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$_keep_dir" 2>/dev/null || true
     for _id in $_failed; do
+      cp "$GATE_DIR/${_id}.log" "$_keep_dir/${_id}.log" 2>/dev/null || true
       echo "── Output of $_id ──"
       cat "$GATE_DIR/${_id}.log" 2>/dev/null
       echo ""
     done
+    echo "📁 Full logs preserved in: $_keep_dir"
     exit 1
   fi
 }
