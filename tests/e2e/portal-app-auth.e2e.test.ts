@@ -45,6 +45,13 @@ interface IPkcePair {
   challenge: string;
 }
 
+/** What one completed app sign-in hands back to the phone. */
+interface IIssuedPair {
+  accessToken: string;
+  refreshToken: string;
+  sessionId: string;
+}
+
 /** A browser signed in to a portal that has app sign-in switched on. */
 interface IAppFixture {
   server: IPortalServer;
@@ -210,6 +217,45 @@ async function callApi(base: string, path: string, accessToken: string): Promise
   return await fetch(`${base}${path}`, {
     headers: { authorization: `Bearer ${accessToken}` },
   });
+}
+
+/**
+ * Ends one app session by its listed id, the way the portal's own UI does.
+ * @param base - Portal base URL.
+ * @param sessionId - The session id from the sessions list.
+ * @param accessToken - The bearer token of the caller doing the ending.
+ * @returns The raw response.
+ */
+async function deleteSession(
+  base: string,
+  sessionId: string,
+  accessToken: string,
+): Promise<Response> {
+  return await fetch(`${base}/api/app/sessions/${sessionId}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * Runs one signed-in app sign-in and returns the tokens it produced.
+ * @param fx - A fixture whose page is already past the portal login.
+ * @param state - The state value to round-trip.
+ * @returns The access token, refresh token and session id.
+ */
+async function signIn(fx: IAppFixture, state: string): Promise<IIssuedPair> {
+  const { verifier, challenge } = pkcePair();
+  const url = authorizeUrl(fx.server.baseUrl, challenge, state);
+  const granted = await authorizeAsUser(fx, url);
+  expect(granted.status).toBe(302);
+  const handed = codeFrom(granted.headers.get('location') ?? '');
+  const issued = await exchange(fx.server.baseUrl, handed.code, verifier);
+  expect(issued.status).toBe(200);
+  return {
+    accessToken: String(issued.body.accessToken),
+    refreshToken: String(issued.body.refreshToken),
+    sessionId: String(issued.body.sessionId),
+  };
 }
 
 /**
@@ -506,5 +552,73 @@ describe('portal app sign-in when the auth mode changes underneath it', () => {
     const refused = await postJson(`${fx.server.baseUrl}/auth/app/refresh`, { refreshToken });
     expect(refused.status).toBe(400);
     expect(refused.body.error).toBe('invalid_grant');
+  }, 120_000);
+});
+
+describe('portal app sign-out', () => {
+  let fx: IAppFixture;
+
+  beforeAll(async () => {
+    const server = await startSeededPortal(seedConfig(), appConfig());
+    const context = await browser.newContext({ viewport: null });
+    const page = await context.newPage();
+    await page.goto(server.baseUrl);
+    await submitPassword(page);
+    await page.waitForSelector('#app', { state: 'visible', timeout: 30_000 });
+    fx = { server, context, page };
+  }, 120_000);
+
+  afterAll(async () => {
+    if (!fx) return;
+    await fx.context.close();
+    await fx.server.app.close();
+  });
+
+  it('ends a session the phone hands back', async () => {
+    const issued = await signIn(fx, 'e2e-state-revoke');
+
+    const done = await postJson(`${fx.server.baseUrl}/auth/app/revoke`, {
+      refreshToken: issued.refreshToken,
+    });
+    expect(done.status).toBe(200);
+    expect(done.body.ok).toBe(true);
+
+    // The access token is a signed claim, not a database row, so it keeps
+    // working until it expires. Revoking ends the ability to renew it.
+    const still = await callApi(fx.server.baseUrl, '/api/status', issued.accessToken);
+    expect(still.status).toBe(200);
+    const refused = await postJson(`${fx.server.baseUrl}/auth/app/refresh`, {
+      refreshToken: issued.refreshToken,
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toBe('invalid_grant');
+  }, 120_000);
+
+  it('says nothing about a token it has never seen', async () => {
+    const unknown = await postJson(`${fx.server.baseUrl}/auth/app/revoke`, {
+      refreshToken: 'not-a-token-this-portal-ever-issued',
+    });
+    expect(unknown.status).toBe(200);
+    expect(unknown.body.ok).toBe(true);
+  }, 120_000);
+
+  it('ends a session the owner picks off the list', async () => {
+    const issued = await signIn(fx, 'e2e-state-remote-revoke');
+
+    const gone = await deleteSession(fx.server.baseUrl, issued.sessionId, issued.accessToken);
+    expect(gone.status).toBe(200);
+
+    const refused = await postJson(`${fx.server.baseUrl}/auth/app/refresh`, {
+      refreshToken: issued.refreshToken,
+    });
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toBe('invalid_grant');
+
+    const missing = await deleteSession(
+      fx.server.baseUrl,
+      'AAAAAAAAAAAAAAAAAAAAAA',
+      issued.accessToken,
+    );
+    expect(missing.status).toBe(404);
   }, 120_000);
 });
