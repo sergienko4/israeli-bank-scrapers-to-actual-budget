@@ -190,6 +190,7 @@ export interface IGooglePortalServer extends IPortalServer {
 /** A running fake-Google stub plus its base URL and teardown. */
 export interface IFakeGoogle {
   base: string;
+  port: number;
   close: () => Promise<void>;
 }
 
@@ -203,6 +204,9 @@ export interface IGooglePortalOptions {
 
 /** Google client id the fake OAuth server issues tokens for (matches the runtime). */
 const GOOGLE_CLIENT_ID = 'e2e-client-id';
+
+/** Same client id, for tests that hand-write a Google config file. */
+export const FAKE_GOOGLE_CLIENT_ID = GOOGLE_CLIENT_ID;
 
 /**
  * Builds a fake Google id_token JWT (`header.payload.sig`) vouching for an
@@ -240,9 +244,12 @@ function consentPage(target: string, email: string): string {
  * a token endpoint at `/token` returning an id_token for the given email. Point
  * `GOOGLE_AUTH_BASE`/`GOOGLE_TOKEN_URL` at it to drive the real portal flow.
  * @param email - Email the stub vouches for (default {@link GOOGLE_TEST_EMAIL}).
- * @returns The stub's base URL and a close handle.
+ * @param host - Bind address; use `0.0.0.0` when a container must reach it.
+ * @returns The stub's base URL, bound port and a close handle.
  */
-export async function startFakeGoogle(email: string = GOOGLE_TEST_EMAIL): Promise<IFakeGoogle> {
+export async function startFakeGoogle(
+  email: string = GOOGLE_TEST_EMAIL, host = '127.0.0.1',
+): Promise<IFakeGoogle> {
   const app = Fastify({ logger: false });
   app.addContentTypeParser(
     'application/x-www-form-urlencoded', { parseAs: 'string' },
@@ -256,8 +263,9 @@ export async function startFakeGoogle(email: string = GOOGLE_TEST_EMAIL): Promis
     return reply.type('text/html').send(consentPage(target.toString(), email));
   });
   app.post('/token', (_req, reply) => reply.send({ id_token: makeIdToken(email) }));
-  await app.listen({ host: '127.0.0.1', port: 0 });
-  return { base: `http://127.0.0.1:${String(boundPort(app))}`, close: () => app.close() };
+  await app.listen({ host, port: 0 });
+  const port = boundPort(app);
+  return { base: `http://127.0.0.1:${String(port)}`, port, close: () => app.close() };
 }
 
 /**

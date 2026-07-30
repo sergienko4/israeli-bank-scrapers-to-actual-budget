@@ -14,13 +14,26 @@
  * `Location` header the OS would have received.
  */
 
-import { createHash, randomBytes } from 'node:crypto';
-
 import type { Browser, BrowserContext, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { IImporterConfig, IPortalAppConfig } from '../../src/Types/Index.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
+import {
+  authorizeUrl,
+  authorizeWithCookie,
+  callApi,
+  codeFrom,
+  cookieHeader,
+  deleteSession,
+  DEVICE_NAME,
+  exchange,
+  type IIssuedPair,
+  pkcePair,
+  postJson,
+  REDIRECT_URI,
+  signInWithCookie,
+} from './helpers/appAuthClient.js';
 import {
   GOOGLE_TEST_EMAIL,
   type IFakeGoogle,
@@ -32,25 +45,6 @@ import {
   startSeededGooglePortal,
   startSeededPortal,
 } from './helpers/portalHarness.js';
-
-/** The only redirect target the seeded portals accept. */
-const REDIRECT_URI = 'bankimporter://auth';
-
-/** How the app names itself when it asks for a code. */
-const DEVICE_NAME = 'Pixel 8';
-
-/** A PKCE verifier and the S256 challenge derived from it. */
-interface IPkcePair {
-  verifier: string;
-  challenge: string;
-}
-
-/** What one completed app sign-in hands back to the phone. */
-interface IIssuedPair {
-  accessToken: string;
-  refreshToken: string;
-  sessionId: string;
-}
 
 /** A browser signed in to a portal that has app sign-in switched on. */
 interface IAppFixture {
@@ -95,53 +89,6 @@ function appConfig(): IPortalAppConfig {
 }
 
 /**
- * Derives a PKCE pair the same way RFC 7636 says to, independently of the
- * portal's own implementation, so a bug in `Pkce.ts` cannot hide here.
- * @returns A fresh verifier and its S256 challenge.
- */
-function pkcePair(): IPkcePair {
-  const verifier = randomBytes(32).toString('base64url');
-  const digest = createHash('sha256').update(verifier).digest();
-  return { verifier, challenge: digest.toString('base64url') };
-}
-
-/**
- * Builds an authorize URL exactly as the app would.
- * @param base - Portal base URL.
- * @param challenge - PKCE challenge.
- * @param state - Opaque value the app expects back untouched.
- * @param redirectUri - Where the portal should send the code.
- * @returns The full authorize URL.
- */
-function authorizeUrl(
-  base: string,
-  challenge: string,
-  state: string,
-  redirectUri: string = REDIRECT_URI,
-): string {
-  const params = new URLSearchParams({
-    redirect_uri: redirectUri,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    state,
-    device_name: DEVICE_NAME,
-  });
-  return `${base}/auth/app/authorize?${params.toString()}`;
-}
-
-/**
- * Serializes the browser's cookies for the portal into a request header.
- * @param context - Browser context holding the session cookie.
- * @param base - Portal base URL.
- * @returns A `Cookie` header value.
- */
-async function cookieHeader(context: BrowserContext, base: string): Promise<string> {
-  const cookies = await context.cookies(base);
-  const pairs = cookies.map((cookie) => `${cookie.name}=${cookie.value}`);
-  return pairs.join('; ');
-}
-
-/**
  * Requests an authorization code with the signed-in browser's cookies, without
  * following the redirect into the app's custom scheme.
  * @param fx - Signed-in fixture.
@@ -150,91 +97,7 @@ async function cookieHeader(context: BrowserContext, base: string): Promise<stri
  */
 async function authorizeAsUser(fx: IAppFixture, url: string): Promise<Response> {
   const cookie = await cookieHeader(fx.context, fx.server.baseUrl);
-  return await fetch(url, { headers: { cookie }, redirect: 'manual' });
-}
-
-/**
- * Reads the code and state the portal handed back on the redirect.
- * @param location - The `Location` header value.
- * @returns The parsed code and state, blank when absent.
- */
-function codeFrom(location: string): { code: string; state: string } {
-  const target = new URL(location);
-  return {
-    code: target.searchParams.get('code') ?? '',
-    state: target.searchParams.get('state') ?? '',
-  };
-}
-
-/**
- * Posts JSON with no cookies at all, the way the app's HTTP client does.
- * @param url - Absolute URL to post to.
- * @param body - JSON body.
- * @returns The status code and parsed body.
- */
-async function postJson(
-  url: string,
-  body: unknown,
-): Promise<{ status: number; body: Record<string, unknown> }> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const parsed = (await response.json()) as Record<string, unknown>;
-  return { status: response.status, body: parsed };
-}
-
-/**
- * Exchanges an authorization code for a token pair.
- * @param base - Portal base URL.
- * @param code - The authorization code.
- * @param verifier - The PKCE verifier that matches the code's challenge.
- * @param redirectUri - The redirect URI the code was issued for.
- * @returns The status code and parsed body.
- */
-async function exchange(
-  base: string,
-  code: string,
-  verifier: string,
-  redirectUri: string = REDIRECT_URI,
-): Promise<{ status: number; body: Record<string, unknown> }> {
-  return await postJson(`${base}/auth/app/token`, {
-    code,
-    code_verifier: verifier,
-    redirect_uri: redirectUri,
-  });
-}
-
-/**
- * Calls a guarded endpoint with an app access token and nothing else.
- * @param base - Portal base URL.
- * @param path - Path under `/api`.
- * @param accessToken - The bearer token to present.
- * @returns The raw response.
- */
-async function callApi(base: string, path: string, accessToken: string): Promise<Response> {
-  return await fetch(`${base}${path}`, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  });
-}
-
-/**
- * Ends one app session by its listed id, the way the portal's own UI does.
- * @param base - Portal base URL.
- * @param sessionId - The session id from the sessions list.
- * @param accessToken - The bearer token of the caller doing the ending.
- * @returns The raw response.
- */
-async function deleteSession(
-  base: string,
-  sessionId: string,
-  accessToken: string,
-): Promise<Response> {
-  return await fetch(`${base}/api/app/sessions/${sessionId}`, {
-    method: 'DELETE',
-    headers: { authorization: `Bearer ${accessToken}` },
-  });
+  return await authorizeWithCookie(url, cookie);
 }
 
 /**
@@ -244,18 +107,8 @@ async function deleteSession(
  * @returns The access token, refresh token and session id.
  */
 async function signIn(fx: IAppFixture, state: string): Promise<IIssuedPair> {
-  const { verifier, challenge } = pkcePair();
-  const url = authorizeUrl(fx.server.baseUrl, challenge, state);
-  const granted = await authorizeAsUser(fx, url);
-  expect(granted.status).toBe(302);
-  const handed = codeFrom(granted.headers.get('location') ?? '');
-  const issued = await exchange(fx.server.baseUrl, handed.code, verifier);
-  expect(issued.status).toBe(200);
-  return {
-    accessToken: String(issued.body.accessToken),
-    refreshToken: String(issued.body.refreshToken),
-    sessionId: String(issued.body.sessionId),
-  };
+  const cookie = await cookieHeader(fx.context, fx.server.baseUrl);
+  return await signInWithCookie(fx.server.baseUrl, cookie, state);
 }
 
 /**
