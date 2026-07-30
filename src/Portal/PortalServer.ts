@@ -106,7 +106,9 @@ export async function startPortal(
     getLogger().warn(
       `⚠️  Portal is bound to non-loopback host ${rt.host} and reachable from the network. `
       + 'Put it behind a TLS reverse proxy and set PORTAL_SECURE_COOKIES=true so cookies '
-      + 'and secrets are never sent over plain HTTP.',
+      + 'and secrets are never sent over plain HTTP. Set PORTAL_TRUST_PROXY to the number '
+      + 'of proxy hops in front of the portal, or its rate limits will count the proxy '
+      + 'instead of the caller and one client can spend the login budget for everyone.',
     );
   }
   return app;

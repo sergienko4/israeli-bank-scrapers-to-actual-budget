@@ -66,6 +66,7 @@ Then start the portal entry point: `node dist/Portal.js`. Open
 | `port` / `PORTAL_PORT` | `8080` | Listen port. |
 | `authMode` | `password` | `password`, `google`, or `both`. |
 | `secureCookies` / `PORTAL_SECURE_COOKIES` | `false` | Mark cookies `Secure` (enable behind HTTPS). |
+| `PORTAL_TRUST_PROXY` | `false` | Proxy hops to trust for `X-Forwarded-For`; set to `1` behind one reverse proxy so rate limits count the caller. |
 
 > **Boot requirement:** the snippet above is not enough to start. Every mode
 > needs a strong `sessionSecret` (≥16 characters), and `password`/`both` mode
@@ -193,6 +194,68 @@ With this in place:
 > Set `secureCookies`/`PORTAL_SECURE_COOKIES=true` **only** when the browser
 > reaches the portal over HTTPS. Over plain HTTP the browser drops `Secure`
 > cookies and you will not stay logged in.
+
+## Reach it from your phone with Tailscale
+
+A reverse proxy on a public hostname means opening a port, renewing a
+certificate, and accepting that anyone on the internet can knock on the login
+page. If the portal only ever needs to be reachable by *you*, Tailscale is the
+smaller answer: your devices join a private network, and `tailscale serve`
+fronts the portal with HTTPS on a name only that network can resolve.
+
+Run this on the host where the portal already listens on `127.0.0.1:8080`:
+
+```bash
+tailscale serve --bg 8080
+```
+
+Tailscale prints the resulting URL, of the form
+`https://<node>.<tailnet>.ts.net/`. It terminates TLS with a certificate it
+provisions for you, so the portal keeps speaking plain HTTP on loopback and
+nothing is published to the internet.
+
+Two settings must change, because the portal is now behind a proxy:
+
+```bash
+PORTAL_SECURE_COOKIES=true   # the browser is on HTTPS; cookies must say Secure
+PORTAL_TRUST_PROXY=1         # exactly one hop (tailscale serve) sits in front
+```
+
+`PORTAL_TRUST_PROXY` is what makes the per-IP rate limits count the phone that
+made the request rather than the proxy that forwarded it. Without it every
+caller shares one bucket, so one device retrying a login can lock out the rest.
+Set it to the number of proxies in front of the portal — `1` for `tailscale
+serve` alone — and leave it unset when nothing is in front, because trusting
+`X-Forwarded-For` with no proxy to rewrite it lets any caller invent an address
+and walk past the limits entirely.
+
+| Setting / env | Value behind `tailscale serve` | Why |
+| --- | --- | --- |
+| `host` / `PORTAL_HOST` | `127.0.0.1` | The proxy connects over loopback; nothing else should. |
+| `PORTAL_SECURE_COOKIES` | `true` | The browser speaks HTTPS, so cookies must be `Secure`. |
+| `PORTAL_TRUST_PROXY` | `1` | One hop to trust, so limits count the real caller. |
+
+> Use `tailscale serve`, not `tailscale funnel`. Funnel publishes the same URL
+> to the whole internet, which gives back every exposure the reverse-proxy
+> section was trying to avoid.
+
+### Register the Tailscale URL with Google
+
+If `authMode` is `google` or `both`, Google must be told to accept the new
+callback. In the Google Cloud console, under the OAuth client's **Authorized
+redirect URIs**, add:
+
+```text
+https://<node>.<tailnet>.ts.net/auth/google/callback
+```
+
+Then set the same value as `portal.google.redirectUri` in your config, because
+Google compares it byte for byte against what the portal sends.
+
+Google will accept this URI: it is HTTPS, it is a hostname rather than a raw IP
+address, and `ts.net` is on the public suffix list. A bare LAN address such as
+`https://192.168.1.20:8080/...` is rejected for exactly those reasons, which is
+part of why Tailscale is the easier route for Google sign-in.
 
 ## Authentication
 
@@ -337,6 +400,13 @@ curl -sX POST http://127.0.0.1:8080/auth/token \
 A wrong, empty, or non-string password returns `401`, and the route is
 rate-limited exactly like `/auth/login`.
 
+In `authMode: "both"` this route returns `409` instead of a token. A password
+alone can never satisfy `both`, so a token minted from one would be rejected by
+every `/api` call that followed — the route says so up front rather than handing
+back a credential that only looks valid. Clients that need `both` sign in
+through `/auth/app/authorize`, where the second factor can actually be
+collected.
+
 ### Use the token
 
 Send it as an `Authorization: Bearer` header on any `/api/*` request:
@@ -376,16 +446,18 @@ via Expo Push. Set **`DEVICE_TOKENS_PATH`** to a shared-volume path (for example
 
 ### Token lifetime and security
 
-- **Same token as the cookie.** A bearer token is the portal's stateless,
-  HMAC-signed session token; it expires after 12 hours.
+- **Short-lived by design.** A bearer token is the portal's stateless,
+  HMAC-signed session token, and it expires 15 minutes after it is issued. The
+  browser cookie is a separate, longer-lived token; neither is accepted in the
+  other's place.
 - **Rotation evicts tokens.** The token embeds a fingerprint of the credentials
   in force when it was issued, so changing the portal password (or the Google
   allow-list) immediately invalidates every outstanding token — the client must
   request a new one.
-- **`password` mode is the right fit.** In `both` mode a token proves only the
-  password factor, so the guard still withholds `/api` until the Google factor is
-  satisfied — which a header-only client cannot provide. Use
-  `authMode: "password"` for app/script access.
+- **`password` mode is the right fit for scripts.** In `both` mode this route
+  refuses (`409`), because a header-only client has no way to satisfy the Google
+  factor. Use `authMode: "password"` for scripts, or the app sign-in flow at
+  `/auth/app/authorize` for anything that can open a browser.
 - Store the token in the platform secret store (Keychain / Keystore), never in
   plain text.
 
@@ -395,9 +467,11 @@ The API can edit bank secrets, so **never publish its port to the internet**.
 Reach your own importer over a **private tunnel** instead:
 
 - **Tailscale (recommended):** install it on the importer host and on your phone,
-  then reach the portal at the host's Tailscale address (bind with `PORTAL_HOST`
-  or keep the default and connect over the tunnel). Traffic is encrypted
-  end-to-end with no publicly exposed ports.
+  then front the portal with `tailscale serve --bg 8080` and connect to the
+  `https://<node>.<tailnet>.ts.net/` URL it prints. Traffic is encrypted
+  end-to-end with no publicly exposed ports. See *Reach it from your phone with
+  Tailscale* above for the `PORTAL_SECURE_COOKIES` and `PORTAL_TRUST_PROXY`
+  settings it needs.
 - **TLS reverse proxy:** if you must expose it, front it with HTTPS (see *Expose
   over HTTPS* above) and set `PORTAL_SECURE_COOKIES=true`.
 
