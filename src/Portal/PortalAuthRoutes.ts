@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { PortalAuthMode, Procedure } from '../Types/Index.js';
 import { fail, isFail } from '../Types/Index.js';
+import registerAppRoutes from './AppRoutes.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import type PortalConfigStore from './PortalConfigStore.js';
 import { type IGrantArgs, registerGoogleRoutes } from './PortalGoogleRoutes.js';
@@ -291,6 +292,7 @@ export function registerAuthRoutes(
   registerTokenRoute(app, live);
   app.post('/auth/logout', (_req, reply) => reply.clearCookie(COOKIE, { path: '/' }).send({ ok: true }));
   registerGoogleRoutes(app, live, grant);
+  registerAppRoutes(app, live, sessionOf);
   registerGuardHook(app, live);
   return { registered: true };
 }
