@@ -403,7 +403,7 @@ rate-limited exactly like `/auth/login`.
 In `authMode: "both"` this route returns `409` instead of a token. A password
 alone can never satisfy `both`, so a token minted from one would be rejected by
 every `/api` call that followed — the route says so up front rather than handing
-back a credential that only looks valid. Clients that need `both` sign in
+back a credential that only looks valid. A client that needs `both` signs in
 through `/auth/app/authorize`, where the second factor can actually be
 collected.
 
