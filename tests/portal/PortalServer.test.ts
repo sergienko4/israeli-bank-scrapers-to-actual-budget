@@ -298,3 +298,43 @@ describe('PortalServer routes (password mode)', () => {
     rmSync(seed.dir, { recursive: true, force: true });
   });
 });
+
+/**
+ * Spends one login attempt from a stated forwarded address.
+ * @param instance - The portal under test.
+ * @param forwarded - Value to send as X-Forwarded-For.
+ * @returns The remaining-attempts counter the limiter reported.
+ */
+async function remainingAfterLogin(instance: FastifyInstance, forwarded: string): Promise<number> {
+  const res = await instance.inject({
+    method: 'POST',
+    url: '/auth/login',
+    headers: { 'x-forwarded-for': forwarded },
+    payload: { password: `${PORTAL_TEST_PASSWORD}-rejected` },
+  });
+  return Number(res.headers['x-ratelimit-remaining']);
+}
+
+describe('PortalServer rate-limit keying', () => {
+  it('counts two forwarded addresses as one caller when no proxy is trusted', async () => {
+    const seed = seedConfigDir();
+    const portal = await buildPortal(fakePortalRuntime(), new PortalConfigStore(seed.path));
+    const first = await remainingAfterLogin(portal, '203.0.113.1');
+    const second = await remainingAfterLogin(portal, '198.51.100.7');
+    expect(second).toBe(first - 1);
+    await portal.close();
+    rmSync(seed.dir, { recursive: true, force: true });
+  });
+
+  it('counts each forwarded address separately when a proxy hop is trusted', async () => {
+    const seed = seedConfigDir();
+    const runtime = fakePortalRuntime({ trustProxy: 1 });
+    const portal = await buildPortal(runtime, new PortalConfigStore(seed.path));
+    const first = await remainingAfterLogin(portal, '203.0.113.1');
+    const second = await remainingAfterLogin(portal, '198.51.100.7');
+    expect(second).toBe(first);
+    await portal.close();
+    rmSync(seed.dir, { recursive: true, force: true });
+  });
+});
+

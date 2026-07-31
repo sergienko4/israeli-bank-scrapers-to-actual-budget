@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { PortalAuthMode, Procedure } from '../Types/Index.js';
 import { fail, isFail } from '../Types/Index.js';
+import registerAppRoutes from './AppRoutes.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import type PortalConfigStore from './PortalConfigStore.js';
 import { type IGrantArgs, registerGoogleRoutes } from './PortalGoogleRoutes.js';
@@ -17,10 +18,17 @@ import {
   credentialFingerprint, type IPortalRuntime, portalCookieOptions,
   resolveLiveRuntime, type RuntimeAccessor,
 } from './PortalRuntime.js';
-import { createSession, type ISessionPayload } from './PortalSession.js';
+import type { ISessionPayload } from './PortalSession.js';
+import {
+  ACCESS_TTL_MS, COOKIE_TTL_MS, createSession,
+} from './PortalSession.js';
 import { bearerSessionOf, verifyToken } from './PortalTokenAuth.js';
 
 const COOKIE = 'portal_session';
+
+/** What the legacy token route says when a password alone cannot be enough. */
+export const BOTH_MODE_REFUSAL =
+  "Password alone cannot satisfy authMode 'both'. Use /auth/app/authorize.";
 
 /** Public auth status for the login UI: configured mode + satisfied factors. */
 export interface IAuthStatus {
@@ -33,8 +41,10 @@ export interface IAuthStatus {
 
 /**
  * Reads and verifies the session cookie from a request, then rejects it unless
- * its embedded credential fingerprint still matches the live credentials — so a
- * password rotation or allow-list change evicts every session issued before it.
+ * it was minted as a cookie session and its embedded credential fingerprint
+ * still matches the live credentials — so a password rotation or allow-list
+ * change evicts every session issued before it, and an API access token cannot
+ * be pasted into the cookie to impersonate one.
  * @param req - Incoming request.
  * @param rt - Live runtime carrying the session secret + current credentials.
  * @returns Procedure with the session payload, or failure when absent/invalid/stale.
@@ -42,14 +52,14 @@ export interface IAuthStatus {
 export function sessionOf(req: FastifyRequest, rt: IPortalRuntime): Procedure<ISessionPayload> {
   const raw = req.cookies[COOKIE];
   if (!raw) return fail('No session cookie');
-  return verifyToken(raw, rt);
+  return verifyToken(raw, rt, 'cookie');
 }
 
 /**
  * Resolves the request's session from either transport: the `portal_session`
  * cookie (web SPA) first, then an `Authorization: Bearer` token (native/API
- * clients). Both carry the same signed payload + credential fingerprint, so
- * either proves the same factors to the guard.
+ * clients). Each transport only accepts a token minted for it, but both prove
+ * the same factors to the guard.
  * @param req - Incoming request.
  * @param rt - Live runtime carrying the session secret + current credentials.
  * @returns Procedure with the session payload, or failure when neither is valid.
@@ -71,7 +81,8 @@ function grant(args: IGrantArgs): { granted: true } {
   const prior = sessionOf(req, runtime);
   const base = isFail(prior) ? { google: false, password: false } : prior.data;
   const fingerprint = credentialFingerprint(runtime);
-  const token = createSession({ ...base, ...factor, fingerprint }, runtime.sessionSecret);
+  const payload = { ...base, ...factor, fingerprint, typ: 'cookie' as const };
+  const token = createSession(payload, runtime.sessionSecret, COOKIE_TTL_MS);
   const cookieOpts = portalCookieOptions(runtime);
   reply.setCookie(COOKIE, token, cookieOpts);
   return { granted: true };
@@ -163,22 +174,33 @@ async function handleLogin(
 /**
  * Issues a bearer token for native/API clients: verifies the password and returns
  * the signed session token (password factor + current credential fingerprint) in
- * the JSON body instead of a cookie. In `both` mode the token proves only the
- * password factor, so the `/api` guard still withholds access until the Google
- * factor is satisfied too.
+ * the JSON body instead of a cookie.
+ *
+ * In `both` mode the password alone can never open the `/api` guard, so this
+ * route refuses rather than handing back a token that would 401 on every call
+ * afterwards. A caller that needs `both` has to come through
+ * `/auth/app/authorize`, where the second factor can actually be collected.
  * @param req - Incoming token request carrying the JSON `{ password }` body.
  * @param reply - Reply used to send the token or an error.
  * @param rt - Live portal runtime carrying the current password hash + secret.
- * @returns The reply after sending `{ token }` or a 401.
+ * @returns The reply after sending `{ token }`, a 401, or a 409.
  */
 async function handleToken(
   req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime,
 ): Promise<FastifyReply> {
+  if (rt.authMode === 'both') {
+    return await reply.code(409).send({ error: BOTH_MODE_REFUSAL });
+  }
   if (!(await passwordMatches(req, rt))) {
     return await reply.code(401).send({ error: 'Invalid password' });
   }
-  const payload = { google: false, password: true, fingerprint: credentialFingerprint(rt) };
-  const token = createSession(payload, rt.sessionSecret);
+  const payload = {
+    google: false,
+    password: true,
+    fingerprint: credentialFingerprint(rt),
+    typ: 'access' as const,
+  };
+  const token = createSession(payload, rt.sessionSecret, ACCESS_TTL_MS);
   return await reply.send({ token });
 }
 
@@ -281,6 +303,7 @@ export function registerAuthRoutes(
   registerTokenRoute(app, live);
   app.post('/auth/logout', (_req, reply) => reply.clearCookie(COOKIE, { path: '/' }).send({ ok: true }));
   registerGoogleRoutes(app, live, grant);
+  registerAppRoutes(app, live, sessionOf);
   registerGuardHook(app, live);
   return { registered: true };
 }

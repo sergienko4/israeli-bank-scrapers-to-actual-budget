@@ -10,6 +10,7 @@ import { join } from 'node:path';
 
 import type { IImporterConfig, IPortalConfig, IPortalGoogleConfig } from '../../src/Types/Index.js';
 import type { IPortalRuntime } from '../../src/Portal/PortalRuntime.js';
+import { resolvePortalApp } from '../../src/Portal/PortalAppConfig.js';
 import { hashPassword } from '../../src/Portal/PortalPassword.js';
 import { fakeImporterConfig } from './factories.js';
 import { TEST_CREDENTIAL } from './testCredentials.js';
@@ -56,12 +57,15 @@ export function fakeGoogleConfig(overrides: Partial<IPortalGoogleConfig> = {}): 
  */
 export function fakePortalRuntime(overrides: Partial<IPortalRuntime> = {}): IPortalRuntime {
   const portal = overrides.portal ?? fakePortalConfig();
+  const app = resolvePortalApp(portal);
   return {
     host: '127.0.0.1',
     port: 0,
     authMode: portal.authMode ?? 'password',
     sessionSecret: portal.sessionSecret ?? 'portal-test-secret',
     secureCookies: portal.secureCookies ?? false,
+    trustProxy: false,
+    app,
     portal,
     ...overrides,
   };

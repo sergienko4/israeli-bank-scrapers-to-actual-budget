@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { credentialFingerprint, type IPortalRuntime } from '../../src/Portal/PortalRuntime.js';
 import { hashPassword } from '../../src/Portal/PortalPassword.js';
-import { createSession } from '../../src/Portal/PortalSession.js';
+import { ACCESS_TTL_MS, COOKIE_TTL_MS, createSession } from '../../src/Portal/PortalSession.js';
 import { bearerSessionOf, verifyToken } from '../../src/Portal/PortalTokenAuth.js';
 import { isFail } from '../../src/Types/Index.js';
 import { fakePortalConfig, fakePortalRuntime } from '../helpers/portalFactories.js';
@@ -24,20 +24,54 @@ function reqWith(authorization?: string): FastifyRequest {
  * @returns A `payload.sig` token string.
  */
 function tokenFor(rt: IPortalRuntime): string {
-  const payload = { google: false, password: true, fingerprint: credentialFingerprint(rt) };
-  return createSession(payload, rt.sessionSecret);
+  const payload = {
+    google: false,
+    password: true,
+    fingerprint: credentialFingerprint(rt),
+    typ: 'access' as const,
+  };
+  return createSession(payload, rt.sessionSecret, ACCESS_TTL_MS);
+}
+
+/**
+ * Signs a valid cookie session token for a runtime.
+ * @param rt - Runtime whose secret + credentials the token is bound to.
+ * @returns A `payload.sig` token string minted for the cookie transport.
+ */
+function cookieTokenFor(rt: IPortalRuntime): string {
+  const payload = {
+    google: true,
+    password: true,
+    fingerprint: credentialFingerprint(rt),
+    typ: 'cookie' as const,
+  };
+  return createSession(payload, rt.sessionSecret, COOKIE_TTL_MS);
 }
 
 describe('verifyToken', () => {
   it('accepts a token signed for the runtime', () => {
     const rt = fakePortalRuntime();
-    const result = verifyToken(tokenFor(rt), rt);
+    const result = verifyToken(tokenFor(rt), rt, 'access');
     expect(result.success).toBe(true);
     if (!isFail(result)) expect(result.data.password).toBe(true);
   });
 
   it('rejects a garbage token', () => {
-    expect(isFail(verifyToken('not.a.token', fakePortalRuntime()))).toBe(true);
+    expect(isFail(verifyToken('not.a.token', fakePortalRuntime(), 'access'))).toBe(true);
+  });
+
+  it('rejects a cookie session presented as an access token', () => {
+    const rt = fakePortalRuntime();
+    const result = verifyToken(cookieTokenFor(rt), rt, 'access');
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) expect(result.message).toBe('Wrong token type');
+  });
+
+  it('rejects an access token presented as a cookie session', () => {
+    const rt = fakePortalRuntime();
+    const result = verifyToken(tokenFor(rt), rt, 'cookie');
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) expect(result.message).toBe('Wrong token type');
   });
 
   it('rejects a token whose fingerprint no longer matches the credentials', () => {
@@ -46,7 +80,7 @@ describe('verifyToken', () => {
     const rotated = fakePortalRuntime({
       portal: fakePortalConfig({ passwordHash: hashPassword('a-different-password') }),
     });
-    const result = verifyToken(token, rotated);
+    const result = verifyToken(token, rotated, 'access');
     expect(isFail(result)).toBe(true);
     if (isFail(result)) expect(result.message).toBe('Credentials changed');
   });
@@ -86,5 +120,12 @@ describe('bearerSessionOf', () => {
   it('fails on a well-formed header carrying a garbage token', () => {
     const result = bearerSessionOf(reqWith('Bearer not.a.token'), fakePortalRuntime());
     expect(isFail(result)).toBe(true);
+  });
+
+  it('fails when the header carries a cookie session instead of an access token', () => {
+    const rt = fakePortalRuntime();
+    const result = bearerSessionOf(reqWith(`Bearer ${cookieTokenFor(rt)}`), rt);
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) expect(result.message).toBe('Wrong token type');
   });
 });

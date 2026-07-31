@@ -93,6 +93,14 @@ describe('Portal bearer-token auth (native/API clients)', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it('rejects an access token pasted into the session cookie with 401', async () => {
+    const token = await issueToken();
+    const res = await app.inject({
+      method: 'GET', url: '/api/config', cookies: { portal_session: token },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
   it('accepts a bearer token on a write (PUT /api/config)', async () => {
     const token = await issueToken();
     const masked = await app.inject({
@@ -129,7 +137,7 @@ describe('Portal bearer-token auth (native/API clients)', () => {
     expect(codes).toContain(429);
   });
 
-  it('does not authorize a bearer-only session when authMode is both', async () => {
+  it('refuses to issue a password-only token when authMode is both', async () => {
     await app.close();
     rmSync(dir, { recursive: true, force: true });
     const seed = seedConfigDir(fakeImporterConfig({ portal: fakePortalConfig({ authMode: 'both' }) }));
@@ -138,10 +146,10 @@ describe('Portal bearer-token auth (native/API clients)', () => {
       fakePortalRuntime({ portal: fakePortalConfig({ authMode: 'both' }) }),
       new PortalConfigStore(seed.path),
     );
-    const token = await issueToken();
     const res = await app.inject({
-      method: 'GET', url: '/api/config', headers: { authorization: `Bearer ${token}` },
+      method: 'POST', url: '/auth/token', payload: { password: PORTAL_TEST_PASSWORD },
     });
-    expect(res.statusCode).toBe(401);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('/auth/app/authorize');
   });
 });

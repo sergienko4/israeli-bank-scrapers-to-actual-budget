@@ -8,6 +8,8 @@ import { createHmac } from 'node:crypto';
 
 import type { IImporterConfig, IPortalConfig, IPortalGoogleConfig, PortalAuthMode } from '../Types/Index.js';
 import { PORTAL_AUTH_MODES } from '../Types/Index.js';
+import type { IPortalAppRuntime } from './PortalAppConfig.js';
+import { resolvePortalApp } from './PortalAppConfig.js';
 import { isEncodedHash } from './PortalPassword.js';
 
 const DEFAULT_HOST = '127.0.0.1';
@@ -24,6 +26,8 @@ export interface IPortalRuntime {
   authMode: PortalAuthMode;
   sessionSecret: string;
   secureCookies: boolean;
+  trustProxy: boolean | number;
+  app: IPortalAppRuntime;
   portal: IPortalConfig;
 }
 
@@ -172,6 +176,27 @@ export function resolveSecureCookies(portal: IPortalConfig): boolean {
 }
 
 /**
+ * Resolves how far the portal should trust `X-Forwarded-*` headers, from
+ * `PORTAL_TRUST_PROXY`.
+ *
+ * This decides which address the rate limiter and the logs attribute a request
+ * to. Trusting the header when nothing rewrites it lets any caller forge its
+ * own client address and slip the per-IP limits, so the default is to trust
+ * nothing and anything unparseable falls back to that default. Set it to the
+ * number of proxy hops in front of the portal (`1` behind `tailscale serve`).
+ *
+ * `true` is refused along with everything else that is not a hop count: Fastify
+ * reads it as "trust every hop", which hands the rate-limit key to whoever sent
+ * the request.
+ * @returns `false` to trust no forwarded header, or the hop count to trust.
+ */
+export function resolveTrustProxy(): boolean | number {
+  const raw = process.env.PORTAL_TRUST_PROXY?.trim() ?? '';
+  const hops = Number(raw);
+  return raw.length > 0 && Number.isInteger(hops) && hops > 0 ? hops : false;
+}
+
+/**
  * Whether the resolved bind host exposes the portal beyond loopback.
  *
  * A non-loopback bind (e.g. `0.0.0.0` or a LAN address) makes the portal
@@ -203,12 +228,15 @@ function normalizeAuthMode(mode?: string): PortalAuthMode {
  */
 export function resolvePortalRuntime(config: IImporterConfig): IPortalRuntime {
   const portal = config.portal ?? { enabled: false };
+  const app = resolvePortalApp(portal);
   return {
     host: resolveHost(process.env.PORTAL_HOST, portal.host),
     port: resolvePort(process.env.PORTAL_PORT, portal.port),
     authMode: normalizeAuthMode(portal.authMode),
     sessionSecret: portal.sessionSecret ?? '',
     secureCookies: resolveSecureCookies(portal),
+    trustProxy: resolveTrustProxy(),
+    app,
     portal,
   };
 }
@@ -232,6 +260,8 @@ export function resolveLiveRuntime(boot: IPortalRuntime, config: IImporterConfig
     authMode: live.authMode,
     sessionSecret: boot.sessionSecret,
     secureCookies: boot.secureCookies,
+    trustProxy: boot.trustProxy,
+    app: live.app,
     portal: live.portal,
   };
 }

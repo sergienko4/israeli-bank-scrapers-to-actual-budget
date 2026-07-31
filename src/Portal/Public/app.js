@@ -20,6 +20,10 @@ const EYE_SVG =
 // untouched masked field is re-sent unchanged so the stored secret is kept.
 const MASK = '********';
 
+// Where the app sign-in bounce target is kept while the browser is away at
+// Google, which returns to `/` with no query string.
+const NEXT_KEY = 'portal.app.next';
+
 let manifest = { sections: [], banks: [], bankRequirements: {} };
 let config = {};
 let current = '';
@@ -119,14 +123,94 @@ async function init() {
 }
 
 /**
+ * Reports whether a bounce target points back into the app sign-in flow.
+ * The value reaches us from the address bar, so an unchecked redirect would let
+ * a crafted link send the browser to an attacker's site carrying a freshly
+ * authorized session.
+ * @param {string} raw - the candidate destination
+ * @returns {boolean} true when the destination is safe to navigate to
+ */
+function isAppNext(raw) {
+  return raw.startsWith('/auth/app/');
+}
+
+/**
+ * Reads the `next` query parameter.
+ * @returns {string} the destination from the address bar, or an empty string
+ */
+function nextFromUrl() {
+  const raw = new URLSearchParams(window.location.search).get('next') || '';
+  return isAppNext(raw) ? raw : '';
+}
+
+/**
+ * Stores the bounce target for the rest of this tab's session.
+ *
+ * Google's callback lands back on `/` with no query string, so in `both` mode
+ * the destination would be forgotten between the two factors and the browser
+ * would settle on the dashboard instead of returning to the app.
+ * @returns {void}
+ */
+function rememberNext() {
+  const raw = nextFromUrl();
+  if (!raw) return;
+  try {
+    window.sessionStorage.setItem(NEXT_KEY, raw);
+  } catch {
+    // Storage can be unavailable; the address bar still carries the value until
+    // the Google round trip drops it.
+  }
+}
+
+/**
+ * Reads the remembered bounce target.
+ * @returns {string} the stored destination, or an empty string
+ */
+function storedNext() {
+  try {
+    const raw = window.sessionStorage.getItem(NEXT_KEY) || '';
+    return isAppNext(raw) ? raw : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Forgets the bounce target so a later visit to the portal stays on the portal.
+ * @returns {void}
+ */
+function forgetNext() {
+  try {
+    window.sessionStorage.removeItem(NEXT_KEY);
+  } catch {
+    // Nothing to clean up when storage is unavailable.
+  }
+}
+
+/**
+ * Resolves where to send the browser once every required factor is satisfied.
+ * @returns {string} the safe destination, or an empty string when there is none
+ */
+function safeNext() {
+  return nextFromUrl() || storedNext();
+}
+
+/**
  * Re-reads auth status and either opens the app (when every required factor is
  * satisfied) or shows the remaining login step. Called on boot, after returning
  * from Google, and after a password submit so `both` mode advances cleanly.
  * @returns {Promise<void>} resolves when the view is updated
  */
 async function refreshAuth() {
+  rememberNext();
   const status = await api('/auth/status').catch(() => ({ authMode: 'password' }));
   if (status.authorized) {
+    const next = safeNext();
+    if (next) {
+      forgetNext();
+      window.location.replace(next);
+      return;
+    }
     try {
       await load();
       return;

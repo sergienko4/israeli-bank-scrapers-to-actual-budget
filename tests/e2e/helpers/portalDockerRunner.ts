@@ -24,6 +24,10 @@ export interface IPortalContainer {
 interface IStartPortalContainerOptions {
   dir: string;
   mode: 'ro' | 'rw';
+  /** Extra container environment, for tests that need app sign-in or a fake IdP. */
+  env?: Record<string, string>;
+  /** Maps `host.docker.internal` to the host, so the container can call back out. */
+  hostGateway?: boolean;
 }
 
 /**
@@ -55,11 +59,14 @@ function hostUserArgs(): string[] {
 function dockerArgs(opts: IStartPortalContainerOptions): string[] {
   const portSpec = '127.0.0.1::8080';
   const volumeSpec = `${opts.dir}:/app/config:${opts.mode}`;
+  const gateway = opts.hostGateway === true ? ['--add-host', 'host.docker.internal:host-gateway'] : [];
+  const extra = Object.entries(opts.env ?? {}).flatMap(([key, value]) => ['-e', `${key}=${value}`]);
   return [
-    'run', '-d', ...hostUserArgs(), '-p', portSpec, '-v', volumeSpec,
+    'run', '-d', ...hostUserArgs(), ...gateway, '-p', portSpec, '-v', volumeSpec,
     '-e', 'PORTAL_ENABLED=true', '-e', 'PORTAL_HOST=0.0.0.0',
     '-e', `PORTAL_CONFIG_PATH=${CONTAINER_CONFIG_PATH}`,
     '-e', `CONFIG_PATH=${CONTAINER_CONFIG_PATH}`,
+    ...extra,
     DOCKER_IMAGE, 'node', 'dist/Portal.js',
   ];
 }

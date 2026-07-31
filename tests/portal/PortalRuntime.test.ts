@@ -2,19 +2,53 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   credentialFingerprint, isNonLoopbackHost, isPortalEnabled, isSessionSecretWeak, portalAuthConfigError,
-  portalBootBlocker, portalCookieOptions, resolvePortalRuntime, resolveSecureCookies,
+  portalBootBlocker, portalCookieOptions, resolvePortalRuntime, resolveSecureCookies, resolveTrustProxy,
 } from '../../src/Portal/PortalRuntime.js';
 import type { PortalAuthMode } from '../../src/Types/Index.js';
 import { fakeImporterConfig } from '../helpers/factories.js';
 import { fakeGoogleConfig, fakePortalConfig, fakePortalRuntime } from '../helpers/portalFactories.js';
 
-const ENV_KEYS = ['PORTAL_ENABLED', 'PORTAL_HOST', 'PORTAL_PORT', 'PORTAL_SECURE_COOKIES'] as const;
+const ENV_KEYS = ['PORTAL_ENABLED', 'PORTAL_HOST', 'PORTAL_PORT', 'PORTAL_SECURE_COOKIES', 'PORTAL_TRUST_PROXY'] as const;
 const saved: Record<string, string | undefined> = {};
 
 describe('PortalRuntime', () => {
   beforeEach(() => { for (const k of ENV_KEYS) { saved[k] = process.env[k]; delete process.env[k]; } });
   afterEach(() => {
     for (const k of ENV_KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+  });
+
+  describe('resolveTrustProxy', () => {
+    it('trusts nothing when the env var is unset', () => {
+      expect(resolveTrustProxy()).toBe(false);
+    });
+
+    it('trusts the stated number of proxy hops', () => {
+      process.env.PORTAL_TRUST_PROXY = '1';
+      expect(resolveTrustProxy()).toBe(1);
+    });
+
+    it('refuses to trust every hop, however plainly it is asked', () => {
+      process.env.PORTAL_TRUST_PROXY = 'true';
+      expect(resolveTrustProxy()).toBe(false);
+    });
+
+    it('falls back to trusting nothing on an unparseable value', () => {
+      process.env.PORTAL_TRUST_PROXY = 'yes-please';
+      expect(resolveTrustProxy()).toBe(false);
+    });
+
+    it('falls back to trusting nothing on a zero or negative hop count', () => {
+      process.env.PORTAL_TRUST_PROXY = '0';
+      expect(resolveTrustProxy()).toBe(false);
+      process.env.PORTAL_TRUST_PROXY = '-2';
+      expect(resolveTrustProxy()).toBe(false);
+    });
+
+    it('carries the resolved hop count into the portal runtime', () => {
+      process.env.PORTAL_TRUST_PROXY = '2';
+      const config = fakeImporterConfig({ portal: fakePortalConfig() });
+      expect(resolvePortalRuntime(config).trustProxy).toBe(2);
+    });
   });
 
   describe('isPortalEnabled', () => {

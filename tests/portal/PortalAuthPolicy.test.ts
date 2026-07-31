@@ -11,7 +11,7 @@ import type { ISessionPayload } from '../../src/Portal/PortalSession.js';
  * @returns ISessionPayload fixture with a far-future expiry.
  */
 function session(google: boolean, password: boolean): ISessionPayload {
-  return { google, password, expires: Date.now() + 1000, fingerprint: 'fp' };
+  return { google, password, expires: Date.now() + 1000, fingerprint: 'fp', typ: 'cookie' };
 }
 
 describe('PortalAuthPolicy', () => {
