@@ -27,8 +27,7 @@ describe('PortalSession', () => {
       expect(result.data.email).toBe('a@b.com');
       expect(result.data.google).toBe(true);
       expect(result.data.typ).toBe('cookie');
-      expect(result.data.expires).toBeGreaterThanOrEqual(before + TWELVE_HOURS_MS);
-      expect(result.data.expires).toBeLessThanOrEqual(before + TWELVE_HOURS_MS);
+      expect(result.data.expires).toBe(before + TWELVE_HOURS_MS);
     });
 
     it('honours the shorter access-token TTL', () => {

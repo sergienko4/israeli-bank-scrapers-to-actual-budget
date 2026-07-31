@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TokenGrant } from '../../src/Portal/AppTokenStore.js';
 import { AppTokenStore, DEFAULT_REFRESH_TTL_DAYS, resolveAppTokensPath } from '../../src/Portal/AppTokenStore.js';
@@ -34,19 +34,18 @@ describe('AppTokenStore', () => {
   });
 
   describe('resolveAppTokensPath', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
     it('falls back to the shared data volume when unset', () => {
-      const previous = process.env.APP_TOKENS_PATH;
-      delete process.env.APP_TOKENS_PATH;
+      vi.stubEnv('APP_TOKENS_PATH', undefined);
       expect(resolveAppTokensPath()).toBe('/app/data/app-tokens.json');
-      if (previous !== undefined) process.env.APP_TOKENS_PATH = previous;
     });
 
     it('honours an explicit override', () => {
-      const previous = process.env.APP_TOKENS_PATH;
-      process.env.APP_TOKENS_PATH = '/custom/tokens.json';
+      vi.stubEnv('APP_TOKENS_PATH', '/custom/tokens.json');
       expect(resolveAppTokensPath()).toBe('/custom/tokens.json');
-      if (previous === undefined) delete process.env.APP_TOKENS_PATH;
-      else process.env.APP_TOKENS_PATH = previous;
     });
   });
 
@@ -122,13 +121,15 @@ describe('AppTokenStore', () => {
     });
 
     it('rejects an unknown token', () => {
-      expect(isFail(store.rotate('not-a-token', NOW))).toBe(true);
+      const result = store.rotate('not-a-token', NOW);
+      expect(isFail(result) && result.message).toBe('Unknown refresh token');
     });
 
-    it('rejects an expired token', () => {
+    it('treats an expired token as one it has never heard of', () => {
       const issued = store.issue(GRANT, NOW);
       const later = NOW + DEFAULT_REFRESH_TTL_DAYS * DAY_MS + 1;
-      expect(isFail(store.rotate(issued.token, later))).toBe(true);
+      const result = store.rotate(issued.token, later);
+      expect(isFail(result) && result.message).toBe('Unknown refresh token');
     });
 
     it('revokes the whole family when a retired token is replayed', () => {

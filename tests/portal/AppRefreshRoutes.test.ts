@@ -23,9 +23,9 @@ let dir: string;
  * @param authMode - Auth mode the portal should enforce.
  * @returns Portal runtime fixture.
  */
-function enabledRuntime(authMode = 'password'): IPortalRuntime {
+function enabledRuntime(authMode: IPortalRuntime['authMode'] = 'password'): IPortalRuntime {
   const portal = fakePortalConfig({
-    authMode: authMode as IPortalRuntime['authMode'],
+    authMode,
     app: { enabled: true, redirectUris: [REDIRECT] },
   });
   return fakePortalRuntime({ portal });

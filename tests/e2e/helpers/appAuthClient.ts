@@ -47,28 +47,28 @@ export function pkcePair(): IPkcePair {
   return { verifier, challenge: digest.toString('base64url') };
 }
 
+/** What an authorize URL is built from. */
+export interface IAuthorizeArgs {
+  base: string;
+  challenge: string;
+  state: string;
+  redirectUri?: string;
+}
+
 /**
  * Builds an authorize URL exactly as the app would.
- * @param base - Portal base URL.
- * @param challenge - PKCE challenge.
- * @param state - Opaque value the app expects back untouched.
- * @param redirectUri - Where the portal should send the code.
+ * @param args - Portal base, PKCE challenge, state, and optional redirect URI.
  * @returns The full authorize URL.
  */
-export function authorizeUrl(
-  base: string,
-  challenge: string,
-  state: string,
-  redirectUri: string = REDIRECT_URI,
-): string {
+export function authorizeUrl(args: IAuthorizeArgs): string {
   const params = new URLSearchParams({
-    redirect_uri: redirectUri,
-    code_challenge: challenge,
+    redirect_uri: args.redirectUri ?? REDIRECT_URI,
+    code_challenge: args.challenge,
     code_challenge_method: 'S256',
-    state,
+    state: args.state,
     device_name: DEVICE_NAME,
   });
-  return `${base}/auth/app/authorize?${params.toString()}`;
+  return `${args.base}/auth/app/authorize?${params.toString()}`;
 }
 
 /**
@@ -96,10 +96,15 @@ export async function authorizeWithCookie(url: string, cookie: string): Promise<
 
 /**
  * Reads the code and state the portal handed back on the redirect.
+ *
+ * A response that is not a redirect has no `Location` at all. Returning blanks
+ * for that lets the assertion about the status be the one that fails, instead
+ * of a URL parse error that says nothing about what went wrong.
  * @param location - The `Location` header value.
  * @returns The parsed code and state, blank when absent.
  */
 export function codeFrom(location: string): { code: string; state: string } {
+  if (!URL.canParse(location)) return { code: '', state: '' };
   const target = new URL(location);
   return {
     code: target.searchParams.get('code') ?? '',
@@ -109,6 +114,9 @@ export function codeFrom(location: string): { code: string; state: string } {
 
 /**
  * Posts JSON with no cookies at all, the way the app's HTTP client does.
+ *
+ * A body that is not JSON is reported rather than thrown, so a proxy answering
+ * in plain text leaves the status visible to the test.
  * @param url - Absolute URL to post to.
  * @param body - JSON body.
  * @param headers - Extra headers, used to name the caller behind a proxy.
@@ -124,28 +132,34 @@ export async function postJson(
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
-  const parsed = (await response.json()) as Record<string, unknown>;
+  const text = await response.text();
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    parsed = { nonJsonBody: text };
+  }
   return { status: response.status, body: parsed };
+}
+
+/** What a token exchange is built from. */
+export interface IExchangeArgs {
+  base: string;
+  code: string;
+  verifier: string;
+  redirectUri?: string;
 }
 
 /**
  * Exchanges an authorization code for a token pair.
- * @param base - Portal base URL.
- * @param code - The authorization code.
- * @param verifier - The PKCE verifier that matches the code's challenge.
- * @param redirectUri - The redirect URI the code was issued for.
+ * @param args - Portal base, the code, its PKCE verifier, and optional redirect URI.
  * @returns The status code and parsed body.
  */
-export async function exchange(
-  base: string,
-  code: string,
-  verifier: string,
-  redirectUri: string = REDIRECT_URI,
-): Promise<IJsonReply> {
-  return await postJson(`${base}/auth/app/token`, {
-    code,
-    code_verifier: verifier,
-    redirect_uri: redirectUri,
+export async function exchange(args: IExchangeArgs): Promise<IJsonReply> {
+  return await postJson(`${args.base}/auth/app/token`, {
+    code: args.code,
+    code_verifier: args.verifier,
+    redirect_uri: args.redirectUri ?? REDIRECT_URI,
   });
 }
 
@@ -193,12 +207,12 @@ export async function signInWithCookie(
   state: string,
 ): Promise<IIssuedPair> {
   const { verifier, challenge } = pkcePair();
-  const url = authorizeUrl(base, challenge, state);
+  const url = authorizeUrl({ base, challenge, state });
   const granted = await authorizeWithCookie(url, cookie);
   expect(granted.status).toBe(302);
   const location = granted.headers.get('location') ?? '';
   const handed = codeFrom(location);
-  const issued = await exchange(base, handed.code, verifier);
+  const issued = await exchange({ base, code: handed.code, verifier });
   expect(issued.status).toBe(200);
   return {
     accessToken: String(issued.body.accessToken),

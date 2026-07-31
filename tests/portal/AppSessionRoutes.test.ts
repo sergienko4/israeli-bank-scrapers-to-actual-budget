@@ -118,7 +118,9 @@ describe('AppSessionRoutes', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
-    expect(tokens.findByToken(issued.token)?.revokedAt).toBeGreaterThan(0);
+    // Rotation already revoked the first token, so only the replacement being
+    // revoked too says anything about what the DELETE did.
+    expect(tokens.findByToken(rotated.data.token)?.revokedAt).toBeGreaterThan(0);
     expect(tokens.list()).toHaveLength(0);
   });
 

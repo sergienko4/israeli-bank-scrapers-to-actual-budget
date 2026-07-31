@@ -29,7 +29,10 @@ import type {
 export const PORTAL_PASSWORD = 'e2e-portal-pass-9182';
 
 /** Strong session secret (>=16 chars) required by the weak-secret boot guard. */
-const SESSION_SECRET = 'e2e-portal-session-secret-0123456789';
+export const SESSION_SECRET = 'e2e-portal-session-secret-0123456789';
+
+/** Client secret the stand-in Google never checks, shared so it is written once. */
+export const GOOGLE_CLIENT_SECRET = 'e2e-client-secret';
 
 /** A running portal instance plus its on-disk paths and base URL. */
 export interface IPortalServer {
@@ -107,7 +110,8 @@ function passwordRuntime(app?: IPortalAppConfig): IPortalRuntime {
  *
  * The app refresh-token store is repointed into the same dir before any portal
  * is built, because the routes construct it at registration time and its
- * default path (`/app/data`) belongs to the container, not to a test run.
+ * default path (`/app/data`) belongs to the container, not to a test run. The
+ * variable is cleared again wherever this dir is removed.
  * @param config - Importer config to seed on disk.
  * @returns The temp dir and the config.json path inside it.
  */
@@ -175,6 +179,7 @@ export async function startSeededPortal(
   } catch (error: unknown) {
     if (started) await started.app.close();
     rmSync(dir, { recursive: true, force: true });
+    delete process.env.APP_TOKENS_PATH;
     throw error;
   }
 }
@@ -274,7 +279,7 @@ export async function startFakeGoogle(
 function googleRuntime(opts: IGooglePortalOptions): IPortalRuntime {
   const authMode = opts.authMode ?? 'google';
   const google: IPortalGoogleConfig = {
-    clientId: GOOGLE_CLIENT_ID, clientSecret: 'e2e-client-secret',
+    clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET,
     redirectUri: 'http://127.0.0.1:0/auth/google/callback', allowedEmails: opts.allowedEmails,
   };
   const portal: IPortalConfig = {
@@ -332,6 +337,7 @@ export async function startSeededGooglePortal(
   } catch (error: unknown) {
     if (app) await app.close();
     rmSync(dir, { recursive: true, force: true });
+    delete process.env.APP_TOKENS_PATH;
     throw error;
   }
 }

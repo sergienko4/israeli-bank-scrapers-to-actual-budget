@@ -3,7 +3,7 @@
  *
  * This is the proof behind the whole Design A change: a phone can reach a
  * portal that requires Google *and* a password, and end up holding a bearer
- * token that actually opens `/api` — something the legacy password-only token
+ * token that actually opens `/api` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â something the legacy password-only token
  * could never do in `both` mode.
  *
  * The final hop of the authorize flow is fetched rather than followed in the
@@ -209,6 +209,12 @@ describe('portal app sign-in (both mode)', () => {
   beforeAll(async () => {
     envBackup = backupGoogleEnv();
     fx = await startGoogleFixture();
+    // Every test here authorizes as a signed-in user. Signing in once, up here,
+    // is what lets any of them run alone: while this lived inside the first
+    // test, the rest only passed because that one had already run.
+    await approveGoogle(fx.page);
+    await submitPassword(fx.page);
+    await fx.page.waitForSelector('#app', { state: 'visible', timeout: 30_000 });
   }, 120_000);
 
   afterAll(async () => {
@@ -219,27 +225,9 @@ describe('portal app sign-in (both mode)', () => {
   it('carries the app from authorize to a working access token', async () => {
     const { verifier, challenge } = pkcePair();
     const state = 'e2e-state-happy-path';
-    const url = authorizeUrl(fx.server.baseUrl, challenge, state);
+    const url = authorizeUrl({ base: fx.server.baseUrl, challenge, state });
 
-    // A signed-out request parks the authorize URL and shows the login instead.
-    await fx.page.goto(url);
-    await fx.page.waitForSelector('#google-btn', { state: 'visible', timeout: 30_000 });
-    expect(fx.page.url()).toContain('next=');
-
-    // Forget that parked target before signing in, or this page would follow it
-    // and leave for a scheme only a phone can resolve. The bounce itself is
-    // covered by its own fixture below. Expression form: this project has no
-    // DOM types, so a callback referencing `window` would not compile.
-    await fx.page.evaluate('sessionStorage.clear()');
-
-    // Sign in away from the parked URL, so the browser is never asked to follow
-    // the redirect into a scheme only a phone can resolve.
-    await fx.page.goto(fx.server.baseUrl);
-    await approveGoogle(fx.page);
-    await submitPassword(fx.page);
-    await fx.page.waitForSelector('#app', { state: 'visible', timeout: 30_000 });
-
-    // Now the same URL hands over a single-use code.
+    // An authorized browser gets a single-use code on the app's own scheme.
     const granted = await authorizeAsUser(fx, url);
     expect(granted.status).toBe(302);
     const location = granted.headers.get('location') ?? '';
@@ -249,7 +237,7 @@ describe('portal app sign-in (both mode)', () => {
     expect(handed.code.length).toBeGreaterThan(20);
 
     // The code buys a token pair.
-    const issued = await exchange(fx.server.baseUrl, handed.code, verifier);
+    const issued = await exchange({ base: fx.server.baseUrl, code: handed.code, verifier });
     expect(issued.status).toBe(200);
     expect(issued.body.tokenType).toBe('Bearer');
     expect(issued.body.expiresIn).toBe(900);
@@ -297,31 +285,37 @@ describe('portal app sign-in (both mode)', () => {
   it('refuses a code redeemed with the wrong verifier', async () => {
     const mine = pkcePair();
     const attacker = pkcePair();
-    const url = authorizeUrl(fx.server.baseUrl, mine.challenge, 'e2e-state-wrong-verifier');
+    const url = authorizeUrl({
+      base: fx.server.baseUrl, challenge: mine.challenge, state: 'e2e-state-wrong-verifier',
+    });
     const granted = await authorizeAsUser(fx, url);
     expect(granted.status).toBe(302);
     const handed = codeFrom(granted.headers.get('location') ?? '');
 
-    const stolen = await exchange(fx.server.baseUrl, handed.code, attacker.verifier);
+    const stolen = await exchange({
+      base: fx.server.baseUrl, code: handed.code, verifier: attacker.verifier,
+    });
     expect(stolen.status).toBe(400);
     expect(stolen.body.error).toBe('invalid_grant');
 
     // The code is spent either way, so the honest holder cannot recover it.
-    const honest = await exchange(fx.server.baseUrl, handed.code, mine.verifier);
+    const honest = await exchange({
+      base: fx.server.baseUrl, code: handed.code, verifier: mine.verifier,
+    });
     expect(honest.status).toBe(400);
   }, 120_000);
 
   it('treats a replayed code as a breach and kills what it issued', async () => {
     const { verifier, challenge } = pkcePair();
-    const url = authorizeUrl(fx.server.baseUrl, challenge, 'e2e-state-replay');
+    const url = authorizeUrl({ base: fx.server.baseUrl, challenge, state: 'e2e-state-replay' });
     const granted = await authorizeAsUser(fx, url);
     const handed = codeFrom(granted.headers.get('location') ?? '');
 
-    const first = await exchange(fx.server.baseUrl, handed.code, verifier);
+    const first = await exchange({ base: fx.server.baseUrl, code: handed.code, verifier });
     expect(first.status).toBe(200);
     const refreshToken = String(first.body.refreshToken);
 
-    const second = await exchange(fx.server.baseUrl, handed.code, verifier);
+    const second = await exchange({ base: fx.server.baseUrl, code: handed.code, verifier });
     expect(second.status).toBe(400);
     expect(second.body.error).toBe('invalid_grant');
 
@@ -334,12 +328,12 @@ describe('portal app sign-in (both mode)', () => {
 
   it('refuses a redirect target that is not on the allow-list', async () => {
     const { challenge } = pkcePair();
-    const url = authorizeUrl(
-      fx.server.baseUrl,
+    const url = authorizeUrl({
+      base: fx.server.baseUrl,
       challenge,
-      'e2e-state-bad-redirect',
-      'bankimporter://stolen',
-    );
+      state: 'e2e-state-bad-redirect',
+      redirectUri: 'bankimporter://stolen',
+    });
     const refused = await authorizeAsUser(fx, url);
     expect(refused.status).toBe(400);
     const body = (await refused.json()) as { error: string };
@@ -348,7 +342,9 @@ describe('portal app sign-in (both mode)', () => {
 
   it('refuses a malformed state and echoes a good one unchanged', async () => {
     const { challenge } = pkcePair();
-    const bad = authorizeUrl(fx.server.baseUrl, challenge, 'has spaces and <angles>');
+    const bad = authorizeUrl({
+      base: fx.server.baseUrl, challenge, state: 'has spaces and <angles>',
+    });
     const refused = await authorizeAsUser(fx, bad);
     expect(refused.status).toBe(400);
     const body = (await refused.json()) as { error: string };
@@ -357,7 +353,7 @@ describe('portal app sign-in (both mode)', () => {
     // The app compares what comes back against what it sent, so the portal
     // must return the value byte for byte.
     const state = 'e2e-state~echo.check-1';
-    const good = authorizeUrl(fx.server.baseUrl, challenge, state);
+    const good = authorizeUrl({ base: fx.server.baseUrl, challenge, state });
     const granted = await authorizeAsUser(fx, good);
     expect(granted.status).toBe(302);
     const handed = codeFrom(granted.headers.get('location') ?? '');
@@ -384,7 +380,9 @@ describe('portal app sign-in when the auth mode changes underneath it', () => {
 
   it('stops honouring a password-era token once both factors are required', async () => {
     const { verifier, challenge } = pkcePair();
-    const url = authorizeUrl(fx.server.baseUrl, challenge, 'e2e-state-mode-change');
+    const url = authorizeUrl({
+      base: fx.server.baseUrl, challenge, state: 'e2e-state-mode-change',
+    });
 
     await submitPassword(fx.page);
     await fx.page.waitForSelector('#app', { state: 'visible', timeout: 30_000 });
@@ -392,7 +390,7 @@ describe('portal app sign-in when the auth mode changes underneath it', () => {
     const granted = await authorizeAsUser(fx, url);
     expect(granted.status).toBe(302);
     const handed = codeFrom(granted.headers.get('location') ?? '');
-    const issued = await exchange(fx.server.baseUrl, handed.code, verifier);
+    const issued = await exchange({ base: fx.server.baseUrl, code: handed.code, verifier });
     expect(issued.status).toBe(200);
     const accessToken = String(issued.body.accessToken);
     const refreshToken = String(issued.body.refreshToken);
@@ -499,7 +497,7 @@ describe('portal app sign-in from the parked authorize URL', () => {
   it('returns to the app sign-in instead of settling on the dashboard', async () => {
     const { challenge } = pkcePair();
     const state = 'e2e-state-bounce';
-    const url = authorizeUrl(fx.server.baseUrl, challenge, state);
+    const url = authorizeUrl({ base: fx.server.baseUrl, challenge, state });
 
     // This fixture stays on the parked URL, which the happy path deliberately
     // leaves. Without that, nothing exercises what a phone depends on: Google's

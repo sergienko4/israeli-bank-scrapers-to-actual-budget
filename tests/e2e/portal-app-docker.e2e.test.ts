@@ -35,10 +35,12 @@ import { hasDockerImage } from './helpers/dockerRunner.js';
 import { CLIENT_HEADER, type IForwardingProxy, startForwardingProxy } from './helpers/forwardingProxy.js';
 import {
   GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
   GOOGLE_TEST_EMAIL,
   type IFakeGoogle,
   launchPortalBrowser,
   PORTAL_PASSWORD,
+  SESSION_SECRET,
   startFakeGoogle,
 } from './helpers/portalHarness.js';
 import {
@@ -47,8 +49,6 @@ import {
   stopPortalContainer,
   waitForPortal,
 } from './helpers/portalDockerRunner.js';
-
-const SESSION_SECRET = 'e2e-docker-app-session-secret-01234';
 
 /** Where the container keeps refresh tokens, on the mounted config volume. */
 const CONTAINER_TOKENS_PATH = '/app/config/app-tokens.json';
@@ -83,7 +83,7 @@ function portalConfig(callbackUrl: string): IPortalConfig {
     sessionSecret: SESSION_SECRET,
     google: {
       clientId: GOOGLE_CLIENT_ID,
-      clientSecret: 'e2e-client-secret',
+      clientSecret: GOOGLE_CLIENT_SECRET,
       redirectUri: callbackUrl,
       allowedEmails: [GOOGLE_TEST_EMAIL],
     },
@@ -111,8 +111,8 @@ function seedDir(callbackUrl: string): string {
   const banks = { discount: fakeBankConfig({ targets: [fakeBankTarget()] }) };
   const config: IImporterConfig = fakeImporterConfig({ banks, portal });
   writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-  chmodSync(dir, 0o777);
-  chmodSync(configPath, 0o666);
+  chmodSync(dir, 0o755);
+  chmodSync(configPath, 0o644);
   return dir;
 }
 

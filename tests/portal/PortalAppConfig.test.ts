@@ -52,6 +52,16 @@ describe('isValidRedirectUri', () => {
     expect(isValidRedirectUri('')).toBe(false);
   });
 
+  it('rejects a URI that has a scheme separator but nothing to reach', () => {
+    expect(isValidRedirectUri('https://')).toBe(false);
+  });
+
+  it('accepts a URI of exactly 512 characters', () => {
+    const exact = `bankimporter://auth/${'a'.repeat(512 - 'bankimporter://auth/'.length)}`;
+    expect(exact).toHaveLength(512);
+    expect(isValidRedirectUri(exact)).toBe(true);
+  });
+
   it('rejects a URI longer than 512 characters', () => {
     const long = `bankimporter://auth/${'a'.repeat(512)}`;
     expect(isValidRedirectUri(long)).toBe(false);
@@ -127,12 +137,21 @@ describe('resolvePortalApp TTL validation', () => {
     expect(resolvePortalApp(config({ accessTokenTtlMinutes: 30 })).accessTokenTtlMinutes).toBe(30);
   });
 
+  it.each([1, 60])('keeps an access TTL of exactly %i minutes', (minutes) => {
+    expect(resolvePortalApp(config({ accessTokenTtlMinutes: minutes })).accessTokenTtlMinutes)
+      .toBe(minutes);
+  });
+
   it('falls back on a refresh TTL outside 1-365', () => {
     expect(resolvePortalApp(config({ refreshTokenTtlDays: 366 })).refreshTokenTtlDays).toBe(60);
   });
 
   it('keeps a legal refresh TTL', () => {
     expect(resolvePortalApp(config({ refreshTokenTtlDays: 7 })).refreshTokenTtlDays).toBe(7);
+  });
+
+  it.each([1, 365])('keeps a refresh TTL of exactly %i days', (days) => {
+    expect(resolvePortalApp(config({ refreshTokenTtlDays: days })).refreshTokenTtlDays).toBe(days);
   });
 
   it('falls back when a TTL arrives as a string', () => {

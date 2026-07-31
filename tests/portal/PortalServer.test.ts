@@ -310,7 +310,7 @@ async function remainingAfterLogin(instance: FastifyInstance, forwarded: string)
     method: 'POST',
     url: '/auth/login',
     headers: { 'x-forwarded-for': forwarded },
-    payload: { password: 'not-the-portal-password' },
+    payload: { password: `${PORTAL_TEST_PASSWORD}-rejected` },
   });
   return Number(res.headers['x-ratelimit-remaining']);
 }
