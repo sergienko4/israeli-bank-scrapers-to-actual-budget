@@ -226,6 +226,12 @@ describe('portal app sign-in (both mode)', () => {
     await fx.page.waitForSelector('#google-btn', { state: 'visible', timeout: 30_000 });
     expect(fx.page.url()).toContain('next=');
 
+    // Forget that parked target before signing in, or this page would follow it
+    // and leave for a scheme only a phone can resolve. The bounce itself is
+    // covered by its own fixture below. Expression form: this project has no
+    // DOM types, so a callback referencing `window` would not compile.
+    await fx.page.evaluate('sessionStorage.clear()');
+
     // Sign in away from the parked URL, so the browser is never asked to follow
     // the redirect into a scheme only a phone can resolve.
     await fx.page.goto(fx.server.baseUrl);
@@ -473,5 +479,45 @@ describe('portal app sign-out', () => {
       issued.accessToken,
     );
     expect(missing.status).toBe(404);
+  }, 120_000);
+});
+
+describe('portal app sign-in from the parked authorize URL', () => {
+  let envBackup: IGoogleEnvBackup;
+  let fx: IGoogleFixture;
+
+  beforeAll(async () => {
+    envBackup = backupGoogleEnv();
+    fx = await startGoogleFixture();
+  }, 120_000);
+
+  afterAll(async () => {
+    await stopGoogleFixture(fx);
+    restoreGoogleEnv(envBackup);
+  });
+
+  it('returns to the app sign-in instead of settling on the dashboard', async () => {
+    const { challenge } = pkcePair();
+    const state = 'e2e-state-bounce';
+    const url = authorizeUrl(fx.server.baseUrl, challenge, state);
+
+    // This fixture stays on the parked URL, which the happy path deliberately
+    // leaves. Without that, nothing exercises what a phone depends on: Google's
+    // callback returns to `/` carrying no query string, so the destination has
+    // to survive the round trip some other way or the browser settles on the
+    // dashboard and the app waits for a code that never comes.
+    await fx.page.goto(url);
+    await fx.page.waitForSelector('#google-btn', { state: 'visible', timeout: 30_000 });
+
+    const bounced = fx.page.waitForRequest(
+      (request) => request.url().includes('/auth/app/authorize'),
+      { timeout: 60_000 },
+    );
+    await approveGoogle(fx.page);
+    await submitPassword(fx.page);
+
+    const request = await bounced;
+    expect(request.url()).toContain(`code_challenge=${challenge}`);
+    expect(request.url()).toContain(`state=${state}`);
   }, 120_000);
 });
