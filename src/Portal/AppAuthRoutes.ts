@@ -19,12 +19,10 @@ import { CHALLENGE_METHOD, isValidChallenge } from './Pkce.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { OAUTH_MAX, RATE_WINDOW } from './PortalRateLimit.js';
 import {
-  credentialFingerprint, type IPortalRuntime, portalCookieOptions, type RuntimeAccessor,
+  credentialFingerprint, type IPortalRuntime, type RuntimeAccessor,
 } from './PortalRuntime.js';
 import type { ISessionPayload } from './PortalSession.js';
 
-const AUTHZ_COOKIE = 'portal_app_authz';
-const AUTHZ_MAX_AGE = 600;
 const APP_UNCONFIGURED = 'App sign-in is not configured';
 const STATE = /^[\w.~-]{1,128}$/;
 
@@ -92,23 +90,14 @@ function originalQuery(req: FastifyRequest): string {
 }
 
 /**
- * Parks the pending authorization in a short-lived signed cookie and sends the
- * browser to the portal login UI, which returns here once the caller is
- * authorized. The cookie is signed so the parked request cannot be swapped for
- * another one while the user is typing their password.
+ * Sends the browser to the portal login UI, carrying this authorization in the
+ * `next` parameter so the SPA can return here once the caller is authorized.
  * @param req - Incoming request.
- * @param reply - Reply used to set the cookie and redirect.
- * @param rt - Live runtime carrying the cookie security flags.
+ * @param reply - Reply used to redirect.
  * @returns The reply after redirecting to the login UI.
  */
-function bounceToLogin(
-  req: FastifyRequest, reply: FastifyReply, rt: IPortalRuntime,
-): FastifyReply {
-  const query = originalQuery(req);
-  const signed = reply.signCookie(query);
-  const options = portalCookieOptions(rt, AUTHZ_MAX_AGE);
-  reply.setCookie(AUTHZ_COOKIE, signed, options);
-  const target = `/auth/app/authorize?${query}`;
+function bounceToLogin(req: FastifyRequest, reply: FastifyReply): FastifyReply {
+  const target = `/auth/app/authorize?${originalQuery(req)}`;
   const next = encodeURIComponent(target);
   return reply.redirect(`/?next=${next}`);
 }
@@ -130,7 +119,6 @@ function issueCode(args: IIssueArgs): FastifyReply {
     fingerprint: credentialFingerprint(runtime),
     deviceName: params.deviceName,
   });
-  reply.clearCookie(AUTHZ_COOKIE, { path: '/' });
   return reply.redirect(`${params.redirectUri}?code=${record.code}&state=${params.state}`);
 }
 
@@ -151,7 +139,7 @@ function handleAuthorize(
   if (isFail(params)) return reply.code(400).send({ error: params.message });
   const session = deps.sessionOf(req, rt);
   const isAllowed = isFail(session) ? false : isAuthorized(session.data, rt.authMode);
-  if (isFail(session) || !isAllowed) return bounceToLogin(req, reply, rt);
+  if (isFail(session) || !isAllowed) return bounceToLogin(req, reply);
   const issue = { reply, rt, params: params.data, session: session.data, codes: deps.codes };
   return issueCode(issue);
 }

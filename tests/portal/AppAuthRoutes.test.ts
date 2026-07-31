@@ -124,13 +124,6 @@ describe('AppAuthRoutes authorize', () => {
     expect(res.headers.location).toContain('/?next=%2Fauth%2Fapp%2Fauthorize');
   });
 
-  it('parks the pending request in a signed cookie while bouncing', async () => {
-    const res = await app.inject({ method: 'GET', url: authorizeUrl() });
-    const header = String(res.headers['set-cookie']);
-    expect(header).toContain('portal_app_authz=');
-    expect(header).toContain('HttpOnly');
-  });
-
   it('bounces a session that does not yet satisfy the auth mode', async () => {
     runtime = enabledRuntime();
     runtime.authMode = 'both';
@@ -152,12 +145,6 @@ describe('AppAuthRoutes authorize', () => {
     session = authorizedSession();
     const res = await app.inject({ method: 'GET', url: authorizeUrl({ state: 'a-b._~9' }) });
     expect(res.headers.location).toContain('&state=a-b._~9');
-  });
-
-  it('clears the parked request cookie once the code is issued', async () => {
-    session = authorizedSession();
-    const res = await app.inject({ method: 'GET', url: authorizeUrl() });
-    expect(String(res.headers['set-cookie'])).toContain('portal_app_authz=;');
   });
 
   it('records the sanitized device name on the code', async () => {
