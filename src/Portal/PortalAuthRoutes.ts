@@ -18,8 +18,9 @@ import {
   credentialFingerprint, type IPortalRuntime, portalCookieOptions,
   resolveLiveRuntime, type RuntimeAccessor,
 } from './PortalRuntime.js';
+import type { ISessionPayload } from './PortalSession.js';
 import {
-  ACCESS_TTL_MS, COOKIE_TTL_MS, createSession, type ISessionPayload,
+  ACCESS_TTL_MS, COOKIE_TTL_MS, createSession,
 } from './PortalSession.js';
 import { bearerSessionOf, verifyToken } from './PortalTokenAuth.js';
 

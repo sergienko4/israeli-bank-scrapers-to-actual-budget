@@ -11,8 +11,10 @@ import type { FastifyRequest } from 'fastify';
 
 import type { Procedure } from '../Types/Index.js';
 import { fail, isFail } from '../Types/Index.js';
-import { credentialFingerprint, type IPortalRuntime } from './PortalRuntime.js';
-import { type ISessionPayload, readSession, type SessionType } from './PortalSession.js';
+import type { IPortalRuntime } from './PortalRuntime.js';
+import { credentialFingerprint } from './PortalRuntime.js';
+import type { ISessionPayload, SessionType } from './PortalSession.js';
+import { readSession } from './PortalSession.js';
 
 const BEARER = /^Bearer\s+(\S+)$/i;
 
