@@ -34,7 +34,7 @@ import {
 import { hasDockerImage } from './helpers/dockerRunner.js';
 import { CLIENT_HEADER, type IForwardingProxy, startForwardingProxy } from './helpers/forwardingProxy.js';
 import {
-  FAKE_GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_ID,
   GOOGLE_TEST_EMAIL,
   type IFakeGoogle,
   launchPortalBrowser,
@@ -82,7 +82,7 @@ function portalConfig(callbackUrl: string): IPortalConfig {
     passwordHash: hashPassword(PORTAL_PASSWORD),
     sessionSecret: SESSION_SECRET,
     google: {
-      clientId: FAKE_GOOGLE_CLIENT_ID,
+      clientId: GOOGLE_CLIENT_ID,
       clientSecret: 'e2e-client-secret',
       redirectUri: callbackUrl,
       allowedEmails: [GOOGLE_TEST_EMAIL],

@@ -203,10 +203,7 @@ export interface IGooglePortalOptions {
 }
 
 /** Google client id the fake OAuth server issues tokens for (matches the runtime). */
-const GOOGLE_CLIENT_ID = 'e2e-client-id';
-
-/** Same client id, for tests that hand-write a Google config file. */
-export const FAKE_GOOGLE_CLIENT_ID = GOOGLE_CLIENT_ID;
+export const GOOGLE_CLIENT_ID = 'e2e-client-id';
 
 /**
  * Builds a fake Google id_token JWT (`header.payload.sig`) vouching for an
