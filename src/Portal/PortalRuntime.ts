@@ -184,13 +184,16 @@ export function resolveSecureCookies(portal: IPortalConfig): boolean {
  * own client address and slip the per-IP limits, so the default is to trust
  * nothing and anything unparseable falls back to that default. Set it to the
  * number of proxy hops in front of the portal (`1` behind `tailscale serve`).
+ *
+ * `true` is refused along with everything else that is not a hop count: Fastify
+ * reads it as "trust every hop", which hands the rate-limit key to whoever sent
+ * the request.
  * @returns `false` to trust no forwarded header, or the hop count to trust.
  */
 export function resolveTrustProxy(): boolean | number {
   const raw = process.env.PORTAL_TRUST_PROXY?.trim() ?? '';
-  if (raw === 'true') return true;
   const hops = Number(raw);
-  return Number.isInteger(hops) && hops > 0 ? hops : false;
+  return raw.length > 0 && Number.isInteger(hops) && hops > 0 ? hops : false;
 }
 
 /**

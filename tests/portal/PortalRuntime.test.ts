@@ -27,9 +27,9 @@ describe('PortalRuntime', () => {
       expect(resolveTrustProxy()).toBe(1);
     });
 
-    it('trusts every hop when told plainly to trust the header', () => {
+    it('refuses to trust every hop, however plainly it is asked', () => {
       process.env.PORTAL_TRUST_PROXY = 'true';
-      expect(resolveTrustProxy()).toBe(true);
+      expect(resolveTrustProxy()).toBe(false);
     });
 
     it('falls back to trusting nothing on an unparseable value', () => {
