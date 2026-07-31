@@ -72,7 +72,14 @@ function relay(target: URL, req: IncomingMessage, res: ServerResponse): void {
       proxied.pipe(res);
     },
   );
-  upstream.on('error', () => { res.writeHead(502).end('proxy upstream failed'); });
+  upstream.on('error', () => {
+    // An upstream that dies mid-response has already had its head written, and
+    // writing a second one throws from inside this handler, which the test
+    // process sees as an unhandled exception rather than a failed request.
+    if (!res.headersSent) res.writeHead(502);
+    res.end('proxy upstream failed');
+  });
+  req.on('aborted', () => { upstream.destroy(); });
   req.pipe(upstream);
 }
 
