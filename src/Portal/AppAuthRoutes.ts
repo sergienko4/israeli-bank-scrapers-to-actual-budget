@@ -106,6 +106,10 @@ function bounceToLogin(req: FastifyRequest, reply: FastifyReply): FastifyReply {
  * Mints the single-use code and hands it to the app on its own scheme. The code
  * records the factors and credential fingerprint in force right now, so a
  * credential change between here and the token exchange invalidates it.
+ *
+ * A configured redirect URI may already carry a query, so the separator is
+ * chosen rather than assumed; appending a second `?` would hide the code from
+ * every parser the app could use.
  * @param args - Reply, runtime, validated parameters, session, and code store.
  * @returns The reply after redirecting to the app.
  */
@@ -119,7 +123,9 @@ function issueCode(args: IIssueArgs): FastifyReply {
     fingerprint: credentialFingerprint(runtime),
     deviceName: params.deviceName,
   });
-  return reply.redirect(`${params.redirectUri}?code=${record.code}&state=${params.state}`);
+  const separator = params.redirectUri.includes('?') ? '&' : '?';
+  const query = `code=${record.code}&state=${params.state}`;
+  return reply.redirect(`${params.redirectUri}${separator}${query}`);
 }
 
 /**

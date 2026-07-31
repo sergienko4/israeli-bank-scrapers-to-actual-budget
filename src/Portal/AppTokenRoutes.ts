@@ -9,6 +9,7 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { getLogger } from '../Logger/Index.js';
 import { fail, isFail, isSuccess, type Procedure,succeed } from '../Types/Index.js';
 import type { AppAuthCodes, IAuthCodeRecord } from './AppAuthCodes.js';
 import type { AppTokenStore, IIssuedToken } from './AppTokenStore.js';
@@ -124,14 +125,20 @@ function validateGrant(
 
 /**
  * Revokes everything the first redemption of a replayed code handed out.
+ *
+ * A replay means the code reached someone it should not have, so the tokens it
+ * bought are destroyed. That silently ends a device's access, which is worth a
+ * line in the log; the code, the verifier and the tokens are not.
  * @param deps - Injected collaborators.
  * @param code - The code that was presented twice.
  * @returns How many refresh tokens were revoked.
  */
 function revokeReplayedFamily(deps: IAppTokenDeps, code: string): number {
   const family = deps.codes.familyOf(code);
-  if (isSuccess(family)) return deps.tokens.revokeFamily(family.data);
-  return 0;
+  if (!isSuccess(family)) return 0;
+  const revoked = deps.tokens.revokeFamily(family.data);
+  getLogger().warn(`Portal: app authorization code replayed; revoked ${String(revoked)} token(s)`);
+  return revoked;
 }
 
 /**
@@ -220,14 +227,8 @@ function handleToken(
   if (isFail(parsed)) return reply.code(400).send({ error: INVALID_REQUEST });
   const granted = redeemCode(deps, parsed.data, runtime);
   if (isFail(granted)) return reply.code(400).send({ error: INVALID_GRANT });
-  const body = issueTokens(granted.data, deps, runtime);
-  return reply.code(200).send({
-    accessToken: body.accessToken,
-    refreshToken: body.refreshToken,
-    expiresIn: body.expiresIn,
-    tokenType: body.tokenType,
-    sessionId: body.sessionId,
-  });
+  const tokens = issueTokens(granted.data, deps, runtime);
+  return reply.code(200).send(tokens);
 }
 
 /**

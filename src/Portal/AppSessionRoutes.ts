@@ -19,6 +19,11 @@ import { bearerSessionOf } from './PortalTokenAuth.js';
 /** Shape of a record id, as minted by the token store. */
 const SESSION_ID = /^[\w-]{22}$/;
 
+/** The one path parameter the revoke route takes. */
+interface IRevokeParams {
+  id: string;
+}
+
 /** Collaborators the session routes need, injected to avoid an import cycle. */
 export interface IAppSessionDeps {
   live: RuntimeAccessor;
@@ -81,12 +86,11 @@ function handleList(
  * @returns The reply, already sent.
  */
 function handleRevoke(
-  req: FastifyRequest,
+  req: FastifyRequest<{ Params: IRevokeParams }>,
   reply: FastifyReply,
   deps: IAppSessionDeps,
 ): FastifyReply {
-  const params = req.params as { id: string };
-  const sessionId = params.id;
+  const sessionId = req.params.id;
   if (!SESSION_ID.test(sessionId)) return reply.code(404).send({ error: 'Unknown session' });
   const records = deps.tokens.list();
   const match = records.find((record) => record.id === sessionId);
@@ -111,6 +115,8 @@ export function registerAppSessionRoutes(
 ): { registered: true } {
   const limit = { config: { rateLimit: { max: SESSIONS_MAX, timeWindow: RATE_WINDOW } } };
   app.get('/api/app/sessions', limit, (req, reply) => handleList(req, reply, deps));
-  app.delete('/api/app/sessions/:id', limit, (req, reply) => handleRevoke(req, reply, deps));
+  app.delete<{ Params: IRevokeParams }>(
+    '/api/app/sessions/:id', limit, (req, reply) => handleRevoke(req, reply, deps),
+  );
   return { registered: true };
 }

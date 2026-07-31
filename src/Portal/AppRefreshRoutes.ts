@@ -132,18 +132,15 @@ function handleRefresh(
   if (isFail(parsed)) return reply.code(400).send({ error: INVALID_REQUEST });
   const granted = rotateTokens(parsed.data, deps, runtime);
   if (isFail(granted)) return reply.code(400).send({ error: INVALID_GRANT });
-  const body = granted.data;
-  return reply.code(200).send({
-    accessToken: body.accessToken,
-    refreshToken: body.refreshToken,
-    expiresIn: body.expiresIn,
-    tokenType: body.tokenType,
-    sessionId: body.sessionId,
-  });
+  return reply.code(200).send(granted.data);
 }
 
 /**
  * Handles one revocation, which never reports whether the token was real.
+ *
+ * Unlike the other app routes this one does not refuse when app sign-in is
+ * switched off. Turning the feature off leaves issued tokens alive, so an
+ * operator still needs a way to destroy them.
  * @param req - Incoming request.
  * @param reply - Outgoing reply.
  * @param deps - Injected collaborators.
