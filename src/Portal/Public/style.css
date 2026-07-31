@@ -1,4 +1,4 @@
-/* Config Portal — design system. Dark-first with a light theme, a manifest-driven
+/* Config Portal â€” design system. Dark-first with a light theme, a manifest-driven
    app shell (persistent sidebar on desktop, slide-in drawer on mobile), and
    accessible, tactile form controls. All structural hooks (ids, data-* and the
    classes app.js sets) are preserved for the E2E suite. */
@@ -251,7 +251,7 @@ select {
   background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px;
 }
 
-/* boolean → toggle switch (built from the plain checkbox app.js renders) */
+/* boolean â†’ toggle switch (built from the plain checkbox app.js renders) */
 .row input[type="checkbox"] {
   appearance: none; -webkit-appearance: none; min-height: 0; justify-self: start;
   width: 46px; height: 27px; border-radius: 999px; background: var(--switch-off);
@@ -333,7 +333,7 @@ select {
   border-radius: var(--r); background: var(--surface-2); color: var(--fg); font-size: 14px;
 }
 
-/* ---------- banks (searchable master–detail) ---------- */
+/* ---------- banks (searchable masterâ€“detail) ---------- */
 
 .banks {
   display: grid; grid-template-columns: minmax(220px, 300px) 1fr;
@@ -431,7 +431,4 @@ select {
 /* Approval page: shown before the portal hands an app an authorization code. */
 .approve-page { display: grid; place-items: center; min-height: 100vh; }
 .approve-card { max-width: 22rem; padding: 2rem; text-align: center; }
-.approve-note { opacity: .75; }
-.approve-button { display: block; margin-top: 1.5rem; padding: .75rem 1rem;
-  border-radius: .5rem; background: #3b82f6; color: #fff; text-decoration: none;
-  font-weight: 600; }
+.approve-card .btn { margin-top: 1.5rem; width: 100%; text-decoration: none; }
