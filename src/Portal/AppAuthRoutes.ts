@@ -15,7 +15,7 @@ import type { Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import type { AppAuthCodes } from './AppAuthCodes.js';
 import { sanitizeDeviceName } from './AppAuthCodes.js';
-import { consentPage, mintConsent, verifyConsent } from './AppConsent.js';
+import { CONSENT_PATH, mintConsent, verifyConsent } from './AppConsent.js';
 import { CHALLENGE_METHOD, isValidChallenge } from './Pkce.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { OAUTH_MAX, RATE_WINDOW } from './PortalRateLimit.js';
@@ -137,19 +137,24 @@ function issueCode(args: IIssueArgs): FastifyReply {
 }
 
 /**
- * Shows the approval page for an authorization the operator has not confirmed.
+ * Sends the browser to the approval page for an authorization the operator has
+ * not confirmed.
  * @param req - Incoming request.
  * @param reply - Reply.
  * @param allowed - Runtime and validated parameters from the checks above.
- * @returns The reply carrying the page.
+ * @returns The reply after redirecting to the page.
  */
 function askApproval(
   req: FastifyRequest, reply: FastifyReply, allowed: IAllowed,
 ): FastifyReply {
   const token = mintConsent(allowed.params, allowed.rt.sessionSecret);
-  const target = `/auth/app/authorize?${originalQuery(req)}&consent=${encodeURIComponent(token)}`;
-  const page = consentPage(allowed.params, target);
-  return reply.code(200).type('text/html; charset=utf-8').send(page);
+  // An expired approval leaves its token in the URL. `set` replaces it; simply
+  // appending another would give Fastify two `consent` keys, which it reads as
+  // an array, so the retry could never present a string and the page would ask
+  // forever.
+  const carried = new URLSearchParams(originalQuery(req));
+  carried.set('consent', token);
+  return reply.redirect(`${CONSENT_PATH}?${carried.toString()}`);
 }
 
 /**

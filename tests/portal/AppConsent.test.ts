@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IConsentSubject } from '../../src/Portal/AppConsent.js';
-import { consentPage, CONSENT_TTL_MS, mintConsent, verifyConsent } from '../../src/Portal/AppConsent.js';
+import { CONSENT_TTL_MS, mintConsent, verifyConsent } from '../../src/Portal/AppConsent.js';
 
 const SECRET = 'portal-test-secret-0123456789';
 const NOW = 1_700_000_000_000;
@@ -68,24 +68,5 @@ describe('mintConsent and verifyConsent', () => {
   ])('refuses a token moved to a request with a different %s', (_field, override) => {
     const token = mintConsent({ ...SUBJECT, ...override }, SECRET, NOW);
     expect(verifyConsent(check(token))).toBe(false);
-  });
-});
-
-describe('consentPage', () => {
-  it('names the device that is asking', () => {
-    expect(consentPage(SUBJECT, '/approve')).toContain('Pixel 8');
-  });
-
-  it('points the approve link at the target it was given', () => {
-    expect(consentPage(SUBJECT, '/auth/app/authorize?x=1&consent=t')).toContain(
-      'href="/auth/app/authorize?x=1&amp;consent=t"',
-    );
-  });
-
-  it('escapes a device name that tries to close the tag it sits in', () => {
-    const hostile = { ...SUBJECT, deviceName: '</strong><script>alert(1)</script>' };
-    const page = consentPage(hostile, '/approve');
-    expect(page).not.toContain('<script>');
-    expect(page).toContain('&lt;script&gt;');
   });
 });

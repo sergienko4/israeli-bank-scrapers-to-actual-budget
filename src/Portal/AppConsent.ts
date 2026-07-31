@@ -9,15 +9,23 @@
  * the portal itself issued means an authorization the user never started does
  * not become a code on its own.
  *
- * This narrows the window rather than closing it — a user who approves anyway
+ * This narrows the window rather than closing it â€” a user who approves anyway
  * has still approved. Only a verified HTTPS redirect target would close it, and
  * the portal's address belongs to the operator, not to us.
+ *
+ * The page itself is a static asset. Building it here would mean assembling
+ * HTML around a device name the caller chose, and hand-written escaping is the
+ * kind of thing that is wrong once and then wrong forever; the asset writes
+ * that name with `textContent` instead.
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /** How long an approval stays usable, in milliseconds. */
 export const CONSENT_TTL_MS = 5 * 60 * 1000;
+
+/** The static page that asks the operator to approve. */
+export const CONSENT_PATH = '/approve.html';
 
 /** The fields an approval is bound to, so it cannot be moved to another request. */
 export interface IConsentSubject {
@@ -94,61 +102,4 @@ export function verifyConsent(check: IConsentCheck): boolean {
   const presented = token.slice(separator + 1);
   const actual = Buffer.from(presented);
   return expected.length === actual.length && timingSafeEqual(expected, actual);
-}
-
-/**
- * Escapes the characters that would let a value break out of the page.
- * @param value - Untrusted text destined for HTML.
- * @returns The text, safe to interpolate.
- */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/** The approval page's styles, kept out of the builder so it stays readable. */
-const CONSENT_STYLE = `body { font-family: system-ui, sans-serif; margin: 0; display: grid;
-  place-items: center; min-height: 100vh; background: #10131a; color: #e6e9ef; }
-main { max-width: 22rem; padding: 2rem; text-align: center; }
-h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
-p { color: #9aa3b2; line-height: 1.5; }
-strong { color: #e6e9ef; }
-a#approve { display: block; margin-top: 1.5rem; padding: .75rem 1rem; border-radius: .5rem;
-  background: #3b82f6; color: #fff; text-decoration: none; font-weight: 600; }`;
-
-/** The head of the approval page, which carries no untrusted value. */
-const CONSENT_HEAD = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Approve sign-in</title>
-<style>${CONSENT_STYLE}</style>
-</head>`;
-
-/**
- * Builds the page that asks the operator to approve one sign-in.
- *
- * The device name is the only untrusted value on the page, and it arrives from
- * a query parameter, so it is escaped rather than trusted.
- * @param subject - The authorization being approved.
- * @param target - The URL the approve button navigates to.
- * @returns A complete HTML document.
- */
-export function consentPage(subject: IConsentSubject, target: string): string {
-  const device = escapeHtml(subject.deviceName);
-  const href = escapeHtml(target);
-  return `${CONSENT_HEAD}
-<body>
-<main>
-<h1>Approve sign-in</h1>
-<p><strong>${device}</strong> is asking to sign in to this importer.</p>
-<p>Approve only if you just started this on that device.</p>
-<a id="approve" href="${href}">Approve</a>
-</main>
-</body>
-</html>`;
 }

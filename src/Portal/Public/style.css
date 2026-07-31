@@ -427,3 +427,11 @@ select {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* Approval page: shown before the portal hands an app an authorization code. */
+.approve-page { display: grid; place-items: center; min-height: 100vh; }
+.approve-card { max-width: 22rem; padding: 2rem; text-align: center; }
+.approve-note { opacity: .75; }
+.approve-button { display: block; margin-top: 1.5rem; padding: .75rem 1rem;
+  border-radius: .5rem; background: #3b82f6; color: #fff; text-decoration: none;
+  font-weight: 600; }

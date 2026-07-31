@@ -70,16 +70,18 @@ function authorizeUrl(overrides: Record<string, string> = {}): string {
 /**
  * Asks for a code the way an operator does: request it, then approve.
  *
- * The portal shows an approval page before it mints anything, so a test that
- * wants the redirect has to follow the link on that page.
+ * The portal sends the browser to the approval page before it mints anything,
+ * so a test that wants the redirect has to come back with the token that page
+ * was handed.
  * @param url - The authorize URL to request.
  * @returns The reply to the approving request.
  */
 async function approve(url: string): Promise<LightMyRequestResponse> {
   const asked = await app.inject({ method: 'GET', url });
-  const match = /<a id="approve" href="([^"]+)"/.exec(asked.body);
-  if (!match) return asked;
-  return await app.inject({ method: 'GET', url: match[1].replace(/&amp;/g, '&') });
+  const sent = String(asked.headers.location);
+  if (!sent.startsWith('/approve.html?')) return asked;
+  const query = sent.slice(sent.indexOf('?') + 1);
+  return await app.inject({ method: 'GET', url: `/auth/app/authorize?${query}` });
 }
 
 describe('AppAuthRoutes authorize', () => {
@@ -152,20 +154,31 @@ describe('AppAuthRoutes authorize', () => {
   it('asks an authorized caller to approve before minting anything', async () => {
     session = authorizedSession();
     const res = await app.inject({ method: 'GET', url: authorizeUrl() });
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toContain('Approve sign-in');
+    expect(res.statusCode).toBe(302);
+    expect(String(res.headers.location)).toContain('/approve.html?');
+    expect(String(res.headers.location)).toContain('consent=');
     expect(codes.size).toBe(0);
   });
 
   it('refuses an approval minted for a different request', async () => {
     session = authorizedSession();
     const other = await app.inject({ method: 'GET', url: authorizeUrl({ state: 'other-state' }) });
-    const match = /consent=([^"&]+)/.exec(other.body);
+    const match = /consent=([^"&]+)/.exec(String(other.headers.location));
     const stolen = decodeURIComponent(String(match?.[1]));
     const url = `${authorizeUrl()}&consent=${encodeURIComponent(stolen)}`;
     const res = await app.inject({ method: 'GET', url });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(302);
+    expect(String(res.headers.location)).toContain('/approve.html?');
     expect(codes.size).toBe(0);
+  });
+
+  it('still approves after a rejected token, rather than asking forever', async () => {
+    session = authorizedSession();
+    const stale = `${authorizeUrl()}&consent=${encodeURIComponent('1.dead')}`;
+    const res = await approve(stale);
+    expect(res.statusCode).toBe(302);
+    expect(String(res.headers.location).startsWith(REDIRECT)).toBe(true);
+    expect(codes.size).toBe(1);
   });
 
   it('redirects an authorized caller to the app with a code', async () => {

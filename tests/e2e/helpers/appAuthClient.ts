@@ -11,6 +11,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { BrowserContext } from 'playwright-core';
 import { expect } from 'vitest';
 
+import { CONSENT_PATH } from '../../../src/Portal/AppConsent.js';
+
 /** The only redirect target the seeded portals accept. */
 export const REDIRECT_URI = 'bankimporter://auth';
 
@@ -92,27 +94,16 @@ export async function cookieHeader(context: BrowserContext, base: string): Promi
  */
 export async function authorizeWithCookie(url: string, cookie: string): Promise<Response> {
   const asked = await fetch(url, { headers: { cookie }, redirect: 'manual' });
-  if (asked.status !== 200) return asked;
-  const page = await asked.text();
-  const approval = approveHref(page);
-  if (!approval) return asked;
+  const sent = asked.headers.get('location') ?? '';
+  if (!sent.startsWith(`${CONSENT_PATH}?`)) return asked;
+  // The portal asks before it mints, so an authorize that reaches a signed-in
+  // browser lands on the approval page. A phone shows it and the operator taps;
+  // here the tap is coming straight back with the token that page was handed.
+  const query = sent.slice(sent.indexOf('?') + 1);
   const origin = new URL(url).origin;
-  return await fetch(`${origin}${approval}`, { headers: { cookie }, redirect: 'manual' });
-}
-
-/**
- * Pulls the approve link out of the portal's consent page.
- *
- * The portal asks before it mints, so an authorize that reaches a signed-in
- * browser answers with a page rather than a redirect. A phone's browser shows
- * it and the operator taps; here the tap is this link being followed.
- * @param page - The HTML the portal answered with.
- * @returns The href, or an empty string when the page is not the consent page.
- */
-function approveHref(page: string): string {
-  const match = /<a id="approve" href="([^"]+)"/.exec(page);
-  if (!match) return '';
-  return match[1].replace(/&amp;/g, '&');
+  return await fetch(`${origin}/auth/app/authorize?${query}`, {
+    headers: { cookie }, redirect: 'manual',
+  });
 }
 
 /**

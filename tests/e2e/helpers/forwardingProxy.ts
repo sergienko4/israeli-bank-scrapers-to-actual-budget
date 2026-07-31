@@ -79,7 +79,11 @@ function relay(target: URL, req: IncomingMessage, res: ServerResponse): void {
     if (!res.headersSent) res.writeHead(502);
     res.end('proxy upstream failed');
   });
-  req.on('aborted', () => { upstream.destroy(); });
+  // `close` fires for a client that goes away whether or not a head was written;
+  // the request's own `aborted` event is deprecated and misses cases.
+  res.on('close', () => {
+    if (!res.writableEnded) upstream.destroy();
+  });
   req.pipe(upstream);
 }
 
