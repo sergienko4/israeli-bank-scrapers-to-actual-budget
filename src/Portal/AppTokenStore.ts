@@ -138,6 +138,9 @@ export class AppTokenStore {
    * Rotates a refresh token: the presented record is revoked and a replacement
    * joins the same family. Presenting an already-revoked token means the client
    * or an attacker replayed it, so the whole family is revoked instead.
+   *
+   * An expired token reads as unknown, because the load that feeds this drops
+   * expired records before anything looks at them.
    * @param token - The plaintext refresh token presented by the client.
    * @param now - Current epoch milliseconds, injectable for tests.
    * @returns Procedure with the replacement token, or a failure naming the reason.
@@ -148,7 +151,6 @@ export class AppTokenStore {
     const record = records.find((entry) => entry.tokenHash === hash);
     if (!record) return fail('Unknown refresh token');
     if (record.revokedAt !== undefined) return this.reuseDetected(record, now);
-    if (record.expiresAt <= now) return fail('Refresh token expired');
     record.revokedAt = now;
     record.lastUsedAt = now;
     const issued = this.build(record.familyId, record, now);

@@ -42,14 +42,17 @@ export interface IPortalAppRuntime {
  *
  * A fragment would let a code land in a part of the URL the app never parses,
  * and embedded whitespace defeats the exact-match comparison the authorize
- * endpoint relies on, so both are rejected outright.
+ * endpoint relies on, so both are rejected outright. The value must also parse
+ * as a URL: `https://` clears every other check here and is still not somewhere
+ * a code can be delivered.
  * @param value - Candidate redirect URI, already trimmed.
  * @returns True when the URI can be used as an allow-list entry.
  */
 export function isValidRedirectUri(value: string): boolean {
   if (value.length === 0 || value.length > MAX_REDIRECT_URI_LENGTH) return false;
   if (!value.includes('://') || value.includes('#')) return false;
-  return !/\s/.test(value);
+  if (/\s/.test(value)) return false;
+  return URL.canParse(value);
 }
 
 /**
