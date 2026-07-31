@@ -91,7 +91,28 @@ export async function cookieHeader(context: BrowserContext, base: string): Promi
  * @returns The unfollowed response.
  */
 export async function authorizeWithCookie(url: string, cookie: string): Promise<Response> {
-  return await fetch(url, { headers: { cookie }, redirect: 'manual' });
+  const asked = await fetch(url, { headers: { cookie }, redirect: 'manual' });
+  if (asked.status !== 200) return asked;
+  const page = await asked.text();
+  const approval = approveHref(page);
+  if (!approval) return asked;
+  const origin = new URL(url).origin;
+  return await fetch(`${origin}${approval}`, { headers: { cookie }, redirect: 'manual' });
+}
+
+/**
+ * Pulls the approve link out of the portal's consent page.
+ *
+ * The portal asks before it mints, so an authorize that reaches a signed-in
+ * browser answers with a page rather than a redirect. A phone's browser shows
+ * it and the operator taps; here the tap is this link being followed.
+ * @param page - The HTML the portal answered with.
+ * @returns The href, or an empty string when the page is not the consent page.
+ */
+function approveHref(page: string): string {
+  const match = /<a id="approve" href="([^"]+)"/.exec(page);
+  if (!match) return '';
+  return match[1].replace(/&amp;/g, '&');
 }
 
 /**

@@ -407,6 +407,25 @@ back a credential that only looks valid. A client that needs `both` signs in
 through `/auth/app/authorize`, where the second factor can actually be
 collected.
 
+### The app sign-in asks before it hands over a code
+
+`/auth/app/authorize` does not mint a code the moment an authorized browser
+reaches it. It answers with a page naming the device that is asking, and only
+the Approve button on that page produces the code.
+
+The step exists because the redirect target is a custom scheme
+(`bankimporter://auth`). Any app on the phone can register that scheme, and PKCE
+does not help when the person who wrote the link also chose the challenge — they
+hold the verifier. Without the approval, opening a crafted link in a browser
+that is already signed in to the portal would mint a code and hand it to
+whichever app answers the scheme.
+
+The approval is signed by the portal, tied to that exact request, and expires
+after five minutes, so a link cannot carry one that was issued for something
+else. This narrows the window rather than closing it: a person who approves
+anyway has approved. Closing it entirely needs a verified HTTPS redirect target,
+which is not available when the address belongs to the operator.
+
 ### Use the token
 
 Send it as an `Authorization: Bearer` header on any `/api/*` request:

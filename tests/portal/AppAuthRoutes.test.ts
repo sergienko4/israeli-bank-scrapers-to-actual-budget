@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
+import type { LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AppAuthCodes } from '../../src/Portal/AppAuthCodes.js';
@@ -64,6 +65,21 @@ function authorizeUrl(overrides: Record<string, string> = {}): string {
   });
   const query = params.toString();
   return `/auth/app/authorize?${query}`;
+}
+
+/**
+ * Asks for a code the way an operator does: request it, then approve.
+ *
+ * The portal shows an approval page before it mints anything, so a test that
+ * wants the redirect has to follow the link on that page.
+ * @param url - The authorize URL to request.
+ * @returns The reply to the approving request.
+ */
+async function approve(url: string): Promise<LightMyRequestResponse> {
+  const asked = await app.inject({ method: 'GET', url });
+  const match = /<a id="approve" href="([^"]+)"/.exec(asked.body);
+  if (!match) return asked;
+  return await app.inject({ method: 'GET', url: match[1].replace(/&amp;/g, '&') });
 }
 
 describe('AppAuthRoutes authorize', () => {
@@ -133,9 +149,28 @@ describe('AppAuthRoutes authorize', () => {
     expect(res.headers.location).toContain('/?next=');
   });
 
-  it('redirects an authorized caller to the app with a code', async () => {
+  it('asks an authorized caller to approve before minting anything', async () => {
     session = authorizedSession();
     const res = await app.inject({ method: 'GET', url: authorizeUrl() });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('Approve sign-in');
+    expect(codes.size).toBe(0);
+  });
+
+  it('refuses an approval minted for a different request', async () => {
+    session = authorizedSession();
+    const other = await app.inject({ method: 'GET', url: authorizeUrl({ state: 'other-state' }) });
+    const match = /consent=([^"&]+)/.exec(other.body);
+    const stolen = decodeURIComponent(String(match?.[1]));
+    const url = `${authorizeUrl()}&consent=${encodeURIComponent(stolen)}`;
+    const res = await app.inject({ method: 'GET', url });
+    expect(res.statusCode).toBe(200);
+    expect(codes.size).toBe(0);
+  });
+
+  it('redirects an authorized caller to the app with a code', async () => {
+    session = authorizedSession();
+    const res = await approve(authorizeUrl());
     expect(res.statusCode).toBe(302);
     expect(res.headers.location).toMatch(/^bankimporter:\/\/auth\?code=[\w-]+&state=state-123$/);
     expect(codes.size).toBe(1);
@@ -143,13 +178,13 @@ describe('AppAuthRoutes authorize', () => {
 
   it('echoes the state verbatim', async () => {
     session = authorizedSession();
-    const res = await app.inject({ method: 'GET', url: authorizeUrl({ state: 'a-b._~9' }) });
+    const res = await approve(authorizeUrl({ state: 'a-b._~9' }));
     expect(res.headers.location).toContain('&state=a-b._~9');
   });
 
   it('records the sanitized device name on the code', async () => {
     session = authorizedSession();
-    const res = await app.inject({ method: 'GET', url: authorizeUrl({ device_name: 'Pixel\u00009' }) });
+    const res = await approve(authorizeUrl({ device_name: 'Pixel\u00009' }));
     const code = String(res.headers.location).split('code=')[1].split('&')[0];
     const record = codes.redeem(code, Date.now());
     expect(record.success && record.data.deviceName).toBe('Pixel9');
@@ -157,7 +192,7 @@ describe('AppAuthRoutes authorize', () => {
 
   it('records the live factors and fingerprint on the code', async () => {
     session = authorizedSession();
-    const res = await app.inject({ method: 'GET', url: authorizeUrl() });
+    const res = await approve(authorizeUrl());
     const code = String(res.headers.location).split('code=')[1].split('&')[0];
     const record = codes.redeem(code, Date.now());
     expect(record.success && record.data.fingerprint).toBe(credentialFingerprint(runtime));
@@ -166,7 +201,7 @@ describe('AppAuthRoutes authorize', () => {
 
   it('binds the code to the requested redirect URI', async () => {
     session = authorizedSession();
-    const res = await app.inject({ method: 'GET', url: authorizeUrl() });
+    const res = await approve(authorizeUrl());
     const code = String(res.headers.location).split('code=')[1].split('&')[0];
     const record = codes.redeem(code, Date.now());
     expect(record.success && record.data.redirectUri).toBe(REDIRECT);

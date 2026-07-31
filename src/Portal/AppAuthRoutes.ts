@@ -15,6 +15,7 @@ import type { Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import type { AppAuthCodes } from './AppAuthCodes.js';
 import { sanitizeDeviceName } from './AppAuthCodes.js';
+import { consentPage, mintConsent, verifyConsent } from './AppConsent.js';
 import { CHALLENGE_METHOD, isValidChallenge } from './Pkce.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { OAUTH_MAX, RATE_WINDOW } from './PortalRateLimit.js';
@@ -53,6 +54,13 @@ interface IIssueArgs {
   params: IAuthorizeParams;
   session: ISessionPayload;
   codes: AppAuthCodes;
+}
+
+/** An authorization that passed every check except the operator's approval. */
+interface IAllowed {
+  rt: IPortalRuntime;
+  params: IAuthorizeParams;
+  session: ISessionPayload;
 }
 
 /**
@@ -129,11 +137,31 @@ function issueCode(args: IIssueArgs): FastifyReply {
 }
 
 /**
+ * Shows the approval page for an authorization the operator has not confirmed.
+ * @param req - Incoming request.
+ * @param reply - Reply.
+ * @param allowed - Runtime and validated parameters from the checks above.
+ * @returns The reply carrying the page.
+ */
+function askApproval(
+  req: FastifyRequest, reply: FastifyReply, allowed: IAllowed,
+): FastifyReply {
+  const token = mintConsent(allowed.params, allowed.rt.sessionSecret);
+  const target = `/auth/app/authorize?${originalQuery(req)}&consent=${encodeURIComponent(token)}`;
+  const page = consentPage(allowed.params, target);
+  return reply.code(200).type('text/html; charset=utf-8').send(page);
+}
+
+/**
  * Handles `GET /auth/app/authorize`.
+ *
+ * An authorized browser is asked to approve before any code exists, because a
+ * crafted link opened in a signed-in browser would otherwise mint one on its
+ * own. See {@link mintConsent} for what that protects against.
  * @param req - Incoming request.
  * @param reply - Reply.
  * @param deps - Live runtime accessor, code store, and session resolver.
- * @returns The reply after redirecting or reporting the rejection.
+ * @returns The reply after redirecting, asking, or reporting the rejection.
  */
 function handleAuthorize(
   req: FastifyRequest, reply: FastifyReply, deps: IAppAuthDeps,
@@ -146,6 +174,10 @@ function handleAuthorize(
   const session = deps.sessionOf(req, rt);
   const isAllowed = isFail(session) ? false : isAuthorized(session.data, rt.authMode);
   if (isFail(session) || !isAllowed) return bounceToLogin(req, reply);
+  const allowed = { rt, params: params.data, session: session.data };
+  const token = typeof query.consent === 'string' ? query.consent : '';
+  const isApproved = verifyConsent({ token, subject: params.data, secret: rt.sessionSecret });
+  if (!isApproved) return askApproval(req, reply, allowed);
   const issue = { reply, rt, params: params.data, session: session.data, codes: deps.codes };
   return issueCode(issue);
 }
