@@ -12,6 +12,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { isSuccess } from '../Types/Index.js';
 import type { AppTokenStore, IAppTokenRecord } from './AppTokenStore.js';
+import { RATE_WINDOW, SESSIONS_MAX } from './PortalRateLimit.js';
 import type { RuntimeAccessor } from './PortalRuntime.js';
 import { bearerSessionOf } from './PortalTokenAuth.js';
 
@@ -96,6 +97,10 @@ function handleRevoke(
 
 /**
  * Registers the app session management routes under the `/api` guard.
+ *
+ * The limit literal is declared here rather than at module scope so the
+ * protection stays visible to static analysis, which follows it no further than
+ * the function that registers the route.
  * @param app - Fastify instance to register on.
  * @param deps - Injected collaborators.
  * @returns A marker confirming registration ran.
@@ -104,7 +109,8 @@ export function registerAppSessionRoutes(
   app: FastifyInstance,
   deps: IAppSessionDeps,
 ): { registered: true } {
-  app.get('/api/app/sessions', (req, reply) => handleList(req, reply, deps));
-  app.delete('/api/app/sessions/:id', (req, reply) => handleRevoke(req, reply, deps));
+  const limit = { config: { rateLimit: { max: SESSIONS_MAX, timeWindow: RATE_WINDOW } } };
+  app.get('/api/app/sessions', limit, (req, reply) => handleList(req, reply, deps));
+  app.delete('/api/app/sessions/:id', limit, (req, reply) => handleRevoke(req, reply, deps));
   return { registered: true };
 }
