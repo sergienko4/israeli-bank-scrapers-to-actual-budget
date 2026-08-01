@@ -72,6 +72,25 @@ async function expectConforms(url: string, schema: TSchema): Promise<Record<stri
   return body;
 }
 
+/** The reply shape `app.inject` resolves to, taken from Fastify itself. */
+type InjectedReply = Awaited<ReturnType<FastifyInstance['inject']>>;
+
+/**
+ * Posts a JSON body to a guarded route.
+ * @param url - Path to request.
+ * @param payload - Body to send.
+ * @returns The reply, for the caller to assert on.
+ */
+async function postJson(url: string, payload: unknown): Promise<InjectedReply> {
+  return await app.inject({
+    method: 'POST',
+    url,
+    cookies: { portal_session: cookie },
+    headers: { 'content-type': 'application/json' },
+    payload: JSON.stringify(payload),
+  });
+}
+
 describe('portal contract conformance', () => {
   beforeEach(async () => {
     faker.seed(20260801);
@@ -141,6 +160,19 @@ describe('portal contract conformance', () => {
     expect(Value.Check(DEVICE_BODY, { token: 'ExponentPushToken[abc]' })).toBe(true);
     expect(Value.Check(DEVICE_BODY, { token: 'ExponentPushToken[abc]\n' })).toBe(false);
     expect(Value.Check(DEVICE_BODY, { token: 'ExponentPushToken[a\nb]' })).toBe(false);
+  });
+
+  it('refuses those requests at the route, in the wording each route owns', async () => {
+    // The schema check above proves the pattern. It says nothing about whether
+    // the route is wired to it, or whether the refusal reaches the client as
+    // the portal's own `{ error }` body rather than Fastify's "Bad Request".
+    const code = await postJson('/api/otp/req-1', { code: '123456\n' });
+    expect(code.statusCode).toBe(400);
+    expect(JSON.parse(code.body)).toEqual({ error: 'Invalid OTP code' });
+
+    const device = await postJson('/api/devices', { token: 'ExponentPushToken[a\nb]' });
+    expect(device.statusCode).toBe(400);
+    expect(JSON.parse(device.body)).toEqual({ error: 'Invalid Expo push token' });
   });
 
   it('rejects a malformed field nested inside a manifest group', () => {
