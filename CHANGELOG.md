@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.41.0...v1.42.0) (2026-08-01)
+
+
+### Added
+
+* **contract:** declare and enforce the portal API contract ([#567](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/567)) ([fa4c228](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fa4c2287e5230cd99de9ba8006652ee522c22b76))
+
 ## [1.41.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.40.1...v1.41.0) (2026-07-31)
 
 
