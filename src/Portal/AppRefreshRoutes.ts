@@ -24,6 +24,7 @@ import {
 import type { AppTokenStore, IAppTokenRecord, IIssuedToken } from './AppTokenStore.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { LOGIN_MAX, RATE_WINDOW, REFRESH_MAX } from './PortalRateLimit.js';
+import { APP_GRANT_SCHEMA, APP_REVOKE_SCHEMA } from './PortalRouteSchemas.js';
 import {
   credentialFingerprint,
   type IPortalRuntime,
@@ -169,8 +170,14 @@ export function registerAppRefreshRoutes(
   app: FastifyInstance,
   deps: IAppRefreshDeps,
 ): { registered: true } {
-  const refresh = { config: { rateLimit: { max: REFRESH_MAX, timeWindow: RATE_WINDOW } } };
-  const revoke = { config: { rateLimit: { max: LOGIN_MAX, timeWindow: RATE_WINDOW } } };
+  const refresh = {
+    config: { rateLimit: { max: REFRESH_MAX, timeWindow: RATE_WINDOW } },
+    schema: APP_GRANT_SCHEMA,
+  };
+  const revoke = {
+    config: { rateLimit: { max: LOGIN_MAX, timeWindow: RATE_WINDOW } },
+    schema: APP_REVOKE_SCHEMA,
+  };
   app.post('/auth/app/refresh', refresh, (req, reply) => handleRefresh(req, reply, deps));
   app.post('/auth/app/revoke', revoke, (req, reply) => handleRevoke(req, reply, deps));
   return { registered: true };

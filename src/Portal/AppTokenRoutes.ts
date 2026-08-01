@@ -16,6 +16,7 @@ import type { AppTokenStore, IIssuedToken } from './AppTokenStore.js';
 import { verifyChallenge } from './Pkce.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { LOGIN_MAX, RATE_WINDOW } from './PortalRateLimit.js';
+import { APP_GRANT_SCHEMA } from './PortalRouteSchemas.js';
 import {
   credentialFingerprint,
   type IPortalRuntime,
@@ -241,7 +242,10 @@ export function registerAppTokenRoutes(
   app: FastifyInstance,
   deps: IAppTokenDeps,
 ): { registered: true } {
-  const options = { config: { rateLimit: { max: LOGIN_MAX, timeWindow: RATE_WINDOW } } };
+  const options = {
+    config: { rateLimit: { max: LOGIN_MAX, timeWindow: RATE_WINDOW } },
+    schema: APP_GRANT_SCHEMA,
+  };
   app.post('/auth/app/token', options, (req, reply) => handleToken(req, reply, deps));
   return { registered: true };
 }

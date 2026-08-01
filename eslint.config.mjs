@@ -12,6 +12,13 @@ import jsdoc from 'eslint-plugin-jsdoc';
 import regexpPlugin from 'eslint-plugin-regexp';
 
 /**
+ * Bans a call passed straight into another call. Named so the Contract layer,
+ * whose schemas are built by nesting TypeBox constructors, can drop this one
+ * selector while keeping every other guardrail in the list.
+ */
+const NESTED_CALL_SELECTOR = "CallExpression > .arguments[type='CallExpression']";
+
+/**
  * GLOBAL ARCHITECTURAL GUARDRAILS
  * These apply to all source files to ensure a "Zero-Skip" and Security-First environment.
  */
@@ -44,7 +51,7 @@ const RESTRICTED_SYNTAX_RULES = [
 
   // Nested Logic & Readability
   {
-    selector: "CallExpression > .arguments[type='CallExpression']",
+    selector: NESTED_CALL_SELECTOR,
     message: '🚫 FORBIDDEN NESTED CALL: Assign the nested function result to a descriptive variable first for better debugging.',
   },
   {
@@ -594,6 +601,48 @@ export default tseslint.config(
           selector: 'NewExpression[callee.name=/^(TwoFactorService|TelegramNotifier|WebhookNotifier|AccountImporter|ReceiptImportHandler|ReceiptOcrService|MetricsService|TransactionService|ImportMediator|TelegramCommandHandler|TelegramPoller|NotificationService|SpendingWatchService|ReconciliationService|AuditLogService|DryRunCollector)$/]',
           message: '🚫 LAYER: Scraper code MUST NOT instantiate Integration Services. Inject the interface (e.g. ITwoFactorPrompter) via constructor opts; the composition root in src/Index.ts owns concrete wiring.',
         },
+      ],
+    },
+  },
+
+  // 6b. CONTRACT LAYER (schema DSL exemption)
+  // src/Contract holds the API contract as TypeBox schemas. A schema is built
+  // by nesting constructors -- Type.Optional(Type.String()) -- so the global
+  // nested-call guardrail fires on every field and cannot be satisfied without
+  // naming a variable per property, which would bury the shape it describes.
+  // Only that one selector is dropped; the rest of RESTRICTED_SYNTAX_RULES
+  // (non-null assertions, `as any`, sensitive logging, throw new Error) still
+  // applies here. Per eslint-rules-guidlines.md §3 this is a scoped `files:`
+  // override, never an eslint-disable comment.
+  {
+    files: ['src/Contract/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...RESTRICTED_SYNTAX_RULES.filter(
+          (rule) => typeof rule === 'string' || rule.selector !== NESTED_CALL_SELECTOR,
+        ),
+      ],
+    },
+  },
+
+  // 6c. AMBIENT DECLARATIONS (third-party augmentation)
+  // A `declare module` block must reuse the augmented library's own interface
+  // name, so the `^I[A-Z]` prefix cannot apply here. The rule is restated
+  // without that one custom regex rather than switched off, so every other
+  // selector — typeLike, variable, parameter, typeParameter, enumMember —
+  // still holds in declaration files.
+  {
+    files: ['src/**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/naming-convention': [
+        'error',
+        { selector: 'typeLike', format: ['PascalCase'] },
+        { selector: 'interface', format: ['PascalCase'] },
+        { selector: ['variable', 'function', 'method'], format: ['camelCase'] },
+        { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
+        { selector: 'typeParameter', format: ['PascalCase'], prefix: ['T'] },
+        { selector: 'enumMember', format: ['PascalCase', 'UPPER_CASE'] },
       ],
     },
   },
@@ -1408,7 +1457,8 @@ export default tseslint.config(
       'max-lines-per-function': ['error', { max: 10, skipBlankLines: true, skipComments: true }],
     },
   },
-  // ─── Section 7y: Services/Account cluster max-fn-lines: 10 ───
+
+  // ─── Section 7y: Services/Account cluster max-fn-lines: 10 ───
   //
   // WHY: src/Services/Account (LiveAccountWriter / AccountReconciler and
   // their siblings) own per-account import + balance-reconciliation

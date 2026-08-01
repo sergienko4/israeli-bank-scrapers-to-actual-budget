@@ -4,6 +4,7 @@
  * masked secrets and persist via PortalConfigStore.
  */
 
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { BANK_REQUIREMENTS, CONFIG_MANIFEST } from '../Config/ConfigManifest.js';
@@ -17,6 +18,10 @@ import { errorMessage } from '../Utils/Index.js';
 import { addBank, removeBank } from './ConfigMutations.js';
 import type PortalConfigStore from './PortalConfigStore.js';
 import registerOtpRoutes from './PortalOtpRoutes.js';
+import {
+  BANK_ADD_ROUTE, BANK_REMOVE_ROUTE, CONFIG_READ_ROUTE, CONFIG_WRITE_ROUTE,
+  DEVICE_ROUTE, STATUS_ROUTE, VALIDATE_ROUTE,
+} from './PortalRouteSchemas.js';
 
 /** Static manifest payload (sections, supported bank ids, per-bank required keys), built once. */
 const MANIFEST_PAYLOAD = {
@@ -28,9 +33,6 @@ const MANIFEST_PAYLOAD = {
 /** How many recent import runs the status endpoint returns. */
 const STATUS_HISTORY = 10;
 
-/** Matches a well-formed Expo push token, e.g. ExponentPushToken[xxxx]. */
-const EXPO_TOKEN_RE = /^Expo(?:nent)?PushToken\[[^\]]+\]$/;
-
 /**
  * Registers the manifest probe + guarded config API routes.
  * @param app - Fastify instance.
@@ -40,6 +42,13 @@ const EXPO_TOKEN_RE = /^Expo(?:nent)?PushToken\[[^\]]+\]$/;
 export default function registerApiRoutes(
   app: FastifyInstance, store: PortalConfigStore,
 ): { registered: true } {
+  // The manifest deliberately carries no response schema. Its field shape is
+  // recursive, and a recursive schema cannot be inlined at the four places a
+  // section refers to it without Fastify rejecting the duplicate reference.
+  // Bounding the depth instead would let a deeply nested group be dropped
+  // silently, which is the exact failure response schemas are meant to prevent.
+  // The payload is a server-owned constant with nothing to strip, and
+  // PortalContract.test.ts asserts it satisfies MANIFEST_BODY.
   app.get('/api/manifest', (_req, reply) => reply.send(MANIFEST_PAYLOAD));
   registerConfigRoutes(app, store);
   registerBankRoutes(app, store);
@@ -56,9 +65,10 @@ export default function registerApiRoutes(
  * @returns Confirmation that the status route is registered.
  */
 function registerStatusRoute(app: FastifyInstance): { registered: true } {
-  app.get('/api/status', (_req, reply) => {
+  const typed = app.withTypeProvider<TypeBoxTypeProvider>();
+  typed.get('/api/status', STATUS_ROUTE, () => {
     const recent = new AuditLogService().getRecent(STATUS_HISTORY);
-    return reply.send({ runs: isFail(recent) ? [] : recent.data });
+    return { runs: isFail(recent) ? [] : recent.data };
   });
   return { registered: true };
 }
@@ -72,7 +82,7 @@ function registerStatusRoute(app: FastifyInstance): { registered: true } {
 function registerValidateRoute(
   app: FastifyInstance, store: PortalConfigStore,
 ): { registered: true } {
-  app.post('/api/validate', (req, reply) => {
+  app.post('/api/validate', VALIDATE_ROUTE, (req, reply) => {
     try {
       const report = store.validate(req.body as IImporterConfig);
       return reply.type('application/json').send(report);
@@ -84,7 +94,8 @@ function registerValidateRoute(
 }
 
 /**
- * Adds or removes an Expo push token for the mobile app, validating its format.
+ * Adds or removes an Expo push token for the mobile app. The token's shape is
+ * enforced by the route schema, so an unusable token never reaches here.
  * @param req - Request carrying a JSON `{ token }` body.
  * @param reply - Fastify reply.
  * @param action - Whether to register or unregister the token.
@@ -93,11 +104,7 @@ function registerValidateRoute(
 function handleDevice(
   req: FastifyRequest, reply: FastifyReply, action: 'add' | 'remove',
 ): FastifyReply {
-  const body = req.body as { token?: unknown } | null;
-  const token = typeof body?.token === 'string' ? body.token : '';
-  if (!EXPO_TOKEN_RE.test(token)) {
-    return reply.code(400).send({ error: 'Invalid Expo push token' });
-  }
+  const { token } = req.body as { token: string };
   const store = new DeviceTokenStore();
   if (action === 'add') store.add(token);
   else store.remove(token);
@@ -110,8 +117,8 @@ function handleDevice(
  * @returns Confirmation that the device routes are registered.
  */
 function registerDeviceRoutes(app: FastifyInstance): { registered: true } {
-  app.post('/api/devices', (req, reply) => handleDevice(req, reply, 'add'));
-  app.delete('/api/devices', (req, reply) => handleDevice(req, reply, 'remove'));
+  app.post('/api/devices', DEVICE_ROUTE, (req, reply) => handleDevice(req, reply, 'add'));
+  app.delete('/api/devices', DEVICE_ROUTE, (req, reply) => handleDevice(req, reply, 'remove'));
   return { registered: true };
 }
 
@@ -151,11 +158,13 @@ async function persistConfig(
 function registerConfigRoutes(
   app: FastifyInstance, store: PortalConfigStore,
 ): { registered: true } {
-  app.get('/api/config', (_req, reply) => {
+  app.get('/api/config', CONFIG_READ_ROUTE, (_req, reply) => {
     const masked = store.masked();
     return reply.send(masked);
   });
-  app.put('/api/config', (req, reply) => persistConfig(store, req.body as IImporterConfig, reply));
+  app.put('/api/config', CONFIG_WRITE_ROUTE, (req, reply) => (
+    persistConfig(store, req.body as IImporterConfig, reply)
+  ));
   return { registered: true };
 }
 
@@ -166,13 +175,13 @@ function registerConfigRoutes(
  * @returns Confirmation that the bank routes are registered.
  */
 function registerBankRoutes(app: FastifyInstance, store: PortalConfigStore): { registered: true } {
-  app.post('/api/banks/:name', (req, reply) => {
+  app.post('/api/banks/:name', BANK_ADD_ROUTE, (req, reply) => {
     const { name } = req.params as { name: string };
     const current = store.raw();
     const next = addBank(current, name, req.body as IBankConfig);
     return persistConfig(store, next, reply);
   });
-  app.delete('/api/banks/:name', (req, reply) => {
+  app.delete('/api/banks/:name', BANK_REMOVE_ROUTE, (req, reply) => {
     const { name } = req.params as { name: string };
     const current = store.raw();
     const next = removeBank(current, name);
