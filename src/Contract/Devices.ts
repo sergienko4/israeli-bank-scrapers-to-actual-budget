@@ -11,7 +11,7 @@ import { type Static, Type } from '@sinclair/typebox';
 /** The POST/DELETE /api/devices request body. */
 export const DEVICE_BODY = Type.Object({
   token: Type.String({
-    pattern: '^Expo(?:nent)?PushToken\\[[^\\]]+\\]$',
+    pattern: String.raw`^Expo(?:nent)?PushToken\[[^\]]+\]$`,
     description: 'Expo push token, e.g. ExponentPushToken[xxxxxxxx].',
   }),
 });

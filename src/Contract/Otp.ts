@@ -40,7 +40,7 @@ export const OTP_SUBMIT_PARAMS = Type.Object({
 /** The POST /api/otp/:id request body. */
 export const OTP_SUBMIT_BODY = Type.Object({
   code: Type.String({
-    pattern: '^\\d{4,8}$',
+    pattern: String.raw`^\d{4,8}$`,
     description: 'The 4-8 digit code the user entered. Never logged.',
   }),
 });
