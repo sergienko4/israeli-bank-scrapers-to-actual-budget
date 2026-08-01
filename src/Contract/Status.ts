@@ -4,7 +4,13 @@
  *
  * `successRate` is the field this contract exists for. It is a percentage out
  * of 100, and an app that read it as a 0-1 fraction once rendered a flawless
- * import as "10000%". The range below makes that reading unrepresentable.
+ * import as "10000%".
+ *
+ * The range below does not make that mistake impossible, and should not be read
+ * as doing so: 1 is a legitimate one percent, and Fastify's serialiser does not
+ * enforce numeric bounds at all. What it does is let a client reject a figure
+ * that could only have come from a unit error. What prevents the original bug
+ * is that the unit is stated here once, rather than guessed at by each client.
  */
 
 import { type Static, Type } from '@sinclair/typebox';
