@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.41.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.40.1...v1.41.0) (2026-07-31)
+
+
+### Added
+
+* **portal:** sign a phone app in without the portal password ([#565](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/565)) ([080ac2e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/080ac2ee8d5214d753309fc81d9d5cfa4188829a))
+
 ## [1.40.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.40.0...v1.40.1) (2026-07-30)
 
 
