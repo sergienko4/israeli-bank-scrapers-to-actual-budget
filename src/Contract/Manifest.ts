@@ -22,12 +22,14 @@ export const SHOW_WHEN = Type.Object({
 });
 
 /**
- * Builds the body of the recursive field schema.
- * @param self - Reference to the field schema being defined, for nesting.
- * @returns The object schema describing one manifest field.
+ * One configuration field: a leaf, a nested group, or a list.
+ *
+ * The callback's return type is deliberately left to inference. Annotating it
+ * widens every property to `unknown`, which silently turns the whole manifest
+ * type into something a client cannot read a label off.
  */
-function fieldBody(self: TThis): ReturnType<typeof Type.Object> {
-  return Type.Object({
+export const MANIFEST_FIELD = Type.Recursive(
+  (self: TThis) => Type.Object({
     key: Type.String({ description: 'Object key exactly as it appears in config.json.' }),
     label: Type.String({ description: 'Human-readable label.' }),
     kind: FIELD_KIND,
@@ -40,11 +42,9 @@ function fieldBody(self: TThis): ReturnType<typeof Type.Object> {
       description: 'Nested fields for `group` kinds, or the item shape for object `list` kinds.',
     })),
     showWhen: Type.Optional(SHOW_WHEN),
-  });
-}
-
-/** One configuration field: a leaf, a nested group, or a list. */
-export const MANIFEST_FIELD = Type.Recursive(fieldBody, { $id: 'ManifestField' });
+  }),
+  { $id: 'ManifestField' },
+);
 
 /** How a whole section is structured for rendering. */
 export const SECTION_KIND = Type.Union([
