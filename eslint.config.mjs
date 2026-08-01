@@ -628,12 +628,22 @@ export default tseslint.config(
 
   // 6c. AMBIENT DECLARATIONS (third-party augmentation)
   // A `declare module` block must reuse the augmented library's own interface
-  // name, so the `^I[A-Z]` convention cannot apply here. Scoped to .d.ts files
-  // only; every other naming rule still holds.
+  // name, so the `^I[A-Z]` prefix cannot apply here. The rule is restated
+  // without that one custom regex rather than switched off, so every other
+  // selector — typeLike, variable, parameter, typeParameter, enumMember —
+  // still holds in declaration files.
   {
     files: ['src/**/*.d.ts'],
     rules: {
-      '@typescript-eslint/naming-convention': 'off',
+      '@typescript-eslint/naming-convention': [
+        'error',
+        { selector: 'typeLike', format: ['PascalCase'] },
+        { selector: 'interface', format: ['PascalCase'] },
+        { selector: ['variable', 'function', 'method'], format: ['camelCase'] },
+        { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
+        { selector: 'typeParameter', format: ['PascalCase'], prefix: ['T'] },
+        { selector: 'enumMember', format: ['PascalCase', 'UPPER_CASE'] },
+      ],
     },
   },
 
