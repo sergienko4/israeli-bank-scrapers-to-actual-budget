@@ -13,6 +13,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isSuccess } from '../Types/Index.js';
 import type { AppTokenStore, IAppTokenRecord } from './AppTokenStore.js';
 import { RATE_WINDOW, SESSIONS_MAX } from './PortalRateLimit.js';
+import { APP_SESSION_LIST_SCHEMA, APP_SESSION_REVOKE_SCHEMA } from './PortalRouteSchemas.js';
 import type { RuntimeAccessor } from './PortalRuntime.js';
 import { bearerSessionOf } from './PortalTokenAuth.js';
 
@@ -114,9 +115,11 @@ export function registerAppSessionRoutes(
   deps: IAppSessionDeps,
 ): { registered: true } {
   const limit = { config: { rateLimit: { max: SESSIONS_MAX, timeWindow: RATE_WINDOW } } };
-  app.get('/api/app/sessions', limit, (req, reply) => handleList(req, reply, deps));
+  const list = { ...limit, schema: APP_SESSION_LIST_SCHEMA };
+  const revoke = { ...limit, schema: APP_SESSION_REVOKE_SCHEMA };
+  app.get('/api/app/sessions', list, (req, reply) => handleList(req, reply, deps));
   app.delete<{ Params: IRevokeParams }>(
-    '/api/app/sessions/:id', limit, (req, reply) => handleRevoke(req, reply, deps),
+    '/api/app/sessions/:id', revoke, (req, reply) => handleRevoke(req, reply, deps),
   );
   return { registered: true };
 }

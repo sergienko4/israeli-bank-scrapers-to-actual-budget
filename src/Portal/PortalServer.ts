@@ -17,6 +17,7 @@ import registerApiRoutes from './PortalApiRoutes.js';
 import { registerAuthRoutes } from './PortalAuthRoutes.js';
 import PortalConfigStore from './PortalConfigStore.js';
 import { type IPortalRuntime, isNonLoopbackHost } from './PortalRuntime.js';
+import { handlePortalError } from './PortalValidationError.js';
 
 /**
  * Resolves the static UI directory (compiled dist or source fallback).
@@ -81,6 +82,7 @@ export async function buildPortal(
   });
   await app.register(cookie, { secret: rt.sessionSecret });
   await app.register(fstatic, { root: publicDir() });
+  app.setErrorHandler(handlePortalError);
   registerAuthRoutes(app, rt, store);
   registerApiRoutes(app, store);
   app.setNotFoundHandler((req, reply) => (
