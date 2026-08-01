@@ -8,10 +8,17 @@
 
 import { type Static, Type } from '@sinclair/typebox';
 
-/** The POST/DELETE /api/devices request body. */
+/**
+ * The POST/DELETE /api/devices request body.
+ *
+ * The token body excludes line breaks as well as the closing bracket. `$` in a
+ * JavaScript pattern already means end of input, so a trailing newline is
+ * refused without help — but `[^\]]` alone would accept one in the middle of
+ * the token, which no real Expo token contains.
+ */
 export const DEVICE_BODY = Type.Object({
   token: Type.String({
-    pattern: String.raw`^Expo(?:nent)?PushToken\[[^\]]+\]$`,
+    pattern: String.raw`^Expo(?:nent)?PushToken\[[^\]\r\n]+\]$`,
     description: 'Expo push token, e.g. ExponentPushToken[xxxxxxxx].',
   }),
 });
