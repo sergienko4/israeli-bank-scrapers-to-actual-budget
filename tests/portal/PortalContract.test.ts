@@ -22,8 +22,9 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CONFIG_BODY } from '../../src/Contract/Config.js';
+import { DEVICE_BODY } from '../../src/Contract/Devices.js';
 import { MANIFEST_BODY } from '../../src/Contract/Manifest.js';
-import { OTP_SETTINGS, PENDING_OTP_BODY } from '../../src/Contract/Otp.js';
+import { OTP_SETTINGS, OTP_SUBMIT_BODY, PENDING_OTP_BODY } from '../../src/Contract/Otp.js';
 import { STATUS_BODY } from '../../src/Contract/Status.js';
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
@@ -125,8 +126,21 @@ describe('portal contract conformance', () => {
     // rejects is a value that could only come from a unit mistake downstream.
     const withinRange = { runs: [{ ...AUDIT_FIXTURE[0], successRate: 1 }] };
     expect(Value.Check(STATUS_BODY, withinRange)).toBe(true);
-    const outOfRange = { runs: [{ ...AUDIT_FIXTURE[0], successRate: 10_000 }] };
-    expect(Value.Check(STATUS_BODY, outOfRange)).toBe(false);
+    const tooHigh = { runs: [{ ...AUDIT_FIXTURE[0], successRate: 10_000 }] };
+    expect(Value.Check(STATUS_BODY, tooHigh)).toBe(false);
+    const negative = { runs: [{ ...AUDIT_FIXTURE[0], successRate: -1 }] };
+    expect(Value.Check(STATUS_BODY, negative)).toBe(false);
+  });
+
+  it('keeps line breaks out of a code and a push token', () => {
+    // `$` in a JavaScript pattern is already end-of-input, so a trailing
+    // newline is refused; the character classes are what stop one appearing in
+    // the middle.
+    expect(Value.Check(OTP_SUBMIT_BODY, { code: '123456' })).toBe(true);
+    expect(Value.Check(OTP_SUBMIT_BODY, { code: '123456\n' })).toBe(false);
+    expect(Value.Check(DEVICE_BODY, { token: 'ExponentPushToken[abc]' })).toBe(true);
+    expect(Value.Check(DEVICE_BODY, { token: 'ExponentPushToken[abc]\n' })).toBe(false);
+    expect(Value.Check(DEVICE_BODY, { token: 'ExponentPushToken[a\nb]' })).toBe(false);
   });
 
   it('rejects a malformed field nested inside a manifest group', () => {
@@ -156,6 +170,6 @@ describe('portal contract conformance', () => {
       payload: JSON.stringify('not a config'), headers: { 'content-type': 'application/json' },
     });
     expect(res.statusCode).toBe(400);
-    expect((JSON.parse(res.body) as { error?: unknown }).error).toBe('Invalid configuration');
+    expect(JSON.parse(res.body)).toEqual({ error: 'Invalid configuration' });
   });
 });
