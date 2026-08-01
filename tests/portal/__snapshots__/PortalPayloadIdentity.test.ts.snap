@@ -1,0 +1,732 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`portal payload identity > serves the manifest unchanged, to full nesting depth 1`] = `
+{
+  "bankRequirements": {
+    "amex": {
+      "displayName": "Amex",
+      "required": [
+        "id",
+        "card6Digits",
+        "password",
+      ],
+    },
+    "behatsdaa": {
+      "displayName": "Behatsdaa",
+      "required": [
+        "id",
+        "password",
+      ],
+    },
+    "beinleumi": {
+      "displayName": "Beinleumi",
+      "required": [
+        "username",
+        "password",
+      ],
+    },
+    "beyahadbishvilha": {
+      "displayName": "Beyahad Bishvilha",
+      "required": [
+        "id",
+        "password",
+      ],
+    },
+    "discount": {
+      "displayName": "Discount bank",
+      "required": [
+        "id",
+        "password",
+        "num",
+      ],
+    },
+    "hapoalim": {
+      "displayName": "Hapoalim",
+      "required": [
+        "userCode",
+        "password",
+      ],
+    },
+    "isracard": {
+      "displayName": "Isracard",
+      "required": [
+        "id",
+        "card6Digits",
+        "password",
+      ],
+    },
+    "leumi": {
+      "displayName": "Leumi",
+      "required": [
+        "username",
+        "password",
+      ],
+    },
+    "massad": {
+      "displayName": "Massad",
+      "required": [
+        "username",
+        "password",
+      ],
+    },
+    "max": {
+      "displayName": "Max",
+      "required": [
+        "username",
+        "password",
+        "id",
+      ],
+    },
+    "mercantile": {
+      "displayName": "Mercantile Bank",
+      "required": [
+        "id",
+        "password",
+        "num",
+      ],
+    },
+    "mizrahi": {
+      "displayName": "Mizrahi Bank",
+      "required": [
+        "username",
+        "password",
+      ],
+    },
+    "onezero": {
+      "displayName": "OneZero",
+      "required": [
+        "email",
+        "password",
+        "phoneNumber",
+      ],
+    },
+    "otsarhahayal": {
+      "displayName": "Bank Otsar Hahayal",
+      "required": [
+        "username",
+        "password",
+      ],
+    },
+    "pagi": {
+      "displayName": "Pagi",
+      "required": [
+        "username",
+        "password",
+      ],
+    },
+    "paybox": {
+      "displayName": "PayBox",
+      "required": [
+        "phoneNumber",
+      ],
+    },
+    "pepper": {
+      "displayName": "Pepper",
+      "required": [
+        "phoneNumber",
+        "password",
+      ],
+    },
+    "visacal": {
+      "displayName": "Visa Cal",
+      "required": [
+        "username",
+        "password",
+      ],
+    },
+    "yahav": {
+      "displayName": "Yahav",
+      "required": [
+        "nationalID",
+        "password",
+      ],
+    },
+  },
+  "banks": [
+    "hapoalim",
+    "leumi",
+    "discount",
+    "mizrahi",
+    "mercantile",
+    "otsarhahayal",
+    "beinleumi",
+    "massad",
+    "yahav",
+    "visacal",
+    "max",
+    "isracard",
+    "amex",
+    "beyahadbishvilha",
+    "behatsdaa",
+    "pagi",
+    "onezero",
+    "paybox",
+    "pepper",
+  ],
+  "sections": [
+    {
+      "doc": "getting-started/configuration.md",
+      "fields": [
+        {
+          "help": "Milliseconds to wait between bank imports. Default 0 (no delay).",
+          "key": "delayBetweenBanks",
+          "kind": "number",
+          "label": "Delay between banks (ms)",
+          "min": 0,
+        },
+      ],
+      "icon": "⚙️",
+      "key": "",
+      "kind": "object",
+      "label": "General",
+    },
+    {
+      "doc": "configuration/actual.md",
+      "fields": [
+        {
+          "fields": [
+            {
+              "help": "URL of the Actual Budget server (http:// or https://).",
+              "key": "serverURL",
+              "kind": "string",
+              "label": "Server URL",
+              "required": true,
+            },
+            {
+              "help": "Actual Budget server password.",
+              "key": "password",
+              "kind": "secret",
+              "label": "Server password",
+              "required": true,
+            },
+            {
+              "help": "Local directory for cached budget data.",
+              "key": "dataDir",
+              "kind": "string",
+              "label": "Data directory",
+            },
+          ],
+          "key": "init",
+          "kind": "group",
+          "label": "Connection",
+        },
+        {
+          "fields": [
+            {
+              "help": "UUID of the budget to sync (Actual → Settings → Show Advanced).",
+              "key": "syncId",
+              "kind": "string",
+              "label": "Sync ID",
+              "required": true,
+            },
+            {
+              "help": "Optional password for an end-to-end encrypted budget.",
+              "key": "password",
+              "kind": "secret",
+              "label": "Budget password",
+            },
+          ],
+          "key": "budget",
+          "kind": "group",
+          "label": "Budget",
+        },
+      ],
+      "icon": "💰",
+      "key": "actual",
+      "kind": "object",
+      "label": "Actual",
+    },
+    {
+      "bankFields": [
+        {
+          "help": "Import the last N days (1-30). Cannot combine with start date.",
+          "key": "daysBack",
+          "kind": "number",
+          "label": "Days back",
+          "max": 30,
+          "min": 1,
+        },
+        {
+          "help": "Fixed YYYY-MM-DD (max 1 year back). Cannot combine with days back.",
+          "key": "startDate",
+          "kind": "date",
+          "label": "Start date",
+        },
+        {
+          "help": "Bank user/account id.",
+          "key": "id",
+          "kind": "secret",
+          "label": "ID",
+        },
+        {
+          "help": "Bank password.",
+          "key": "password",
+          "kind": "secret",
+          "label": "Password",
+        },
+        {
+          "help": "Bank-specific number/code.",
+          "key": "num",
+          "kind": "secret",
+          "label": "Num",
+        },
+        {
+          "help": "Hapoalim user code.",
+          "key": "userCode",
+          "kind": "secret",
+          "label": "User code",
+        },
+        {
+          "help": "Login username.",
+          "key": "username",
+          "kind": "secret",
+          "label": "Username",
+        },
+        {
+          "help": "Yahav national ID.",
+          "key": "nationalID",
+          "kind": "secret",
+          "label": "National ID",
+        },
+        {
+          "help": "Six card digits (Isracard/Amex).",
+          "key": "card6Digits",
+          "kind": "secret",
+          "label": "Card 6 digits",
+        },
+        {
+          "help": "Login email.",
+          "key": "email",
+          "kind": "secret",
+          "label": "Email",
+        },
+        {
+          "help": "E.g. 9725XXXXXXXX.",
+          "key": "phoneNumber",
+          "kind": "secret",
+          "label": "Phone number",
+        },
+        {
+          "help": "Saved after first 2FA login to skip OTP next time.",
+          "key": "otpLongTermToken",
+          "kind": "secret",
+          "label": "OTP long-term token",
+        },
+        {
+          "help": "true = bot asks for SMS OTP via Telegram.",
+          "key": "twoFactorAuth",
+          "kind": "boolean",
+          "label": "Two-factor auth",
+        },
+        {
+          "help": "Seconds to wait for OTP reply. Default 300.",
+          "key": "twoFactorTimeout",
+          "kind": "number",
+          "label": "2FA timeout (s)",
+          "min": 1,
+        },
+        {
+          "help": "No-op with Camoufox; kept for backward compatibility.",
+          "key": "clearSession",
+          "kind": "boolean",
+          "label": "Clear session",
+        },
+        {
+          "help": "Navigation timeout in ms. Default 30000.",
+          "key": "timeout",
+          "kind": "number",
+          "label": "Navigation timeout (ms)",
+          "min": 0,
+        },
+        {
+          "help": "Retries on page load failure. Default 0.",
+          "key": "navigationRetryCount",
+          "kind": "number",
+          "label": "Navigation retries",
+          "min": 0,
+        },
+      ],
+      "doc": "configuration/banks.md",
+      "icon": "🏦",
+      "key": "banks",
+      "kind": "bankMap",
+      "label": "Banks",
+      "targetFields": [
+        {
+          "help": "UUID from the Actual Budget account URL.",
+          "key": "actualAccountId",
+          "kind": "string",
+          "label": "Actual account id",
+          "required": true,
+        },
+        {
+          "help": "Optional friendly label shown in logs and Telegram.",
+          "key": "accountName",
+          "kind": "string",
+          "label": "Account name",
+        },
+        {
+          "help": ""all" or comma-separated bank account numbers.",
+          "key": "accounts",
+          "kind": "string",
+          "label": "Accounts",
+        },
+        {
+          "help": "true = auto-adjust balance to match the bank.",
+          "key": "reconcile",
+          "kind": "boolean",
+          "label": "Reconcile",
+        },
+      ],
+    },
+    {
+      "doc": "notifications/telegram.md",
+      "fields": [
+        {
+          "help": "Master switch for notifications.",
+          "key": "enabled",
+          "kind": "boolean",
+          "label": "Enabled",
+        },
+        {
+          "help": "Max transactions per account in notifications (1-25). Default 5.",
+          "key": "maxTransactions",
+          "kind": "number",
+          "label": "Max transactions",
+          "max": 25,
+          "min": 1,
+        },
+        {
+          "fields": [
+            {
+              "help": "Telegram bot token.",
+              "key": "botToken",
+              "kind": "secret",
+              "label": "Bot token",
+            },
+            {
+              "help": "Target chat id.",
+              "key": "chatId",
+              "kind": "string",
+              "label": "Chat id",
+            },
+            {
+              "help": "summary | compact | ledger | emoji.",
+              "key": "messageFormat",
+              "kind": "select",
+              "label": "Message format",
+              "options": [
+                "summary",
+                "compact",
+                "ledger",
+                "emoji",
+              ],
+            },
+            {
+              "help": "new | all | none.",
+              "key": "showTransactions",
+              "kind": "select",
+              "label": "Show transactions",
+              "options": [
+                "new",
+                "all",
+                "none",
+              ],
+            },
+            {
+              "help": "Bot listens for /scan, /status, /logs, /help.",
+              "key": "listenForCommands",
+              "kind": "boolean",
+              "label": "Listen for commands",
+            },
+            {
+              "help": "Enable /import_receipt OCR. Requires listenForCommands.",
+              "key": "enableReceiptImport",
+              "kind": "boolean",
+              "label": "Receipt import",
+            },
+          ],
+          "key": "telegram",
+          "kind": "group",
+          "label": "Telegram",
+        },
+        {
+          "fields": [
+            {
+              "help": "Slack/Discord/custom URL.",
+              "key": "url",
+              "kind": "secret",
+              "label": "Webhook URL",
+            },
+            {
+              "help": "plain | slack | discord.",
+              "key": "format",
+              "kind": "select",
+              "label": "Format",
+              "options": [
+                "plain",
+                "slack",
+                "discord",
+              ],
+            },
+          ],
+          "key": "webhook",
+          "kind": "group",
+          "label": "Webhook",
+        },
+      ],
+      "icon": "🔔",
+      "key": "notifications",
+      "kind": "object",
+      "label": "Alerts",
+    },
+    {
+      "doc": "configuration/spending-watch.md",
+      "icon": "👀",
+      "itemFields": [
+        {
+          "help": "Trigger if total spending exceeds this amount.",
+          "key": "alertFromAmount",
+          "kind": "number",
+          "label": "Alert from amount",
+          "min": 1,
+          "required": true,
+        },
+        {
+          "help": "Time window in days (1 = today only).",
+          "key": "numOfDayToCount",
+          "kind": "number",
+          "label": "Days to count",
+          "max": 365,
+          "min": 1,
+          "required": true,
+        },
+        {
+          "help": "Optional payee substrings to match. Empty = all payees.",
+          "key": "watchPayees",
+          "kind": "list",
+          "label": "Watch payees",
+        },
+      ],
+      "key": "spendingWatch",
+      "kind": "list",
+      "label": "Watch",
+    },
+    {
+      "doc": "configuration/categorization.md",
+      "fields": [
+        {
+          "help": "none | history | translate.",
+          "key": "mode",
+          "kind": "select",
+          "label": "Mode",
+          "options": [
+            "none",
+            "history",
+            "translate",
+          ],
+        },
+        {
+          "fields": [
+            {
+              "key": "fromPayee",
+              "kind": "string",
+              "label": "From (Hebrew)",
+            },
+            {
+              "key": "toPayee",
+              "kind": "string",
+              "label": "To (English)",
+            },
+          ],
+          "help": "Payee translation rules (used when mode = translate).",
+          "key": "translations",
+          "kind": "list",
+          "label": "Translations",
+        },
+      ],
+      "icon": "🏷️",
+      "key": "categorization",
+      "kind": "object",
+      "label": "Categories",
+    },
+    {
+      "doc": "configuration/logging.md",
+      "fields": [
+        {
+          "help": "words | json | table | phone. Default: words.",
+          "key": "format",
+          "kind": "select",
+          "label": "Log format",
+          "options": [
+            "words",
+            "json",
+            "table",
+            "phone",
+          ],
+        },
+        {
+          "help": "Directory for rotating log files. Default: ./logs.",
+          "key": "logDir",
+          "kind": "string",
+          "label": "Log directory",
+        },
+      ],
+      "icon": "📝",
+      "key": "logConfig",
+      "kind": "object",
+      "label": "Logging",
+    },
+    {
+      "doc": "configuration/proxy.md",
+      "fields": [
+        {
+          "help": "socks5://host:port or http://host:port (not used with Camoufox yet).",
+          "key": "server",
+          "kind": "string",
+          "label": "Proxy server",
+        },
+      ],
+      "icon": "🌐",
+      "key": "proxy",
+      "kind": "object",
+      "label": "Proxy",
+    },
+    {
+      "doc": "configuration/portal.md",
+      "fields": [
+        {
+          "help": "Start the config web portal.",
+          "key": "enabled",
+          "kind": "boolean",
+          "label": "Enabled",
+        },
+        {
+          "help": "127.0.0.1 (local only) or 0.0.0.0 to expose.",
+          "key": "host",
+          "kind": "string",
+          "label": "Host",
+        },
+        {
+          "help": "Listen port. Default 8080.",
+          "key": "port",
+          "kind": "number",
+          "label": "Port",
+          "max": 65535,
+          "min": 1,
+        },
+        {
+          "help": "password | google | both. Applies on the next login after you save — no restart needed.",
+          "key": "authMode",
+          "kind": "select",
+          "label": "Auth mode",
+          "options": [
+            "password",
+            "google",
+            "both",
+          ],
+        },
+        {
+          "help": "Mark session cookies Secure. Enable only when served over HTTPS.",
+          "key": "secureCookies",
+          "kind": "boolean",
+          "label": "Secure cookies",
+        },
+        {
+          "help": "Set or change the portal password; it is hashed on save. Needed for password and both modes. Applies on the next login after you save — no restart needed.",
+          "key": "passwordHash",
+          "kind": "secret",
+          "label": "Portal password",
+        },
+        {
+          "help": "Signing key for session cookies (>= 16 chars). Changing it needs a portal restart to take effect.",
+          "key": "sessionSecret",
+          "kind": "secret",
+          "label": "Session secret",
+        },
+        {
+          "fields": [
+            {
+              "help": "Google OAuth client id.",
+              "key": "clientId",
+              "kind": "string",
+              "label": "Client id",
+            },
+            {
+              "help": "Google OAuth client secret.",
+              "key": "clientSecret",
+              "kind": "secret",
+              "label": "Client secret",
+            },
+            {
+              "help": "OAuth callback URL.",
+              "key": "redirectUri",
+              "kind": "string",
+              "label": "Redirect URI",
+            },
+            {
+              "help": "Allow-listed Google emails.",
+              "key": "allowedEmails",
+              "kind": "list",
+              "label": "Allowed emails",
+            },
+          ],
+          "key": "google",
+          "kind": "group",
+          "label": "Google OAuth",
+          "showWhen": {
+            "field": "authMode",
+            "in": [
+              "google",
+              "both",
+            ],
+          },
+        },
+      ],
+      "icon": "🖥️",
+      "key": "portal",
+      "kind": "object",
+      "label": "Portal",
+    },
+  ],
+}
+`;
+
+exports[`portal payload identity > serves the masked config unchanged 1`] = `
+{
+  "actual": {
+    "budget": {
+      "password": null,
+      "syncId": "bd228b5c-9ee6-49b0-b8a8-78dc5d9948aa",
+    },
+    "init": {
+      "dataDir": "./data",
+      "password": "********",
+      "serverURL": "http://localhost:5006",
+    },
+  },
+  "banks": {
+    "discount": {
+      "daysBack": 20,
+      "id": "********",
+      "num": "********",
+      "password": "********",
+      "targets": [
+        {
+          "accounts": "all",
+          "actualAccountId": "a9a5109e-a0b9-4dd6-8420-6d52493e7c52",
+          "reconcile": false,
+        },
+      ],
+    },
+  },
+  "portal": {
+    "authMode": "password",
+    "enabled": true,
+    "host": "127.0.0.1",
+    "passwordHash": "********",
+    "port": 8080,
+    "sessionSecret": "********",
+  },
+}
+`;
