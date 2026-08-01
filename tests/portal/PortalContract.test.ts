@@ -32,6 +32,7 @@ import { fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpe
 let app: FastifyInstance;
 let dir: string;
 let cookie: string;
+let seed: { dir: string; path: string };
 
 const ENV_KEYS = ['AUDIT_LOG_PATH', 'OTP_REQUESTS_PATH', 'OTP_SETTINGS_PATH'] as const;
 const originalEnv = new Map<string, string | undefined>();
@@ -59,14 +60,15 @@ async function loginCookie(): Promise<string> {
  * Asserts a live endpoint's payload satisfies its contract schema.
  * @param url - Endpoint to fetch.
  * @param schema - Contract schema the payload must satisfy.
- * @returns Nothing; failures are reported through expect.
+ * @returns The parsed payload, so a caller can assert it was not vacuous.
  */
-async function expectConforms(url: string, schema: TSchema): Promise<void> {
+async function expectConforms(url: string, schema: TSchema): Promise<Record<string, unknown>> {
   const res = await app.inject({ method: 'GET', url, cookies: { portal_session: cookie } });
   expect(res.statusCode).toBe(200);
-  const body = JSON.parse(res.body) as unknown;
+  const body = JSON.parse(res.body) as Record<string, unknown>;
   const errors = [...Value.Errors(schema, body)].map(e => `${e.path}: ${e.message}`);
   expect(errors).toEqual([]);
+  return body;
 }
 
 describe('portal contract conformance', () => {
@@ -78,15 +80,15 @@ describe('portal contract conformance', () => {
     process.env.OTP_REQUESTS_PATH = join(dir, 'otp-requests.json');
     process.env.OTP_SETTINGS_PATH = join(dir, 'otp-settings.json');
     writeFileSync(process.env.AUDIT_LOG_PATH, JSON.stringify(AUDIT_FIXTURE));
-    const seed = seedConfigDir();
+    seed = seedConfigDir();
     app = await buildPortal(fakePortalRuntime(), new PortalConfigStore(seed.path));
-    rmSync(seed.dir, { recursive: true, force: true });
     cookie = await loginCookie();
   });
 
   afterEach(async () => {
     await app.close();
     rmSync(dir, { recursive: true, force: true });
+    rmSync(seed.dir, { recursive: true, force: true });
     for (const key of ENV_KEYS) {
       const value = originalEnv.get(key);
       if (value === undefined) delete process.env[key];
@@ -99,7 +101,11 @@ describe('portal contract conformance', () => {
   });
 
   it('serves a config matching the contract', async () => {
-    await expectConforms('/api/config', CONFIG_BODY);
+    const config = await expectConforms('/api/config', CONFIG_BODY);
+    // CONFIG_BODY is an open record, so an empty object satisfies it. Without
+    // this the test would pass just as happily against a config that never
+    // loaded.
+    expect(Object.keys(config)).toContain('actual');
   });
 
   it('serves run history matching the contract', async () => {
@@ -114,10 +120,42 @@ describe('portal contract conformance', () => {
     await expectConforms('/api/otp/settings', OTP_SETTINGS);
   });
 
-  it('refuses a success rate expressed as a fraction, the bug this contract exists for', () => {
-    const fraction = { runs: [{ ...AUDIT_FIXTURE[0], successRate: 1 }] };
-    expect(Value.Check(STATUS_BODY, fraction)).toBe(true);
+  it('rejects a success rate outside 0-100', () => {
+    // The range cannot catch a fraction: 1 is a legitimate one percent. What it
+    // rejects is a value that could only come from a unit mistake downstream.
+    const withinRange = { runs: [{ ...AUDIT_FIXTURE[0], successRate: 1 }] };
+    expect(Value.Check(STATUS_BODY, withinRange)).toBe(true);
     const outOfRange = { runs: [{ ...AUDIT_FIXTURE[0], successRate: 10_000 }] };
     expect(Value.Check(STATUS_BODY, outOfRange)).toBe(false);
+  });
+
+  it('rejects a malformed field nested inside a manifest group', () => {
+    // Proves the recursive $ref is actually followed. Without this, the
+    // manifest conformance test above could pass because nothing below the
+    // first level was ever checked.
+    const nested = {
+      sections: [{
+        key: 'general', label: 'General', kind: 'object',
+        fields: [{
+          key: 'group', label: 'Group', kind: 'group',
+          fields: [{ key: 'inner', label: 'Inner', kind: 'not-a-kind' }],
+        }],
+      }],
+      banks: [],
+      bankRequirements: {},
+    };
+    expect(Value.Check(MANIFEST_BODY, nested)).toBe(false);
+  });
+
+  it('answers a refused config write with a body the app can read', async () => {
+    // The 400 for a schema-validation failure carries only `error`, while a
+    // rejection from the store carries `errors` too. Both are serialised
+    // through the same response schema, so it has to allow either.
+    const res = await app.inject({
+      method: 'PUT', url: '/api/config', cookies: { portal_session: cookie },
+      payload: JSON.stringify('not a config'), headers: { 'content-type': 'application/json' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect((JSON.parse(res.body) as { error?: unknown }).error).toBe('Invalid configuration');
   });
 });
