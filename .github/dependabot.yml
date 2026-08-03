@@ -15,9 +15,17 @@ updates:
   # ── npm ──────────────────────────────────────────────────
   - package-ecosystem: npm
     directory: /
+    # Daily, not weekly. @sergienko4/israeli-bank-scrapers is the package that
+    # breaks when a bank changes its site, and its releases are overwhelmingly
+    # login/scrape fixes (8.6.2: "stop popup probe closing login UI"). A weekly
+    # window meant a fix published hours after Monday's scan waited six more
+    # days while scraping stayed broken — 8.6.2 published 18h after the
+    # 2026-08-03 run and was invisible until the following Monday. Daily bounds
+    # that lag to ~24h. The dev-dependencies group below keeps the extra
+    # frequency from turning into PR noise: dev churn still lands as one PR.
+    # Docker and Actions stay weekly — neither is time-critical.
     schedule:
-      interval: weekly
-      day: monday
+      interval: daily
       time: "06:00"
       timezone: Asia/Jerusalem
     open-pull-requests-limit: 10
