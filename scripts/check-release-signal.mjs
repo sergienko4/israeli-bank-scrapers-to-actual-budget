@@ -2,20 +2,21 @@
 /**
  * Release-signal CI guard.
  *
- * Fails a pull request that changes a dependency shipped inside the published
- * Docker image while carrying a title release-please will not release on. See
- * scripts/release-signal-logic.mjs for the policy and its rationale.
+ * Fails a pull request that changes a dependency or base image shipped inside
+ * the published Docker image while carrying a title release-please will not
+ * release on. See scripts/release-signal-logic.mjs for the policy and its
+ * rationale.
  *
  * Usage:
  *   node scripts/check-release-signal.mjs --title "<pr title>" --base <ref>
  *
- * `--base` is any git revision holding the pre-merge `package.json`. When the
- * revision cannot be read the guard fails closed rather than assuming the
- * pull request is clean.
+ * `--base` is any git revision holding the pre-merge `package.json` and
+ * `Dockerfile`. When `package.json` cannot be read the guard fails closed
+ * rather than assuming the pull request is clean.
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 import {
   evaluateReleaseSignal,
@@ -34,18 +35,36 @@ function readFlag(flag) {
 }
 
 /**
- * Loads `package.json` as it exists at a given git revision.
+ * Loads a repository file as it exists at a given git revision.
  *
  * @param {string} ref The git revision to read from.
- * @returns {Record<string, unknown>} The parsed manifest.
+ * @param {string} path The repository-relative path to read.
+ * @returns {string} The file contents at that revision.
  */
-function readPackageAtRef(ref) {
-  const stdout = execFileSync('git', ['show', `${ref}:package.json`], {
+function readFileAtRef(ref, path) {
+  return execFileSync('git', ['show', `${ref}:${path}`], {
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
     stdio: ['ignore', 'pipe', 'inherit'],
   });
-  return JSON.parse(stdout);
+}
+
+/**
+ * Loads a repository file that may legitimately be absent at a revision.
+ *
+ * Returns an empty string rather than throwing so that adding or deleting the
+ * Dockerfile registers as a base-image change instead of failing the guard.
+ *
+ * @param {string} ref The git revision to read from.
+ * @param {string} path The repository-relative path to read.
+ * @returns {string} The file contents, or an empty string when absent.
+ */
+function readOptionalFileAtRef(ref, path) {
+  try {
+    return readFileAtRef(ref, path);
+  } catch {
+    return '';
+  }
 }
 
 const title = readFlag('--title') ?? '';
@@ -58,14 +77,26 @@ if (!baseRef) {
 
 let basePackage;
 try {
-  basePackage = readPackageAtRef(baseRef);
+  basePackage = JSON.parse(readFileAtRef(baseRef, 'package.json'));
 } catch (error) {
   console.error(`❌ Unable to read package.json at ${baseRef}: ${error.message}`);
   process.exit(1);
 }
 
-const headPackage = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-const verdict = evaluateReleaseSignal({ title, basePackage, headPackage });
+const repoRoot = new URL('../', import.meta.url);
+const headPackage = JSON.parse(readFileSync(new URL('package.json', repoRoot), 'utf8'));
+const baseDockerfile = readOptionalFileAtRef(baseRef, 'Dockerfile');
+const headDockerfile = existsSync(new URL('Dockerfile', repoRoot))
+  ? readFileSync(new URL('Dockerfile', repoRoot), 'utf8')
+  : '';
+
+const verdict = evaluateReleaseSignal({
+  title,
+  basePackage,
+  headPackage,
+  baseDockerfile,
+  headDockerfile,
+});
 
 console.log(formatReleaseSignalReport(verdict, title));
 process.exit(verdict.ok ? 0 : 1);

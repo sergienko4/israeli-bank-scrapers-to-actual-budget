@@ -120,11 +120,14 @@ maintainer action, so new jobs gate merges through `ci-pass` instead):
 ## Release signal guard
 
 `Build & Audit` runs a `Release signal guard` step on pull requests. It fails
-the PR when `package.json` `dependencies` or `overrides` change under a title
-release-please will not release on, so a bump that ships inside the image can
-never merge silently. It lives inside an already-required job deliberately —
-a new top-level job would need a branch-protection ruleset change to be
-enforced. Policy: `scripts/release-signal-logic.mjs`; see
+the PR when `package.json` `dependencies` or `overrides` change, or when the
+Dockerfile `FROM` base image changes, under a title release-please will not
+release on — so a bump that ships inside the image can never merge silently.
+The Dockerfile is watched because Dependabot's `docker` ecosystem edits only
+that file, which a manifest-only comparison cannot see. The step lives inside
+an already-required job deliberately — a new top-level job would need a
+branch-protection ruleset change to be enforced. Policy:
+`scripts/release-signal-logic.mjs`; see
 [release-pipeline.md](release-pipeline.md).
 
 ## Central config: `.github/config/ci-config.yml`

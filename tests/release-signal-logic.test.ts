@@ -2,15 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import {
   evaluateReleaseSignal,
+  findShippedBaseImageChanges,
   findShippedDependencyChanges,
   formatReleaseSignalReport,
   isReleaseTriggering,
+  parseBaseImages,
   parseCommitHeader,
   RELEASE_TRIGGERING_TYPES,
   SHIPPED_MANIFEST_FIELDS,
 } from '../scripts/release-signal-logic.mjs';
 
 const SCRAPER = '@sergienko4/israeli-bank-scrapers';
+const NODE_24 = 'node:24-slim@sha256:aaaa';
+const NODE_26 = 'node:26-slim@sha256:bbbb';
 
 describe('parseCommitHeader', () => {
   it('parses a scoped type', () => {
@@ -170,7 +174,7 @@ describe('formatReleaseSignalReport', () => {
   it('reports a clean pull request', () => {
     const verdict = evaluateReleaseSignal({ title: 'docs: tidy' });
     expect(formatReleaseSignalReport(verdict, 'docs: tidy')).toContain(
-      'No shipped dependency changes',
+      'No shipped dependency or base-image changes',
     );
   });
 
@@ -183,5 +187,97 @@ describe('formatReleaseSignalReport', () => {
     expect(formatReleaseSignalReport(verdict, 'fix(deps): bump scraper')).toContain(
       'carries a release signal',
     );
+  });
+});
+
+describe('parseBaseImages', () => {
+  it('reads the base image of a single-stage Dockerfile', () => {
+    expect(parseBaseImages(`# comment\nFROM ${NODE_24}\nRUN echo hi\n`)).toEqual([NODE_24]);
+  });
+
+  it('reads every stage of a multi-stage Dockerfile in build order', () => {
+    const dockerfile = `FROM ${NODE_24} AS builder\nFROM ${NODE_26}\n`;
+    expect(parseBaseImages(dockerfile)).toEqual([NODE_24, NODE_26]);
+  });
+
+  it('ignores a FROM appearing inside a comment or mid-line', () => {
+    expect(parseBaseImages(`# FROM node:1-slim\nRUN echo FROM node:2-slim\n`)).toEqual([]);
+  });
+
+  it('returns an empty list when there is no Dockerfile', () => {
+    expect(parseBaseImages(undefined)).toEqual([]);
+  });
+});
+
+describe('findShippedBaseImageChanges', () => {
+  it('reports a base-image bump', () => {
+    const changes = findShippedBaseImageChanges(`FROM ${NODE_24}\n`, `FROM ${NODE_26}\n`);
+    expect(changes).toEqual([
+      { field: 'Dockerfile', name: 'FROM', from: NODE_24, to: NODE_26 },
+    ]);
+  });
+
+  it('reports nothing when the base image is unchanged', () => {
+    expect(findShippedBaseImageChanges(`FROM ${NODE_24}\n`, `FROM ${NODE_24}\nRUN echo hi\n`)).toEqual([]);
+  });
+
+  it('names the stage that moved in a multi-stage build', () => {
+    const before = `FROM ${NODE_24} AS builder\nFROM ${NODE_24}\n`;
+    const after = `FROM ${NODE_24} AS builder\nFROM ${NODE_26}\n`;
+    expect(findShippedBaseImageChanges(before, after)).toEqual([
+      { field: 'Dockerfile', name: 'FROM[1]', from: NODE_24, to: NODE_26 },
+    ]);
+  });
+
+  it('treats an added Dockerfile as a shipped change', () => {
+    expect(findShippedBaseImageChanges('', `FROM ${NODE_26}\n`)).toEqual([
+      { field: 'Dockerfile', name: 'FROM', from: undefined, to: NODE_26 },
+    ]);
+  });
+});
+
+describe('evaluateReleaseSignal — base image', () => {
+  it('rejects a base-image bump under a non-release title', () => {
+    const verdict = evaluateReleaseSignal({
+      title: 'chore(docker): bump base image',
+      baseDockerfile: `FROM ${NODE_24}\n`,
+      headDockerfile: `FROM ${NODE_26}\n`,
+    });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.shippedChanges).toHaveLength(1);
+  });
+
+  it('accepts a base-image bump under a release title', () => {
+    const verdict = evaluateReleaseSignal({
+      title: 'fix(docker): bump base image to node 26',
+      baseDockerfile: `FROM ${NODE_24}\n`,
+      headDockerfile: `FROM ${NODE_26}\n`,
+    });
+    expect(verdict.ok).toBe(true);
+  });
+
+  it('passes a Dockerfile edit that leaves the base image alone', () => {
+    const verdict = evaluateReleaseSignal({
+      title: 'chore(docker): tidy layers',
+      baseDockerfile: `FROM ${NODE_24}\nRUN echo a\n`,
+      headDockerfile: `FROM ${NODE_24}\nRUN echo b\n`,
+    });
+    expect(verdict.ok).toBe(true);
+    expect(verdict.shippedChanges).toEqual([]);
+  });
+
+  it('lists manifest and base-image changes together', () => {
+    const verdict = evaluateReleaseSignal({
+      title: 'chore(deps): bump everything',
+      basePackage: { dependencies: { [SCRAPER]: '^8.6.1' } },
+      headPackage: { dependencies: { [SCRAPER]: '^8.7.0' } },
+      baseDockerfile: `FROM ${NODE_24}\n`,
+      headDockerfile: `FROM ${NODE_26}\n`,
+    });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.shippedChanges.map((change) => change.field)).toEqual([
+      'dependencies',
+      'Dockerfile',
+    ]);
   });
 });

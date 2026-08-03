@@ -37,6 +37,53 @@ export const RELEASE_TRIGGERING_TYPES = Object.freeze([
  */
 export const SHIPPED_MANIFEST_FIELDS = Object.freeze(['dependencies', 'overrides']);
 
+/**
+ * Matches every `FROM <image>` instruction in a Dockerfile.
+ *
+ * The base image is shipped just as literally as a runtime dependency — it
+ * carries the Node runtime and every OS package users execute — so a bump to
+ * it has to reach them through a release. Dependabot's `docker` ecosystem
+ * edits this line and nothing in `package.json`, so the manifest fields above
+ * cannot see the change at all.
+ */
+const FROM_PATTERN = /^[ \t]*FROM[ \t]+(?<image>\S+)/gim;
+
+/**
+ * Lists the base images a Dockerfile builds on, in build order.
+ *
+ * @param {string} [dockerfile] The Dockerfile contents.
+ * @returns {string[]} One entry per `FROM` instruction; empty when there is no Dockerfile.
+ */
+export function parseBaseImages(dockerfile) {
+  const matches = String(dockerfile ?? '').matchAll(FROM_PATTERN);
+  return [...matches].map((match) => match.groups.image);
+}
+
+/**
+ * Lists every base-image change that reaches the published image.
+ *
+ * Stages are compared positionally so a multi-stage Dockerfile reports which
+ * stage moved rather than collapsing to a single yes/no.
+ *
+ * @param {string} [baseDockerfile] The Dockerfile on the base branch.
+ * @param {string} [headDockerfile] The Dockerfile on the head branch.
+ * @returns {Array<{ field: string, name: string, from: string | undefined, to: string | undefined }>} One entry per changed stage.
+ */
+export function findShippedBaseImageChanges(baseDockerfile, headDockerfile) {
+  const before = parseBaseImages(baseDockerfile);
+  const after = parseBaseImages(headDockerfile);
+  const stages = Math.max(before.length, after.length);
+  const singleStage = stages === 1;
+  return Array.from({ length: stages }, (_unused, index) => index)
+    .filter((index) => before[index] !== after[index])
+    .map((index) => ({
+      field: 'Dockerfile',
+      name: singleStage ? 'FROM' : `FROM[${index}]`,
+      from: before[index],
+      to: after[index],
+    }));
+}
+
 const TITLE_PATTERN = /^(?<type>[a-z]+)(?<scope>\([^()]*\))?(?<breaking>!)?:\s+\S/;
 
 /**
@@ -96,15 +143,18 @@ export function findShippedDependencyChanges(basePackage, headPackage) {
 /**
  * Decides whether a pull request may merge under the release-signal policy.
  *
- * A pull request passes when it ships no dependency change, or when its title
- * is release-triggering. It fails only when a shipped change would merge
- * without producing a release.
+ * A pull request passes when it ships no dependency or base-image change, or
+ * when its title is release-triggering. It fails only when a shipped change
+ * would merge without producing a release.
  *
- * @param {{ title?: string, basePackage?: Record<string, unknown>, headPackage?: Record<string, unknown> }} input The pull request title and both manifest revisions.
+ * @param {{ title?: string, basePackage?: Record<string, unknown>, headPackage?: Record<string, unknown>, baseDockerfile?: string, headDockerfile?: string }} input The pull request title, both manifest revisions and both Dockerfile revisions.
  * @returns {{ ok: boolean, releaseTriggering: boolean, shippedChanges: Array<{ field: string, name: string, from: string | undefined, to: string | undefined }> }} The verdict and the evidence behind it.
  */
 export function evaluateReleaseSignal(input) {
-  const shippedChanges = findShippedDependencyChanges(input?.basePackage, input?.headPackage);
+  const shippedChanges = [
+    ...findShippedDependencyChanges(input?.basePackage, input?.headPackage),
+    ...findShippedBaseImageChanges(input?.baseDockerfile, input?.headDockerfile),
+  ];
   const releaseTriggering = isReleaseTriggering(input?.title);
   return { ok: shippedChanges.length === 0 || releaseTriggering, releaseTriggering, shippedChanges };
 }
@@ -118,22 +168,23 @@ export function evaluateReleaseSignal(input) {
  */
 export function formatReleaseSignalReport(verdict, title) {
   if (verdict.shippedChanges.length === 0) {
-    return '✅ No shipped dependency changes — release signal not required';
+    return '✅ No shipped dependency or base-image changes — release signal not required';
   }
   const listed = verdict.shippedChanges
     .map((change) => `   • ${change.field}.${change.name}: ${change.from ?? '—'} → ${change.to ?? '—'}`)
     .join('\n');
   if (verdict.ok) {
-    return `✅ Shipped dependency change carries a release signal:\n${listed}`;
+    return `✅ Shipped change carries a release signal:\n${listed}`;
   }
   return [
-    '❌ Shipped dependency change would merge without cutting a release:',
+    '❌ Shipped change would merge without cutting a release:',
     listed,
     '',
     `   PR title: ${title ?? '(none)'}`,
     `   Retitle using a release-triggering type (${RELEASE_TRIGGERING_TYPES.join(', ')}),`,
     '   e.g. "fix(deps): bump @sergienko4/israeli-bank-scrapers to 8.7.0".',
-    '   These packages ship inside the published Docker image, so users must',
-    '   receive a tagged release rather than a silent update.',
+    '   These packages and the base image ship inside the published Docker',
+    '   image, so users must receive a tagged release rather than a silent',
+    '   update.',
   ].join('\n');
 }

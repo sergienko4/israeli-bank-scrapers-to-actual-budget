@@ -208,9 +208,13 @@ Two mechanisms keep this true:
    (`chore(deps)(deps):`) that the conventional-commit parser cannot read — so
    release-please dropped those commits entirely.
 2. **The `Release signal guard`** step in `pr.yml` → *Build & Audit* fails any
-   PR that changes `dependencies` or `overrides` under a non-releasing title.
-   Configuration alone is not a guarantee; the guard is the enforcement half.
-   Policy and messages live in `scripts/release-signal-logic.mjs`.
+   PR that changes `dependencies`, `overrides` or the Dockerfile `FROM` base
+   image under a non-releasing title. Configuration alone is not a guarantee;
+   the guard is the enforcement half. The Dockerfile is covered because
+   Dependabot's `docker` ecosystem never touches `package.json`, so a manifest
+   comparison alone would let a base-image bump merge silently. Policy and
+   messages live in `scripts/release-signal-logic.mjs`, exercised end to end by
+   `tests/e2e/release-signal.e2e.test.ts`.
 
 Before this, runtime bumps merged as `chore(deps)` and produced no version
 bump, no tag and no image — scraper updates had to be retitled by hand.

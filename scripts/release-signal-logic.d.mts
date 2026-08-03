@@ -4,7 +4,7 @@
  * scripts/render-readme-meta.d.mts precedent.
  */
 
-/** A single dependency change that reaches the published Docker image. */
+/** A single dependency or base-image change that reaches the published Docker image. */
 export interface IShippedDependencyChange {
   field: string;
   name: string;
@@ -24,6 +24,8 @@ export interface IReleaseSignalInput {
   title?: string;
   basePackage?: Record<string, unknown>;
   headPackage?: Record<string, unknown>;
+  baseDockerfile?: string;
+  headDockerfile?: string;
 }
 
 /** The guard verdict and the evidence behind it. */
@@ -49,6 +51,15 @@ export function isReleaseTriggering(title?: string): boolean;
 export function findShippedDependencyChanges(
   basePackage?: Record<string, unknown>,
   headPackage?: Record<string, unknown>,
+): IShippedDependencyChange[];
+
+/** Lists the base images a Dockerfile builds on, in build order. */
+export function parseBaseImages(dockerfile?: string): string[];
+
+/** Lists every base-image change that reaches the published image. */
+export function findShippedBaseImageChanges(
+  baseDockerfile?: string,
+  headDockerfile?: string,
 ): IShippedDependencyChange[];
 
 /** Decides whether a pull request may merge under the release-signal policy. */
