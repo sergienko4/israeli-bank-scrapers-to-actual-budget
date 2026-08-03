@@ -18,7 +18,7 @@ project:
 
 runtime:
   node_engines: ">=22.0.0"
-  node_ci_version: "22.x"
+  node_ci_version: "26.x"
   npm_engines: ">=10.0.0"
   python_ci_version: "3.12"
   camoufox: latest

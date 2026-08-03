@@ -30,6 +30,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/ci/setup
+      # Blocks a dependency change that ships inside the published image from
+      # merging under a title release-please will not release on. Runs inside
+      # this already-required job so no ruleset change is needed.
+      # See docs/architecture/release-pipeline.md.
+      - name: Release signal guard
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA"
+          node scripts/check-release-signal.mjs --title "$PR_TITLE" --base "$BASE_SHA"
       - run: npm audit --audit-level=moderate
       - run: npm run build
       - run: npm run docs
@@ -148,6 +160,23 @@ jobs:
       - uses: ./.github/actions/ci/setup
       - run: npm run lint:licenses
 
+  # ─── SEMGREP ───────────────────────────────────────
+  # Owns the scan the pre-commit hook used to run. It needs Docker and a
+  # rule-registry fetch, which made it the slowest local gate and tied
+  # committing to a running Docker Desktop. CodeQL does not replace it:
+  # the two use different rule sets, and .semgrep/ holds this repo's own
+  # rules. See docs/architecture/ci-pipeline.md.
+  semgrep:
+    name: Semgrep Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run Semgrep
+        run: |
+          docker run --rm -v "$PWD:/data" --workdir /data \
+            semgrep/semgrep@sha256:9fb6f44dc162b1e0aada85f072a95141844c61e3bfcedf40b8a46fecf208e986 \
+            semgrep scan --config auto --config .semgrep/ --error src/
+
   # ─── SONARCLOUD ────────────────────────────────────
   # Job-level `if:` cannot reference `secrets` (GitHub disallows that
   # context in job conditionals). Instead, gate every step on a
@@ -214,7 +243,7 @@ jobs:
   # local scripting (`gh pr checks --required` or polling automation).
   ci-pass:
     name: CI Pass
-    needs: [build, validate, docs, security, trivy, licenses, sonar, e2e]
+    needs: [build, validate, docs, security, semgrep, trivy, licenses, sonar, e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -224,13 +253,14 @@ jobs:
           R_VALIDATE: ${{ needs.validate.result }}
           R_DOCS: ${{ needs.docs.result }}
           R_SECURITY: ${{ needs.security.result }}
+          R_SEMGREP: ${{ needs.semgrep.result }}
           R_TRIVY: ${{ needs.trivy.result }}
           R_LICENSES: ${{ needs.licenses.result }}
           R_SONAR: ${{ needs.sonar.result }}
           R_E2E: ${{ needs.e2e.result }}
         run: |
           fail=0
-          for name in BUILD VALIDATE DOCS SECURITY TRIVY LICENSES SONAR E2E; do
+          for name in BUILD VALIDATE DOCS SECURITY SEMGREP TRIVY LICENSES SONAR E2E; do
             var="R_${name}"
             val="${!var}"
             # Treat 'skipped' as success for jobs that may legitimately skip

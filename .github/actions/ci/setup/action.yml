@@ -4,7 +4,7 @@ description: Setup Node.js with npm cache and install dependencies
 inputs:
   node-version:
     description: Node.js version
-    default: '22.x'
+    default: '26.x'
 
 runs:
   using: composite

@@ -182,7 +182,7 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 <summary><b>Tech stack</b></summary>
 
 <!-- meta:tech-stack:start -->
-- **Node.js** >=22.0.0 (Docker base: `node:24-slim`)
+- **Node.js** >=22.0.0 (Docker base: `node:26-slim`)
 - **TypeScript** ^6.0.3 (strict mode, ES2022)
 - **Vitest** ^4.1.9 (v8 coverage)
 - **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.6.1
@@ -232,7 +232,7 @@ To never miss a release, subscribe to signals that are independent of any Docker
 <summary><b>Local development</b></summary>
 
 ```bash
-nvm use                 # Node 22+ (.nvmrc included)
+nvm use                 # Node 26 (.nvmrc included; engines floor is 22)
 npm ci
 npm run build
 npm test                # unit tests + coverage (config/vitest.config.ts)

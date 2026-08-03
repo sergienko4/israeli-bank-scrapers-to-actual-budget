@@ -70,6 +70,7 @@ graph LR
   validate[Test & Lint]
   docs[Documentation Quality]
   security[CodeQL Security Scan]
+  semgrep[Semgrep Security Scan]
   trivy[Container Security Scan]
   licenses[License Compliance]
   sonar[SonarCloud Analysis]
@@ -83,13 +84,14 @@ graph LR
   validate --> pass
   docs --> pass
   security --> pass
+  semgrep --> pass
   trivy --> pass
   licenses --> pass
   sonar --> pass
   e2e --> pass
 ```
 
-8 parallel jobs at peak (well under GitHub Free's 20-concurrent limit).
+9 parallel jobs at peak (well under GitHub Free's 20-concurrent limit).
 
 ## Required check-name preservation
 
@@ -107,11 +109,26 @@ matches this list verbatim:
 | `SonarCloud Analysis`      | `pr.yml` → `sonar` job                 |
 | `E2E Tests / E2E Tests`    | `pr.yml` → `e2e` job → `_e2e-suite.yml`|
 
-Optional new check (not required):
+Optional new checks (not required — adding a name to the ruleset is a
+maintainer action, so new jobs gate merges through `ci-pass` instead):
 
-| Optional name | Emitter                          |
-|---------------|----------------------------------|
-| `CI Pass`     | `pr.yml` → `ci-pass` aggregator  |
+| Optional name            | Emitter                          |
+|--------------------------|----------------------------------|
+| `CI Pass`                | `pr.yml` → `ci-pass` aggregator  |
+| `Semgrep Security Scan`  | `pr.yml` → `semgrep` job         |
+
+## Release signal guard
+
+`Build & Audit` runs a `Release signal guard` step on pull requests. It fails
+the PR when `package.json` `dependencies` or `overrides` change, or when the
+Dockerfile `FROM` base image changes, under a title release-please will not
+release on — so a bump that ships inside the image can never merge silently.
+The Dockerfile is watched because Dependabot's `docker` ecosystem edits only
+that file, which a manifest-only comparison cannot see. The step lives inside
+an already-required job deliberately — a new top-level job would need a
+branch-protection ruleset change to be enforced. Policy:
+`scripts/release-signal-logic.mjs`; see
+[release-pipeline.md](release-pipeline.md).
 
 ## Central config: `.github/config/ci-config.yml`
 
@@ -260,9 +277,38 @@ mappings.
 
 ## Pre-commit hook
 
-`.husky/pre-commit` runs the same 18 gates locally and is **OUT OF SCOPE**
-for this consolidation per project mandate (CLAUDE.md). Any future drift
-between the hook and CI is the developer's responsibility.
+`.husky/pre-commit` runs the **commit stage** only: 12 fast, offline
+static gates (type-check ×3, `npm audit`, build, ESLint, Biome,
+markdownlint, config-structure, circular deps, coupling, PII scan).
+
+Every acceptance-stage gate runs in CI and **only** in CI:
+
+| Gate | Owning CI job |
+| --- | --- |
+| unit tests + coverage thresholds | `validate` (`validate:ci`) |
+| ESLint canary fixtures | `validate` (`validate:ci`) |
+| config manifest SSoT | `validate` |
+| TypeDoc generation | `build` |
+| markdown link check (lychee) | `docs` |
+| Semgrep | `semgrep` |
+| CodeQL | `security` |
+| Trivy + Docker image build | `trivy` |
+| mocked + Telegram E2E | `e2e` (`_e2e-suite.yml`) |
+
+Those gates left the hook because they are slow, need Docker or the
+network, and already have to pass before merge — running them twice
+bought no safety. The unit-test gate was also actively harmful locally:
+vitest spawns one fork per CPU, and on a busy workstation a fork that
+misses vitest's hardcoded 60-second startup budget is killed. Its tests
+then silently never run, and the resulting coverage shortfall fails the
+commit for a defect that does not exist. CI runs it on a quiet,
+right-sized machine.
+
+The hook no longer shells out to Docker, so a stopped Docker Desktop
+cannot block a commit.
+
+Nothing is unguarded: `ci-pass` aggregates every job above, so a gate
+that is missing locally still blocks the merge.
 
 ## Adding a new check
 

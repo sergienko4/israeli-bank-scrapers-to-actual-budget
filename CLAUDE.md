@@ -100,7 +100,7 @@ After creating every PR:
 
 ## Tech Stack
 
-- Node.js 22+, TypeScript 5.9.3 (strict), ES2022 modules
+- Node.js: engines floor 22+, CI and Docker image run 26; TypeScript 6 (strict), ES2022 modules
 - Vitest for testing, v8 coverage provider
 - Dependencies: @actual-app/api, @sergienko4/israeli-bank-scrapers (fork), cron-parser, pino, pino-pretty
 - devDependency: `@faker-js/faker` v10.5 — typed test factories
