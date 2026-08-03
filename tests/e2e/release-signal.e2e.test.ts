@@ -83,7 +83,7 @@ beforeAll(() => {
   git(['config', 'user.name', 'Fixture']);
   writeFixture('^8.6.1', NODE_24);
   git(['add', '.']);
-  git(['commit', '--quiet', '--no-verify', '-m', 'base']);
+  git(['commit', '--quiet', '-m', 'base']);
   baseSha = git(['rev-parse', 'HEAD']);
 });
 

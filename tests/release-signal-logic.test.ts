@@ -207,6 +207,19 @@ describe('parseBaseImages', () => {
   it('returns an empty list when there is no Dockerfile', () => {
     expect(parseBaseImages(undefined)).toEqual([]);
   });
+
+  it('skips a --platform flag and captures the image behind it', () => {
+    expect(parseBaseImages(`FROM --platform=$BUILDPLATFORM ${NODE_26}\n`)).toEqual([NODE_26]);
+  });
+
+  it('skips several flags before the image', () => {
+    const dockerfile = `FROM --platform=linux/amd64 --foo=bar ${NODE_26} AS builder\n`;
+    expect(parseBaseImages(dockerfile)).toEqual([NODE_26]);
+  });
+
+  it('ignores a FROM that declares a flag but no image', () => {
+    expect(parseBaseImages('FROM --platform=$BUILDPLATFORM\n')).toEqual([]);
+  });
 });
 
 describe('findShippedBaseImageChanges', () => {
@@ -232,6 +245,14 @@ describe('findShippedBaseImageChanges', () => {
   it('treats an added Dockerfile as a shipped change', () => {
     expect(findShippedBaseImageChanges('', `FROM ${NODE_26}\n`)).toEqual([
       { field: 'Dockerfile', name: 'FROM', from: undefined, to: NODE_26 },
+    ]);
+  });
+
+  it('still sees a bump when the image sits behind a --platform flag', () => {
+    const before = `FROM --platform=$BUILDPLATFORM ${NODE_24}\n`;
+    const after = `FROM --platform=$BUILDPLATFORM ${NODE_26}\n`;
+    expect(findShippedBaseImageChanges(before, after)).toEqual([
+      { field: 'Dockerfile', name: 'FROM', from: NODE_24, to: NODE_26 },
     ]);
   });
 });

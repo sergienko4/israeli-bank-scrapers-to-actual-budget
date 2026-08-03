@@ -45,8 +45,15 @@ export const SHIPPED_MANIFEST_FIELDS = Object.freeze(['dependencies', 'overrides
  * it has to reach them through a release. Dependabot's `docker` ecosystem
  * edits this line and nothing in `package.json`, so the manifest fields above
  * cannot see the change at all.
+ *
+ * Flags (`FROM --platform=$BUILDPLATFORM node:26-slim`) are skipped rather
+ * than captured. Capturing one would be worse than failing loudly: the flag
+ * is identical on both branches, so every base-image bump behind it would
+ * compare equal and merge unreleased — the exact silent bump this guards.
+ * The image may not itself start with `--`, so a flag-only `FROM` yields no
+ * match instead of reporting the flag as an image.
  */
-const FROM_PATTERN = /^[ \t]*FROM[ \t]+(?<image>\S+)/gim;
+const FROM_PATTERN = /^[ \t]*FROM(?:[ \t]+--\S+)*[ \t]+(?<image>(?!--)\S+)/gim;
 
 /**
  * Lists the base images a Dockerfile builds on, in build order.

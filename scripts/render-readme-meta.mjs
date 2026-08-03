@@ -31,6 +31,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
+import { parseBaseImages } from './release-signal-logic.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG_PATH = resolve(REPO_ROOT, '.github/config/ci-config.yml');
@@ -143,15 +144,18 @@ function renderSupportedBanks(config) {
  * Reads the Docker base image tag from the Dockerfile's first `FROM`.
  *
  * Derived rather than hardcoded so a Dependabot base-image bump cannot leave
- * the README claiming a runtime the image no longer ships. The digest is
+ * the README claiming a runtime the image no longer ships. Parsing is
+ * delegated to the release-signal guard's parser so the README and the guard
+ * can never disagree about what the image actually is — two parsers of one
+ * fact is what let the README go stale in the first place. The digest is
  * stripped because it is noise to a reader choosing a Node version.
  *
  * @returns The base image tag, or `unknown` when no `FROM` can be read.
  */
 function readDockerBaseImage() {
   if (!existsSync(DOCKERFILE_PATH)) return 'unknown';
-  const match = /^[ \t]*FROM[ \t]+(?<image>\S+)/im.exec(readFileSync(DOCKERFILE_PATH, 'utf8'));
-  return match?.groups?.image?.split('@')[0] ?? 'unknown';
+  const [image] = parseBaseImages(readFileSync(DOCKERFILE_PATH, 'utf8'));
+  return image?.split('@')[0] ?? 'unknown';
 }
 
 function renderTechStack(config, pkg) {
