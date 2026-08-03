@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { renderFile } from '../scripts/render-readme-meta.mjs';
 
 const CONFIG = {
@@ -131,5 +132,18 @@ describe('render-readme-meta', () => {
     expect(out).toContain('GHCR (primary, always available)');
     expect(out).toContain('Docker Hub (mirror, best-effort)');
     expect(out).not.toContain('\nOLD\n');
+  });
+});
+
+describe('docker base image derivation', () => {
+  it('renders the base image the Dockerfile actually declares', () => {
+    const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
+    const declared = /^[ \t]*FROM[ \t]+(?<image>\S+)/im.exec(dockerfile)?.groups?.image?.split('@')[0];
+    expect(declared).toBeDefined();
+
+    const input = '<!-- meta:tech-stack:start -->\n<!-- meta:tech-stack:end -->\n';
+    const out = renderFile(input, ['tech-stack'], CONFIG, PKG, 'test.md');
+
+    expect(out).toContain(`(Docker base: \`${declared}\`)`);
   });
 });

@@ -255,7 +255,7 @@ If a security vulnerability is discovered in a released version:
 - ✅ Secure directory permissions (755)
 - ✅ Read-only application files (cannot be tampered)
 - ✅ Base image pinned to digest (supply chain protection)
-- ✅ Minimal base image (node:22-slim)
+- ✅ Minimal base image (node:26-slim)
 - ✅ Health checks enabled (auto-restart on failure)
 - ✅ `cap_drop: ALL` + only `SYS_ADMIN` (least privilege)
 - ✅ `no-new-privileges` security option
@@ -274,7 +274,7 @@ If a security vulnerability is discovered in a released version:
 - ✅ npm audit: 0 vulnerabilities — **blocking CI check** (fails on HIGH+)
 - ✅ Automated dependency updates via Dependabot (npm, Actions, Docker)
 - ✅ CodeQL static analysis on every PR
-- ✅ Latest security patches applied (Node.js 22 LTS, TypeScript 5.9)
+- ✅ Latest security patches applied (Node.js 26, TypeScript 6)
 
 #### Build Security
 

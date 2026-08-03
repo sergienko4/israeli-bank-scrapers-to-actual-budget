@@ -35,6 +35,7 @@ import { parse as parseYaml } from 'yaml';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG_PATH = resolve(REPO_ROOT, '.github/config/ci-config.yml');
 const PACKAGE_JSON_PATH = resolve(REPO_ROOT, 'package.json');
+const DOCKERFILE_PATH = resolve(REPO_ROOT, 'Dockerfile');
 
 const MARKER_RE = /<!--\s*meta:([a-z][a-z0-9-]*):(start|end)\s*-->/g;
 
@@ -138,13 +139,28 @@ function renderSupportedBanks(config) {
   return lines.join('\n');
 }
 
+/**
+ * Reads the Docker base image tag from the Dockerfile's first `FROM`.
+ *
+ * Derived rather than hardcoded so a Dependabot base-image bump cannot leave
+ * the README claiming a runtime the image no longer ships. The digest is
+ * stripped because it is noise to a reader choosing a Node version.
+ *
+ * @returns The base image tag, or `unknown` when no `FROM` can be read.
+ */
+function readDockerBaseImage() {
+  if (!existsSync(DOCKERFILE_PATH)) return 'unknown';
+  const match = /^[ \t]*FROM[ \t]+(?<image>\S+)/im.exec(readFileSync(DOCKERFILE_PATH, 'utf8'));
+  return match?.groups?.image?.split('@')[0] ?? 'unknown';
+}
+
 function renderTechStack(config, pkg) {
   const nodeEng = pkg.engines?.node ?? config.runtime.node_engines;
   const tsVer = pkg.devDependencies?.typescript ?? 'unknown';
   const vitestVer = pkg.devDependencies?.vitest ?? 'unknown';
   const scraperVer = pkg.dependencies?.['@sergienko4/israeli-bank-scrapers'] ?? 'unknown';
   return [
-    `- **Node.js** ${nodeEng} (Docker base: \`node:24-slim\`)`,
+    `- **Node.js** ${nodeEng} (Docker base: \`${readDockerBaseImage()}\`)`,
     `- **TypeScript** ${tsVer} (strict mode, ES2022)`,
     `- **Vitest** ${vitestVer} (v8 coverage)`,
     `- **Scraper** [\`@sergienko4/israeli-bank-scrapers\`](https://github.com/sergienko4/israeli-bank-scrapers) ${scraperVer}`,
