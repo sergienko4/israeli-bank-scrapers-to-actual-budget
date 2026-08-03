@@ -4,15 +4,31 @@
 export MSYS_NO_PATHCONV=1
 
 # ── Commit-stage scope (Testing Diamond) ──────────────────────────
-# Heavy acceptance-stage gates run in GitHub CI ONLY, never in this hook:
-#   - Docker image build (--no-cache) + scraper-API smoke test
-#   - Trivy image scan (depends on the built image)
-#   - mocked E2E (test:e2e:mock) + Telegram E2E (test:e2e)
-# CI parity is enforced by .github/workflows/pr.yml (build / trivy / e2e
-# jobs) and _e2e-suite.yml (test:e2e:setup + test:e2e). Keeping only the
-# fast lint/type/static/unit gates locally holds commits to ~1-2 min and
-# avoids blocking on the GitHub-rate-limited camoufox fetch in the Docker
-# build. See chore(husky) PR moving these gates to CI-only.
+# This hook runs the commit stage ONLY: fast, deterministic, offline-ish
+# static analysis. Every acceptance-stage gate runs in GitHub CI, never
+# here. Nothing is dropped — each gate below names the CI job that owns
+# it, and .github/workflows/pr.yml `ci-pass` aggregates them all.
+#
+#   Docker image build + scraper smoke  → pr.yml `trivy` / `e2e`
+#   Trivy image scan                    → pr.yml `trivy`
+#   mocked + Telegram E2E               → _e2e-suite.yml
+#   unit tests + coverage thresholds    → pr.yml `validate` (validate:ci)
+#   ESLint canary fixtures              → pr.yml `validate` (validate:ci)
+#   config manifest SSoT gate           → pr.yml `validate`
+#   TypeDoc API generation              → pr.yml `build`
+#   markdown link check (lychee)        → pr.yml `docs`
+#   Semgrep security scan               → pr.yml `semgrep`
+#
+# Those gates were removed from the hook because they are slow, need
+# Docker or the network, and are already required to pass before merge.
+# The unit-test gate in particular spawns one fork per CPU and starves
+# itself on a busy workstation: a worker that misses vitest's hardcoded
+# 60s startup budget is killed, its tests silently never run, and the
+# resulting coverage shortfall fails the commit for a defect that does
+# not exist. CI runs it on a quiet, right-sized machine instead.
+#
+# The hook is now Docker-free, so a stopped Docker Desktop no longer
+# blocks committing. See docs/architecture/ci-pipeline.md.
 
 echo ""
 echo "🛑 MANDATORY QUALITY GATE INITIATED 🛑"
@@ -88,10 +104,10 @@ wait_gates() {
 }
 
 # ═══════════════════════════════════════════════════════════════════
-# PHASE 1: Independent gates (no dependencies — all parallel)
+# Commit stage: fast static gates only (all parallel)
 # ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "⚡ Phase 1/2: Running 16 independent gates in parallel..."
+echo "⚡ Running 12 commit-stage gates in parallel..."
 echo ""
 
 run_gate "1-typecheck"    "Type-checking TypeScript"       npm run type-check
@@ -101,13 +117,9 @@ run_gate "2-audit"        "Auditing dependencies"          npm audit --audit-lev
 run_gate "3-build"        "Compiling TypeScript"           npm run build
 run_gate "6-eslint"       "Running ESLint"                 npm run lint
 run_gate "6b-biome"       "Running Biome lint"             npm run lint:biome
-run_gate "7-semgrep"      "Running Semgrep security scan"  docker run --rm -v "$(pwd):/data" --workdir /data semgrep/semgrep@sha256:9fb6f44dc162b1e0aada85f072a95141844c61e3bfcedf40b8a46fecf208e986 semgrep scan --config auto --config .semgrep/ --error src/
 run_gate "8-markdownlint" "Linting markdown docs"          npm run lint:docs
 run_gate "9-configcheck"  "Checking config structure"      npm run lint:config-structure
-run_gate "10-manifest"    "Checking config manifest completeness" npm run lint:manifest
-run_gate "11-lychee"      "Checking markdown links"        docker run --rm -v "$(pwd):/data" --workdir /data -e GITHUB_TOKEN="${GITHUB_TOKEN:-}" lycheeverse/lychee@sha256:609d1bea17f053bee6df907017e4eb8a0163e90633a26fce3ce8aaba1a3df443 --config config/lychee/lychee.toml --no-progress '*.md' 'docs/**/*.md' '.github/**/*.md'
 run_gate "15-circular"    "Checking for circular deps in src/" npm run lint:circular
-run_gate "17-canaries"    "Verifying ESLint canary rules" npm run lint:canaries
 run_gate "18-coupling"    "Checking coupling regression"  npm run coupling:check
 run_gate "16-pii-check"  "Checking for PII in error messages" bash -c '
   # Catch interpolated PII variables in error/throw/fail messages
@@ -127,33 +139,15 @@ run_gate "16-pii-check"  "Checking for PII in error messages" bash -c '
 
 wait_gates \
   "1-typecheck" "1b-typecheck-e2e" "1c-typecheck-test" "2-audit" "3-build" \
-  "6-eslint" "6b-biome" "7-semgrep" \
-  "8-markdownlint" "9-configcheck" "10-manifest" "11-lychee" \
-  "15-circular" "17-canaries" "18-coupling" \
-  "16-pii-check"
-
-echo ""
-echo "✅ Phase 1 complete (16 gates passed)"
-
-# ═══════════════════════════════════════════════════════════════════
-# PHASE 2: Gates that need build output (parallel)
-# ═══════════════════════════════════════════════════════════════════
-echo ""
-echo "⚡ Phase 2/2: Running 2 build-dependent gates in parallel..."
-echo ""
-
-run_gate "4-typedoc"      "Generating TypeDoc API docs"    npm run docs
-run_gate "5-unittest"     "Running unit tests + coverage"  npm run test:unit
-
-wait_gates "4-typedoc" "5-unittest"
-
-echo ""
-echo "✅ Phase 2 complete (2 gates passed)"
+  "6-eslint" "6b-biome" "8-markdownlint" "9-configcheck" \
+  "15-circular" "18-coupling" "16-pii-check"
 
 # ────────────────────────────────────────────────────────────────
 echo ""
 echo "==========================================="
-echo "✅ ALL 18 GATES PASSED. COMMITTING."
-echo "   (Docker build, Trivy, mocked + Telegram E2E, CodeQL —"
-echo "    GitHub CI only: .github/workflows/pr.yml + _e2e-suite.yml)"
+echo "✅ ALL 12 COMMIT-STAGE GATES PASSED. COMMITTING."
+echo "   Acceptance stage runs in GitHub CI only:"
+echo "   unit tests + coverage, ESLint canaries, config manifest,"
+echo "   TypeDoc, lychee, Semgrep, CodeQL, Trivy, Docker build, E2E."
+echo "   See .github/workflows/pr.yml (job: ci-pass)."
 echo "==========================================="
