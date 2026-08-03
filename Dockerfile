@@ -1,7 +1,9 @@
-# Use Node.js 24 LTS (required by israeli-bank-scrapers)
+# Use Node.js 26 (current release line; LTS from October 2026).
+# Runtime dependencies set a floor, not a ceiling: israeli-bank-scrapers
+# requires >= 22.14.0 and @actual-app/api requires >= 20, so 26 satisfies both.
 # Using slim variant for smaller image size
 # Pin to digest for reproducibility and security
-FROM node:24-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4d1fe5db0e
+FROM node:26-slim@sha256:deae974a69e140f44f434ab29cb519fb5f8fe250fd364b8ca446bd0761acdc6a
 
 # Security labels and metadata
 LABEL maintainer="Israeli Bank Importer Contributors"
