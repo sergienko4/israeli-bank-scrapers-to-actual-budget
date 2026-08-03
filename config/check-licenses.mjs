@@ -7,42 +7,23 @@
  *
  * Run via: npm run lint:licenses
  * Included in validate:all and CI to catch violations before commit.
+ *
+ * license-compliance is used only to enumerate production packages and their
+ * declared licenses; the allow-list decision is made by
+ * config/license-policy.mjs, which documents why the library's own `--allow`
+ * matching is not used.
  */
 
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 
-/* ── Allowed licenses ─────────────────────────────────────────────── */
+import { ALLOWED_PROJECT_LICENSES, findLicenseViolations } from './license-policy.mjs';
 
-const ALLOWED_PROJECT_LICENSES = ['MIT'];
-
-const ALLOWED_DEPENDENCY_LICENSES = [
-  'MIT',
-  'ISC',
-  'Apache-2.0',
-  'BSD-2-Clause',
-  'BSD-3-Clause',
-  '0BSD',
-  'BlueOak-1.0.0',
-  'CC0-1.0',
-  'CC-BY-4.0',
-  'Python-2.0',
-  'MPL-2.0',
-  'AGPL-3.0-or-later',
-  'GPL-3.0-only',
-  '(MIT OR WTFPL)',
-  '(BSD-3-Clause AND Apache-2.0)',
-  '(BSD-2-Clause OR MIT OR Apache-2.0)',
-  'Unlicense',
-];
-
-// Packages excluded by name. Use sparingly; document the reason for each entry.
-const EXCLUDED_PACKAGES = [
-  // absurd-sql ships under MIT per its source repo but its package.json lacks
-  // a `license` field, so license-compliance reports UNKNOWN. Pulled in via
-  // @actual-app/core. https://github.com/jlongster/absurd-sql
-  'absurd-sql',
-];
+// Resolved through the package's own "exports" map so the gate keeps working
+// wherever npm hoists the dependency, and invoked with execFileSync plus an
+// argument array (never a shell string) per the repository's CodeQL rules.
+const CLI_ENTRY = createRequire(import.meta.url).resolve('license-compliance');
 
 /* ── Gate 1: Project license ──────────────────────────────────────── */
 
@@ -59,16 +40,36 @@ console.log(`✅ Project license: ${pkg.license}`);
 
 /* ── Gate 2: Dependency licenses ──────────────────────────────────── */
 
-const allowArg = ALLOWED_DEPENDENCY_LICENSES.join(';');
-const excludeArg = EXCLUDED_PACKAGES.join(';');
-
-try {
-  execSync(
-    `npx license-compliance --production --allow "${allowArg}" --exclude "${excludeArg}"`,
-    { stdio: 'inherit' },
+/**
+ * Enumerates every production dependency with its declared SPDX expression.
+ *
+ * @returns {Array<{ name: string, version: string, license: string }>} The reported packages.
+ */
+function readProductionPackages() {
+  const stdout = execFileSync(
+    process.execPath,
+    [CLI_ENTRY, '--production', '--format', 'json', '--report', 'detailed'],
+    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'inherit'] },
   );
-  console.log('✅ All dependency licenses are compliant');
-} catch {
-  console.error('❌ Dependency license violation detected (see above)');
+  return JSON.parse(stdout);
+}
+
+let packages;
+try {
+  packages = readProductionPackages();
+} catch (error) {
+  console.error(`❌ Unable to enumerate production dependencies: ${error.message}`);
   process.exit(1);
 }
+
+const violations = findLicenseViolations(packages);
+
+if (violations.length > 0) {
+  console.error('❌ Dependency license violation detected:');
+  for (const violation of violations) {
+    console.error(`   • ${violation.name}@${violation.version} — ${violation.license}`);
+  }
+  process.exit(1);
+}
+
+console.log(`✅ All ${packages.length} production dependency licenses are compliant`);
