@@ -90,8 +90,13 @@ packages** — that is the control working, not drift.
 When Dependabot bumps one of them, re-approve the new version:
 
 ```bash
-npm approve-scripts <pkg>@<new-version>
+npm approve-scripts <pkg>
 ```
+
+Pass the **bare package name**, not `<pkg>@<version>` — npm resolves the
+installed version itself and rejects an explicit version with `ENOMATCH`. The
+command swaps the pin in place, reporting `removed-stale <pkg>@<old>` and
+`added <pkg>@<new>`.
 
 Then commit the updated `allowScripts` entry alongside the bump.
 
