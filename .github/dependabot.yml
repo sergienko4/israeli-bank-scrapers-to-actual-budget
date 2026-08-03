@@ -22,9 +22,30 @@ updates:
       timezone: Asia/Jerusalem
     open-pull-requests-limit: 10
     labels: ["dependencies", "npm"]
+    # Production dependencies ship inside the published Docker image, so a
+    # bump changes what users actually run and MUST cut a release. `fix(deps)`
+    # is release-please-triggering (patch); the previous `chore(deps)` prefix
+    # was hidden from the changelog and produced no version bump, no tag and
+    # no image publish — scraper bumps had to be retitled by hand (see
+    # 91d959d, f5f39ec). Dev dependencies never reach the image, so they keep
+    # a non-triggering prefix. `include: scope` is deliberately omitted: it
+    # appended a second scope (`chore(deps)(deps):`), which the conventional
+    # commit parser cannot read, so those commits were dropped entirely.
     commit-message:
-      prefix: "chore(deps)"
-      include: scope
+      prefix: "fix(deps)"
+      prefix-development: "chore(deps-dev)"
+    ignore:
+      # TypeScript 7 (the native Go port) is rejected by two peers we depend
+      # on, so `npm ci` fails with ERESOLVE before any CI job runs:
+      #   typedoc@0.28.20            → typescript 5.0.x … 6.0.x
+      #   typescript-eslint@8.64.0   → typescript >=4.8.4 <6.1.0
+      # Neither ships TS 7 support on a stable release yet (only
+      # typedoc@1.0.0-dev.4 does). Resolving it would need --legacy-peer-deps
+      # or --force, which weakens the dependency gate. Drop this entry once
+      # both peers publish stable TS 7 ranges. Minor/patch updates within the
+      # supported major continue to be proposed.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     groups:
       # Dev tooling churns weekly and used to consume every available PR
       # slot (5 open dev PRs at once), starving runtime dependencies such
@@ -52,9 +73,10 @@ updates:
       timezone: Asia/Jerusalem
     open-pull-requests-limit: 2
     labels: ["dependencies", "docker"]
+    # The base image IS the shipped runtime, so a bump must cut a release for
+    # the same reason production npm dependencies do.
     commit-message:
-      prefix: "chore(docker)"
-      include: scope
+      prefix: "fix(docker)"
 
   # ── GitHub Actions ──────────────────────────────────────
   - package-ecosystem: github-actions
@@ -66,9 +88,11 @@ updates:
       timezone: Asia/Jerusalem
     open-pull-requests-limit: 2
     labels: ["dependencies", "github-actions"]
+    # Workflow actions run in CI only and never ship to users, so these stay
+    # non-triggering. `include: scope` is omitted here too — it produced the
+    # unparseable `chore(ci)(deps):` double scope (see ce02193).
     commit-message:
       prefix: "chore(ci)"
-      include: scope
     groups:
       actions-core:
         patterns:

@@ -188,6 +188,40 @@ Both image tags are byte-identical multi-arch manifest lists
 
 ---
 
+## Dependency bumps always cut a release
+
+A dependency that ships inside the published image changes what users actually
+run, so it must reach them as a tagged release — never as a silent merge.
+
+| Change | Dependabot prefix | Releases? |
+|--------|-------------------|-----------|
+| npm `dependencies` / `overrides` | `fix(deps)` | ✅ patch |
+| Dockerfile base image | `fix(docker)` | ✅ patch |
+| npm `devDependencies` | `chore(deps-dev)` | ❌ never ships |
+| GitHub Actions workflow pins | `chore(ci)` | ❌ never ships |
+
+Two mechanisms keep this true:
+
+1. **`.github/dependabot.yml`** sets `prefix`/`prefix-development` so runtime
+   bumps arrive already titled `fix(deps)`. It deliberately omits
+   `include: scope`, which used to append a second scope
+   (`chore(deps)(deps):`) that the conventional-commit parser cannot read — so
+   release-please dropped those commits entirely.
+2. **The `Release signal guard`** step in `pr.yml` → *Build & Audit* fails any
+   PR that changes `dependencies` or `overrides` under a non-releasing title.
+   Configuration alone is not a guarantee; the guard is the enforcement half.
+   Policy and messages live in `scripts/release-signal-logic.mjs`.
+
+Before this, runtime bumps merged as `chore(deps)` and produced no version
+bump, no tag and no image — scraper updates had to be retitled by hand.
+
+`typescript` majors are pinned back by an `ignore` entry: TypeScript 7 is
+rejected by the `typedoc` and `typescript-eslint` peer ranges, so `npm ci`
+fails with `ERESOLVE` before any job runs. Remove the entry once both peers
+publish stable TS 7 support.
+
+---
+
 ## Cutting a release (operator steps)
 
 1. Merge feature PRs to `main` with **conventional-commit** titles

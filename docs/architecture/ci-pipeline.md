@@ -113,6 +113,16 @@ Optional new check (not required):
 |---------------|----------------------------------|
 | `CI Pass`     | `pr.yml` → `ci-pass` aggregator  |
 
+## Release signal guard
+
+`Build & Audit` runs a `Release signal guard` step on pull requests. It fails
+the PR when `package.json` `dependencies` or `overrides` change under a title
+release-please will not release on, so a bump that ships inside the image can
+never merge silently. It lives inside an already-required job deliberately —
+a new top-level job would need a branch-protection ruleset change to be
+enforced. Policy: `scripts/release-signal-logic.mjs`; see
+[release-pipeline.md](release-pipeline.md).
+
 ## Central config: `.github/config/ci-config.yml`
 
 Holds all CI-only constants in one file:

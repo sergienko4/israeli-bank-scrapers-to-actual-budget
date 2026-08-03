@@ -30,6 +30,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/ci/setup
+      # Blocks a dependency change that ships inside the published image from
+      # merging under a title release-please will not release on. Runs inside
+      # this already-required job so no ruleset change is needed.
+      # See docs/architecture/release-pipeline.md.
+      - name: Release signal guard
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA"
+          node scripts/check-release-signal.mjs --title "$PR_TITLE" --base "$BASE_SHA"
       - run: npm audit --audit-level=moderate
       - run: npm run build
       - run: npm run docs
