@@ -46,6 +46,14 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /dev/shm:size=256m       # Browser shared memory
+    # Memory containment is mandatory, not optional. A stalled scrape can strand
+    # a browser process, and an unbounded container will consume host RAM until
+    # the machine wedges. The 2g ceiling is measured, not guessed: ~200 MB Node
+    # baseline + ~1 GB worst-case bank browser + ~300 MB OCR + headroom. Both
+    # forms are set because deploy.resources is ignored by Compose v1 while
+    # mem_limit is ignored by Swarm — together they cover every runtime.
+    mem_limit: 2g
+    memswap_limit: 2g            # No swap growth beyond the memory ceiling
     deploy:
       resources:
         limits:

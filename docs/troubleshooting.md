@@ -95,6 +95,34 @@ Run with `DRY_RUN=true` first to preview what would be imported.
 
 See [Oracle Cloud deployment guide](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/oracle-cloud.md) for details.
 
+## Container is OOM-killed or the host becomes unresponsive
+
+**Symptom:** the importer disappears mid-run, `docker inspect israeli-bank-importer --format '{{.State.OOMKilled}}'` reports `true`, or — with no memory limit set — the whole host stops responding while still accepting TCP connections.
+
+**Cause:** a bank scrape that exceeds its deadline used to leave its browser process running. Each retry launched another, so a single bank could hold several browsers at once and RSS climbed without bound. Fixed in v1.42.2: every attempt now closes the browsers it launched, whether it succeeded, failed, or timed out. You will see this line in the logs when a browser is reclaimed:
+
+```text
+🧹 Reclaimed 1 abandoned browser(s) after Scraping discount
+```
+
+**Fix:**
+
+1. Upgrade to v1.42.2 or later.
+2. Always run with a memory limit — this is the guard that keeps a runaway container from taking the host with it:
+
+   ```bash
+   docker run --memory 2g --memory-swap 2g ...        # docker run
+   ```
+
+   ```yaml
+   mem_limit: 2g                                       # docker compose
+   memswap_limit: 2g
+   ```
+
+   Kubernetes users set `resources.limits.memory: 2Gi`.
+
+`NODE_OPTIONS=--max-old-space-size` does **not** solve this: it caps only the JS heap, and most of the importer's memory is native browser allocation outside the heap. See [Docker Compose → Memory limits](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-compose.md).
+
 ## Proxy is set but ignored
 
 **Symptom:** `PROXY_SERVER` or `proxy.server` has no effect.
