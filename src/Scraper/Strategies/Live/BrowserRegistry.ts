@@ -58,12 +58,25 @@ function reportCloseFailure(error: unknown, logger: ILogger): boolean {
 export class BrowserRegistry {
   private readonly _live = new Set<IProviderBrowser>();
 
+  /** Logger of the cleanup in flight; non-null only while `closeAll` runs. */
+  private _cleanup: ILogger | null = null;
+
+  /** Closes already started for browsers that arrived after cleanup began. */
+  private _lateCloses: Promise<boolean>[] = [];
+
   /**
    * Records a browser the provider has just launched.
+   *
+   * A browser that arrives while cleanup is already running is closed at once
+   * rather than tracked. An abandoned scrape keeps launching browsers after its
+   * deadline fires, and the snapshot it just missed is the last one the attempt
+   * takes, so anything added afterwards would outlive the import.
    * @param browser - Provider browser handle to track.
    * @returns Number of browsers currently tracked.
    */
   public register(browser: IProviderBrowser): number {
+    const cleanup = this._cleanup;
+    if (cleanup !== null) return this.closeDuringCleanup(browser, cleanup);
     this._live.add(browser);
     return this._live.size;
   }
@@ -76,8 +89,51 @@ export class BrowserRegistry {
   public async closeAll(logger: ILogger): Promise<number> {
     const browsers = [...this._live];
     this._live.clear();
+    this._cleanup = logger;
+    try {
+      return await this.closeSnapshot(browsers, logger);
+    } finally {
+      this._cleanup = null;
+    }
+  }
+
+  /**
+   * Closes the snapshot cleanup captured, then drains anything that arrived after.
+   * @param browsers - Browsers tracked when cleanup started.
+   * @param logger - Logger used to report a failed or stalled close.
+   * @returns Number of browsers that were still connected and had to be closed.
+   */
+  private async closeSnapshot(
+    browsers: IProviderBrowser[], logger: ILogger
+  ): Promise<number> {
     const closing = browsers.map((b) => closeQuietly(b, logger));
     const closed = await Promise.all(closing);
-    return closed.filter(Boolean).length;
+    const late = await this.drainLateCloses();
+    return closed.filter(Boolean).length + late;
+  }
+
+  /**
+   * Closes a browser that appeared after cleanup took its snapshot.
+   * @param browser - Provider browser handle that arrived too late to track.
+   * @param logger - Logger used to report a failed or stalled close.
+   * @returns Number of browsers still tracked, which this browser never joins.
+   */
+  private closeDuringCleanup(browser: IProviderBrowser, logger: ILogger): number {
+    const closing = closeQuietly(browser, logger);
+    this._lateCloses.push(closing);
+    return this._live.size;
+  }
+
+  /**
+   * Awaits every late close, including any a late close itself triggers.
+   * @returns Number of late browsers that were still connected when closed.
+   */
+  private async drainLateCloses(): Promise<number> {
+    const pending = this._lateCloses;
+    if (pending.length === 0) return 0;
+    this._lateCloses = [];
+    const closed = await Promise.all(pending);
+    const nested = await this.drainLateCloses();
+    return closed.filter(Boolean).length + nested;
   }
 }

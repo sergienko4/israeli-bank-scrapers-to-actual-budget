@@ -132,6 +132,75 @@ describe('BrowserRegistry', () => {
   });
 });
 
+describe('BrowserRegistry cleanup race', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Builds a browser whose close blocks until the returned release is called.
+   * @returns The browser handle plus the function that completes its close.
+   */
+  function blockingBrowser() {
+    const browser = fakeBrowser();
+    let release = (): void => undefined;
+    browser.close.mockReturnValue(
+      new Promise<void>((resolve) => {
+        release = (): void => { resolve(); };
+      }));
+    return { browser, release: (): void => { release(); } };
+  }
+
+  it('closes a browser the provider launches while cleanup is in flight', async () => {
+    const registry = new BrowserRegistry();
+    const slow = blockingBrowser();
+    registry.register(slow.browser);
+
+    const pending = registry.closeAll(logger);
+    const late = fakeBrowser();
+    registry.register(late);
+    slow.release();
+    await pending;
+
+    expect(late.close).toHaveBeenCalledOnce();
+  });
+
+  it('counts a browser registered mid-cleanup in the reclaimed total', async () => {
+    const registry = new BrowserRegistry();
+    const slow = blockingBrowser();
+    registry.register(slow.browser);
+
+    const pending = registry.closeAll(logger);
+    registry.register(fakeBrowser());
+    slow.release();
+
+    expect(await pending).toBe(2);
+  });
+
+  it('leaves nothing tracked after a browser arrives mid-cleanup', async () => {
+    const registry = new BrowserRegistry();
+    const slow = blockingBrowser();
+    registry.register(slow.browser);
+
+    const pending = registry.closeAll(logger);
+    registry.register(fakeBrowser());
+    slow.release();
+    await pending;
+
+    expect(await registry.closeAll(logger)).toBe(0);
+  });
+
+  it('tracks browsers normally again once cleanup has finished', async () => {
+    const registry = new BrowserRegistry();
+    await registry.closeAll(logger);
+
+    const next = fakeBrowser();
+
+    expect(registry.register(next)).toBe(1);
+    expect(next.close).not.toHaveBeenCalled();
+  });
+});
+
 describe('BrowserRegistry deadline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
