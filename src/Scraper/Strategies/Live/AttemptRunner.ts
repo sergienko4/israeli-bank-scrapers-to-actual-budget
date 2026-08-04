@@ -80,8 +80,29 @@ function executeAttempt(
   const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig);
   const label = `Scraping ${scrapeOpts.bankId}`;
   const params = { deps, ...initialized, logger: scrapeOpts.logger, label };
+  return runAttemptThenSeal(retryStrategy, params);
+}
+
+/**
+ * Runs the retry loop, then seals the registry because no retry can follow.
+ *
+ * Every retry reclaims its own browsers, but a scrape abandoned by the timeout
+ * keeps running and can launch one after the final reclaim has already
+ * happened. Sealing closes what the attempt still holds and closes anything
+ * arriving later on the spot, so nothing outlives the attempt.
+ * @param retryStrategy - Retry policy applied around the timed scrape.
+ * @param params - Timeout wrapper inputs carrying the browser registry.
+ * @returns Provider scrape result returned by israeli-bank-scrapers.
+ */
+async function runAttemptThenSeal(
+  retryStrategy: IRetryStrategy, params: ITimeoutScrapeParams,
+): Promise<IScraperScrapingResult> {
   const wrapped = buildTimeoutWrappedScrape(params);
-  return retryStrategy.execute(wrapped, label);
+  try {
+    return await retryStrategy.execute(wrapped, params.label);
+  } finally {
+    await sealBrowsers(params);
+  }
 }
 
 /**
@@ -132,6 +153,26 @@ async function wrapScrapePromise(params: ITimeoutScrapeParams): Promise<IScraper
  */
 async function reclaimBrowsers(params: ITimeoutScrapeParams): Promise<number> {
   const reclaimed = await params.browsers.closeAll(params.logger);
+  return reportReclaimed(reclaimed, params);
+}
+
+/**
+ * Closes browsers still held once the attempt can no longer retry.
+ * @param params - Timeout wrapper inputs carrying the browser registry.
+ * @returns Number of still-running browsers reclaimed by the seal.
+ */
+async function sealBrowsers(params: ITimeoutScrapeParams): Promise<number> {
+  const reclaimed = await params.browsers.seal(params.logger);
+  return reportReclaimed(reclaimed, params);
+}
+
+/**
+ * Reports how many browsers a reclaim closed, staying silent when none did.
+ * @param reclaimed - Number of browsers the reclaim had to close.
+ * @param params - Timeout wrapper inputs carrying the logger and label.
+ * @returns The reclaimed count, unchanged, for the caller to surface.
+ */
+function reportReclaimed(reclaimed: number, params: ITimeoutScrapeParams): number {
   if (reclaimed > 0) {
     const count = String(reclaimed);
     params.logger.info(`  🧹 Reclaimed ${count} abandoned browser(s) after ${params.label}`);

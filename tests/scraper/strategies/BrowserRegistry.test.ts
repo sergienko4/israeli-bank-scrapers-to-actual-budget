@@ -201,6 +201,49 @@ describe('BrowserRegistry cleanup race', () => {
   });
 });
 
+describe('BrowserRegistry seal', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('closes the browsers tracked when the attempt is sealed', async () => {
+    const registry = new BrowserRegistry();
+    const live = fakeBrowser();
+    registry.register(live);
+
+    expect(await registry.seal(logger)).toBe(1);
+    expect(live.close).toHaveBeenCalledOnce();
+  });
+
+  it('closes a browser the abandoned scrape launches after the attempt ends', async () => {
+    const registry = new BrowserRegistry();
+    await registry.seal(logger);
+
+    const stray = fakeBrowser();
+    registry.register(stray);
+
+    expect(stray.close).toHaveBeenCalledOnce();
+  });
+
+  it('never tracks a browser that arrives after the attempt ends', async () => {
+    const registry = new BrowserRegistry();
+    await registry.seal(logger);
+
+    expect(registry.register(fakeBrowser())).toBe(0);
+  });
+
+  it('keeps refusing browsers even after a later cleanup runs', async () => {
+    const registry = new BrowserRegistry();
+    await registry.seal(logger);
+    await registry.closeAll(logger);
+
+    const stray = fakeBrowser();
+    registry.register(stray);
+
+    expect(stray.close).toHaveBeenCalledOnce();
+  });
+});
+
 describe('BrowserRegistry deadline', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -61,22 +61,25 @@ export class BrowserRegistry {
   /** Logger of the cleanup in flight; non-null only while `closeAll` runs. */
   private _cleanup: ILogger | null = null;
 
+  /** Logger kept once the attempt is over; non-null from `seal` onwards. */
+  private _sealed: ILogger | null = null;
+
   /** Closes already started for browsers that arrived after cleanup began. */
   private _lateCloses: Promise<boolean>[] = [];
 
   /**
    * Records a browser the provider has just launched.
    *
-   * A browser that arrives while cleanup is already running is closed at once
-   * rather than tracked. An abandoned scrape keeps launching browsers after its
-   * deadline fires, and the snapshot it just missed is the last one the attempt
-   * takes, so anything added afterwards would outlive the import.
+   * A browser that arrives while cleanup is running, or after the attempt has
+   * been sealed, is closed at once rather than tracked. An abandoned scrape
+   * keeps launching browsers after its deadline fires, and once the attempt is
+   * over no later cleanup exists to collect them.
    * @param browser - Provider browser handle to track.
    * @returns Number of browsers currently tracked.
    */
   public register(browser: IProviderBrowser): number {
-    const cleanup = this._cleanup;
-    if (cleanup !== null) return this.closeDuringCleanup(browser, cleanup);
+    const closer = this._cleanup ?? this._sealed;
+    if (closer !== null) return this.closeDuringCleanup(browser, closer);
     this._live.add(browser);
     return this._live.size;
   }
@@ -98,6 +101,21 @@ export class BrowserRegistry {
   }
 
   /**
+   * Closes every tracked browser and refuses to track any more.
+   *
+   * `closeAll` runs after every retry, so it cannot latch — the next retry has
+   * to be able to track its own browsers. Sealing marks the point where no
+   * further retry follows, so a browser an abandoned scrape launches from here
+   * on is closed on arrival instead of outliving the import.
+   * @param logger - Logger used to report browsers that were still running.
+   * @returns Number of browsers that were still connected and had to be closed.
+   */
+  public async seal(logger: ILogger): Promise<number> {
+    this._sealed = logger;
+    return await this.closeAll(logger);
+  }
+
+  /**
    * Closes the snapshot cleanup captured, then drains anything that arrived after.
    * @param browsers - Browsers tracked when cleanup started.
    * @param logger - Logger used to report a failed or stalled close.
@@ -114,13 +132,17 @@ export class BrowserRegistry {
 
   /**
    * Closes a browser that appeared after cleanup took its snapshot.
+   *
+   * Only a cleanup in flight waits for the close; one that arrives after the
+   * attempt was sealed is closed without being queued, so a long-lived registry
+   * cannot accumulate settled promises.
    * @param browser - Provider browser handle that arrived too late to track.
    * @param logger - Logger used to report a failed or stalled close.
    * @returns Number of browsers still tracked, which this browser never joins.
    */
   private closeDuringCleanup(browser: IProviderBrowser, logger: ILogger): number {
     const closing = closeQuietly(browser, logger);
-    this._lateCloses.push(closing);
+    if (this._cleanup !== null) this._lateCloses.push(closing);
     return this._live.size;
   }
 

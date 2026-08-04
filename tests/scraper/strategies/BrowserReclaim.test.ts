@@ -254,6 +254,19 @@ describe('live scrape browser reclamation', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('closes a browser the abandoned scrape launches after the attempt ends', async () => {
+    mockScraper.scrape.mockImplementation(async () => {
+      await launchBrowser();
+      return await new Promise(() => undefined);
+    });
+
+    await makeStrategy(abandoningTimeout()).scrape(makeOpts()).catch(() => undefined);
+    const stray = await launchBrowser();
+
+    expect(stray.close).toHaveBeenCalledOnce();
+    expect(stray.isConnected()).toBe(false);
+  });
 });
 
 describe('live scrape browser reclamation with the real timeout wrapper', () => {
