@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.2...v1.42.3) (2026-08-04)
+
+
+### Fixed
+
+* pin NODE_ENV to stop scraper logger leak ([#578](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/578)) ([41be0af](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/41be0afcab3ff4fb4688c25111ec0dda6f60c4e7))
+
 ## [1.42.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.1...v1.42.2) (2026-08-04)
 
 
