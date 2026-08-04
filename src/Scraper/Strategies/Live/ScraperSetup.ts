@@ -56,7 +56,7 @@ type PrepareBrowserHook = NonNullable<ILaunchingScraperOptions['prepareBrowser']
  * Provider options subset that accepts the browser lifecycle hook.
  * `companyId` is included so the type is not weak and the union assigns.
  */
-interface IBrowserHookTarget {
+export interface IBrowserHookTarget {
   companyId: ScraperOptions['companyId'];
   prepareBrowser?: PrepareBrowserHook;
 }
