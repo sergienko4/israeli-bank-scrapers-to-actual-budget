@@ -36,7 +36,7 @@ This is NOT optional. If you skip this checklist you WILL introduce bugs that Co
 4. **FULL hook cycle (NEVER skip):** just `git commit`, then `git push` — verification is split across two stages:
    - `git commit` → 5 commit-stage gates: type-check (`src/`), cached ESLint, Biome, config-structure, PII scan
    - `git push` → 9 push-stage gates: `type-check:test`, `type-check:e2e`, audit, build, TypeDoc, uncached ESLint, markdownlint, circular-dep, coupling
-   - Neither hook uses Docker. Unit tests, Semgrep, Trivy, Docker build, link-check, mocked + Telegram E2E run in CI only.
+   - Neither hook uses Docker. Unit tests, Semgrep, Trivy, Docker image build, link-check, mocked + Telegram E2E run in CI only — but a local `docker build` is still required before opening a PR (step 5), because the hooks cannot catch a broken image.
 5. `docker build -t israeli-bank-importer:test .`
 6. Write E2E tests for every new feature — unit tests + E2E tests are BOTH required
 7. Update docs: README.md, task files, config.json.example (CHANGELOG is auto-generated)
