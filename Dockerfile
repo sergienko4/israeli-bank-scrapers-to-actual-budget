@@ -146,6 +146,16 @@ USER node
 # Security: Remove write permissions from application files
 RUN chmod -R a-w /app/dist /app/node_modules 2>/dev/null || true
 
+# Production logging mode.
+# Declared after the build so `npm ci` still installs devDependencies.
+# The scraper library only memoises its root logger when a log file is set, and
+# outside production it attaches a pino-pretty transport. pino({ transport })
+# starts a thread-stream worker thread per logger, so an un-memoised logger
+# leaks one worker (4 MB SharedArrayBuffer + a process exit listener) per log
+# call. Measured on a real scrape: 14,336 MB peak RSS (OOM-killed) unset versus
+# 1,008 MB set. See docs/deployment/docker-run.md before overriding this.
+ENV NODE_ENV=production
+
 # Health check (basic process check)
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
   CMD ps aux | grep -q "[n]ode dist/Scheduler.js" || exit 1
