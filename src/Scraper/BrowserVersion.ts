@@ -32,14 +32,22 @@ function manifestPath(): string {
 
 /**
  * Reads the browser manifest, treating any read or parse failure as absent.
+ *
+ * `JSON.parse` accepts bare `null` and scalars, so the parsed value is checked
+ * before it is trusted. Without that check a manifest holding `null` would
+ * satisfy the type assertion and then throw while being formatted, outside this
+ * `try`, turning an unreadable manifest into a failed startup.
  * @returns Procedure carrying the parsed manifest, or a failure.
  */
 function readManifest(): Procedure<IBrowserManifest> {
   const file = manifestPath();
   try {
     const raw = fs.readFileSync(file, 'utf8');
-    const parsed = JSON.parse(raw) as IBrowserManifest;
-    return succeed(parsed);
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== 'object') {
+      return fail(`Camoufox manifest at ${file} is not a JSON object`, { status: 'not-found' });
+    }
+    return succeed(parsed as IBrowserManifest);
   } catch (error: unknown) {
     const reason = errorMessage(error);
     return fail(`Camoufox manifest unavailable at ${file}: ${reason}`, { status: 'not-found' });

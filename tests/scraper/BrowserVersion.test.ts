@@ -105,6 +105,20 @@ describe('describeBrowserVersion', () => {
     expect(!result.success && result.message).toContain('EACCES');
   });
 
+  it('fails instead of throwing when the manifest is JSON null', () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(null));
+
+    expect(() => describeBrowserVersion()).not.toThrow();
+    expect(describeBrowserVersion().success).toBe(false);
+  });
+
+  it('fails when the manifest is a JSON scalar rather than an object', () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify('152.0.4'));
+
+    expect(() => describeBrowserVersion()).not.toThrow();
+    expect(describeBrowserVersion().success).toBe(false);
+  });
+
   it('never throws, so a broken manifest cannot block startup', () => {
     vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error('EACCES: permission denied');
