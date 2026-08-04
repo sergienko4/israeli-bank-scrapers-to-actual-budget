@@ -32,6 +32,18 @@ const SIZE_MULTIPLIERS: Record<string, number> = {
 interface IComposeService {
   readonly mem_limit?: string;
   readonly memswap_limit?: string;
+  readonly deploy?: {
+    readonly resources?: { readonly limits?: { readonly memory?: string } };
+  };
+}
+
+/**
+ * Reads the Swarm-side memory limit declared under deploy.resources.
+ * @param service - Parsed importer service block.
+ * @returns The declared Swarm memory limit, or undefined when absent.
+ */
+function swarmLimit(service: IComposeService): string | undefined {
+  return service.deploy?.resources?.limits?.memory;
 }
 
 /**
@@ -85,6 +97,15 @@ describe.each(SHIPPED_COMPOSE_FILES)('%s memory ceiling', (file) => {
   it('pins swap to the memory limit, leaving no unbounded swap headroom', () => {
     const service = readImporterService(file);
     expect(service.memswap_limit).toBe(service.mem_limit);
+  });
+
+  it('declares a Swarm memory limit so deploy runtimes are capped too', () => {
+    expect(swarmLimit(readImporterService(file))).toBeDefined();
+  });
+
+  it('keeps the Swarm limit identical to the Compose limit', () => {
+    const service = readImporterService(file);
+    expect(swarmLimit(service)).toBe(service.mem_limit);
   });
 
   it('sets a ceiling large enough to complete a bank import', () => {
