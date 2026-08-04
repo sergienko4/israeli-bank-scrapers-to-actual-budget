@@ -17,7 +17,7 @@ export MSYS_NO_PATHCONV=1
 # this uncached run is what the branch is actually judged on.
 #
 # Acceptance-stage gates (unit tests + coverage, Docker build, Trivy,
-# Semgrep, CodeQL, mocked + Telegram E2E, TypeDoc, lychee, ESLint canaries)
+# Semgrep, CodeQL, mocked + Telegram E2E, lychee, ESLint canaries)
 # still run in GitHub CI only. See docs/architecture/ci-pipeline.md.
 
 . "$(dirname "$0")/../config/hooks/gate-runner.sh"
@@ -66,6 +66,6 @@ echo "==========================================="
 echo "✅ ALL 9 PUSH-STAGE GATES PASSED. PUSHING."
 echo "   Acceptance stage runs in GitHub CI only:"
 echo "   unit tests + coverage, ESLint canaries, config manifest,"
-echo "   TypeDoc, lychee, Semgrep, CodeQL, Trivy, Docker build, E2E."
+echo "   lychee, Semgrep, CodeQL, Trivy, Docker build, E2E."
 echo "   See .github/workflows/pr.yml (job: ci-pass)."
 echo "==========================================="

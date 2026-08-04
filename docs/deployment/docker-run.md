@@ -61,7 +61,9 @@ docker run -d \
 
 `--memory` is not optional for a long-running deployment. Without a cgroup
 ceiling a stalled scrape can consume every byte of host RAM before the kernel
-reclaims it — see [Hardened defaults](#hardened-defaults) for the sizing.
+reclaims it — see
+[Hardened defaults](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-run.md#hardened-defaults)
+for the sizing.
 
 ## Hardened defaults
 
