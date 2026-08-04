@@ -44,25 +44,26 @@ echo "==========================================="
 gate_init "prepush"
 
 echo ""
-echo "⚡ Running 8 push-stage gates in parallel..."
+echo "⚡ Running 9 push-stage gates in parallel..."
 echo ""
 
 run_gate "1b-typecheck-e2e"  "Type-checking tests/e2e/"           npm run type-check:e2e
 run_gate "1c-typecheck-test" "Type-checking tests/"               npm run type-check:test
 run_gate "2-audit"           "Auditing dependencies"              npm audit --audit-level=moderate
 run_gate "3-build"           "Compiling TypeScript"               npm run build
+run_gate "3b-typedoc"        "Generating API docs"                npm run docs
 run_gate "6-eslint-full"     "Running ESLint (uncached)"          npm run lint
 run_gate "8-markdownlint"    "Linting markdown docs"              npm run lint:docs
 run_gate "15-circular"       "Checking for circular deps in src/" npm run lint:circular
 run_gate "18-coupling"       "Checking coupling regression"       npm run coupling:check
 
 wait_gates \
-  "1b-typecheck-e2e" "1c-typecheck-test" "2-audit" "3-build" \
+  "1b-typecheck-e2e" "1c-typecheck-test" "2-audit" "3-build" "3b-typedoc" \
   "6-eslint-full" "8-markdownlint" "15-circular" "18-coupling"
 
 echo ""
 echo "==========================================="
-echo "✅ ALL 8 PUSH-STAGE GATES PASSED. PUSHING."
+echo "✅ ALL 9 PUSH-STAGE GATES PASSED. PUSHING."
 echo "   Acceptance stage runs in GitHub CI only:"
 echo "   unit tests + coverage, ESLint canaries, config manifest,"
 echo "   TypeDoc, lychee, Semgrep, CodeQL, Trivy, Docker build, E2E."

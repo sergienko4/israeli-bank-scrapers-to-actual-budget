@@ -288,9 +288,9 @@ Answers **"is the snapshot I am recording internally correct?"** — 5 gates:
 
 ### Push stage — `.husky/pre-push`
 
-Answers **"is what leaves this machine correct as a whole?"** — 8 gates:
-`type-check:test`, `type-check:e2e`, `npm audit`, build, ESLint (uncached),
-markdownlint, circular deps, coupling.
+Answers **"is what leaves this machine correct as a whole?"** — 9 gates:
+`type-check:test`, `type-check:e2e`, `npm audit`, build, TypeDoc, ESLint
+(uncached), markdownlint, circular deps, coupling.
 
 A push that only deletes a remote branch ships no code, so the hook detects
 the all-zero local SHA and exits without running anything.
@@ -300,13 +300,19 @@ ESLint appears in both stages deliberately. The commit stage lints against
 invalidation, so the push stage re-runs it with no cache at all and that
 uncached run is what the branch is judged on.
 
+TypeDoc is a push gate rather than a CI-only one because it fails on a class
+of error nothing else catches: an interface referenced by an exported
+signature but not itself exported. That is a real API-surface defect, and
+finding it in CI costs a full round-trip to learn something a local 23s gate
+already knew.
+
 ### Why this split
 
 The gates run in parallel, so a stage costs its slowest gate plus the
 contention between them, not the sum. Measured on this repo (minimum of
 three alternating runs, to discount ambient load): the previous single
 twelve-gate hook took **35s**, the commit stage now takes **24s** — a 31%
-cut on the operation performed most often — and the push stage adds **37s**
+cut on the operation performed most often — and the push stage adds **40s**
 once per push rather than once per commit.
 
 The win is 31% rather than 60% because the two tall poles, `type-check` and
@@ -323,7 +329,6 @@ Every acceptance-stage gate runs in CI and **only** in CI:
 | unit tests + coverage thresholds | `validate` (`validate:ci`) |
 | ESLint canary fixtures | `validate` (`validate:ci`) |
 | config manifest SSoT | `validate` |
-| TypeDoc generation | `build` |
 | markdown link check (lychee) | `docs` |
 | Semgrep | `semgrep` |
 | CodeQL | `security` |
