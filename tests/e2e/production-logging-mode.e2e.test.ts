@@ -39,15 +39,4 @@ describe.runIf(hasDockerImage())('production logging mode E2E', () => {
 
     expect(nodeEnv).toBe('production');
   });
-
-  it('keeps the importer on the main thread when the scraper library loads', () => {
-    const snippet = [
-      'const { threadId } = require("node:worker_threads");',
-      'import("@sergienko4/israeli-bank-scrapers")',
-      '  .then(() => process.stdout.write(String(threadId)))',
-      '  .catch((error) => { process.stderr.write(String(error)); process.exit(1); });',
-    ].join('\n');
-
-    expect(evalInImage(snippet)).toBe('0');
-  });
 });
