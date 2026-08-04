@@ -93,10 +93,12 @@ When Dependabot bumps one of them, re-approve the new version:
 npm approve-scripts <pkg>
 ```
 
-Pass the **bare package name**, not `<pkg>@<version>` — npm resolves the
-installed version itself and rejects an explicit version with `ENOMATCH`. The
-command swaps the pin in place, reporting `removed-stale <pkg>@<old>` and
-`added <pkg>@<new>`.
+Pass the **bare package name**. npm resolves the installed version itself, so
+this form works on every npm version. A `<pkg>@<version>` argument is only
+understood by **npm 11.17.0+**
+([npm/cli#9541](https://github.com/npm/cli/pull/9541)); on older npm it fails
+with `ENOMATCH`. Either way the command swaps the pin in place, reporting
+`removed-stale <pkg>@<old>` and `added <pkg>@<new>`.
 
 Then commit the updated `allowScripts` entry alongside the bump.
 
