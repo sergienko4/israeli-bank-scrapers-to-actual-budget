@@ -101,4 +101,47 @@ describe('ImportProcessRunner.spawnImport', () => {
       expect.stringContaining('Import killed by signal: SIGTERM')
     );
   });
+
+  it('reports SIGKILL as the conventional out-of-memory exit code 137', async () => {
+    const child = new EventEmitter() as EventEmitter & { stdio?: unknown };
+    mockSpawn.mockImplementation(() => child);
+    const pending = spawnImport();
+    setImmediate(() => child.emit('exit', null, 'SIGKILL'));
+    const code = await pending;
+    expect(code).toBe(137);
+  });
+
+  it('explains that a SIGKILLed child ran out of memory', async () => {
+    const child = new EventEmitter() as EventEmitter & { stdio?: unknown };
+    mockSpawn.mockImplementation(() => child);
+    const pending = spawnImport();
+    setImmediate(() => child.emit('exit', null, 'SIGKILL'));
+    await pending;
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('out of memory')
+    );
+  });
+
+  it('points the operator at the memory limit when a child is OOM-killed', async () => {
+    const child = new EventEmitter() as EventEmitter & { stdio?: unknown };
+    mockSpawn.mockImplementation(() => child);
+    const pending = spawnImport();
+    setImmediate(() => child.emit('exit', null, 'SIGKILL'));
+    await pending;
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('mem_limit')
+    );
+  });
+
+  it('does not claim out-of-memory when the child exits non-zero on its own', async () => {
+    const child = new EventEmitter() as EventEmitter & { stdio?: unknown };
+    mockSpawn.mockImplementation(() => child);
+    const pending = spawnImport();
+    setImmediate(() => child.emit('exit', 2, null));
+    const code = await pending;
+    expect(code).toBe(2);
+    expect(mockLogger.error).not.toHaveBeenCalledWith(
+      expect.stringContaining('out of memory')
+    );
+  });
 });
