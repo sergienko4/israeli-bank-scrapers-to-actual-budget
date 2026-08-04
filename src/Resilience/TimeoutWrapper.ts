@@ -31,6 +31,8 @@ export class TimeoutWrapper implements ITimeoutWrapper {
 
   /**
    * Builds a promise that rejects with a TimeoutError once the deadline elapses.
+   * The timer is cleared on either settlement, and both outcomes are handled so
+   * a rejecting operation cannot surface as an unhandled rejection.
    * @param promise - The original operation; its settlement clears the timer.
    * @param timeoutMs - Maximum allowed duration in milliseconds.
    * @param operationName - Label used in the TimeoutError message.
@@ -43,7 +45,7 @@ export class TimeoutWrapper implements ITimeoutWrapper {
       const timer = globalThis.setTimeout(() => {
         reject(new this._errorFactory(operationName, timeoutMs));
       }, timeoutMs);
-      void promise.finally(() => { clearTimeout(timer); });
+      void promise.catch(() => undefined).finally(() => { clearTimeout(timer); });
     });
   }
 }
