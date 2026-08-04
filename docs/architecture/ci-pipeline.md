@@ -275,11 +275,52 @@ mappings.
 - **github-actions** — 4 groups (actions-core, docker-actions, codeql,
   security-actions).
 
-## Pre-commit hook
+## Git hooks
 
-`.husky/pre-commit` runs the **commit stage** only: 12 fast, offline
-static gates (type-check ×3, `npm audit`, build, ESLint, Biome,
-markdownlint, config-structure, circular deps, coupling, PII scan).
+Local verification is split across two stages so the cost lands where it
+belongs. Nothing was dropped or weakened when the stages were separated —
+every gate below still runs before any commit reaches the remote.
+
+### Commit stage — `.husky/pre-commit`
+
+Answers **"is the snapshot I am recording internally correct?"** — 5 gates:
+`type-check` (src), ESLint (cached), Biome, config-structure, PII scan.
+
+### Push stage — `.husky/pre-push`
+
+Answers **"is what leaves this machine correct as a whole?"** — 9 gates:
+`type-check:test`, `type-check:e2e`, `npm audit`, build, TypeDoc, ESLint
+(uncached), markdownlint, circular deps, coupling.
+
+A push that only deletes a remote branch ships no code, so the hook detects
+the all-zero local SHA and exits without running anything.
+
+ESLint appears in both stages deliberately. The commit stage lints against
+`.eslintcache` for speed; a cache is only ever as trustworthy as its
+invalidation, so the push stage re-runs it with no cache at all and that
+uncached run is what the branch is judged on.
+
+TypeDoc is a push gate rather than a CI-only one because it fails on a class
+of error nothing else catches: an interface referenced by an exported
+signature but not itself exported. That is a real API-surface defect, and
+finding it in CI costs a full round-trip to learn something a local 23s gate
+already knew.
+
+### Why this split
+
+The gates run in parallel, so a stage costs its slowest gate plus the
+contention between them, not the sum. Measured on this repo (minimum of
+three alternating runs, to discount ambient load): the previous single
+twelve-gate hook took **35s**, the commit stage now takes **24s** — a 31%
+cut on the operation performed most often — and the push stage adds **40s**
+once per push rather than once per commit.
+
+The win is 31% rather than 60% because the two tall poles, `type-check` and
+ESLint, both stay in the commit stage: each must build the TypeScript
+program before it can report anything, and that build is the floor for the
+stage. Gates cheaper than that floor were free to keep, so they were kept.
+
+### Acceptance stage — CI only
 
 Every acceptance-stage gate runs in CI and **only** in CI:
 
@@ -288,14 +329,13 @@ Every acceptance-stage gate runs in CI and **only** in CI:
 | unit tests + coverage thresholds | `validate` (`validate:ci`) |
 | ESLint canary fixtures | `validate` (`validate:ci`) |
 | config manifest SSoT | `validate` |
-| TypeDoc generation | `build` |
 | markdown link check (lychee) | `docs` |
 | Semgrep | `semgrep` |
 | CodeQL | `security` |
 | Trivy + Docker image build | `trivy` |
 | mocked + Telegram E2E | `e2e` (`_e2e-suite.yml`) |
 
-Those gates left the hook because they are slow, need Docker or the
+Those gates left the hooks because they are slow, need Docker or the
 network, and already have to pass before merge — running them twice
 bought no safety. The unit-test gate was also actively harmful locally:
 vitest spawns one fork per CPU, and on a busy workstation a fork that
@@ -304,8 +344,8 @@ then silently never run, and the resulting coverage shortfall fails the
 commit for a defect that does not exist. CI runs it on a quiet,
 right-sized machine.
 
-The hook no longer shells out to Docker, so a stopped Docker Desktop
-cannot block a commit.
+Neither hook shells out to Docker, so a stopped Docker Desktop cannot
+block a commit or a push.
 
 Nothing is unguarded: `ci-pass` aggregates every job above, so a gate
 that is missing locally still blocks the merge.

@@ -45,7 +45,7 @@ COPY tsconfig.json ./
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN npm install -g npm@latest \
     && NPM_MODS=/usr/local/lib/node_modules/npm/node_modules \
-    && PATCH_PKGS="minimatch tar picomatch brace-expansion undici" \
+    && PATCH_PKGS="minimatch tar picomatch brace-expansion undici ip-address" \
     && for pkg in $PATCH_PKGS; do \
          cd /tmp \
          && npm pack "${pkg}@latest" --quiet \
@@ -108,6 +108,9 @@ RUN ARCH=$(uname -m) && \
     fi && \
     rm -rf /tmp/camoufox-precache && \
     echo "Validating Camoufox binary for $ARCH..." && \
+    [ -f /home/node/.cache/camoufox/version.json ] || \
+      (echo "ERROR: Camoufox version manifest missing — startup banner would be blank" && exit 1) && \
+    node -e "const m=JSON.parse(require('node:fs').readFileSync('/home/node/.cache/camoufox/version.json','utf8')); if(typeof m.version!=='string'||m.version.trim()===''){console.error('ERROR: Camoufox manifest declares no usable version');process.exit(1)}" && \
     head -c 4 /home/node/.cache/camoufox/camoufox-bin | grep -qP '\x7fELF' || \
       (echo "ERROR: Camoufox binary is not a valid ELF executable" && exit 1) && \
     EXPECTED_MACHINE=$([ "$ARCH" = "aarch64" ] && echo "b7 00" || echo "3e 00") && \
@@ -116,7 +119,7 @@ RUN ARCH=$(uname -m) && \
     [ "$ACTUAL_MACHINE" = "$EXPECTED_HEX" ] || \
       (echo "ERROR: ELF e_machine mismatch — expected $EXPECTED_HEX ($ARCH) got $ACTUAL_MACHINE" && exit 1) && \
     chmod +x /home/node/.cache/camoufox/camoufox-bin && \
-    echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE)"
+    echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE, $(cat /home/node/.cache/camoufox/version.json))"
 
 # Copy source code and build config
 COPY src ./src

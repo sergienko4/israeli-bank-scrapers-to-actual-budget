@@ -73,3 +73,6 @@ site/
 # understand-anything plugin local state (per-developer knowledge graph)
 # https://github.com/Lum1104/Understand-Anything
 .understand-anything/
+
+# ESLint cache (commit-stage hook only; pre-push re-lints with no cache)
+.eslintcache

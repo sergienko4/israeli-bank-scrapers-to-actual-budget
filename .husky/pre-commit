@@ -3,124 +3,63 @@
 # Prevent MSYS from converting Unix paths to Windows paths for Docker volume mounts
 export MSYS_NO_PATHCONV=1
 
-# ── Commit-stage scope (Testing Diamond) ──────────────────────────
-# This hook runs the commit stage ONLY: fast, deterministic, offline-ish
-# static analysis. Every acceptance-stage gate runs in GitHub CI, never
-# here. Nothing is dropped — each gate below names the CI job that owns
-# it, and .github/workflows/pr.yml `ci-pass` aggregates them all.
+# ── Commit-stage scope (Testing Diamond) ─────────────────────────────────
+# This hook answers one question: **is the snapshot I am recording
+# internally correct?** It therefore runs only the gates whose verdict can
+# change from one commit to the next within a single branch — type safety,
+# architecture rules, formatting, config shape, and PII leakage.
 #
-#   Docker image build + scraper smoke  → pr.yml `trivy` / `e2e`
-#   Trivy image scan                    → pr.yml `trivy`
-#   mocked + Telegram E2E               → _e2e-suite.yml
-#   unit tests + coverage thresholds    → pr.yml `validate` (validate:ci)
-#   ESLint canary fixtures              → pr.yml `validate` (validate:ci)
-#   config manifest SSoT gate           → pr.yml `validate`
-#   TypeDoc API generation              → pr.yml `build`
-#   markdown link check (lychee)        → pr.yml `docs`
-#   Semgrep security scan               → pr.yml `semgrep`
+# Whole-repo integrity gates moved to .husky/pre-push, which answers a
+# different question: **is what leaves this machine correct as a whole?**
+# Nothing was dropped or weakened — every gate still runs before any commit
+# reaches the remote, just once per push instead of once per commit:
 #
-# Those gates were removed from the hook because they are slow, need
-# Docker or the network, and are already required to pass before merge.
-# The unit-test gate in particular spawns one fork per CPU and starves
-# itself on a busy workstation: a worker that misses vitest's hardcoded
-# 60s startup budget is killed, its tests silently never run, and the
-# resulting coverage shortfall fails the commit for a defect that does
-# not exist. CI runs it on a quiet, right-sized machine instead.
+#   type-check:test / type-check:e2e  → pre-push
+#   build (tsup)                      → pre-push
+#   npm audit                         → pre-push (needs the network)
+#   markdownlint                      → pre-push
+#   circular-dependency check         → pre-push
+#   coupling regression check         → pre-push
+#   full uncached ESLint              → pre-push
 #
-# The hook is now Docker-free, so a stopped Docker Desktop no longer
-# blocks committing. See docs/architecture/ci-pipeline.md.
+# Why the split pays: the gates run in parallel, so a stage costs its
+# slowest gate plus the contention between them, not the sum. Measured on
+# this repo (minimum of three alternating runs, to discount ambient load):
+# the old twelve-gate hook took 35s, this five-gate hook takes 24s — a 31%
+# cut on the operation performed most often.
+#
+# The win is 31% rather than 60% because the two tall poles, `type-check`
+# and ESLint, both stay here: each has to build the TypeScript program
+# before it can say anything, and that build is the floor for the stage.
+# Gates cheaper than that floor were free to keep and are kept; the ones
+# moved to pre-push are the ones that verify the repo as a whole rather
+# than the snapshot being recorded.
+#
+# ESLint runs against a cache here so an unchanged file is not re-linted.
+# The cache is a speed optimisation only and is never trusted as the final
+# verdict: pre-push re-runs ESLint with no cache at all.
+#
+# Acceptance-stage gates (unit tests + coverage, Docker build, Trivy,
+# Semgrep, CodeQL, mocked + Telegram E2E, TypeDoc, lychee, ESLint canaries)
+# run in GitHub CI only. See docs/architecture/ci-pipeline.md and
+# .github/workflows/pr.yml (job: ci-pass).
+
+. "$(dirname "$0")/../config/hooks/gate-runner.sh"
 
 echo ""
-echo "🛑 MANDATORY QUALITY GATE INITIATED 🛑"
+echo "🛑 COMMIT-STAGE QUALITY GATE 🛑"
 echo "==========================================="
 
-# ── Temp directory for parallel gate output ───────────────────────
-GATE_DIR=$(mktemp -d)
-trap 'rm -rf "$GATE_DIR"' EXIT
+gate_init "precommit"
 
-# run_gate <id> <label> <command...>
-# Runs a gate in the background, captures output and exit code.
-run_gate() {
-  _id="$1"; _label="$2"; shift 2
-  (
-    echo "Running: ${_label}" > "$GATE_DIR/${_id}.log"
-    "$@" >> "$GATE_DIR/${_id}.log" 2>&1
-    echo $? > "$GATE_DIR/${_id}.exit"
-  ) &
-}
-
-# wait_gates <id1> <id2> ...
-# Waits for all listed gates, prints results, exits on first failure.
-wait_gates() {
-  wait
-  _failed=""
-  for _id in "$@"; do
-    _exit_code=$(cat "$GATE_DIR/${_id}.exit" 2>/dev/null || echo 1)
-    if [ "$_exit_code" = "0" ]; then
-      echo "  ✅ $_id"
-    else
-      echo "  ❌ $_id (exit $_exit_code)"
-      _failed="${_failed} ${_id}"
-    fi
-  done
-  if [ -n "$_failed" ]; then
-    echo ""
-    echo "❌ FAILED GATES:${_failed}"
-    echo ""
-    # Preserve logs before the EXIT trap removes GATE_DIR. Without this the
-    # only copy is the scrollback below, which is unrecoverable after a
-    # 16-gate parallel run — losing the evidence for intermittent failures.
-    # mktemp -d guarantees uniqueness: concurrent hook runs (or a rapid
-    # amend/retry) can share a whole-second timestamp and would otherwise
-    # overwrite each other's logs. The timestamp is kept only for readability.
-    _keep_dir=""
-    if mkdir -p .git/precommit-failures 2>/dev/null; then
-      _keep_dir=$(mktemp -d ".git/precommit-failures/$(date +%Y%m%d-%H%M%S)-XXXXXX" 2>/dev/null) || _keep_dir=""
-    fi
-
-    # Track per-gate copy results so the summary never claims a log was
-    # preserved when mkdir/mktemp/cp actually failed.
-    _kept=""
-    _keep_failed=""
-    for _id in $_failed; do
-      if [ -n "$_keep_dir" ] && cp "$GATE_DIR/${_id}.log" "$_keep_dir/${_id}.log" 2>/dev/null; then
-        _kept="${_kept} ${_id}"
-      else
-        _keep_failed="${_keep_failed} ${_id}"
-      fi
-      echo "── Output of $_id ──"
-      cat "$GATE_DIR/${_id}.log" 2>/dev/null
-      echo ""
-    done
-
-    if [ -n "$_kept" ]; then
-      echo "📁 Logs preserved in ${_keep_dir}:${_kept}"
-    fi
-    if [ -n "$_keep_failed" ]; then
-      echo "⚠️  Could not preserve logs for:${_keep_failed} — see output above."
-    fi
-    exit 1
-  fi
-}
-
-# ═══════════════════════════════════════════════════════════════════
-# Commit stage: fast static gates only (all parallel)
-# ═══════════════════════════════════════════════════════════════════
 echo ""
-echo "⚡ Running 12 commit-stage gates in parallel..."
+echo "⚡ Running 5 commit-stage gates in parallel..."
 echo ""
 
-run_gate "1-typecheck"    "Type-checking TypeScript"       npm run type-check
-run_gate "1b-typecheck-e2e" "Type-checking tests/e2e/"     npm run type-check:e2e
-run_gate "1c-typecheck-test" "Type-checking tests/"        npm run type-check:test
-run_gate "2-audit"        "Auditing dependencies"          npm audit --audit-level=moderate
-run_gate "3-build"        "Compiling TypeScript"           npm run build
-run_gate "6-eslint"       "Running ESLint"                 npm run lint
-run_gate "6b-biome"       "Running Biome lint"             npm run lint:biome
-run_gate "8-markdownlint" "Linting markdown docs"          npm run lint:docs
-run_gate "9-configcheck"  "Checking config structure"      npm run lint:config-structure
-run_gate "15-circular"    "Checking for circular deps in src/" npm run lint:circular
-run_gate "18-coupling"    "Checking coupling regression"  npm run coupling:check
+run_gate "1-typecheck"   "Type-checking src/"             npm run type-check
+run_gate "6-eslint"      "Running ESLint (cached)"        npm run lint:cached
+run_gate "6b-biome"      "Running Biome lint"             npm run lint:biome
+run_gate "9-configcheck" "Checking config structure"      npm run lint:config-structure
 run_gate "16-pii-check"  "Checking for PII in error messages" bash -c '
   # Catch interpolated PII variables in error/throw/fail messages
   # e.g., `throw new Error(\`got ${otp}\`)` or `fail(\`token: ${token}\`)`
@@ -138,16 +77,12 @@ run_gate "16-pii-check"  "Checking for PII in error messages" bash -c '
 '
 
 wait_gates \
-  "1-typecheck" "1b-typecheck-e2e" "1c-typecheck-test" "2-audit" "3-build" \
-  "6-eslint" "6b-biome" "8-markdownlint" "9-configcheck" \
-  "15-circular" "18-coupling" "16-pii-check"
+  "1-typecheck" "6-eslint" "6b-biome" "9-configcheck" "16-pii-check"
 
-# ────────────────────────────────────────────────────────────────
 echo ""
 echo "==========================================="
-echo "✅ ALL 12 COMMIT-STAGE GATES PASSED. COMMITTING."
-echo "   Acceptance stage runs in GitHub CI only:"
-echo "   unit tests + coverage, ESLint canaries, config manifest,"
-echo "   TypeDoc, lychee, Semgrep, CodeQL, Trivy, Docker build, E2E."
-echo "   See .github/workflows/pr.yml (job: ci-pass)."
+echo "✅ ALL 5 COMMIT-STAGE GATES PASSED. COMMITTING."
+echo "   Push stage (.husky/pre-push) adds: test/e2e type-checks,"
+echo "   build, npm audit, markdownlint, circular deps, coupling,"
+echo "   and a full uncached ESLint run."
 echo "==========================================="

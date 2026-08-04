@@ -53,4 +53,17 @@ describe('TimeoutWrapper', () => {
     const result = await wrapper.wrap(fastPromise, 5000, 'test-op');
     expect(result).toBe('fast result');
   });
+
+  it('does not emit an unhandled rejection when the operation rejects', async () => {
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      await expect(wrapper.wrap(Promise.reject(new Error('boom')), 5000, 'op'))
+        .rejects.toThrow('boom');
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
 });

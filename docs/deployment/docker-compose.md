@@ -67,6 +67,38 @@ volumes:
 
 `:ro` is correct for the **importer** — it never writes its config. If you enable the optional config portal (see `docs/configuration/portal.md`), the portal service must mount the **same `./config` directory read-write** (`./config:/app/config:rw`): the portal saves atomically (write a temp file, then rename), which a read-only — or single-file — mount breaks. Always bind-mount the **directory**, never a single `config.json` file.
 
+## Memory limits
+
+The importer ships with a **2 GB memory ceiling** in `docker-compose.yml`:
+
+```yaml
+services:
+  importer:
+    mem_limit: 2g
+    memswap_limit: 2g       # no swap growth beyond the ceiling
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+```
+
+Both forms are set on purpose — `deploy.resources` is ignored by Compose v1, `mem_limit` is ignored by Swarm.
+
+**Do not remove them.** A stalled bank scrape can strand a browser process; without a ceiling the container keeps allocating host RAM until the machine stops scheduling processes and becomes unreachable. With the ceiling, only the import process is killed and the host is unaffected.
+
+The 2 GB figure is measured, not guessed:
+
+| Component | Measured |
+| --- | --- |
+| Node baseline | ~200 MB |
+| One bank browser (worst case, heavy SPA) | ~1 GB |
+| Receipt OCR (tesseract + sharp) | ~300 MB |
+| Headroom | remainder |
+
+Raise it only if you see the container OOM-killed on a bank that legitimately needs more; check with `docker inspect israeli-bank-importer --format '{{.State.OOMKilled}}'`.
+
+> `--max-old-space-size` is **not** a substitute. It caps only the JS heap, while most of the importer's footprint is native memory owned by the browser. The cgroup limit is what actually protects the host.
+
 ## Health
 
 ```bash

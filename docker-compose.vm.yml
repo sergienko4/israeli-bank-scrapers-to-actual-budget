@@ -1,15 +1,33 @@
-version: '3.8'
+# Add this to your existing docker-compose.yml on the VM, alongside your
+# actual_server and caddy services. This block mirrors the hardening applied
+# in the repository's top-level docker-compose.yml.
 
 services:
-  # Add this to your existing docker-compose.yml on the VM
-  # alongside your actual_server and caddy services
-
   israeli_bank_importer:
-    image: YOUR_DOCKERHUB_USERNAME/israeli-bank-importer:latest
+    image: sergienko4/israeli-bank-importer:latest
     container_name: israeli_bank_importer
     restart: always
+    cap_drop:
+      - ALL                # Drop all capabilities first
     cap_add:
-      - SYS_ADMIN
+      - SYS_ADMIN          # Required for Camoufox (Firefox) browser sandboxing
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /dev/shm:size=256m       # Browser shared memory
+    # Memory containment is mandatory, not optional. A stalled scrape can strand
+    # a browser process, and an unbounded container will consume host RAM until
+    # the machine wedges. The 2g ceiling is measured, not guessed: ~200 MB Node
+    # baseline + ~1 GB worst-case bank browser + ~300 MB OCR + headroom. Both
+    # keys are set because deploy.resources is ignored by Compose v1 while
+    # mem_limit is ignored by Swarm — together they cover every runtime.
+    mem_limit: 2g
+    memswap_limit: 2g            # No swap growth beyond the memory ceiling
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '1.5'
     environment:
       - TZ=Asia/Jerusalem
       # Cron schedule: run every 8 hours (at midnight, 8am, 4pm)
@@ -18,11 +36,18 @@ services:
       - /home/ubuntu/actual-importer/config.json:/app/config.json:ro
       - /home/ubuntu/actual-importer/data:/app/data
       - /home/ubuntu/actual-importer/cache:/app/cache
-      - /home/ubuntu/actual-importer/chrome-data:/app/chrome-data
     depends_on:
       - actual_server
     networks:
       - actual_network
+    healthcheck:
+      # Verify the scheduler node process is alive; a bare `ps aux` always
+      # exits 0 and proves nothing.
+      test: ["CMD", "sh", "-c", "ps aux | grep -q '[n]ode dist/Scheduler.js'"]
+      interval: 5m
+      timeout: 10s
+      start_period: 30s
+      retries: 3
 
 # Make sure your actual_server is on this network too
 networks:

@@ -40,13 +40,15 @@ The container entrypoint is `node dist/Index.js`.
 
 ## Production (long-running)
 
-Drop `--rm`, add `--restart unless-stopped`, and run detached:
+Drop `--rm`, add `--restart unless-stopped`, cap the memory, and run detached:
 
 ```bash
 docker run -d \
   --name israeli-bank-importer \
   --restart unless-stopped \
   --cap-add SYS_ADMIN \
+  --memory 2g \
+  --memory-swap 2g \
   -v $(pwd)/config.json:/app/config.json:ro \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
@@ -56,6 +58,12 @@ docker run -d \
   -e SCHEDULE="0 */8 * * *" \
   sergienko4/israeli-bank-importer
 ```
+
+`--memory` is not optional for a long-running deployment. Without a cgroup
+ceiling a stalled scrape can consume every byte of host RAM before the kernel
+reclaims it — see
+[Hardened defaults](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-run.md#hardened-defaults)
+for the sizing.
 
 ## Hardened defaults
 
@@ -67,6 +75,8 @@ docker run -d \
   --cap-add SYS_ADMIN \
   --security-opt no-new-privileges:true \
   --tmpfs /dev/shm:size=256m \
+  --memory 2g \
+  --memory-swap 2g \
   -v $(pwd)/config.json:/app/config.json:ro \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
@@ -82,6 +92,7 @@ docker run -d \
 | `--cap-drop ALL` + `--cap-add SYS_ADMIN` | Drop every Linux capability except the one Camoufox needs for sandboxing |
 | `--security-opt no-new-privileges:true` | Block setuid escalation |
 | `--tmpfs /dev/shm:size=256m` | Firefox-family browsers stream to `/dev/shm`; allocate it explicitly |
+| `--memory 2g` + `--memory-swap 2g` | Cap the container so a stalled scrape can never exhaust host RAM. Sized from measurements: ~200 MB Node + ~1 GB worst-case bank browser + ~300 MB OCR + headroom. `--max-old-space-size` is not a substitute — it caps only the JS heap, and most of the footprint is native browser memory |
 
 ## Volumes reference
 

@@ -11,6 +11,7 @@ import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 import { errorMessage } from '../../../Utils/Index.js';
 import buildCredentials from '../../CredentialsBuilder.js';
 import { buildChromeArgs, getChromeDataDir } from '../../ScraperOptionsBuilder.js';
+import { BrowserRegistry } from './BrowserRegistry.js';
 import { resolveOtpRetriever } from './OtpRetriever.js';
 import type {
   IInitializedLiveScrape,
@@ -34,9 +35,57 @@ type ProviderScraper = ILiveProviderScraper;
 export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLiveScrape {
   const retriever = resolveOtpRetriever(deps, scrapeOpts);
   const options = buildScraperOptions(deps, scrapeOpts, retriever);
+  const browsers = new BrowserRegistry();
+  attachBrowserCapture(options, browsers);
   const scraper = prepareScraper(scrapeOpts, options);
   const credentials = buildCredentials(scrapeOpts.bankConfig, retriever);
-  return { scraper, credentials };
+  return { scraper, credentials, browsers };
+}
+
+/**
+ * Provider options branch that launches and owns its browser.
+ * `ScraperOptions` is a union; the external-browser branches omit the
+ * lifecycle hook, so the launching branch is selected explicitly.
+ */
+type ILaunchingScraperOptions = Extract<ScraperOptions, { prepareBrowser?: unknown }>;
+
+/** Provider lifecycle callback invoked immediately after a browser launches. */
+type PrepareBrowserHook = NonNullable<ILaunchingScraperOptions['prepareBrowser']>;
+
+/**
+ * Provider options subset that accepts the browser lifecycle hook.
+ * `companyId` is included so the type is not weak and the union assigns.
+ */
+export interface IBrowserHookTarget {
+  companyId: ScraperOptions['companyId'];
+  prepareBrowser?: PrepareBrowserHook;
+}
+
+/**
+ * Builds the lifecycle hook that records each browser the provider launches.
+ * @param browsers - Registry tracking browsers launched for this attempt.
+ * @returns Hook the provider invokes immediately after a browser launches.
+ */
+function buildCaptureHook(browsers: BrowserRegistry): PrepareBrowserHook {
+  return (browser: Parameters<PrepareBrowserHook>[0]): ReturnType<PrepareBrowserHook> => {
+    browsers.register(browser);
+    return Promise.resolve();
+  };
+}
+
+/**
+ * Registers every launched browser so a timed-out scrape can be reclaimed.
+ * The provider abandons rather than cancels a scrape that exceeds its deadline,
+ * so without this hook each retry strands a live Camoufox process.
+ * @param target - Provider options object that receives the lifecycle hook.
+ * @param browsers - Registry tracking browsers launched for this attempt.
+ * @returns True once the capture hook is attached.
+ */
+export function attachBrowserCapture(
+  target: IBrowserHookTarget, browsers: BrowserRegistry,
+): boolean {
+  target.prepareBrowser = buildCaptureHook(browsers);
+  return true;
 }
 
 /**

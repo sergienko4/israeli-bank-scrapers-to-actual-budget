@@ -1,0 +1,71 @@
+#!/usr/bin/env sh
+
+# Prevent MSYS from converting Unix paths to Windows paths for Docker volume mounts
+export MSYS_NO_PATHCONV=1
+
+# ── Push-stage scope ─────────────────────────────────────────────────────
+# This hook answers: **is what leaves this machine correct as a whole?**
+#
+# It owns the whole-repo integrity gates that used to run on every commit.
+# Their verdict depends on the repository as a unit rather than on the
+# individual snapshot being recorded, so running them once per push costs
+# a fraction of the time while blocking exactly the same defects from ever
+# reaching the remote.
+#
+# ESLint runs here with no cache. The commit hook lints against a cache for
+# speed, and a cache can only ever be as trustworthy as its invalidation;
+# this uncached run is what the branch is actually judged on.
+#
+# Acceptance-stage gates (unit tests + coverage, Docker build, Trivy,
+# Semgrep, CodeQL, mocked + Telegram E2E, lychee, ESLint canaries)
+# still run in GitHub CI only. See docs/architecture/ci-pipeline.md.
+
+. "$(dirname "$0")/../config/hooks/gate-runner.sh"
+
+# Deleting a remote branch (`git push origin --delete <branch>`) pushes an
+# all-zero local SHA and ships no code, so there is nothing to verify.
+# Reading stdin also drains it, which git expects the hook to do.
+PUSHING_CODE=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  case "$local_sha" in
+    *[!0]*) PUSHING_CODE=1 ;;
+  esac
+done
+
+if [ "$PUSHING_CODE" -eq 0 ]; then
+  echo "🗑️  Branch deletion only — no code to verify."
+  exit 0
+fi
+
+echo ""
+echo "🛑 PUSH-STAGE QUALITY GATE 🛑"
+echo "==========================================="
+
+gate_init "prepush"
+
+echo ""
+echo "⚡ Running 9 push-stage gates in parallel..."
+echo ""
+
+run_gate "1b-typecheck-e2e"  "Type-checking tests/e2e/"           npm run type-check:e2e
+run_gate "1c-typecheck-test" "Type-checking tests/"               npm run type-check:test
+run_gate "2-audit"           "Auditing dependencies"              npm audit --audit-level=moderate
+run_gate "3-build"           "Compiling TypeScript"               npm run build
+run_gate "3b-typedoc"        "Generating API docs"                npm run docs
+run_gate "6-eslint-full"     "Running ESLint (uncached)"          npm run lint
+run_gate "8-markdownlint"    "Linting markdown docs"              npm run lint:docs
+run_gate "15-circular"       "Checking for circular deps in src/" npm run lint:circular
+run_gate "18-coupling"       "Checking coupling regression"       npm run coupling:check
+
+wait_gates \
+  "1b-typecheck-e2e" "1c-typecheck-test" "2-audit" "3-build" "3b-typedoc" \
+  "6-eslint-full" "8-markdownlint" "15-circular" "18-coupling"
+
+echo ""
+echo "==========================================="
+echo "✅ ALL 9 PUSH-STAGE GATES PASSED. PUSHING."
+echo "   Acceptance stage runs in GitHub CI only:"
+echo "   unit tests + coverage, ESLint canaries, config manifest,"
+echo "   lychee, Semgrep, CodeQL, Trivy, Docker build, E2E."
+echo "   See .github/workflows/pr.yml (job: ci-pass)."
+echo "==========================================="

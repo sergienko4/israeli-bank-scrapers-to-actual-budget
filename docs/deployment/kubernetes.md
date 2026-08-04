@@ -39,6 +39,13 @@ spec:
                   add:
                     - SYS_ADMIN
                 readOnlyRootFilesystem: false
+              resources:
+                requests:
+                  memory: 512Mi
+                  cpu: 250m
+                limits:
+                  memory: 2Gi
+                  cpu: "1.5"
               env:
                 - name: TZ
                   value: Asia/Jerusalem
@@ -118,6 +125,9 @@ spec:
             capabilities:
               drop: [ALL]
               add: [SYS_ADMIN]
+          resources:
+            requests: { memory: 512Mi, cpu: 250m }
+            limits:   { memory: 2Gi,   cpu: "1.5" }
           volumeMounts:
             - { name: config, mountPath: /app/config.json, subPath: config.json, readOnly: true }
             - { name: data,   mountPath: /app/data }
@@ -136,6 +146,12 @@ spec:
         - name: shm
           emptyDir: { medium: Memory, sizeLimit: 256Mi }
 ```
+
+## Resource limits
+
+Both patterns set `resources.limits.memory: 2Gi`. **Keep it.** A stalled bank scrape can strand a browser process; without a limit the pod keeps allocating node RAM until the kubelet evicts unrelated workloads or the node stops responding. With the limit, only this pod is OOM-killed.
+
+The 2 Gi figure is measured: ~200 MB Node baseline + ~1 GB worst-case bank browser + ~300 MB receipt OCR + headroom. Setting `NODE_OPTIONS=--max-old-space-size` instead does **not** work — it caps only the JS heap, while most of the footprint is native browser memory.
 
 ## Secrets
 

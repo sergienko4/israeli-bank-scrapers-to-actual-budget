@@ -19,6 +19,52 @@ import { succeed } from '../Types/Index.js';
 
 const DEFAULT_IMPORT_CHILD_ENTRY = '/app/dist/Index.js';
 
+/** Shell convention for a process terminated by SIGKILL (128 + signal 9). */
+const SIGKILL_EXIT_CODE = 137;
+
+/** How a child process ended: a normal exit code, or the signal that killed it. */
+interface IChildExit {
+  /** Exit code reported by the child, null when it was terminated by a signal. */
+  readonly exitCode: number | null;
+  /** Signal that terminated the child, null on a normal exit. */
+  readonly signal: NodeJS.Signals | null;
+}
+
+/**
+ * Maps a child termination into the exit code the batch layer reports.
+ *
+ * SIGKILL is surfaced as 137 rather than a generic failure because the kernel
+ * OOM reaper is its overwhelmingly common cause, and an operator who sees 137
+ * can act on it (raise the ceiling, narrow the scrape) while a bare 1 hides
+ * the memory ceiling behind what looks like an ordinary import error.
+ * @param exit - How the child process ended.
+ * @returns The effective exit code to report.
+ */
+function toExitCode(exit: IChildExit): number {
+  if (exit.exitCode !== null) return exit.exitCode;
+  if (exit.signal === 'SIGKILL') return SIGKILL_EXIT_CODE;
+  return exit.signal ? 1 : 0;
+}
+
+/**
+ * Reports the likely cause and remedy when a child is killed by SIGKILL.
+ * @param signal - Signal that terminated the child.
+ * @returns Procedure indicating whether an out-of-memory hint was emitted.
+ */
+function warnIfOutOfMemory(signal: NodeJS.Signals): IProcedureSuccess<{ status: string }> {
+  const logger = getLogger();
+  logger.warn(`Import killed by signal: ${signal}`);
+  if (signal !== 'SIGKILL') return succeed({ status: 'not-oom' });
+  logger.error(
+    '💥 The import was killed by SIGKILL (exit 137) — most often the kernel out-of-memory ' +
+      'reaper, though a manual stop or an orchestrator eviction looks identical. ' +
+      'If memory is the cause, raise the container ceiling ' +
+      '(mem_limit / --memory / resources.limits.memory) or reduce the work per run ' +
+      'by lowering daysBack.'
+  );
+  return succeed({ status: 'oom-reported' });
+}
+
 /**
  * Resolves the path to the import child entry script.
  *
@@ -52,8 +98,8 @@ function attachChildListeners(
 ): IProcedureSuccess<{ status: string }> {
   const logger = getLogger();
   child.on('exit', (exitCode, signal) => {
-    const code = exitCode ?? (signal ? 1 : 0);
-    if (signal) logger.warn(`Import killed by signal: ${signal}`);
+    const code = toExitCode({ exitCode, signal });
+    if (signal) warnIfOutOfMemory(signal);
     logImportResult(code, startTime);
     resolve(code);
   });

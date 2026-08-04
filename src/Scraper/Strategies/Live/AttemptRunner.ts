@@ -74,14 +74,35 @@ async function handleOtpReject(
  * @returns Provider scrape result returned by israeli-bank-scrapers.
  */
 function executeAttempt(
-  deps: ILiveScrapeDependencies,
-  scrapeOpts: IResolvedLiveOpts,
+  deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts,
 ): Promise<IScraperScrapingResult> {
   const initialized = initScrape(deps, scrapeOpts);
   const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig);
   const label = `Scraping ${scrapeOpts.bankId}`;
-  const wrapped = buildTimeoutWrappedScrape({ deps, ...initialized, label });
-  return retryStrategy.execute(wrapped, label);
+  const params = { deps, ...initialized, logger: scrapeOpts.logger, label };
+  return runAttemptThenSeal(retryStrategy, params);
+}
+
+/**
+ * Runs the retry loop, then seals the registry because no retry can follow.
+ *
+ * Every retry reclaims its own browsers, but a scrape abandoned by the timeout
+ * keeps running and can launch one after the final reclaim has already
+ * happened. Sealing closes what the attempt still holds and closes anything
+ * arriving later on the spot, so nothing outlives the attempt.
+ * @param retryStrategy - Retry policy applied around the timed scrape.
+ * @param params - Timeout wrapper inputs carrying the browser registry.
+ * @returns Provider scrape result returned by israeli-bank-scrapers.
+ */
+async function runAttemptThenSeal(
+  retryStrategy: IRetryStrategy, params: ITimeoutScrapeParams,
+): Promise<IScraperScrapingResult> {
+  const wrapped = buildTimeoutWrappedScrape(params);
+  try {
+    return await retryStrategy.execute(wrapped, params.label);
+  } finally {
+    await sealBrowsers(params);
+  }
 }
 
 /**
@@ -110,13 +131,53 @@ function buildTimeoutWrappedScrape(
 
 /**
  * Applies the configured timeout deadline around provider scraping.
+ * Every attempt reclaims its own browsers, so a timed-out or failed retry
+ * cannot strand a Camoufox process and exhaust container memory.
  * @param params - Timeout wrapper inputs for the provider call.
  * @returns Provider scrape result subject to the configured timeout.
  */
-function wrapScrapePromise(params: ITimeoutScrapeParams): Promise<IScraperScrapingResult> {
-  const scrapePromise = params.scraper.scrape(params.credentials);
+async function wrapScrapePromise(params: ITimeoutScrapeParams): Promise<IScraperScrapingResult> {
   const timeoutMs = DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs;
-  return params.deps.timeoutWrapper.wrap(scrapePromise, timeoutMs, params.label);
+  try {
+    const scraping = params.scraper.scrape(params.credentials);
+    return await params.deps.timeoutWrapper.wrap(scraping, timeoutMs, params.label);
+  } finally {
+    await reclaimBrowsers(params);
+  }
+}
+
+/**
+ * Closes browsers the provider left running after the attempt settled.
+ * @param params - Timeout wrapper inputs carrying the browser registry.
+ * @returns Number of still-running browsers reclaimed by this attempt.
+ */
+async function reclaimBrowsers(params: ITimeoutScrapeParams): Promise<number> {
+  const reclaimed = await params.browsers.closeAll(params.logger);
+  return reportReclaimed(reclaimed, params);
+}
+
+/**
+ * Closes browsers still held once the attempt can no longer retry.
+ * @param params - Timeout wrapper inputs carrying the browser registry.
+ * @returns Number of still-running browsers reclaimed by the seal.
+ */
+async function sealBrowsers(params: ITimeoutScrapeParams): Promise<number> {
+  const reclaimed = await params.browsers.seal(params.logger);
+  return reportReclaimed(reclaimed, params);
+}
+
+/**
+ * Reports how many browsers a reclaim closed, staying silent when none did.
+ * @param reclaimed - Number of browsers the reclaim had to close.
+ * @param params - Timeout wrapper inputs carrying the logger and label.
+ * @returns The reclaimed count, unchanged, for the caller to surface.
+ */
+function reportReclaimed(reclaimed: number, params: ITimeoutScrapeParams): number {
+  if (reclaimed > 0) {
+    const count = String(reclaimed);
+    params.logger.info(`  🧹 Reclaimed ${count} abandoned browser(s) after ${params.label}`);
+  }
+  return reclaimed;
 }
 
 /**

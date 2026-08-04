@@ -40,6 +40,7 @@ export class ImportMediator {
   private readonly _summaryNotifier: BatchSummaryNotifier;
   private readonly _pollerLifecycle: PollerLifecycle;
   private readonly _jobProcessor: JobProcessor;
+  private readonly _getBankNames: () => string[];
   private _lastResult: IBatchResult | null = null;
   private _lastRunTime: Date | null = null;
 
@@ -51,6 +52,7 @@ export class ImportMediator {
     this._summaryNotifier = new BatchSummaryNotifier(opts.notifier);
     this._pollerLifecycle = new PollerLifecycle();
     this._jobProcessor = this.createJobProcessor(opts.spawnImport);
+    this._getBankNames = opts.getBankNames;
     this._queue = this.createQueue();
   }
 
@@ -64,18 +66,22 @@ export class ImportMediator {
   }
 
   /**
-   * Requests an import for the specified banks (or all if undefined).
+   * Requests an import, isolating each bank in its own child process.
+   *
+   * One child per bank is a containment boundary, not an optimisation: a bank
+   * whose scrape is killed by the kernel OOM reaper cannot be caught in-process,
+   * so sharing a process across banks lets one bad bank cancel every other one.
    * @param opts - Import request options including banks, source, and extra env.
-   * @returns The batch ID, or null if an import is already active.
+   * @returns The batch ID, or false if an import is already active.
    */
   public requestImport(opts: IImportRequestOptions): string | false {
     if (this._queue.isBusy()) return false;
     const batchId = randomUUID();
-    const tracker = createTracker(batchId, opts, 1);
+    const labels = this.resolveBankLabels(opts);
+    const tracker = createTracker(batchId, opts, labels.length);
     this._batches.set(batchId, tracker);
-    const label = opts.banks?.join(',') ?? 'all';
-    const job = createJob(label, batchId, opts.source);
-    this._queue.enqueue(job);
+    const jobs = labels.map((label) => createJob(label, batchId, opts.source));
+    this._queue.enqueueAll(jobs);
     return batchId;
   }
 
@@ -114,6 +120,21 @@ export class ImportMediator {
    */
   public getLastRunTime(): Date | null {
     return this._lastRunTime;
+  }
+
+  /**
+   * Resolves the child processes a request fans out into, one label per bank.
+   *
+   * An empty result would produce a batch that never finalizes, because a
+   * tracker only settles once a job result arrives, so an unresolvable bank
+   * list degrades to a single all-banks child rather than a hung batch.
+   * @param opts - Import request options carrying an optional explicit bank list.
+   * @returns One job label per child process to spawn.
+   */
+  private resolveBankLabels(opts: IImportRequestOptions): string[] {
+    const requested = opts.banks ?? this._getBankNames();
+    if (requested.length === 0) return ['all'];
+    return requested;
   }
 
   /**

@@ -49,6 +49,15 @@ vi.mock('../../src/Scrapers/Pipeline/Index.js', () => ({
   execute: mockExecute,
 }));
 
+const { mockDescribeBrowserVersion } = vi.hoisted(() => ({
+  mockDescribeBrowserVersion: vi.fn(
+    () => ({ success: false, status: 'not-found', message: 'unset' }) as unknown,
+  ),
+}));
+vi.mock('../../src/Scraper/BrowserVersion.js', () => ({
+  default: mockDescribeBrowserVersion,
+}));
+
 import { bootImporter, buildImporterBootHandle } from '../../src/Importer/ImporterBootstrap.js';
 
 interface IFakeWiring {
@@ -207,6 +216,28 @@ describe('ImporterBootstrap', () => {
       const banners = mockLogger.info.mock.calls.map((c) => c[0] as string);
       expect(banners.some((b) => b.includes('DRY RUN'))).toBe(true);
       expect(banners.some((b) => b.includes('proxy'))).toBe(true);
+    });
+
+    it('reports the bundled browser build in the startup banner', async () => {
+      mockExecute.mockResolvedValue(succeed({ state: {} }));
+      mockBuildImporter.mockReturnValue(makeWiring({}));
+      mockDescribeBrowserVersion.mockReturnValue(succeed('152.0.4 (beta.28)'));
+
+      await expect(bootImporter()).rejects.toThrow('__exit:0');
+
+      const banners = mockLogger.info.mock.calls.map((c) => c[0] as string);
+      expect(banners.some((b) => b.includes('Camoufox 152.0.4 (beta.28)'))).toBe(true);
+    });
+
+    it('omits the browser line when the build cannot be determined', async () => {
+      mockExecute.mockResolvedValue(succeed({ state: {} }));
+      mockBuildImporter.mockReturnValue(makeWiring({}));
+      mockDescribeBrowserVersion.mockReturnValue(fail('Camoufox manifest unavailable'));
+
+      await expect(bootImporter()).rejects.toThrow('__exit:0');
+
+      const banners = mockLogger.info.mock.calls.map((c) => c[0] as string);
+      expect(banners.some((b) => b.includes('Camoufox'))).toBe(false);
     });
   });
 });

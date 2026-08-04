@@ -12,6 +12,7 @@
  */
 
 import { getLogger } from '../Logger/Index.js';
+import describeBrowserVersion from '../Scraper/BrowserVersion.js';
 import { execute } from '../Scrapers/Pipeline/Index.js';
 import type { IImporterConfig, IProcedureSuccess } from '../Types/Index.js';
 import { isFail, succeed } from '../Types/Index.js';
@@ -37,12 +38,16 @@ export interface IImporterBootHandle {
 /**
  * Prints the startup banner (dry-run + proxy notes when applicable).
  *
+ * The browser build is included because it is fetched at image build time
+ * rather than pinned, so a silent upgrade is otherwise invisible.
  * @param wiring - The completed importer wiring handle.
  * @returns Procedure indicating banner emission.
  */
 function emitStartupBanner(wiring: IImporterWiring): IProcedureSuccess<{ status: string }> {
   const logger = getLogger();
   logger.info('🚀 Starting Israeli Bank Importer for Actual Budget\n');
+  const browser = describeBrowserVersion();
+  if (browser.success) logger.info(`🦊 Camoufox ${browser.data}`);
   if (wiring.isDryRun) {
     logger.info('🔍 DRY RUN MODE — no changes will be made to Actual Budget\n');
   }

@@ -16,6 +16,7 @@ import type { ITwoFactorPrompter } from '../../../Services/ITwoFactorPrompter.js
 import type NotificationService from '../../../Services/NotificationService.js';
 import type { IBankConfig, IImporterConfig } from '../../../Types/Index.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
+import type { BrowserRegistry } from './BrowserRegistry.js';
 
 /** Dependencies captured once by the public LiveScrapeStrategy facade. */
 export interface ILiveScrapeDependencies {
@@ -53,6 +54,7 @@ export type ILiveProviderScraper = ReturnType<typeof createScraper>;
 export interface IInitializedLiveScrape {
   readonly scraper: ILiveProviderScraper;
   readonly credentials: ScraperCredentials;
+  readonly browsers: BrowserRegistry;
 }
 
 /** Timeout wrapper input bundle for one provider scrape invocation. */
@@ -60,5 +62,7 @@ export interface ITimeoutScrapeParams {
   readonly deps: ILiveScrapeDependencies;
   readonly scraper: ILiveProviderScraper;
   readonly credentials: ScraperCredentials;
+  readonly browsers: BrowserRegistry;
+  readonly logger: ILogger;
   readonly label: string;
 }
