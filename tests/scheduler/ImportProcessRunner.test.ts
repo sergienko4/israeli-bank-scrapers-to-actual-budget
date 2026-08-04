@@ -111,14 +111,14 @@ describe('ImportProcessRunner.spawnImport', () => {
     expect(code).toBe(137);
   });
 
-  it('explains that a SIGKILLed child ran out of memory', async () => {
+  it('flags a SIGKILLed child as a likely out-of-memory kill', async () => {
     const child = new EventEmitter() as EventEmitter & { stdio?: unknown };
     mockSpawn.mockImplementation(() => child);
     const pending = spawnImport();
     setImmediate(() => child.emit('exit', null, 'SIGKILL'));
     await pending;
     expect(mockLogger.error).toHaveBeenCalledWith(
-      expect.stringContaining('out of memory')
+      expect.stringContaining('most often the kernel out-of-memory reaper')
     );
   });
 
@@ -141,7 +141,7 @@ describe('ImportProcessRunner.spawnImport', () => {
     const code = await pending;
     expect(code).toBe(2);
     expect(mockLogger.error).not.toHaveBeenCalledWith(
-      expect.stringContaining('out of memory')
+      expect.stringContaining('out-of-memory')
     );
   });
 });

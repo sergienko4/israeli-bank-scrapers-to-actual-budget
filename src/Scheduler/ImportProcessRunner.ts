@@ -56,9 +56,11 @@ function warnIfOutOfMemory(signal: NodeJS.Signals): IProcedureSuccess<{ status: 
   logger.warn(`Import killed by signal: ${signal}`);
   if (signal !== 'SIGKILL') return succeed({ status: 'not-oom' });
   logger.error(
-    '💥 The import ran out of memory and was killed by the kernel. ' +
-      'Raise the container ceiling (mem_limit / --memory / resources.limits.memory) ' +
-      'or reduce the work per run by lowering daysBack.'
+    '💥 The import was killed by SIGKILL (exit 137) — most often the kernel out-of-memory ' +
+      'reaper, though a manual stop or an orchestrator eviction looks identical. ' +
+      'If memory is the cause, raise the container ceiling ' +
+      '(mem_limit / --memory / resources.limits.memory) or reduce the work per run ' +
+      'by lowering daysBack.'
   );
   return succeed({ status: 'oom-reported' });
 }
