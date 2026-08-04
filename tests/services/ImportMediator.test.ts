@@ -81,9 +81,9 @@ describe('ImportMediator', () => {
     const result = await mediator.waitForBatch(batchId as string);
     expect(result.batchId).toBe(batchId);
     expect(result.source).toBe('cron');
-    expect(result.successCount).toBe(1);
+    expect(result.successCount).toBe(2);
     expect(result.failureCount).toBe(0);
-    expect(result.jobs).toHaveLength(1);
+    expect(result.jobs).toHaveLength(2);
   });
 
   it('waitForBatch rejects for unknown batchId', async () => {
@@ -101,7 +101,7 @@ describe('ImportMediator', () => {
     const batchId = mediator.requestImport({ source: 'telegram' });
     const result = await mediator.waitForBatch(batchId as string);
 
-    expect(result.failureCount).toBe(1);
+    expect(result.failureCount).toBe(2);
     expect(result.successCount).toBe(0);
   });
 
@@ -127,14 +127,13 @@ describe('ImportMediator', () => {
     const batchId = mediator.requestImport({ source: 'cron' });
     // Should not throw
     const result = await mediator.waitForBatch(batchId as string);
-    expect(result.successCount).toBe(1);
+    expect(result.successCount).toBe(2);
   });
 
   it('isImporting returns true while processing', async () => {
-    let resolveSpawn: ((v: number) => void) | undefined;
-    spawnImport.mockImplementation(
-      () => new Promise<number>((r) => { resolveSpawn = r; })
-    );
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((r) => { release = r; });
+    spawnImport.mockImplementation(async () => { await gate; return 0; });
     const mediator = new ImportMediator({
       spawnImport, getBankNames, notifier: null,
     });
@@ -145,7 +144,9 @@ describe('ImportMediator', () => {
     // Queue is now busy
     await vi.waitFor(() => expect(mediator.isImporting()).toBe(true));
 
-    resolveSpawn?.(0);
+    // Every bank runs in its own child, so releasing the shared gate lets
+    // each queued child finish in turn.
+    release?.();
     await mediator.waitForBatch(batchId as string);
     // Allow drain() to finish (microtask after finalizeBatch resolves the tracker)
     await vi.waitFor(() => expect(mediator.isImporting()).toBe(false));
@@ -229,7 +230,7 @@ describe('ImportMediator', () => {
     const batchId = mediator.requestImport({ source: 'telegram' });
     await mediator.waitForBatch(batchId as string);
 
-    expect(callOrder).toEqual(['stopAndFlush', 'spawnImport']);
+    expect(callOrder).toEqual(['stopAndFlush', 'spawnImport', 'spawnImport']);
   });
 
   it('does not stop poller when none is set', async () => {
@@ -240,7 +241,7 @@ describe('ImportMediator', () => {
     const batchId = mediator.requestImport({ source: 'cron' });
     // Should not throw
     const result = await mediator.waitForBatch(batchId as string);
-    expect(result.successCount).toBe(1);
+    expect(result.successCount).toBe(2);
   });
 
   it('handles spawnImport throwing an error', async () => {
@@ -252,7 +253,7 @@ describe('ImportMediator', () => {
     const result = await mediator.waitForBatch(batchId as string);
 
     // Error case: exitCode defaults to 1
-    expect(result.failureCount).toBe(1);
+    expect(result.failureCount).toBe(2);
     expect(result.successCount).toBe(0);
   });
 
@@ -263,8 +264,9 @@ describe('ImportMediator', () => {
     const batchId = mediator.requestImport({ source: 'cron' });
     await mediator.waitForBatch(batchId as string);
 
-    // Should pass empty env (no IMPORT_BANKS) for 'all' label
-    expect(spawnImport).toHaveBeenCalledWith({});
+    // Every configured bank is targeted, one isolated child process each
+    expect(spawnImport).toHaveBeenNthCalledWith(1, { IMPORT_BANKS: 'discount' });
+    expect(spawnImport).toHaveBeenNthCalledWith(2, { IMPORT_BANKS: 'leumi' });
   });
 
   it('handles poller.start failure gracefully', async () => {
