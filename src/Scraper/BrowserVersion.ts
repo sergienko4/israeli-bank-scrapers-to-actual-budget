@@ -13,6 +13,7 @@ import * as path from 'node:path';
 
 import type { Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
+import { errorMessage } from '../Utils/Index.js';
 
 /** Manifest written by the Camoufox fetch alongside the browser binary. */
 interface IBrowserManifest {
@@ -39,22 +40,35 @@ function readManifest(): Procedure<IBrowserManifest> {
     const raw = fs.readFileSync(file, 'utf8');
     const parsed = JSON.parse(raw) as IBrowserManifest;
     return succeed(parsed);
-  } catch {
-    return fail(`Camoufox manifest unavailable at ${file}`, { status: 'not-found' });
+  } catch (error: unknown) {
+    const reason = errorMessage(error);
+    return fail(`Camoufox manifest unavailable at ${file}: ${reason}`, { status: 'not-found' });
   }
 }
 
 /**
  * Formats a manifest into a human-readable browser description.
+ *
+ * Blank values are treated as absent so a half-written manifest degrades to a
+ * clear failure or a bare version, never to a banner ending in empty brackets.
  * @param manifest - Parsed Camoufox version manifest.
  * @returns Procedure carrying the description, or a failure when unusable.
  */
 function formatManifest(manifest: IBrowserManifest): Procedure<string> {
-  const version = manifest.version;
-  if (typeof version !== 'string') return fail('Camoufox manifest has no version');
-  const release = manifest.release;
-  if (typeof release !== 'string') return succeed(version);
+  const version = readText(manifest.version);
+  if (version === '') return fail('Camoufox manifest has no version');
+  const release = readText(manifest.release);
+  if (release === '') return succeed(version);
   return succeed(`${version} (${release})`);
+}
+
+/**
+ * Normalises a manifest field into trimmed text, or empty when unusable.
+ * @param value - Raw manifest field of unknown type.
+ * @returns The trimmed string value, or an empty string when not usable text.
+ */
+function readText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 /**

@@ -80,6 +80,31 @@ describe('describeBrowserVersion', () => {
     expect(result.success && result.data).toBe('152.0.4');
   });
 
+  it('rejects a version made only of whitespace', () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ version: '   ' }));
+
+    expect(describeBrowserVersion().success).toBe(false);
+  });
+
+  it('omits a blank release instead of printing empty parentheses', () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({ version: '152.0.4', release: '  ' }));
+
+    const result = describeBrowserVersion();
+
+    expect(result.success && result.data).toBe('152.0.4');
+  });
+
+  it('reports why the manifest could not be read', () => {
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw new Error('EACCES: permission denied');
+    });
+
+    const result = describeBrowserVersion();
+
+    expect(!result.success && result.message).toContain('EACCES');
+  });
+
   it('never throws, so a broken manifest cannot block startup', () => {
     vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error('EACCES: permission denied');

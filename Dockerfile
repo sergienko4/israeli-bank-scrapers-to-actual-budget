@@ -110,6 +110,7 @@ RUN ARCH=$(uname -m) && \
     echo "Validating Camoufox binary for $ARCH..." && \
     [ -f /home/node/.cache/camoufox/version.json ] || \
       (echo "ERROR: Camoufox version manifest missing — startup banner would be blank" && exit 1) && \
+    node -e "const m=JSON.parse(require('node:fs').readFileSync('/home/node/.cache/camoufox/version.json','utf8')); if(typeof m.version!=='string'||m.version.trim()===''){console.error('ERROR: Camoufox manifest declares no usable version');process.exit(1)}" && \
     head -c 4 /home/node/.cache/camoufox/camoufox-bin | grep -qP '\x7fELF' || \
       (echo "ERROR: Camoufox binary is not a valid ELF executable" && exit 1) && \
     EXPECTED_MACHINE=$([ "$ARCH" = "aarch64" ] && echo "b7 00" || echo "3e 00") && \
