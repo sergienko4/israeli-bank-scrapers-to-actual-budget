@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.1...v1.42.2) (2026-08-04)
+
+
+### Fixed
+
+* survive OOM-killed imports and reclaim leaked browsers ([#576](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/576)) ([9a3d361](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/9a3d361e29eb396d1ca793a1423c1fe70a4ac26d))
+
 ## [1.42.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.0...v1.42.1) (2026-08-03)
 
 
