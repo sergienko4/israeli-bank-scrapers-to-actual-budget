@@ -94,6 +94,27 @@ docker run -d \
 | `--tmpfs /dev/shm:size=256m` | Firefox-family browsers stream to `/dev/shm`; allocate it explicitly |
 | `--memory 2g` + `--memory-swap 2g` | Cap the container so a stalled scrape can never exhaust host RAM. Sized from measurements: ~200 MB Node + ~1 GB worst-case bank browser + ~300 MB OCR + headroom. `--max-old-space-size` is not a substitute — it caps only the JS heap, and most of the footprint is native browser memory |
 
+## Memory sizing
+
+Banks are scraped one child process at a time, so the ceiling is set by the
+single heaviest bank — not by how many banks you configure. Thirteen banks need
+the same 2 GB as one.
+
+A measured end-to-end run of the heaviest bank inside a `--memory 2g` container
+peaks at ~1.2 GB and settles back to ~400 MB between banks.
+
+> **Do not unset `NODE_ENV`.** The image pins `NODE_ENV=production`. The scraper
+> library only memoises its root logger when a log file is configured, and
+> outside production it attaches a `pino-pretty` transport — which starts a
+> `thread-stream` worker thread, each owning a 4 MB `SharedArrayBuffer` and a
+> `process` exit listener. Without `NODE_ENV=production` a single bank allocated
+> a worker per log call and reached 14.3 GB RSS before the kernel OOM-killed it.
+> Overriding `NODE_ENV` to anything else re-enables that behaviour.
+
+`NODE_ENV=production` silences the *scraper library's* own log output. The
+importer's logging is independent and still honours `LOG_LEVEL`, so
+`-e LOG_LEVEL=trace` continues to produce full importer traces.
+
 ## Volumes reference
 
 | Mount | Purpose | Required |
