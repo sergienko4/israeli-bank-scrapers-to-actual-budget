@@ -109,8 +109,9 @@ peaks at ~1.2 GB and settles back to ~400 MB between banks.
 > scraper 8.6.2 the root logger was cached only when a log file was configured,
 > so a fresh worker leaked on *every log call* — one bank reached 14.3 GB RSS
 > before the kernel OOM-killed it. Scraper 8.6.3 caches the root logger per
-> destination and fixes that at source; pinning production additionally keeps
-> the pretty transport, and its worker, out of the container.
+> destination and fixes that at source. `pino-pretty` is a runtime dependency
+> and stays installed either way; production mode stops the transport being
+> attached, so no worker is ever started.
 
 `NODE_ENV=production` silences the *scraper library's* own log output. The
 importer's logging is independent and still honours `LOG_LEVEL`, so

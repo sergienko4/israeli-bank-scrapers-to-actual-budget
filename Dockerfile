@@ -154,9 +154,9 @@ RUN chmod -R a-w /app/dist /app/node_modules 2>/dev/null || true
 # logger was cached only when a log file was set, so a fresh worker leaked on
 # every log call: 14,336 MB peak RSS (OOM-killed) unset versus 1,008 MB set.
 # Scraper 8.6.3 caches the root logger per destination and fixes that at
-# source; pinning production additionally keeps the pretty transport — and its
-# worker — out of the image. See docs/deployment/docker-run.md before
-# overriding this.
+# source. pino-pretty is a runtime dependency and stays installed either way;
+# production mode stops the transport being attached, so no worker is ever
+# started. See docs/deployment/docker-run.md before overriding this.
 ENV NODE_ENV=production
 
 # Health check (basic process check)

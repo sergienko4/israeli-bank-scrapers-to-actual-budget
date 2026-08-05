@@ -1,13 +1,15 @@
 /**
  * Guards the production logging mode of the shipped image.
  *
- * The scraper's root logger is only memoised when a log file is configured, and
- * outside production it attaches a `pino-pretty` transport. `pino({ transport })`
- * starts a `thread-stream` worker thread that owns a 4 MB SharedArrayBuffer and a
- * `process` exit listener, so an un-memoised logger allocates one worker per log
- * call. A real Discount scrape measured 14,336 MB peak RSS (OOM-killed) with
- * `NODE_ENV` unset versus 1,247 MB with it set to `production` — an 11x
- * difference produced by this single variable, so the image must pin it.
+ * Outside production the scraper attaches a `pino-pretty` transport, and
+ * `pino({ transport })` starts a `thread-stream` worker thread that owns a 4 MB
+ * SharedArrayBuffer and a `process` exit listener. On scraper 8.6.2 the root
+ * logger was cached only when a log file was configured, so that cost one worker
+ * per log call: a real Discount scrape measured 14,336 MB peak RSS (OOM-killed)
+ * with `NODE_ENV` unset versus 1,008 MB with it set to `production` — a 14x
+ * difference produced by this single variable. Scraper 8.6.3 caches the root
+ * logger per destination, but production mode still stops the transport being
+ * attached at all, so the image must pin it.
  */
 
 import { readFileSync } from 'node:fs';
