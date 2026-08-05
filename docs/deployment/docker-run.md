@@ -103,13 +103,14 @@ the same 2 GB as one.
 A measured end-to-end run of the heaviest bank inside a `--memory 2g` container
 peaks at ~1.2 GB and settles back to ~400 MB between banks.
 
-> **Do not unset `NODE_ENV`.** The image pins `NODE_ENV=production`. The scraper
-> library only memoises its root logger when a log file is configured, and
-> outside production it attaches a `pino-pretty` transport — which starts a
-> `thread-stream` worker thread, each owning a 4 MB `SharedArrayBuffer` and a
-> `process` exit listener. Without `NODE_ENV=production` a single bank allocated
-> a worker per log call and reached 14.3 GB RSS before the kernel OOM-killed it.
-> Overriding `NODE_ENV` to anything else re-enables that behaviour.
+> **Keep `NODE_ENV=production`.** Outside production the scraper library
+> attaches a `pino-pretty` transport, which starts a `thread-stream` worker
+> thread owning a 4 MB `SharedArrayBuffer` and a `process` exit listener. On
+> scraper 8.6.2 the root logger was cached only when a log file was configured,
+> so a fresh worker leaked on *every log call* — one bank reached 14.3 GB RSS
+> before the kernel OOM-killed it. Scraper 8.6.3 caches the root logger per
+> destination and fixes that at source; pinning production additionally keeps
+> the pretty transport, and its worker, out of the container.
 
 `NODE_ENV=production` silences the *scraper library's* own log output. The
 importer's logging is independent and still honours `LOG_LEVEL`, so
