@@ -58,7 +58,7 @@ export const SCRAPER_ERROR_ADVICE: Record<string, IErrorAdvice> = {
 };
 
 /** A distinctive fragment of an upstream error message, and what it really means. */
-interface IFailureSignature {
+export interface IFailureSignature {
   /** Case-insensitive pattern matched against the provider's error message. */
   readonly pattern: RegExp;
   /** Advice shown instead of the upstream wording. */
