@@ -9,6 +9,7 @@ import type { IRetryStrategy } from '../../../Resilience/RetryStrategy.js';
 import type { IBankConfig, IRawScrape, Procedure } from '../../../Types/Index.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../../Types/Index.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
+import { RetryableProviderFailure, throwIfRetryable } from './ProviderFailure.js';
 import {
   isInvalidOtpFailure,
   resolveLiveOpts,
@@ -97,12 +98,43 @@ function executeAttempt(
 async function runAttemptThenSeal(
   retryStrategy: IRetryStrategy, params: ITimeoutScrapeParams,
 ): Promise<IScraperScrapingResult> {
-  const wrapped = buildTimeoutWrappedScrape(params);
   try {
-    return await retryStrategy.execute(wrapped, params.label);
+    return await runRetries(retryStrategy, params);
   } finally {
     await sealBrowsers(params);
   }
+}
+
+/**
+ * Runs the retry loop and restores the provider result once it is exhausted.
+ *
+ * Transient provider failures are thrown so the retry strategy counts them;
+ * when the budget runs out the original result is returned here, keeping the
+ * envelope contract identical to a failure that never retried.
+ * @param retryStrategy - Retry policy applied around the timed scrape.
+ * @param params - Timeout wrapper inputs carrying the browser registry.
+ * @returns Provider scrape result returned by israeli-bank-scrapers.
+ */
+async function runRetries(
+  retryStrategy: IRetryStrategy, params: ITimeoutScrapeParams,
+): Promise<IScraperScrapingResult> {
+  const wrapped = buildTimeoutWrappedScrape(params);
+  try {
+    return await retryStrategy.execute(wrapped, params.label);
+  } catch (error: unknown) {
+    return restoreProviderResult(error);
+  }
+}
+
+/**
+ * Restores the provider's own result after the retry budget is spent.
+ * @param error - Value thrown out of the retry strategy.
+ * @returns The provider result carried by an exhausted retry loop.
+ * @throws The original error when it did not come from a provider failure.
+ */
+function restoreProviderResult(error: unknown): IScraperScrapingResult {
+  if (error instanceof RetryableProviderFailure) return error.result;
+  throw error;
 }
 
 /**
@@ -140,7 +172,8 @@ async function wrapScrapePromise(params: ITimeoutScrapeParams): Promise<IScraper
   const timeoutMs = DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs;
   try {
     const scraping = params.scraper.scrape(params.credentials);
-    return await params.deps.timeoutWrapper.wrap(scraping, timeoutMs, params.label);
+    const result = await params.deps.timeoutWrapper.wrap(scraping, timeoutMs, params.label);
+    return throwIfRetryable(result);
   } finally {
     await reclaimBrowsers(params);
   }
