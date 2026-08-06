@@ -38,6 +38,17 @@ cap_add:
 
 Better still: [auto-forward OTP codes from your phone](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md) so no manual input is needed.
 
+## PayBox asks for the OTP twice in a row
+
+**Symptom:** a single PayBox login shows two back-to-back OTP prompts, and the
+second prompt arrives before any new SMS does.
+
+**Fix:** upgrade — the importer now reuses the code you supplied for PayBox's
+second internal request, so one login prompts once. See
+[PayBox](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md).
+If a prompt times out or the bank rejects the code, you are asked again with a
+fresh code — that re-prompt is expected.
+
 ## Windows volume mounts don't work
 
 **Symptom:** `bind: invalid mount config` or container can't read `config.json`.

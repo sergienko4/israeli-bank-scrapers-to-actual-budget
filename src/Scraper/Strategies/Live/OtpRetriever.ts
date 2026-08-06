@@ -3,6 +3,7 @@
  * @internal
  */
 
+import { applyOtpReplayCache } from './OtpReplayCache.js';
 import type {
   ILiveScrapeDependencies,
   IOptionalOtpRetriever,
@@ -12,6 +13,10 @@ import type {
 
 /**
  * Resolves caller-provided OTP retrieval before constructing Telegram fallback.
+ *
+ * The resolved retriever is memoised for banks whose login flow asks for the
+ * same delivered code more than once (see {@link applyOtpReplayCache}), so the
+ * user is prompted once per attempt rather than once per provider step.
  * @param deps - Strategy dependencies captured by the public facade.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @returns OTP retriever when one is configured for this scrape.
@@ -20,7 +25,8 @@ export function resolveOtpRetriever(
   deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts,
 ): IOptionalOtpRetriever {
   const params = buildOtpRetrieverParams(deps, scrapeOpts);
-  return scrapeOpts.otpRetriever ?? buildOtpRetriever(params);
+  const retriever = scrapeOpts.otpRetriever ?? buildOtpRetriever(params);
+  return applyOtpReplayCache(retriever, scrapeOpts.companyType, scrapeOpts.logger);
 }
 
 /**

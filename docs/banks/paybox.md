@@ -46,6 +46,11 @@ After the first successful login, capture the value of `otpLongTermToken` from t
 
 For automated SMS forwarding, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
+PayBox's login consumes the SMS code **twice** — once to validate the PIN step
+and once to complete the SMS sign-in. Both steps need the same delivered digits,
+so the importer answers the second request with the code you already supplied.
+You are prompted once per login attempt, not twice.
+
 ## Known gotchas
 
 - `twoFactorAuth: true` is **always required** on first login.
