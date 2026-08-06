@@ -194,6 +194,43 @@ describe('ProcessAllBanksStep', () => {
     }
   });
 
+  it('failure message names the banks instead of the all-banks-failed token', async () => {
+    const ctx = makeCtx();
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, errorMessage: 'timeout' });
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) {
+      expect(result.message).not.toBe('all-banks-failed');
+      expect(result.message).toContain('hapoalim');
+      expect(result.message).toContain('leumi');
+      expect(result.message).toContain('All 2 banks failed');
+    }
+  });
+
+  it('single-bank run reports that one bank, not a total outage', async () => {
+    const ctx = makeCtx({
+      config: fakePipelineConfig({
+        banks: { visacal: fakeBankConfig() },
+      }) as unknown as IPipelineContext['config'],
+    });
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, errorMessage: 'zero accounts' });
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) {
+      expect(result.status).toBe('banks-failed');
+      expect(result.message).toContain('Import failed for visacal');
+      expect(result.message).not.toContain('All');
+    }
+  });
+
   it('shutdown aborts before processing any banks', async () => {
     const ctx = makeCtx({
       shutdownHandler: {

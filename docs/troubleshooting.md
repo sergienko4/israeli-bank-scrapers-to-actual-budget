@@ -57,6 +57,17 @@ fresh code — that re-prompt is expected.
 of the run and read `⚠️ Partial import (38s) — 4/5 banks OK, 1 failed:` with the
 failed bank named. Use `/retry` to re-run only the failed banks.
 
+## The error notification says `all-banks-failed`
+
+**Symptom:** Telegram shows `🚨 Import Failed` followed by the bare token
+`all-banks-failed`, even though only one bank was actually involved.
+
+**Fix:** upgrade — every bank runs in its own child process, so a lone failure
+used to satisfy the internal "all banks failed" condition and send that token
+verbatim. The message now names the bank and the reason, for example
+`Import failed for visacal: Hard-model scrape resolved zero accounts`. Runs
+covering several banks read `All 3 banks failed — …` with each bank listed.
+
 ## Windows volume mounts don't work
 
 **Symptom:** `bind: invalid mount config` or container can't read `config.json`.
