@@ -137,6 +137,12 @@ function diffPins(required, current) {
 /**
  * Prints a human-readable report of every finding.
  *
+ * The `stale pin: ` line prefix is a contract, not just prose:
+ * `.github/workflows/dependabot-meta-render.yml` greps for it to tell a
+ * re-approval (which needs a human to read a release diff) apart from an
+ * orphan removal (which withdraws an approval and needs nobody). Renaming it
+ * silently stops that review request from being posted.
+ *
  * @param {{ stale: object[], missing: object[], orphan: object[] }} findings
  * @param {(line: string) => void} log sink for each reported line
  * @returns {void}

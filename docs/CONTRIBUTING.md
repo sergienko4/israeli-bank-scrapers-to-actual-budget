@@ -130,10 +130,12 @@ rotates the pins for it and commits the result onto the Dependabot branch.
 
 This is a deliberate, narrow exception to the rule above, and it does not
 delete the review the pin exists to force — it moves it. Whenever the workflow
-rotates a pin it comments on the pull request naming every package it
+re-approves a version it comments on the pull request naming every package it
 re-approved and asks for that release diff to be reviewed before merge. **A
 Dependabot pull request being green does not mean anyone has vetted the new
-install script.** Read the comment.
+install script.** Read the comment. Dropping an entry the tree no longer needs
+withdraws an approval rather than granting one, so that alone is committed
+without a comment.
 
 The exception is deliberately narrow in two directions:
 

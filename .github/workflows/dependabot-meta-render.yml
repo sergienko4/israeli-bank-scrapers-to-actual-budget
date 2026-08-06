@@ -217,10 +217,20 @@ jobs:
           set -euo pipefail
           node scripts/check-allow-scripts.mjs --fix \
             | tee "${RUNNER_TEMP}/rotation.txt"
+          # Two outcomes, reported separately because they point in opposite
+          # directions: dropping an orphaned entry narrows what may execute and
+          # needs no review, whereas re-pinning a bumped package re-approves
+          # code nobody has read. Only the latter may claim an approval was
+          # granted, so only it triggers the review request below.
           if git diff --quiet -- package.json; then
-            echo 'rotated=false' >> "${GITHUB_OUTPUT}"
+            echo 'changed=false' >> "${GITHUB_OUTPUT}"
           else
-            echo 'rotated=true' >> "${GITHUB_OUTPUT}"
+            echo 'changed=true' >> "${GITHUB_OUTPUT}"
+          fi
+          if grep -q '^stale pin: ' "${RUNNER_TEMP}/rotation.txt"; then
+            echo 'repinned=true' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'repinned=false' >> "${GITHUB_OUTPUT}"
           fi
 
       - name: Commit the rendered documents to the Dependabot branch
@@ -229,7 +239,8 @@ jobs:
           HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
           HEAD_REF: ${{ steps.resolve.outputs.head_ref }}
           PR_NUMBER: ${{ steps.resolve.outputs.number }}
-          ROTATED: ${{ steps.rotate.outputs.rotated }}
+          CHANGED: ${{ steps.rotate.outputs.changed }}
+          REPINNED: ${{ steps.rotate.outputs.repinned }}
         run: |
           set -euo pipefail
           drifted=$(git diff --name-only \
@@ -254,8 +265,10 @@ jobs:
             git add -- "${file}"
           done <<< "${drifted}"
 
-          if [ "${ROTATED}" = 'true' ]; then
+          if [ "${REPINNED}" = 'true' ]; then
             subject='chore: re-render meta and rotate script pins'
+          elif [ "${CHANGED}" = 'true' ]; then
+            subject='chore: re-render meta and prune script pins'
           else
             subject='docs: re-render README meta markers'
           fi
@@ -275,11 +288,14 @@ jobs:
       # stays green and the review it used to force becomes this comment. The
       # rotation is narrow by construction — it only moves the version of a package
       # somebody already approved, never approves a new one — so what needs reading
-      # here is a release diff, not a trust decision. Keyed by a digest of the
-      # rotation so a rebase that re-renders the same change does not post a
-      # duplicate, while a genuinely different rotation always gets its own comment.
+      # here is a release diff, not a trust decision. Gated on `repinned` rather
+      # than on the file changing, because dropping an orphaned entry *withdraws*
+      # an approval; asking for review of that would cry wolf on the one comment
+      # that has to stay worth reading. Keyed by a digest of the rotation so a
+      # rebase that re-renders the same change does not post a duplicate, while a
+      # genuinely different rotation always gets its own comment.
       - name: Request review of the newly approved install scripts
-        if: steps.resolve.outputs.skip == 'false' && steps.rotate.outputs.rotated == 'true'
+        if: steps.resolve.outputs.skip == 'false' && steps.rotate.outputs.repinned == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           PR_NUMBER: ${{ steps.resolve.outputs.number }}
