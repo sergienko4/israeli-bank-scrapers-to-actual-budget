@@ -51,6 +51,14 @@ and once to complete the SMS sign-in. Both steps need the same delivered digits,
 so the importer answers the second request with the code you already supplied.
 You are prompted once per login attempt, not twice.
 
+If the bank rejects the code, the next attempt prompts you for a fresh one —
+the replay cache is rebuilt per attempt, so a wrong code is never re-sent.
+
+> The bank is matched on the `CompanyTypes` enum **value**, which is camelCase
+> (`payBox`) rather than PascalCase (`PayBox`). Matching on a hand-written
+> PascalCase literal silently disables the replay cache and the double prompt
+> returns. Always compare against `CompanyTypes.PayBox`, never a string literal.
+
 ## Known gotchas
 
 - `twoFactorAuth: true` is **always required** on first login.

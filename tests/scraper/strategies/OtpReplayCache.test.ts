@@ -9,6 +9,7 @@
  * user prompt to once per scrape attempt.
  */
 
+import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ILogger } from '../../../src/Logger/ILogger.js';
@@ -52,10 +53,10 @@ function makeOpts(companyType: string, otpRetriever: IOtpRetriever): IResolvedLi
 describe('OtpReplayCache', () => {
   describe('needsOtpReplayCache', () => {
     it('is enabled for PayBox only', () => {
-      expect(needsOtpReplayCache('PayBox')).toBe(true);
+      expect(needsOtpReplayCache(CompanyTypes.PayBox)).toBe(true);
     });
 
-    it.each(['OneZero', 'Pepper', 'hapoalim', 'paybox', ''])(
+    it.each([CompanyTypes.OneZero, CompanyTypes.Pepper, 'hapoalim', 'PayBox', ''])(
       'is disabled for %s', (companyId: string) => {
         expect(needsOtpReplayCache(companyId)).toBe(false);
       },
@@ -111,7 +112,7 @@ describe('OtpReplayCache', () => {
   describe('applyOtpReplayCache', () => {
     it('returns the retriever untouched for banks that ask once', async () => {
       const inner = vi.fn().mockResolvedValue('555555');
-      const wrapped = applyOtpReplayCache(inner, 'OneZero', makeLogger());
+      const wrapped = applyOtpReplayCache(inner, CompanyTypes.OneZero, makeLogger());
       expect(wrapped).toBe(inner);
       await wrapped?.();
       await wrapped?.();
@@ -120,7 +121,7 @@ describe('OtpReplayCache', () => {
 
     it('memoizes the retriever for PayBox', async () => {
       const inner = vi.fn().mockResolvedValue('666666');
-      const wrapped = applyOtpReplayCache(inner, 'PayBox', makeLogger());
+      const wrapped = applyOtpReplayCache(inner, CompanyTypes.PayBox, makeLogger());
       expect(wrapped).not.toBe(inner);
       await wrapped?.();
       await wrapped?.();
@@ -128,14 +129,14 @@ describe('OtpReplayCache', () => {
     });
 
     it('passes through when 2FA is disabled and no retriever exists', () => {
-      expect(applyOtpReplayCache(undefined, 'PayBox', makeLogger())).toBeUndefined();
+      expect(applyOtpReplayCache(undefined, CompanyTypes.PayBox, makeLogger())).toBeUndefined();
     });
   });
 
   describe('resolveOtpRetriever wiring', () => {
     it('memoizes a caller-supplied retriever for PayBox', async () => {
       const inner = vi.fn().mockResolvedValue('777777');
-      const resolved = resolveOtpRetriever(NO_PROMPTER_DEPS, makeOpts('PayBox', inner));
+      const resolved = resolveOtpRetriever(NO_PROMPTER_DEPS, makeOpts(CompanyTypes.PayBox, inner));
       await resolved?.();
       await resolved?.();
       expect(inner).toHaveBeenCalledTimes(1);
@@ -143,7 +144,7 @@ describe('OtpReplayCache', () => {
 
     it('leaves a caller-supplied retriever alone for other banks', async () => {
       const inner = vi.fn().mockResolvedValue('888888');
-      const resolved = resolveOtpRetriever(NO_PROMPTER_DEPS, makeOpts('OneZero', inner));
+      const resolved = resolveOtpRetriever(NO_PROMPTER_DEPS, makeOpts(CompanyTypes.OneZero, inner));
       await resolved?.();
       await resolved?.();
       expect(inner).toHaveBeenCalledTimes(2);

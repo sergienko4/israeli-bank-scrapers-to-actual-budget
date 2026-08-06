@@ -17,14 +17,18 @@
  * @internal
  */
 
+import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
+
 import type { ILogger } from '../../../Logger/ILogger.js';
 import type { IOptionalOtpRetriever, IOtpRetriever } from './Types.js';
 
 /**
  * Provider ids whose login flow invokes `otpCodeRetriever` more than once for
- * a single delivered code. Values must match CompanyTypes enum string values.
+ * a single delivered code. Built from the CompanyTypes enum rather than string
+ * literals: the enum values are camelCase (`payBox`), so a hand-written
+ * PascalCase literal silently never matches and disables the cache.
  */
-const OTP_REPLAY_BANKS = new Set(['PayBox']);
+const OTP_REPLAY_BANKS = new Set<string>([CompanyTypes.PayBox]);
 
 /** Mutable holder for the in-flight or resolved OTP retrieval of one attempt. */
 interface IOtpCacheBox {
@@ -97,6 +101,10 @@ export function memoizeOtpRetriever(
   retriever: IOtpRetriever, logger: ILogger,
 ): IOtpRetriever {
   const box: IOtpCacheBox = {};
+  /**
+   * Retriever exposed to the provider; each call shares one cache box.
+   * @returns The OTP digits, prompting the user only on the first call.
+   */
   return async (): Promise<string> => await resolveCached(box, retriever, logger);
 }
 

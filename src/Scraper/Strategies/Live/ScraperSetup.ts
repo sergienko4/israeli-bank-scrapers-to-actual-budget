@@ -6,7 +6,7 @@
 import { existsSync, rmSync } from 'node:fs';
 
 import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
-import { createScraper } from '@sergienko4/israeli-bank-scrapers';
+import { CompanyTypes, createScraper } from '@sergienko4/israeli-bank-scrapers';
 
 import { errorMessage } from '../../../Utils/Index.js';
 import buildCredentials from '../../CredentialsBuilder.js';
@@ -124,9 +124,13 @@ export function buildBaseScraperOptions(deps: LiveDeps, scrapeOpts: LiveOpts): S
 
 /**
  * Banks that read otpCodeRetriever from credentials, not ScraperOptions.
- * Values must match CompanyTypes enum string values (PascalCase).
+ * Built from the CompanyTypes enum rather than string literals: the enum
+ * values are camelCase (`payBox`), so a hand-written PascalCase literal
+ * silently never matches and the guard below stops working.
  */
-const CREDS_ONLY_BANKS = new Set(['OneZero', 'Pepper', 'PayBox']);
+const CREDS_ONLY_BANKS = new Set<string>([
+  CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox,
+]);
 
 /**
  * Attaches the OTP adapter expected by the provider package.
