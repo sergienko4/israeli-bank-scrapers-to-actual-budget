@@ -7,7 +7,8 @@ export MSYS_NO_PATHCONV=1
 # This hook answers one question: **is the snapshot I am recording
 # internally correct?** It therefore runs only the gates whose verdict can
 # change from one commit to the next within a single branch — type safety,
-# architecture rules, formatting, config shape, and PII leakage.
+# architecture rules, formatting, config shape, dependency install-script
+# pins, and PII leakage.
 #
 # Whole-repo integrity gates moved to .husky/pre-push, which answers a
 # different question: **is what leaves this machine correct as a whole?**
@@ -25,8 +26,10 @@ export MSYS_NO_PATHCONV=1
 # Why the split pays: the gates run in parallel, so a stage costs its
 # slowest gate plus the contention between them, not the sum. Measured on
 # this repo (minimum of three alternating runs, to discount ambient load):
-# the old twelve-gate hook took 35s, this five-gate hook takes 24s — a 31%
-# cut on the operation performed most often.
+# the old twelve-gate hook took 35s, the split hook takes 24s — a 31%
+# cut on the operation performed most often. The `allowScripts` pin gate
+# added later reads two JSON files and finishes far inside that floor, so
+# it does not move the number.
 #
 # The win is 31% rather than 60% because the two tall poles, `type-check`
 # and ESLint, both stay here: each has to build the TypeScript program
@@ -53,13 +56,14 @@ echo "==========================================="
 gate_init "precommit"
 
 echo ""
-echo "⚡ Running 5 commit-stage gates in parallel..."
+echo "⚡ Running 6 commit-stage gates in parallel..."
 echo ""
 
 run_gate "1-typecheck"   "Type-checking src/"             npm run type-check
 run_gate "6-eslint"      "Running ESLint (cached)"        npm run lint:cached
 run_gate "6b-biome"      "Running Biome lint"             npm run lint:biome
 run_gate "9-configcheck" "Checking config structure"      npm run lint:config-structure
+run_gate "9b-allowscripts" "Checking allowScripts pins"   npm run lint:allow-scripts
 run_gate "16-pii-check"  "Checking for PII in error messages" bash -c '
   # Catch interpolated PII variables in error/throw/fail messages
   # e.g., `throw new Error(\`got ${otp}\`)` or `fail(\`token: ${token}\`)`
@@ -77,11 +81,11 @@ run_gate "16-pii-check"  "Checking for PII in error messages" bash -c '
 '
 
 wait_gates \
-  "1-typecheck" "6-eslint" "6b-biome" "9-configcheck" "16-pii-check"
+  "1-typecheck" "6-eslint" "6b-biome" "9-configcheck" "9b-allowscripts" "16-pii-check"
 
 echo ""
 echo "==========================================="
-echo "✅ ALL 5 COMMIT-STAGE GATES PASSED. COMMITTING."
+echo "✅ ALL 6 COMMIT-STAGE GATES PASSED. COMMITTING."
 echo "   Push stage (.husky/pre-push) adds: test/e2e type-checks,"
 echo "   build, npm audit, markdownlint, circular deps, coupling,"
 echo "   and a full uncached ESLint run."

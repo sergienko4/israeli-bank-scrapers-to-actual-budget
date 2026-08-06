@@ -30,6 +30,7 @@
     "lint:biome": "npx biome lint src/",
     "lint:docs": "markdownlint-cli2 --config config/markdownlint/.markdownlint.jsonc \"README.md\" \".github/**/*.md\"",
     "lint:config-structure": "node config/check-structure.mjs",
+    "lint:allow-scripts": "node scripts/check-allow-scripts.mjs",
     "lint:manifest": "vitest run --config config/vitest.config.ts tests/config/ManifestGate.test.ts",
     "lint:canaries": "node config/check-eslint-canaries.mjs",
     "lint:circular": "node scripts/check-circular.cjs",

@@ -1,14 +1,21 @@
 name: Dependabot Meta Render
 
-# Keeps Dependabot pull requests green against the README marker gate.
+# Keeps Dependabot pull requests green against the two gates a version bump
+# predictably breaks, without relaxing either of them.
 #
-# `scripts/render-readme-meta.mjs` renders the `meta:tech-stack` fragment from
-# `package.json`, so every Dependabot bump of a version the README advertises
-# (`@sergienko4/israeli-bank-scrapers`, `@actual-app/api`, `typescript`,
-# `vitest`, `engines.node`) leaves the fragment stale and fails the
-# `Documentation Quality` gate. Dependabot cannot run `npm run meta:render`
-# itself, so this workflow renders the fragments and commits them onto the
-# Dependabot branch instead of relaxing the gate.
+# 1. `scripts/render-readme-meta.mjs` renders the `meta:tech-stack` fragment
+#    from `package.json`, so every Dependabot bump of a version the README
+#    advertises (`@sergienko4/israeli-bank-scrapers`, `@actual-app/api`,
+#    `typescript`, `vitest`, `engines.node`) leaves the fragment stale and
+#    fails `Documentation Quality`.
+#
+# 2. `allowScripts` pins each install-script dependency to an exact version, so
+#    bumping one leaves its pin stale. npm does not fail on a stale pin — it
+#    silently skips the script, and the break surfaces ~14 minutes later as a
+#    missing `better-sqlite3` native binding in E2E.
+#
+# Dependabot can run neither fix itself, so this workflow applies both and
+# commits them onto the Dependabot branch.
 #
 # Design decisions, each backed by GitHub documentation:
 #
@@ -33,15 +40,35 @@ name: Dependabot Meta Render
 #    Dependabot in control of the branch.
 #    https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-pull-requests-for-dependency-updates
 #
+# 4. Triggered on `requested` as well as `completed` — because decision 1 rules
+#    out reacting to the pull request itself, the fix cannot precede the run it
+#    repairs. Firing when the PR Pipeline is *queued* is the earliest a
+#    privileged token is available, so the corrected commit normally lands
+#    while the gates are still running rather than after they have gone red.
+#
+# Rotating a pin re-approves install-script execution for a version no human
+# has reviewed. The control is therefore relocated rather than dropped: the
+# job posts a comment on the pull request naming every package it re-approved
+# and asking for that review before merge. The same drift on a human-authored
+# branch still fails hard, at commit time, via the `lint:allow-scripts` gate.
+#
 # The job runs privileged, so no executable file from the pull request head is
-# ever run: the checkout, the lockfile and the renderer all come from the
-# default branch, and the head tree is only restored after the last step that
-# executes anything.
+# ever run. The checkout, the install and both scripts come from the default
+# branch; `package.json` and `package-lock.json` are overlaid from the head
+# only after `npm ci` has finished, purely as data for those scripts to read;
+# and the head tree is restored only after the last step that executes
+# anything.
 
 on:
   workflow_run:
     workflows: [PR Pipeline]
-    types: [completed]
+    # `requested` fires the moment the PR Pipeline is queued, so the render
+    # lands while the gates are still running and the very first reported
+    # `Documentation Quality` result is the corrected one. `completed` stays
+    # as the fallback for the case where the pull request is not yet
+    # associated with its head commit when `requested` arrives; by then the
+    # tree is normally already in sync and that run exits without pushing.
+    types: [requested, completed]
   # Escape hatch for pull requests opened before this workflow existed, and for
   # re-running a render without waiting for a new PR Pipeline run.
   workflow_dispatch:
@@ -64,7 +91,7 @@ concurrency:
 
 jobs:
   render:
-    name: Render README meta
+    name: Render meta and rotate script pins
     # `workflow_run` fires for every PR Pipeline run, including pushes to main.
     # Narrow to pull request runs here; the authoritative author check needs the
     # API and lives in the "Resolve" step below.
@@ -157,25 +184,44 @@ jobs:
 
       # Only data files are taken from the head: the manifest the renderer reads
       # and the documents it rewrites. Every executable file stays at the
-      # default branch commit checked out above.
+      # default branch commit checked out above. `package-lock.json` is safe to
+      # overlay because it arrives after `npm ci` — nothing installs from it.
       - name: Overlay the head manifest and documents
         if: steps.resolve.outputs.skip == 'false'
         env:
           HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
         run: |
           set -euo pipefail
-          for file in package.json README.md README.docker-hub.md; do
+          for file in package.json package-lock.json README.md README.docker-hub.md; do
             if git cat-file -e "${HEAD_SHA}:${file}" 2>/dev/null; then
               git checkout "${HEAD_SHA}" -- "${file}"
             fi
           done
 
       # Invoked through `node` rather than `npm run` so the overlaid
-      # `package.json` cannot inject a script into this privileged job. This is
-      # the last step that executes anything.
+      # `package.json` cannot inject a script into this privileged job.
       - name: Re-render the marker fragments
         if: steps.resolve.outputs.skip == 'false'
         run: node scripts/render-readme-meta.mjs
+
+      # A bump of a package that runs an install script leaves its exact
+      # `allowScripts` pin stale, and npm then silently skips that script — the
+      # failure only surfaces much later as a missing native binding. This is
+      # pure JSON manipulation over the two overlaid data files; no npm command
+      # and no head executable is involved. This is the last step that executes
+      # anything.
+      - name: Rotate the allowScripts pins to match the bumped lockfile
+        id: rotate
+        if: steps.resolve.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          node scripts/check-allow-scripts.mjs --fix \
+            | tee "${RUNNER_TEMP}/rotation.txt"
+          if git diff --quiet -- package.json; then
+            echo 'rotated=false' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'rotated=true' >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Commit the rendered documents to the Dependabot branch
         if: steps.resolve.outputs.skip == 'false'
@@ -183,11 +229,13 @@ jobs:
           HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
           HEAD_REF: ${{ steps.resolve.outputs.head_ref }}
           PR_NUMBER: ${{ steps.resolve.outputs.number }}
+          ROTATED: ${{ steps.rotate.outputs.rotated }}
         run: |
           set -euo pipefail
-          drifted=$(git diff --name-only -- README.md README.docker-hub.md)
+          drifted=$(git diff --name-only \
+            -- README.md README.docker-hub.md package.json)
           if [ -z "${drifted}" ]; then
-            echo "Marker fragments on #${PR_NUMBER} are already in sync."
+            echo "Pull request #${PR_NUMBER} is already in sync."
             exit 0
           fi
 
@@ -206,12 +254,67 @@ jobs:
             git add -- "${file}"
           done <<< "${drifted}"
 
+          if [ "${ROTATED}" = 'true' ]; then
+            subject='chore: re-render meta and rotate script pins'
+          else
+            subject='docs: re-render README meta markers'
+          fi
+
           git config user.name 'github-actions[bot]'
           git config user.email \
             '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'docs: re-render README meta markers [dependabot skip]'
+          git commit -m "${subject} [dependabot skip]"
           # A plain push, never forced: if Dependabot moved the branch while
           # this ran, the push is rejected and the next run renders the newer
           # head instead of overwriting it.
           git push origin "meta-render:refs/heads/${HEAD_REF}"
           echo "Rendered and pushed to #${PR_NUMBER} (${HEAD_REF})."
+
+      # Rotating a pin re-approves arbitrary install-script execution for a
+      # version no human has looked at, so the control is not dropped, it is
+      # relocated: the pipeline stays green and the review it used to force
+      # becomes this comment. Keyed by a digest of the rotation so a rebase
+      # that re-renders the same change does not post a duplicate, while a
+      # genuinely different rotation always gets its own comment.
+      - name: Request review of the newly approved install scripts
+        if: steps.resolve.outputs.skip == 'false' && steps.rotate.outputs.rotated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+        run: |
+          set -euo pipefail
+          digest=$(sha256sum "${RUNNER_TEMP}/rotation.txt" | cut -c1-16)
+          marker="<!-- allowscripts-rotation:${digest} -->"
+
+          # Written to a file rather than piped into `grep -q`: an early-exiting
+          # reader would SIGPIPE `gh`, and `pipefail` would report that as a
+          # failed lookup, which reads as "not yet flagged" and duplicates the
+          # comment.
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --jq '.[].body' > "${RUNNER_TEMP}/comments.txt"
+
+          if grep -qF "${marker}" "${RUNNER_TEMP}/comments.txt"; then
+            echo 'This rotation has already been flagged for review.'
+            exit 0
+          fi
+
+          {
+            echo "${marker}"
+            echo '### ⚠️ Install-script allowlist rotated automatically'
+            echo
+            echo 'This bump changed a package that runs an install script, so'
+            echo 'its `allowScripts` pin was re-pinned to keep the build working:'
+            echo
+            echo '```text'
+            cat "${RUNNER_TEMP}/rotation.txt"
+            echo '```'
+            echo
+            echo 'Exact-version pinning is a supply-chain control: a new version'
+            echo 'cannot run code during `npm ci` until someone approves it. The'
+            echo 'rotation above kept this pull request green, so **the approval'
+            echo 'has not happened yet — it is yours to give.** Before merging,'
+            echo 'review the release diff for the packages listed above.'
+          } > "${RUNNER_TEMP}/comment.md"
+
+          gh pr comment "${PR_NUMBER}" --body-file "${RUNNER_TEMP}/comment.md"
