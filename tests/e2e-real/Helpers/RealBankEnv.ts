@@ -88,6 +88,19 @@ export function loadOnezeroCreds(): Procedure<IBankConfig> {
 }
 
 /**
+ * Loads VisaCal real credentials from env.
+ * @returns Procedure success with IBankConfig or 'skip-no-creds' failure.
+ */
+export function loadVisacalCreds(): Procedure<IBankConfig> {
+  const username = process.env.VISACAL_USERNAME;
+  if (!username) return missing('VISACAL_USERNAME');
+  const password = process.env.VISACAL_PASSWORD;
+  if (!password) return missing('VISACAL_PASSWORD');
+  const config: IBankConfig = { username, password, daysBack: 7 };
+  return succeed(config);
+}
+
+/**
  * Builds an OTP retriever that prompts the user on stdin (readline).
  * Used when a real OTP code arrives via SMS during a real-bank test.
  * @param bankId - bank id used in the prompt label.
