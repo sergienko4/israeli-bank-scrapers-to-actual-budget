@@ -23,6 +23,10 @@ import { succeed } from '../Types/Index.js';
  * Back-compat shim — uses module-level getLogger() since callers do not
  * thread an ILogger through; phase-3 will delete and inline at call sites.
  *
+ * The error type and the error message are both offered to the advice lookup:
+ * some upstream failures arrive under a catch-all code and are only
+ * identifiable from their message text.
+ *
  * @param bankName - Name of the bank that failed.
  * @param result - Failed IScraperScrapingResult containing error details.
  * @returns Successful Procedure indicating the failure was logged.
@@ -32,7 +36,7 @@ export default function logScrapeFailure(
 ): IProcedureSuccess<{ status: string }> {
   const baseMsg = result.errorMessage ?? 'Unknown error';
   const errorType = result.errorType ?? '';
-  const advice = getScraperErrorAdvice(errorType);
+  const advice = getScraperErrorAdvice(`${errorType} ${baseMsg}`);
   const hint = advice ? `. ${advice}` : '';
   getLogger().error(`  ❌ Failed to scrape ${bankName}: ${baseMsg}${hint}`);
   return succeed({ status: 'logged' });
