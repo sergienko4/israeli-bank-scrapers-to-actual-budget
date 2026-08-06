@@ -81,13 +81,34 @@ every E2E import fails.
 Entries are written as `<name>@<version>`, not bare names. A bare name would
 trust the install script of **every future version**, so a dependency bump
 could execute an unreviewed install script during `npm ci`. Pinning means a new
-version is not pre-approved: CI fails loudly instead of running the script
-silently.
+version is not pre-approved.
 
 The pins are therefore **expected to change on every bump of these four
 packages** — that is the control working, not drift.
 
-When Dependabot bumps one of them, re-approve the new version:
+### The `lint:allow-scripts` gate
+
+A stale pin does not fail `npm ci`. npm simply skips the blocked script, so the
+break surfaces much later and in a shape that points nowhere near the cause —
+in [#585] it was a `Could not locate the bindings file` error roughly fourteen
+minutes into E2E, two bumps after the pin went stale.
+
+```bash
+npm run lint:allow-scripts
+```
+
+`scripts/check-allow-scripts.mjs` derives the pins the tree actually requires
+from `package-lock.json` — a package needs one exactly when it declares
+`hasInstallScript` and is not `optional` — and compares them against
+`allowScripts`. It names every stale, missing, or orphaned pin and prints the
+remedy for each: the `npm approve-scripts` command for a stale or missing pin,
+and the entry to delete for an orphaned one. It runs as a commit-stage gate in
+`.husky/pre-commit` and again in the `Build & Audit` CI job, so the failure is
+now immediate and actionable rather than delayed and opaque.
+
+[#585]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/pull/585
+
+### Re-approving a bumped package
 
 ```bash
 npm approve-scripts <pkg>
@@ -101,6 +122,34 @@ with `ENOMATCH`. Either way the command swaps the pin in place, reporting
 `removed-stale <pkg>@<old>` and `added <pkg>@<new>`.
 
 Then commit the updated `allowScripts` entry alongside the bump.
+
+### Dependabot pull requests rotate their own pins
+
+Dependabot cannot run either command, so `.github/workflows/dependabot-meta-render.yml`
+rotates the pins for it and commits the result onto the Dependabot branch.
+
+This is a deliberate, narrow exception to the rule above, and it does not
+delete the review the pin exists to force — it moves it. Whenever the workflow
+re-approves a version it comments on the pull request naming every package it
+re-approved and asks for that release diff to be reviewed before merge. **A
+Dependabot pull request being green does not mean anyone has vetted the new
+install script.** Read the comment. Dropping an entry the tree no longer needs
+withdraws an approval rather than granting one, so that alone is committed
+without a comment.
+
+The exception is deliberately narrow in two directions:
+
+- **Only Dependabot branches.** It applies only to pull requests authored by
+  `dependabot[bot]` that change nothing but the manifest, the lockfile, and the
+  rendered READMEs. On any human-authored branch the pins are never rotated
+  automatically and `lint:allow-scripts` still fails the commit.
+- **Only packages that are already approved.** `--fix` rotates the *version* of
+  a package someone already approved, and removes entries the tree no longer
+  needs. It never adds a package that is missing from `allowScripts`. A
+  dependency that has newly gained an install script is a new decision rather
+  than a rotation of an existing one, so it is reported as
+  `needs human approval` and left to fail the gate until someone runs
+  `npm approve-scripts` themselves.
 
 ---
 
