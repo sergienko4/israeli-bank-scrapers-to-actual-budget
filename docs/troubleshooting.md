@@ -49,6 +49,14 @@ second internal request, so one login prompts once. See
 If a prompt times out or the bank rejects the code, you are asked again with a
 fresh code — that re-prompt is expected.
 
+## One bank failed but the notification says the import failed
+
+**Symptom:** four of five banks imported fine, yet Telegram reported a failure.
+
+**Fix:** upgrade — failure notifications are now built from the per-bank results
+of the run and read `⚠️ Partial import (38s) — 4/5 banks OK, 1 failed:` with the
+failed bank named. Use `/retry` to re-run only the failed banks.
+
 ## Windows volume mounts don't work
 
 **Symptom:** `bind: invalid mount config` or container can't read `config.json`.

@@ -151,7 +151,8 @@ export class TelegramImportExecutor {
   private batchErrorReply(batch: IBatchResult): string {
     const freshResult = this._auditQuery.getFreshEntryFor(batch);
     const entry = freshResult.success ? freshResult.data : undefined;
-    return buildBatchErrorReply({ batch, entry, auditLog: this._auditLog });
+    const entries = this._auditQuery.getFreshEntriesFor(batch);
+    return buildBatchErrorReply({ batch, entry, entries, auditLog: this._auditLog });
   }
 }
 

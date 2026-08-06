@@ -4,13 +4,14 @@
  */
 
 import type { IBatchResult } from '../../Types/Index.js';
-import type { IAuditEntry, IAuditLog } from '../AuditLogService.js';
+import type { IAuditEntry } from '../AuditLogService.js';
 import {
   formatAuditEntry,
-  formatFailedBanks,
-  isFreshEntry,
   timeSince,
 } from '../TelegramCommandFormatters.js';
+
+export type { IBatchErrorReplyArgs } from './BatchFailureReply.js';
+export { buildBatchErrorReply } from './BatchFailureReply.js';
 
 /** Inputs for {@link buildStatusLines}. */
 export interface IStatusLinesArgs {
@@ -20,16 +21,6 @@ export interface IStatusLinesArgs {
   readonly lastResult: IBatchResult | null;
   /** Whether an import is currently in progress. */
   readonly isImporting: boolean;
-}
-
-/** Inputs for {@link buildBatchErrorReply}. */
-export interface IBatchErrorReplyArgs {
-  /** The completed batch with failure information. */
-  readonly batch: IBatchResult;
-  /** Optional fresh audit entry recorded during this batch. */
-  readonly entry: IAuditEntry | undefined;
-  /** Optional audit log used for failure-streak annotations. */
-  readonly auditLog: IAuditLog | undefined;
 }
 
 /** Static base help lines shared between /help and /start replies. */
@@ -80,9 +71,20 @@ export function buildStatusLines(
  */
 function buildRunLine(args: IStatusLinesArgs): string {
   if (!args.lastTime) return 'No imports run yet';
-  const resultLabel = args.lastResult?.failureCount === 0 ? 'success' : 'failed';
-  const label = args.lastResult ? ` (${resultLabel})` : '';
+  const label = args.lastResult ? ` (${resultLabel(args.lastResult)})` : '';
   return `Last run: ${timeSince(args.lastTime)} ago${label}`;
+}
+
+/**
+ * Labels a batch outcome, distinguishing a partial run from a total failure.
+ * @param result - The batch result to label.
+ * @returns 'success', 'failed', or a partial label with the OK ratio.
+ */
+function resultLabel(result: IBatchResult): string {
+  if (result.failureCount === 0) return 'success';
+  if (result.successCount === 0) return 'failed';
+  const total = result.successCount + result.failureCount;
+  return `partial: ${String(result.successCount)}/${String(total)} OK`;
 }
 
 /**
@@ -115,22 +117,4 @@ export function buildLogsHeader(count: number): string {
  */
 export function buildLogsFooter(): string {
   return '</pre>';
-}
-
-/**
- * Builds the multi-line error reply for a failed batch.
- * Falls back to a generic single-line message when the audit entry is stale
- * or absent.
- * @param args - Batch, optional fresh audit entry, and audit log.
- * @returns Reply text suitable for sendMessage().
- */
-export function buildBatchErrorReply(
-  args: IBatchErrorReplyArgs,
-): string {
-  const dur = (args.batch.totalDurationMs / 1000).toFixed(0);
-  const entry = args.entry;
-  if (!entry || !isFreshEntry(entry, args.batch)) {
-    return `❌ Import failed (${dur}s). Use /logs for details.`;
-  }
-  return formatFailedBanks(entry, dur, args.auditLog);
 }

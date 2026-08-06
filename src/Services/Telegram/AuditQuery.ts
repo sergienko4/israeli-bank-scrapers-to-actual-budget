@@ -30,6 +30,15 @@ export interface IAuditQuery {
    */
   getFreshEntryFor(batch: IBatchResult): Procedure<IAuditEntry>;
   /**
+   * Returns every audit entry recorded during the batch window.
+   *
+   * The importer runs one child process per bank and each writes its own
+   * entry, so a batch of N banks produces up to N fresh entries.
+   * @param batch - Recently completed batch.
+   * @returns Fresh entries for the batch; empty array when none.
+   */
+  getFreshEntriesFor(batch: IBatchResult): readonly IAuditEntry[];
+  /**
    * Returns the consecutive failure count for a bank.
    * @param bankName - Bank to check.
    * @returns Consecutive failure count for that bank (0 if none / on failure).
@@ -63,6 +72,8 @@ export function createAuditQuery(auditLog?: IAuditLog): IAuditQuery {
      */
     getFreshEntryFor: (batch: IBatchResult): Procedure<IAuditEntry> =>
       pickFreshEntry(batch, auditLog),
+    /** Reads every audit entry recorded during the batch window. */
+    getFreshEntriesFor: freshEntriesReader(auditLog),
     /**
      * Reads the consecutive failure count for a bank.
      * @param bankName - Bank to check.
@@ -70,6 +81,15 @@ export function createAuditQuery(auditLog?: IAuditLog): IAuditQuery {
      */
     getConsecutiveFailures: (bankName: string): number => readStreak(bankName, auditLog),
   };
+}
+
+/**
+ * Builds the batch-window entries reader bound to an audit log.
+ * @param log - Optional audit log.
+ * @returns Reader returning every fresh entry for a batch.
+ */
+function freshEntriesReader(log?: IAuditLog): IAuditQuery['getFreshEntriesFor'] {
+  return (batch: IBatchResult): readonly IAuditEntry[] => pickFreshEntries(batch, log);
 }
 
 /**
@@ -125,4 +145,21 @@ function pickFreshEntry(
   const [entry] = recent;
   if (!isFreshEntry(entry, batch)) return fail('stale-entry');
   return succeed(entry);
+}
+
+/**
+ * Picks every audit entry that falls within the supplied batch window.
+ *
+ * Reads as many entries as the batch had jobs, because each bank runs in its
+ * own child process and records its own entry.
+ * @param batch - Recently completed batch.
+ * @param log - Optional audit log.
+ * @returns Fresh entries for the batch; empty array when none.
+ */
+function pickFreshEntries(
+  batch: IBatchResult, log?: IAuditLog,
+): readonly IAuditEntry[] {
+  const limit = Math.max(batch.jobs.length, 1);
+  const recent = readRecent(limit, log);
+  return recent.filter(e => isFreshEntry(e, batch));
 }

@@ -46,17 +46,32 @@ export async function rateLimitDelay(): Promise<void> {
 }
 
 /**
+ * Extracts the `text` field of an outgoing Telegram sendMessage request body.
+ * @param init - Fetch init carrying the JSON-encoded request body.
+ * @returns The message text, or an empty string when it cannot be read.
+ */
+function readSentText(init?: RequestInit): string {
+  if (typeof init?.body !== 'string') return '';
+  try {
+    return (JSON.parse(init.body) as { text?: string }).text ?? '';
+  } catch { return ''; }
+}
+
+/**
  * Capture message_id from TelegramNotifier.send() by wrapping global fetch.
- * Returns a collector that records message IDs for cleanup.
+ * Returns a collector that records message IDs (for cleanup) and message texts
+ * (so tests can assert on the exact wording delivered to Telegram).
  */
 export function createMessageCollector() {
   const messageIds: number[] = [];
+  const sentTexts: string[] = [];
   const originalFetch = globalThis.fetch;
 
   function startCapturing(): void {
     globalThis.fetch = async (input, init) => {
       const res = await originalFetch(input, init);
       if (String(input).includes('/sendMessage')) {
+        sentTexts.push(readSentText(init));
         try {
           const clone = res.clone();
           const data = await clone.json() as { ok: boolean; result?: { message_id: number } };
@@ -73,7 +88,7 @@ export function createMessageCollector() {
     globalThis.fetch = originalFetch;
   }
 
-  return { messageIds, startCapturing, stopCapturing };
+  return { messageIds, sentTexts, startCapturing, stopCapturing };
 }
 
 interface TelegramCleanupConfig {
@@ -90,5 +105,6 @@ export async function cleanupMessages(
     await deleteMessage(config.botToken, config.chatId, id);
   }
   collector.messageIds.length = 0;
+  collector.sentTexts.length = 0;
   await rateLimitDelay();
 }

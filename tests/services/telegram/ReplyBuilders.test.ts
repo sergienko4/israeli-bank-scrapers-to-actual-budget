@@ -50,6 +50,17 @@ describe('ReplyBuilders', () => {
       expect(joined).toContain('(failed)');
       expect(joined).toContain('importing');
     });
+
+    it('shows a partial label when some banks succeeded', () => {
+      const lines = buildStatusLines({
+        lastTime: new Date(),
+        lastResult: fakeBatchResult({ successCount: 4, failureCount: 1 }),
+        isImporting: false,
+      });
+      const joined = lines.join('\n');
+      expect(joined).toContain('(partial: 4/5 OK)');
+      expect(joined).not.toContain('(failed)');
+    });
   });
 
   describe('buildHistoryLines', () => {

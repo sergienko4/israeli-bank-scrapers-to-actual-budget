@@ -100,10 +100,25 @@ export function formatBankError(
   bank: IAuditEntry['banks'][number],
   auditLog?: IAuditLog
 ): string {
-  const errorSuffix = bank.error ? `: ${bank.error.slice(0, 80)}` : '';
-  const line = `• ${bank.name}${errorSuffix}`;
-  const advice = bank.error ? getScraperErrorAdvice(bank.error) : '';
-  const streakResult = auditLog?.getConsecutiveFailures(bank.name);
+  return formatFailedBankLine(bank.name, bank.error, auditLog);
+}
+
+/**
+ * Formats a failed bank bullet line from its name and optional error text.
+ * @param name - Bank name to display.
+ * @param error - Recorded error text, when the run captured one.
+ * @param auditLog - Audit log for looking up failure streak.
+ * @returns Formatted bullet-point string with error and advice.
+ */
+export function formatFailedBankLine(
+  name: string,
+  error?: string,
+  auditLog?: IAuditLog
+): string {
+  const errorSuffix = error ? `: ${error.slice(0, 80)}` : '';
+  const line = `• ${name}${errorSuffix}`;
+  const advice = error ? getScraperErrorAdvice(error) : '';
+  const streakResult = auditLog?.getConsecutiveFailures(name);
   const streak = streakResult?.success ? streakResult.data : 0;
   return [line, ...buildErrorAnnotations(advice, streak)].join('\n');
 }
