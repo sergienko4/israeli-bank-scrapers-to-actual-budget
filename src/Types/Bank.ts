@@ -49,7 +49,7 @@ export interface IBankConfig {
   // Scraper tuning (per bank)
   timeout?: number;                  // Navigation timeout in ms. Default: 30000
   navigationRetryCount?: number;     // Retries on page.goto failure. Default: 0
-  failureScreenshotPath?: string;    // Dir for login-failure screenshots. Default: /app/logs/failures
+  failureScreenshotPath?: string;    // Dir for login-failure screenshots. Default: <cwd>/logs/failures
 
   [key: string]: unknown; // Allow other bank-specific fields
 }

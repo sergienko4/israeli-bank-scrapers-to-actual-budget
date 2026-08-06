@@ -12,6 +12,8 @@
  * @internal
  */
 
+import { join } from 'node:path';
+
 import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
 
 import type { IBankConfig } from '../../../Types/Index.js';
@@ -19,8 +21,8 @@ import type { IBankConfig } from '../../../Types/Index.js';
 /** Importer log levels that turn on provider diagnostics. */
 const DIAGNOSTIC_LEVELS = new Set<string>(['debug', 'trace']);
 
-/** Directory the provider writes failure screenshots into. */
-const FAILURE_SHOT_DIR = '/app/logs/failures';
+/** Path segments, below the working directory, holding failure screenshots. */
+const FAILURE_SHOT_SEGMENTS = ['logs', 'failures'];
 
 /**
  * Reports whether the importer is running verbosely enough for diagnostics.
@@ -33,22 +35,54 @@ export function wantsDiagnostics(logLevel: string): boolean {
 }
 
 /**
- * Resolves where provider failure screenshots are written.
- * @param bankConfig - Bank config that may override the screenshot directory.
- * @returns Absolute directory path for provider failure screenshots.
+ * Resolves the default screenshot directory below the working directory.
+ *
+ * Anchoring on the working directory keeps one path expression correct both
+ * inside the container, where it resolves to /app/logs/failures, and on a
+ * developer machine running the real-bank suites directly.
+ * @returns Absolute default directory for provider failure screenshots.
  */
-function resolveShotDir(bankConfig: IBankConfig): string {
+function defaultShotDir(): string {
+  const cwd = process.cwd();
+  return join(cwd, ...FAILURE_SHOT_SEGMENTS);
+}
+
+/**
+ * Builds a collision-free screenshot file name for one failed scrape.
+ * @param companyId - Provider company id being scraped.
+ * @returns File name carrying the bank and the failure timestamp.
+ */
+function shotFileName(companyId: string): string {
+  const now = new Date();
+  const iso = now.toISOString();
+  const stamp = iso.replace(/[:.]/gu, '-');
+  return `${companyId}-${stamp}.png`;
+}
+
+/**
+ * Resolves the file the provider writes its failure screenshot to.
+ *
+ * The provider treats this option as a file path, not a directory, so a bare
+ * directory would be overwritten by a PNG. Naming the file per run also keeps
+ * one failure from erasing the evidence of the previous one.
+ * @param target - Provider options, consulted for the company id.
+ * @param bankConfig - Bank config that may override the screenshot directory.
+ * @returns Absolute file path for this run's failure screenshot.
+ */
+function resolveShotPath(target: ScraperOptions, bankConfig: IBankConfig): string {
   const configured = bankConfig.failureScreenshotPath ?? '';
-  if (configured !== '') return configured;
-  return FAILURE_SHOT_DIR;
+  const dir = configured === '' ? defaultShotDir() : configured;
+  const file = shotFileName(target.companyId);
+  return join(dir, file);
 }
 
 /**
  * Attaches provider diagnostics when the importer is running verbosely.
  *
- * `loginLogLevel` makes the provider narrate each login step, and
- * `storeFailureScreenShotPath` captures the page at the moment of failure —
- * together they turn an opaque "zero accounts" result into a diagnosable one.
+ * `loginLogLevel` makes the provider narrate each step, and
+ * `storeFailureScreenShotPath` makes it photograph the page before it tears
+ * the browser down on any failed session — together they turn an opaque
+ * "zero accounts" result into a diagnosable one.
  * @param target - Provider options object that receives the diagnostics.
  * @param bankConfig - Bank config consulted for the screenshot directory.
  * @param logLevel - Importer log level resolved from config or env.
@@ -60,6 +94,6 @@ export default function attachDiagnostics(
   if (!wantsDiagnostics(logLevel)) return false;
   target.verbose = true;
   target.loginLogLevel = 'trace';
-  target.storeFailureScreenShotPath = resolveShotDir(bankConfig);
+  target.storeFailureScreenShotPath = resolveShotPath(target, bankConfig);
   return true;
 }

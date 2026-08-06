@@ -6,6 +6,8 @@
  * raising the importer log level turns on the provider's own login trace and
  * failure screenshot, and that a normal run stays quiet.
  */
+import { join } from 'node:path';
+
 import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
 import { describe, expect, it } from 'vitest';
 
@@ -13,6 +15,12 @@ import attachDiagnostics, {
   wantsDiagnostics,
 } from '../../src/Scraper/Strategies/Live/ScrapeDiagnostics.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
+
+/** Screenshot directory the importer defaults to, anchored on the workdir. */
+const DEFAULT_SHOT_DIR = join(process.cwd(), 'logs', 'failures');
+
+/** Matches the timestamped PNG file name the diagnostics wiring generates. */
+const SHOT_FILE = /visaCal-\d{4}-\d{2}-\d{2}T[\d-]+Z\.png$/u;
 
 /**
  * Builds an empty provider options object for assertions.
@@ -38,7 +46,22 @@ describe('attachDiagnostics', () => {
     expect(attachDiagnostics(options, {}, 'debug')).toBe(true);
     expect(options.verbose).toBe(true);
     expect(options.loginLogLevel).toBe('trace');
-    expect(options.storeFailureScreenShotPath).toBe('/app/logs/failures');
+    expect(options.storeFailureScreenShotPath).toContain(DEFAULT_SHOT_DIR);
+  });
+
+  it('names the screenshot file so the provider cannot overwrite a folder', () => {
+    const options = buildOptions();
+    attachDiagnostics(options, {}, 'debug');
+    expect(options.storeFailureScreenShotPath).toMatch(SHOT_FILE);
+  });
+
+  it('keeps each failure by stamping the screenshot file name', () => {
+    const first = buildOptions();
+    const second = buildOptions();
+    attachDiagnostics(first, { failureScreenshotPath: '/data/shots' }, 'debug');
+    attachDiagnostics(second, { failureScreenshotPath: '/data/shots' }, 'debug');
+    expect(first.storeFailureScreenShotPath).toMatch(SHOT_FILE);
+    expect(second.storeFailureScreenShotPath).toMatch(SHOT_FILE);
   });
 
   it('keeps a normal run quiet so logs stay readable', () => {
@@ -53,12 +76,12 @@ describe('attachDiagnostics', () => {
     const options = buildOptions();
     const bankConfig: IBankConfig = { failureScreenshotPath: '/app/data/shots' };
     attachDiagnostics(options, bankConfig, 'trace');
-    expect(options.storeFailureScreenShotPath).toBe('/app/data/shots');
+    expect(options.storeFailureScreenShotPath).toContain('shots');
   });
 
   it('ignores an empty screenshot override and uses the default', () => {
     const options = buildOptions();
     attachDiagnostics(options, { failureScreenshotPath: '' }, 'debug');
-    expect(options.storeFailureScreenShotPath).toBe('/app/logs/failures');
+    expect(options.storeFailureScreenShotPath).toContain(DEFAULT_SHOT_DIR);
   });
 });

@@ -31,7 +31,8 @@ explain itself:
 | Verbose scraper output | `verbose: true` |
 | A screenshot of the page at the moment login failed | `storeFailureScreenShotPath` |
 
-Screenshots land in `/app/logs/failures` by default. Override per bank with
+Screenshots land in `logs/failures` below the working directory — which is
+`/app/logs/failures` in the container. Override per bank with
 `failureScreenshotPath`:
 
 ```json
