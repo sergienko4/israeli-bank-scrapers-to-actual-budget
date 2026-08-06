@@ -18,13 +18,36 @@ const LISTED_BANK_CAP = 5;
 const UNKNOWN_REASON = 'unknown error';
 
 /**
+ * Maximum characters kept from a single failure reason.
+ *
+ * Scraper errors can carry multi-line stack context. Telegram truncates at
+ * 4096 characters, so an unbounded reason from one bank could push the other
+ * failed banks out of the message entirely.
+ */
+const REASON_CAP = 160;
+
+/** Collapses any run of whitespace, including line breaks, to one space. */
+const WHITESPACE_RUN = /\s+/g;
+
+/**
+ * Flattens a raw error message to a single bounded line.
+ * @param raw - Error message recorded on the quarantine entry.
+ * @returns Single-line reason, truncated with an ellipsis when over the cap.
+ */
+function condenseReason(raw: string): string {
+  const flat = raw.replace(WHITESPACE_RUN, ' ').trim();
+  if (flat === '') return UNKNOWN_REASON;
+  if (flat.length <= REASON_CAP) return flat;
+  return `${flat.slice(0, REASON_CAP).trimEnd()}…`;
+}
+
+/**
  * Renders one quarantined bank as a `name: reason` fragment.
  * @param entry - Quarantine entry recorded for the failed bank.
  * @returns Single-line description of the bank and its failure reason.
  */
 function describeBank(entry: IBankQuarantineEntry): string {
-  const reason = entry.error.message.trim();
-  if (reason === '') return `${entry.bankName}: ${UNKNOWN_REASON}`;
+  const reason = condenseReason(entry.error.message);
   return `${entry.bankName}: ${reason}`;
 }
 

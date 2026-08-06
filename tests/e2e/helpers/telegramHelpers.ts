@@ -61,6 +61,7 @@ function readSentText(init?: RequestInit): string {
  * Capture message_id from TelegramNotifier.send() by wrapping global fetch.
  * Returns a collector that records message IDs (for cleanup) and message texts
  * (so tests can assert on the exact wording delivered to Telegram).
+ * @returns Collector exposing capture control plus the recorded IDs and texts.
  */
 export function createMessageCollector() {
   const messageIds: number[] = [];

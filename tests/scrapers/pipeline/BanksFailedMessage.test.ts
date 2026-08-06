@@ -92,4 +92,26 @@ describe('buildBanksFailedMessage', () => {
 
     expect(message).toBe('All 4 banks failed');
   });
+
+  it('flattens a multi-line reason onto one line', () => {
+    const stack = 'Request failed\n    at fetchAccounts (api.ts:42)\n    at scrape';
+
+    const message = buildBanksFailedMessage(failedPartition([['visacal', stack]]));
+
+    expect(message).not.toContain('\n');
+    expect(message).toBe(
+      'Import failed for visacal: Request failed at fetchAccounts (api.ts:42) at scrape',
+    );
+  });
+
+  it('truncates an oversized reason so other banks stay visible', () => {
+    const huge = 'x'.repeat(500);
+    const partition = failedPartition([['visacal', huge], ['max', 'login rejected']]);
+
+    const message = buildBanksFailedMessage(partition);
+
+    expect(message).toContain('…');
+    expect(message).toContain('max: login rejected');
+    expect(message.length).toBeLessThan(300);
+  });
 });
