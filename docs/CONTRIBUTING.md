@@ -101,9 +101,10 @@ npm run lint:allow-scripts
 from `package-lock.json` — a package needs one exactly when it declares
 `hasInstallScript` and is not `optional` — and compares them against
 `allowScripts`. It names every stale, missing, or orphaned pin and prints the
-command that fixes it. It runs as a commit-stage gate in `.husky/pre-commit`
-and again in the `Build & Audit` CI job, so the failure is now immediate and
-actionable rather than delayed and opaque.
+remedy for each: the `npm approve-scripts` command for a stale or missing pin,
+and the entry to delete for an orphaned one. It runs as a commit-stage gate in
+`.husky/pre-commit` and again in the `Build & Audit` CI job, so the failure is
+now immediate and actionable rather than delayed and opaque.
 
 [#585]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/pull/585
 
@@ -134,11 +135,19 @@ re-approved and asks for that release diff to be reviewed before merge. **A
 Dependabot pull request being green does not mean anyone has vetted the new
 install script.** Read the comment.
 
-The exception is scoped to that workflow alone: it applies only to pull
-requests authored by `dependabot[bot]` that change nothing but the manifest,
-the lockfile, and the rendered READMEs. On any human-authored branch the pins
-are never rotated automatically and `lint:allow-scripts` still fails the
-commit.
+The exception is deliberately narrow in two directions:
+
+- **Only Dependabot branches.** It applies only to pull requests authored by
+  `dependabot[bot]` that change nothing but the manifest, the lockfile, and the
+  rendered READMEs. On any human-authored branch the pins are never rotated
+  automatically and `lint:allow-scripts` still fails the commit.
+- **Only packages that are already approved.** `--fix` rotates the *version* of
+  a package someone already approved, and removes entries the tree no longer
+  needs. It never adds a package that is missing from `allowScripts`. A
+  dependency that has newly gained an install script is a new decision rather
+  than a rotation of an existing one, so it is reported as
+  `needs human approval` and left to fail the gate until someone runs
+  `npm approve-scripts` themselves.
 
 ---
 

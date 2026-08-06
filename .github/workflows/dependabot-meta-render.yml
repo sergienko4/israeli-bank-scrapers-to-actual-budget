@@ -270,12 +270,14 @@ jobs:
           git push origin "meta-render:refs/heads/${HEAD_REF}"
           echo "Rendered and pushed to #${PR_NUMBER} (${HEAD_REF})."
 
-      # Rotating a pin re-approves arbitrary install-script execution for a
-      # version no human has looked at, so the control is not dropped, it is
-      # relocated: the pipeline stays green and the review it used to force
-      # becomes this comment. Keyed by a digest of the rotation so a rebase
-      # that re-renders the same change does not post a duplicate, while a
-      # genuinely different rotation always gets its own comment.
+      # Rotating a pin re-approves install-script execution for a version no human
+      # has looked at, so the control is not dropped, it is relocated: the pipeline
+      # stays green and the review it used to force becomes this comment. The
+      # rotation is narrow by construction — it only moves the version of a package
+      # somebody already approved, never approves a new one — so what needs reading
+      # here is a release diff, not a trust decision. Keyed by a digest of the
+      # rotation so a rebase that re-renders the same change does not post a
+      # duplicate, while a genuinely different rotation always gets its own comment.
       - name: Request review of the newly approved install scripts
         if: steps.resolve.outputs.skip == 'false' && steps.rotate.outputs.rotated == 'true'
         env:
@@ -315,6 +317,11 @@ jobs:
             echo 'rotation above kept this pull request green, so **the approval'
             echo 'has not happened yet — it is yours to give.** Before merging,'
             echo 'review the release diff for the packages listed above.'
+            echo
+            echo 'Only packages that were already approved get rotated. A'
+            echo 'dependency that has newly gained an install script is reported'
+            echo 'as `needs human approval` and fails the `lint:allow-scripts`'
+            echo 'gate instead, so it can never be approved automatically.'
           } > "${RUNNER_TEMP}/comment.md"
 
           gh pr comment "${PR_NUMBER}" --body-file "${RUNNER_TEMP}/comment.md"

@@ -19,10 +19,15 @@
  *
  * Modes:
  *   default:  report drift on stderr, exit 1 if any pin is wrong
- *   --fix:    rewrite the allowlist in place, preserving key order, exit 0,
- *             listing every rotation on stdout so the Dependabot workflow can
+ *   --fix:    rotate the pins of already-approved packages in place and drop
+ *             entries the tree no longer needs, preserving key order, exit 0,
+ *             listing every change on stdout so the Dependabot workflow can
  *             quote it into the comment that asks a human to review the newly
  *             approved install scripts
+ *
+ * `--fix` never approves a package that is not on the allowlist already. A
+ * dependency that has newly gained an install script is a new decision, not a
+ * rotation of an existing one, so it is left to fail the gate for a human.
  *
  * Contract:
  *   - Idempotent: running twice produces identical bytes
@@ -151,6 +156,11 @@ function report({ stale, missing, orphan }, log) {
 /**
  * Rebuilds the allowlist, keeping existing key order to minimise the diff.
  *
+ * Rotates the version of packages that are already approved and drops entries
+ * the tree no longer needs. A package absent from the allowlist is deliberately
+ * *not* added: approving a dependency that has newly gained an install script
+ * is a decision a human has to make, so it is left to fail the gate.
+ *
  * @param {object} pkg parsed package.json
  * @param {Map<string, string>} required pins the tree requires
  * @returns {Record<string, boolean>} the corrected allowlist
@@ -160,9 +170,6 @@ function rebuildAllowScripts(pkg, required) {
   for (const entry of Object.keys(pkg.allowScripts ?? {})) {
     const { name } = splitPin(entry);
     if (required.has(name)) rebuilt[`${name}@${required.get(name)}`] = true;
-  }
-  for (const [name, version] of required) {
-    if (!(`${name}@${version}` in rebuilt)) rebuilt[`${name}@${version}`] = true;
   }
   return rebuilt;
 }
@@ -183,7 +190,8 @@ function applyFix(pkg, required) {
  * Repairs the allowlist and reports every rotation on stdout.
  *
  * The report is the payload the Dependabot workflow quotes back into its
- * review-request comment, so it goes to stdout rather than stderr.
+ * review-request comment, so it goes to stdout rather than stderr. Missing
+ * pins are reported but never written: see {@link rebuildAllowScripts}.
  *
  * @param {object} pkg parsed package.json
  * @param {Map<string, string>} required pins the tree requires
@@ -191,12 +199,35 @@ function applyFix(pkg, required) {
  * @returns {void}
  */
 function runFix(pkg, required, findings) {
-  if (countFindings(findings) === 0) {
-    console.log('allowScripts pins already correct.');
-    return;
+  const { stale, missing, orphan } = findings;
+  if (stale.length + orphan.length > 0) {
+    report({ stale, missing: [], orphan }, console.log);
+    applyFix(pkg, required);
   }
-  report(findings, console.log);
-  applyFix(pkg, required);
+  for (const { name, version } of missing) {
+    console.log(
+      `needs human approval: ${name}@${version} is not approved at all — ` +
+        `run npm approve-scripts ${name}`
+    );
+  }
+  if (countFindings(findings) === 0) console.log('allowScripts pins already correct.');
+}
+
+/**
+ * Prints the command or instruction that resolves each class of finding.
+ *
+ * @param {{ stale: object[], missing: object[], orphan: object[] }} findings
+ * @returns {void}
+ */
+function reportRemedy({ stale, missing, orphan }) {
+  const names = [...new Set([...stale, ...missing].map(f => f.name))];
+  if (names.length > 0) {
+    console.error(`\nRun: ${names.map(n => `npm approve-scripts ${n}`).join(' && ')}`);
+  }
+  if (orphan.length > 0) {
+    const entries = orphan.map(o => `${o.name}@${o.was}`).join(', ');
+    console.error(`\nDelete from \`allowScripts\` in package.json: ${entries}`);
+  }
 }
 
 /**
@@ -211,10 +242,7 @@ function runCheck(findings) {
     return;
   }
   report(findings, console.error);
-  const names = [...new Set([...findings.stale, ...findings.missing].map(f => f.name))];
-  if (names.length > 0) {
-    console.error(`\nRun: ${names.map(n => `npm approve-scripts ${n}`).join(' && ')}`);
-  }
+  reportRemedy(findings);
   console.error('\nSee docs/CONTRIBUTING.md "Dependency install scripts (allowScripts)".');
   process.exit(1);
 }
