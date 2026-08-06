@@ -566,6 +566,19 @@ exports[`portal payload identity > serves the manifest unchanged, to full nestin
           ],
         },
         {
+          "help": "Verbosity. Default: info. debug/trace also capture scraper login diagnostics (step-by-step provider logs plus a screenshot on failure).",
+          "key": "level",
+          "kind": "select",
+          "label": "Log level",
+          "options": [
+            "trace",
+            "debug",
+            "info",
+            "warn",
+            "error",
+          ],
+        },
+        {
           "help": "Directory for rotating log files. Default: ./logs.",
           "key": "logDir",
           "kind": "string",

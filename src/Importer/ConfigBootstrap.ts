@@ -17,6 +17,7 @@
 import { ConfigLoader } from '../Config/ConfigLoader.js';
 import { resolveConfigPath } from '../Config/ConfigPath.js';
 import { createLogger, deriveLogFormat } from '../Logger/Index.js';
+import { applyConfiguredLogLevel } from '../Logger/LoggerOptions.js';
 import type { IImporterConfig, IProcedureSuccess } from '../Types/Index.js';
 import { isFail, succeed } from '../Types/Index.js';
 
@@ -53,6 +54,7 @@ export function bootConfigAndLogger(): IImporterConfig {
     process.exit(1);
   }
   const config = result.data;
+  applyConfiguredLogLevel(config);
   const telegram = config.notifications?.telegram;
   const derivedFormat = deriveLogFormat(telegram?.messageFormat, telegram?.listenForCommands);
   createLogger({

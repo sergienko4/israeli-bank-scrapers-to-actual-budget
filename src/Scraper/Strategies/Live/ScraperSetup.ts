@@ -13,6 +13,7 @@ import buildCredentials from '../../CredentialsBuilder.js';
 import { buildChromeArgs, getChromeDataDir } from '../../ScraperOptionsBuilder.js';
 import { BrowserRegistry } from './BrowserRegistry.js';
 import { resolveOtpRetriever } from './OtpRetriever.js';
+import attachDiagnostics from './ScrapeDiagnostics.js';
 import type {
   IInitializedLiveScrape,
   ILiveProviderScraper,
@@ -112,14 +113,38 @@ export function buildScraperOptions(
  * @returns Provider options without OTP-specific callbacks.
  */
 export function buildBaseScraperOptions(deps: LiveDeps, scrapeOpts: LiveOpts): ScraperOptions {
+  const options = buildProviderCoreOptions(deps, scrapeOpts);
+  const logLevel = resolveLogLevel(deps);
+  attachDiagnostics(options, scrapeOpts.bankConfig, logLevel);
+  return options;
+}
+
+/**
+ * Builds the provider options that every live scrape sets, without diagnostics.
+ * @param deps - Strategy dependencies used to resolve proxy settings.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @returns Provider options carrying identity, dates and navigation tuning.
+ */
+function buildProviderCoreOptions(deps: LiveDeps, scrapeOpts: LiveOpts): ScraperOptions {
+  const { bankConfig } = scrapeOpts;
   const options: ScraperOptions = {
     companyId: scrapeOpts.companyType, startDate: scrapeOpts.startDate,
-    args: buildChromeArgs(deps.config.proxy),
-    defaultTimeout: scrapeOpts.bankConfig.timeout ?? 60_000,
+    args: buildChromeArgs(deps.config.proxy), defaultTimeout: bankConfig.timeout ?? 60_000,
   };
-  const navRetry = scrapeOpts.bankConfig.navigationRetryCount;
+  const navRetry = bankConfig.navigationRetryCount;
   if (navRetry !== undefined) options.navigationRetryCount = navRetry;
   return options;
+}
+
+/**
+ * Resolves the log level that governs provider diagnostics.
+ * @param deps - Strategy dependencies exposing the importer config.
+ * @returns Configured log level, falling back to the process environment.
+ */
+function resolveLogLevel(deps: LiveDeps): string {
+  const configured = deps.config.logConfig?.level ?? '';
+  if (configured !== '') return configured;
+  return process.env.LOG_LEVEL ?? 'info';
 }
 
 /**

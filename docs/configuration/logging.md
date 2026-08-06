@@ -5,6 +5,7 @@ The importer uses [pino](https://github.com/pinojs/pino) for structured logging.
 ```json
 "logConfig": {
   "format": "words",
+  "level": "info",
   "logDir": "./logs"
 }
 ```
@@ -12,7 +13,40 @@ The importer uses [pino](https://github.com/pinojs/pino) for structured logging.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `format` | _auto_ | Log format. Auto-derived from `telegram.messageFormat` when not set. |
+| `level` | `info` | Verbosity: `trace`, `debug`, `info`, `warn`, `error`. `debug`/`trace` also enable scraper diagnostics. |
 | `logDir` | `./logs` | Directory for rotating log files. In Docker, use an absolute path like `/app/logs` and mount as a volume. |
+
+## Log level and scraper diagnostics
+
+`level` is editable from the **config portal** (Logging section), so you can raise
+verbosity and re-run without editing files over SSH. It falls back to the
+`LOG_LEVEL` environment variable when unset.
+
+Setting `level` to `debug` or `trace` additionally asks the bank scraper to
+explain itself:
+
+| What you get | Provider option |
+|--------------|-----------------|
+| Step-by-step login narration | `loginLogLevel: trace` |
+| Verbose scraper output | `verbose: true` |
+| A screenshot of the page at the moment login failed | `storeFailureScreenShotPath` |
+
+Screenshots land in `/app/logs/failures` by default. Override per bank with
+`failureScreenshotPath`:
+
+```json
+"banks": {
+  "visaCal": { "failureScreenshotPath": "/app/data/shots" }
+}
+```
+
+This is the fastest way to diagnose an opaque scrape failure such as
+*"resolved zero accounts"*, which on its own tells you the session was rejected
+but not why (an expired session, a WAF challenge, or a changed login page).
+
+!!! warning "Turn it back down"
+    `trace` is noisy and screenshots may capture account details. Return `level`
+    to `info` once you have diagnosed the problem.
 
 ## Log formats
 

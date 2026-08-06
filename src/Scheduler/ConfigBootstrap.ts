@@ -6,6 +6,7 @@
  */
 
 import { deriveLogFormat } from '../Logger/Index.js';
+import { applyConfiguredLogLevel } from '../Logger/LoggerOptions.js';
 import type {
   IImporterConfig,
   ILogConfig,
@@ -49,6 +50,7 @@ export function loadLogConfig(): Procedure<ILogConfig> {
   const configResult = loadFullConfig();
   if (isFail(configResult)) return fail('Cannot derive log config');
   const config = configResult.data;
+  applyConfiguredLogLevel(config);
   const tg = config.notifications?.telegram;
   const hasBot = tg?.listenForCommands === true;
   const format = config.logConfig?.format ?? deriveLogFormat(tg?.messageFormat, hasBot);
