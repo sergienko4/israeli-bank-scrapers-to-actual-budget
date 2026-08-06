@@ -16,5 +16,11 @@
   // Unordered list style — release-please uses * but our docs use -. Allow both.
   "MD004": false,
   // Table column style — release-please and README tables use compact pipe spacing
-  "MD060": false
+  "MD060": false,
+  // Code block style — MkDocs Material content tabs (=== "tab") require their
+  // body indented by four spaces, and markdownlint reads an indented ```fence
+  // as an indented code block. That makes MD046's "consistent" style infer a
+  // different answer per file and flag correct blocks on both sides. Every code
+  // block in this repo is fenced; there are no genuinely indented ones.
+  "MD046": false
 }
