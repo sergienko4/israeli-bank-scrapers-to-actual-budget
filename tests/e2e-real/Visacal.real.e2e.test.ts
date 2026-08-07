@@ -9,7 +9,8 @@
  * when asked, so run this with LOG_LEVEL=debug to capture that evidence.
  *
  * SKIP-BY-DEFAULT. Requires RUN_REAL_BANK_TESTS=true plus VISACAL_USERNAME
- * and VISACAL_PASSWORD in .env.e2e (or .env). Never runs in CI.
+ * and VISACAL_PASSWORD in .env.e2e. Never runs in CI, where credentials come
+ * from GitHub Secrets rather than a local file.
  */
 
 import { describe, it, expect } from 'vitest';

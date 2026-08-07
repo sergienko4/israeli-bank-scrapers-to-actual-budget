@@ -3,9 +3,16 @@
  *
  * Deliberately narrow: the provider already photographs a failed session for
  * us via `storeFailureScreenShotPath`, so this adds only what the provider
- * does not expose — the full body of a failed API reply (the bundle previews
- * roughly the first thirty characters), the request headers behind it, and
+ * does not expose — which API calls the bank SPA made, how each answered, and
  * the browser-side errors that explain why a bank SPA failed to boot.
+ *
+ * Everything logged here is allowlisted metadata. Response bodies, request
+ * payloads, header values and query strings are never printed: this runs
+ * against a real account, so a body can carry balances and transactions and a
+ * header can carry a live bearer token. The shape of a reply — its status,
+ * content type and size — is what diagnoses a broken bank deploy anyway. That
+ * is exactly how CAL's fault was identified: an HTML document served where the
+ * page expected JavaScript.
  */
 
 import type {
@@ -14,6 +21,9 @@ import type {
 
 const OK_FLOOR = 200;
 const OK_CEILING = 300;
+
+/** Request headers whose presence is reported, never their value. */
+const WATCHED_HEADERS = ['authorization', 'x-site-id', 'referer'] as const;
 
 /**
  * Decides whether a response is an API failure worth dumping.
@@ -26,19 +36,58 @@ function isFailure(response: Response): boolean {
 }
 
 /**
- * Prints a failed API response with its complete body and request context.
+ * Strips a URL down to origin and path, discarding query and fragment.
+ *
+ * Bank URLs routinely carry tokens and account identifiers in the query
+ * string, and none of that is needed to tell which endpoint answered.
+ * @param raw - Absolute URL as reported by the browser.
+ * @returns Origin and pathname, or a placeholder when the URL will not parse.
+ */
+function safeUrl(raw: string): string {
+  try {
+    const parsed = new URL(raw);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return '<unparseable-url>';
+  }
+}
+
+/**
+ * Reports which watched headers were sent, without revealing their values.
+ * @param headers - Request headers collected from the browser.
+ * @returns Space-separated `name=present|absent` pairs.
+ */
+function describeHeaders(headers: Record<string, string>): string {
+  return WATCHED_HEADERS
+    .map(name => `${name}=${headers[name] === undefined ? 'absent' : 'present'}`)
+    .join(' ');
+}
+
+/**
+ * Summarises a response body by type and size rather than by content.
+ * @param response - Playwright response that failed.
+ * @returns Content type and byte length, or a note when the body is unreadable.
+ */
+async function describeBody(response: Response): Promise<string> {
+  const body = await response.text().catch(() => null);
+  if (body === null) return 'body=<unreadable>';
+  const type = response.headers()['content-type'] ?? 'unknown';
+  return `content-type=${type} body-bytes=${String(body.length)}`;
+}
+
+/**
+ * Prints a failed API response as allowlisted metadata only.
  * @param response - Playwright response that failed.
  * @returns Nothing once the failure has been reported.
  */
 async function dumpFailure(response: Response): Promise<void> {
-  const body = await response.text().catch(() => '<unreadable>');
-  console.warn(`[api-failure] ${response.status()} ${response.url()}\n${body}`);
   const request = response.request();
+  const shape = await describeBody(response);
   const headers = await request.allHeaders();
-  console.warn(`[api-failure] request.body=${request.postData() ?? ''}`);
-  console.warn(`[api-failure] authorization=${headers.authorization ?? '<none>'}`);
-  console.warn(`[api-failure] x-site-id=${headers['x-site-id'] ?? '<none>'}`);
-  console.warn(`[api-failure] referer=${headers.referer ?? '<none>'}`);
+  console.warn(
+    `[api-failure] ${String(response.status())} ${request.method()} `
+    + `${safeUrl(response.url())} ${shape} ${describeHeaders(headers)}`,
+  );
 }
 
 /**
@@ -48,7 +97,7 @@ async function dumpFailure(response: Response): Promise<void> {
  */
 function trackNavigation(page: Page): void {
   page.on('framenavigated', (frame: Frame) => {
-    if (frame === page.mainFrame()) console.warn(`[nav] ${frame.url()}`);
+    if (frame === page.mainFrame()) console.warn(`[nav] ${safeUrl(frame.url())}`);
   });
 }
 
@@ -63,7 +112,7 @@ function trackScriptFailures(page: Page): void {
   });
   page.on('requestfailed', (request: Request) => {
     const failure = request.failure();
-    console.warn(`[reqfail] ${request.url()} :: ${failure?.errorText ?? ''}`);
+    console.warn(`[reqfail] ${safeUrl(request.url())} :: ${failure?.errorText ?? ''}`);
   });
   page.on('console', (message: ConsoleMessage) => {
     if (message.type() === 'error') console.warn(`[console] ${message.text()}`);
@@ -93,7 +142,7 @@ function trackApiCalls(page: Page): void {
   page.on('response', (response: Response) => {
     if (!isApiCall(response)) return;
     const method = response.request().method();
-    console.warn(`[api] ${response.status()} ${method} ${response.url()}`);
+    console.warn(`[api] ${String(response.status())} ${method} ${safeUrl(response.url())}`);
   });
 }
 
