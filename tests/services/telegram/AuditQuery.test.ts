@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IAuditLog } from '../../../src/Services/AuditLogService.js';
 import { createAuditQuery } from '../../../src/Services/Telegram/AuditQuery.js';
 import { fail, succeed } from '../../../src/Types/Index.js';
-import { fakeBatchResult, fakeIAuditEntry } from '../../helpers/factories.js';
+import { fakeBatchResult, fakeIAuditEntry, fakeImportJobResult } from '../../helpers/factories.js';
 
 /**
  * Builds a stub IAuditLog whose methods return the supplied Procedures.
@@ -87,5 +87,24 @@ describe('AuditQuery', () => {
   it('getFreshEntryFor fails when there are no entries', () => {
     const q = createAuditQuery(stubAuditLog());
     expect(q.getFreshEntryFor(fakeBatchResult()).success).toBe(false);
+  });
+
+  it('getFreshEntriesFor reads one entry per bank job and drops stale ones', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:05.000Z'));
+    const fresh = fakeIAuditEntry({ timestamp: '2025-01-01T00:00:03.000Z' });
+    const stale = fakeIAuditEntry({ timestamp: '2020-01-01T00:00:00.000Z' });
+    const getRecent = vi.fn().mockReturnValue(succeed([stale, fresh]));
+    const q = createAuditQuery(stubAuditLog({ getRecent }));
+    const batch = fakeBatchResult({
+      totalDurationMs: 5000,
+      jobs: [fakeImportJobResult('leumi', 0), fakeImportJobResult('paybox', 1)],
+    });
+    expect(q.getFreshEntriesFor(batch)).toEqual([fresh]);
+    expect(getRecent).toHaveBeenCalledWith(2);
+  });
+
+  it('getFreshEntriesFor returns an empty array without an audit log', () => {
+    expect(createAuditQuery(undefined).getFreshEntriesFor(fakeBatchResult())).toEqual([]);
   });
 });

@@ -25,6 +25,22 @@ function createE2eMediator(): ImportMediator {
   });
 }
 
+/**
+ * Creates an ImportMediator whose per-bank child process fails for one bank.
+ *
+ * Mirrors production, where each bank gets its own child process; the failing
+ * bank is selected by the `IMPORT_BANKS` env var the mediator passes down.
+ * @param failing - Bank name whose spawned import exits non-zero.
+ * @returns ImportMediator over three banks with exactly one deterministic failure.
+ */
+function createPartialFailureMediator(failing: string): ImportMediator {
+  return new ImportMediator({
+    spawnImport: async (env) => (env.IMPORT_BANKS === failing ? 1 : 0),
+    getBankNames: () => ['discount', 'visaCal', 'oneZero'],
+    notifier: null,
+  });
+}
+
 const collector = createMessageCollector();
 const auditFile = join(tmpdir(), `e2e-cmd-audit-${Date.now()}.json`);
 
@@ -70,6 +86,21 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
     // mediator requested the import
     expect(mediator.getLastRunTime()).not.toBeNull();
     expect(collector.messageIds.length).toBeGreaterThan(0);
+  });
+
+  it('reports a single failed bank as partial, not a total failure', async () => {
+    collector.startCapturing();
+    const notifier = new TelegramNotifier(config);
+    handler = new TelegramCommandHandler({
+      mediator: createPartialFailureMediator('oneZero'), notifier,
+    });
+
+    await handler.handle('/scan');
+
+    const failureMsg = collector.sentTexts.find(t => t.includes('banks OK'));
+    expect(failureMsg).toContain('2/3 banks OK, 1 failed');
+    expect(failureMsg).toContain('oneZero');
+    expect(failureMsg).not.toContain('Import failed');
   });
 
   it('delivers /logs response to real Telegram', async () => {

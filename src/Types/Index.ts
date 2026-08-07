@@ -59,8 +59,8 @@ export {
 } from './Notifications.js';
 
 // Log output config (see ./Logging.ts)
-export type { ILogConfig, LogFormat } from './Logging.js';
-export { LOG_FORMATS } from './Logging.js';
+export type { ILogConfig, LogFormat, LogLevelSetting } from './Logging.js';
+export { LOG_FORMATS, LOG_LEVELS } from './Logging.js';
 
 // Categorization + payee translation (see ./Categorization.ts)
 export type {

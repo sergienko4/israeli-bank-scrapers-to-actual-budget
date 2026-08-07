@@ -20,6 +20,7 @@ const { default: logScrapeFailure } = await import('../../src/Scraper/FailureLog
 
 const WAF_BLOCKED_ERROR_TYPE = 'WAF_BLOCKED' as unknown as IScraperScrapingResult['errorType'];
 const UNKNOWN_ERROR_TYPE = 'UNKNOWN_ERROR_TYPE_FOR_TEST' as unknown as IScraperScrapingResult['errorType'];
+const GENERIC_ERROR_TYPE = 'GENERIC' as unknown as IScraperScrapingResult['errorType'];
 
 describe('FailureLogShim.logScrapeFailure', () => {
   beforeEach(() => {
@@ -79,5 +80,18 @@ describe('FailureLogShim.logScrapeFailure', () => {
     const line = mockLogger.error.mock.calls[0][0] as string;
     expect(line).toContain('mystery');
     expect(line.endsWith('mystery')).toBe(true);
+  });
+
+  it('appends advice matched from the error message, not just the error type', () => {
+    const result: IScraperScrapingResult = {
+      success: false,
+      errorType: GENERIC_ERROR_TYPE,
+      errorMessage: 'Hard-model scrape resolved zero accounts — Re-authenticate.',
+      accounts: [],
+    };
+    logScrapeFailure('visaCal', result);
+    const line = mockLogger.error.mock.calls[0][0] as string;
+    expect(line).toContain('bank returned no accounts');
+    expect(line).toContain('credentials are fine');
   });
 });

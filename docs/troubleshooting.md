@@ -38,6 +38,36 @@ cap_add:
 
 Better still: [auto-forward OTP codes from your phone](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md) so no manual input is needed.
 
+## PayBox asks for the OTP twice in a row
+
+**Symptom:** a single PayBox login shows two back-to-back OTP prompts, and the
+second prompt arrives before any new SMS does.
+
+**Fix:** upgrade — the importer now reuses the code you supplied for PayBox's
+second internal request, so one login prompts once. See
+[PayBox](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md).
+If a prompt times out or the bank rejects the code, you are asked again with a
+fresh code — that re-prompt is expected.
+
+## One bank failed but the notification says the import failed
+
+**Symptom:** four of five banks imported fine, yet Telegram reported a failure.
+
+**Fix:** upgrade — failure notifications are now built from the per-bank results
+of the run and read `⚠️ Partial import (38s) — 4/5 banks OK, 1 failed:` with the
+failed bank named. Use `/retry` to re-run only the failed banks.
+
+## The error notification says `all-banks-failed`
+
+**Symptom:** Telegram shows `🚨 Import Failed` followed by the bare token
+`all-banks-failed`, even though only one bank was actually involved.
+
+**Fix:** upgrade — every bank runs in its own child process, so a lone failure
+used to satisfy the internal "all banks failed" condition and send that token
+verbatim. The message now names the bank and the reason, for example
+`Import failed for visacal: Hard-model scrape resolved zero accounts`. Runs
+covering several banks read `All 3 banks failed — …` with each bank listed.
+
 ## Windows volume mounts don't work
 
 **Symptom:** `bind: invalid mount config` or container can't read `config.json`.

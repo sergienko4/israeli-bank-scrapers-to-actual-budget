@@ -88,6 +88,48 @@ When `listenForCommands: true`, the **logger** format auto-switches to `phone` (
 
 Errors are categorized so users can self-serve fixes: authentication, captcha, rate-limit, password change required, network. Each category includes a one-line action hint.
 
+## Partial runs
+
+Every bank is imported in its own child process, so one bank failing never
+cancels the others. When a Telegram-triggered import finishes with a mix of
+outcomes, the bot reports exactly which banks failed instead of implying the
+whole run was lost:
+
+```text
+⚠️ Partial import (38s) — 4/5 banks OK, 1 failed:
+  • paybox: Invalid credentials. Please verify your password.
+
+Use /retry to re-run the failed bank(s), or /logs for details.
+```
+
+Only when *every* bank failed does the message read as a total failure:
+
+```text
+❌ Import failed (12s) — all 3 bank(s) failed:
+```
+
+`/status` uses the same distinction and shows `partial: 4/5 OK` for a mixed run.
+
+Each child process also sends its own `🚨 Import Failed` message when none of the
+banks it was given succeeded. That message names the bank and the reason rather
+than reporting a bare status token, so a single-bank child never reads as a
+total outage:
+
+```text
+🚨 Import Failed
+
+Import failed for visacal: Hard-model scrape resolved zero accounts
+```
+
+When a child was given several banks and every one of them failed, the message
+states the count and lists up to five banks, eliding the rest:
+
+```text
+🚨 Import Failed
+
+All 3 banks failed — visacal: zero accounts; max: login rejected; leumi: timeout
+```
+
 ## See also
 
 - [Telegram setup](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/notifications/telegram.md)

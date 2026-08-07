@@ -8,6 +8,8 @@ import type { ITimeoutWrapper } from '../../src/Resilience/TimeoutWrapper.js';
 import { TimeoutWrapper } from '../../src/Resilience/TimeoutWrapper.js';
 import { isSuccess } from '../../src/Types/ProcedureHelpers.js';
 import type NotificationService from '../../src/Services/NotificationService.js';
+import buildBanksFailedMessage from '../../src/Scrapers/Pipeline/Steps/BanksFailedMessage.js';
+import { fakeBankQuarantineEntry } from '../helpers/factories.js';
 
 function makeLogger() {
   return { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -135,10 +137,27 @@ describe('ProcessLifecycle', () => {
       expect(notifier.sendError).toHaveBeenCalledWith('all banks failed');
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
+
+    it('delivers the bank-named pipeline message, not a total-outage token', async () => {
+      const notifier = makeNotifier();
+      const lc = buildProcessLifecycle(makeDeps({ notificationService: notifier }));
+      const message = buildBanksFailedMessage({
+        successful: [],
+        quarantined: [fakeBankQuarantineEntry({
+          bankName: 'visacal', error: new Error('zero accounts resolved'),
+        })],
+        totalBanks: 1,
+      });
+
+      await expect(lc.handlePipelineFailure({ message })).rejects.toThrow('process.exit(1)');
+
+      expect(notifier.sendError).toHaveBeenCalledWith(
+        'Import failed for visacal: zero accounts resolved',
+      );
+    });
   });
 
-  describe('sendError timeout safety (CR cycle 2 #1)', () => {
-    it('handleFatalError continues to shutdown + exit when timeout wrapper rejects (transport hang)', async () => {
+  describe('sendError timeout safety (CR cycle 2 #1)', () => {    it('handleFatalError continues to shutdown + exit when timeout wrapper rejects (transport hang)', async () => {
       const logger = makeLogger();
       const notifier = makeNotifier();
       const api = makeApi();

@@ -3,7 +3,7 @@
  * general root settings (delayBetweenBanks), proxy, and logging.
  */
 
-import { LOG_FORMATS } from '../../Types/Index.js';
+import { LOG_FORMATS, LOG_LEVELS } from '../../Types/Index.js';
 import type { IManifestSection } from './ManifestTypes.js';
 
 /** Actual Budget connection section. */
@@ -74,6 +74,11 @@ export const LOG_SECTION: IManifestSection = {
     {
       key: 'format', label: 'Log format', kind: 'select', options: LOG_FORMATS,
       help: 'words | json | table | phone. Default: words.',
+    },
+    {
+      key: 'level', label: 'Log level', kind: 'select', options: LOG_LEVELS,
+      help: 'Verbosity. Default: info. debug/trace also capture scraper login '
+        + 'diagnostics (step-by-step provider logs plus a screenshot on failure).',
     },
     {
       key: 'logDir', label: 'Log directory', kind: 'string',

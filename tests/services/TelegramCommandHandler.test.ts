@@ -5,7 +5,9 @@ import type { ImportMediator } from '../../src/Services/ImportMediator.js';
 import type { IAuditEntry, IAuditLog } from '../../src/Services/AuditLogService.js';
 import type { INotifier } from '../../src/Services/Notifications/INotifier.js';
 import { succeed, fail } from '../../src/Types/Index.js';
-import { fakeIAuditEntry, assertProcedureSuccess } from '../helpers/factories.js';
+import {
+  assertProcedureSuccess, fakeIAuditEntry, fakeImportJobResult,
+} from '../helpers/factories.js';
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
 
@@ -481,6 +483,22 @@ describe('TelegramCommandHandler', () => {
     return calls.find((m: string) => m.includes('Import failed'));
   }
 
+  /**
+   * Runs /scan with an audit-log handler and returns the partial-run message.
+   * @param auditLog - The mock audit-log to attach.
+   * @returns The '⚠️ Partial import' message string, or undefined.
+   */
+  async function scanAndGetPartial(auditLog: IAuditLog): Promise<string | undefined> {
+    const auditHandler = new TelegramCommandHandler({
+      mediator: mockMediator as unknown as ImportMediator,
+      notifier: mockNotifier,
+      auditLog,
+    });
+    await auditHandler.handle('/scan');
+    const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
+    return calls.find((m: string) => m.includes('banks OK'));
+  }
+
   // ─── buildBatchErrorReply with auditLog ───
 
   it('/scan failure with fresh audit log builds detailed error reply', async () => {
@@ -541,6 +559,30 @@ describe('TelegramCommandHandler', () => {
     const calls = mockNotifier.sendMessage.mock.calls.map((c: string[]) => c[0]);
     const errMsg = calls.find((m: string) => m.includes('Import failed'));
     expect(errMsg).toContain('Use /logs for details');
+  });
+
+  // ─── Regression: one failed bank must not read as a total failure ───
+
+  it('/scan reports a partial run when only one per-bank job failed', async () => {
+    mockMediator.waitForBatch.mockResolvedValue({
+      batchId: 'batch-2', source: 'telegram', totalDurationMs: 4000,
+      successCount: 2, failureCount: 1,
+      jobs: [
+        fakeImportJobResult('discount', 0),
+        fakeImportJobResult('visaCal', 0),
+        fakeImportJobResult('oneZero', 1),
+      ],
+    });
+    const mockAuditLog = createMockAuditLog({
+      entries: [fakeIAuditEntry({
+        totalBanks: 1, successfulBanks: 0, failedBanks: 1,
+        banks: [{ name: 'oneZero', status: 'failure', error: 'Auth timeout', txns: 0 }],
+      })],
+    });
+    const errMsg = await scanAndGetPartial(mockAuditLog);
+    expect(errMsg).toContain('2/3 banks OK, 1 failed');
+    expect(errMsg).toContain('oneZero');
+    expect(errMsg).not.toContain('Import failed');
   });
 
   it('/scan with menu but empty bank list falls through to import', async () => {

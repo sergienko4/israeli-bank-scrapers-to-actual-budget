@@ -7,6 +7,7 @@
  * 2. OTP attached to ScraperOptions for OtpHandler banks (beinleumi)
  */
 
+import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 import { describe, it, expect } from 'vitest';
 import { attachOtpRetriever } from '../../../src/Scraper/Strategies/Live/ScraperSetup.js';
 
@@ -15,7 +16,7 @@ describe('ScraperSetup', () => {
     const mockOtpRetriever = async () => '123456';
 
     describe('credentials-only banks (OneZero, Pepper, PayBox)', () => {
-      const credsBanks = ['OneZero', 'Pepper', 'PayBox'];
+      const credsBanks = [CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox];
 
       credsBanks.forEach((companyId) => {
         it(`should NOT attach to ScraperOptions for ${companyId}`, () => {
@@ -27,6 +28,19 @@ describe('ScraperSetup', () => {
           expect(opts).not.toHaveProperty('otpCodeRetriever');
         });
       });
+    });
+
+    /**
+     * Regression guard for the casing defect this suite once masked: the
+     * CompanyTypes values are camelCase (`payBox`), so a hand-written
+     * PascalCase literal falls through and the guard silently stops working.
+     */
+    it('treats a PascalCase literal as an unknown bank', () => {
+      const opts = {} as any;
+
+      const attached = attachOtpRetriever(opts, mockOtpRetriever, 'PayBox');
+
+      expect(attached).toBe(true);
     });
 
     describe('OtpHandler banks (beinleumi)', () => {

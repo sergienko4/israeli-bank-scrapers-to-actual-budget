@@ -32,7 +32,7 @@ import type {
   IAccountTransactionsRecord,
 } from '../../src/Services/MetricsService.js';
 import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
-import type { IBatchResult } from '../../src/Types/Index.js';
+import type { IBatchResult, IImportJob, IImportJobResult } from '../../src/Types/Index.js';
 import { CREDENTIAL_SPECS, type ICredentialSpec } from '../../src/Config/ConfigLoaderValidator.js';
 import { DEFAULT_BANK_REGISTRY } from '../../src/Scraper/BankRegistry.js';
 
@@ -393,6 +393,23 @@ export function fakeBatchResult(
     failureCount: 0,
     ...overrides,
   };
+}
+
+/**
+ * Builds a fake IImportJobResult for one bank's dedicated child process.
+ * The importer fans out one job per bank, so batch-reply tests need a list of
+ * these to reproduce a partial-failure run.
+ * @param bankName - Bank label carried by the job.
+ * @param exitCode - Child process exit code (0 = success, non-zero = failure).
+ * @returns IImportJobResult fixture.
+ */
+export function fakeImportJobResult(
+  bankName: string, exitCode = 0,
+): IImportJobResult {
+  const job: IImportJob = {
+    id: faker.string.uuid(), bankName, batchId: faker.string.uuid(), source: 'telegram',
+  };
+  return { job, exitCode, durationMs: faker.number.int({ min: 500, max: 30000 }) };
 }
 
 /**

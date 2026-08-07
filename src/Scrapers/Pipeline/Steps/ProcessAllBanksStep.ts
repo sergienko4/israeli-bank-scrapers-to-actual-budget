@@ -32,6 +32,7 @@ import type { IBankEntry, IBankOpts } from './Bank/Index.js';
 import {
   importStage, mapStage, scrapeStage,
 } from './Bank/Index.js';
+import buildBanksFailedMessage from './BanksFailedMessage.js';
 
 /** Bundle for the pagination iteration helper (keeps params ≤ 3). */
 interface IIterateOpts {
@@ -243,6 +244,10 @@ async function runScrapeMapImport(
 
 /**
  * Finalizes the pipeline ctx; fails if every bank was quarantined (INV-4).
+ *
+ * The failure message names the quarantined bank(s) because the importer runs
+ * one child process per bank: a lone failure would otherwise notify operators
+ * with a bare token that reads as a total outage.
  * @param ctx - Pipeline context.
  * @param partition - Bank partition from the iteration loop.
  * @returns Procedure with new context state.
@@ -253,7 +258,8 @@ function finalizeContext(
   const newCtx = buildNewCtx(ctx, partition);
   if (partition.totalBanks === 0) return succeed(newCtx);
   if (partition.successful.length === 0) {
-    return fail('all-banks-failed', { status: 'banks-failed' });
+    const message = buildBanksFailedMessage(partition);
+    return fail(message, { status: 'banks-failed' });
   }
   return succeed(newCtx);
 }
