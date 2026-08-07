@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { IImporterConfig, IPortalAppConfig } from '../../src/Types/Index.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
+import { closeStep, quiescePage } from '../helpers/teardown.js';
 import {
   authorizeUrl,
   authorizeWithCookie,
@@ -72,7 +73,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  await browser?.close();
+  if (browser) await closeStep('browser', () => browser.close());
 });
 
 /**
@@ -173,6 +174,7 @@ async function startGoogleFixture(): Promise<IGoogleFixture> {
   process.env.GOOGLE_TOKEN_URL = `${fake.base}/token`;
   let server: IGooglePortalServer | undefined;
   let context: BrowserContext | undefined;
+  let page: Page | undefined;
   try {
     server = await startSeededGooglePortal(seedConfig(), {
       allowedEmails: [GOOGLE_TEST_EMAIL],
@@ -180,26 +182,75 @@ async function startGoogleFixture(): Promise<IGoogleFixture> {
       app: appConfig(),
     });
     context = await browser.newContext({ viewport: null });
-    const page = await context.newPage();
+    page = await context.newPage();
     await page.goto(server.baseUrl);
     return { server, fake, context, page };
   } catch (error: unknown) {
-    if (context) await context.close();
-    if (server) await server.app.close();
-    await fake.close();
+    // A failed `goto` is the worst case for the close below: it leaves the page
+    // holding the pending navigation that lets Firefox decline the window close.
+    // The deadline bounds that wait but cannot cancel it, so park the page first.
+    const startedContext = context;
+    const startedServer = server;
+    if (page) await quiescePage(page);
+    if (startedContext) {
+      await closeStep('browser context', () => startedContext.close()).catch(() => undefined);
+    }
+    if (startedServer) {
+      await closeStep('portal server', () => startedServer.app.close()).catch(() => undefined);
+    }
+    await closeStep('fake Google', () => fake.close()).catch(() => undefined);
     throw error;
   }
 }
 
 /**
+ * Runs every close under its own deadline, then reports the first failure.
+ *
+ * Each step is attempted even when an earlier one fails, so a wedged browser
+ * context can no longer strand the servers behind it — the leak that turns one
+ * stuck resource into a port still held by the next test file.
+ * @param steps - Labelled closes, outermost resource first.
+ * @returns Resolves when all steps settled; rejects with the first failure.
+ */
+async function runCloses(
+  steps: ReadonlyArray<readonly [string, () => Promise<unknown>]>,
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const [label, close] of steps) {
+    await closeStep(label, close).catch((error: unknown) => {
+      failures.push(error);
+    });
+  }
+  if (failures.length > 0) throw failures[0];
+}
+
+/**
+ * Tears down a plain app fixture, tolerating a partially built one.
+ * @param fx - The fixture, when it was created.
+ * @returns Resolves once every resource settled; rejects on the first failure.
+ */
+async function stopAppFixture(fx: IAppFixture | undefined): Promise<void> {
+  if (!fx) return;
+  await quiescePage(fx.page);
+  await runCloses([
+    ['browser context', () => fx.context.close()],
+    ['portal server', () => fx.server.app.close()],
+  ]);
+}
+
+/**
  * Tears down a Google fixture, tolerating a partially built one.
  * @param fx - The fixture, when it was created.
+ * @returns Resolves once every resource settled; rejects on the first failure.
  */
 async function stopGoogleFixture(fx: IGoogleFixture | undefined): Promise<void> {
   if (!fx) return;
-  await fx.context.close();
-  await fx.server.app.close();
-  await fx.fake.close();
+  await quiescePage(fx.page);
+  await runCloses([
+    ['browser context', () => fx.context.close()],
+    ['portal server', () => fx.server.app.close()],
+    ['fake Google', () => fx.fake.close()],
+  ]);
 }
 
 describe('portal app sign-in (both mode)', () => {
@@ -218,9 +269,14 @@ describe('portal app sign-in (both mode)', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await stopGoogleFixture(fx);
-    restoreGoogleEnv(envBackup);
-  });
+    try {
+      await stopGoogleFixture(fx);
+    } finally {
+      // Restoring must survive a failed teardown: when the close below hung,
+      // these overrides leaked into every later suite in the same worker.
+      restoreGoogleEnv(envBackup);
+    }
+  }, 60_000);
 
   it('carries the app from authorize to a working access token', async () => {
     const { verifier, challenge } = pkcePair();
@@ -373,10 +429,8 @@ describe('portal app sign-in when the auth mode changes underneath it', () => {
   }, 120_000);
 
   afterAll(async () => {
-    if (!fx) return;
-    await fx.context.close();
-    await fx.server.app.close();
-  });
+    await stopAppFixture(fx);
+  }, 60_000);
 
   it('stops honouring a password-era token once both factors are required', async () => {
     const { verifier, challenge } = pkcePair();
@@ -426,10 +480,8 @@ describe('portal app sign-out', () => {
   }, 120_000);
 
   afterAll(async () => {
-    if (!fx) return;
-    await fx.context.close();
-    await fx.server.app.close();
-  });
+    await stopAppFixture(fx);
+  }, 60_000);
 
   it('ends a session the phone hands back', async () => {
     const issued = await signIn(fx, 'e2e-state-revoke');
@@ -490,9 +542,12 @@ describe('portal app sign-in from the parked authorize URL', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await stopGoogleFixture(fx);
-    restoreGoogleEnv(envBackup);
-  });
+    try {
+      await stopGoogleFixture(fx);
+    } finally {
+      restoreGoogleEnv(envBackup);
+    }
+  }, 60_000);
 
   it('returns to the app sign-in instead of settling on the dashboard', async () => {
     const { challenge } = pkcePair();
@@ -517,5 +572,12 @@ describe('portal app sign-in from the parked authorize URL', () => {
     const request = await bounced;
     expect(request.url()).toContain(`code_challenge=${challenge}`);
     expect(request.url()).toContain(`state=${state}`);
+
+    // `waitForRequest` resolves the moment the request is issued, so without
+    // this the test returns while the page is still navigating — and a page
+    // caught mid-navigation is what lets Firefox decline the window close that
+    // `context.close()` then waits on forever. Landing the redirect also
+    // asserts where the bounce actually ends up, which nothing else here did.
+    await fx.page.waitForURL(/\/approve\.html/, { timeout: 30_000 });
   }, 120_000);
 });
