@@ -10,16 +10,20 @@
  * What follows deliberately does NOT claim the hang is gone — that race cannot
  * be summoned on demand (removing the fix and re-running still tears down in
  * ~2.7s), so a green run here would prove nothing about it. It pins down the
- * guarantees that were put in its place, which are the part we actually
- * control: every close is bounded, a stall names the resource that caused it,
- * and a page is verifiably parked before its context is closed.
+ * one guarantee that needs a real browser to verify: that a page carrying a
+ * pending navigation is verifiably parked before its context is closed.
+ *
+ * The deadline mechanics around it — bounding a close, naming a stalled
+ * resource, not masking a genuine failure — are covered far more cheaply
+ * against a stub in `tests/helpers/Teardown.test.ts`.
  */
 
 import Fastify from 'fastify';
 import type { Browser } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { closeStep, launchPortalBrowser, quiescePage } from './helpers/portalHarness.js';
+import { closeStep, quiescePage } from '../helpers/teardown.js';
+import { launchPortalBrowser } from './helpers/portalHarness.js';
 
 /**
  * A promise that never settles, standing in for a wedged close or a dead route.
@@ -30,36 +34,6 @@ async function neverSettles(): Promise<never> {
     // Intentionally empty: the point is that it never resolves.
   });
 }
-
-describe('teardown deadline', () => {
-  it('resolves as soon as a healthy close finishes', async () => {
-    const started = Date.now();
-    await closeStep('healthy resource', async () => await Promise.resolve('closed'));
-    expect(Date.now() - started).toBeLessThan(1_000);
-  });
-
-  it('names the resource that stalled instead of failing anonymously', async () => {
-    // The whole point of the deadline: an anonymous 60s hook timeout says
-    // nothing about where to look, which is what made the original CI failure
-    // so expensive to diagnose.
-    await expect(closeStep('browser context', neverSettles, 100)).rejects.toThrow(
-      /teardown stalled closing browser context after 100ms/,
-    );
-  });
-
-  it('surfaces a genuine close failure rather than masking it as a stall', async () => {
-    await expect(
-      closeStep('broken resource', async () => await Promise.reject(new Error('boom'))),
-    ).rejects.toThrow('boom');
-  });
-
-  it('bounds a stalled close well inside the hook budget', async () => {
-    const started = Date.now();
-    await expect(closeStep('slow resource', neverSettles, 200)).rejects.toThrow();
-    // Vitest's hook timeout must never again be the first clock in the stack.
-    expect(Date.now() - started).toBeLessThan(5_000);
-  });
-});
 
 describe('teardown of a page left mid-navigation', () => {
   let browser: Browser;

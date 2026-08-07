@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { IImporterConfig, IPortalAppConfig } from '../../src/Types/Index.js';
 import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
+import { closeStep, quiescePage } from '../helpers/teardown.js';
 import {
   authorizeUrl,
   authorizeWithCookie,
@@ -35,14 +36,12 @@ import {
   signInWithCookie,
 } from './helpers/appAuthClient.js';
 import {
-  closeStep,
   GOOGLE_TEST_EMAIL,
   type IFakeGoogle,
   type IGooglePortalServer,
   type IPortalServer,
   launchPortalBrowser,
   PORTAL_PASSWORD,
-  quiescePage,
   startFakeGoogle,
   startSeededGooglePortal,
   startSeededPortal,
@@ -175,6 +174,7 @@ async function startGoogleFixture(): Promise<IGoogleFixture> {
   process.env.GOOGLE_TOKEN_URL = `${fake.base}/token`;
   let server: IGooglePortalServer | undefined;
   let context: BrowserContext | undefined;
+  let page: Page | undefined;
   try {
     server = await startSeededGooglePortal(seedConfig(), {
       allowedEmails: [GOOGLE_TEST_EMAIL],
@@ -182,14 +182,16 @@ async function startGoogleFixture(): Promise<IGoogleFixture> {
       app: appConfig(),
     });
     context = await browser.newContext({ viewport: null });
-    const page = await context.newPage();
+    page = await context.newPage();
     await page.goto(server.baseUrl);
     return { server, fake, context, page };
   } catch (error: unknown) {
-    // The page that failed may be mid-navigation, which is precisely the state
-    // that can wedge a context close, so this path needs the deadline too.
+    // A failed `goto` is the worst case for the close below: it leaves the page
+    // holding the pending navigation that lets Firefox decline the window close.
+    // The deadline bounds that wait but cannot cancel it, so park the page first.
     const startedContext = context;
     const startedServer = server;
+    if (page) await quiescePage(page);
     if (startedContext) {
       await closeStep('browser context', () => startedContext.close()).catch(() => undefined);
     }
@@ -225,6 +227,7 @@ async function runCloses(
 /**
  * Tears down a plain app fixture, tolerating a partially built one.
  * @param fx - The fixture, when it was created.
+ * @returns Resolves once every resource settled; rejects on the first failure.
  */
 async function stopAppFixture(fx: IAppFixture | undefined): Promise<void> {
   if (!fx) return;
@@ -238,6 +241,7 @@ async function stopAppFixture(fx: IAppFixture | undefined): Promise<void> {
 /**
  * Tears down a Google fixture, tolerating a partially built one.
  * @param fx - The fixture, when it was created.
+ * @returns Resolves once every resource settled; rejects on the first failure.
  */
 async function stopGoogleFixture(fx: IGoogleFixture | undefined): Promise<void> {
   if (!fx) return;
