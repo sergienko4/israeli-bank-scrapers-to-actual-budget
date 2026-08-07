@@ -22,12 +22,20 @@ function stubPage(goto: unknown): Page {
   return { goto } as unknown as Page;
 }
 
-/** A promise that never settles, standing in for a wedged close. */
+/**
+ * A promise that never settles, standing in for a wedged close.
+ * @returns A promise that is never resolved or rejected.
+ */
 function neverSettles(): Promise<never> {
   return new Promise<never>(() => undefined);
 }
 
 afterEach(() => {
+  // Unwind in reverse order of installation. The `clearTimeout` spy below is
+  // taken *over* the fake clock, so it holds the fake as its original; undoing
+  // the timers first would let the spy restore reinstall that fake globally and
+  // leak a dead clock into every later file in this worker.
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
