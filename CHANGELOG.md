@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.5...v1.42.6) (2026-08-07)
+
+
+### Fixed
+
+* stop double PayBox OTP prompts and total-failure notifications ([#588](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/588)) ([a89ef3e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/a89ef3eb0345079fa425d765f2d2adca5487215e))
+
 ## [1.42.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.4...v1.42.5) (2026-08-05)
 
 
