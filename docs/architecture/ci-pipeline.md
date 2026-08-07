@@ -289,7 +289,7 @@ Answers **"is the snapshot I am recording internally correct?"** — 5 gates:
 ### Push stage — `.husky/pre-push`
 
 Answers **"is what leaves this machine correct as a whole?"** — 9 gates:
-`type-check:test`, `type-check:e2e`, `npm audit`, build, TypeDoc, ESLint
+`type-check:test`, `type-check:e2e`, `npm run audit`, build, TypeDoc, ESLint
 (uncached), markdownlint, circular deps, coupling.
 
 A push that only deletes a remote branch ships no code, so the hook detects

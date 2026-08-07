@@ -226,7 +226,7 @@ If a security vulnerability is discovered in a released version:
 1. **Dependency Scanning**
 
    ```bash
-   npm audit
+   npm run audit
    docker scan israeli-bank-importer:latest
    ```
 
@@ -271,7 +271,10 @@ If a security vulnerability is discovered in a released version:
 
 #### Dependency Security
 
-- ✅ npm audit: 0 vulnerabilities — **blocking CI check** (fails on HIGH+)
+- ✅ `npm run audit`: **blocking CI check** (fails at MODERATE+). An advisory
+  passes only if it is fixed, or carries a justified entry in
+  `config/audit-policy.mjs` that has not expired and does not affect the
+  production tree
 - ✅ Automated dependency updates via Dependabot (npm, Actions, Docker)
 - ✅ CodeQL static analysis on every PR
 - ✅ Latest security patches applied (Node.js 26, TypeScript 6)
@@ -288,7 +291,7 @@ If a security vulnerability is discovered in a released version:
 - ✅ SBOM (Software Bill of Materials) attached to every GitHub Release (SPDX format)
 - ✅ Docker images scanned with Trivy on every PR (CRITICAL + HIGH, blocks merge)
 - ✅ Automated dependency updates via Dependabot (npm, GitHub Actions, Docker)
-- ✅ npm audit runs as blocking CI check (no bypass)
+- ✅ `npm run audit` runs as blocking CI check (no bypass; exceptions expire)
 
 ---
 
