@@ -9,7 +9,10 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Scan for vulnerabilities and secrets
+    # Gate 1 — vulnerabilities. Deliberately capped at CRITICAL/HIGH: lower
+    # severities are dominated by unfixable upstream OS CVEs that would make
+    # the gate unactionable. `ignore-unfixed` keeps it to CVEs we can resolve.
+    - name: Fail on CRITICAL or HIGH vulnerabilities
       uses: aquasecurity/trivy-action@v0.36.0
       with:
         image-ref: ${{ inputs.image-ref }}
@@ -17,14 +20,45 @@ runs:
         exit-code: '1'
         severity: CRITICAL,HIGH
         ignore-unfixed: true
-        scanners: vuln,secret
-        trivy-config: config/trivy/secret.yaml
+        scanners: vuln
         vuln-type: os,library
+        skip-dirs: root/.npm
+
+    # Gate 2 — secrets. Fails on ANY severity, by design.
+    #
+    # Trivy grades most secret rules MEDIUM (e.g. `jwt-token`), so folding
+    # secrets into the CRITICAL/HIGH vulnerability gate above silently made
+    # them non-blocking: the gate counted `Secrets: 0` and exited 0 while the
+    # SARIF upload still published the findings to the Security tab. A real
+    # leaked credential would have behaved the same way — reported, never
+    # blocking. Severity is a useful lever for CVE triage; for a credential in
+    # a shipped image it is not, so every detection breaks the build here.
+    #
+    # False positives are suppressed by rule in config/trivy/secret.yaml
+    # rather than by raising this threshold.
+    #
+    # That file is passed via TRIVY_SECRET_CONFIG, *not* the action's
+    # `trivy-config` input. `trivy-config` maps to Trivy's `--config`
+    # (general configuration), which does not understand the `allow-rules`
+    # key — it parses without error and silently ignores every rule. Only
+    # `--secret-config` / TRIVY_SECRET_CONFIG feeds the secret scanner.
+    - name: Fail on any detected secret
+      uses: aquasecurity/trivy-action@v0.36.0
+      env:
+        TRIVY_SECRET_CONFIG: config/trivy/secret.yaml
+      with:
+        image-ref: ${{ inputs.image-ref }}
+        format: table
+        exit-code: '1'
+        severity: CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN
+        scanners: secret
         skip-dirs: root/.npm
 
     - name: Generate SARIF report
       if: always()
       uses: aquasecurity/trivy-action@v0.36.0
+      env:
+        TRIVY_SECRET_CONFIG: config/trivy/secret.yaml
       with:
         image-ref: ${{ inputs.image-ref }}
         format: sarif
@@ -32,7 +66,6 @@ runs:
         severity: CRITICAL,HIGH
         ignore-unfixed: true
         scanners: vuln,secret
-        trivy-config: config/trivy/secret.yaml
         vuln-type: os,library
         skip-dirs: root/.npm
 
