@@ -32,13 +32,13 @@ const WHITESPACE_RUN = /\s+/g;
 /**
  * Flattens a raw error message to a single bounded line.
  * @param raw - Error message recorded on the quarantine entry.
- * @returns Single-line reason, truncated with an ellipsis when over the cap.
+ * @returns Single-line reason, never longer than {@link REASON_CAP}.
  */
 function condenseReason(raw: string): string {
   const flat = raw.replace(WHITESPACE_RUN, ' ').trim();
   if (flat === '') return UNKNOWN_REASON;
   if (flat.length <= REASON_CAP) return flat;
-  return `${flat.slice(0, REASON_CAP).trimEnd()}…`;
+  return `${flat.slice(0, REASON_CAP - 1).trimEnd()}…`;
 }
 
 /**

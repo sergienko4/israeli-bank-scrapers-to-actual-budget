@@ -9,7 +9,7 @@
 import { join } from 'node:path';
 
 import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import attachDiagnostics, {
   wantsDiagnostics,
@@ -19,8 +19,8 @@ import type { IBankConfig } from '../../src/Types/Index.js';
 /** Screenshot directory the importer defaults to, anchored on the workdir. */
 const DEFAULT_SHOT_DIR = join(process.cwd(), 'logs', 'failures');
 
-/** Matches the timestamped PNG file name the diagnostics wiring generates. */
-const SHOT_FILE = /visaCal-\d{4}-\d{2}-\d{2}T[\d-]+Z\.png$/u;
+/** Matches the timestamped, nonce-suffixed PNG name the wiring generates. */
+const SHOT_FILE = /visaCal-\d{4}-\d{2}-\d{2}T[\d-]+Z-[0-9a-f]{8}\.png$/u;
 
 /**
  * Builds an empty provider options object for assertions.
@@ -55,13 +55,21 @@ describe('attachDiagnostics', () => {
     expect(options.storeFailureScreenShotPath).toMatch(SHOT_FILE);
   });
 
-  it('keeps each failure by stamping the screenshot file name', () => {
-    const first = buildOptions();
-    const second = buildOptions();
-    attachDiagnostics(first, { failureScreenshotPath: '/data/shots' }, 'debug');
-    attachDiagnostics(second, { failureScreenshotPath: '/data/shots' }, 'debug');
-    expect(first.storeFailureScreenShotPath).toMatch(SHOT_FILE);
-    expect(second.storeFailureScreenShotPath).toMatch(SHOT_FILE);
+  it('keeps each failure even when two attempts share a millisecond', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-07T09:15:00.000Z'));
+    try {
+      const first = buildOptions();
+      const second = buildOptions();
+      attachDiagnostics(first, { failureScreenshotPath: '/data/shots' }, 'debug');
+      attachDiagnostics(second, { failureScreenshotPath: '/data/shots' }, 'debug');
+      expect(first.storeFailureScreenShotPath).toMatch(SHOT_FILE);
+      expect(second.storeFailureScreenShotPath).toMatch(SHOT_FILE);
+      expect(first.storeFailureScreenShotPath)
+        .not.toBe(second.storeFailureScreenShotPath);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps a normal run quiet so logs stay readable', () => {

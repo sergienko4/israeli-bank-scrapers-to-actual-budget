@@ -12,6 +12,7 @@
  * @internal
  */
 
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
 import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
@@ -23,6 +24,9 @@ const DIAGNOSTIC_LEVELS = new Set<string>(['debug', 'trace']);
 
 /** Path segments, below the working directory, holding failure screenshots. */
 const FAILURE_SHOT_SEGMENTS = ['logs', 'failures'];
+
+/** Characters of randomness appended to a screenshot name to avoid collisions. */
+const SHOT_NONCE_LENGTH = 8;
 
 /**
  * Reports whether the importer is running verbosely enough for diagnostics.
@@ -49,14 +53,17 @@ function defaultShotDir(): string {
 
 /**
  * Builds a collision-free screenshot file name for one failed scrape.
+ *
+ * The timestamp alone is not enough: two attempts on the same bank can land in
+ * the same millisecond, and the loser would silently overwrite the evidence of
+ * the winner. A short random suffix keeps every failure on disk.
  * @param companyId - Provider company id being scraped.
- * @returns File name carrying the bank and the failure timestamp.
+ * @returns File name carrying the bank, the failure timestamp and a nonce.
  */
 function shotFileName(companyId: string): string {
-  const now = new Date();
-  const iso = now.toISOString();
-  const stamp = iso.replace(/[:.]/gu, '-');
-  return `${companyId}-${stamp}.png`;
+  const stamp = new Date().toISOString().replace(/[:.]/gu, '-');
+  const nonce = randomUUID().slice(0, SHOT_NONCE_LENGTH);
+  return `${companyId}-${stamp}-${nonce}.png`;
 }
 
 /**

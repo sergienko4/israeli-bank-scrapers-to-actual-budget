@@ -114,4 +114,14 @@ describe('buildBanksFailedMessage', () => {
     expect(message).toContain('max: login rejected');
     expect(message.length).toBeLessThan(300);
   });
+
+  it('never exceeds the reason cap, ellipsis included', () => {
+    const overCap = 'y'.repeat(161);
+
+    const message = buildBanksFailedMessage(failedPartition([['visacal', overCap]]));
+
+    const reason = message.replace('Import failed for visacal: ', '');
+    expect(reason.endsWith('…')).toBe(true);
+    expect(reason.length).toBeLessThanOrEqual(160);
+  });
 });
