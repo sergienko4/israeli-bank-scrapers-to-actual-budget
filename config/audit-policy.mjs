@@ -91,7 +91,7 @@ export function classifyAdvisories(advisories, productionPackages) {
       violations.push({ ...advisory, why: 'no accepted-advisory entry' });
     } else if (productionPackages.has(advisory.package)) {
       violations.push({ ...advisory, why: 'reaches the production tree; exception does not apply' });
-    } else if (entry.expires < today) {
+    } else if (entry.expires <= today) {
       violations.push({ ...advisory, why: `exception expired on ${entry.expires}` });
     } else {
       accepted.push({ ...advisory, expires: entry.expires, reason: entry.reason });

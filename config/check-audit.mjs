@@ -33,6 +33,26 @@ function npmInvocation(args) {
 }
 
 /**
+ * Parses an npm audit report and rejects anything that is not one.
+ *
+ * On operational failures (ENOLOCK, registry auth, network) npm still writes
+ * valid JSON to stdout, but it carries an `error` object instead of findings.
+ * Returning that would make the gate report success having audited nothing, so
+ * a report without a vulnerabilities object is treated as a failed run.
+ *
+ * @param {string} stdout Raw stdout captured from npm audit.
+ * @param {Error} [cause] The child-process error, when the run exited non-zero.
+ * @returns {object} The validated audit report.
+ */
+function parseAuditReport(stdout, cause) {
+  const report = JSON.parse(stdout);
+  if (!report?.vulnerabilities || typeof report.vulnerabilities !== 'object') {
+    throw cause ?? new Error('npm audit did not return a vulnerability report');
+  }
+  return report;
+}
+
+/**
  * Runs `npm audit --json` and returns the parsed report.
  *
  * npm exits non-zero whenever it finds advisories, so a thrown error still
@@ -44,7 +64,7 @@ function npmInvocation(args) {
 function runAudit(extraArgs) {
   const { command, args } = npmInvocation(['audit', '--json', ...extraArgs]);
   try {
-    return JSON.parse(
+    return parseAuditReport(
       execFileSync(command, args, {
         encoding: 'utf8',
         maxBuffer: 64 * 1024 * 1024,
@@ -54,7 +74,7 @@ function runAudit(extraArgs) {
   } catch (error) {
     const stdout = error?.stdout;
     if (!stdout) throw error;
-    return JSON.parse(stdout);
+    return parseAuditReport(stdout, error);
   }
 }
 
