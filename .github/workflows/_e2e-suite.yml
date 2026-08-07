@@ -102,8 +102,13 @@ jobs:
             node dist/Index.js
           EXIT_CODE=$?
           echo "Run #1 exit code: $EXIT_CODE"
-          if [ $EXIT_CODE -gt 1 ]; then
-            echo "::error::Importer crashed with exit code $EXIT_CODE"
+          # Both e2e banks are mock-backed and always expected to succeed, so
+          # anything other than 0 is a defect. Exit 1 is overloaded (invalid
+          # config aborts before importing, and a failed bank also yields 1);
+          # tolerating it previously let a config-fatal run masquerade as green
+          # while the pipeline-verify suite silently self-skipped.
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Importer exited $EXIT_CODE (expected 0)"
             exit 1
           fi
 
@@ -120,8 +125,9 @@ jobs:
             node dist/Index.js
           EXIT_CODE=$?
           echo "Run #2 exit code: $EXIT_CODE"
-          if [ $EXIT_CODE -gt 1 ]; then
-            echo "::error::Importer crashed with exit code $EXIT_CODE"
+          # Same contract as Run #1 — see the rationale there.
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "::error::Importer exited $EXIT_CODE (expected 0)"
             exit 1
           fi
 

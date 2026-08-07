@@ -37,7 +37,7 @@
     }
   },
   "notifications": {
-    "enabled": true
+    "enabled": false
   },
   "spendingWatch": [
     {

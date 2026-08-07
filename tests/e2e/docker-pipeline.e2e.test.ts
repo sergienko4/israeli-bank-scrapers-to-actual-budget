@@ -48,6 +48,19 @@ const { hasData, rows } = await (async (): Promise<{ hasData: boolean; rows: Tra
   return { hasData: true, rows: data };
 })();
 
+// A silent skip here hid a broken importer for five weeks: the container aborted
+// on a config error, CI tolerated the non-zero exit, no transactions were written,
+// and these 14 assertions self-skipped while the run reported green. Under CI the
+// absence of imported data is a failure, never a reason to skip. Local runs still
+// skip so contributors who have not executed the Docker steps are not blocked.
+if (!hasData && process.env.CI) {
+  throw new Error(
+    'Docker pipeline verification found no imported transactions. ' +
+    'Run #1/#2 of the importer must complete successfully before this suite. ' +
+    `budget=${BUDGET_ID ?? 'none'}`
+  );
+}
+
 describe.runIf(hasData)('Docker Pipeline E2E', () => {
   let transactions: TransactionRow[] = [];
   let amountByPayee: Map<string, number> = new Map();

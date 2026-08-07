@@ -37,9 +37,17 @@ async function createTestBudget(): Promise<string> {
   }
 }
 
+/**
+ * Builds the importer config the E2E run consumes, from the checked-in template.
+ * @returns Nothing; the generated config is written to CONFIG_OUTPUT.
+ */
 function generateConfig(): void {
   const template = JSON.parse(readFileSync(CONFIG_TEMPLATE, 'utf8'));
 
+  // The template ships with notifications disabled so the generated config is
+  // valid without secrets. Each adder below turns them back on when it injects
+  // a channel — an enabled block with no channel is a fatal config error and
+  // previously aborted the importer before it imported anything.
   addTelegramConfig(template);
   addWebhookConfig(template);
 
@@ -47,21 +55,33 @@ function generateConfig(): void {
   console.log(`Config written to ${CONFIG_OUTPUT}`);
 }
 
+/**
+ * Enables notifications and injects a Telegram channel when credentials are present.
+ * @param template Mutable config object; left untouched when credentials are absent.
+ * @returns Nothing; the template is mutated in place.
+ */
 function addTelegramConfig(template: Record<string, unknown>): void {
   const token = process.env.E2E_TELEGRAM_BOT_TOKEN;
   const chatId = process.env.E2E_TELEGRAM_CHAT_ID;
   if (!token || !chatId) return;
   const notifications = template.notifications as Record<string, unknown>;
+  notifications.enabled = true;
   notifications.telegram = {
     botToken: token, chatId,
     messageFormat: 'compact', showTransactions: 'new',
   };
 }
 
+/**
+ * Enables notifications and injects a webhook channel when a URL is present.
+ * @param template Mutable config object; left untouched when the URL is absent.
+ * @returns Nothing; the template is mutated in place.
+ */
 function addWebhookConfig(template: Record<string, unknown>): void {
   const webhookUrl = process.env.E2E_WEBHOOK_URL;
   if (!webhookUrl) return;
   const notifications = template.notifications as Record<string, unknown>;
+  notifications.enabled = true;
   notifications.webhook = { url: webhookUrl, format: 'plain' };
 }
 
