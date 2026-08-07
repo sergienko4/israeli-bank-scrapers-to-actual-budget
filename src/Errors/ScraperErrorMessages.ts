@@ -104,7 +104,14 @@ function renderAdvice(entry: IErrorAdvice): string {
  * @returns Formatted advice, or empty string when no signature applies.
  */
 function findSignatureAdvice(errorText: string): string {
-  const hit = UPSTREAM_FAILURE_SIGNATURES.find(s => s.pattern.test(errorText));
+  /**
+   * Tests one signature against the error text.
+   * @param signature - Candidate signature from the OCP list.
+   * @returns True when this signature describes the failure.
+   */
+  const matches = (signature: IFailureSignature): boolean =>
+    signature.pattern.test(errorText);
+  const hit = UPSTREAM_FAILURE_SIGNATURES.find(matches);
   return hit ? renderAdvice(hit.advice) : '';
 }
 
@@ -114,16 +121,23 @@ function findSignatureAdvice(errorText: string): string {
  * @returns Formatted advice, or empty string when no code applies.
  */
 function findCodeAdvice(errorText: string): string {
-  const hit = Object.entries(SCRAPER_ERROR_ADVICE)
-    .find(([code]) => errorText.includes(code));
+  /**
+   * Tests one mapped error code against the error text.
+   * @param pair - Entry pairing a provider error code with its advice.
+   * @returns True when the error text carries this code.
+   */
+  const matches = (pair: readonly [string, IErrorAdvice]): boolean =>
+    errorText.includes(pair[0]);
+  const hit = Object.entries(SCRAPER_ERROR_ADVICE).find(matches);
   return hit ? renderAdvice(hit[1]) : '';
 }
 
 /**
- * Looks up actionable advice for a scraper error by matching known codes.
+ * Looks up actionable advice for a scraper error.
  *
- * Message signatures win over error codes: a failure carrying a catch-all code
- * plus a recognisable message is described by the message, which is specific.
+ * Matches known upstream message signatures as well as provider error codes.
+ * Signatures win: a failure carrying a catch-all code plus recognisable wording
+ * is described by the wording, which is the more specific signal.
  * @param errorText - The error message or error type string from the scraper.
  * @returns Formatted advice string, or empty string if nothing matched.
  */
