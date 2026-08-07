@@ -96,27 +96,57 @@ async function dumpFailure(response: Response): Promise<void> {
  * @returns Nothing once the listener is attached.
  */
 function trackNavigation(page: Page): void {
-  page.on('framenavigated', (frame: Frame) => {
+  /**
+   * Reports a main-frame navigation, discarding query and fragment.
+   * @param frame - Frame that navigated.
+   * @returns Nothing once the navigation has been reported.
+   */
+  const onNavigated = (frame: Frame): void => {
     if (frame === page.mainFrame()) console.warn(`[nav] ${safeUrl(frame.url())}`);
-  });
+  };
+  page.on('framenavigated', onNavigated);
 }
 
 /**
  * Logs browser-side failures, which is what stops a bank SPA booting.
+ *
+ * Browser-generated signals are safe to print verbatim: an error class and a
+ * network error code come from the engine, not from the page's data. Text the
+ * page itself produced is untrusted — a bank SPA that logs a failed reply
+ * would put balances into `console.error` — so only its shape is recorded.
  * @param page - Page being observed.
  * @returns Nothing once the listeners are attached.
  */
 function trackScriptFailures(page: Page): void {
-  page.on('pageerror', (error: Error) => {
-    console.warn(`[pageerror] ${error.message}`);
-  });
-  page.on('requestfailed', (request: Request) => {
+  /**
+   * Reports an uncaught page exception by class, never by message.
+   * @param error - Exception raised inside the page.
+   * @returns Nothing once the exception has been reported.
+   */
+  const onPageError = (error: Error): void => {
+    console.warn(`[pageerror] ${error.name}`);
+  };
+  /**
+   * Reports a network-level request failure with its browser error code.
+   * @param request - Request the browser could not complete.
+   * @returns Nothing once the failure has been reported.
+   */
+  const onRequestFailed = (request: Request): void => {
     const failure = request.failure();
     console.warn(`[reqfail] ${safeUrl(request.url())} :: ${failure?.errorText ?? ''}`);
-  });
-  page.on('console', (message: ConsoleMessage) => {
-    if (message.type() === 'error') console.warn(`[console] ${message.text()}`);
-  });
+  };
+  /**
+   * Reports that the page logged an error, by size rather than by content.
+   * @param message - Console message emitted by the page.
+   * @returns Nothing once the message has been reported.
+   */
+  const onConsole = (message: ConsoleMessage): void => {
+    if (message.type() !== 'error') return;
+    console.warn(`[console] error text-length=${String(message.text().length)}`);
+  };
+  page.on('pageerror', onPageError);
+  page.on('requestfailed', onRequestFailed);
+  page.on('console', onConsole);
 }
 
 /**
@@ -139,11 +169,17 @@ function isApiCall(response: Response): boolean {
  * @returns Nothing once the listener is attached.
  */
 function trackApiCalls(page: Page): void {
-  page.on('response', (response: Response) => {
+  /**
+   * Reports one API response by status, method and path.
+   * @param response - Response observed on the page.
+   * @returns Nothing once the response has been reported.
+   */
+  const onResponse = (response: Response): void => {
     if (!isApiCall(response)) return;
     const method = response.request().method();
     console.warn(`[api] ${String(response.status())} ${method} ${safeUrl(response.url())}`);
-  });
+  };
+  page.on('response', onResponse);
 }
 
 /**
