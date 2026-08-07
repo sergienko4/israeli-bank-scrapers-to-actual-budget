@@ -37,6 +37,10 @@ async function createTestBudget(): Promise<string> {
   }
 }
 
+/**
+ * Builds the importer config the E2E run consumes, from the checked-in template.
+ * @returns Nothing; the generated config is written to CONFIG_OUTPUT.
+ */
 function generateConfig(): void {
   const template = JSON.parse(readFileSync(CONFIG_TEMPLATE, 'utf8'));
 
@@ -51,6 +55,11 @@ function generateConfig(): void {
   console.log(`Config written to ${CONFIG_OUTPUT}`);
 }
 
+/**
+ * Enables notifications and injects a Telegram channel when credentials are present.
+ * @param template Mutable config object; left untouched when credentials are absent.
+ * @returns Nothing; the template is mutated in place.
+ */
 function addTelegramConfig(template: Record<string, unknown>): void {
   const token = process.env.E2E_TELEGRAM_BOT_TOKEN;
   const chatId = process.env.E2E_TELEGRAM_CHAT_ID;
@@ -63,6 +72,11 @@ function addTelegramConfig(template: Record<string, unknown>): void {
   };
 }
 
+/**
+ * Enables notifications and injects a webhook channel when a URL is present.
+ * @param template Mutable config object; left untouched when the URL is absent.
+ * @returns Nothing; the template is mutated in place.
+ */
 function addWebhookConfig(template: Record<string, unknown>): void {
   const webhookUrl = process.env.E2E_WEBHOOK_URL;
   if (!webhookUrl) return;
