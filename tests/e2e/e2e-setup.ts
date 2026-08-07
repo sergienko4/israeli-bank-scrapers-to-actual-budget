@@ -40,6 +40,10 @@ async function createTestBudget(): Promise<string> {
 function generateConfig(): void {
   const template = JSON.parse(readFileSync(CONFIG_TEMPLATE, 'utf8'));
 
+  // The template ships with notifications disabled so the generated config is
+  // valid without secrets. Each adder below turns them back on when it injects
+  // a channel — an enabled block with no channel is a fatal config error and
+  // previously aborted the importer before it imported anything.
   addTelegramConfig(template);
   addWebhookConfig(template);
 
@@ -52,6 +56,7 @@ function addTelegramConfig(template: Record<string, unknown>): void {
   const chatId = process.env.E2E_TELEGRAM_CHAT_ID;
   if (!token || !chatId) return;
   const notifications = template.notifications as Record<string, unknown>;
+  notifications.enabled = true;
   notifications.telegram = {
     botToken: token, chatId,
     messageFormat: 'compact', showTransactions: 'new',
@@ -62,6 +67,7 @@ function addWebhookConfig(template: Record<string, unknown>): void {
   const webhookUrl = process.env.E2E_WEBHOOK_URL;
   if (!webhookUrl) return;
   const notifications = template.notifications as Record<string, unknown>;
+  notifications.enabled = true;
   notifications.webhook = { url: webhookUrl, format: 'plain' };
 }
 
