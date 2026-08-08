@@ -54,8 +54,9 @@ const { hasData, rows } = await (async (): Promise<{ hasData: boolean; rows: Tra
 // E2E image exists the Docker runs were expected, so missing data is a failure and
 // never a reason to skip — including a missing budget, which means setup itself
 // broke. Jobs that never build the image (the release-please badge counter) and
-// contributors who have not run the Docker steps still skip.
-if (hasDockerImage() && !hasData && process.env.CI) {
+// contributors who have not run the Docker steps still skip. The image probe spawns
+// a docker subprocess, so it is tested last and only when the outcome depends on it.
+if (process.env.CI && !hasData && hasDockerImage()) {
   throw new Error(
     'Docker pipeline verification found no imported transactions. ' +
     'Run #1/#2 of the importer must complete successfully before this suite. ' +
