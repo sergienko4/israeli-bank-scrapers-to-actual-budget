@@ -12,7 +12,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import api from '@actual-app/api';
 import { join } from 'path';
 import { extractQueryData } from '../../src/Utils/Index.js';
-import { findBudgetId, getFixturesDir } from './helpers/dockerRunner.js';
+import { findBudgetId, getFixturesDir, hasDockerImage } from './helpers/dockerRunner.js';
 
 const DATA_DIR = join(getFixturesDir(), 'e2e-data');
 const BUDGET_ID = findBudgetId();
@@ -50,10 +50,12 @@ const { hasData, rows } = await (async (): Promise<{ hasData: boolean; rows: Tra
 
 // A silent skip here hid a broken importer for five weeks: the container aborted
 // on a config error, CI tolerated the non-zero exit, no transactions were written,
-// and these 14 assertions self-skipped while the run reported green. Under CI the
-// absence of imported data is a failure, never a reason to skip. Local runs still
-// skip so contributors who have not executed the Docker steps are not blocked.
-if (!hasData && process.env.CI) {
+// and these 14 assertions self-skipped while the run reported green. Whenever the
+// E2E image exists the Docker runs were expected, so missing data is a failure and
+// never a reason to skip — including a missing budget, which means setup itself
+// broke. Jobs that never build the image (the release-please badge counter) and
+// contributors who have not run the Docker steps still skip.
+if (hasDockerImage() && !hasData && process.env.CI) {
   throw new Error(
     'Docker pipeline verification found no imported transactions. ' +
     'Run #1/#2 of the importer must complete successfully before this suite. ' +
