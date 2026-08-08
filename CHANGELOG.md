@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.6...v1.42.7) (2026-08-08)
+
+
+### Fixed
+
+* **ci:** gate audit with expiring advisory policy ([#597](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/597)) ([c715035](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c71503555d2b1300dd2cf176c9e71f0b82a835e9))
+* **ci:** restore dead docker-pipeline e2e gate ([#596](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/596)) ([6b5026e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/6b5026e011c7d236714e8ebf1db0afc98b5e5601))
+* **deps:** bump fastify from 5.11.0 to 5.11.2 ([#592](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/592)) ([9c1d3ff](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/9c1d3ff2a35018a4f1c2e5c96dfe605a6341a716))
+* **e2e:** skip docker pipeline suite when image is absent ([#598](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/598)) ([3882819](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/38828191ad70612ffd46aadba823f8181734a339))
+* **test:** bound e2e teardown with a deadline ([#595](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/595)) ([64d6042](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/64d6042694019d07a50a45843838da7634daac96))
+
 ## [1.42.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.5...v1.42.6) (2026-08-07)
 
 
