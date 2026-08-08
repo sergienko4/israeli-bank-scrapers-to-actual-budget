@@ -40,13 +40,18 @@ function npmInvocation(args) {
  * Returning that would make the gate report success having audited nothing, so
  * a report without a vulnerabilities object is treated as a failed run.
  *
+ * Arrays are rejected too: `typeof [] === 'object'`, so an array would satisfy a
+ * naive object check while yielding no findings, which is the same silent pass.
+ * A real report keys vulnerabilities by package name, never by index.
+ *
  * @param {string} stdout Raw stdout captured from npm audit.
  * @param {Error} [cause] The child-process error, when the run exited non-zero.
  * @returns {object} The validated audit report.
  */
 function parseAuditReport(stdout, cause) {
   const report = JSON.parse(stdout);
-  if (!report?.vulnerabilities || typeof report.vulnerabilities !== 'object') {
+  const findings = report?.vulnerabilities;
+  if (!findings || typeof findings !== 'object' || Array.isArray(findings)) {
     throw cause ?? new Error('npm audit did not return a vulnerability report');
   }
   return report;
