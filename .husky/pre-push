@@ -49,7 +49,7 @@ echo ""
 
 run_gate "1b-typecheck-e2e"  "Type-checking tests/e2e/"           npm run type-check:e2e
 run_gate "1c-typecheck-test" "Type-checking tests/"               npm run type-check:test
-run_gate "2-audit"           "Auditing dependencies"              npm audit --audit-level=moderate
+run_gate "2-audit"           "Auditing dependencies"              npm run audit
 run_gate "3-build"           "Compiling TypeScript"               npm run build
 run_gate "3b-typedoc"        "Generating API docs"                npm run docs
 run_gate "6-eslint-full"     "Running ESLint (uncached)"          npm run lint

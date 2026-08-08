@@ -42,7 +42,10 @@ jobs:
         run: |
           git fetch --depth=1 origin "$BASE_SHA"
           node scripts/check-release-signal.mjs --title "$PR_TITLE" --base "$BASE_SHA"
-      - run: npm audit --audit-level=moderate
+      # Fails on any advisory at or above "moderate" unless it carries a
+      # justified, expiring entry in config/audit-policy.mjs — an exception
+      # never applies to a package that reaches the production tree.
+      - run: npm run audit
       # Stale `allowScripts` pins do not fail install — npm just silently
       # skips the blocked postinstall, so the break only surfaces ~14min
       # later as a missing native binding in E2E. Catch it here in seconds.

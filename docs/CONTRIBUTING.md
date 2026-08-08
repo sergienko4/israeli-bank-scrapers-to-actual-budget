@@ -159,7 +159,7 @@ The exception is deliberately narrow in two directions:
 2. PRs must pass all CI checks:
    - Build (TypeScript strict mode)
    - Tests (80%+ line coverage, 70%+ branch coverage)
-   - npm audit (0 vulnerabilities)
+   - `npm run audit` (no unaddressed advisories at MODERATE+)
    - CodeQL security scan
    - Trivy container image scan (CRITICAL + HIGH)
    - Markdown lint + link check
