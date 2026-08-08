@@ -139,10 +139,11 @@ without a comment.
 
 The exception is deliberately narrow in two directions:
 
-- **Only Dependabot branches.** It applies only to pull requests authored by
+- **Only automated bump branches.** It applies only to pull requests authored by
   `dependabot[bot]` that change nothing but the manifest, the lockfile, and the
-  rendered READMEs. On any human-authored branch the pins are never rotated
-  automatically and `lint:allow-scripts` still fails the commit.
+  rendered READMEs. The on-demand workflow described below rotates pins on its
+  own branches for the same reason. On any hand-written branch the pins are
+  never rotated automatically and `lint:allow-scripts` still fails the commit.
 - **Only packages that are already approved.** `--fix` rotates the *version* of
   a package someone already approved, and removes entries the tree no longer
   needs. It never adds a package that is missing from `allowScripts`. A
@@ -150,6 +151,37 @@ The exception is deliberately narrow in two directions:
   than a rotation of an existing one, so it is reported as
   `needs human approval` and left to fail the gate until someone runs
   `npm approve-scripts` themselves.
+
+### Bumping a package on demand
+
+Dependabot scans once a day, which is slower than
+`@sergienko4/israeli-bank-scrapers` sometimes needs to move: that package is
+what breaks when a bank changes its site, so an upstream fix is often wanted in
+a release the same evening. A version published shortly before a scan can also
+be missed, because the registry index Dependabot reads has not caught up yet.
+
+`.github/workflows/dependency-bump.yml` covers those cases. It takes the
+package and the version, installs it on a runner, rotates the `allowScripts`
+pin, and opens the pull request:
+
+```bash
+# newest published version of the scraper
+gh workflow run dependency-bump.yml
+
+# a specific version, when you do not want whatever is newest
+gh workflow run dependency-bump.yml -f version=8.6.6
+
+# any other package; chore keeps it out of the release notes
+gh workflow run dependency-bump.yml -f package=pino -f version=10.4.0 -f type=chore
+```
+
+Running it on a runner is also what makes the lockfile trustworthy when your
+own network cannot reach the npm registry: the integrity hash is produced by
+npm from the tarball it actually fetched, rather than typed in by hand.
+
+The result is an ordinary pull request with the full CI suite attached, and the
+`allowScripts` review it triggers is the same one described above — a newly
+introduced install script still fails the gate and waits for a human.
 
 ---
 

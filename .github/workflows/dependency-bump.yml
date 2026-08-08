@@ -1,0 +1,174 @@
+# Opens a ready-to-review bump pull request for a single npm package.
+#
+# Dependabot already watches this repository daily and stays the default path.
+# A daily cadence is too slow for @sergienko4/israeli-bank-scrapers, though:
+# that package is what breaks when a bank changes its site, so an upstream fix
+# is usually needed in a release the same evening. A freshly published version
+# also takes time to surface in the registry index Dependabot reads, so a scan
+# running shortly after a publish can miss it and leave the bump waiting for
+# the next day.
+#
+# This workflow is the on-demand path for those cases, and for any maintainer
+# whose network cannot reach the npm registry: the install runs on a runner,
+# where npm resolves and verifies the tarball itself rather than trusting a
+# hand-edited lockfile.
+#
+#   gh workflow run dependency-bump.yml -f version=8.6.6
+#   gh workflow run dependency-bump.yml -f package=pino -f version=10.4.0
+#
+name: Dependency bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "npm package to bump"
+        required: true
+        default: "@sergienko4/israeli-bank-scrapers"
+      version:
+        description: "Exact version or dist-tag, e.g. 8.6.6 or latest"
+        required: true
+        default: "latest"
+      type:
+        description: "Commit type: fix ships a release, chore does not"
+        required: true
+        type: choice
+        options: [fix, chore]
+        default: fix
+
+# The job writes through RELEASE_TOKEN, so the workflow token stays read-only.
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-bump-${{ inputs.package }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump ${{ inputs.package }} to ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # A PAT rather than GITHUB_TOKEN: pull requests opened by
+          # GITHUB_TOKEN do not raise `pull_request` events, so every gate in
+          # pr.yml would silently be skipped and the bump would look green
+          # without having been tested at all.
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Resolve the requested version
+        id: resolve
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          resolved="$(npm view "${PACKAGE}@${VERSION}" version --json | tr -d '"[]' | tr ',' '\n' | tail -n 1 | xargs)"
+          if [ -z "${resolved}" ]; then
+            echo "::error::${PACKAGE}@${VERSION} does not resolve to a published version."
+            exit 1
+          fi
+          slug="$(printf '%s' "${PACKAGE}" | sed 's|^@||; s|/|-|g')"
+          echo "resolved=${resolved}"            >> "${GITHUB_OUTPUT}"
+          echo "branch=deps/${slug}-${resolved}" >> "${GITHUB_OUTPUT}"
+          echo "::notice::${PACKAGE}@${VERSION} resolves to ${resolved}."
+
+      - name: Refuse to clobber an existing branch
+        env:
+          BRANCH: ${{ steps.resolve.outputs.branch }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1; then
+            echo "::error::${BRANCH} already exists. Merge or delete it, then run again."
+            exit 1
+          fi
+
+      - name: Install the requested version
+        env:
+          PACKAGE: ${{ inputs.package }}
+          RESOLVED: ${{ steps.resolve.outputs.resolved }}
+        run: npm install "${PACKAGE}@${RESOLVED}" --no-audit --no-fund
+
+      # Install scripts stay blocked until the exact name@version is pinned, so
+      # a bump that skips this leaves the native bindings unbuilt and fails E2E
+      # much later with an opaque error. --fix only rotates already-approved
+      # packages; a newly introduced one still needs a human.
+      - name: Rotate the install-script allowlist
+        run: node scripts/check-allow-scripts.mjs --fix
+
+      - name: Verify the allowlist gate passes
+        run: npm run lint:allow-scripts
+
+      - name: Confirm the bump touched only the manifest and lockfile
+        id: diff
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::Already at the requested version; nothing to do."
+            exit 0
+          fi
+          unexpected="$(git status --porcelain | grep -v -E '^ M (package\.json|package-lock\.json)$' || true)"
+          if [ -n "${unexpected}" ]; then
+            echo "::error::The install touched unexpected paths:"
+            echo "${unexpected}"
+            exit 1
+          fi
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+          git --no-pager diff --stat -- package.json package-lock.json
+
+      - name: Open the pull request
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PACKAGE: ${{ inputs.package }}
+          RESOLVED: ${{ steps.resolve.outputs.resolved }}
+          BRANCH: ${{ steps.resolve.outputs.branch }}
+          TYPE: ${{ inputs.type }}
+        run: |
+          set -euo pipefail
+          title="${TYPE}(deps): bump ${PACKAGE} to ${RESOLVED}"
+
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "${BRANCH}"
+          git add package.json package-lock.json
+          git commit -m "${title}" -m "Opened by the dependency-bump workflow (run ${GITHUB_RUN_ID})." \
+            -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
+          git push origin "${BRANCH}"
+
+          gh pr create \
+            --title "${title}" \
+            --base main \
+            --head "${BRANCH}" \
+            --body "$(cat <<EOF
+          Raises \`${PACKAGE}\` to \`${RESOLVED}\`.
+
+          ## Why this is not a Dependabot pull request
+
+          Dependabot scans once a day. This package is what breaks when a bank
+          changes its site, so an upstream fix is usually needed sooner than the
+          next scan, and a version published shortly before a scan can be missed
+          because the registry index has not caught up yet. This bump was
+          requested on demand instead.
+
+          ## What ran on the runner
+
+          - \`npm install ${PACKAGE}@${RESOLVED}\` regenerated \`package-lock.json\`,
+            so the integrity hash was produced by npm from the tarball it fetched.
+          - \`check-allow-scripts.mjs --fix\` rotated the install-script pin, and the
+            \`lint:allow-scripts\` gate was re-run and passes.
+          - The diff was checked to touch \`package.json\` and \`package-lock.json\` only.
+
+          Everything else is deliberately left to CI on this pull request, which is
+          the real validation: build, type-checks, unit and mocked E2E suites,
+          audit, and the container scans.
+          EOF
+          )"
+
+          echo "::notice::Opened ${title}"
