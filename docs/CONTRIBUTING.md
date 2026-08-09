@@ -175,7 +175,7 @@ gh workflow run dependency-bump.yml
 gh workflow run dependency-bump.yml -f version=8.6.6
 
 # a devDependency; chore keeps it out of the release notes
-gh workflow run dependency-bump.yml -f package=vitest -f version=4.0.1 -f type=chore
+gh workflow run dependency-bump.yml -f package=vitest -f type=chore
 ```
 
 `chore` is only for packages that do not ship inside the image. Anything under
@@ -191,9 +191,17 @@ Running it on a runner is also what makes the lockfile trustworthy when your
 own network cannot reach the npm registry: the integrity hash is produced by
 npm from the tarball it actually fetched, rather than typed in by hand.
 
-The result is an ordinary pull request with the full CI suite attached, and the
-`allowScripts` review it triggers is the same one described above — a newly
-introduced install script still fails the gate and waits for a human.
+The result is an ordinary pull request with the full CI suite attached. The
+workflow only bumps a package that is already in `dependencies` or
+`devDependencies`, and preserves the range operator it finds, so it cannot
+introduce a dependency or widen a deliberate pin. A package that only appears
+in `overrides` has to be edited by hand.
+
+If the new version introduces an install script that has never been approved,
+`lint:allow-scripts` fails inside the workflow and the run stops without
+opening a pull request — that approval is a human decision, so run
+`npm approve-scripts` locally and raise the bump as an ordinary pull request
+instead.
 
 Only the deterministic repairs belong to the workflow. Audit findings, licence
 changes and test failures cannot be fixed by regenerating a file, so they are

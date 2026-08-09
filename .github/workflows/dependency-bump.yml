@@ -57,11 +57,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # A PAT rather than GITHUB_TOKEN: pull requests opened by
-          # GITHUB_TOKEN do not raise `pull_request` events, so every gate in
+          # No PAT here, and no persisted credentials: `npm install` below runs
+          # approved install scripts, and any credential left in .git/config
+          # would be usable by them to push. The PAT is introduced only in the
+          # final step, which needs it because a pull request opened with
+          # GITHUB_TOKEN does not raise `pull_request` events, so every gate in
           # pr.yml would silently be skipped and the bump would look green
           # without having been tested at all.
-          token: ${{ secrets.RELEASE_TOKEN }}
+          persist-credentials: false
+          # workflow_dispatch can be aimed at any ref, but the pull request is
+          # always based on main. Checking out anything else would carry that
+          # ref's unrelated commits into the bump, where the working-tree guard
+          # below cannot see them.
+          ref: main
 
       - uses: actions/setup-node@v7
         with:
@@ -93,16 +101,39 @@ jobs:
           BRANCH: ${{ steps.resolve.outputs.branch }}
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1; then
+          # --exit-code reports 2 for "no such ref"; anything else non-zero is a
+          # transport failure, which must not be mistaken for a free branch name.
+          set +e
+          git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "${rc}" -eq 0 ]; then
             echo "::error::${BRANCH} already exists. Merge or delete it, then run again."
             exit 1
           fi
+          if [ "${rc}" -ne 2 ]; then
+            echo "::error::Could not reach origin to check for ${BRANCH} (git exit ${rc})."
+            exit 1
+          fi
+
+      # npm install would happily *add* a package that is not currently a
+      # dependency, so a typo in the dispatch input becomes a new production
+      # dependency instead of an error. It also re-saves the range with its own
+      # save-prefix, which would widen a deliberate pin such as
+      # `playwright-core: ~1.62.1` into a caret range. This refuses both.
+      - name: Confirm the package can be bumped safely
+        id: target
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: node scripts/resolve-bump-target.mjs --package "${PACKAGE}"
 
       - name: Install the requested version
         env:
           PACKAGE: ${{ inputs.package }}
           RESOLVED: ${{ steps.resolve.outputs.resolved }}
-        run: npm install "${PACKAGE}@${RESOLVED}" --no-audit --no-fund
+          SAVE_FLAG: ${{ steps.target.outputs.saveFlag }}
+          PREFIX_FLAG: ${{ steps.target.outputs.prefixFlag }}
+        run: npm install "${PACKAGE}@${RESOLVED}" "${SAVE_FLAG}" "${PREFIX_FLAG}" --no-audit --no-fund
 
       # Install scripts stay blocked until the exact name@version is pinned, so
       # a bump that skips this leaves the native bindings unbuilt and fails E2E
@@ -118,11 +149,17 @@ jobs:
       #
       # Both READMEs are restored from HEAD first so that their only possible
       # diff is the renderer's own output. An approved install script that
-      # edited one would otherwise ride along into a commit pushed under a PAT.
+      # edited one would otherwise ride along into the commit. Each is restored
+      # only if it is tracked, because an unmatched pathspec would abort the
+      # step before the renderer, which tolerates a missing file, ever runs.
       - name: Re-render the README marker fragments
         run: |
           set -euo pipefail
-          git checkout HEAD -- README.md README.docker-hub.md
+          for readme in README.md README.docker-hub.md; do
+            if git cat-file -e "HEAD:${readme}" 2>/dev/null; then
+              git checkout HEAD -- "${readme}"
+            fi
+          done
           npm run meta:render
 
       # Every artefact repaired above is gated in CI, so those same gates run
@@ -186,7 +223,11 @@ jobs:
           git add -u
           git commit -m "${title}" -m "Opened by the dependency-bump workflow (run ${GITHUB_RUN_ID})." \
             -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
-          git push origin "${BRANCH}"
+          # The remote is credential-free by design, so the token is supplied
+          # for this one command rather than left in .git/config for the whole
+          # job. Actions masks it in the log.
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:refs/heads/${BRANCH}"
 
           gh pr create \
             --title "${title}" \
