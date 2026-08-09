@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.7...v1.42.8) (2026-08-09)
+
+
+### Fixed
+
+* **ci:** repair and harden the bump workflow ([#602](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/602)) ([3b3281d](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/3b3281d60f6f4a0effad2b2fd392ea5c4f700fb6))
+* **deps:** bump @actual-app/api from 26.8.0 to 26.8.1 ([#608](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/608)) ([16f7d2a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/16f7d2a790fb760e835c44ba5621109e602faef1))
+* **deps:** bump @sergienko4/israeli-bank-scrapers from 8.6.4 to 8.6.5 ([#610](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/610)) ([d336e76](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d336e767369a7eb614e2b2f660bc8799f631d8cd))
+
 ## [1.42.7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.6...v1.42.7) (2026-08-08)
 
 
