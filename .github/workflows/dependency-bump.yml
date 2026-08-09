@@ -89,7 +89,12 @@ jobs:
           # having to interpret the array npm answers a range with. A dist-tag
           # is arbitrary text, so the second branch is permissive — but it must
           # start with a letter, which is what keeps a range out of it.
-          if [[ ! "${VERSION}" =~ ^([0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)*|[a-zA-Z][a-zA-Z0-9._-]*)$ ]]; then
+          # Build metadata (`1.2.3+build.1`) is refused rather than accepted:
+          # npm strips it when resolving and saving, so the manifest would come
+          # back reading `1.2.3` and this input would have promised a pin the
+          # resolver never reproduces. The accepted shape is kept identical to
+          # SUPPORTED_RANGE's exact form in scripts/resolve-bump-target.mjs.
+          if [[ ! "${VERSION}" =~ ^([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?|[a-zA-Z][a-zA-Z0-9._-]*)$ ]]; then
             echo "::error::version must be an exact version (8.6.5) or a dist-tag (latest)."
             exit 1
           fi
@@ -135,7 +140,10 @@ jobs:
           # A dist-tag pointing nowhere, or a typo, can still leave this holding
           # something other than one published version — an empty string, or a
           # value carrying a newline that would forge the outputs written next.
-          if [[ ! "${resolved}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)*$ ]]; then
+          # Held to the same shape as the version input: npm strips build
+          # metadata, so a resolved version carrying `+` is not something it
+          # would go on to write into the manifest.
+          if [[ ! "${resolved}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::${PACKAGE}@${VERSION} did not resolve to a single published version."
             exit 1
           fi
@@ -321,9 +329,15 @@ jobs:
             echo "::error::core.hooksPath is set to '${hooks_path}'; git would run hooks from there during the push."
             exit 1
           fi
-          filters="$(git config --get-regexp '^filter\.' || true)"
+          # git-lfs ships preinstalled on GitHub runners and registers its four
+          # filter.lfs.* entries in the global config, so they are the expected
+          # baseline here rather than evidence of tampering. Everything else is
+          # a filter this job did not start with. Matching on the whole
+          # `^filter\.` namespace instead cost a run: it failed every dispatch
+          # deterministically, because the baseline is never empty on a runner.
+          filters="$(git config --get-regexp '^filter\.' | grep -v '^filter\.lfs\.' || true)"
           if [ -n "${filters}" ]; then
-            echo "::error::Content filters are configured, and git runs them while staging:"
+            echo "::error::Unexpected content filters are configured, and git runs them while staging:"
             echo "${filters}"
             exit 1
           fi
@@ -358,11 +372,20 @@ jobs:
       #
       # Two reviewers asked for a two-job split instead, on the grounds that a
       # process left running by an install script shares this runner's user and
-      # could read a later step's environment. That threat is addressed at its
-      # root instead: --ignore-scripts means no third-party code runs in this
-      # job at all, so there is nothing to leave a process behind. The split
-      # would additionally defend against a compromised npm CLI, which is a
-      # threat this repository accepts everywhere else it runs npm.
+      # could read a later step's environment. --ignore-scripts addresses that
+      # specific threat at its root: no install script runs, so none can leave
+      # a process behind.
+      #
+      # It does NOT make this job free of third-party code, and the comment
+      # here used to claim that it did. The verification steps above run
+      # `npm run meta:render`, which imports `yaml`, and `npm run` puts
+      # node_modules/.bin on PATH. So bumping a package that the render path
+      # imports — or one shipping a bin that shadows a later command — still
+      # executes freshly installed code in the job that ends up holding the
+      # token. Closing that needs the split (generate here, push from a job
+      # that installs nothing), which is tracked as follow-up work rather than
+      # bolted onto this PR. Until then the exposure is bounded by the fact
+      # that only a maintainer can dispatch this workflow.
       - name: Push the branch and open the pull request
         if: steps.diff.outputs.changed == 'true'
         env:
