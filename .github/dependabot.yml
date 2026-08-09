@@ -15,40 +15,52 @@ updates:
   # ── npm ──────────────────────────────────────────────────
   - package-ecosystem: npm
     directory: /
-    # Every six hours, on every day of the week. NOT `daily`: GitHub defines
-    # that interval as "run on every weekday, Monday to Friday", so it skips
-    # Saturday and Sunday entirely. That is a silent two-day hole, and the
-    # scraper falls into it. @sergienko4/israeli-bank-scrapers is the package
-    # that breaks when a bank changes its site, and its releases are
-    # overwhelmingly login/scrape fixes (8.6.2: "stop popup probe closing login
-    # UI"). 8.6.5 published Saturday 2026-08-08 20:43Z; under `daily` the first
+    # 06:00 on every day of the week. NOT `daily`: GitHub defines that interval
+    # as "run on every weekday, Monday to Friday", so it skips Saturday and
+    # Sunday entirely. That is a silent two-day hole, and the scraper falls
+    # into it. @sergienko4/israeli-bank-scrapers is the package that breaks
+    # when a bank changes its site, and its releases are overwhelmingly
+    # login/scrape fixes (8.6.2: "stop popup probe closing login UI"). 8.6.5
+    # published Saturday 2026-08-08 20:43Z; under `daily` the first scheduled
     # scan that could propose it was Monday 06:00 — the entire weekend with
     # scraping broken, which is precisely when an unattended import runs. Every
     # such gap so far has been closed by a hand-written bump PR (#554, #574,
-    # #582, #585), which is the manual work this schedule exists to remove.
-    # A six-hourly cron bounds the scan lag to ~6h on any day; the `cooldown`
-    # block below removes the separate three-day eligibility delay, and both
-    # are required before a release is proposed promptly. The dev-dependencies
-    # group below keeps the extra frequency from becoming PR noise: dev churn
-    # still lands as a single PR. Docker and Actions stay weekly — neither is
-    # time-critical.
+    # #582, #585), which is the manual work this schedule exists to remove. A
+    # cron expression is the only interval that covers all seven days, and it
+    # nominally bounds the wait to the next scheduled scan, under 24h (queueing
+    # or a failed run can still exceed that); the `cooldown` block below removes
+    # the separate three-day eligibility delay, and both are required before a
+    # release is proposed promptly. The dev-dependencies group below keeps the
+    # weekend scans from becoming PR noise: dev churn still lands as a single
+    # PR. Docker and Actions stay weekly — neither is time-critical.
+    #
+    # Do not tighten this below one run per day. `cronjob` enforces a minimum
+    # interval of 24 hours, and GitHub rejects anything more frequent with
+    # "Cronjob expression '<expr>' has a minimum interval of N hours which is
+    # less than the minimum allowed interval of 24 hours". A rejected
+    # expression does not fall back to a default — it invalidates the whole
+    # file and silently disables version updates for EVERY ecosystem here, so
+    # an over-eager schedule is strictly worse than the weekday gap it targets.
+    # An earlier revision of this block shipped "0 */6 * * *" and hit exactly
+    # that. Validate any change on the repository's Dependabot page before
+    # trusting it.
     #
     # The cron expression belongs to `cronjob`; `cron` is not a recognised key,
     # and the timezone must stay in `timezone` rather than inside the
-    # expression. `time` applies only to the daily and weekly intervals, so it
-    # is dropped here — the hour now comes from the expression itself.
+    # expression. `time` is omitted because the cron expression itself defines
+    # the hour.
     # https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#cronjob
     schedule:
       interval: cron
-      cronjob: "0 */6 * * *"
+      cronjob: "0 6 * * *"
       timezone: Asia/Jerusalem
     # The schedule above only controls how often Dependabot LOOKS. A second,
     # independent barrier controls what it is allowed to PROPOSE: Dependabot
     # applies a default cooldown of three days, so a release is invisible to a
     # version update until it is 72h old, no matter how often we scan. That
     # barrier is not theoretical — it is visible in this repository's own
-    # history, where every recent bot PR landed just past the three-day mark
-    # and none before it:
+    # history, where every recent bot PR was opened just past the three-day
+    # mark and none before it:
     #
     #   @actual-app/api 26.8.0  published 2026-08-02 20:40Z  ->  #584  +3d01h
     #   cron-parser     5.7.0   published 2026-08-01 18:09Z  ->  #580  +3d09h
