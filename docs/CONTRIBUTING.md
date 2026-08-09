@@ -172,18 +172,21 @@ files out of sync:
 gh workflow run dependency-bump.yml
 
 # a specific version, when you do not want whatever is newest
-gh workflow run dependency-bump.yml -f version=8.6.6
+gh workflow run dependency-bump.yml -f version=8.6.5
 
 # a devDependency; chore keeps it out of the release notes
 gh workflow run dependency-bump.yml -f package=vitest -f type=chore
 ```
 
-`chore` is only for packages that do not ship inside the image. Anything under
-`dependencies` or `overrides` reaches users through a release, so the
-[release-signal guard][release-pipeline] rejects it under a title
-release-please will not release on. The workflow runs that guard before opening
-the pull request, so the wrong combination ends the run rather than producing
-one that cannot merge.
+`chore` is only for packages that do not ship inside the image, and the workflow
+decides that from `package-lock.json` rather than from the manifest section.
+`npm prune --omit=dev` keeps whatever the production graph reaches, so
+`playwright-core` and `@hieutran094/camoufox-js` ship despite being declared as
+devDependencies — the scraper pulls them in. The workflow refuses a `chore` bump
+of anything that survives that prune, and it decides before installing anything,
+because the [release-signal guard][release-pipeline] on the pull request
+compares `package.json`: a bump that lands inside the range already declared
+there moves only the lockfile, which that comparison cannot see.
 
 [release-pipeline]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/release-pipeline.md
 
@@ -193,9 +196,13 @@ npm from the tarball it actually fetched, rather than typed in by hand.
 
 The result is an ordinary pull request with the full CI suite attached. The
 workflow only bumps a package that is already in `dependencies` or
-`devDependencies`, and preserves the range operator it finds, so it cannot
-introduce a dependency or widen a deliberate pin. A package that only appears
-in `overrides` has to be edited by hand.
+`devDependencies`, and it re-saves the new version using the same operator it
+found — `^`, `~`, or an exact pin — so it cannot introduce a dependency, and
+cannot turn an exact pin or a `~` range into a `^` one. It will still let you
+name an older version: keeping `^` while lowering the floor accepts a wider
+range than before, which the diff shows. A range it cannot reproduce exactly,
+such as a compound range or a `git:` specifier, is refused rather than guessed
+at, and a package that appears only in `overrides` has to be edited by hand.
 
 If the new version introduces an install script that has never been approved,
 `lint:allow-scripts` fails inside the workflow and the run stops without

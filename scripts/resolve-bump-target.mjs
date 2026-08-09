@@ -11,14 +11,21 @@
  * resulting diff without reading it closely.
  *
  * This resolver refuses those cases up front and reports the npm flags that
- * reproduce the manifest's existing intent.
+ * reproduce the manifest's existing intent. It handles the range forms used by
+ * the dependencies and devDependencies it can target — `^`, `~` and bare exact
+ * versions — and refuses anything else, such as a compound range or a
+ * `git:`/`file:` specifier, rather than guessing at how to reproduce it.
+ *
+ * It also reports whether the package reaches users, which decides the commit
+ * type the workflow will accept. That answer comes from the lockfile, not from
+ * the manifest section: see {@link isShipped}.
  *
  * Usage:
  *   node scripts/resolve-bump-target.mjs --package <name>
  *
- * Writes `section`, `saveFlag` and `prefixFlag` to `$GITHUB_OUTPUT` when it is
- * set, and always echoes them for local use. Exits non-zero, with the reason on
- * stderr, when the request cannot be honoured.
+ * Writes `section`, `saveFlag`, `prefixFlag` and `shipped` to `$GITHUB_OUTPUT`
+ * when it is set, and always echoes them for local use. Exits non-zero, with the
+ * reason on stderr, when the request cannot be honoured.
  */
 
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -29,8 +36,15 @@ const SUPPORTED_SECTIONS = Object.freeze({
   devDependencies: '--save-dev',
 });
 
-/** Ranges this resolver can reproduce: a caret range or a bare exact version. */
-const SUPPORTED_RANGE = /^\^?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+/** Ranges this resolver can reproduce: a caret or tilde range, or a bare exact version. */
+const SUPPORTED_RANGE = /^[~^]?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
+/** npm flag that re-saves a version using the operator the manifest already uses. */
+const PREFIX_FLAGS = Object.freeze({
+  '^': '--save-prefix=^',
+  '~': '--save-prefix=~',
+  '': '--save-exact',
+});
 
 /**
  * Reads a named `--flag value` argument from the process arguments.
@@ -109,24 +123,48 @@ function resolveTarget(manifest, name) {
   return {
     section,
     saveFlag: SUPPORTED_SECTIONS[section],
-    // Without this, npm rewrites an exact pin as a caret range and quietly
-    // widens what the lockfile may resolve to on the next install.
-    prefixFlag: spec.startsWith('^') ? '--save-prefix=^' : '--save-exact',
+    // Without this, npm re-saves the version with its own configured prefix,
+    // quietly widening a deliberate `~` or exact pin into a caret range.
+    prefixFlag: PREFIX_FLAGS[/^[~^]/.test(spec) ? spec[0] : ''],
     spec,
   };
 }
 
 /**
- * Reads the repository manifest, refusing the run if it cannot be parsed.
+ * Reads a JSON file from the repository root, refusing the run if it cannot be
+ * read or parsed.
  *
- * @returns {Record<string, Record<string, string>>} The parsed manifest.
+ * @param {string} file The file name, relative to the repository root.
+ * @returns {Record<string, any>} The parsed contents.
  */
-function readManifest() {
+function readJson(file) {
   try {
-    return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    return JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), 'utf8'));
   } catch (error) {
-    return refuse(`Could not read package.json: ${error instanceof Error ? error.message : String(error)}`);
+    return refuse(`Could not read ${file}: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+/**
+ * Reports whether a package is installed into the published image.
+ *
+ * The manifest section cannot answer this. `npm prune --omit=dev` keeps every
+ * package the production graph reaches, so a devDependency that a runtime
+ * dependency also requires survives the prune and ships — which is true here of
+ * `playwright-core` and `@hieutran094/camoufox-js`, both pulled in by the
+ * scraper. The lockfile records that reachability, and marks a package `dev`
+ * only when nothing in production needs it.
+ *
+ * @param {Record<string, any>} lockfile The parsed lockfile.
+ * @param {string} name The package being bumped.
+ * @returns {boolean} True when the package reaches users.
+ */
+function isShipped(lockfile, name) {
+  const entry = lockfile.packages?.[`node_modules/${name}`];
+  if (!entry) {
+    refuse(`${name} has no package-lock.json entry, so whether it ships cannot be determined. Install and commit the lockfile first.`);
+  }
+  return entry.dev !== true;
 }
 
 /**
@@ -153,9 +191,12 @@ function main() {
   const name = readFlag('--package');
   if (!name) refuse('Usage: node scripts/resolve-bump-target.mjs --package <name>');
 
-  const { section, saveFlag, prefixFlag, spec } = resolveTarget(readManifest(), name);
-  publish({ section, saveFlag, prefixFlag });
-  process.stdout.write(`${name} is in ${section} as "${spec}"; saving with ${saveFlag} ${prefixFlag}\n`);
+  const { section, saveFlag, prefixFlag, spec } = resolveTarget(readJson('package.json'), name);
+  const shipped = isShipped(readJson('package-lock.json'), name);
+  publish({ section, saveFlag, prefixFlag, shipped: String(shipped) });
+  process.stdout.write(
+    `${name} is in ${section} as "${spec}"; saving with ${saveFlag} ${prefixFlag}; ships to users: ${shipped}\n`,
+  );
 }
 
 main();
