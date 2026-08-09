@@ -49,12 +49,12 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@actual-app/api": "^26.8.0",
+    "@actual-app/api": "^26.8.1",
     "@fastify/cookie": "^11.0.2",
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/static": "^10.1.0",
     "@fastify/type-provider-typebox": "^6.1.0",
-    "@sergienko4/israeli-bank-scrapers": "^8.6.4",
+    "@sergienko4/israeli-bank-scrapers": "^8.6.5",
     "@sinclair/typebox": "^0.34.52",
     "cron-parser": "^5.7.0",
     "fastify": "^5.11.2",
@@ -138,6 +138,6 @@
     "better-sqlite3@12.11.1": true,
     "tesseract.js@7.0.0": true,
     "unrs-resolver@1.12.2": true,
-    "@sergienko4/israeli-bank-scrapers@8.6.4": true
+    "@sergienko4/israeli-bank-scrapers@8.6.5": true
   }
 }
