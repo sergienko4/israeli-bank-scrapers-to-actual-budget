@@ -174,9 +174,18 @@ gh workflow run dependency-bump.yml
 # a specific version, when you do not want whatever is newest
 gh workflow run dependency-bump.yml -f version=8.6.6
 
-# any other package; chore keeps it out of the release notes
-gh workflow run dependency-bump.yml -f package=pino -f version=10.4.0 -f type=chore
+# a devDependency; chore keeps it out of the release notes
+gh workflow run dependency-bump.yml -f package=vitest -f version=4.0.1 -f type=chore
 ```
+
+`chore` is only for packages that do not ship inside the image. Anything under
+`dependencies` or `overrides` reaches users through a release, so the
+[release-signal guard][release-pipeline] rejects it under a title
+release-please will not release on. The workflow runs that guard before opening
+the pull request, so the wrong combination ends the run rather than producing
+one that cannot merge.
+
+[release-pipeline]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/release-pipeline.md
 
 Running it on a runner is also what makes the lockfile trustworthy when your
 own network cannot reach the npm registry: the integrity hash is produced by

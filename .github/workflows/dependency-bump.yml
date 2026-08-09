@@ -30,7 +30,7 @@ on:
         required: true
         default: "latest"
       type:
-        description: "Commit type: fix ships a release, chore does not"
+        description: "Commit type: fix ships a release; chore is for devDependencies only"
         required: true
         type: choice
         options: [fix, chore]
@@ -48,6 +48,12 @@ jobs:
   bump:
     name: Bump ${{ inputs.package }} to ${{ inputs.version }}
     runs-on: ubuntu-latest
+    # `prepare` runs husky, so installing here would also install the local git
+    # hooks and make this job re-run all 15 of them against its own commit and
+    # push. The pull request's CI is the validation; a hook failing here would
+    # end the run without leaving a pull request to look at.
+    env:
+      HUSKY: 0
     steps:
       - uses: actions/checkout@v7
         with:
@@ -66,6 +72,7 @@ jobs:
         env:
           PACKAGE: ${{ inputs.package }}
           VERSION: ${{ inputs.version }}
+          TYPE: ${{ inputs.type }}
         run: |
           set -euo pipefail
           resolved="$(npm view "${PACKAGE}@${VERSION}" version --json | tr -d '"[]' | tr ',' '\n' | tail -n 1 | xargs)"
@@ -76,6 +83,9 @@ jobs:
           slug="$(printf '%s' "${PACKAGE}" | sed 's|^@||; s|/|-|g')"
           echo "resolved=${resolved}"            >> "${GITHUB_OUTPUT}"
           echo "branch=deps/${slug}-${resolved}" >> "${GITHUB_OUTPUT}"
+          # One source of truth for the title: the release-signal guard has to
+          # check the exact string the pull request will carry.
+          echo "title=${TYPE}(deps): bump ${PACKAGE} to ${resolved}" >> "${GITHUB_OUTPUT}"
           echo "::notice::${PACKAGE}@${VERSION} resolves to ${resolved}."
 
       - name: Refuse to clobber an existing branch
@@ -105,23 +115,36 @@ jobs:
       # so bumping any version the README advertises leaves the meta:tech-stack
       # fragment stale and fails the Documentation Quality gate. This has to run
       # after the manifest is final, which means after the pin rotation above.
+      #
+      # Both READMEs are restored from HEAD first so that their only possible
+      # diff is the renderer's own output. An approved install script that
+      # edited one would otherwise ride along into a commit pushed under a PAT.
       - name: Re-render the README marker fragments
-        run: npm run meta:render
+        run: |
+          set -euo pipefail
+          git checkout HEAD -- README.md README.docker-hub.md
+          npm run meta:render
 
-      # A bump invalidates generated artefacts, and each one is gated in CI.
-      # Repairing them above is not enough on its own: if a gate is added later
-      # that this workflow does not know how to repair, the run has to fail here
-      # rather than open a pull request that is red on arrival. Only
-      # deterministic gates belong in this list — audit, licences, tests and E2E
-      # are semantic, cannot be repaired here, and are left to the pull request's
-      # own CI, which reports them accurately.
+      # Every artefact repaired above is gated in CI, so those same gates run
+      # here: a repair that did not take must end the run rather than open a
+      # pull request that is red on arrival. The release-signal guard is in the
+      # list because a `chore` title on a shipped dependency fails it every
+      # time, and that can only be caught before the pull request exists.
+      #
+      # Semantic gates — audit, licences, unit tests, E2E — cannot be repaired
+      # by regenerating a file, so they stay with the pull request's own CI,
+      # which reports them accurately. This list therefore covers what this
+      # workflow generates, not every gate in pr.yml.
       - name: Verify the generated artefacts satisfy their gates
+        env:
+          TITLE: ${{ steps.resolve.outputs.title }}
         run: |
           set -euo pipefail
           npm run meta:markers
           npm run meta:check
           npm run lint:allow-scripts
           npm run lint:docs
+          node scripts/check-release-signal.mjs --title "${TITLE}" --base HEAD
 
       - name: Confirm the bump touched only its expected files
         id: diff
@@ -148,15 +171,19 @@ jobs:
           PACKAGE: ${{ inputs.package }}
           RESOLVED: ${{ steps.resolve.outputs.resolved }}
           BRANCH: ${{ steps.resolve.outputs.branch }}
-          TYPE: ${{ inputs.type }}
+          TITLE: ${{ steps.resolve.outputs.title }}
         run: |
           set -euo pipefail
-          title="${TYPE}(deps): bump ${PACKAGE} to ${RESOLVED}"
+          title="${TITLE}"
 
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -b "${BRANCH}"
-          git add package.json package-lock.json README.md README.docker-hub.md
+          # The guard above already proved the only modified files are the
+          # manifest, the lockfile and the two rendered READMEs, so staging
+          # every tracked modification stages exactly that set — and cannot
+          # break on a pathspec if one of those files ever stops existing.
+          git add -u
           git commit -m "${title}" -m "Opened by the dependency-bump workflow (run ${GITHUB_RUN_ID})." \
             -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
           git push origin "${BRANCH}"
@@ -186,6 +213,8 @@ jobs:
           - The \`meta:markers\`, \`meta:check\`, \`lint:allow-scripts\` and
             \`lint:docs\` gates were then re-run and all pass, so this pull request
             does not arrive with generated files out of sync.
+          - \`check-release-signal.mjs\` confirmed this title carries the release
+            signal the changed manifest fields require.
           - The diff was checked to touch only the manifest, the lockfile and the
             two rendered READMEs.
 
