@@ -15,19 +15,64 @@ updates:
   # ── npm ──────────────────────────────────────────────────
   - package-ecosystem: npm
     directory: /
-    # Daily, not weekly. @sergienko4/israeli-bank-scrapers is the package that
-    # breaks when a bank changes its site, and its releases are overwhelmingly
-    # login/scrape fixes (8.6.2: "stop popup probe closing login UI"). A weekly
-    # window meant a fix published hours after Monday's scan waited six more
-    # days while scraping stayed broken — 8.6.2 published 18h after the
-    # 2026-08-03 run and was invisible until the following Monday. Daily bounds
-    # that lag to ~24h. The dev-dependencies group below keeps the extra
-    # frequency from turning into PR noise: dev churn still lands as one PR.
-    # Docker and Actions stay weekly — neither is time-critical.
+    # Every six hours, on every day of the week. NOT `daily`: GitHub defines
+    # that interval as "run on every weekday, Monday to Friday", so it skips
+    # Saturday and Sunday entirely. That is a silent two-day hole, and the
+    # scraper falls into it. @sergienko4/israeli-bank-scrapers is the package
+    # that breaks when a bank changes its site, and its releases are
+    # overwhelmingly login/scrape fixes (8.6.2: "stop popup probe closing login
+    # UI"). 8.6.5 published Saturday 2026-08-08 20:43Z; under `daily` the first
+    # scan that could propose it was Monday 06:00 — the entire weekend with
+    # scraping broken, which is precisely when an unattended import runs. Every
+    # such gap so far has been closed by a hand-written bump PR (#554, #574,
+    # #582, #585), which is the manual work this schedule exists to remove.
+    # A six-hourly cron bounds the scan lag to ~6h on any day; the `cooldown`
+    # block below removes the separate three-day eligibility delay, and both
+    # are required before a release is proposed promptly. The dev-dependencies
+    # group below keeps the extra frequency from becoming PR noise: dev churn
+    # still lands as a single PR. Docker and Actions stay weekly — neither is
+    # time-critical.
+    #
+    # The cron expression belongs to `cronjob`; `cron` is not a recognised key,
+    # and the timezone must stay in `timezone` rather than inside the
+    # expression. `time` applies only to the daily and weekly intervals, so it
+    # is dropped here — the hour now comes from the expression itself.
+    # https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#cronjob
     schedule:
-      interval: daily
-      time: "06:00"
+      interval: cron
+      cronjob: "0 */6 * * *"
       timezone: Asia/Jerusalem
+    # The schedule above only controls how often Dependabot LOOKS. A second,
+    # independent barrier controls what it is allowed to PROPOSE: Dependabot
+    # applies a default cooldown of three days, so a release is invisible to a
+    # version update until it is 72h old, no matter how often we scan. That
+    # barrier is not theoretical — it is visible in this repository's own
+    # history, where every recent bot PR landed just past the three-day mark
+    # and none before it:
+    #
+    #   @actual-app/api 26.8.0  published 2026-08-02 20:40Z  ->  #584  +3d01h
+    #   cron-parser     5.7.0   published 2026-08-01 18:09Z  ->  #580  +3d09h
+    #   fastify         5.11.2  published 2026-08-03 08:21Z  ->  #592  +3d19h
+    #   @biomejs/biome  2.5.7   published 2026-08-04 13:24Z  ->  #599  +4d08h
+    #
+    # biome is the clearest case: at the 2026-08-07 03:08Z scan it was 2d14h
+    # old, missed the bar by ten hours and was skipped, then appeared at the
+    # very next scan. The same rule — not a missed scan — is why scraper 8.6.5
+    # was not proposed by the 2026-08-08 21:32Z run: it was 48 minutes old.
+    #
+    # Three days is a sound default for ordinary dependencies; it is a window
+    # in which a compromised or broken release gets pulled before it ever
+    # reaches us, so it is kept for everything else. It is the wrong trade for
+    # this one package. A scraper release exists because a bank changed its
+    # site and logins are already failing, so the cooldown holds back the fix
+    # for the exact three days the importer is broken. Excluding it restores
+    # the intended behaviour for every future release, not just the current
+    # one. `default-days` is deliberately not set: leaving it unspecified keeps
+    # whatever default GitHub applies for other packages, so this block can
+    # only ever remove a delay, never introduce one.
+    cooldown:
+      exclude:
+        - "@sergienko4/israeli-bank-scrapers"
     open-pull-requests-limit: 10
     labels: ["dependencies", "npm"]
     # Production dependencies ship inside the published Docker image, so a
