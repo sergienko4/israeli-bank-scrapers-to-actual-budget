@@ -161,27 +161,58 @@ a release the same evening. A version published shortly before a scan can also
 be missed, because the registry index Dependabot reads has not caught up yet.
 
 `.github/workflows/dependency-bump.yml` covers those cases. It takes the
-package and the version, installs it on a runner, rotates the `allowScripts`
-pin, and opens the pull request:
+package and the version, installs it on a runner, then repairs the two things a
+bump invalidates — the `allowScripts` pin and the README marker fragments,
+which carry dependency versions read out of `package.json`. It re-runs those
+gates before opening the pull request, so a bump cannot arrive with generated
+files out of sync:
 
 ```bash
 # newest published version of the scraper
 gh workflow run dependency-bump.yml
 
 # a specific version, when you do not want whatever is newest
-gh workflow run dependency-bump.yml -f version=8.6.6
+gh workflow run dependency-bump.yml -f version=8.6.5
 
-# any other package; chore keeps it out of the release notes
-gh workflow run dependency-bump.yml -f package=pino -f version=10.4.0 -f type=chore
+# a devDependency; chore keeps it out of the release notes
+gh workflow run dependency-bump.yml -f package=vitest -f type=chore
 ```
+
+`chore` is only for packages that do not ship inside the image, and the workflow
+decides that from `package-lock.json` rather than from the manifest section.
+`npm prune --omit=dev` keeps whatever the production graph reaches, so
+`playwright-core` and `@hieutran094/camoufox-js` ship despite being declared as
+devDependencies — the scraper pulls them in. The workflow refuses a `chore` bump
+of anything that survives that prune, and it decides before installing anything,
+because the [release-signal guard][release-pipeline] on the pull request
+compares `package.json`: a bump that lands inside the range already declared
+there moves only the lockfile, which that comparison cannot see.
+
+[release-pipeline]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/release-pipeline.md
 
 Running it on a runner is also what makes the lockfile trustworthy when your
 own network cannot reach the npm registry: the integrity hash is produced by
 npm from the tarball it actually fetched, rather than typed in by hand.
 
-The result is an ordinary pull request with the full CI suite attached, and the
-`allowScripts` review it triggers is the same one described above — a newly
-introduced install script still fails the gate and waits for a human.
+The result is an ordinary pull request with the full CI suite attached. The
+workflow only bumps a package that is already in `dependencies` or
+`devDependencies`, and it re-saves the new version using the same operator it
+found — `^`, `~`, or an exact pin — so it cannot introduce a dependency, and
+cannot turn an exact pin or a `~` range into a `^` one. It will still let you
+name an older version: keeping `^` while lowering the floor accepts a wider
+range than before, which the diff shows. A range it cannot reproduce exactly,
+such as a compound range or a `git:` specifier, is refused rather than guessed
+at, and a package that appears only in `overrides` has to be edited by hand.
+
+If the new version introduces an install script that has never been approved,
+`lint:allow-scripts` fails inside the workflow and the run stops without
+opening a pull request — that approval is a human decision, so run
+`npm approve-scripts` locally and raise the bump as an ordinary pull request
+instead.
+
+Only the deterministic repairs belong to the workflow. Audit findings, licence
+changes and test failures cannot be fixed by regenerating a file, so they are
+left to CI on the pull request, which reports them accurately.
 
 ---
 

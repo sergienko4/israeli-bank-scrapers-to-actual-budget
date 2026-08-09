@@ -13,8 +13,8 @@
 # where npm resolves and verifies the tarball itself rather than trusting a
 # hand-edited lockfile.
 #
-#   gh workflow run dependency-bump.yml -f version=8.6.6
-#   gh workflow run dependency-bump.yml -f package=pino -f version=10.4.0
+#   gh workflow run dependency-bump.yml -f version=8.6.5
+#   gh workflow run dependency-bump.yml -f package=vitest -f type=chore
 #
 name: Dependency bump
 
@@ -26,11 +26,11 @@ on:
         required: true
         default: "@sergienko4/israeli-bank-scrapers"
       version:
-        description: "Exact version or dist-tag, e.g. 8.6.6 or latest"
+        description: "Exact version or dist-tag, e.g. 8.6.5 or latest"
         required: true
         default: "latest"
       type:
-        description: "Commit type: fix ships a release, chore does not"
+        description: "Commit type: fix ships a release; chore is for devDependencies only"
         required: true
         type: choice
         options: [fix, chore]
@@ -48,14 +48,66 @@ jobs:
   bump:
     name: Bump ${{ inputs.package }} to ${{ inputs.version }}
     runs-on: ubuntu-latest
+    # `prepare` runs husky, so installing here would also install the local git
+    # hooks and make this job re-run all 15 of them against its own commit and
+    # push. A hook failing here would end the run without leaving a pull
+    # request to look at, which is the failure this workflow exists to remove.
+    #
+    # This is not a validation bypass, and the alternative — committing with
+    # --no-verify — is prohibited outright by CLAUDE.md. The gates that apply
+    # to what this job generates run explicitly in the verify step below; the
+    # semantic ones (audit, licences, tests, E2E) run on the pull request's own
+    # CI, where a failure is reported against a diff you can actually read.
+    env:
+      HUSKY: 0
     steps:
+      # These inputs are written to $GITHUB_OUTPUT below, where a newline ends
+      # the record and starts another one — so a crafted value could append an
+      # output a later step trusts, such as the resolved version or the branch
+      # being pushed. GitHub validates `type: choice` for us, but `package` and
+      # `version` are free text and the dispatch API accepts more than the form
+      # offers. An anchored bash match rejects a newline outright, because `$`
+      # here anchors the end of the whole string rather than of a line.
+      - name: Validate the dispatch inputs
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+          TYPE: ${{ inputs.type }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${TYPE}" =~ ^(fix|chore)$ ]]; then
+            echo "::error::type must be fix or chore."
+            exit 1
+          fi
+          if [[ ! "${PACKAGE}" =~ ^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$ ]]; then
+            echo "::error::package is not a valid npm package name."
+            exit 1
+          fi
+          # A partial range such as `8.6` would resolve to whichever version is
+          # newest inside it, which is not the exact version or dist-tag this
+          # input promises. Rejecting it here also keeps the resolve step from
+          # having to interpret the array npm answers a range with. A dist-tag
+          # is arbitrary text, so the second branch is permissive — but it must
+          # start with a letter, which is what keeps a range out of it.
+          if [[ ! "${VERSION}" =~ ^([0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)*|[a-zA-Z][a-zA-Z0-9._-]*)$ ]]; then
+            echo "::error::version must be an exact version (8.6.5) or a dist-tag (latest)."
+            exit 1
+          fi
+
       - uses: actions/checkout@v7
         with:
-          # A PAT rather than GITHUB_TOKEN: pull requests opened by
-          # GITHUB_TOKEN do not raise `pull_request` events, so every gate in
-          # pr.yml would silently be skipped and the bump would look green
-          # without having been tested at all.
-          token: ${{ secrets.RELEASE_TOKEN }}
+          # No PAT here, and no persisted credentials: a credential left in
+          # .git/config is readable by anything the job runs. The PAT is
+          # introduced only in the final step, which needs it because a pull
+          # request opened with GITHUB_TOKEN does not raise `pull_request`
+          # events, so every gate in pr.yml would silently be skipped and the
+          # bump would look green without having been tested at all.
+          persist-credentials: false
+          # workflow_dispatch can be aimed at any ref, but the pull request is
+          # always based on main. Checking out anything else would carry that
+          # ref's unrelated commits into the bump, where the working-tree guard
+          # below cannot see them.
+          ref: main
 
       - uses: actions/setup-node@v7
         with:
@@ -66,16 +118,33 @@ jobs:
         env:
           PACKAGE: ${{ inputs.package }}
           VERSION: ${{ inputs.version }}
+          TYPE: ${{ inputs.type }}
         run: |
           set -euo pipefail
-          resolved="$(npm view "${PACKAGE}@${VERSION}" version --json | tr -d '"[]' | tr ',' '\n' | tail -n 1 | xargs)"
-          if [ -z "${resolved}" ]; then
-            echo "::error::${PACKAGE}@${VERSION} does not resolve to a published version."
+          raw="$(npm view "${PACKAGE}@${VERSION}" version --json)"
+          # npm answers a range with a JSON array. Flattening one to its last
+          # element would quietly resolve the bump to whatever is newest inside
+          # the range, so an array is refused rather than collapsed. The input
+          # check already rejects ranges; this covers the case where npm answers
+          # with more than one version for something that looked exact.
+          if [[ "${raw}" == \[* ]]; then
+            echo "::error::${PACKAGE}@${VERSION} matches more than one published version."
+            exit 1
+          fi
+          resolved="$(printf '%s' "${raw}" | tr -d '"' | xargs)"
+          # A dist-tag pointing nowhere, or a typo, can still leave this holding
+          # something other than one published version — an empty string, or a
+          # value carrying a newline that would forge the outputs written next.
+          if [[ ! "${resolved}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)*$ ]]; then
+            echo "::error::${PACKAGE}@${VERSION} did not resolve to a single published version."
             exit 1
           fi
           slug="$(printf '%s' "${PACKAGE}" | sed 's|^@||; s|/|-|g')"
           echo "resolved=${resolved}"            >> "${GITHUB_OUTPUT}"
           echo "branch=deps/${slug}-${resolved}" >> "${GITHUB_OUTPUT}"
+          # One source of truth for the title: the release-signal guard has to
+          # check the exact string the pull request will carry.
+          echo "title=${TYPE}(deps): bump ${PACKAGE} to ${resolved}" >> "${GITHUB_OUTPUT}"
           echo "::notice::${PACKAGE}@${VERSION} resolves to ${resolved}."
 
       - name: Refuse to clobber an existing branch
@@ -83,16 +152,82 @@ jobs:
           BRANCH: ${{ steps.resolve.outputs.branch }}
         run: |
           set -euo pipefail
-          if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1; then
+          # --exit-code reports 2 for "no such ref"; anything else non-zero is a
+          # transport failure, which must not be mistaken for a free branch name.
+          set +e
+          git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1
+          rc=$?
+          set -e
+          if [ "${rc}" -eq 0 ]; then
             echo "::error::${BRANCH} already exists. Merge or delete it, then run again."
             exit 1
           fi
+          if [ "${rc}" -ne 2 ]; then
+            echo "::error::Could not reach origin to check for ${BRANCH} (git exit ${rc})."
+            exit 1
+          fi
 
+      # npm install would happily *add* a package that is not currently a
+      # dependency, so a typo in the dispatch input becomes a new production
+      # dependency instead of an error. It also re-saves the range with its own
+      # save-prefix, which would widen a deliberate pin such as
+      # `playwright-core: ~1.62.1` into a caret range. This refuses both.
+      - name: Confirm the package can be bumped safely
+        id: target
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: node scripts/resolve-bump-target.mjs --package "${PACKAGE}"
+
+      # The release-signal guard in the verify step compares package.json, so it
+      # cannot see a bump that moves only the lockfile: installing 10.1.0 over a
+      # locked 10.1.2 under a `^10.1.0` range leaves the manifest byte-identical.
+      # A `chore` title would then ship that change to users with no release cut
+      # for it, and the pull request's own CI would agree, because it runs the
+      # same manifest comparison.
+      #
+      # The manifest section is the wrong signal for "does this reach users",
+      # too. `npm prune --omit=dev` keeps whatever the production graph reaches,
+      # so `playwright-core` and `@hieutran094/camoufox-js` ship despite being
+      # devDependencies — the scraper pulls them in. The resolver answers from
+      # the lockfile instead, and does it before anything is installed.
+      - name: Require a release-triggering type for a shipped dependency
+        env:
+          SHIPPED: ${{ steps.target.outputs.shipped }}
+          PACKAGE: ${{ inputs.package }}
+          TYPE: ${{ inputs.type }}
+        run: |
+          set -euo pipefail
+          # Asserting the value rather than testing it in an `if:` keeps this
+          # closed: an expression comparing an output that was never written is
+          # simply false, so a resolver that stopped emitting one would skip the
+          # check silently instead of failing.
+          case "${SHIPPED}" in
+            true | false) ;;
+            *)
+              echo "::error::The resolver did not report whether ${PACKAGE} reaches users."
+              exit 1
+              ;;
+          esac
+          if [ "${SHIPPED}" = 'true' ] && [ "${TYPE}" != 'fix' ]; then
+            echo "::error::${PACKAGE} is installed into the published image, so it reaches users through a release. Re-run with type=fix."
+            exit 1
+          fi
+
+      # --ignore-scripts is the reason this job can hold a PAT at all. Without
+      # it, npm would run the install scripts of every approved package here,
+      # and third-party code executing in the same job as a token can poison
+      # $GITHUB_ENV, set BASH_ENV, plant a git hook or leave a process running
+      # to read a later step's environment. Nothing this job does needs them:
+      # it builds nothing and runs no tests, the allowlist rotation below reads
+      # `hasInstallScript` out of the lockfile rather than observing a build,
+      # and script execution does not affect what npm writes to the lockfile.
       - name: Install the requested version
         env:
           PACKAGE: ${{ inputs.package }}
           RESOLVED: ${{ steps.resolve.outputs.resolved }}
-        run: npm install "${PACKAGE}@${RESOLVED}" --no-audit --no-fund
+          SAVE_FLAG: ${{ steps.target.outputs.saveFlag }}
+          PREFIX_FLAG: ${{ steps.target.outputs.prefixFlag }}
+        run: npm install "${PACKAGE}@${RESOLVED}" "${SAVE_FLAG}" "${PREFIX_FLAG}" --ignore-scripts --no-audit --no-fund
 
       # Install scripts stay blocked until the exact name@version is pinned, so
       # a bump that skips this leaves the native bindings unbuilt and fails E2E
@@ -101,10 +236,50 @@ jobs:
       - name: Rotate the install-script allowlist
         run: node scripts/check-allow-scripts.mjs --fix
 
-      - name: Verify the allowlist gate passes
-        run: npm run lint:allow-scripts
+      # renderTechStack reads dependency versions straight out of package.json,
+      # so bumping any version the README advertises leaves the meta:tech-stack
+      # fragment stale and fails the Documentation Quality gate. This has to run
+      # after the manifest is final, which means after the pin rotation above.
+      #
+      # Both READMEs are restored from HEAD first so that their only possible
+      # diff is the renderer's own output. An approved install script that
+      # edited one would otherwise ride along into the commit. Each is restored
+      # only if it is tracked, because an unmatched pathspec would abort the
+      # step before the renderer, which tolerates a missing file, ever runs.
+      - name: Re-render the README marker fragments
+        run: |
+          set -euo pipefail
+          for readme in README.md README.docker-hub.md; do
+            if git cat-file -e "HEAD:${readme}" 2>/dev/null; then
+              git checkout HEAD -- "${readme}"
+            fi
+          done
+          npm run meta:render
 
-      - name: Confirm the bump touched only the manifest and lockfile
+      # Every artefact repaired above is gated in CI, so those same gates run
+      # here: a repair that did not take must end the run rather than open a
+      # pull request that is red on arrival. The release-signal guard is in the
+      # list because it reads the title this run is about to use, which nothing
+      # on the pull request can check before that pull request exists. It works
+      # by comparing manifests, so it catches a changed range; a bump that only
+      # moves the lockfile is caught by the section check further up instead.
+      #
+      # Semantic gates — audit, licences, unit tests, E2E — cannot be repaired
+      # by regenerating a file, so they stay with the pull request's own CI,
+      # which reports them accurately. This list therefore covers what this
+      # workflow generates, not every gate in pr.yml.
+      - name: Verify the generated artefacts satisfy their gates
+        env:
+          TITLE: ${{ steps.resolve.outputs.title }}
+        run: |
+          set -euo pipefail
+          npm run meta:markers
+          npm run meta:check
+          npm run lint:allow-scripts
+          npm run lint:docs
+          node scripts/check-release-signal.mjs --title "${TITLE}" --base HEAD
+
+      - name: Confirm the bump touched only its expected files
         id: diff
         run: |
           set -euo pipefail
@@ -113,34 +288,98 @@ jobs:
             echo "::notice::Already at the requested version; nothing to do."
             exit 0
           fi
-          unexpected="$(git status --porcelain | grep -v -E '^ M (package\.json|package-lock\.json)$' || true)"
+          unexpected="$(git status --porcelain | grep -v -E '^ M (package\.json|package-lock\.json|README\.md|README\.docker-hub\.md)$' || true)"
           if [ -n "${unexpected}" ]; then
             echo "::error::The install touched unexpected paths:"
             echo "${unexpected}"
             exit 1
           fi
           echo "changed=true" >> "${GITHUB_OUTPUT}"
-          git --no-pager diff --stat -- package.json package-lock.json
+          git --no-pager diff --stat
 
-      - name: Open the pull request
+      # This is what proves `HUSKY: 0` took effect, rather than assuming it. If
+      # husky ever installed anyway, core.hooksPath would point at .husky/_ and
+      # the push below would silently run all 15 local gates inside a job whose
+      # failure leaves no pull request to inspect.
+      #
+      # It doubles as defence in depth against a planted hook. --ignore-scripts
+      # means no third-party code ran to plant one, but .git is invisible to the
+      # working-tree guard above, so a hook — or a core.hooksPath pointing at
+      # one, or a content filter — would otherwise be invoked by git itself
+      # while committing and pushing, inheriting the token the push needs.
+      # Detecting a hook is the opposite of skipping one, which CLAUDE.md
+      # prohibits outright.
+      #
+      # Both checks read the effective configuration rather than the local file,
+      # so a value set globally or on the command line is caught too.
+      - name: Confirm the install left no git hook behind
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          hooks_path="$(git config --get core.hooksPath || true)"
+          if [ -n "${hooks_path}" ]; then
+            echo "::error::core.hooksPath is set to '${hooks_path}'; git would run hooks from there during the push."
+            exit 1
+          fi
+          filters="$(git config --get-regexp '^filter\.' || true)"
+          if [ -n "${filters}" ]; then
+            echo "::error::Content filters are configured, and git runs them while staging:"
+            echo "${filters}"
+            exit 1
+          fi
+          # `! -type d` rather than `-type f`, so a symlinked hook is caught too.
+          planted="$(find .git/hooks ! -type d ! -name '*.sample')"
+          if [ -n "${planted}" ]; then
+            echo "::error::Unexpected git hooks present after the install:"
+            echo "${planted}"
+            exit 1
+          fi
+
+      - name: Commit the bump
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          BRANCH: ${{ steps.resolve.outputs.branch }}
+          TITLE: ${{ steps.resolve.outputs.title }}
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "${BRANCH}"
+          # The guard above already proved the only modified files are the
+          # manifest, the lockfile and the two rendered READMEs, so staging
+          # every tracked modification stages exactly that set — and cannot
+          # break on a pathspec if one of those files ever stops existing.
+          git add -u
+          git commit -m "${TITLE}" -m "Opened by the dependency-bump workflow (run ${GITHUB_RUN_ID})." \
+            -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
+
+      # The token is confined to the one step that cannot work without it, so it
+      # is absent from the install, the render and the commit that precede it.
+      #
+      # Two reviewers asked for a two-job split instead, on the grounds that a
+      # process left running by an install script shares this runner's user and
+      # could read a later step's environment. That threat is addressed at its
+      # root instead: --ignore-scripts means no third-party code runs in this
+      # job at all, so there is nothing to leave a process behind. The split
+      # would additionally defend against a compromised npm CLI, which is a
+      # threat this repository accepts everywhere else it runs npm.
+      - name: Push the branch and open the pull request
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           PACKAGE: ${{ inputs.package }}
           RESOLVED: ${{ steps.resolve.outputs.resolved }}
           BRANCH: ${{ steps.resolve.outputs.branch }}
-          TYPE: ${{ inputs.type }}
+          TITLE: ${{ steps.resolve.outputs.title }}
         run: |
           set -euo pipefail
-          title="${TYPE}(deps): bump ${PACKAGE} to ${RESOLVED}"
+          title="${TITLE}"
 
-          git config user.name  'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git checkout -b "${BRANCH}"
-          git add package.json package-lock.json
-          git commit -m "${title}" -m "Opened by the dependency-bump workflow (run ${GITHUB_RUN_ID})." \
-            -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
-          git push origin "${BRANCH}"
+          # The remote is credential-free by design, so the token is supplied
+          # for this one command rather than left in .git/config for the whole
+          # job. Actions masks it in the log.
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:refs/heads/${BRANCH}"
 
           gh pr create \
             --title "${title}" \
@@ -161,13 +400,20 @@ jobs:
 
           - \`npm install ${PACKAGE}@${RESOLVED}\` regenerated \`package-lock.json\`,
             so the integrity hash was produced by npm from the tarball it fetched.
-          - \`check-allow-scripts.mjs --fix\` rotated the install-script pin, and the
-            \`lint:allow-scripts\` gate was re-run and passes.
-          - The diff was checked to touch \`package.json\` and \`package-lock.json\` only.
+          - \`check-allow-scripts.mjs --fix\` rotated the install-script pin.
+          - \`meta:render\` re-rendered the README marker fragments, which carry
+            dependency versions read out of \`package.json\`.
+          - The \`meta:markers\`, \`meta:check\`, \`lint:allow-scripts\` and
+            \`lint:docs\` gates were then re-run and all pass, so this pull request
+            does not arrive with generated files out of sync.
+          - \`check-release-signal.mjs\` confirmed this title carries the release
+            signal the changed manifest fields require.
+          - The diff was checked to touch only the manifest, the lockfile and the
+            two rendered READMEs.
 
           Everything else is deliberately left to CI on this pull request, which is
           the real validation: build, type-checks, unit and mocked E2E suites,
-          audit, and the container scans.
+          audit, licences, and the container scans.
           EOF
           )"
 
