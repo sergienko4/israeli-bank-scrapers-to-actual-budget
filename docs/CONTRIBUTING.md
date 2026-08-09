@@ -161,8 +161,11 @@ a release the same evening. A version published shortly before a scan can also
 be missed, because the registry index Dependabot reads has not caught up yet.
 
 `.github/workflows/dependency-bump.yml` covers those cases. It takes the
-package and the version, installs it on a runner, rotates the `allowScripts`
-pin, and opens the pull request:
+package and the version, installs it on a runner, then repairs the two things a
+bump invalidates — the `allowScripts` pin and the README marker fragments,
+which carry dependency versions read out of `package.json`. It re-runs those
+gates before opening the pull request, so a bump cannot arrive with generated
+files out of sync:
 
 ```bash
 # newest published version of the scraper
@@ -182,6 +185,10 @@ npm from the tarball it actually fetched, rather than typed in by hand.
 The result is an ordinary pull request with the full CI suite attached, and the
 `allowScripts` review it triggers is the same one described above — a newly
 introduced install script still fails the gate and waits for a human.
+
+Only the deterministic repairs belong to the workflow. Audit findings, licence
+changes and test failures cannot be fixed by regenerating a file, so they are
+left to CI on the pull request, which reports them accurately.
 
 ---
 

@@ -101,10 +101,29 @@ jobs:
       - name: Rotate the install-script allowlist
         run: node scripts/check-allow-scripts.mjs --fix
 
-      - name: Verify the allowlist gate passes
-        run: npm run lint:allow-scripts
+      # renderTechStack reads dependency versions straight out of package.json,
+      # so bumping any version the README advertises leaves the meta:tech-stack
+      # fragment stale and fails the Documentation Quality gate. This has to run
+      # after the manifest is final, which means after the pin rotation above.
+      - name: Re-render the README marker fragments
+        run: npm run meta:render
 
-      - name: Confirm the bump touched only the manifest and lockfile
+      # A bump invalidates generated artefacts, and each one is gated in CI.
+      # Repairing them above is not enough on its own: if a gate is added later
+      # that this workflow does not know how to repair, the run has to fail here
+      # rather than open a pull request that is red on arrival. Only
+      # deterministic gates belong in this list — audit, licences, tests and E2E
+      # are semantic, cannot be repaired here, and are left to the pull request's
+      # own CI, which reports them accurately.
+      - name: Verify the generated artefacts satisfy their gates
+        run: |
+          set -euo pipefail
+          npm run meta:markers
+          npm run meta:check
+          npm run lint:allow-scripts
+          npm run lint:docs
+
+      - name: Confirm the bump touched only its expected files
         id: diff
         run: |
           set -euo pipefail
@@ -113,14 +132,14 @@ jobs:
             echo "::notice::Already at the requested version; nothing to do."
             exit 0
           fi
-          unexpected="$(git status --porcelain | grep -v -E '^ M (package\.json|package-lock\.json)$' || true)"
+          unexpected="$(git status --porcelain | grep -v -E '^ M (package\.json|package-lock\.json|README\.md|README\.docker-hub\.md)$' || true)"
           if [ -n "${unexpected}" ]; then
             echo "::error::The install touched unexpected paths:"
             echo "${unexpected}"
             exit 1
           fi
           echo "changed=true" >> "${GITHUB_OUTPUT}"
-          git --no-pager diff --stat -- package.json package-lock.json
+          git --no-pager diff --stat
 
       - name: Open the pull request
         if: steps.diff.outputs.changed == 'true'
@@ -137,7 +156,7 @@ jobs:
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -b "${BRANCH}"
-          git add package.json package-lock.json
+          git add package.json package-lock.json README.md README.docker-hub.md
           git commit -m "${title}" -m "Opened by the dependency-bump workflow (run ${GITHUB_RUN_ID})." \
             -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
           git push origin "${BRANCH}"
@@ -161,13 +180,18 @@ jobs:
 
           - \`npm install ${PACKAGE}@${RESOLVED}\` regenerated \`package-lock.json\`,
             so the integrity hash was produced by npm from the tarball it fetched.
-          - \`check-allow-scripts.mjs --fix\` rotated the install-script pin, and the
-            \`lint:allow-scripts\` gate was re-run and passes.
-          - The diff was checked to touch \`package.json\` and \`package-lock.json\` only.
+          - \`check-allow-scripts.mjs --fix\` rotated the install-script pin.
+          - \`meta:render\` re-rendered the README marker fragments, which carry
+            dependency versions read out of \`package.json\`.
+          - The \`meta:markers\`, \`meta:check\`, \`lint:allow-scripts\` and
+            \`lint:docs\` gates were then re-run and all pass, so this pull request
+            does not arrive with generated files out of sync.
+          - The diff was checked to touch only the manifest, the lockfile and the
+            two rendered READMEs.
 
           Everything else is deliberately left to CI on this pull request, which is
           the real validation: build, type-checks, unit and mocked E2E suites,
-          audit, and the container scans.
+          audit, licences, and the container scans.
           EOF
           )"
 
