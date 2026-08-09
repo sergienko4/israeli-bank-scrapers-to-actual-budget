@@ -148,8 +148,20 @@ jobs:
             exit 1
           fi
           slug="$(printf '%s' "${PACKAGE}" | sed 's|^@||; s|/|-|g')"
+          branch="deps/${slug}-${resolved}"
+          # A name that passes the version and package regexes can still be an
+          # illegal ref: Git rejects a component ending in `.lock` or containing
+          # `..`, both of which are legal SemVer/package spellings. Without this
+          # the preflight below reports the branch "absent" (ls-remote exits 2
+          # for a malformed ref exactly as it does for a free one) and the job
+          # dies later at `checkout -b` with no explanation. Fail here instead,
+          # naming the branch that could not be created.
+          if ! git check-ref-format --branch "${branch}" >/dev/null 2>&1; then
+            echo "::error::${PACKAGE}@${resolved} yields '${branch}', which is not a valid Git branch name."
+            exit 1
+          fi
           echo "resolved=${resolved}"            >> "${GITHUB_OUTPUT}"
-          echo "branch=deps/${slug}-${resolved}" >> "${GITHUB_OUTPUT}"
+          echo "branch=${branch}"                >> "${GITHUB_OUTPUT}"
           # One source of truth for the title: the release-signal guard has to
           # check the exact string the pull request will carry.
           echo "title=${TYPE}(deps): bump ${PACKAGE} to ${resolved}" >> "${GITHUB_OUTPUT}"
