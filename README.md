@@ -185,7 +185,7 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 - **Node.js** >=22.0.0 (Docker base: `node:26-slim`)
 - **TypeScript** ^6.0.3 (strict mode, ES2022)
 - **Vitest** ^4.1.9 (v8 coverage)
-- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.6.5
+- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.6.6
 - **Browser** Camoufox (Firefox + C++-level fingerprint masking)
 - **Actual Budget API** `@actual-app/api` ^26.8.1
 <!-- meta:tech-stack:end -->
