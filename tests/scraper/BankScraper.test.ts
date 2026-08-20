@@ -142,14 +142,14 @@ describe('BankScraper coordinator', () => {
     expect(callArg.startDate).toBeInstanceOf(Date);
   });
 
-  it('applies sign flip via mapper for credit-card banks (visaCal)', async () => {
+  it('passes credit-card amounts through unflipped (visaCal, scraper 8.6.7)', async () => {
     const strategy: IBankScrapeStrategy = {
       scrape: vi.fn().mockResolvedValue(succeed({
         bankId: 'visacal', companyType: 'visaCal',
         attemptCount: 1, strategy: 'live',
         raw: { success: true, accounts: [{
           accountNumber: '9999', balance: 0,
-          txns: [{ chargedAmount: 100, originalAmount: 50, date: '2026-01-01' }],
+          txns: [{ chargedAmount: -100, originalAmount: -50, date: '2026-01-01' }],
         }] },
       })),
     };

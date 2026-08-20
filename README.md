@@ -65,6 +65,16 @@ See [Quick Start guide](https://sergienko4.github.io/israeli-bank-scrapers-to-ac
 
 See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/banks/) · [docs/banks/](docs/banks/).
 
+> **Upgrade note — credit-card signs (scraper 8.6.7).** Card issuers (Visa Cal,
+> Max, Isracard, Amex) now emit charges as negative amounts at the source, so
+> this importer no longer flips them. Card charges keep landing as outflows and
+> existing rows are untouched, because the `imported_id` hash is unchanged.
+>
+> One exception: Visa Cal refunds were previously recorded with the wrong sign
+> (as spend instead of income). They are now correct, but the corrected row has
+> a different `imported_id`, so it imports alongside the old wrong row. Delete
+> the stale negative rows manually, or wait for the cleanup command.
+
 ---
 
 ## Features
@@ -185,7 +195,7 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 - **Node.js** >=22.0.0 (Docker base: `node:26-slim`)
 - **TypeScript** ^6.0.3 (strict mode, ES2022)
 - **Vitest** ^4.1.9 (v8 coverage)
-- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.6.6
+- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.6.7
 - **Browser** Camoufox (Firefox + C++-level fingerprint masking)
 - **Actual Budget API** `@actual-app/api` ^26.8.1
 <!-- meta:tech-stack:end -->

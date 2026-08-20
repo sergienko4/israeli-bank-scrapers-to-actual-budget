@@ -4,6 +4,12 @@
  * shared-kernel Types layer so both the Scraper's BankRegistry and the Config
  * manifest derive the supported-bank list from one place without an outward
  * (Config → Scraper) dependency. Adding a bank = one entry here.
+ *
+ * Sign policy: every bank is `preserve` as of scraper 8.6.7. The four card
+ * issuers (visacal/max/isracard/amex) carried `flip-credit` while the upstream
+ * scraper emitted card charges as positive amounts; 8.6.7 (upstream PR #483)
+ * negates them at the source, so flipping again would book every charge as
+ * income. `flip-credit` is retained as an escape hatch should upstream regress.
  */
 
 import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
@@ -45,10 +51,10 @@ export const BANK_CATALOG: readonly IBankCatalogEntry[] = Object.freeze([
   entry({ bankId: 'beinleumi',        companyType: CompanyTypes.Beinleumi,        aliases: ['beinleumi'],                             signPolicy: 'preserve' }),
   entry({ bankId: 'massad',           companyType: CompanyTypes.Massad,           aliases: ['massad'],                                signPolicy: 'preserve' }),
   entry({ bankId: 'yahav',            companyType: CompanyTypes.Yahav,            aliases: ['yahav'],                                 signPolicy: 'preserve' }),
-  entry({ bankId: 'visacal',          companyType: CompanyTypes.VisaCal,          aliases: ['visaCal', 'visacal'],                    signPolicy: 'flip-credit' }),
-  entry({ bankId: 'max',              companyType: CompanyTypes.Max,              aliases: ['max'],                                   signPolicy: 'flip-credit' }),
-  entry({ bankId: 'isracard',         companyType: CompanyTypes.Isracard,         aliases: ['isracard'],                              signPolicy: 'flip-credit' }),
-  entry({ bankId: 'amex',             companyType: CompanyTypes.Amex,             aliases: ['amex'],                                  signPolicy: 'flip-credit' }),
+  entry({ bankId: 'visacal',          companyType: CompanyTypes.VisaCal,          aliases: ['visaCal', 'visacal'],                    signPolicy: 'preserve' }),
+  entry({ bankId: 'max',              companyType: CompanyTypes.Max,              aliases: ['max'],                                   signPolicy: 'preserve' }),
+  entry({ bankId: 'isracard',         companyType: CompanyTypes.Isracard,         aliases: ['isracard'],                              signPolicy: 'preserve' }),
+  entry({ bankId: 'amex',             companyType: CompanyTypes.Amex,             aliases: ['amex'],                                  signPolicy: 'preserve' }),
   entry({ bankId: 'beyahadbishvilha', companyType: CompanyTypes.BeyahadBishvilha, aliases: ['beyahadBishvilha', 'beyahadbishvilha'],  signPolicy: 'preserve' }),
   entry({ bankId: 'behatsdaa',        companyType: CompanyTypes.Behatsdaa,        aliases: ['behatsdaa'],                             signPolicy: 'preserve' }),
   entry({ bankId: 'pagi',             companyType: CompanyTypes.Pagi,             aliases: ['pagi'],                                  signPolicy: 'preserve' }),

@@ -343,7 +343,7 @@ describe('ProcessAllBanksStep', () => {
       byBank[arg.bankName] = arg.signPolicy;
     }
     expect(byBank.hapoalim).toBe('preserve');
-    expect(byBank.visacal).toBe('flip-credit');
+    expect(byBank.visacal).toBe('preserve');
   });
 
   it('mapStage falls back to preserve for unknown bank names', async () => {
