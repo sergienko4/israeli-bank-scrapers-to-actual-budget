@@ -3,6 +3,7 @@ import { afterEach,beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_BANK_REGISTRY } from '../../../src/Scraper/BankRegistry.js';
 import createProcessAllBanksStep from '../../../src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.js';
 import type { IPipelineContext } from '../../../src/Scrapers/Pipeline/Types/PipelineContext.js';
+import type { IImportSummary } from '../../../src/Services/MetricsService.js';
 import { isFail, isSuccess } from '../../../src/Types/ProcedureHelpers.js';
 import {
   ALLOW_ALL_BANK_FILTER, fakeBankConfig, fakeCanonicalScrapeResult,
@@ -35,6 +36,10 @@ function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
         startBank: vi.fn().mockReturnValue({ success: true, data: { status: 'tracking' } }),
         recordBankSuccess: vi.fn().mockReturnValue({ success: true, data: { status: 'recorded' } }),
         recordBankFailure: vi.fn().mockReturnValue({ success: true, data: { status: 'recorded' } }),
+        getSummary: vi.fn().mockReturnValue({ success: true, data: { status: 'summary' } }),
+      },
+      auditLogService: {
+        record: vi.fn().mockReturnValue({ success: true, data: { status: 'recorded' } }),
       },
       bankScraper: {
         scrapeBankWithResilience: vi.fn().mockResolvedValue({ success: true, accounts: [] }),
@@ -229,6 +234,65 @@ describe('ProcessAllBanksStep', () => {
       expect(result.message).toContain('Import failed for visacal');
       expect(result.message).not.toContain('All');
     }
+  });
+
+  it('all banks failing records an audit entry with failure status and error (INV-4)', async () => {
+    const ctx = makeCtx();
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, errorMessage: 'timeout' });
+    const failureSummary: IImportSummary = {
+      totalBanks: 2, successfulBanks: 0, failedBanks: 2,
+      totalTransactions: 0, totalDuplicates: 0, totalDuration: 2000,
+      averageDuration: 1000, successRate: 0,
+      banks: [
+        { bankName: 'hapoalim', startTime: 0, endTime: 1000, duration: 1000,
+          status: 'failure', transactionsImported: 0, transactionsSkipped: 0,
+          accounts: [], error: 'Error: timeout' },
+        { bankName: 'leumi', startTime: 0, endTime: 1000, duration: 1000,
+          status: 'failure', transactionsImported: 0, transactionsSkipped: 0,
+          accounts: [], error: 'Error: timeout' },
+      ],
+    };
+    (ctx.services.metricsService.getSummary as ReturnType<typeof vi.fn>)
+      .mockReturnValue({ success: true, data: failureSummary });
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(ctx.services.auditLogService.record).toHaveBeenCalledOnce();
+    expect(ctx.services.auditLogService.record).toHaveBeenCalledWith(failureSummary);
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) {
+      expect(result.status).toBe('banks-failed');
+    }
+  });
+
+  it('all banks failing in dry-run does not record an audit entry', async () => {
+    const ctx = makeCtx({ state: { isDryRun: true, apiInitialized: true, banksProcessed: 0 } });
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, errorMessage: 'timeout' });
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(ctx.services.auditLogService.record).not.toHaveBeenCalled();
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) {
+      expect(result.status).toBe('banks-failed');
+    }
+  });
+
+  it('partial failure does not record an audit entry in this step (finalize owns that path)', async () => {
+    const ctx = makeCtx();
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({ success: false, errorMessage: 'timeout' })
+      .mockResolvedValueOnce({ success: true, accounts: [] });
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(isSuccess(result)).toBe(true);
+    expect(ctx.services.auditLogService.record).not.toHaveBeenCalled();
   });
 
   it('shutdown aborts before processing any banks', async () => {

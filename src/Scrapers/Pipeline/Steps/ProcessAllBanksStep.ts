@@ -258,10 +258,36 @@ function finalizeContext(
   const newCtx = buildNewCtx(ctx, partition);
   if (partition.totalBanks === 0) return succeed(newCtx);
   if (partition.successful.length === 0) {
+    recordFailedRun(ctx);
     const message = buildBanksFailedMessage(partition);
     return fail(message, { status: 'banks-failed' });
   }
   return succeed(newCtx);
+}
+
+/**
+ * Records a fully-failed run in the audit log, best effort.
+ *
+ * The pipeline short-circuits on the all-banks-failed failure (INV-4), so the
+ * finalize step never runs; without this the run is invisible to /api/status
+ * and the app. Failures here are warnings, never a change of the caller's
+ * outcome.
+ * @param ctx - Pipeline context.
+ * @returns True when the audit entry was written.
+ */
+function recordFailedRun(ctx: IPipelineContext): boolean {
+  if (ctx.state.isDryRun) return false;
+  const summary = ctx.services.metricsService.getSummary();
+  if (isFail(summary)) {
+    ctx.logger.warn(`getSummary failed: ${summary.message}`);
+    return false;
+  }
+  const recorded = ctx.services.auditLogService.record(summary.data);
+  if (isFail(recorded)) {
+    ctx.logger.warn(`audit record failed: ${recorded.message}`);
+    return false;
+  }
+  return true;
 }
 
 /**
