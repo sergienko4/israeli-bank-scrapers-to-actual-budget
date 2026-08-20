@@ -128,7 +128,10 @@ function seedDir(callbackUrl: string): string {
 function containerEnv(fake: IFakeGoogle): Record<string, string> {
   const port = String(fake.port);
   return {
-    PORTAL_TRUST_PROXY: '1',
+    // The forwarding proxy runs on the host, so the container sees it arrive
+    // from the Docker gateway — a private address, hence `uniquelocal`.
+    // `loopback` covers a host-networked daemon.
+    PORTAL_TRUST_PROXY: 'uniquelocal,loopback',
     APP_TOKENS_PATH: CONTAINER_TOKENS_PATH,
     GOOGLE_AUTH_BASE: `http://127.0.0.1:${port}/auth`,
     GOOGLE_TOKEN_URL: `http://host.docker.internal:${port}/token`,

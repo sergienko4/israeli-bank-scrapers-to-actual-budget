@@ -16,7 +16,9 @@ import { getLogger } from '../Logger/Index.js';
 import registerApiRoutes from './PortalApiRoutes.js';
 import { registerAuthRoutes } from './PortalAuthRoutes.js';
 import PortalConfigStore from './PortalConfigStore.js';
-import { type IPortalRuntime, isNonLoopbackHost } from './PortalRuntime.js';
+import {
+  type IPortalRuntime, isLegacyProxyHopCount, isNonLoopbackHost, isRejectedProxyConfig,
+} from './PortalRuntime.js';
 import { handlePortalError } from './PortalValidationError.js';
 
 /**
@@ -91,6 +93,57 @@ export async function buildPortal(
   return await app;
 }
 
+const HOP_COUNT_WARNING = '⚠️  PORTAL_TRUST_PROXY is set to a proxy hop count, a form Fastify removed in '
+  + '5.12.1 because it trusted X-Forwarded-For on every connection regardless of who opened it '
+  + '(GHSA-3m5p-2c4r-xxw2). The portal is therefore trusting no forwarded header, so every caller '
+  + 'now shares one rate-limit bucket. Name the proxy\'s own address instead: `loopback` behind '
+  + '`tailscale serve`, or an IP/CIDR such as 10.0.0.0/8.';
+
+const REJECTED_PROXY_WARNING = '⚠️  PORTAL_TRUST_PROXY was set to a value the portal could not parse, '
+  + 'so it is trusting no forwarded header and every caller now shares one rate-limit bucket. '
+  + 'Each entry must name a proxy address: `loopback`, `linklocal`, `uniquelocal`, an IP, or a '
+  + 'CIDR such as 10.0.0.0/8.';
+
+/**
+ * Builds the warning shown when the portal listens beyond loopback.
+ * @param host - Resolved bind host.
+ * @returns The warning line to log.
+ */
+function exposedHostWarning(host: string): string {
+  return `⚠️  Portal is bound to non-loopback host ${host} and reachable from the network. `
+    + 'Put it behind a TLS reverse proxy and set PORTAL_SECURE_COOKIES=true so cookies '
+    + 'and secrets are never sent over plain HTTP. Set PORTAL_TRUST_PROXY to the proxy\'s own '
+    + 'address (`loopback` when it shares the host), or the rate limits will count the proxy '
+    + 'instead of the caller and one client can spend the login budget for everyone.';
+}
+
+/**
+ * Reports how `PORTAL_TRUST_PROXY` was interpreted, when that deserves saying.
+ *
+ * A hop count earns the specific upgrade advice; anything else unparseable
+ * earns the generic notice. Both resolve to "trust nothing", which is safe but
+ * indistinguishable from an unset value unless the operator is told.
+ * @returns Warning lines, empty when the setting was honoured or absent.
+ */
+function proxyWarnings(): string[] {
+  if (isLegacyProxyHopCount()) return [HOP_COUNT_WARNING];
+  const isRejected = isRejectedProxyConfig();
+  return isRejected ? [REJECTED_PROXY_WARNING] : [];
+}
+
+/**
+ * Collects the boot warnings the resolved runtime deserves.
+ * @param rt - Resolved portal runtime.
+ * @returns Warning lines to log, empty when nothing is amiss.
+ */
+function bootWarnings(rt: IPortalRuntime): string[] {
+  const warnings = proxyWarnings();
+  if (!isNonLoopbackHost(rt.host)) return warnings;
+  const exposed = exposedHostWarning(rt.host);
+  warnings.push(exposed);
+  return warnings;
+}
+
 /**
  * Builds and starts the portal server, logging the bind address.
  * @param rt - Resolved portal runtime.
@@ -104,14 +157,7 @@ export async function startPortal(
   await app.listen({ host: rt.host, port: rt.port });
   const url = `http://${rt.host}:${String(rt.port)}`;
   getLogger().info(`🖥️  Config portal on ${url} (auth: ${rt.authMode})`);
-  if (isNonLoopbackHost(rt.host)) {
-    getLogger().warn(
-      `⚠️  Portal is bound to non-loopback host ${rt.host} and reachable from the network. `
-      + 'Put it behind a TLS reverse proxy and set PORTAL_SECURE_COOKIES=true so cookies '
-      + 'and secrets are never sent over plain HTTP. Set PORTAL_TRUST_PROXY to the number '
-      + 'of proxy hops in front of the portal, or its rate limits will count the proxy '
-      + 'instead of the caller and one client can spend the login budget for everyone.',
-    );
-  }
+  const warnings = bootWarnings(rt);
+  for (const warning of warnings) getLogger().warn(warning);
   return app;
 }

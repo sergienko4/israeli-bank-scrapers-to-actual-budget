@@ -326,9 +326,9 @@ describe('PortalServer rate-limit keying', () => {
     rmSync(seed.dir, { recursive: true, force: true });
   });
 
-  it('counts each forwarded address separately when a proxy hop is trusted', async () => {
+  it('counts each forwarded address separately when the proxy address is trusted', async () => {
     const seed = seedConfigDir();
-    const runtime = fakePortalRuntime({ trustProxy: 1 });
+    const runtime = fakePortalRuntime({ trustProxy: ['loopback'] });
     const portal = await buildPortal(runtime, new PortalConfigStore(seed.path));
     const first = await remainingAfterLogin(portal, '203.0.113.1');
     const second = await remainingAfterLogin(portal, '198.51.100.7');

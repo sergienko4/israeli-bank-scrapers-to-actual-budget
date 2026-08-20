@@ -5,6 +5,7 @@
  */
 
 import { createHmac } from 'node:crypto';
+import { isIP } from 'node:net';
 
 import type { IImporterConfig, IPortalConfig, IPortalGoogleConfig, PortalAuthMode } from '../Types/Index.js';
 import { PORTAL_AUTH_MODES } from '../Types/Index.js';
@@ -18,6 +19,20 @@ const MAX_PORT = 65535;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 const MIN_SECRET_LENGTH = 16;
 const KNOWN_WEAK_SECRETS = new Set(['change-me-portal-secret']);
+const PROXY_SUBNET_NAMES = new Set(['loopback', 'linklocal', 'uniquelocal']);
+const IPV4_BITS = 32;
+const IPV6_BITS = 128;
+const IPV6_FAMILY = 6;
+
+/**
+ * Values Fastify accepts for `trustProxy` that decide trust by inspecting the
+ * connecting address.
+ *
+ * Deliberately excludes the bare hop count: Fastify removed it in 5.12.1
+ * because it matched every connection regardless of who opened it
+ * (GHSA-3m5p-2c4r-xxw2).
+ */
+export type PortalTrustProxy = boolean | string | string[];
 
 /** Fully-resolved portal runtime settings. */
 export interface IPortalRuntime {
@@ -26,7 +41,7 @@ export interface IPortalRuntime {
   authMode: PortalAuthMode;
   sessionSecret: string;
   secureCookies: boolean;
-  trustProxy: boolean | number;
+  trustProxy: PortalTrustProxy;
   app: IPortalAppRuntime;
   portal: IPortalConfig;
 }
@@ -176,24 +191,110 @@ export function resolveSecureCookies(portal: IPortalConfig): boolean {
 }
 
 /**
- * Resolves how far the portal should trust `X-Forwarded-*` headers, from
+ * Checks a CIDR suffix against the address family it qualifies.
+ * @param prefix - The text following the `/`.
+ * @param family - Address family reported by `isIP`, either 4 or 6.
+ * @returns True when the suffix is an in-range prefix length.
+ */
+function isPrefixLength(prefix: string, family: number): boolean {
+  if (!/^\d+$/.test(prefix)) return false;
+  const max = family === IPV6_FAMILY ? IPV6_BITS : IPV4_BITS;
+  return Number(prefix) <= max;
+}
+
+/**
+ * Decides whether one `PORTAL_TRUST_PROXY` entry names something Fastify can
+ * match a connecting socket against.
+ * @param entry - A single trimmed entry, such as `127.0.0.1`, `10.0.0.0/8`, or `loopback`.
+ * @returns True when Fastify can compile the entry into an address test.
+ */
+function isProxyAddress(entry: string): boolean {
+  if (PROXY_SUBNET_NAMES.has(entry)) return true;
+  const parts = entry.split('/');
+  if (parts.length > 2) return false;
+  const family = isIP(parts[0]);
+  if (family === 0) return false;
+  if (parts.length === 1) return true;
+  return isPrefixLength(parts[1], family);
+}
+
+/**
+ * Splits a raw `PORTAL_TRUST_PROXY` value into its individual entries.
+ *
+ * Empty members are dropped, so a trailing comma or an unset interpolated
+ * variable is tolerated rather than being treated as a malformed value. Doing
+ * so cannot widen trust — the result is always a subset of what was written —
+ * and it keeps a harmless typo from collapsing the portal into the silent
+ * single-bucket mode. An entry that names something invalid is a different
+ * matter and rejects the whole value; see {@link resolveTrustProxy}.
+ * @param raw - Raw environment value, comma-separated.
+ * @returns Trimmed, non-empty entries in declaration order.
+ */
+function proxyEntries(raw: string): string[] {
+  const parts = raw.split(',');
+  const trimmed = parts.map((part) => part.trim());
+  return trimmed.filter((part) => part.length > 0);
+}
+
+/**
+ * Resolves which proxies may speak for their callers via `X-Forwarded-*`, from
  * `PORTAL_TRUST_PROXY`.
  *
  * This decides which address the rate limiter and the logs attribute a request
  * to. Trusting the header when nothing rewrites it lets any caller forge its
  * own client address and slip the per-IP limits, so the default is to trust
- * nothing and anything unparseable falls back to that default. Set it to the
- * number of proxy hops in front of the portal (`1` behind `tailscale serve`).
+ * nothing and anything unparseable falls back to that default.
  *
- * `true` is refused along with everything else that is not a hop count: Fastify
- * reads it as "trust every hop", which hands the rate-limit key to whoever sent
+ * Entries name the *proxy's own* address — `loopback` behind `tailscale serve`,
+ * or an IP/CIDR such as `10.0.0.0/8` — so a forwarded header is honoured only
+ * on connections that genuinely arrive from that proxy.
+ *
+ * A bare hop count is refused. Fastify removed it in 5.12.1 because it matched
+ * every connection regardless of origin, which left anyone able to reach the
+ * portal directly free to forge their own address (GHSA-3m5p-2c4r-xxw2). `true`
+ * is refused for the same reason: it hands the rate-limit key to whoever sent
  * the request.
- * @returns `false` to trust no forwarded header, or the hop count to trust.
+ * @returns `false` to trust no forwarded header, or the proxy addresses to trust.
  */
-export function resolveTrustProxy(): boolean | number {
+export function resolveTrustProxy(): PortalTrustProxy {
   const raw = process.env.PORTAL_TRUST_PROXY?.trim() ?? '';
-  const hops = Number(raw);
-  return raw.length > 0 && Number.isInteger(hops) && hops > 0 ? hops : false;
+  const entries = proxyEntries(raw);
+  if (entries.length === 0) return false;
+  return entries.every(isProxyAddress) ? entries : false;
+}
+
+/**
+ * Reports whether `PORTAL_TRUST_PROXY` still carries a bare proxy hop count.
+ *
+ * Fastify 5.12.1 removed that form, so such a value now resolves to "trust
+ * nothing", which quietly collapses every caller into a single rate-limit
+ * bucket. Callers use this to warn the operator to name the proxy's address
+ * instead of counting hops.
+ *
+ * A sign is tolerated so a stray `+1` is still recognised as the old form and
+ * earns the specific upgrade advice rather than the generic rejection notice.
+ * @returns True when the configured value is a bare integer.
+ */
+export function isLegacyProxyHopCount(): boolean {
+  const raw = process.env.PORTAL_TRUST_PROXY?.trim() ?? '';
+  return /^[+-]?\d+$/.test(raw);
+}
+
+/**
+ * Reports whether `PORTAL_TRUST_PROXY` was set to something the parser refused.
+ *
+ * Rejection is deliberately indistinguishable from "unset" at runtime, both
+ * being "trust nothing". That is safe but silent: the operator believes the
+ * portal reads `X-Forwarded-For` while every caller in fact shares one
+ * rate-limit bucket. Callers use this to say so out loud at boot.
+ *
+ * The verdict is re-derived from the environment rather than taken from a
+ * resolved runtime, so it cannot disagree with itself.
+ * @returns True when a value was supplied but none of it could be honoured.
+ */
+export function isRejectedProxyConfig(): boolean {
+  const raw = process.env.PORTAL_TRUST_PROXY?.trim() ?? '';
+  return raw !== '' && resolveTrustProxy() === false;
 }
 
 /**

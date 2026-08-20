@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  credentialFingerprint, isNonLoopbackHost, isPortalEnabled, isSessionSecretWeak, portalAuthConfigError,
-  portalBootBlocker, portalCookieOptions, resolvePortalRuntime, resolveSecureCookies, resolveTrustProxy,
+  credentialFingerprint, isLegacyProxyHopCount, isNonLoopbackHost, isPortalEnabled, isRejectedProxyConfig,
+  isSessionSecretWeak,
+  portalAuthConfigError, portalBootBlocker, portalCookieOptions, resolvePortalRuntime, resolveSecureCookies,
+  resolveTrustProxy,
 } from '../../src/Portal/PortalRuntime.js';
 import type { PortalAuthMode } from '../../src/Types/Index.js';
 import { fakeImporterConfig } from '../helpers/factories.js';
@@ -22,9 +24,24 @@ describe('PortalRuntime', () => {
       expect(resolveTrustProxy()).toBe(false);
     });
 
-    it('trusts the stated number of proxy hops', () => {
-      process.env.PORTAL_TRUST_PROXY = '1';
-      expect(resolveTrustProxy()).toBe(1);
+    it('trusts a named subnet the proxy connects from', () => {
+      process.env.PORTAL_TRUST_PROXY = 'loopback';
+      expect(resolveTrustProxy()).toEqual(['loopback']);
+    });
+
+    it('trusts a single proxy address', () => {
+      process.env.PORTAL_TRUST_PROXY = '10.0.0.4';
+      expect(resolveTrustProxy()).toEqual(['10.0.0.4']);
+    });
+
+    it('trusts a CIDR range of proxies', () => {
+      process.env.PORTAL_TRUST_PROXY = '10.0.0.0/8';
+      expect(resolveTrustProxy()).toEqual(['10.0.0.0/8']);
+    });
+
+    it('trusts every address in a comma-separated list', () => {
+      process.env.PORTAL_TRUST_PROXY = 'loopback, 10.0.0.0/8 ,fd00::/8';
+      expect(resolveTrustProxy()).toEqual(['loopback', '10.0.0.0/8', 'fd00::/8']);
     });
 
     it('refuses to trust every hop, however plainly it is asked', () => {
@@ -37,17 +54,83 @@ describe('PortalRuntime', () => {
       expect(resolveTrustProxy()).toBe(false);
     });
 
-    it('falls back to trusting nothing on a zero or negative hop count', () => {
-      process.env.PORTAL_TRUST_PROXY = '0';
+    // Fastify 5.12.1 removed the hop count (GHSA-3m5p-2c4r-xxw2): it matched
+    // every connection, so anyone reaching the origin directly could forge
+    // X-Forwarded-For. Accepting it again would silently reopen that hole.
+    it('refuses a bare proxy hop count', () => {
+      process.env.PORTAL_TRUST_PROXY = '1';
       expect(resolveTrustProxy()).toBe(false);
-      process.env.PORTAL_TRUST_PROXY = '-2';
+      process.env.PORTAL_TRUST_PROXY = '2';
       expect(resolveTrustProxy()).toBe(false);
     });
 
-    it('carries the resolved hop count into the portal runtime', () => {
-      process.env.PORTAL_TRUST_PROXY = '2';
+    it('refuses a CIDR whose prefix is out of range for its family', () => {
+      process.env.PORTAL_TRUST_PROXY = '10.0.0.0/33';
+      expect(resolveTrustProxy()).toBe(false);
+    });
+
+    it('refuses the whole list when any entry is not an address', () => {
+      process.env.PORTAL_TRUST_PROXY = 'loopback,not-an-address';
+      expect(resolveTrustProxy()).toBe(false);
+    });
+
+    // An empty member names nothing, so dropping it can only shrink the trust
+    // set, never widen it. Rejecting the value outright would turn a trailing
+    // comma or an unset interpolated variable into a silent loss of per-caller
+    // rate limits — a worse outcome than tolerating the typo.
+    it('tolerates empty members without widening trust', () => {
+      process.env.PORTAL_TRUST_PROXY = 'loopback,';
+      expect(resolveTrustProxy()).toEqual(['loopback']);
+      process.env.PORTAL_TRUST_PROXY = ',loopback,,uniquelocal';
+      expect(resolveTrustProxy()).toEqual(['loopback', 'uniquelocal']);
+    });
+
+    it('refuses a signed hop count', () => {
+      process.env.PORTAL_TRUST_PROXY = '-1';
+      expect(resolveTrustProxy()).toBe(false);
+    });
+
+    it('carries the resolved proxy addresses into the portal runtime', () => {
+      process.env.PORTAL_TRUST_PROXY = 'loopback';
       const config = fakeImporterConfig({ portal: fakePortalConfig() });
-      expect(resolvePortalRuntime(config).trustProxy).toBe(2);
+      expect(resolvePortalRuntime(config).trustProxy).toEqual(['loopback']);
+    });
+  });
+
+  describe('isLegacyProxyHopCount', () => {
+    it('spots a hop count left over from before Fastify 5.12.1', () => {
+      process.env.PORTAL_TRUST_PROXY = '1';
+      expect(isLegacyProxyHopCount()).toBe(true);
+    });
+
+    it('is quiet for an address value', () => {
+      process.env.PORTAL_TRUST_PROXY = 'loopback';
+      expect(isLegacyProxyHopCount()).toBe(false);
+    });
+
+    it('is quiet when nothing is configured', () => {
+      expect(isLegacyProxyHopCount()).toBe(false);
+    });
+
+    it('spots a signed hop count', () => {
+      process.env.PORTAL_TRUST_PROXY = '+1';
+      expect(isLegacyProxyHopCount()).toBe(true);
+    });
+  });
+
+  describe('isRejectedProxyConfig', () => {
+    it('reports a supplied value that could not be honoured', () => {
+      process.env.PORTAL_TRUST_PROXY = 'not-an-address';
+      expect(isRejectedProxyConfig()).toBe(true);
+    });
+
+    it('stays silent when nothing was supplied', () => {
+      expect(isRejectedProxyConfig()).toBe(false);
+    });
+
+    it('stays silent when the value was honoured', () => {
+      process.env.PORTAL_TRUST_PROXY = 'loopback';
+      expect(isRejectedProxyConfig()).toBe(false);
     });
   });
 

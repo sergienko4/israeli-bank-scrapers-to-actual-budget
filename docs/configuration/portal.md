@@ -66,7 +66,7 @@ Then start the portal entry point: `node dist/Portal.js`. Open
 | `port` / `PORTAL_PORT` | `8080` | Listen port. |
 | `authMode` | `password` | `password`, `google`, or `both`. |
 | `secureCookies` / `PORTAL_SECURE_COOKIES` | `false` | Mark cookies `Secure` (enable behind HTTPS). |
-| `PORTAL_TRUST_PROXY` | `false` | Proxy hops to trust for `X-Forwarded-For`; set to `1` behind one reverse proxy so rate limits count the caller. |
+| `PORTAL_TRUST_PROXY` | `false` | Address the reverse proxy connects from, allowed to set `X-Forwarded-For`; `loopback` behind `tailscale serve` so rate limits count the caller. |
 
 > **Boot requirement:** the snippet above is not enough to start. Every mode
 > needs a strong `sessionSecret` (≥16 characters), and `password`/`both` mode
@@ -217,23 +217,36 @@ nothing is published to the internet.
 Two settings must change, because the portal is now behind a proxy:
 
 ```bash
-PORTAL_SECURE_COOKIES=true   # the browser is on HTTPS; cookies must say Secure
-PORTAL_TRUST_PROXY=1         # exactly one hop (tailscale serve) sits in front
+PORTAL_SECURE_COOKIES=true    # the browser is on HTTPS; cookies must say Secure
+PORTAL_TRUST_PROXY=loopback   # tailscale serve forwards from the local machine
 ```
 
 `PORTAL_TRUST_PROXY` is what makes the per-IP rate limits count the phone that
 made the request rather than the proxy that forwarded it. Without it every
 caller shares one bucket, so one device retrying a login can lock out the rest.
-Set it to the number of proxies in front of the portal — `1` for `tailscale
-serve` alone — and leave it unset when nothing is in front, because trusting
-`X-Forwarded-For` with no proxy to rewrite it lets any caller invent an address
-and walk past the limits entirely.
+
+Set it to the **address the proxy connects from**, so `X-Forwarded-For` is
+believed only on connections that genuinely came through it. `tailscale serve`
+runs on the same machine, so `loopback` is the right value; a proxy on another
+host takes its IP or a CIDR range such as `10.0.0.0/8`, and several may be
+listed comma-separated. Leave it unset when nothing is in front, because
+trusting `X-Forwarded-For` with no proxy to rewrite it lets any caller invent an
+address and walk past the limits entirely.
+
+> **Changed with Fastify 5.12.1:** this used to be a count of proxy hops (`1`).
+> Fastify removed that form because it trusted the header on every connection,
+> letting anyone who could reach the portal directly forge their own address
+> ([GHSA-3m5p-2c4r-xxw2][fastify-proxy-advisory]). A leftover number is now
+> ignored — the portal logs a warning at boot and trusts nothing until you name
+> the address.
+
+[fastify-proxy-advisory]: https://github.com/fastify/fastify/security/advisories/GHSA-3m5p-2c4r-xxw2
 
 | Setting / env | Value behind `tailscale serve` | Why |
 | --- | --- | --- |
 | `host` / `PORTAL_HOST` | `127.0.0.1` | The proxy connects over loopback; nothing else should. |
 | `PORTAL_SECURE_COOKIES` | `true` | The browser speaks HTTPS, so cookies must be `Secure`. |
-| `PORTAL_TRUST_PROXY` | `1` | One hop to trust, so limits count the real caller. |
+| `PORTAL_TRUST_PROXY` | `loopback` | Believe the proxy's forwarded address, so limits count the real caller. |
 
 > Use `tailscale serve`, not `tailscale funnel`. Funnel publishes the same URL
 > to the whole internet, which gives back every exposure the reverse-proxy
