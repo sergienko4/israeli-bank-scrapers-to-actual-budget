@@ -274,6 +274,14 @@ Local verification is split across two git hooks. **Pre-commit** runs 5 fast gat
 
 ---
 
+## Upgrade notes
+
+Most releases need nothing beyond `docker pull`. Releases that require you to change your configuration first are listed in [docs/UPGRADING.md](docs/UPGRADING.md). Currently:
+
+- **1.42.12** — `PORTAL_TRUST_PROXY` no longer accepts a proxy hop count. Deployments running the config portal behind a reverse proxy with `PORTAL_TRUST_PROXY=1` (the value previously recommended for `tailscale serve`) must name the proxy's address instead, e.g. `loopback`. Left unchanged the portal still runs, but it credits every request to the proxy, so all callers share one rate-limit bucket and one busy device can lock everyone out of login.
+
+---
+
 ## Documentation
 
 | Topic | Link |
@@ -289,6 +297,7 @@ Local verification is split across two git hooks. **Pre-commit** runs 5 fast gat
 | Architecture | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/architecture/> |
 | Release &amp; deployment | [docs/architecture/release-pipeline.md](docs/architecture/release-pipeline.md) |
 | Troubleshooting | <https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/troubleshooting/> |
+| Upgrade notes (breaking changes) | [docs/UPGRADING.md](docs/UPGRADING.md) |
 | Security | [docs/SECURITY.md](docs/SECURITY.md) |
 | Contributing | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) |
 | Code guidelines | [docs/GUIDELINES.md](docs/GUIDELINES.md) |

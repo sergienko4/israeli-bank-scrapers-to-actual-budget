@@ -159,6 +159,12 @@ See [Oracle Cloud deployment guide](https://github.com/sergienko4/israeli-bank-s
 
 **Fix:** proxy support is **not yet wired** to Camoufox (v7.9.0+). The config is preserved for future use. See [Proxy docs](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/proxy.md).
 
+## Portal rate limit locks everyone out
+
+**Symptom:** the config portal's login limiter blocks people who have barely used it, and the boot log contains `⚠️  PORTAL_TRUST_PROXY is set to a proxy hop count`.
+
+**Fix:** `PORTAL_TRUST_PROXY` stopped accepting a hop count (`1`, `2`) in 1.42.12, because Fastify 5.12.1 removed that form. Until it names the address the proxy connects **from** — `loopback` behind `tailscale serve`, or an IP/CIDR — the portal trusts no forwarded header and credits every request to the proxy, so all callers share one bucket. See [Upgrading](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/UPGRADING.md).
+
 ## Telegram bot stops responding
 
 **Symptom:** `/scan` and `/status` no longer get replies.
