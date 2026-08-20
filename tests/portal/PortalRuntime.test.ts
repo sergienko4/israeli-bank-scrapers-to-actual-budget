@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  credentialFingerprint, isLegacyProxyHopCount, isNonLoopbackHost, isPortalEnabled, isSessionSecretWeak,
+  credentialFingerprint, isLegacyProxyHopCount, isNonLoopbackHost, isPortalEnabled, isRejectedProxyConfig,
+  isSessionSecretWeak,
   portalAuthConfigError, portalBootBlocker, portalCookieOptions, resolvePortalRuntime, resolveSecureCookies,
   resolveTrustProxy,
 } from '../../src/Portal/PortalRuntime.js';
@@ -73,6 +74,22 @@ describe('PortalRuntime', () => {
       expect(resolveTrustProxy()).toBe(false);
     });
 
+    // An empty member names nothing, so dropping it can only shrink the trust
+    // set, never widen it. Rejecting the value outright would turn a trailing
+    // comma or an unset interpolated variable into a silent loss of per-caller
+    // rate limits — a worse outcome than tolerating the typo.
+    it('tolerates empty members without widening trust', () => {
+      process.env.PORTAL_TRUST_PROXY = 'loopback,';
+      expect(resolveTrustProxy()).toEqual(['loopback']);
+      process.env.PORTAL_TRUST_PROXY = ',loopback,,uniquelocal';
+      expect(resolveTrustProxy()).toEqual(['loopback', 'uniquelocal']);
+    });
+
+    it('refuses a signed hop count', () => {
+      process.env.PORTAL_TRUST_PROXY = '-1';
+      expect(resolveTrustProxy()).toBe(false);
+    });
+
     it('carries the resolved proxy addresses into the portal runtime', () => {
       process.env.PORTAL_TRUST_PROXY = 'loopback';
       const config = fakeImporterConfig({ portal: fakePortalConfig() });
@@ -93,6 +110,27 @@ describe('PortalRuntime', () => {
 
     it('is quiet when nothing is configured', () => {
       expect(isLegacyProxyHopCount()).toBe(false);
+    });
+
+    it('spots a signed hop count', () => {
+      process.env.PORTAL_TRUST_PROXY = '+1';
+      expect(isLegacyProxyHopCount()).toBe(true);
+    });
+  });
+
+  describe('isRejectedProxyConfig', () => {
+    it('reports a supplied value that could not be honoured', () => {
+      process.env.PORTAL_TRUST_PROXY = 'not-an-address';
+      expect(isRejectedProxyConfig()).toBe(true);
+    });
+
+    it('stays silent when nothing was supplied', () => {
+      expect(isRejectedProxyConfig()).toBe(false);
+    });
+
+    it('stays silent when the value was honoured', () => {
+      process.env.PORTAL_TRUST_PROXY = 'loopback';
+      expect(isRejectedProxyConfig()).toBe(false);
     });
   });
 

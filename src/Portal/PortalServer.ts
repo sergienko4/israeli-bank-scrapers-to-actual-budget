@@ -16,7 +16,9 @@ import { getLogger } from '../Logger/Index.js';
 import registerApiRoutes from './PortalApiRoutes.js';
 import { registerAuthRoutes } from './PortalAuthRoutes.js';
 import PortalConfigStore from './PortalConfigStore.js';
-import { type IPortalRuntime, isLegacyProxyHopCount, isNonLoopbackHost } from './PortalRuntime.js';
+import {
+  type IPortalRuntime, isLegacyProxyHopCount, isNonLoopbackHost, isRejectedProxyConfig,
+} from './PortalRuntime.js';
 import { handlePortalError } from './PortalValidationError.js';
 
 /**
@@ -97,6 +99,11 @@ const HOP_COUNT_WARNING = '⚠️  PORTAL_TRUST_PROXY is set to a proxy hop coun
   + 'now shares one rate-limit bucket. Name the proxy\'s own address instead: `loopback` behind '
   + '`tailscale serve`, or an IP/CIDR such as 10.0.0.0/8.';
 
+const REJECTED_PROXY_WARNING = '⚠️  PORTAL_TRUST_PROXY was set to a value the portal could not parse, '
+  + 'so it is trusting no forwarded header and every caller now shares one rate-limit bucket. '
+  + 'Each entry must name a proxy address: `loopback`, `linklocal`, `uniquelocal`, an IP, or a '
+  + 'CIDR such as 10.0.0.0/8.';
+
 /**
  * Builds the warning shown when the portal listens beyond loopback.
  * @param host - Resolved bind host.
@@ -111,13 +118,26 @@ function exposedHostWarning(host: string): string {
 }
 
 /**
+ * Reports how `PORTAL_TRUST_PROXY` was interpreted, when that deserves saying.
+ *
+ * A hop count earns the specific upgrade advice; anything else unparseable
+ * earns the generic notice. Both resolve to "trust nothing", which is safe but
+ * indistinguishable from an unset value unless the operator is told.
+ * @returns Warning lines, empty when the setting was honoured or absent.
+ */
+function proxyWarnings(): string[] {
+  if (isLegacyProxyHopCount()) return [HOP_COUNT_WARNING];
+  const isRejected = isRejectedProxyConfig();
+  return isRejected ? [REJECTED_PROXY_WARNING] : [];
+}
+
+/**
  * Collects the boot warnings the resolved runtime deserves.
  * @param rt - Resolved portal runtime.
  * @returns Warning lines to log, empty when nothing is amiss.
  */
 function bootWarnings(rt: IPortalRuntime): string[] {
-  const warnings: string[] = [];
-  if (isLegacyProxyHopCount()) warnings.push(HOP_COUNT_WARNING);
+  const warnings = proxyWarnings();
   if (!isNonLoopbackHost(rt.host)) return warnings;
   const exposed = exposedHostWarning(rt.host);
   warnings.push(exposed);

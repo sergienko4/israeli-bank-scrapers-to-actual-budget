@@ -42,6 +42,20 @@ describe('portal boot warnings', () => {
     expect(warnings.some((line) => line.includes('GHSA-3m5p-2c4r-xxw2'))).toBe(true);
   });
 
+  it('warns when PORTAL_TRUST_PROXY is a signed hop count', async () => {
+    process.env.PORTAL_TRUST_PROXY = '+1';
+    const warnings = await warningsFromBoot('127.0.0.1');
+    expect(warnings.some((line) => line.includes('GHSA-3m5p-2c4r-xxw2'))).toBe(true);
+  });
+
+  // Rejection is indistinguishable from "unset" at runtime, so a typo would
+  // otherwise silently cost the operator their per-caller rate limits.
+  it('warns when PORTAL_TRUST_PROXY is set but unparseable', async () => {
+    process.env.PORTAL_TRUST_PROXY = '10.0.0.0/999';
+    const warnings = await warningsFromBoot('127.0.0.1');
+    expect(warnings.some((line) => line.includes('could not parse'))).toBe(true);
+  });
+
   it('stays quiet when PORTAL_TRUST_PROXY names an address', async () => {
     process.env.PORTAL_TRUST_PROXY = 'loopback';
     const warnings = await warningsFromBoot('127.0.0.1');

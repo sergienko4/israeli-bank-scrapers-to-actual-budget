@@ -220,6 +220,13 @@ function isProxyAddress(entry: string): boolean {
 
 /**
  * Splits a raw `PORTAL_TRUST_PROXY` value into its individual entries.
+ *
+ * Empty members are dropped, so a trailing comma or an unset interpolated
+ * variable is tolerated rather than being treated as a malformed value. Doing
+ * so cannot widen trust — the result is always a subset of what was written —
+ * and it keeps a harmless typo from collapsing the portal into the silent
+ * single-bucket mode. An entry that names something invalid is a different
+ * matter and rejects the whole value; see {@link resolveTrustProxy}.
  * @param raw - Raw environment value, comma-separated.
  * @returns Trimmed, non-empty entries in declaration order.
  */
@@ -263,11 +270,31 @@ export function resolveTrustProxy(): PortalTrustProxy {
  * nothing", which quietly collapses every caller into a single rate-limit
  * bucket. Callers use this to warn the operator to name the proxy's address
  * instead of counting hops.
+ *
+ * A sign is tolerated so a stray `+1` is still recognised as the old form and
+ * earns the specific upgrade advice rather than the generic rejection notice.
  * @returns True when the configured value is a bare integer.
  */
 export function isLegacyProxyHopCount(): boolean {
   const raw = process.env.PORTAL_TRUST_PROXY?.trim() ?? '';
-  return /^\d+$/.test(raw);
+  return /^[+-]?\d+$/.test(raw);
+}
+
+/**
+ * Reports whether `PORTAL_TRUST_PROXY` was set to something the parser refused.
+ *
+ * Rejection is deliberately indistinguishable from "unset" at runtime, both
+ * being "trust nothing". That is safe but silent: the operator believes the
+ * portal reads `X-Forwarded-For` while every caller in fact shares one
+ * rate-limit bucket. Callers use this to say so out loud at boot.
+ *
+ * The verdict is re-derived from the environment rather than taken from a
+ * resolved runtime, so it cannot disagree with itself.
+ * @returns True when a value was supplied but none of it could be honoured.
+ */
+export function isRejectedProxyConfig(): boolean {
+  const raw = process.env.PORTAL_TRUST_PROXY?.trim() ?? '';
+  return raw !== '' && resolveTrustProxy() === false;
 }
 
 /**
