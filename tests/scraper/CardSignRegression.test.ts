@@ -46,11 +46,12 @@ function mapOne(bankId: string, signPolicy: ISignPolicy, txn: IBankTransaction):
 
 /**
  * Computes the `imported_id` the importer would write for a mapped txn.
+ * @param bankId - Bank the transaction belongs to; seeds the account key.
  * @param txn - Mapped transaction to hash.
  * @returns The 16-char content hash.
  */
-function idFor(txn: IBankTransaction): string {
-  return buildImportedId('visacal|9', txn, parseTransaction(txn));
+function idFor(bankId: string, txn: IBankTransaction): string {
+  return buildImportedId(`${bankId}|9`, txn, parseTransaction(txn));
 }
 
 describe('card sign policy after scraper 8.6.7', () => {
@@ -80,15 +81,15 @@ describe('card sign policy after scraper 8.6.7', () => {
 });
 
 describe('imported_id stability across the 8.6.6 to 8.6.7 upgrade', () => {
-  it('keeps the same hash for a card purchase', () => {
-    const before = mapOne('visacal', 'flip-credit', {
+  it.each(CARD_BANKS)('keeps the same hash for a %s purchase', (bankId) => {
+    const before = mapOne(bankId, 'flip-credit', {
       date: '2026-01-15', description: 'SUPERMARKET', chargedAmount: 122.17, originalAmount: 122.17,
     });
-    const after = mapOne('visacal', 'preserve', {
+    const after = mapOne(bankId, 'preserve', {
       date: '2026-01-15', description: 'SUPERMARKET', chargedAmount: -122.17, originalAmount: -122.17,
     });
     expect(after.chargedAmount).toBe(before.chargedAmount);
-    expect(idFor(after)).toBe(idFor(before));
+    expect(idFor(bankId, after)).toBe(idFor(bankId, before));
   });
 
   it('keeps the same hash for a fully-signed refund', () => {
@@ -99,7 +100,7 @@ describe('imported_id stability across the 8.6.6 to 8.6.7 upgrade', () => {
       date: '2026-01-20', description: 'RETURN', chargedAmount: 50, originalAmount: 50,
     });
     expect(after.chargedAmount).toBe(before.chargedAmount);
-    expect(idFor(after)).toBe(idFor(before));
+    expect(idFor('isracard', after)).toBe(idFor('isracard', before));
   });
 
   it('changes the hash for a partially-signed VisaCal refund', () => {
@@ -111,6 +112,6 @@ describe('imported_id stability across the 8.6.6 to 8.6.7 upgrade', () => {
     });
     expect(before.chargedAmount).toBe(-50);
     expect(after.chargedAmount).toBe(50);
-    expect(idFor(after)).not.toBe(idFor(before));
+    expect(idFor('visacal', after)).not.toBe(idFor('visacal', before));
   });
 });
