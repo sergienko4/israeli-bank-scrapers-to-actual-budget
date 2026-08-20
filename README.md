@@ -65,6 +65,31 @@ See [Quick Start guide](https://sergienko4.github.io/israeli-bank-scrapers-to-ac
 
 See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/banks/) · [docs/banks/](docs/banks/).
 
+> **Upgrade note — credit-card signs (scraper 8.6.7).** Card issuers (Visa Cal,
+> Max, Isracard, Amex) now emit charges as negative amounts at the source, so
+> this importer no longer flips them. Card charges keep landing as outflows and
+> existing rows are untouched, because the `imported_id` hash is unchanged.
+>
+> One exception: Visa Cal refunds were previously recorded with the wrong sign
+> (as spend instead of income). They are now correct, but the corrected row has
+> a different `imported_id`, so it imports alongside the old wrong row. After
+> your first import on 8.6.7, run the cleanup command to list and remove them:
+>
+> ```bash
+> # Report only — lists suspected stale rows, changes nothing
+> docker run --rm -v "$PWD/config.json:/app/config.json:ro" \
+>   ghcr.io/sergienko4/israeli-bank-importer --cleanup-card-refunds
+>
+> # Delete them once you have reviewed the list
+> docker run --rm -v "$PWD/config.json:/app/config.json:ro" \
+>   ghcr.io/sergienko4/israeli-bank-importer --cleanup-card-refunds --confirm
+> ```
+>
+> The command only inspects credit-card accounts, and only ever deletes the
+> wrongly-signed row of a matched pair. A genuine same-day, same-merchant
+> purchase and refund of equal value is indistinguishable from a stale pair,
+> so review the report before passing `--confirm`.
+
 ---
 
 ## Features
@@ -182,10 +207,10 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 <summary><b>Tech stack</b></summary>
 
 <!-- meta:tech-stack:start -->
-- **Node.js** >=22.0.0 (Docker base: `node:26-slim`)
+- **Node.js** >=22.14.0 (Docker base: `node:26-slim`)
 - **TypeScript** ^6.0.3 (strict mode, ES2022)
 - **Vitest** ^4.1.9 (v8 coverage)
-- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.6.6
+- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.6.7
 - **Browser** Camoufox (Firefox + C++-level fingerprint masking)
 - **Actual Budget API** `@actual-app/api` ^26.8.1
 <!-- meta:tech-stack:end -->

@@ -5,6 +5,7 @@
  * decoupling refactor. Owns three responsibilities the importer entry
  * point used to perform inline:
  *   - `--validate` CLI short-circuit (dynamic import + process.exit)
+ *   - `--cleanup-card-refunds` CLI short-circuit (8.6.7 sign migration)
  *   - ConfigLoader.load() with stderr+exit on failure
  *   - createLogger() initialisation (logger remains a module singleton
  *     accessed via getLogger() throughout the codebase)
@@ -35,6 +36,32 @@ export async function handleValidateMode(): Promise<IProcedureSuccess<{ status: 
   if (!process.argv.includes('--validate')) return succeed({ status: 'skipped' });
   const { runValidateMode } = await import('../Config/ConfigValidator.js');
   process.exit(await runValidateMode());
+}
+
+/**
+ * Short-circuits the process when `--cleanup-card-refunds` is present in argv.
+ *
+ * One-off migration for the israeli-bank-scrapers 8.6.7 upgrade: removes
+ * credit-card refund rows this importer wrote with an inverted sign while
+ * `signPolicy: 'flip-credit'` was still in force. Reports by default and
+ * only deletes when `--confirm` is also supplied. Boots config and the
+ * logger first so the command reports through the operator's configured
+ * sink, then injects the config and the operator's `--confirm` decision —
+ * keeping the Actual Budget client lazy for the same reason as
+ * {@link handleValidateMode}.
+ *
+ * @returns Procedure indicating the cleanup phase was skipped (or never returns).
+ */
+export async function handleCardRefundCleanupMode(): Promise<
+  IProcedureSuccess<{ status: string }>
+> {
+  if (!process.argv.includes('--cleanup-card-refunds')) return succeed({ status: 'skipped' });
+  const config = bootConfigAndLogger();
+  const isConfirmed = process.argv.includes('--confirm');
+  const { default: runCardRefundCleanup } = await import(
+    '../Services/Transaction/CardRefundCleanup.js'
+  );
+  process.exit(await runCardRefundCleanup(config, isConfirmed));
 }
 
 /**

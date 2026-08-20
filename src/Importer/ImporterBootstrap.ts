@@ -16,7 +16,7 @@ import describeBrowserVersion from '../Scraper/BrowserVersion.js';
 import { execute } from '../Scrapers/Pipeline/Index.js';
 import type { IImporterConfig, IProcedureSuccess } from '../Types/Index.js';
 import { isFail, succeed } from '../Types/Index.js';
-import { bootConfigAndLogger, handleValidateMode } from './ConfigBootstrap.js';
+import { bootConfigAndLogger, handleCardRefundCleanupMode, handleValidateMode } from './ConfigBootstrap.js';
 import type { IImporterWiring } from './ImporterWiring.js';
 import { buildImporter } from './ImporterWiring.js';
 import type { IProcessLifecycle } from './ProcessLifecycle.js';
@@ -110,16 +110,18 @@ async function runImporter(handle: IImporterBootHandle): Promise<never> {
 }
 
 /**
- * Top-level entry: short-circuits on --validate, otherwise assembles
- * everything and runs the importer pipeline to completion.
+ * Top-level entry: short-circuits on --validate or --cleanup-card-refunds,
+ * otherwise assembles everything and runs the importer pipeline to completion.
  *
  * @returns Promise that never resolves on the main path (process
- *   exits before resolution). Only awaits on the validate-mode
- *   short-circuit, which itself terminates the process before return.
+ *   exits before resolution). Only awaits on the CLI-mode
+ *   short-circuits, which themselves terminate the process before return.
  */
 export async function bootImporter(): Promise<never> {
   // --validate mode: validator runs and calls process.exit; returns 'skipped' otherwise
   await handleValidateMode();
+  // --cleanup-card-refunds: one-off 8.6.7 sign migration; exits when present
+  await handleCardRefundCleanupMode();
   const handle = buildImporterBootHandle();
   emitStartupBanner(handle.wiring);
   return await runImporter(handle);

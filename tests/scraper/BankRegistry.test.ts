@@ -58,13 +58,18 @@ describe('createBankRegistry', () => {
     }
   });
 
-  it('marks credit-card banks with flip-credit sign policy', () => {
+  it('marks credit-card banks with preserve sign policy since scraper 8.6.7', () => {
     for (const id of ['visacal', 'max', 'isracard', 'amex']) {
       const result = registry.resolve(id);
       expect(result.success).toBe(true);
       if (!result.success) continue;
-      expect(result.data.signPolicy).toBe('flip-credit');
+      expect(result.data.signPolicy).toBe('preserve');
     }
+  });
+
+  it('applies no flip-credit policy to any bank', () => {
+    const flipping = registry.list().filter((b) => b.signPolicy === 'flip-credit');
+    expect(flipping).toEqual([]);
   });
 
   it('marks regular banks with preserve sign policy', () => {

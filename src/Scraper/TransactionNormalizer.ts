@@ -1,27 +1,28 @@
 /**
  * Scraper-boundary normalizer for credit-card sign conventions.
  *
- * Israeli credit-card scrapers (visaCal, max, isracard, amex) in
- * `@sergienko4/israeli-bank-scrapers` return `chargedAmount` with the
- * source-statement sign convention (purchases positive, refunds negative).
- * The scraper's own `maybeNegateAmount` step is supposed to flip this on
- * its way out but silently fails for these four scrapers in 8.3.0.
+ * Retained mechanism, no longer active by default. Israeli credit-card
+ * scrapers (visaCal, max, isracard, amex) in
+ * `@sergienko4/israeli-bank-scrapers` used to return `chargedAmount` with the
+ * source-statement sign convention (purchases positive, refunds negative),
+ * because the scraper's own `maybeNegateAmount` step did not fire for them.
+ * Scraper 8.6.7 (upstream PR #483) marks those four issuers `isCardIssuer`
+ * and negates at the source, so every bank now ships `signPolicy: 'preserve'`
+ * and this flip is not applied — applying it as well would book every card
+ * charge as income.
  *
- * Actual Budget's convention is the opposite (outflows negative, inflows
- * positive). Multiplying both `chargedAmount` and `originalAmount` by -1
- * for these four banks reconciles the two conventions in both directions.
+ * Kept as an escape hatch: re-setting a bank to `flip-credit` in
+ * `BANK_CATALOG` reactivates this path should upstream regress.
+ *
+ * Actual Budget's convention is outflows negative, inflows positive.
+ * Multiplying both `chargedAmount` and `originalAmount` by -1 reconciles the
+ * two conventions in both directions.
  *
  * Generic over the transaction shape so the same normalizer fits both
  * the upstream `ITransaction` type and our internal `IBankTransaction`.
  */
 
-/** Bank keys whose transaction amounts are inverted relative to Actual Budget. */
-const CREDIT_CARD_BANKS: ReadonlySet<string> = new Set([
-  'visacal',
-  'max',
-  'isracard',
-  'amex',
-]);
+import { CREDIT_CARD_BANKS } from '../Types/BankCatalog.js';
 
 /** Subset of transaction shape that this normalizer touches. */
 export interface ISignedTxn {
