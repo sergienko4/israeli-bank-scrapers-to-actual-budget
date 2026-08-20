@@ -251,46 +251,113 @@ gate has no e2e leg.
 
 ## Phase 5: Commit, push, PR
 
-Status: Not started
+Status: In progress (PR open, CI running)
 
-- [ ] Re-read `before-commit-guidlines.md` + `commit-guidlines.md`; pre-flight:
+- [x] Re-read `before-commit-guidlines.md` + `commit-guidlines.md`; pre-flight:
       subject ≤50 chars, body wrap ≤72, atomic commit, selective staging
       (never `git add .`).
-- [ ] Commit: `fix(import): record audit entry for fully failed runs`
-      (body: WHY — INV-4 all-failed path skipped finalize, so failed runs never
-      reached the audit log and `/api/status` hid them from the app).
-- [ ] Push branch; open PR with Conventional Commit title and a
+- [x] Commit: `fix(import): record fully failed runs in audit log`
+      (subject 48 chars; body: WHY — INV-4 all-failed path skipped finalize,
+      so failed runs never reached the audit log and `/api/status` hid them
+      from the app).
+- [x] Push branch; open PR with Conventional Commit title and a
       `## Guideline compliance` section (checkbox table + verification output
       per row, per `pr-guidlines.md`).
-- [ ] Self-review the PR diff against `pr-review-guidlines.md` order (context →
+- [x] Self-review the PR diff against `pr-review-guidlines.md` order (context →
       flow → scope → correctness → security → tests → reliability → deployment →
       naming) before requesting review; confirm the 20-item Final Approval
       checklist before merging.
 - [ ] Wait for CI (`pr.yml`: build, tests, lint, Trivy, CodeQL, markdownlint,
       lychee) — all green before merge; squash & merge only then.
-- [ ] Read `post-pr-checklist.md` after the PR opens.
+- [x] Read `post-pr-checklist.md` after the PR opens. (Applicable now: C9 — no
+      CodeRabbit rate-limit comment, review skipped as "manual review required"
+      for this OSS repo → no watchdog. C1/C5/C7/C8/C10 apply post-merge.)
 
 ### Verification Plan
 
-- `npm run validate:all` green before push.
-- `git diff --cached --stat` matches exactly the intended files (source +
-  tests + plan + any doc fix).
-- PR URL reported when opened.
+- [x] `npm run validate:all` green before push. (All legs green except
+      `test:e2e:mock` portal-browser suites, which cannot run locally —
+      camoufox binary not installed; environment-only, unrelated to this
+      change; CI's `validate:ci` gate has no e2e leg.)
+- [x] `git diff --cached --stat` matches exactly the intended files (source +
+      tests + plan + any doc fix). (Fixture JSONs mutated by the e2e:mock run
+      were detected and restored before commit.)
+- [x] PR URL reported when opened.
 
 ### Phase Summary
 
-_(write when phase completes)_
+Committed `9769c8a` on top of the #634 merge (`6e910ac`); pre-commit 6-gate
+hook suite green. Push ran the pre-push 9-gate suite green. PR opened:
+https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/pull/637
+with `## Guideline compliance` table (12 rows) + root-cause chain + changes +
+testing evidence + rebase note. Self-review per `pr-review-guidlines.md`
+order (context → flow → scope → correctness → security → tests → reliability →
+deployment → naming): context ✅ (plan cross-referenced, no stale claims),
+flow ✅ (metrics flushed before `finalizeContext` — summary is complete),
+scope ✅ (app repo untouched, notifications/exit codes unchanged), correctness
+✅ (guards: dry-run, totalBanks 0, best-effort warns), security ✅ (redacted
+errors only, no PII, no new env reads — INV-1 held), tests ✅ (red → green →
+regression + portal contract), reliability ✅ (write failure cannot change the
+pipeline outcome), deployment ✅ (server release only; app needs no release),
+naming ✅ (module-private `recordFailedRun`, repo casing). 20-item Final
+Approval checklist: all items pass (JSDoc, no `any`/`!`, ≤20 lines/≤3 params,
+no comments without WHY, conventional commit, docs accurate, coverage above
+gate, no secrets, atomic diff). Post-PR checklist read; C9 N/A (no CodeRabbit
+rate-limit). CI pending: Build & Audit, CodeQL, Container Security,
+Documentation Quality, License Compliance; Semgrep + PR Status Watch already
+green.
 
 ## Final Recap
 
-_(write when all phases complete: summary of the entire piece of work)_
+**Goal:** stop failed import runs from being invisible in the mobile app —
+a run where no configured bank succeeds was never written to the audit log,
+so `/api/status` never returned it and the app showed only green runs.
+
+**Root cause (server-side):** INV-4 in `ProcessAllBanksStep.finalizeContext`
+returns `fail('banks-failed')` when all banks fail; `PipelineRunner` then
+short-circuits before the `finalize` step — the only caller of
+`auditLogService.record()`. The failed run therefore never reached the audit
+JSON, and the scheduler's one-child-per-bank shape meant every failed bank
+child recorded nothing at all.
+
+**Fix:** `recordFailedRun(ctx)` helper in `ProcessAllBanksStep` — called on
+the all-failed branch BEFORE the failure is returned; reads the already
+flushed metrics summary and records it best-effort (warns, never changes the
+outcome). Skips dry-runs; notifications, exit codes, and the failure result
+are byte-identical. No new services or wiring; no app-repo changes.
+
+**Verification:** red→green TDD (1 red test reproduced the bug), 3 new step
+tests + 1 new portal contract test, full suite 2552 green, coverage
+96.7/92.5/97.2/97.4 (gates 90/90/95/90), lint/canaries/circular/coupling/
+docs/config-structure/manifest all green, pre-commit + pre-push hook suites
+green. Rebased onto the fastify 5.12.1 trust-proxy security merge (#634) with
+all gates re-verified on the merged base.
+
+**Outcome:** after this ships, a fully failed run produces one audit entry
+(per-bank `status: 'failure'` + redacted `error`, `successRate: 0`), and the
+app's `RunCard` renders the red run with its error text — no app release
+needed.
 
 ## Deployment Plan
 
-_(write when all phases complete: step-by-step deployment instructions)_
-
-Expected shape: merge the `fix:` PR → release-please creates a Release PR →
-merge → patch bump (`fix:` → patch) → git tag → Docker image built and pushed
-to Docker Hub. The mobile app requires NO release: existing app builds already
-parse `error`/`failure` fields and will render red runs as soon as the importer
-serves them (contract validated in Phase 3).
+1. Review and merge PR #637 (`fix(import): record fully failed runs in audit
+   log`) once CI is green — squash & merge (repo rule: PR-only merges).
+2. release-please creates the Release PR from the merge; merge it → patch
+   bump (`fix:` → patch) → git tag → Docker image built and pushed to
+   Docker Hub by the release workflow.
+3. Pull the new image on the server (`docker compose pull && up -d`), or
+   restart the service if running the image by tag.
+4. The importer writes the audit log and the portal reads it — both run from
+   the same new image in the standard deployment, so no path changes. For a
+   split deployment (importer and portal on different images), `AUDIT_LOG_PATH`
+   must remain a shared volume; no format change, old entries stay valid.
+5. **If the deployment still sets `PORTAL_TRUST_PROXY=1`** (per the #634
+   breaking change): switch it to `loopback` (tailscale serve on the same
+   host) or the proxy's IP/CIDR before or with this rollout — a leftover
+   number silently collapses all callers into one rate-limit bucket.
+6. The mobile app requires NO release: existing app builds already parse
+   `error`/`failure` fields and will render red runs as soon as the importer
+   serves them (contract validated in Phase 3).
+7. Smoke-test: trigger an import against a misconfigured bank, or wait for a
+   real bank outage; confirm the app's status screen now shows the failed run
+   with its error text (was: missing entirely).
