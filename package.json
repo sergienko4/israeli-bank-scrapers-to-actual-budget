@@ -108,7 +108,7 @@
     "find-my-way": "^9.7.0"
   },
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=22.14.0",
     "npm": ">=10.0.0"
   },
   "author": "Israeli Bank Importer Contributors",

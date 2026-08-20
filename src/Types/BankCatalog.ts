@@ -22,17 +22,9 @@ export interface IBankCatalogEntry {
   readonly companyType: CompanyTypes;
   readonly aliases: readonly string[];
   readonly signPolicy: ISignPolicy;
+  /** True when this issuer's statements are card statements, not bank accounts. */
+  readonly isCreditCard?: boolean;
 }
-
-/**
- * Bank IDs whose statements are credit-card statements rather than bank
- * accounts. Lives here — beside the sign policy it explains — so both the
- * Scraper's sign normalizer and the card-refund cleanup command read one
- * source of truth without either depending on the other.
- */
-export const CREDIT_CARD_BANKS: ReadonlySet<string> = Object.freeze(
-  new Set(['visacal', 'max', 'isracard', 'amex']),
-);
 
 /**
  * Freezes one catalog entry so the shared catalog stays fully immutable.
@@ -61,10 +53,10 @@ export const BANK_CATALOG: readonly IBankCatalogEntry[] = Object.freeze([
   entry({ bankId: 'beinleumi',        companyType: CompanyTypes.Beinleumi,        aliases: ['beinleumi'],                             signPolicy: 'preserve' }),
   entry({ bankId: 'massad',           companyType: CompanyTypes.Massad,           aliases: ['massad'],                                signPolicy: 'preserve' }),
   entry({ bankId: 'yahav',            companyType: CompanyTypes.Yahav,            aliases: ['yahav'],                                 signPolicy: 'preserve' }),
-  entry({ bankId: 'visacal',          companyType: CompanyTypes.VisaCal,          aliases: ['visaCal', 'visacal'],                    signPolicy: 'preserve' }),
-  entry({ bankId: 'max',              companyType: CompanyTypes.Max,              aliases: ['max'],                                   signPolicy: 'preserve' }),
-  entry({ bankId: 'isracard',         companyType: CompanyTypes.Isracard,         aliases: ['isracard'],                              signPolicy: 'preserve' }),
-  entry({ bankId: 'amex',             companyType: CompanyTypes.Amex,             aliases: ['amex'],                                  signPolicy: 'preserve' }),
+  entry({ bankId: 'visacal',          companyType: CompanyTypes.VisaCal,          aliases: ['visaCal', 'visacal'],                    signPolicy: 'preserve', isCreditCard: true }),
+  entry({ bankId: 'max',              companyType: CompanyTypes.Max,              aliases: ['max'],                                   signPolicy: 'preserve', isCreditCard: true }),
+  entry({ bankId: 'isracard',         companyType: CompanyTypes.Isracard,         aliases: ['isracard'],                              signPolicy: 'preserve', isCreditCard: true }),
+  entry({ bankId: 'amex',             companyType: CompanyTypes.Amex,             aliases: ['amex'],                                  signPolicy: 'preserve', isCreditCard: true }),
   entry({ bankId: 'beyahadbishvilha', companyType: CompanyTypes.BeyahadBishvilha, aliases: ['beyahadBishvilha', 'beyahadbishvilha'],  signPolicy: 'preserve' }),
   entry({ bankId: 'behatsdaa',        companyType: CompanyTypes.Behatsdaa,        aliases: ['behatsdaa'],                             signPolicy: 'preserve' }),
   entry({ bankId: 'pagi',             companyType: CompanyTypes.Pagi,             aliases: ['pagi'],                                  signPolicy: 'preserve' }),
@@ -72,3 +64,17 @@ export const BANK_CATALOG: readonly IBankCatalogEntry[] = Object.freeze([
   entry({ bankId: 'paybox',           companyType: CompanyTypes.PayBox,           aliases: ['payBox', 'paybox'],                      signPolicy: 'preserve' }),
   entry({ bankId: 'pepper',           companyType: CompanyTypes.Pepper,           aliases: ['pepper'],                                signPolicy: 'preserve' }),
 ]);
+
+/** Bank IDs of every catalog entry flagged {@link IBankCatalogEntry.isCreditCard}. */
+const CARD_BANK_IDS: readonly string[] = BANK_CATALOG
+  .filter((bank) => bank.isCreditCard === true)
+  .map((bank) => bank.bankId);
+
+/**
+ * Bank IDs whose statements are credit-card statements rather than bank
+ * accounts. Derived from the catalog itself — beside the sign policy it
+ * explains — so both the Scraper's sign normalizer and the card-refund
+ * cleanup command read one source of truth without either depending on the
+ * other, and adding a card issuer stays a one-line catalog edit.
+ */
+export const CREDIT_CARD_BANKS: ReadonlySet<string> = new Set(CARD_BANK_IDS);

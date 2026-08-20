@@ -143,8 +143,19 @@ describe('ConfigBootstrap', () => {
 
       await expect(handleCardRefundCleanupMode()).rejects.toThrow('__exit:0');
 
-      expect(mockRunCardRefundCleanup).toHaveBeenCalledWith(config);
+      expect(mockRunCardRefundCleanup).toHaveBeenCalledWith(config, false);
       expect(mockCreateLogger).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards the --confirm decision from argv into the cleanup command', async () => {
+      process.argv = ['node', 'index.js', '--cleanup-card-refunds', '--confirm'];
+      const config = makeConfig();
+      mockLoad.mockReturnValue(succeed(config));
+      mockRunCardRefundCleanup.mockResolvedValue(0);
+
+      await expect(handleCardRefundCleanupMode()).rejects.toThrow('__exit:0');
+
+      expect(mockRunCardRefundCleanup).toHaveBeenCalledWith(config, true);
     });
 
     it('forwards a non-zero cleanup exit code', async () => {

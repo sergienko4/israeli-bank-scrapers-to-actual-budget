@@ -8,7 +8,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { IImporterConfig } from '../../src/Types/Index.js';
+import type { IBankConfig, IImporterConfig } from '../../src/Types/Index.js';
+import { fakeBankConfig, fakeBankTarget, fakeImporterConfig } from '../helpers/factories.js';
 
 const { mockLogger } = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -42,12 +43,14 @@ const ACTUAL_SECTION = {
 
 /**
  * Builds a config whose banks map is supplied by the caller.
+ *
+ * The `actual` section is pinned rather than faked so the connection
+ * assertions stay deterministic.
  * @param banks - The banks section to embed in the config.
  * @returns A config object shaped for the cleanup command.
  */
-function configWith(banks: Record<string, unknown>): IImporterConfig {
-  const config = { actual: ACTUAL_SECTION, banks };
-  return config as unknown as IImporterConfig;
+function configWith(banks: Record<string, IBankConfig>): IImporterConfig {
+  return fakeImporterConfig({ actual: ACTUAL_SECTION, banks });
 }
 
 /**
@@ -55,8 +58,8 @@ function configWith(banks: Record<string, unknown>): IImporterConfig {
  * @param accountId - The Actual account UUID the bank targets.
  * @returns A bank config with one target.
  */
-function bankTargeting(accountId: string): Record<string, unknown> {
-  return { targets: [{ actualAccountId: accountId, reconcile: false, accounts: 'all' }] };
+function bankTargeting(accountId: string): IBankConfig {
+  return fakeBankConfig({ targets: [fakeBankTarget({ actualAccountId: accountId })] });
 }
 
 /**
@@ -91,20 +94,34 @@ describe('runCardRefundCleanup', () => {
   it('returns 1 and logs when Actual cannot be reached', async () => {
     mockApi.init.mockRejectedValue(new Error('cannot reach server'));
 
-    expect(await runCardRefundCleanup(configWith({}))).toBe(1);
+    expect(await runCardRefundCleanup(configWith({}), false)).toBe(1);
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('cannot reach server'));
   });
 
   it('shuts the API down even when the run fails', async () => {
     mockApi.init.mockRejectedValue(new Error('cannot reach server'));
 
-    await runCardRefundCleanup(configWith({}));
+    await runCardRefundCleanup(configWith({}), false);
 
     expect(mockApi.shutdown).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the run exit code when shutdown itself fails', async () => {
+    mockApi.shutdown.mockRejectedValue(new Error('socket already closed'));
+
+    expect(await runCardRefundCleanup(configWith({}), false)).toBe(0);
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('socket already closed'));
+  });
+
+  it('keeps the failure exit code when the run and shutdown both fail', async () => {
+    mockApi.init.mockRejectedValue(new Error('cannot reach server'));
+    mockApi.shutdown.mockRejectedValue(new Error('socket already closed'));
+
+    expect(await runCardRefundCleanup(configWith({}), false)).toBe(1);
+  });
+
   it('connects with the configured credentials and budget', async () => {
-    await runCardRefundCleanup(configWith({}));
+    await runCardRefundCleanup(configWith({}), false);
 
     expect(mockApi.init).toHaveBeenCalledWith(ACTUAL_SECTION.init);
     expect(mockApi.downloadBudget).toHaveBeenCalledWith('sync-1', { password: undefined });
@@ -116,6 +133,7 @@ describe('runCardRefundCleanup', () => {
         visaCal: bankTargeting('card-account'),
         hapoalim: bankTargeting('bank-account'),
       }),
+      false,
     );
 
     expect(mockApi.q().filter).toHaveBeenCalledWith({ account: 'card-account' });
@@ -125,16 +143,16 @@ describe('runCardRefundCleanup', () => {
   it('reports a clean slate and returns 0 when nothing matches', async () => {
     const config = configWith({ max: bankTargeting('a1') });
 
-    expect(await runCardRefundCleanup(config)).toBe(0);
+    expect(await runCardRefundCleanup(config, false)).toBe(0);
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('nothing to clean up'));
     expect(mockApi.deleteTransaction).not.toHaveBeenCalled();
   });
 
-  it('reports candidates without deleting when --confirm is absent', async () => {
+  it('reports candidates without deleting when not confirmed', async () => {
     mockApi.aqlQuery.mockResolvedValue({ data: stalePairRows() });
     const config = configWith({ visaCal: bankTargeting('a1') });
 
-    expect(await runCardRefundCleanup(config)).toBe(0);
+    expect(await runCardRefundCleanup(config, false)).toBe(0);
     expect(mockApi.deleteTransaction).not.toHaveBeenCalled();
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('re-run with --confirm'));
   });
@@ -142,29 +160,39 @@ describe('runCardRefundCleanup', () => {
   it('always prints the ambiguity warning alongside candidates', async () => {
     mockApi.aqlQuery.mockResolvedValue({ data: stalePairRows() });
 
-    await runCardRefundCleanup(configWith({ visaCal: bankTargeting('a1') }));
+    await runCardRefundCleanup(configWith({ visaCal: bankTargeting('a1') }), false);
 
     expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('WARNING'));
   });
 
-  it('deletes only the wrongly-signed row when --confirm is present', async () => {
-    process.argv = ['node', 'index.js', '--cleanup-card-refunds', '--confirm'];
+  it('deletes only the wrongly-signed row when confirmed', async () => {
     mockApi.aqlQuery.mockResolvedValue({ data: stalePairRows() });
     const config = configWith({ visaCal: bankTargeting('a1') });
 
-    expect(await runCardRefundCleanup(config)).toBe(0);
+    expect(await runCardRefundCleanup(config, true)).toBe(0);
     expect(mockApi.deleteTransaction).toHaveBeenCalledTimes(1);
     expect(mockApi.deleteTransaction).toHaveBeenCalledWith('stale');
+  });
+
+  it('logs every deleted row id so a partial run stays auditable', async () => {
+    mockApi.aqlQuery.mockResolvedValue({ data: stalePairRows() });
+
+    await runCardRefundCleanup(configWith({ visaCal: bankTargeting('a1') }), true);
+
+    expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('stale'));
+    expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Deleted 1 stale'));
   });
 
   it('tolerates Actual returning no data field', async () => {
     mockApi.aqlQuery.mockResolvedValue(null);
 
-    expect(await runCardRefundCleanup(configWith({ amex: bankTargeting('a1') }))).toBe(0);
+    expect(await runCardRefundCleanup(configWith({ amex: bankTargeting('a1') }), false)).toBe(0);
   });
 
   it('handles a card bank configured without any targets', async () => {
-    expect(await runCardRefundCleanup(configWith({ isracard: {} }))).toBe(0);
+    const noTargets = fakeBankConfig({ targets: undefined });
+
+    expect(await runCardRefundCleanup(configWith({ isracard: noTargets }), false)).toBe(0);
     expect(mockApi.aqlQuery).not.toHaveBeenCalled();
   });
 
@@ -172,7 +200,7 @@ describe('runCardRefundCleanup', () => {
     mockApi.aqlQuery.mockRejectedValue(new Error('server down'));
     const config = configWith({ visaCal: bankTargeting('a1') });
 
-    expect(await runCardRefundCleanup(config)).toBe(1);
+    expect(await runCardRefundCleanup(config, false)).toBe(1);
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining('server down'));
   });
 });

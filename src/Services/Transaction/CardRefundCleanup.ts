@@ -5,8 +5,9 @@
  *
  * Owns every side effect (Actual Budget connection, AQL query, row
  * deletion) so {@link findStaleRefundCandidates} stays pure and
- * unit-testable. Configuration is injected by the composition root rather
- * than loaded here, keeping this module free of Config-layer coupling.
+ * unit-testable. Configuration and the operator's `--confirm` decision are
+ * injected by the composition root rather than read here, keeping this
+ * module free of Config-layer coupling and of `process.argv`.
  * See StaleRefundFinder.ts for why stale rows exist and why the match
  * cannot be proven from stored data alone.
  *
@@ -132,17 +133,29 @@ function emitReport(candidates: readonly IStaleRefundCandidate[]): number {
 }
 
 /**
+ * Deletes one stale row and records it, so a mid-run failure still leaves
+ * an audit trail of exactly which rows were already removed.
+ *
+ * @param candidate - The candidate whose stale row should be deleted.
+ * @returns The id of the row that was deleted.
+ */
+async function deleteOne(candidate: IStaleRefundCandidate): Promise<string> {
+  await api.deleteTransaction(candidate.staleRowId);
+  getLogger().info(`Deleted stale refund row ${candidate.staleRowId}.`);
+  return candidate.staleRowId;
+}
+
+/**
  * Deletes the stale row of every candidate pair, leaving the corrected row.
  *
  * @param candidates - The candidates the operator confirmed for deletion.
  * @returns The number of rows deleted.
  */
 async function deleteCandidates(candidates: readonly IStaleRefundCandidate[]): Promise<number> {
-  const deletions = candidates.map((candidate) => api.deleteTransaction(candidate.staleRowId));
-  await Promise.all(deletions);
-  const count = deletions.length;
-  getLogger().info(`Deleted ${String(count)} stale refund row(s).`);
-  return count;
+  const deletions = candidates.map((candidate) => deleteOne(candidate));
+  const deleted = await Promise.all(deletions);
+  getLogger().info(`Deleted ${String(deleted.length)} stale refund row(s).`);
+  return deleted.length;
 }
 
 /**
@@ -156,17 +169,27 @@ function reportNoCandidates(): number {
 }
 
 /**
+ * Reports the dry-run outcome, leaving every candidate row untouched.
+ *
+ * @returns Exit code 0 — reporting without deleting is the default success path.
+ */
+function reportDryRun(): number {
+  getLogger().info('Dry run — re-run with --confirm to delete the stale rows.');
+  return 0;
+}
+
+/**
  * Applies the report-then-optionally-delete decision for found candidates.
  *
  * @param candidates - Every candidate discovered across card accounts.
+ * @param isConfirmed - True when the operator authorised deletion.
  * @returns Exit code 0 — the command never fails on candidate count alone.
  */
-async function resolveCandidates(candidates: readonly IStaleRefundCandidate[]): Promise<number> {
+async function resolveCandidates(
+  candidates: readonly IStaleRefundCandidate[], isConfirmed: boolean,
+): Promise<number> {
   emitReport(candidates);
-  if (!process.argv.includes('--confirm')) {
-    getLogger().info('Dry run — re-run with --confirm to delete the stale rows.');
-    return 0;
-  }
+  if (!isConfirmed) return reportDryRun();
   await deleteCandidates(candidates);
   return 0;
 }
@@ -175,28 +198,62 @@ async function resolveCandidates(candidates: readonly IStaleRefundCandidate[]): 
  * Runs the cleanup end to end, without the error boundary.
  *
  * @param config - The loaded importer configuration.
+ * @param isConfirmed - True when the operator authorised deletion.
  * @returns Exit code 0 once the report (and any deletion) has completed.
  */
-async function runCleanup(config: IImporterConfig): Promise<number> {
+async function runCleanup(config: IImporterConfig, isConfirmed: boolean): Promise<number> {
   await connect(config);
   const candidates = await collectCandidates(config);
   if (candidates.length === 0) return reportNoCandidates();
-  return await resolveCandidates(candidates);
+  return await resolveCandidates(candidates, isConfirmed);
+}
+
+/**
+ * Closes the Actual client without letting a shutdown failure mask the run's
+ * own outcome — a teardown error must never turn a clean run into a crash.
+ *
+ * @returns True when shutdown completed, false when it failed.
+ */
+async function shutdownQuietly(): Promise<boolean> {
+  try {
+    await api.shutdown();
+    return true;
+  } catch (error: unknown) {
+    getLogger().warn(`Actual Budget shutdown failed: ${errorMessage(error)}`);
+    return false;
+  }
+}
+
+/**
+ * Runs the cleanup, converting any unexpected failure into exit code 1.
+ *
+ * @param config - The loaded importer configuration.
+ * @param isConfirmed - True when the operator authorised deletion.
+ * @returns Exit code: 0 on success, 1 when the run could not complete.
+ */
+async function runGuarded(config: IImporterConfig, isConfirmed: boolean): Promise<number> {
+  try {
+    return await runCleanup(config, isConfirmed);
+  } catch (error: unknown) {
+    getLogger().error(`Card refund cleanup failed: ${errorMessage(error)}`);
+    return 1;
+  }
 }
 
 /**
  * CLI entry point for `--cleanup-card-refunds` mode.
  *
+ * Shutdown runs after the guarded run and cannot alter its exit code, so a
+ * teardown failure never masks the outcome the operator needs to see.
+ *
  * @param config - The importer configuration loaded by the composition root.
+ * @param isConfirmed - True when the operator passed `--confirm`.
  * @returns Exit code: 0 on success, 1 when the run could not complete.
  */
-export default async function runCardRefundCleanup(config: IImporterConfig): Promise<number> {
-  try {
-    return await runCleanup(config);
-  } catch (error: unknown) {
-    getLogger().error(`Card refund cleanup failed: ${errorMessage(error)}`);
-    return 1;
-  } finally {
-    await api.shutdown();
-  }
+export default async function runCardRefundCleanup(
+  config: IImporterConfig, isConfirmed: boolean,
+): Promise<number> {
+  const exitCode = await runGuarded(config, isConfirmed);
+  await shutdownQuietly();
+  return exitCode;
 }

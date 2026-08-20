@@ -20,9 +20,10 @@ import { describe, it, expect } from 'vitest';
 import { createBankRegistry } from '../../src/Scraper/BankRegistry.js';
 import createScrapeResultMapper from '../../src/Scraper/Mappers/DefaultScrapeResultMapper.js';
 import { buildImportedId, parseTransaction } from '../../src/Services/Transaction/ImportedIdBuilder.js';
+import { CREDIT_CARD_BANKS } from '../../src/Types/BankCatalog.js';
 import type { IBankTransaction, IRawScrape, ISignPolicy } from '../../src/Types/Index.js';
 
-const CARD_BANKS = ['visacal', 'max', 'isracard', 'amex'] as const;
+const CARD_BANKS = [...CREDIT_CARD_BANKS];
 const mapper = createScrapeResultMapper();
 const startDate = new Date('2026-01-01');
 const endDate = new Date('2026-01-31');
@@ -35,9 +36,10 @@ const endDate = new Date('2026-01-31');
  * @returns The mapped transaction as the importer would see it.
  */
 function mapOne(bankId: string, signPolicy: ISignPolicy, txn: IBankTransaction): IBankTransaction {
+  const account = { accountNumber: '9', balance: 0, txns: [txn] };
   const raw: IRawScrape = {
-    bankId, companyType: bankId as never, attemptCount: 1, strategy: 'live',
-    raw: { success: true, accounts: [{ accountNumber: '9', balance: 0, txns: [txn] }] as never },
+    bankId, attemptCount: 1, strategy: 'live',
+    raw: { success: true, accounts: [account] as IRawScrape['raw']['accounts'] },
   };
   return mapper.mapToCanonical({ raw, signPolicy, startDate, endDate }).accounts[0].txns[0];
 }
@@ -52,6 +54,10 @@ function idFor(txn: IBankTransaction): string {
 }
 
 describe('card sign policy after scraper 8.6.7', () => {
+  it('derives the card-bank matrix from the catalog', () => {
+    expect([...CARD_BANKS].sort()).toEqual(['amex', 'isracard', 'max', 'visacal']);
+  });
+
   it.each(CARD_BANKS)('registry gives %s the preserve policy', (bankId) => {
     const result = createBankRegistry().resolve(bankId);
     expect(result.success).toBe(true);
