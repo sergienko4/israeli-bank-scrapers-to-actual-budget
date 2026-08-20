@@ -72,8 +72,23 @@ See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scra
 >
 > One exception: Visa Cal refunds were previously recorded with the wrong sign
 > (as spend instead of income). They are now correct, but the corrected row has
-> a different `imported_id`, so it imports alongside the old wrong row. Delete
-> the stale negative rows manually, or wait for the cleanup command.
+> a different `imported_id`, so it imports alongside the old wrong row. After
+> your first import on 8.6.7, run the cleanup command to list and remove them:
+>
+> ```bash
+> # Report only — lists suspected stale rows, changes nothing
+> docker run --rm -v "$PWD/config.json:/app/config.json:ro" \
+>   ghcr.io/sergienko4/israeli-bank-importer --cleanup-card-refunds
+>
+> # Delete them once you have reviewed the list
+> docker run --rm -v "$PWD/config.json:/app/config.json:ro" \
+>   ghcr.io/sergienko4/israeli-bank-importer --cleanup-card-refunds --confirm
+> ```
+>
+> The command only inspects credit-card accounts, and only ever deletes the
+> wrongly-signed row of a matched pair. A genuine same-day, same-merchant
+> purchase and refund of equal value is indistinguishable from a stale pair,
+> so review the report before passing `--confirm`.
 
 ---
 

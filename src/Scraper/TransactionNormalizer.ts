@@ -22,13 +22,7 @@
  * the upstream `ITransaction` type and our internal `IBankTransaction`.
  */
 
-/** Bank keys the flip applies to when a bank opts into `flip-credit`. */
-const CREDIT_CARD_BANKS: ReadonlySet<string> = new Set([
-  'visacal',
-  'max',
-  'isracard',
-  'amex',
-]);
+import { CREDIT_CARD_BANKS } from '../Types/BankCatalog.js';
 
 /** Subset of transaction shape that this normalizer touches. */
 export interface ISignedTxn {

@@ -12,13 +12,15 @@ vi.mock('../../src/Logger/Index.js', () => ({
   deriveLogFormat: vi.fn(() => 'words'),
 }));
 
-const { mockBootConfigAndLogger, mockHandleValidateMode } = vi.hoisted(() => ({
+const { mockBootConfigAndLogger, mockHandleValidateMode, mockHandleCardRefundCleanupMode } = vi.hoisted(() => ({
   mockBootConfigAndLogger: vi.fn(),
   mockHandleValidateMode: vi.fn(),
+  mockHandleCardRefundCleanupMode: vi.fn(),
 }));
 vi.mock('../../src/Importer/ConfigBootstrap.js', () => ({
   bootConfigAndLogger: mockBootConfigAndLogger,
   handleValidateMode: mockHandleValidateMode,
+  handleCardRefundCleanupMode: mockHandleCardRefundCleanupMode,
 }));
 
 const { mockBuildResilience } = vi.hoisted(() => ({

@@ -25,6 +25,16 @@ export interface IBankCatalogEntry {
 }
 
 /**
+ * Bank IDs whose statements are credit-card statements rather than bank
+ * accounts. Lives here — beside the sign policy it explains — so both the
+ * Scraper's sign normalizer and the card-refund cleanup command read one
+ * source of truth without either depending on the other.
+ */
+export const CREDIT_CARD_BANKS: ReadonlySet<string> = Object.freeze(
+  new Set(['visacal', 'max', 'isracard', 'amex']),
+);
+
+/**
  * Freezes one catalog entry so the shared catalog stays fully immutable.
  *
  * Both the entry object and its nested `aliases` array are frozen, so no

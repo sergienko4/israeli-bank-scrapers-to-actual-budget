@@ -31,7 +31,14 @@ vi.mock('../../src/Config/ConfigValidator.js', () => ({
   runValidateMode: mockRunValidateMode,
 }));
 
-import { bootConfigAndLogger, handleValidateMode } from '../../src/Importer/ConfigBootstrap.js';
+const { mockRunCardRefundCleanup } = vi.hoisted(() => ({
+  mockRunCardRefundCleanup: vi.fn(),
+}));
+vi.mock('../../src/Services/Transaction/CardRefundCleanup.js', () => ({
+  default: mockRunCardRefundCleanup,
+}));
+
+import { bootConfigAndLogger, handleCardRefundCleanupMode, handleValidateMode } from '../../src/Importer/ConfigBootstrap.js';
 
 interface IFakeImporterConfig {
   notifications?: { telegram?: { messageFormat?: string; listenForCommands?: boolean } };
@@ -91,6 +98,61 @@ describe('ConfigBootstrap', () => {
       mockRunValidateMode.mockResolvedValue(1);
 
       await expect(handleValidateMode()).rejects.toThrow('__exit:1');
+    });
+  });
+
+  describe('handleCardRefundCleanupMode', () => {
+    it('returns skipped status when --cleanup-card-refunds is absent', async () => {
+      process.argv = ['node', 'index.js'];
+
+      const result = await handleCardRefundCleanupMode();
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.status).toBe('skipped');
+      }
+      expect(mockRunCardRefundCleanup).not.toHaveBeenCalled();
+      expect(exitSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not trigger on the --validate flag alone', async () => {
+      process.argv = ['node', 'index.js', '--validate'];
+
+      await handleCardRefundCleanupMode();
+
+      expect(mockRunCardRefundCleanup).not.toHaveBeenCalled();
+    });
+
+    it('invokes cleanup and exits with its code when the flag is present', async () => {
+      process.argv = ['node', 'index.js', '--cleanup-card-refunds'];
+      const config = makeConfig();
+      mockLoad.mockReturnValue(succeed(config));
+      mockRunCardRefundCleanup.mockResolvedValue(0);
+
+      await expect(handleCardRefundCleanupMode()).rejects.toThrow('__exit:0');
+
+      expect(mockRunCardRefundCleanup).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    });
+
+    it('passes the booted config into the cleanup command', async () => {
+      process.argv = ['node', 'index.js', '--cleanup-card-refunds'];
+      const config = makeConfig();
+      mockLoad.mockReturnValue(succeed(config));
+      mockRunCardRefundCleanup.mockResolvedValue(0);
+
+      await expect(handleCardRefundCleanupMode()).rejects.toThrow('__exit:0');
+
+      expect(mockRunCardRefundCleanup).toHaveBeenCalledWith(config);
+      expect(mockCreateLogger).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards a non-zero cleanup exit code', async () => {
+      process.argv = ['node', 'index.js', '--cleanup-card-refunds', '--confirm'];
+      mockLoad.mockReturnValue(succeed(makeConfig()));
+      mockRunCardRefundCleanup.mockResolvedValue(1);
+
+      await expect(handleCardRefundCleanupMode()).rejects.toThrow('__exit:1');
     });
   });
 
