@@ -146,6 +146,7 @@ nav:
       - CI/CD Pipeline: architecture/ci-pipeline.md
       - "Release & Deployment": architecture/release-pipeline.md
   - Troubleshooting: troubleshooting.md
+  - Upgrading: UPGRADING.md
   - Security: SECURITY.md
   - Contributing:
       - Overview: contributing/index.md

@@ -66,7 +66,7 @@ Then start the portal entry point: `node dist/Portal.js`. Open
 | `port` / `PORTAL_PORT` | `8080` | Listen port. |
 | `authMode` | `password` | `password`, `google`, or `both`. |
 | `secureCookies` / `PORTAL_SECURE_COOKIES` | `false` | Mark cookies `Secure` (enable behind HTTPS). |
-| `PORTAL_TRUST_PROXY` | `false` | Address the reverse proxy connects from, allowed to set `X-Forwarded-For`; `loopback` behind `tailscale serve` so rate limits count the caller. |
+| `PORTAL_TRUST_PROXY` | `false` | Address the reverse proxy connects from, allowed to set `X-Forwarded-For`; `loopback` behind `tailscale serve` so rate limits count the caller. A hop count such as `1` was accepted before 1.42.12 and is now refused — see [Upgrading](../UPGRADING.md). |
 
 > **Boot requirement:** the snippet above is not enough to start. Every mode
 > needs a strong `sessionSecret` (≥16 characters), and `password`/`both` mode
