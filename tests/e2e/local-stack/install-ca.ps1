@@ -23,6 +23,9 @@
 #>
 
 $ErrorActionPreference = 'Stop'
+# 'Stop' alone ignores native exit codes, so a failed adb call would otherwise
+# sail past and leave a misleading root count at the end.
+$PSNativeCommandUseErrorActionPreference = $true
 
 . C:\tmp\android\env.ps1
 $adb = Join-Path $env:ANDROID_SDK_ROOT 'platform-tools\adb.exe'
@@ -45,7 +48,9 @@ Start-Sleep -Seconds 3
 & $adb shell 'for pid in $(pidof zygote) $(pidof zygote64); do nsenter --mount=/proc/$pid/ns/mnt -- mount --bind /data/local/tmp/cacerts-copy /apex/com.android.conscrypt/cacerts; done'
 
 foreach ($package in @('com.android.chrome', 'com.google.android.webview', 'com.sergienko4.israelibankimporter')) {
-  & $adb shell am force-stop $package | Out-Null
+  # Best effort: an image without one of these packages must not fail the run.
+  & { $PSNativeCommandUseErrorActionPreference = $false
+      & $adb shell am force-stop $package 2>&1 | Out-Null }
 }
 
 $count = (& $adb shell 'ls /apex/com.android.conscrypt/cacerts | wc -l').Trim()

@@ -80,15 +80,22 @@ own child process, so each records its own failed run.
 ### Proving the fix rather than assuming it
 
 Build the same image from `main` and run leg B against it. The audit log does
-not grow:
+not grow.
+
+Build from a detached worktree so the comparison never touches your working
+tree:
 
 ```bash
-git checkout origin/main -- src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts
-npm run build
+git worktree add /tmp/before origin/main
+npm --prefix /tmp/before ci
+npm --prefix /tmp/before run build
 docker build -f tests/e2e/local-stack/Dockerfile.overlay \
-  -t israeli-bank-importer:e2e-before .
-git checkout HEAD -- src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts
+  -t israeli-bank-importer:e2e-before /tmp/before
+git worktree remove /tmp/before
 ```
+
+Then point the `importer-fail` service at `israeli-bank-importer:e2e-before`
+and run leg B again.
 
 Observed: entries before the run `2`, after the run `2`. With the fix the same
 run adds one entry per bank.

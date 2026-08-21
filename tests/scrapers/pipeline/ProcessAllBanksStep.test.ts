@@ -6,8 +6,8 @@ import type { IPipelineContext } from '../../../src/Scrapers/Pipeline/Types/Pipe
 import type { IImportSummary } from '../../../src/Services/MetricsService.js';
 import { isFail, isSuccess } from '../../../src/Types/ProcedureHelpers.js';
 import {
-  ALLOW_ALL_BANK_FILTER, fakeBankConfig, fakeCanonicalScrapeResult,
-  fakePipelineConfig,
+  ALLOW_ALL_BANK_FILTER, fakeBankConfig, fakeBankMetrics, fakeCanonicalScrapeResult,
+  fakeImportSummary, fakePipelineConfig,
 } from '../../helpers/factories.js';
 
 function makeMockMapper() {
@@ -240,19 +240,18 @@ describe('ProcessAllBanksStep', () => {
     const ctx = makeCtx();
     (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
       .mockResolvedValue({ success: false, errorMessage: 'timeout' });
-    const failureSummary: IImportSummary = {
+    const failureSummary: IImportSummary = fakeImportSummary({
       totalBanks: 2, successfulBanks: 0, failedBanks: 2,
-      totalTransactions: 0, totalDuplicates: 0, totalDuration: 2000,
-      averageDuration: 1000, successRate: 0,
+      totalTransactions: 0, totalDuplicates: 0, successRate: 0,
       banks: [
-        { bankName: 'hapoalim', startTime: 0, endTime: 1000, duration: 1000,
-          status: 'failure', transactionsImported: 0, transactionsSkipped: 0,
-          accounts: [], error: 'Error: timeout' },
-        { bankName: 'leumi', startTime: 0, endTime: 1000, duration: 1000,
-          status: 'failure', transactionsImported: 0, transactionsSkipped: 0,
-          accounts: [], error: 'Error: timeout' },
+        fakeBankMetrics({ bankName: 'hapoalim', status: 'failure',
+          transactionsImported: 0, transactionsSkipped: 0,
+          accounts: [], error: 'Error: timeout' }),
+        fakeBankMetrics({ bankName: 'leumi', status: 'failure',
+          transactionsImported: 0, transactionsSkipped: 0,
+          accounts: [], error: 'Error: timeout' }),
       ],
-    };
+    });
     (ctx.services.metricsService.getSummary as ReturnType<typeof vi.fn>)
       .mockReturnValue({ success: true, data: failureSummary });
 

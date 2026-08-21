@@ -201,7 +201,8 @@ parity: app `src/api/generated/Status.ts` `RUN_ENTRY` already accepts
 `failure`/`error` (RunCard renders them) — no app change. Docs: `portal.md`
 `GET /api/status` section is accurate (no claim that only successful runs are
 recorded; the green-only example remains valid) — no doc change. Full suite
-green: 180 files / 2552 tests.
+green at that point: 180 files / 2552 tests (2558 after the degradation-path
+tests added in Phase 5).
 
 ## Phase 4: Regression and edge-case sweep
 
@@ -245,7 +246,8 @@ shutdown abort → no record (shutdown check precedes `runAndFinalize`; existing
 active, `check-circular` 314 files clean, `coupling:check` at baseline
 (critical 0, high 1 unchanged). Also re-verified on top of the #634 merge
 (fastify 5.12.1 trust-proxy security fix): rebased cleanly (no file overlap),
-`npm ci` installed fastify 5.12.1, full `validate` green (2552 tests).
+`npm ci` installed fastify 5.12.1, full `validate` green (2552 tests at that
+point; 2558 after the Phase 5 degradation-path tests).
 `test:e2e:mock` portal browser suites cannot run locally (camoufox binary not
 installed) — environment-only, unrelated to this change; CI's `validate:ci`
 gate has no e2e leg.
@@ -328,9 +330,10 @@ outcome). Skips dry-runs; notifications, exit codes, and the failure result
 are byte-identical. No new services or wiring; no app-repo changes.
 
 **Verification:** red→green TDD (1 red test reproduced the bug), 6 new step
-tests + 1 new portal contract test, full suite 2558 green, coverage
-96.8/92.5/97.2/97.5 (gates 90/90/95/90), every line and branch of
-`recordFailedRun` covered (SonarCloud new-code coverage gate), lint/canaries/
+tests + 1 new portal contract test, full suite 2558 passed / 5 skipped,
+coverage 96.8/92.5/97.2/97.5 (gates 90/90/95/90), every line and branch of
+`recordFailedRun` and `writeAuditEntry` covered (SonarCloud new-code coverage
+gate at 100%), lint/canaries/
 circular/coupling/docs/config-structure/manifest all green, pre-commit +
 pre-push hook suites green. Rebased onto the fastify 5.12.1 trust-proxy
 security merge (#634) with all gates re-verified on the merged base.

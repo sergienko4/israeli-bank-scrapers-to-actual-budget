@@ -282,7 +282,30 @@ function recordFailedRun(ctx: IPipelineContext): boolean {
     ctx.logger.warn(`getSummary failed: ${summary.message}`);
     return false;
   }
-  const recorded = ctx.services.auditLogService.record(summary.data);
+  return writeAuditEntry(ctx, summary.data);
+}
+
+/**
+ * The summary shape the audit log accepts.
+ *
+ * Derived from the service contract rather than imported from the services
+ * layer, because steps reach services only through the pipeline barrel.
+ */
+type AuditSummary = Parameters<
+  IPipelineContext['services']['auditLogService']['record']
+>[0];
+
+/**
+ * Writes one summary to the audit log, warning instead of throwing.
+ *
+ * Split out of {@link recordFailedRun} to keep both within the method-size
+ * rule; a failed audit write must never change the caller's outcome.
+ * @param ctx - Pipeline context.
+ * @param summary - Summary of the fully-failed run.
+ * @returns True when the audit entry was written.
+ */
+function writeAuditEntry(ctx: IPipelineContext, summary: AuditSummary): boolean {
+  const recorded = ctx.services.auditLogService.record(summary);
   if (isFail(recorded)) {
     ctx.logger.warn(`audit record failed: ${recorded.message}`);
     return false;
