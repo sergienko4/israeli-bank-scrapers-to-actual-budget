@@ -6,13 +6,11 @@
 .DESCRIPTION
   The phone app refuses plain HTTP, so the local portal has to be reachable over
   TLS. This mints a throwaway CA and a certificate whose SAN covers 10.0.2.2 —
-  the address the Android emulator uses for the host — then installs the CA into
-  the emulator's system trust store.
+  the address the Android emulator uses for the host — and copies the CA to the
+  <hash>.0 name Android looks roots up by.
 
-  Android 14 keeps the trusted roots in the Conscrypt APEX, which is read-only.
-  The store is replaced with a tmpfs copy that also contains our CA, and the
-  same mount is entered into every running app namespace. It lives only until
-  the emulator restarts, which is exactly the lifetime we want.
+  Nothing here touches the emulator: this only prepares files. install-ca.ps1
+  loads the prepared CA into the emulator's system trust store.
 
   Everything it writes lands in tests/e2e/local-stack/certs, which .gitignore
   excludes.
@@ -58,10 +56,14 @@ try {
   & $openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial `
     -out server.crt -days 30 -sha256 -extfile server.ext 2>&1 | Out-Null
 
-  # Android looks the root up by the hash of its subject, named <hash>.0.
+  # Android looks the root up by the hash of its subject, named <hash>.0. A
+  # renamed subject would hash differently, so earlier hash files are cleared
+  # first: install-ca.ps1 has to find exactly one, never an outdated root
+  # alongside the current one.
+  Get-ChildItem -Path . -Filter '*.0' -File | Remove-Item -Force
   $hash = (& $openssl x509 -subject_hash_old -in ca.crt -noout).Trim()
   Copy-Item ca.crt "$hash.0" -Force
-  Write-Host "CA installed under Android hash name: $hash.0"
+  Write-Host "CA prepared for installation under Android hash name: $hash.0"
 }
 finally { Pop-Location }
 

@@ -37,26 +37,59 @@ $PSNativeCommandUseErrorActionPreference = $true
 $adb = Join-Path $env:ANDROID_SDK_ROOT 'platform-tools\adb.exe'
 $certDir = Join-Path $PSScriptRoot 'certs'
 
-$hashName = (Get-ChildItem $certDir -Filter '*.0' | Select-Object -First 1).Name
-if (-not $hashName) { throw 'No <hash>.0 CA file found. Run make-certs.ps1 first.' }
+# make-certs.ps1 leaves exactly one hash file, so more than one means the certs
+# directory holds a root from an earlier subject; picking either silently is how
+# the emulator ends up trusting a CA that no longer signs the server cert.
+$hashFiles = @(Get-ChildItem $certDir -Filter '*.0' -File)
+if ($hashFiles.Count -eq 0) { throw 'No <hash>.0 CA file found. Run make-certs.ps1 first.' }
+if ($hashFiles.Count -gt 1) {
+  throw "Found $($hashFiles.Count) <hash>.0 files in $certDir. Re-run make-certs.ps1 to leave exactly one."
+}
+$hashName = $hashFiles[0].Name
 
 & $adb root | Out-Null
-Start-Sleep -Seconds 3
+& $adb wait-for-device
+
+# adb root restarts adbd, so the transport coming back is not the same as the
+# daemon being usable again. A fixed pause is a guess either way; poll until it
+# actually answers as root.
+$uid = ''
+$deadline = (Get-Date).AddSeconds(30)
+while ((Get-Date) -lt $deadline) {
+  $uid = "$(& { $PSNativeCommandUseErrorActionPreference = $false; & $adb shell id -u })".Trim()
+  if ($uid -eq '0') { break }
+  Start-Sleep -Milliseconds 500
+}
+if ($uid -ne '0') { throw "adbd did not come back as root within 30s (id -u returned '$uid')." }
+
+function Invoke-DeviceProbe {
+  <#
+  .SYNOPSIS
+    Asks the emulator a yes/no question and fails when the call itself fails.
+  .DESCRIPTION
+    A probe answers a question, so a non-zero exit is expected and native exit
+    propagation is disabled for it. adb reports a lost device or a refused
+    command the same way, with exit 1, so exit codes cannot tell the two apart.
+    The probe always prints one of two sentinels instead; output carrying
+    neither means the call failed rather than answered.
+  #>
+  param([Parameter(Mandatory)][string]$Command)
+
+  $out = "$(& { $PSNativeCommandUseErrorActionPreference = $false; & $adb shell $Command })".Trim()
+  if ($out -notmatch '\b(present|absent)\b') { throw "Device probe failed: $out" }
+  return $out -match '\bpresent\b'
+}
 
 function Test-RemotePath {
   <#
   .SYNOPSIS
     Reports whether a path exists on the emulator, optionally inside a namespace.
-  .DESCRIPTION
-    A missing path makes test exit 1, which is an answer rather than a failure,
-    so native exit-code propagation is disabled for the probe itself.
   #>
   param([Parameter(Mandatory)][string]$Path, [string]$ProcessId)
 
-  $probe = "test -f $Path && echo present"
-  if ($ProcessId) { $probe = "nsenter --mount=/proc/$ProcessId/ns/mnt -- $probe" }
-  $found = & { $PSNativeCommandUseErrorActionPreference = $false; & $adb shell $probe }
-  return "$found" -match 'present'
+  $test = "test -f $Path"
+  if ($ProcessId) { $test = "nsenter --mount=/proc/$ProcessId/ns/mnt -- $test" }
+  return Invoke-DeviceProbe -Command "$test && echo present || echo absent"
 }
 
 function Test-CaStoreMounted {
@@ -67,9 +100,8 @@ function Test-CaStoreMounted {
     adb shell runs in init's namespace, which is where the first mount lands, so
     this answers whether the staging directory has become the APEX path itself.
   #>
-  $probe = "grep -q ' /apex/com.android.conscrypt/cacerts ' /proc/mounts && echo present"
-  $found = & { $PSNativeCommandUseErrorActionPreference = $false; & $adb shell $probe }
-  return "$found" -match 'present'
+  $mounted = "grep -q ' /apex/com.android.conscrypt/cacerts ' /proc/mounts"
+  return Invoke-DeviceProbe -Command "$mounted && echo present || echo absent"
 }
 
 function Get-ZygotePid {
@@ -79,11 +111,14 @@ function Get-ZygotePid {
   .DESCRIPTION
     Apps fork from zygote, so a patch that misses it never reaches the app. No
     zygote at all means the emulator is not ready, which is a failure rather
-    than a step worth skipping.
+    than a step worth skipping. pidof also exits 1 when it simply finds nothing,
+    so it prints a sentinel and anything non-numeric is treated as a failed call
+    rather than mistaken for a pid.
   #>
-  $raw = & { $PSNativeCommandUseErrorActionPreference = $false
-             & $adb shell 'pidof zygote zygote64' }
-  $found = "$raw".Trim() -split '\s+' | Where-Object { $_ }
+  $raw = "$(& { $PSNativeCommandUseErrorActionPreference = $false
+                & $adb shell 'pidof zygote zygote64 || echo none' })".Trim()
+  $found = @($raw -split '\s+' | Where-Object { $_ -match '^\d+$' })
+  if (-not $found -and $raw -ne 'none') { throw "Unable to query zygote processes: $raw" }
   if (-not $found) { throw 'No zygote process found; is the emulator fully booted?' }
   return $found
 }
@@ -140,5 +175,8 @@ Stop-Package -Package 'com.android.chrome'
 Stop-Package -Package 'com.google.android.webview'
 Stop-Package -Package 'com.sergienko4.israelibankimporter'
 
-$count = (& $adb shell 'ls /apex/com.android.conscrypt/cacerts | wc -l').Trim()
+# Counted locally rather than with a remote ls | wc -l: the pipeline reports
+# wc's status, so a failed listing still exits 0 and prints a confident 0.
+$roots = & $adb shell 'ls -1 /apex/com.android.conscrypt/cacerts'
+$count = @($roots | Where-Object { "$_".Trim() }).Count
 Write-Host "System trust store now holds $count roots (including the local CA)."
