@@ -25,7 +25,7 @@ import { CONFIG_BODY } from '../../src/Contract/Config.js';
 import { DEVICE_BODY } from '../../src/Contract/Devices.js';
 import { MANIFEST_BODY } from '../../src/Contract/Manifest.js';
 import { OTP_SETTINGS, OTP_SUBMIT_BODY, PENDING_OTP_BODY } from '../../src/Contract/Otp.js';
-import { STATUS_BODY } from '../../src/Contract/Status.js';
+import { STATUS_BODY, type RunEntry } from '../../src/Contract/Status.js';
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
 import { fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
@@ -130,6 +130,26 @@ describe('portal contract conformance', () => {
 
   it('serves run history matching the contract', async () => {
     await expectConforms('/api/status', STATUS_BODY);
+  });
+
+  it('serves a fully failed run in history with per-bank failure details', async () => {
+    const failedRun = [{
+      timestamp: '2026-01-02T03:04:05.000Z',
+      totalBanks: 2, successfulBanks: 0, failedBanks: 2,
+      totalTransactions: 0, totalDuplicates: 0, totalDuration: 8000, successRate: 0,
+      banks: [
+        { name: 'hapoalim', status: 'failure', duration: 4000, txns: 0, error: 'Error: timeout' },
+        { name: 'leumi', status: 'failure', duration: 4000, txns: 0, error: 'Error: invalid credentials' },
+      ],
+    }];
+    writeFileSync(process.env.AUDIT_LOG_PATH as string, JSON.stringify(failedRun));
+
+    const body = await expectConforms('/api/status', STATUS_BODY);
+    const runs = (body as { runs: RunEntry[] }).runs;
+    expect(runs).toHaveLength(1);
+    expect(runs[0].successRate).toBe(0);
+    expect(runs[0].failedBanks).toBe(2);
+    expect(runs[0].banks[0]).toMatchObject({ status: 'failure', error: 'Error: timeout' });
   });
 
   it('serves pending OTP requests matching the contract', async () => {

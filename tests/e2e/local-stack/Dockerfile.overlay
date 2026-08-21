@@ -1,0 +1,26 @@
+# Local-validation overlay image.
+#
+# The repository Dockerfile builds from source, which needs registry.npmjs.org.
+# On networks that only allow a corporate package mirror that host is
+# unreachable, so a from-source build cannot run locally at all. This overlay
+# sidesteps the registry entirely: it starts from the published image for the
+# version under test (same node_modules, same Camoufox) and swaps in the dist/
+# compiled from the working tree.
+#
+# It exists to validate LOCAL CHANGES ONLY. CI still builds the real Dockerfile
+# from source, and that remains the image that ships.
+#
+# Build (from the repository root, after `npm run build`):
+#   docker build -f tests/e2e/local-stack/Dockerfile.overlay \
+#     --build-arg BASE_VERSION=v1.42.11 -t israeli-bank-importer:e2e .
+
+ARG BASE_VERSION=v1.42.11
+FROM sergienko4/israeli-bank-importer:${BASE_VERSION}
+
+# Replace the published build output with the working tree's compiled output.
+# Removing first keeps deleted modules from surviving as stale files.
+USER root
+RUN rm -rf /app/dist
+COPY dist/ /app/dist/
+RUN chown -R node:node /app/dist
+USER node
