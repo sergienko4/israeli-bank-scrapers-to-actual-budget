@@ -86,6 +86,7 @@ Build from a detached worktree so the comparison never touches your working
 tree:
 
 ```bash
+git fetch origin main
 git worktree add /tmp/before origin/main
 npm --prefix /tmp/before ci
 npm --prefix /tmp/before run build
