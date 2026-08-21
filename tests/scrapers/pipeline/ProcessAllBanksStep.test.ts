@@ -267,6 +267,62 @@ describe('ProcessAllBanksStep', () => {
     }
   });
 
+  it('flushes every metrics delta before reading the summary it records', async () => {
+    const ctx = makeCtx();
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, errorMessage: 'timeout' });
+
+    const step = createProcessAllBanksStep();
+    await step(ctx);
+
+    const flush = ctx.services.metricsService.recordBankFailure as ReturnType<typeof vi.fn>;
+    const summary = ctx.services.metricsService.getSummary as ReturnType<typeof vi.fn>;
+    expect(flush.mock.invocationCallOrder).toHaveLength(2);
+    expect(summary.mock.invocationCallOrder).toHaveLength(1);
+    expect(summary.mock.invocationCallOrder[0])
+      .toBeGreaterThan(Math.max(...flush.mock.invocationCallOrder));
+  });
+
+  it('warns and leaves the step outcome intact when getSummary fails', async () => {
+    const ctx = makeCtx();
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, errorMessage: 'timeout' });
+    (ctx.services.metricsService.getSummary as ReturnType<typeof vi.fn>)
+      .mockReturnValue({ success: false, message: 'metrics unavailable' });
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(ctx.services.auditLogService.record).not.toHaveBeenCalled();
+    expect(ctx.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('metrics unavailable')
+    );
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) {
+      expect(result.status).toBe('banks-failed');
+    }
+  });
+
+  it('warns and leaves the step outcome intact when the audit write fails', async () => {
+    const ctx = makeCtx();
+    (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)
+      .mockResolvedValue({ success: false, errorMessage: 'timeout' });
+    (ctx.services.auditLogService.record as ReturnType<typeof vi.fn>)
+      .mockReturnValue({ success: false, message: 'audit log is not writable' });
+
+    const step = createProcessAllBanksStep();
+    const result = await step(ctx);
+
+    expect(ctx.services.auditLogService.record).toHaveBeenCalledOnce();
+    expect(ctx.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('audit log is not writable')
+    );
+    expect(isFail(result)).toBe(true);
+    if (isFail(result)) {
+      expect(result.status).toBe('banks-failed');
+    }
+  });
+
   it('all banks failing in dry-run does not record an audit entry', async () => {
     const ctx = makeCtx({ state: { isDryRun: true, apiInitialized: true, banksProcessed: 0 } });
     (ctx.services.bankScraper.scrapeBankWithResilience as ReturnType<typeof vi.fn>)

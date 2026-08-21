@@ -235,12 +235,13 @@ Regression sweep green. Edge cases: single-bank all-failed → records
 (totalBanks 1, failedBanks 1, successRate 0) — covered by the two-bank INV-4
 test shape; zero banks → `totalBanks === 0` returns success before the helper
 (existing test "no banks configured" green); dry-run all-failed → no record
-(test added in Phase 1); `record()` write failure → warn path covered by
-`FinalizeImportStep` pattern and the helper's fail branch (warning, outcome
-unchanged — asserted via the existing warn-failure suite convention);
+(test added in Phase 1); `record()` write failure and `getSummary()` failure →
+warn path, outcome unchanged (both branches covered by dedicated step tests);
+metrics-flush-before-summary ordering pinned by an `invocationCallOrder`
+assertion, so hoisting the helper above the flush turns the suite red;
 shutdown abort → no record (shutdown check precedes `runAndFinalize`; existing
-"shutdown aborts" test green). Coverage: 96.7 stmts / 92.5 branches /
-97.2 funcs / 97.4 lines — all above the 90/90/95/90 gate. `lint:canaries` 42
+"shutdown aborts" test green). Coverage: 96.8 stmts / 92.5 branches /
+97.2 funcs / 97.5 lines — all above the 90/90/95/90 gate. `lint:canaries` 42
 active, `check-circular` 314 files clean, `coupling:check` at baseline
 (critical 0, high 1 unchanged). Also re-verified on top of the #634 merge
 (fastify 5.12.1 trust-proxy security fix): rebased cleanly (no file overlap),
@@ -326,16 +327,20 @@ flushed metrics summary and records it best-effort (warns, never changes the
 outcome). Skips dry-runs; notifications, exit codes, and the failure result
 are byte-identical. No new services or wiring; no app-repo changes.
 
-**Verification:** red→green TDD (1 red test reproduced the bug), 3 new step
-tests + 1 new portal contract test, full suite 2552 green, coverage
-96.7/92.5/97.2/97.4 (gates 90/90/95/90), lint/canaries/circular/coupling/
-docs/config-structure/manifest all green, pre-commit + pre-push hook suites
-green. Rebased onto the fastify 5.12.1 trust-proxy security merge (#634) with
-all gates re-verified on the merged base.
+**Verification:** red→green TDD (1 red test reproduced the bug), 6 new step
+tests + 1 new portal contract test, full suite 2558 green, coverage
+96.8/92.5/97.2/97.5 (gates 90/90/95/90), every line and branch of
+`recordFailedRun` covered (SonarCloud new-code coverage gate), lint/canaries/
+circular/coupling/docs/config-structure/manifest all green, pre-commit +
+pre-push hook suites green. Rebased onto the fastify 5.12.1 trust-proxy
+security merge (#634) with all gates re-verified on the merged base.
 
-**Outcome:** after this ships, a fully failed run produces one audit entry
-(per-bank `status: 'failure'` + redacted `error`, `successRate: 0`), and the
-app's `RunCard` renders the red run with its error text — no app release
+**Outcome:** after this ships, a fully failed run is recorded in the audit log
+instead of being dropped. The scheduler spawns one child process per bank, each
+with its own `MetricsService`, so an all-failed N-bank batch writes N entries of
+`totalBanks: 1` — one per bank — rather than a single combined entry. Each entry
+carries per-bank `status: 'failure'` + redacted `error` and `successRate: 0`,
+and the app's `RunCard` renders the red run with its error text — no app release
 needed.
 
 ## Deployment Plan
