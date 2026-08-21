@@ -258,10 +258,59 @@ function finalizeContext(
   const newCtx = buildNewCtx(ctx, partition);
   if (partition.totalBanks === 0) return succeed(newCtx);
   if (partition.successful.length === 0) {
+    recordFailedRun(ctx);
     const message = buildBanksFailedMessage(partition);
     return fail(message, { status: 'banks-failed' });
   }
   return succeed(newCtx);
+}
+
+/**
+ * Records a fully-failed run in the audit log, best effort.
+ *
+ * The pipeline short-circuits on the all-banks-failed failure (INV-4), so the
+ * finalize step never runs; without this the run is invisible to /api/status
+ * and the app. Failures here are warnings, never a change of the caller's
+ * outcome.
+ * @param ctx - Pipeline context.
+ * @returns True when the audit entry was written.
+ */
+function recordFailedRun(ctx: IPipelineContext): boolean {
+  if (ctx.state.isDryRun) return false;
+  const summary = ctx.services.metricsService.getSummary();
+  if (isFail(summary)) {
+    ctx.logger.warn(`getSummary failed: ${summary.message}`);
+    return false;
+  }
+  return writeAuditEntry(ctx, summary.data);
+}
+
+/**
+ * The summary shape the audit log accepts.
+ *
+ * Derived from the service contract rather than imported from the services
+ * layer, because steps reach services only through the pipeline barrel.
+ */
+type AuditSummary = Parameters<
+  IPipelineContext['services']['auditLogService']['record']
+>[0];
+
+/**
+ * Writes one summary to the audit log, warning instead of throwing.
+ *
+ * Split out of {@link recordFailedRun} to keep both within the method-size
+ * rule; a failed audit write must never change the caller's outcome.
+ * @param ctx - Pipeline context.
+ * @param summary - Summary of the fully-failed run.
+ * @returns True when the audit entry was written.
+ */
+function writeAuditEntry(ctx: IPipelineContext, summary: AuditSummary): boolean {
+  const recorded = ctx.services.auditLogService.record(summary);
+  if (isFail(recorded)) {
+    ctx.logger.warn(`audit record failed: ${recorded.message}`);
+    return false;
+  }
+  return true;
 }
 
 /**

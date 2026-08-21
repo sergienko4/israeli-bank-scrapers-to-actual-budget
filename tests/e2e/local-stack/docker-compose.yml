@@ -1,0 +1,85 @@
+# Local validation stack — importer + portal against a throwaway budget.
+#
+# Proves PR #637 end to end on a real container: a run whose banks all fail is
+# written to the audit log and served by GET /api/status.
+#
+# The importer image is built by tests/e2e/local-stack/Dockerfile.overlay, not
+# from source, because a from-source build needs registry.npmjs.org (see that
+# file). CI still builds the real Dockerfile.
+#
+# Usage (from the repository root) — see README.md in this directory:
+#   npm run test:e2e:setup
+#   node tests/e2e/local-stack/setup.mjs
+#   docker build -f tests/e2e/local-stack/Dockerfile.overlay -t israeli-bank-importer:e2e .
+#   docker compose -f tests/e2e/local-stack/docker-compose.yml up -d portal
+#   docker compose -f tests/e2e/local-stack/docker-compose.yml run --rm importer-dryrun
+#   docker compose -f tests/e2e/local-stack/docker-compose.yml run --rm importer-fail
+
+name: bank-importer-local-validation
+
+services:
+  # Serves /api/status from the same audit log the importer writes. Bound to
+  # 0.0.0.0 and published on 8080 so the Android emulator can reach it at
+  # 10.0.2.2:8080.
+  portal:
+    image: israeli-bank-importer:e2e
+    command: ["node", "dist/Portal.js"]
+    ports:
+      - "8080:8080"
+    environment:
+      - PORTAL_ENABLED=true
+      - PORTAL_HOST=0.0.0.0
+      - PORTAL_PORT=8080
+      - PORTAL_CONFIG_PATH=/app/config/config.json
+      - CONFIG_PATH=/app/config/config.json
+    volumes:
+      # The portal is the only writer of the config directory.
+      - ./stack-config:/app/config:rw
+      - ../fixtures/e2e-data:/app/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ps aux | grep -q '[n]ode dist/Portal.js'"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # The phone app refuses plain HTTP on purpose, so the emulator reaches the
+  # portal through this. Certificates come from make-certs.ps1, whose CA is
+  # installed into the emulator's trust store by install-ca.ps1.
+  tls:
+    image: nginx:1.29-alpine
+    depends_on:
+      - portal
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+
+  # Leg A: proves the stack is wired (config, budget, mock scraper, audit path)
+  # without importing anything. Records nothing by design — a dry run is not a
+  # run, which is exactly why leg B exists.
+  importer-dryrun:
+    image: israeli-bank-importer:e2e
+    environment:
+      - DRY_RUN=true
+      - CONFIG_PATH=/app/config/config.json
+      - E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir
+      - E2E_LOCAL_BUDGET_ID=${E2E_LOCAL_BUDGET_ID}
+    volumes:
+      - ./stack-config:/app/config:ro
+      - ../fixtures/mock-scraper-dir:/app/mock-scraper-dir:ro
+      - ../fixtures/e2e-data:/app/data
+
+  # Leg B: every bank fails, so the pipeline short-circuits before the finalize
+  # step. This is the path PR #637 fixes; without the fix nothing is recorded.
+  importer-fail:
+    image: israeli-bank-importer:e2e
+    environment:
+      - CONFIG_PATH=/app/config/config.json
+      - E2E_MOCK_SCRAPER_DIR=/app/mock-scraper-dir
+      - E2E_LOCAL_BUDGET_ID=${E2E_LOCAL_BUDGET_ID}
+    volumes:
+      - ./stack-config:/app/config:ro
+      - ./fixtures:/app/mock-scraper-dir:ro
+      - ../fixtures/e2e-data:/app/data
