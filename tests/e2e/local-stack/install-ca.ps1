@@ -17,6 +17,8 @@
   Re-running against an already-patched emulator is safe and repairs a partial
   install: staging, the init mount and each zygote mount are checked separately,
   so a run interrupted between them is finished rather than reported as done.
+  The local CA itself is rewritten every run, because regenerating it keeps the
+  same file name and a stale copy would otherwise survive unnoticed.
 
   Chrome and the app are force-stopped at the end so both re-fork from the
   patched zygote. Without that they keep the store they started with and the
@@ -57,6 +59,19 @@ function Test-RemotePath {
   return "$found" -match 'present'
 }
 
+function Test-CaStoreMounted {
+  <#
+  .SYNOPSIS
+    Reports whether the patched trust store is already bind-mounted.
+  .DESCRIPTION
+    adb shell runs in init's namespace, which is where the first mount lands, so
+    this answers whether the staging directory has become the APEX path itself.
+  #>
+  $probe = "grep -q ' /apex/com.android.conscrypt/cacerts ' /proc/mounts && echo present"
+  $found = & { $PSNativeCommandUseErrorActionPreference = $false; & $adb shell $probe }
+  return "$found" -match 'present'
+}
+
 function Get-ZygotePid {
   <#
   .SYNOPSIS
@@ -76,18 +91,23 @@ function Get-ZygotePid {
 $apexCa = "/apex/com.android.conscrypt/cacerts/$hashName"
 $bind = 'mount --bind /data/local/tmp/cacerts-copy /apex/com.android.conscrypt/cacerts'
 
-# Once the bind mount is live the staging directory and the APEX path are the
-# same directory, so the cp below would read through its own target and fail.
-if (Test-RemotePath -Path "/data/local/tmp/cacerts-copy/$hashName") {
-  Write-Host 'CA already staged; reusing the existing copy.'
+# Only the bulk copy is guarded, on the condition that actually matters: while
+# the mount is live the staging directory and the APEX path are one and the
+# same, so copying the real store into it would read through its own target.
+& $adb push (Join-Path $certDir $hashName) "/data/local/tmp/$hashName" | Out-Null
+
+if (Test-CaStoreMounted) {
+  Write-Host 'System roots already staged; refreshing the local CA only.'
 }
 else {
-  & $adb push (Join-Path $certDir $hashName) "/data/local/tmp/$hashName" | Out-Null
-
-  # Stage the real store plus our root, with the labels the runtime expects.
-  & $adb shell "mkdir -p /data/local/tmp/cacerts-copy && cp /apex/com.android.conscrypt/cacerts/* /data/local/tmp/cacerts-copy/ && cp /data/local/tmp/$hashName /data/local/tmp/cacerts-copy/ && chmod 644 /data/local/tmp/cacerts-copy/*"
-  & $adb shell 'chcon -R u:object_r:system_file:s0 /data/local/tmp/cacerts-copy'
+  & $adb shell 'mkdir -p /data/local/tmp/cacerts-copy && cp /apex/com.android.conscrypt/cacerts/* /data/local/tmp/cacerts-copy/'
 }
+
+# Our own root is rewritten every run. The subject never changes, so a
+# regenerated CA keeps the same <hash>.0 name, and a guard on that name alone
+# would leave the stale certificate in place while still reporting success.
+& $adb shell "cp /data/local/tmp/$hashName /data/local/tmp/cacerts-copy/ && chmod 644 /data/local/tmp/cacerts-copy/*"
+& $adb shell 'chcon -R u:object_r:system_file:s0 /data/local/tmp/cacerts-copy'
 
 # Each namespace is repaired on its own. A run interrupted after the init mount
 # leaves zygote unpatched, and a guard that only looked at init would skip the

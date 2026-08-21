@@ -43,8 +43,14 @@ extendedKeyUsage = serverAuth
 
 Push-Location $certDir
 try {
+  # The extensions are stated rather than inherited: req -x509 otherwise takes
+  # them from the host openssl.cnf, and the openssl picked up above is whichever
+  # one is on PATH, so a host with a leaner config could mint a root that is not
+  # a usable trust anchor.
   & $openssl req -x509 -newkey rsa:2048 -sha256 -days 30 -nodes `
-    -keyout ca.key -out ca.crt -subj '/CN=Bank Importer Local Validation CA' 2>&1 | Out-Null
+    -keyout ca.key -out ca.crt -subj '/CN=Bank Importer Local Validation CA' `
+    -addext 'basicConstraints=critical,CA:TRUE' `
+    -addext 'keyUsage=critical,keyCertSign,cRLSign' 2>&1 | Out-Null
 
   & $openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr `
     -subj '/CN=10.0.2.2' 2>&1 | Out-Null
