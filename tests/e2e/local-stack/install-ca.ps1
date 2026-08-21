@@ -14,8 +14,9 @@
   app forked afterwards inherits the patched store. The mount is tmpfs-backed
   and disappears on emulator restart.
 
-  Re-running against an already-patched emulator is safe: staging is skipped
-  and only the force-stops repeat.
+  Re-running against an already-patched emulator is safe and repairs a partial
+  install: staging, the init mount and each zygote mount are checked separately,
+  so a run interrupted between them is finished rather than reported as done.
 
   Chrome and the app are force-stopped at the end so both re-fork from the
   patched zygote. Without that they keep the store they started with and the
@@ -40,14 +41,45 @@ if (-not $hashName) { throw 'No <hash>.0 CA file found. Run make-certs.ps1 first
 & $adb root | Out-Null
 Start-Sleep -Seconds 3
 
-# A previous run leaves the bind mount in place, which makes the cp below read
-# through its own target and fail with "is the same file". Detect that and skip
-# to the force-stops, which are what a re-run is usually for anyway.
-$present = & { $PSNativeCommandUseErrorActionPreference = $false
-               & $adb shell "test -f /apex/com.android.conscrypt/cacerts/$hashName && echo present" }
+function Test-RemotePath {
+  <#
+  .SYNOPSIS
+    Reports whether a path exists on the emulator, optionally inside a namespace.
+  .DESCRIPTION
+    A missing path makes test exit 1, which is an answer rather than a failure,
+    so native exit-code propagation is disabled for the probe itself.
+  #>
+  param([Parameter(Mandatory)][string]$Path, [string]$ProcessId)
 
-if ("$present" -match 'present') {
-  Write-Host 'CA already in the system store; skipping staging.'
+  $probe = "test -f $Path && echo present"
+  if ($ProcessId) { $probe = "nsenter --mount=/proc/$ProcessId/ns/mnt -- $probe" }
+  $found = & { $PSNativeCommandUseErrorActionPreference = $false; & $adb shell $probe }
+  return "$found" -match 'present'
+}
+
+function Get-ZygotePid {
+  <#
+  .SYNOPSIS
+    Returns the pids of the running zygote processes.
+  .DESCRIPTION
+    Apps fork from zygote, so a patch that misses it never reaches the app. No
+    zygote at all means the emulator is not ready, which is a failure rather
+    than a step worth skipping.
+  #>
+  $raw = & { $PSNativeCommandUseErrorActionPreference = $false
+             & $adb shell 'pidof zygote zygote64' }
+  $found = "$raw".Trim() -split '\s+' | Where-Object { $_ }
+  if (-not $found) { throw 'No zygote process found; is the emulator fully booted?' }
+  return $found
+}
+
+$apexCa = "/apex/com.android.conscrypt/cacerts/$hashName"
+$bind = 'mount --bind /data/local/tmp/cacerts-copy /apex/com.android.conscrypt/cacerts'
+
+# Once the bind mount is live the staging directory and the APEX path are the
+# same directory, so the cp below would read through its own target and fail.
+if (Test-RemotePath -Path "/data/local/tmp/cacerts-copy/$hashName") {
+  Write-Host 'CA already staged; reusing the existing copy.'
 }
 else {
   & $adb push (Join-Path $certDir $hashName) "/data/local/tmp/$hashName" | Out-Null
@@ -55,10 +87,17 @@ else {
   # Stage the real store plus our root, with the labels the runtime expects.
   & $adb shell "mkdir -p /data/local/tmp/cacerts-copy && cp /apex/com.android.conscrypt/cacerts/* /data/local/tmp/cacerts-copy/ && cp /data/local/tmp/$hashName /data/local/tmp/cacerts-copy/ && chmod 644 /data/local/tmp/cacerts-copy/*"
   & $adb shell 'chcon -R u:object_r:system_file:s0 /data/local/tmp/cacerts-copy'
+}
 
-  # init's namespace first, then zygote so newly forked apps inherit it.
-  & $adb shell 'nsenter --mount=/proc/1/ns/mnt -- mount --bind /data/local/tmp/cacerts-copy /apex/com.android.conscrypt/cacerts'
-  & $adb shell 'for pid in $(pidof zygote) $(pidof zygote64); do nsenter --mount=/proc/$pid/ns/mnt -- mount --bind /data/local/tmp/cacerts-copy /apex/com.android.conscrypt/cacerts; done'
+# Each namespace is repaired on its own. A run interrupted after the init mount
+# leaves zygote unpatched, and a guard that only looked at init would skip the
+# repair, restart the app and still report a working install.
+if (Test-RemotePath -Path $apexCa) { Write-Host 'init namespace already patched.' }
+else { & $adb shell "nsenter --mount=/proc/1/ns/mnt -- $bind" }
+
+foreach ($zygotePid in Get-ZygotePid) {
+  if (Test-RemotePath -Path $apexCa -ProcessId $zygotePid) { continue }
+  & $adb shell "nsenter --mount=/proc/$zygotePid/ns/mnt -- $bind"
 }
 
 function Stop-Package {

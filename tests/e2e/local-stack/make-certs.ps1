@@ -22,6 +22,9 @@
 #>
 
 $ErrorActionPreference = 'Stop'
+# 'Stop' alone ignores native exit codes, so a failed openssl call would leave a
+# stale or partial certificate in place and still reach the success message.
+$PSNativeCommandUseErrorActionPreference = $true
 
 $here = $PSScriptRoot
 $certDir = Join-Path $here 'certs'
