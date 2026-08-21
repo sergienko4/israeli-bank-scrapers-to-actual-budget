@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.12](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.11...v1.42.12) (2026-08-21)
+
+
+### Fixed
+
+* **deps:** bump israeli-bank-scrapers to 8.6.7 and retire card sign flip ([#632](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/632)) ([190ee11](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/190ee113c7272ac61173b1ac65c2ae57325b03d8))
+* **import:** record fully failed runs in audit log ([#637](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/637)) ([6855827](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/68558278d719c5d6276f6b131a23af77d7c39320))
+* **portal:** trust proxies by address after fastify 5.12.1 ([#634](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/634)) ([6e910ac](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/6e910acdc8c65b169132069128c21451c120f6bf))
+
+
+### Testing
+
+* check card-sign parity across all card banks ([#636](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/636)) ([a6bd0a8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/a6bd0a8b7b2baf173d237ea76d2eb9eacab57bcc))
+
 ## [1.42.11](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.10...v1.42.11) (2026-08-18)
 
 
