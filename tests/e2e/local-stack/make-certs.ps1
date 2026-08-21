@@ -1,4 +1,7 @@
 ﻿#!/usr/bin/env pwsh
+# Older hosts accept the assignment below without complaint and ignore it, so
+# the exit-code guard would disappear with nothing to show for it.
+#Requires -Version 7.4
 <#
 .SYNOPSIS
   Generates a local CA and a server certificate for the validation TLS proxy.

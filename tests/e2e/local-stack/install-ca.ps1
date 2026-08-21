@@ -1,4 +1,7 @@
 ﻿#!/usr/bin/env pwsh
+# Older hosts accept the assignment below without complaint and ignore it, so
+# the exit-code guard would disappear with nothing to show for it.
+#Requires -Version 7.4
 <#
 .SYNOPSIS
   Installs the local validation CA into a running emulator's system trust store.
