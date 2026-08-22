@@ -10,7 +10,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildContentKey,
   buildImportedId,
+  buildImportedIdAt,
   buildImportedIdLegacy,
   parseTransaction,
 } from '../../../src/Services/Transaction/ImportedIdBuilder.js';
@@ -45,6 +47,60 @@ describe('buildImportedId', () => {
     const { description: _omit, ...txnNoDesc } = baseTxn;
     const id = buildImportedId('discount-123', txnNoDesc, { ...baseParsed, description: '' });
     expect(id).toMatch(/^[a-f0-9]{16}$/);
+  });
+});
+
+describe('buildContentKey', () => {
+  it('joins accountKey, date, amount and description', () => {
+    expect(buildContentKey('discount-123', baseTxn, baseParsed))
+      .toBe('discount-123|2026-02-14|-10000|Test');
+  });
+
+  it('ignores identifier — identical charges share one key', () => {
+    const a = buildContentKey('discount-123', baseTxn, baseParsed);
+    const b = buildContentKey('discount-123', { ...baseTxn, identifier: 'other' }, baseParsed);
+    expect(b).toBe(a);
+  });
+
+  it('treats missing description as empty string', () => {
+    const { description: _omit, ...txnNoDesc } = baseTxn;
+    expect(buildContentKey('discount-123', txnNoDesc, { ...baseParsed, description: '' }))
+      .toBe('discount-123|2026-02-14|-10000|');
+  });
+});
+
+describe('buildImportedIdAt', () => {
+  const contentKey = 'discount-123|2026-02-14|-10000|Test';
+
+  /*
+   * Pinned literals, not computed expectations. A regression here means
+   * previously-written imported_id values would stop matching, orphaning every
+   * row already in a user's ledger and re-importing their whole history as
+   * duplicates. That is the one outcome worse than the bug this suffix fixes,
+   * so the occurrence-0 hash is frozen deliberately.
+   */
+  it('hashes the bare content key at occurrence 0', () => {
+    expect(buildImportedIdAt(contentKey, 0)).toBe('a5a81e6729bc8dc1');
+  });
+
+  it('keeps occurrence 0 identical to the legacy-free buildImportedId', () => {
+    expect(buildImportedIdAt(contentKey, 0)).toBe(
+      buildImportedId('discount-123', baseTxn, baseParsed),
+    );
+  });
+
+  it('gives later copies distinct, stable hashes', () => {
+    expect(buildImportedIdAt(contentKey, 1)).toBe('825f0a482a2f4d5d');
+    expect(buildImportedIdAt(contentKey, 2)).toBe('3389b362a1397402');
+  });
+
+  it('never collides across occurrences of the same charge', () => {
+    const ids = [0, 1, 2, 3].map((n) => buildImportedIdAt(contentKey, n));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('treats a negative occurrence as occurrence 0', () => {
+    expect(buildImportedIdAt(contentKey, -1)).toBe(buildImportedIdAt(contentKey, 0));
   });
 });
 

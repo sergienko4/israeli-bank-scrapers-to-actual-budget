@@ -11,6 +11,9 @@ import type api from '@actual-app/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DedupQuery from '../../../src/Services/Transaction/DedupQuery.js';
+import {
+  buildImportedId, buildImportedIdLegacy, parseTransaction,
+} from '../../../src/Services/Transaction/ImportedIdBuilder.js';
 import TransactionBatchImporter from '../../../src/Services/Transaction/TransactionBatchImporter.js';
 import type { ICategoryResolver } from '../../../src/Services/ICategoryResolver.js';
 import type { IBankTransaction } from '../../../src/Types/Index.js';
@@ -87,6 +90,104 @@ describe('TransactionBatchImporter.processBatch — empty + classification', () 
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.stringContaining('Error importing transaction: network down'),
     );
+  });
+});
+
+describe('TransactionBatchImporter.processBatch — duplicate charges', () => {
+  const charge: IBankTransaction = {
+    date: '2026-02-14', chargedAmount: -18.9, description: 'Coffee Shop',
+  };
+  const batch = {
+    bankName: 'discount', accountNumber: '123', actualAccountId: 'acc',
+  };
+
+  /**
+   * Collects the imported_id of every transaction sent to Actual Budget.
+   * @returns imported_id values in call order.
+   */
+  function importedIds(): string[] {
+    return mockApi.importTransactions.mock.calls.map((call) => String(
+      (call as [string, Array<Record<string, unknown>>])[1][0].imported_id,
+    ));
+  }
+
+  it('gives both copies of a genuine double charge a distinct id', async () => {
+    const out = await buildImporter().processBatch({
+      ...batch, transactions: [charge, { ...charge }],
+    });
+    expect(out.newTransactions).toHaveLength(2);
+    expect(new Set(importedIds()).size).toBe(2);
+  });
+
+  it('leaves a lone transaction hashing exactly as before', async () => {
+    await buildImporter().processBatch({ ...batch, transactions: [charge] });
+    expect(importedIds()).toEqual([
+      buildImportedId('discount-123', charge, parseTransaction(charge)),
+    ]);
+  });
+
+  it('re-scraping the same batch reuses the same ids and adds nothing new', async () => {
+    await buildImporter().processBatch({ ...batch, transactions: [charge, { ...charge }] });
+    const firstRun = importedIds();
+    mockApi.importTransactions.mockClear();
+    mockApi.aqlQuery.mockResolvedValue({
+      data: firstRun.map((id) => ({ imported_id: id })),
+    });
+
+    const out = await buildImporter().processBatch({
+      ...batch, transactions: [charge, { ...charge }],
+    });
+
+    expect(out.newTransactions).toEqual([]);
+    expect(out.existingTransactions).toHaveLength(2);
+    expect(new Set(importedIds())).toEqual(new Set(firstRun));
+  });
+
+  it('numbers identical charges by content, not by position in the batch', async () => {
+    const other: IBankTransaction = {
+      date: '2026-02-14', chargedAmount: -5, description: 'Bus',
+    };
+    await buildImporter().processBatch({
+      ...batch, transactions: [charge, other, { ...charge }],
+    });
+    const ids = importedIds();
+    expect(ids[0]).toBe(buildImportedId('discount-123', charge, parseTransaction(charge)));
+    expect(ids[1]).toBe(buildImportedId('discount-123', other, parseTransaction(other)));
+    expect(ids[2]).not.toBe(ids[0]);
+  });
+
+  it('does not let one legacy row suppress the second copy of a duplicate', async () => {
+    const legacyId = buildImportedIdLegacy('discount-123', charge, parseTransaction(charge));
+    mockApi.aqlQuery.mockResolvedValue({ data: [{ imported_id: legacyId }] });
+
+    const out = await buildImporter().processBatch({
+      ...batch, transactions: [charge, { ...charge }],
+    });
+
+    expect(out.existingTransactions).toHaveLength(1);
+    expect(out.newTransactions).toHaveLength(1);
+  });
+
+  it('matches BOTH legacy rows when identical charges carry distinct identifiers', async () => {
+    // Credit-card scrapers (Isracard, Cal, Max) supply a unique identifier per
+    // charge, so two identical charges already in a pre-2026-05 ledger hold two
+    // DISTINCT legacy ids. Both must still be recognised, otherwise upgrading
+    // re-imports the second one as a phantom duplicate.
+    const copyA: IBankTransaction = { ...charge, identifier: 'txn-abc' };
+    const copyB: IBankTransaction = { ...charge, identifier: 'txn-def' };
+    mockApi.aqlQuery.mockResolvedValue({
+      data: [
+        { imported_id: buildImportedIdLegacy('discount-123', copyA, parseTransaction(copyA)) },
+        { imported_id: buildImportedIdLegacy('discount-123', copyB, parseTransaction(copyB)) },
+      ],
+    });
+
+    const out = await buildImporter().processBatch({
+      ...batch, transactions: [copyA, copyB],
+    });
+
+    expect(out.existingTransactions).toHaveLength(2);
+    expect(out.newTransactions).toEqual([]);
   });
 });
 
