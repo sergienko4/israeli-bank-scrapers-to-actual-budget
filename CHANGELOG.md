@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.13](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.12...v1.42.13) (2026-08-22)
+
+
+### Fixed
+
+* **deps:** bump @sergienko4/israeli-bank-scrapers from 8.6.7 to 8.6.8 ([#640](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/640)) ([9f7e46e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/9f7e46e05199bb7545672134e55896881a23ab7d))
+
 ## [1.42.12](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.11...v1.42.12) (2026-08-21)
 
 
