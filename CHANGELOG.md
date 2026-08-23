@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.17](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.16...v1.42.17) (2026-08-23)
+
+
+### Fixed
+
+* **test:** replace FileLogger sleep with poll ([#651](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/651)) ([564548e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/564548eb4bace834423780ff00e596bee468c907))
+* **test:** set explicit unit-suite testTimeout ([#649](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/649)) ([6a8d24c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/6a8d24c2acdeeb3ec102477b639473b03b8a24a9))
+
 ## [1.42.16](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.15...v1.42.16) (2026-08-23)
 
 
