@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.15](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.14...v1.42.15) (2026-08-23)
+
+
+### Fixed
+
+* drop scraper log options the library ignores ([#644](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/644)) ([a038c6e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/a038c6ea5cf7ad1af591d861a76f17bd68685abe))
+* stop retrying gone bank landing pages ([#645](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/645)) ([27485a6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/27485a6609cbec2f14656c090895d069e849ad0b))
+
 ## [1.42.14](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.13...v1.42.14) (2026-08-23)
 
 
