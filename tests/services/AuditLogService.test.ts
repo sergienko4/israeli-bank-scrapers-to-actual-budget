@@ -1,22 +1,50 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
-import { existsSync, mkdirSync, readFileSync, rmdirSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'fs';
 import { fakeImportSummary } from '../helpers/factories.js';
 
-const TEST_FILE = '/tmp/test-audit-log.json';
+// A fixed path under the shared C:\tmp loses races against the Windows virus
+// scanner: under full-suite parallel load, unlink intermittently failed with
+// "EBUSY: resource busy or locked". A private directory with a per-test
+// filename removes the contention, and means a failed delete can never leak
+// state into the next test. Matches the join(tmpdir(), ...) convention used
+// further down this file.
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'audit-log-'));
+let TEST_FILE = '';
+let fixtureCount = 0;
+
+/**
+ * Removes a fixture path, tolerating the transient locks that make deletion
+ * fail on Windows while a scanner still holds the handle.
+ * @param target - File or directory to remove.
+ * @param recursive - Whether to remove a directory tree.
+ */
+function removeQuietly(target: string, recursive = false): void {
+  try {
+    rmSync(target, { force: true, recursive });
+  } catch {
+    // Best effort only: every test uses a fresh filename, so a leftover file
+    // cannot affect the next one.
+  }
+}
 
 describe('AuditLogService', () => {
   let service: AuditLogService;
 
   beforeEach(() => {
+    fixtureCount += 1;
+    TEST_FILE = join(TEST_DIR, `audit-${String(fixtureCount)}.json`);
     service = new AuditLogService(TEST_FILE, 5);
-    if (existsSync(TEST_FILE)) unlinkSync(TEST_FILE);
   });
 
   afterEach(() => {
-    if (existsSync(TEST_FILE)) unlinkSync(TEST_FILE);
+    removeQuietly(TEST_FILE);
+  });
+
+  afterAll(() => {
+    removeQuietly(TEST_DIR, true);
   });
 
   it('creates file on first record and returns succeed', () => {
