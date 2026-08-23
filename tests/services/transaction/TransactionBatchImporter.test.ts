@@ -189,6 +189,22 @@ describe('TransactionBatchImporter.processBatch — duplicate charges', () => {
     expect(out.existingTransactions).toHaveLength(2);
     expect(out.newTransactions).toEqual([]);
   });
+
+  it('re-submits a legacy-only match under its legacy id, not a fresh hash', async () => {
+    // The ledger row is stored under the legacy id. Submitting the newly
+    // derived hash would hand Actual Budget an id it has never seen, so it
+    // would insert a second row instead of matching the one just recognised.
+    const historic: IBankTransaction = { ...charge, identifier: 'txn-abc' };
+    const parsed = parseTransaction(historic);
+    const legacyId = buildImportedIdLegacy('discount-123', historic, parsed);
+    mockApi.aqlQuery.mockResolvedValue({ data: [{ imported_id: legacyId }] });
+
+    const out = await buildImporter().processBatch({ ...batch, transactions: [historic] });
+
+    expect(out.existingTransactions).toHaveLength(1);
+    expect(importedIds()).toEqual([legacyId]);
+    expect(importedIds()).not.toContain(buildImportedId('discount-123', historic, parsed));
+  });
 });
 
 describe('TransactionBatchImporter.processBatch — category resolver delegation', () => {

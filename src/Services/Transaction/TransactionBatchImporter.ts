@@ -218,21 +218,40 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
    * @param ctx - Batch context holding the id set and the claim register.
    * @param txn - Raw bank transaction being classified.
    * @param parsed - Parsed transaction record derived from txn.
-   * @returns True when an unclaimed legacy row matched and was claimed.
+   * @returns The claimed legacy id, or '' when no free legacy row matched.
    */
-  private static matchesLegacyRow(
+  private static claimLegacyRow(
     ctx: IBatchContext, txn: IBankTransaction, parsed: ITransactionRecord,
-  ): boolean {
+  ): string {
     const legacyId = buildImportedIdLegacy(ctx.accountKey, txn, parsed);
-    if (!ctx.existingIds.has(legacyId) || ctx.claimedLegacyIds.has(legacyId)) return false;
+    if (!ctx.existingIds.has(legacyId) || ctx.claimedLegacyIds.has(legacyId)) return '';
     ctx.claimedLegacyIds.add(legacyId);
-    return true;
+    return legacyId;
+  }
+
+  /**
+   * Picks the id and accumulator once both candidate ids are known.
+   * @param ctx - Batch context supplying the accumulator arrays.
+   * @param hashId - Occurrence-aware content hash for this transaction.
+   * @param legacyId - Claimed legacy id, or '' when none was free.
+   * @returns The chosen imported_id and the target accumulator array.
+   */
+  private static pickTarget(
+    ctx: IBatchContext, hashId: string, legacyId: string,
+  ): { importedId: string; target: ITransactionRecord[] } {
+    if (legacyId === '') return { importedId: hashId, target: ctx.newTxns };
+    return { importedId: legacyId, target: ctx.existingTxns };
   }
 
   /**
    * Classifies a transaction as new or already-imported via dual-format
    * dedup (new hash + legacy imported_id), returning the imported_id to
    * persist plus the accumulator array it belongs in.
+   *
+   * A transaction matched only by the legacy format is re-submitted under
+   * that same legacy id, never the freshly derived hash: the ledger row is
+   * stored under the legacy id, so sending the hash would present Actual
+   * with an id it has never seen and duplicate the row it was meant to match.
    * @param ctx - Batch context with the dedup set and accumulator arrays.
    * @param txn - Raw bank transaction being classified.
    * @param parsed - Parsed transaction record derived from txn.
@@ -243,10 +262,10 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
   ): { importedId: string; target: ITransactionRecord[] } {
     const contentKey = buildContentKey(ctx.accountKey, txn, parsed);
     const occurrence = TransactionBatchImporter.takeOccurrence(ctx, contentKey);
-    const importedId = buildImportedIdAt(contentKey, occurrence);
-    const isExisting = ctx.existingIds.has(importedId)
-      || TransactionBatchImporter.matchesLegacyRow(ctx, txn, parsed);
-    return { importedId, target: isExisting ? ctx.existingTxns : ctx.newTxns };
+    const hashId = buildImportedIdAt(contentKey, occurrence);
+    if (ctx.existingIds.has(hashId)) return { importedId: hashId, target: ctx.existingTxns };
+    const legacyId = TransactionBatchImporter.claimLegacyRow(ctx, txn, parsed);
+    return TransactionBatchImporter.pickTarget(ctx, hashId, legacyId);
   }
 
   /**

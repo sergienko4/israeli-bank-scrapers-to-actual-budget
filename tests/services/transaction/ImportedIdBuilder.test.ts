@@ -90,8 +90,20 @@ describe('buildImportedIdAt', () => {
   });
 
   it('gives later copies distinct, stable hashes', () => {
-    expect(buildImportedIdAt(contentKey, 1)).toBe('825f0a482a2f4d5d');
-    expect(buildImportedIdAt(contentKey, 2)).toBe('3389b362a1397402');
+    expect(buildImportedIdAt(contentKey, 1)).toBe('f9b53b9864d9db9b');
+    expect(buildImportedIdAt(contentKey, 2)).toBe('c6985a38d4787e3b');
+  });
+
+  /*
+   * The occurrence marker is appended to the HASH of the content key, never to
+   * the content key itself. Suffixing the raw key would let a charge whose
+   * description happens to end in `|#1` claim the id belonging to its
+   * neighbour's second copy, silently merging two unrelated charges.
+   */
+  it('does not confuse a later copy with a key that ends in the marker', () => {
+    const plain = 'discount-123|2026-02-14|-10000|Coffee';
+    const lookalike = 'discount-123|2026-02-14|-10000|Coffee|#1';
+    expect(buildImportedIdAt(plain, 1)).not.toBe(buildImportedIdAt(lookalike, 0));
   });
 
   it('never collides across occurrences of the same charge', () => {

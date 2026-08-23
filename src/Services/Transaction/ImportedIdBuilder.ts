@@ -59,14 +59,22 @@ function hashSeed(seed: string): string {
  *
  * Occurrence 0 deliberately hashes the bare content key, so every id ever
  * written stays valid: rows already in a ledger keep matching and no history
- * is re-imported. Only the second and later copies take a `|#N` suffix.
+ * is re-imported.
+ *
+ * Later copies hash `${hash(contentKey)}|#N` rather than `${contentKey}|#N`.
+ * Suffixing the raw key would be ambiguous: a charge whose description ends
+ * in `|#1` would, at occurrence 0, produce the same seed as its neighbour at
+ * occurrence 1. Hashing first removes that overlap by construction — a
+ * content key always carries the three pipes of its four fields, while the
+ * derived seed carries exactly one.
  * @param contentKey - Key from {@link buildContentKey}.
  * @param occurrence - Zero-based index among identical charges in the batch.
  * @returns A 16-char lowercase hex string for Actual's importTransactions API.
  */
 export function buildImportedIdAt(contentKey: string, occurrence: number): string {
-  const seed = occurrence <= 0 ? contentKey : `${contentKey}|#${String(occurrence)}`;
-  return hashSeed(seed);
+  const base = hashSeed(contentKey);
+  if (occurrence <= 0) return base;
+  return hashSeed(`${base}|#${String(occurrence)}`);
 }
 
 /**
