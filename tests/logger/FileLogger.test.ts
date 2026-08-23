@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, existsSync, readdirSync, readFileSync, unlinkSync, rmdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
 import FileLogger from '../../src/Logger/FileLogger.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
@@ -15,17 +16,58 @@ function clearDir(dir: string): void {
   try { rmdirSync(dir); } catch { /* ignore */ }
 }
 
-async function flush(ms = 50): Promise<void> {
-  return new Promise(res => setTimeout(res, ms));
+// LogRotatingStream writes through fs.createWriteStream, which opens the file
+// asynchronously. Neither the file nor its contents exist at a predictable
+// moment, so these tests wait on observed state instead of a guessed delay.
+// A fixed 50ms sleep used to gate these assertions and failed on a loaded
+// machine (2026-08-23: "expected [] to have a length of 1 but got +0").
+const POLL_INTERVAL_MS = 10;
+const WAIT_TIMEOUT_MS = 5_000;
+
+/**
+ * Polls until the probe reports readiness, or fails once the deadline passes.
+ * @param probe - Returns the observed value, or undefined while not yet ready.
+ * @param expectation - Description of what is awaited, used in the timeout message.
+ * @returns The first defined value the probe returns.
+ */
+async function waitFor<T>(probe: () => T | undefined, expectation: string): Promise<T> {
+  const deadline = Date.now() + WAIT_TIMEOUT_MS;
+  while (Date.now() <= deadline) {
+    const observed = probe();
+    if (observed !== undefined) return observed;
+    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+  throw new Error(`Timed out after ${String(WAIT_TIMEOUT_MS)}ms waiting for ${expectation}`);
+}
+
+/**
+ * Waits until the rotating stream has created its log file on disk.
+ * @returns The directory listing, which contains at least one entry.
+ */
+async function waitForLogFile(): Promise<string[]> {
+  return waitFor(() => {
+    const files = readdirSync(testDir);
+    return files.length > 0 ? files : undefined;
+  }, 'the log file to be created');
+}
+
+/**
+ * Waits until at least one complete NDJSON line has been flushed to the file.
+ * @returns The log file contents, containing at least one terminated line.
+ */
+async function waitForLogContent(): Promise<string> {
+  return waitFor(() => {
+    const content = readLogContent();
+    return content.includes('\n') ? content : undefined;
+  }, 'a complete log line to be written');
 }
 
 beforeEach(() => {
-  testDir = join(tmpdir(), `filelogger-test-${Date.now()}`);
+  testDir = join(tmpdir(), `filelogger-test-${randomUUID()}`);
   mkdirSync(testDir, { recursive: true });
 });
 
-afterEach(async () => {
-  await flush();
+afterEach(() => {
   clearDir(testDir);
 });
 
@@ -39,15 +81,13 @@ describe('FileLogger', () => {
   it('creates a log file on first write', async () => {
     const logger = new FileLogger(testDir);
     logger.info('hello');
-    await flush();
-    expect(readdirSync(testDir)).toHaveLength(1);
+    expect(await waitForLogFile()).toHaveLength(1);
   });
 
   it('writes info messages as valid JSON lines', async () => {
     const logger = new FileLogger(testDir);
     logger.info('test message');
-    await flush();
-    const content = readLogContent();
+    const content = await waitForLogContent();
     const line = content.trim().split('\n')[0];
     const entry = JSON.parse(line);
     expect(entry.msg).toBe('test message');
@@ -57,8 +97,7 @@ describe('FileLogger', () => {
   it('writes debug messages (level 20)', async () => {
     const logger = new FileLogger(testDir);
     logger.debug('debug msg');
-    await flush();
-    const entry = JSON.parse(readLogContent().trim());
+    const entry = JSON.parse((await waitForLogContent()).trim());
     expect(entry.level).toBe(20);
     expect(entry.msg).toBe('debug msg');
   });
@@ -66,16 +105,14 @@ describe('FileLogger', () => {
   it('writes warn messages (level 40)', async () => {
     const logger = new FileLogger(testDir);
     logger.warn('warning');
-    await flush();
-    const entry = JSON.parse(readLogContent().trim());
+    const entry = JSON.parse((await waitForLogContent()).trim());
     expect(entry.level).toBe(40);
   });
 
   it('writes error messages (level 50)', async () => {
     const logger = new FileLogger(testDir);
     logger.error('failure');
-    await flush();
-    const entry = JSON.parse(readLogContent().trim());
+    const entry = JSON.parse((await waitForLogContent()).trim());
     expect(entry.level).toBe(50);
     expect(entry.msg).toBe('failure');
   });
@@ -83,8 +120,7 @@ describe('FileLogger', () => {
   it('includes context fields in JSON output', async () => {
     const logger = new FileLogger(testDir);
     logger.info('import done', { bank: 'discount', count: 5 });
-    await flush();
-    const entry = JSON.parse(readLogContent().trim());
+    const entry = JSON.parse((await waitForLogContent()).trim());
     expect(entry.bank).toBe('discount');
     expect(entry.count).toBe(5);
   });
@@ -92,8 +128,7 @@ describe('FileLogger', () => {
   it('redacts sensitive fields', async () => {
     const logger = new FileLogger(testDir);
     logger.info('login', { password: TEST_CREDENTIAL });
-    await flush();
-    const entry = JSON.parse(readLogContent().trim());
+    const entry = JSON.parse((await waitForLogContent()).trim());
     expect(entry.password).toBe('[REDACTED]');
   });
 });
