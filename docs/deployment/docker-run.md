@@ -113,9 +113,21 @@ peaks at ~1.2 GB and settles back to ~400 MB between banks.
 > and stays installed either way; production mode stops the transport being
 > attached, so no worker is ever started.
 
-`NODE_ENV=production` silences the *scraper library's* own log output. The
+`NODE_ENV=production` silences the *scraper library's* own log output
+completely — the library falls back to `level: 'silent'`, so no scraper line
+reaches the logs at any severity, and `LOG_LEVEL` does not change that. The
 importer's logging is independent and still honours `LOG_LEVEL`, so
-`-e LOG_LEVEL=trace` continues to produce full importer traces.
+`-e LOG_LEVEL=trace` continues to produce full importer traces. Failure
+screenshots are also unaffected, because the provider writes those straight to
+disk rather than through its logger.
+
+To read the scraper's own narration for a single diagnostic run, add
+`-e NODE_ENV=development`. Keep it out of long-running deployments: it attaches
+the `pino-pretty` transport described above — on scraper 8.6.3+ that is one
+~4 MB worker per scrape process rather than the old leak, but it also emits
+ANSI colour codes into the container log. See
+[Logging](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/logging.md)
+for the full procedure.
 
 ## Volumes reference
 

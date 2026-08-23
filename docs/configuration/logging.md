@@ -23,12 +23,10 @@ verbosity and re-run without editing files over SSH. It falls back to the
 `LOG_LEVEL` environment variable when unset.
 
 Setting `level` to `debug` or `trace` additionally asks the bank scraper to
-explain itself:
+photograph any login it fails:
 
 | What you get | Provider option |
 |--------------|-----------------|
-| Step-by-step login narration | `loginLogLevel: trace` |
-| Verbose scraper output | `verbose: true` |
 | A screenshot of the page at the moment login failed | `storeFailureScreenShotPath` |
 
 Screenshots land in `logs/failures` below the working directory — which is
@@ -48,6 +46,42 @@ but not why (an expired session, a WAF challenge, or a changed login page).
 !!! warning "Turn it back down"
     `trace` is noisy and screenshots may capture account details. Return `level`
     to `info` once you have diagnosed the problem.
+
+## Getting the scraper's own log output
+
+`level` controls the **importer's** logger. The scraper library keeps a
+separate logger, and in the published container image it is switched off
+entirely: the image sets `NODE_ENV=production`, which makes the library skip
+attaching a log transport and fall back to `level: 'silent'`. No scraper line,
+at any severity, reaches the logs.
+
+`LOG_LEVEL` does not rescue it. The library only consults `LOG_LEVEL` *after*
+it has decided to attach a transport, so raising it changes importer output
+only.
+
+Failure screenshots are unaffected — the provider writes those straight to
+disk, so they still appear at `debug`/`trace` under `NODE_ENV=production`.
+
+To read the scraper's own narration, run one throwaway container in
+development mode:
+
+```bash
+# Add your usual volumes and flags to this run
+docker run --rm \
+  -e NODE_ENV=development \
+  -e LOG_LEVEL=debug \
+  israeli-bank-importer:latest
+```
+
+!!! warning "Diagnostic runs only"
+    Development mode makes the library attach a `pino-pretty` transport, which
+    starts a worker thread per scrape process and emits ANSI colour codes into
+    the container log. Scraper 8.6.3+ caches that transport per destination, so
+    the cost is one ~4 MB worker rather than the leak that once OOM-killed a
+    2 GB container. Production deployments should still keep
+    `NODE_ENV=production` — see
+    [Docker run](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-run.md)
+    for the memory background.
 
 ## Log formats
 

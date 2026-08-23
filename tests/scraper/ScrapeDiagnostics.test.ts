@@ -3,8 +3,9 @@
  *
  * A visaCal run failed with a single opaque line ("resolved zero accounts")
  * because the provider was never asked to explain itself. These guard that
- * raising the importer log level turns on the provider's own login trace and
- * failure screenshot, and that a normal run stays quiet.
+ * raising the importer log level turns on the provider's failure screenshot,
+ * that a normal run stays quiet, and that the two provider options the library
+ * declares but never reads are left alone.
  */
 import { join } from 'node:path';
 
@@ -44,9 +45,14 @@ describe('attachDiagnostics', () => {
   it('asks the provider to explain itself when running at debug', () => {
     const options = buildOptions();
     expect(attachDiagnostics(options, {}, 'debug')).toBe(true);
-    expect(options.verbose).toBe(true);
-    expect(options.loginLogLevel).toBe('trace');
     expect(options.storeFailureScreenShotPath).toContain(DEFAULT_SHOT_DIR);
+  });
+
+  it('leaves the options the provider declares but never reads unset', () => {
+    const options = buildOptions();
+    attachDiagnostics(options, {}, 'debug');
+    expect(options.verbose).toBeUndefined();
+    expect(options.loginLogLevel).toBeUndefined();
   });
 
   it('names the screenshot file so the provider cannot overwrite a folder', () => {
@@ -75,8 +81,6 @@ describe('attachDiagnostics', () => {
   it('keeps a normal run quiet so logs stay readable', () => {
     const options = buildOptions();
     expect(attachDiagnostics(options, {}, 'info')).toBe(false);
-    expect(options.verbose).toBeUndefined();
-    expect(options.loginLogLevel).toBeUndefined();
     expect(options.storeFailureScreenShotPath).toBeUndefined();
   });
 

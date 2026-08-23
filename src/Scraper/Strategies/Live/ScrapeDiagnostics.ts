@@ -1,14 +1,20 @@
 /**
  * Provider diagnostics wiring for live scrapes.
  *
- * The provider can report why a login failed — verbose step logging and a
- * screenshot taken at the point of failure — but only when it is asked to.
- * Without these, a failed scrape surfaces as a single opaque line such as
- * "resolved zero accounts", which says the session was invalid but not why.
+ * The provider photographs the page at the point a login fails, but only when
+ * it is asked to. Without that, a failed scrape surfaces as a single opaque
+ * line such as "resolved zero accounts", which says the session was invalid
+ * but not why.
  *
  * Diagnostics follow the importer's own log level rather than a separate
  * switch, so raising the log level to debug is enough to get a diagnosable
  * failure on the next run — no config edit, no redeploy.
+ *
+ * Scope note: the screenshot is the whole of what this wiring can buy. The
+ * provider's own step-by-step log narration is not reachable from here. It is
+ * silenced by `NODE_ENV=production` in the container image and cannot be
+ * revived by any provider option or by `LOG_LEVEL`; see
+ * docs/configuration/logging.md for the one-run diagnostic override.
  * @internal
  */
 
@@ -86,10 +92,11 @@ function resolveShotPath(target: ScraperOptions, bankConfig: IBankConfig): strin
 /**
  * Attaches provider diagnostics when the importer is running verbosely.
  *
- * `loginLogLevel` makes the provider narrate each step, and
- * `storeFailureScreenShotPath` makes it photograph the page before it tears
- * the browser down on any failed session — together they turn an opaque
- * "zero accounts" result into a diagnosable one.
+ * `storeFailureScreenShotPath` makes the provider photograph the page before
+ * it tears the browser down on any failed session, turning an opaque "zero
+ * accounts" result into a diagnosable one. The provider writes that file
+ * straight to disk, so it survives even though the provider's own logger is
+ * silent in the container.
  * @param target - Provider options object that receives the diagnostics.
  * @param bankConfig - Bank config consulted for the screenshot directory.
  * @param logLevel - Importer log level resolved from config or env.
@@ -99,8 +106,6 @@ export default function attachDiagnostics(
   target: ScraperOptions, bankConfig: IBankConfig, logLevel: string,
 ): boolean {
   if (!wantsDiagnostics(logLevel)) return false;
-  target.verbose = true;
-  target.loginLogLevel = 'trace';
   target.storeFailureScreenShotPath = resolveShotPath(target, bankConfig);
   return true;
 }
