@@ -18,15 +18,21 @@ let fixtureCount = 0;
 /**
  * Removes a fixture path, tolerating the transient locks that make deletion
  * fail on Windows while a scanner still holds the handle.
+ *
+ * Failures are swallowed: this is best-effort hygiene. Every test writes to a
+ * fresh filename, so a delete that does not land cannot leak state into the
+ * next test, and reporting from teardown would only reintroduce the noise this
+ * change exists to remove.
  * @param target - File or directory to remove.
  * @param recursive - Whether to remove a directory tree.
+ * @returns Nothing; the removal is attempted and then abandoned.
  */
 function removeQuietly(target: string, recursive = false): void {
   try {
     rmSync(target, { force: true, recursive });
   } catch {
-    // Best effort only: every test uses a fresh filename, so a leftover file
-    // cannot affect the next one.
+    // A fixture that cannot be removed is exactly the transient lock this
+    // helper exists to absorb.
   }
 }
 
