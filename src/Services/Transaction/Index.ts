@@ -11,7 +11,9 @@
 export { default as AccountResolver } from './AccountResolver.js';
 export { default as DedupQuery } from './DedupQuery.js';
 export {
+  buildContentKey,
   buildImportedId,
+  buildImportedIdAt,
   buildImportedIdLegacy,
   parseTransaction,
 } from './ImportedIdBuilder.js';

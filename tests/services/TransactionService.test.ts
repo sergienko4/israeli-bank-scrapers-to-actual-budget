@@ -274,27 +274,20 @@ describe('TransactionService', () => {
       expect(result.data.skipped).toBe(1);
     });
 
-    it('collision: same-day same-amount same-description → second txn is treated as duplicate (documented tradeoff)', async () => {
-      // The new imported_id formula deliberately hashes only
+    it('duplicate charges: same-day same-amount same-description → both are imported under distinct ids', async () => {
+      // The imported_id formula deliberately hashes only
       // (accountKey, date, amount, description) to remain robust against
-      // upstream identifier drift. As a consequence, two genuinely
-      // distinct transactions sharing exactly that tuple (e.g. two
-      // identical coffee orders at the same merchant on the same day)
-      // collapse to the same imported_id, and Actual Budget records
-      // only the first one. This mirrors the upstream library's own
-      // canonicalizeTxn at index.mjs:9572 — same tuple, same trade-off.
-      // Including txn.identifier in the seed would re-introduce Bug 1
-      // (unstable identifier causes re-imports to duplicate); including
-      // txn.memo would break dedup whenever the scraper enriches memos
-      // on some runs but not others.
+      // upstream identifier drift. Including txn.identifier in the seed
+      // would re-introduce Bug 1 (unstable identifier causes re-imports to
+      // duplicate); including txn.memo would break dedup whenever the
+      // scraper enriches memos on some runs but not others.
       //
-      // Simulate Actual Budget's "already exists" behaviour: first call
-      // succeeds, second call rejects with the dup error message that
-      // TransactionService.handleImportError matches on.
-      mockApi.importTransactions
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(new Error('Transaction already exists'));
-
+      // That tuple alone, however, cannot tell a genuine double charge
+      // (e.g. two identical coffee orders at the same merchant on the same
+      // day) apart from a re-delivered row. We therefore append an
+      // occurrence suffix `|#N` to the SECOND and later copies within a
+      // batch. The first copy keeps the bare seed, so every row already in
+      // a user's ledger still matches and nothing re-imports.
       const sameDayPair = [
         { date: '2026-05-19', chargedAmount: -28, description: 'Aroma Espresso', identifier: 'a' },
         { date: '2026-05-19', chargedAmount: -28, description: 'Aroma Espresso', identifier: 'b' },
@@ -306,14 +299,16 @@ describe('TransactionService', () => {
 
       expect(result.success).toBe(true);
       assertProcedureSuccess(result);
-      expect(result.data.imported).toBe(1);
+      expect(result.data.imported).toBe(2);
       assertProcedureSuccess(result);
-      expect(result.data.skipped).toBe(1);
+      expect(result.data.skipped).toBe(0);
 
-      // Both insert attempts use the SAME imported_id (proves the collision)
+      // Each copy carries its own imported_id, so Actual Budget keeps both.
       const firstCall = mockApi.importTransactions.mock.calls[0][1][0];
       const secondCall = mockApi.importTransactions.mock.calls[1][1][0];
-      expect(secondCall.imported_id).toBe(firstCall.imported_id);
+      expect(secondCall.imported_id).not.toBe(firstCall.imported_id);
+      expect(firstCall.imported_id).toMatch(/^[0-9a-f]{16}$/);
+      expect(secondCall.imported_id).toMatch(/^[0-9a-f]{16}$/);
     });
 
     it('dual-check recognises legacy-format imported_id from existing data', async () => {

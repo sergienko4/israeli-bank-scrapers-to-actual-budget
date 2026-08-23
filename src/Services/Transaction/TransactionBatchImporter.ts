@@ -10,6 +10,11 @@
  * Behaviour preserved byte-identical: dual-format dedup (new hash + legacy),
  * `already exists` -> existingTransactions classification, category resolver
  * delegation, payload shape into actualApi.importTransactions.
+ *
+ * One deliberate departure since: identical charges arriving in the same
+ * batch are now separated by a per-batch occurrence index, so a genuine
+ * double charge no longer collapses into a single ledger row. Single
+ * transactions — the overwhelming majority — hash exactly as before.
  */
 
 import type api from '@actual-app/api';
@@ -23,7 +28,7 @@ import { errorMessage } from '../../Utils/Index.js';
 import type { ICategoryResolver } from '../ICategoryResolver.js';
 import type DedupQuery from './DedupQuery.js';
 import {
-  buildImportedId, buildImportedIdLegacy, parseTransaction,
+  buildContentKey, buildImportedIdAt, buildImportedIdLegacy, parseTransaction,
 } from './ImportedIdBuilder.js';
 
 export interface IBatchOpts {
@@ -61,6 +66,10 @@ interface IBatchContext {
   existingIds: Set<string>;
   newTxns: ITransactionRecord[];
   existingTxns: ITransactionRecord[];
+  /** Content key -> how many identical charges have been seen in this batch. */
+  occurrences: Map<string, number>;
+  /** Legacy ids already claimed by an earlier transaction in this batch. */
+  claimedLegacyIds: Set<string>;
 }
 
 interface ISingleTxnContext {
@@ -131,6 +140,9 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
    * Builds the mutable batch context (accumulator arrays + dedup set) the
    * per-transaction loop fills. The returned newTxns/existingTxns arrays
    * are the same references {@link processBatch} returns.
+   *
+   * The occurrence counter starts empty per batch so identical charges are
+   * numbered from 0 on every run, keeping repeat scrapes idempotent.
    * @param opts - Batch options with bank name, account info and transactions.
    * @param existingIds - Pre-fetched imported_id set used for dedup.
    * @returns Fresh batch context seeded with empty accumulators.
@@ -141,8 +153,8 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
       accountKey: `${opts.bankName}-${opts.accountNumber}`,
       actualAccountId: opts.actualAccountId,
       existingIds,
-      newTxns: [],
-      existingTxns: [],
+      newTxns: [], existingTxns: [],
+      occurrences: new Map<string, number>(), claimedLegacyIds: new Set<string>(),
     };
   }
 
@@ -178,9 +190,68 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
   }
 
   /**
+   * Returns how many identical charges this batch has already seen, then
+   * records this one.
+   *
+   * The counter is per batch, not per ledger: it exists to separate copies
+   * that arrive together, while occurrence 0 keeps hashing the bare content
+   * key so repeat runs still match what was written before.
+   * @param ctx - Batch context holding the per-batch occurrence counter.
+   * @param contentKey - Key from buildContentKey identifying the charge.
+   * @returns Zero-based index of this charge among its identical siblings.
+   */
+  private static takeOccurrence(ctx: IBatchContext, contentKey: string): number {
+    const seen = ctx.occurrences.get(contentKey) ?? 0;
+    ctx.occurrences.set(contentKey, seen + 1);
+    return seen;
+  }
+
+  /**
+   * Claims the pre-2026-05 row matching this transaction, if one is free.
+   *
+   * Legacy ids are keyed on `txn.identifier`, so identical charges usually
+   * hold DISTINCT legacy ids and must each be able to match. A given legacy
+   * id can still only stand for one ledger row, so it is claimed at most once
+   * per batch: when identifiers are absent both copies collapse onto the same
+   * legacy id, and only the first may consume it — otherwise the second copy
+   * would be re-suppressed, which is the very bug the occurrence index fixes.
+   * @param ctx - Batch context holding the id set and the claim register.
+   * @param txn - Raw bank transaction being classified.
+   * @param parsed - Parsed transaction record derived from txn.
+   * @returns The claimed legacy id, or '' when no free legacy row matched.
+   */
+  private static claimLegacyRow(
+    ctx: IBatchContext, txn: IBankTransaction, parsed: ITransactionRecord,
+  ): string {
+    const legacyId = buildImportedIdLegacy(ctx.accountKey, txn, parsed);
+    if (!ctx.existingIds.has(legacyId) || ctx.claimedLegacyIds.has(legacyId)) return '';
+    ctx.claimedLegacyIds.add(legacyId);
+    return legacyId;
+  }
+
+  /**
+   * Picks the id and accumulator once both candidate ids are known.
+   * @param ctx - Batch context supplying the accumulator arrays.
+   * @param hashId - Occurrence-aware content hash for this transaction.
+   * @param legacyId - Claimed legacy id, or '' when none was free.
+   * @returns The chosen imported_id and the target accumulator array.
+   */
+  private static pickTarget(
+    ctx: IBatchContext, hashId: string, legacyId: string,
+  ): { importedId: string; target: ITransactionRecord[] } {
+    if (legacyId === '') return { importedId: hashId, target: ctx.newTxns };
+    return { importedId: legacyId, target: ctx.existingTxns };
+  }
+
+  /**
    * Classifies a transaction as new or already-imported via dual-format
    * dedup (new hash + legacy imported_id), returning the imported_id to
    * persist plus the accumulator array it belongs in.
+   *
+   * A transaction matched only by the legacy format is re-submitted under
+   * that same legacy id, never the freshly derived hash: the ledger row is
+   * stored under the legacy id, so sending the hash would present Actual
+   * with an id it has never seen and duplicate the row it was meant to match.
    * @param ctx - Batch context with the dedup set and accumulator arrays.
    * @param txn - Raw bank transaction being classified.
    * @param parsed - Parsed transaction record derived from txn.
@@ -189,11 +260,12 @@ export default class TransactionBatchImporter implements ITransactionBatchImport
   private static classify(
     ctx: IBatchContext, txn: IBankTransaction, parsed: ITransactionRecord,
   ): { importedId: string; target: ITransactionRecord[] } {
-    const importedId = buildImportedId(ctx.accountKey, txn, parsed);
-    const legacyId = buildImportedIdLegacy(ctx.accountKey, txn, parsed);
-    const isExisting = ctx.existingIds.has(importedId) || ctx.existingIds.has(legacyId);
-    const target = isExisting ? ctx.existingTxns : ctx.newTxns;
-    return { importedId, target };
+    const contentKey = buildContentKey(ctx.accountKey, txn, parsed);
+    const occurrence = TransactionBatchImporter.takeOccurrence(ctx, contentKey);
+    const hashId = buildImportedIdAt(contentKey, occurrence);
+    if (ctx.existingIds.has(hashId)) return { importedId: hashId, target: ctx.existingTxns };
+    const legacyId = TransactionBatchImporter.claimLegacyRow(ctx, txn, parsed);
+    return TransactionBatchImporter.pickTarget(ctx, hashId, legacyId);
   }
 
   /**
