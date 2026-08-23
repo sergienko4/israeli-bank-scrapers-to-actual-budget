@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.14](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.13...v1.42.14) (2026-08-23)
+
+
+### Fixed
+
+* import both copies of a duplicate charge ([#642](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/642)) ([af6b621](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/af6b62189b2dd80332c464918df0ba9eeb6f1419))
+
 ## [1.42.13](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.12...v1.42.13) (2026-08-22)
 
 
