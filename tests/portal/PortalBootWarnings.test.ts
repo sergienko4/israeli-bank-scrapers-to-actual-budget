@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockLogger } = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -30,6 +30,15 @@ async function warningsFromBoot(host: string): Promise<string[]> {
 }
 
 describe('portal boot warnings', () => {
+  // The first boot in a worker pays Fastify's lazy setup, which measured 4128ms
+  // on a loaded machine against a 5s budget. Paying it here moves that cost
+  // under hookTimeout, so no individual case carries first-boot latency.
+  /**
+   * Absorbs the one-off cost of the first portal boot in this worker.
+   * @returns Nothing; the warnings this boot emits are intentionally discarded.
+   */
+  beforeAll(async () => { await warningsFromBoot('127.0.0.1'); });
+
   beforeEach(() => { vi.clearAllMocks(); delete process.env.PORTAL_TRUST_PROXY; });
   afterEach(() => { delete process.env.PORTAL_TRUST_PROXY; });
 
