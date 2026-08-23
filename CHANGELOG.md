@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.16](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.15...v1.42.16) (2026-08-23)
+
+
+### Fixed
+
+* **test:** isolate audit log fixture path ([#647](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/647)) ([9edb2d8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/9edb2d8c6601b032cac48e40ab0d0b781a698912))
+
 ## [1.42.15](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.14...v1.42.15) (2026-08-23)
 
 
