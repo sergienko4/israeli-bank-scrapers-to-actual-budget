@@ -70,7 +70,7 @@ development mode:
 docker run --rm \
   -e NODE_ENV=development \
   -e LOG_LEVEL=debug \
-  israeli-bank-importer:latest
+  sergienko4/israeli-bank-importer
 ```
 
 !!! warning "Diagnostic runs only"
