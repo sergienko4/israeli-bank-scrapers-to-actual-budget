@@ -86,6 +86,45 @@ function makeOpts(overrides: Record<string, unknown> = {}): IBankScrapeStrategyO
   };
 }
 
+/**
+ * Reproduces the INIT failure text the provider emits for a landing status.
+ *
+ * Copied verbatim from the provider's `landingFailureMessage` so this suite
+ * fails loudly if the wording the classifier matches on ever drifts.
+ * @param status - HTTP status the bank edge served for the landing document.
+ * @returns The provider's INIT failure message for that status.
+ */
+function landingFailure(status: number): string {
+  return (
+    `INIT ACTION: bank edge served HTTP ${String(status)} for the landing ` +
+    `document (https://www.example-bank.co.il/); no later phase can recover from it`
+  );
+}
+
+/**
+ * Emulates the real retry policy, which re-invokes a callback that throws.
+ *
+ * The shared `retryStrategy` mock runs its callback exactly once, so it cannot
+ * show whether a failure was retried. This replacement spends a real attempt
+ * budget, making the retry decision observable through the provider call count.
+ * @param maxAttempts - Attempt budget mirroring the configured retry count.
+ * @returns An execute implementation that retries while the callback throws.
+ */
+function retryingExecute(maxAttempts: number) {
+  return async (fn: () => Promise<unknown>, operationName: string): Promise<unknown> => {
+    void operationName;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        return await fn();
+      } catch (error: unknown) {
+        lastError = error;
+      }
+    }
+    throw lastError;
+  };
+}
+
 describe('LiveScrapeStrategy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -178,5 +217,47 @@ describe('LiveScrapeStrategy', () => {
       twoFactorAuth: true, otpLongTermToken: 'placeholder-not-a-jwt',
     }));
     expect(createOtpRetriever).toHaveBeenCalledWith('discount', undefined);
+  });
+
+  describe('terminal landing failures', () => {
+    beforeEach(() => {
+      retryStrategy.execute.mockImplementation(retryingExecute(3) as never);
+    });
+
+    it.each([404, 410])(
+      'spends one attempt when the bank edge reports the landing gone (HTTP %i)',
+      async (status) => {
+        mockScraper.scrape.mockResolvedValue({
+          success: false, errorType: 'GENERIC', errorMessage: landingFailure(status),
+          accounts: [],
+        });
+        const result = await makeStrategy().scrape(makeOpts());
+        expect(mockScraper.scrape).toHaveBeenCalledTimes(1);
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.raw.success).toBe(false);
+      },
+    );
+
+    it('still spends the full budget on a transient GENERIC failure', async () => {
+      mockScraper.scrape.mockResolvedValue({
+        success: false, errorType: 'GENERIC', errorMessage: 'socket hang up', accounts: [],
+      });
+      const result = await makeStrategy().scrape(makeOpts());
+      expect(mockScraper.scrape).toHaveBeenCalledTimes(3);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.raw.success).toBe(false);
+    });
+
+    it.each([403, 429, 503])(
+      'still spends the full budget on a challenge-capable landing status (HTTP %i)',
+      async (status) => {
+        mockScraper.scrape.mockResolvedValue({
+          success: false, errorType: 'GENERIC', errorMessage: landingFailure(status),
+          accounts: [],
+        });
+        await makeStrategy().scrape(makeOpts());
+        expect(mockScraper.scrape).toHaveBeenCalledTimes(3);
+      },
+    );
   });
 });
