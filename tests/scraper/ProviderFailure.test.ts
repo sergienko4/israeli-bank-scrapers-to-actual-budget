@@ -24,6 +24,21 @@ function failure(errorType: string, errorMessage?: string): IScraperScrapingResu
   return { success: false, errorType, errorMessage } as IScraperScrapingResult;
 }
 
+/**
+ * Reproduces the INIT failure text the provider emits for a landing status.
+ *
+ * Copied verbatim from the provider's `landingFailureMessage` so this suite
+ * fails loudly if the wording our classifier matches on ever drifts.
+ * @param status - HTTP status the bank edge served for the landing document.
+ * @returns The provider's INIT failure message for that status.
+ */
+function landingFailure(status: number): string {
+  return (
+    `INIT ACTION: bank edge served HTTP ${String(status)} for the landing ` +
+    `document (https://www.example-bank.co.il/); no later phase can recover from it`
+  );
+}
+
 describe('isRetryableProviderFailure', () => {
   it('does not retry a successful scrape', () => {
     const result = { success: true, accounts: [] } as unknown as IScraperScrapingResult;
@@ -53,11 +68,35 @@ describe('isRetryableProviderFailure', () => {
   it('retries an unrecognised error type rather than giving up', () => {
     expect(isRetryableProviderFailure(failure('SOMETHING_NEW'))).toBe(true);
   });
+
+  it.each([404, 410])(
+    'does not retry a landing document the bank edge reports gone (HTTP %i)',
+    (status) => {
+      expect(isRetryableProviderFailure(failure('GENERIC', landingFailure(status)))).toBe(false);
+    },
+  );
+
+  it.each([403, 429, 503])(
+    'still retries a challenge-capable landing status (HTTP %i)',
+    (status) => {
+      expect(isRetryableProviderFailure(failure('GENERIC', landingFailure(status)))).toBe(true);
+    },
+  );
+
+  it('still retries a GENERIC failure unrelated to the landing document', () => {
+    const result = failure('GENERIC', 'Hard-model scrape resolved zero accounts');
+    expect(isRetryableProviderFailure(result)).toBe(true);
+  });
 });
 
 describe('throwIfRetryable', () => {
   it('returns permanent failures untouched so they fail fast', () => {
     const result = failure('INVALID_PASSWORD', 'wrong password');
+    expect(throwIfRetryable(result)).toBe(result);
+  });
+
+  it('returns a gone landing document untouched so it fails fast', () => {
+    const result = failure('GENERIC', landingFailure(404));
     expect(throwIfRetryable(result)).toBe(result);
   });
 

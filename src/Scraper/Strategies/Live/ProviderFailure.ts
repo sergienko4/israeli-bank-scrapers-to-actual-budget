@@ -9,8 +9,8 @@
  *
  * This module converts a transient provider failure into a throw so the retry
  * strategy can do its job, while letting permanent failures (a wrong password,
- * a blocked account) fail fast: retrying those wastes minutes of browser time
- * and can lock the customer out.
+ * a blocked account, a landing page that no longer exists) fail fast: retrying
+ * those wastes minutes of browser time and can lock the customer out.
  * @internal
  */
 
@@ -34,6 +34,34 @@ const PERMANENT_ERROR_TYPES = new Set<string>([
   'INVALID_OTP',
   'TWO_FACTOR_RETRIEVER_MISSING',
 ]);
+
+/**
+ * Matches the INIT failure the provider reports for a landing page that does
+ * not exist.
+ *
+ * The provider treats HTTP 404 and 410 on the landing navigation as terminal
+ * — its own wording is "no later phase can recover from it" — but still
+ * surfaces them under the catch-all GENERIC type, which this gate otherwise
+ * treats as transient. Each pointless retry costs a full browser launch and
+ * navigation for an outcome that cannot change.
+ *
+ * Matching the message rather than the type is deliberate: it keeps genuinely
+ * transient GENERIC failures (timeouts, network blips) retryable. Should the
+ * provider ever reword this text, the match stops firing and the failure falls
+ * back to being retried — a reword degrades this optimisation instead of
+ * breaking a scrape.
+ */
+const TERMINAL_LANDING_MESSAGE =
+  /bank edge served HTTP (?:404|410) for the landing document/u;
+
+/**
+ * Reports whether the provider failed because the landing document is gone.
+ * @param result - Provider result reporting the failure.
+ * @returns True when the bank edge served a terminal 404 or 410.
+ */
+function isTerminalLanding(result: IScraperScrapingResult): boolean {
+  return TERMINAL_LANDING_MESSAGE.test(result.errorMessage ?? '');
+}
 
 /**
  * Builds the message shown in retry logs for a provider failure.
@@ -77,6 +105,7 @@ export class RetryableProviderFailure extends Error {
  */
 export function isRetryableProviderFailure(result: IScraperScrapingResult): boolean {
   if (result.success) return false;
+  if (isTerminalLanding(result)) return false;
   const errorType = String(result.errorType);
   return !PERMANENT_ERROR_TYPES.has(errorType);
 }
