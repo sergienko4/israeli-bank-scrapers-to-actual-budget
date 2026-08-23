@@ -156,7 +156,11 @@ RUN chmod -R a-w /app/dist /app/node_modules 2>/dev/null || true
 # Scraper 8.6.3 caches the root logger per destination and fixes that at
 # source. pino-pretty is a runtime dependency and stays installed either way;
 # production mode stops the transport being attached, so no worker is ever
-# started. See docs/deployment/docker-run.md before overriding this.
+# started. The trade-off is that the scraper library then logs nothing at all
+# (it falls back to level: 'silent'), and LOG_LEVEL cannot revive it; override
+# with `-e NODE_ENV=development` for a single diagnostic run. Failure
+# screenshots are written straight to disk and are unaffected.
+# See docs/deployment/docker-run.md before overriding this.
 ENV NODE_ENV=production
 
 # Health check (basic process check)
