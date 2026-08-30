@@ -7,6 +7,7 @@
  * the orchestration class stays focused on flow control.
  */
 import { getLogger } from '../../Logger/Index.js';
+import { CREDIT_CARD_BANKS } from '../../Types/BankCatalog.js';
 import type { IBankTarget } from '../../Types/Index.js';
 import { isFail } from '../../Types/Index.js';
 import type { MetricsService } from '../MetricsService.js';
@@ -47,6 +48,44 @@ const RECONCILIATION_MESSAGES = new Map<string, (diff: number) => string>([
  */
 const UNRELIABLE_BALANCE_BANKS = new Set(['onezero', 'pepper', 'paybox']);
 
+/**
+ * Reports whether an API-direct bank returned its unknown-balance sentinel.
+ * @param ctx - Context with the bank name and scraped balance.
+ * @returns True when the bank is known to report an unreliable balance of 0.
+ */
+const IS_UNRELIABLE_ZERO = (ctx: IReconcileCtx): boolean => {
+  const bankName = ctx.bankName.toLowerCase();
+  return UNRELIABLE_BALANCE_BANKS.has(bankName) && ctx.balance === 0;
+};
+
+/**
+ * Reports whether the scraped figure is a card billing-cycle total, not a balance.
+ * @param ctx - Context with the bank name.
+ * @returns True when the bank is a credit-card issuer.
+ */
+const IS_CARD_CYCLE_FIGURE = (ctx: IReconcileCtx): boolean => {
+  const bankName = ctx.bankName.toLowerCase();
+  return CREDIT_CARD_BANKS.has(bankName);
+};
+
+/**
+ * Reasons a scraped balance must not drive a reconciliation transaction.
+ *
+ * OCP: add a rule here rather than branching inside reconcileIfConfigured.
+ *
+ * Card issuers matter as of scraper 8.6.9: Max stopped publishing a hardcoded 0
+ * per card and now returns its real outstanding ILS cycle debit — a POSITIVE
+ * amount owed. Every card issuer publishes the same kind of figure. Actual
+ * Budget holds card debt as a negative balance, so reconciling a positive debit
+ * writes an adjustment of roughly twice the debt in the wrong direction. Before
+ * 8.6.9 the constant 0 made this silently wrong in a different way, so the guard
+ * is correct for all issuers, not just Max.
+ */
+const BALANCE_SKIP_RULES: readonly (readonly [(ctx: IReconcileCtx) => boolean, string])[] = [
+  [IS_UNRELIABLE_ZERO, 'balance=0 from API-direct bank (unreliable)'],
+  [IS_CARD_CYCLE_FIGURE, 'card issuers report a billing-cycle total, not an account balance'],
+];
+
 /** Context passed to AccountReconciler.reconcileIfConfigured. */
 export interface IReconcileCtx {
   /** Actual Budget account ID to reconcile. */
@@ -83,21 +122,21 @@ export class AccountReconciler {
   public async reconcileIfConfigured(target: IBankTarget, ctx: IReconcileCtx): Promise<void> {
     if (!target.reconcile || ctx.balance === undefined) return;
     const balance = ctx.balance;
-    if (AccountReconciler.isUnreliableZeroBalance(ctx)) {
-      getLogger().info('     ⚠️  Skipping reconcile: balance=0 from API-direct bank (unreliable)');
+    const skipReason = AccountReconciler.findSkipReason(ctx);
+    if (skipReason !== undefined) {
+      getLogger().info(`     ⚠️  Skipping reconcile: ${skipReason}`);
       return;
     }
     await this.reconcileBalance(ctx, balance);
   }
 
   /**
-   * Decides whether a zero balance from an API-direct bank should be skipped.
+   * Finds the first rule that disqualifies this scraped balance from reconciliation.
    * @param ctx - Context with the bank name and scraped balance.
-   * @returns True when the bank is known to report an unreliable balance of 0.
+   * @returns The human-readable skip reason, or undefined when reconciliation may proceed.
    */
-  private static isUnreliableZeroBalance(ctx: IReconcileCtx): boolean {
-    const bankName = ctx.bankName.toLowerCase();
-    return UNRELIABLE_BALANCE_BANKS.has(bankName) && ctx.balance === 0;
+  private static findSkipReason(ctx: IReconcileCtx): string | undefined {
+    return BALANCE_SKIP_RULES.find(([applies]) => applies(ctx))?.[1];
   }
 
   /**

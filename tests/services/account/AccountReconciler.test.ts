@@ -116,6 +116,66 @@ describe('AccountReconciler', () => {
     });
   });
 
+  /**
+   * Card issuers publish a card-cycle figure, not an account balance.
+   *
+   * Amex, Isracard and Visa Cal return a constant 0 sentinel (they expose no
+   * per-card balance at all), so reconciling would zero the Actual account
+   * on every run. Scraper 8.6.9 (upstream PR #516) changed Max from that same
+   * 0 sentinel to its real `ilsCycleDebit` — the outstanding cycle debit as a
+   * POSITIVE magnitude. An Actual credit-card account carries what is owed as
+   * a NEGATIVE balance, so reconciling +debit against -owed writes an
+   * adjustment of roughly twice the debt. Neither figure is an account
+   * balance, so no card issuer may drive reconciliation.
+   */
+  describe('credit-card issuer balance guard (scraper 8.6.9 Max cycle debit)', () => {
+    const cardIssuers = ['max', 'visacal', 'isracard', 'amex', 'Max', 'visaCal'];
+
+    cardIssuers.forEach((bankName) => {
+      it(`skips reconciliation for card issuer ${bankName}`, async () => {
+        const target: IBankTarget = { reconcile: true } as IBankTarget;
+        const ctx: IReconcileCtx = {
+          actualAccountId: 'acc-123',
+          balance: 13.84,
+          currency: 'ILS',
+          bankName,
+        };
+
+        await reconciler.reconcileIfConfigured(target, ctx);
+
+        expect(mockReconciliationService.reconcile).not.toHaveBeenCalled();
+      });
+    });
+
+    it('skips the 0 sentinel the other card issuers still report', async () => {
+      const target: IBankTarget = { reconcile: true } as IBankTarget;
+      const ctx: IReconcileCtx = {
+        actualAccountId: 'acc-123',
+        balance: 0,
+        currency: 'ILS',
+        bankName: 'isracard',
+      };
+
+      await reconciler.reconcileIfConfigured(target, ctx);
+
+      expect(mockReconciliationService.reconcile).not.toHaveBeenCalled();
+    });
+
+    it('still reconciles a real bank account that reports the same figure', async () => {
+      const target: IBankTarget = { reconcile: true } as IBankTarget;
+      const ctx: IReconcileCtx = {
+        actualAccountId: 'acc-123',
+        balance: 13.84,
+        currency: 'ILS',
+        bankName: 'hapoalim',
+      };
+
+      await reconciler.reconcileIfConfigured(target, ctx);
+
+      expect(mockReconciliationService.reconcile).toHaveBeenCalledWith('acc-123', 13.84, 'ILS');
+    });
+  });
+
   describe('successful reconciliation flow', () => {
     it('calls reconciliation service and records metrics', async () => {
       const target: IBankTarget = { reconcile: true } as IBankTarget;
