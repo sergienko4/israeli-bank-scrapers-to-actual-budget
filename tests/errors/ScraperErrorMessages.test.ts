@@ -27,6 +27,23 @@ describe('ScraperErrorMessages', () => {
       expect(advice).toContain('unexpectedly');
     });
 
+    // The provider's ScraperErrorTypes enum spells its catch-all buckets
+    // "GENERIC" and "GENERAL_ERROR" on the wire. FailureLogShim feeds this
+    // lookup `${errorType} ${message}`, so those are the strings that
+    // actually arrive — never the longer "GENERIC_ERROR" spelling.
+    it.each(['GENERIC', 'GENERAL_ERROR'])(
+      'returns advice for the %s wire value the provider actually sends',
+      (errorType) => {
+        expect(getScraperErrorAdvice(`${errorType} boom`)).toContain('unexpectedly');
+      },
+    );
+
+    it('still prefers a specific code over the catch-all bucket', () => {
+      const advice = getScraperErrorAdvice('INVALID_PASSWORD rejected during GENERIC phase');
+      expect(advice).toContain('Password incorrect');
+      expect(advice).not.toContain('unexpectedly');
+    });
+
     it('returns advice for all known codes', () => {
       for (const code of Object.keys(SCRAPER_ERROR_ADVICE)) {
         expect(getScraperErrorAdvice(code)).toBeDefined();
@@ -94,6 +111,36 @@ describe('ScraperErrorMessages', () => {
 
     it('does not fire on unrelated account wording', () => {
       expect(getScraperErrorAdvice('found zero transactions in the account')).toBe('');
+    });
+  });
+
+  /**
+   * Scraper 8.6.9 (upstream PR #530) added an INIT guard for a bank edge that
+   * serves a branded 404 under HTTP 200. It is raised as ScraperErrorTypes
+   * .Generic, so without a signature it lands in the catch-all bucket and the
+   * operator is told the "bank website may have changed" — which sends them
+   * looking for a scraper update for what is a transient bank-side fault.
+   */
+  describe('soft-404 landing document (scraper 8.6.9)', () => {
+    // Copied verbatim from the provider's errorDocumentMessage() so this
+    // suite fails loudly if the wording our signature matches on drifts.
+    const SOFT_404 =
+      'GENERIC INIT_ERROR_DOCUMENT: bank edge served an error document, '
+      + 'not the bank page (https://www.example-bank.co.il/)';
+
+    it('explains the failure as a bank-side error page', () => {
+      const advice = getScraperErrorAdvice(SOFT_404);
+      expect(advice).toContain('error page');
+    });
+
+    it('does not blame a stale scraper for a transient bank fault', () => {
+      const advice = getScraperErrorAdvice(SOFT_404);
+      expect(advice).not.toContain('check for scraper updates');
+    });
+
+    it('does not fire on an ordinary GENERIC failure', () => {
+      const advice = getScraperErrorAdvice('GENERIC navigation timed out');
+      expect(advice).not.toContain('error page');
     });
   });
 });
