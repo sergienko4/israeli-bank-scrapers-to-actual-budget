@@ -37,8 +37,32 @@ function checkScrapeSuccess(
   result: IScraperScrapingResult,
 ): Procedure<IScraperScrapingResult> {
   if (result.success) return succeed(result);
-  const message = result.errorMessage ?? 'Scrape failed';
+  const message = describeScrapeFailure(result);
   return fail(message, {
     status: STAGE_SCRAPE, error: new Error(message),
   });
+}
+
+/**
+ * Builds the quarantine message, keeping the provider's error TYPE attached.
+ *
+ * The provider splits a failure into a machine-readable `errorType` and free
+ * prose in `errorMessage`. Downstream, TelegramCommandFormatters derives
+ * operator advice from the quarantine entry's message alone, so a type that is
+ * dropped here can never be matched — every code-keyed advice entry became
+ * unreachable, and a bare `GENERIC` failure reached the user with no guidance.
+ *
+ * The type is prefixed rather than appended so it survives the 80-character
+ * truncation the Telegram formatter applies, and is skipped when the provider
+ * already spelled it out (scraper 8.6.9 front-loads its own codes, e.g.
+ * `INIT_ERROR_DOCUMENT: ...`) so the text is never stuttered.
+ * @param result - Failed provider result to describe.
+ * @returns Message carrying both the error type and the provider's prose.
+ */
+function describeScrapeFailure(result: IScraperScrapingResult): string {
+  const detail = result.errorMessage ?? 'Scrape failed';
+  const errorType = result.errorType;
+  if (errorType === undefined) return detail;
+  if (detail.includes(errorType)) return detail;
+  return `${errorType}: ${detail}`;
 }
