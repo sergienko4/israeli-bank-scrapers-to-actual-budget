@@ -13,6 +13,7 @@ import { AccountReconciler } from '../../../src/Services/Account/AccountReconcil
 import type { IReconcileCtx } from '../../../src/Services/Account/AccountReconciler.js';
 import type { IBankTarget } from '../../../src/Types/Index.js';
 import { succeed } from '../../../src/Types/Index.js';
+import { fakeBankTarget } from '../../helpers/factories.js';
 
 describe('AccountReconciler', () => {
   let mockReconciliationService: {
@@ -133,7 +134,7 @@ describe('AccountReconciler', () => {
 
     cardIssuers.forEach((bankName) => {
       it(`skips reconciliation for card issuer ${bankName}`, async () => {
-        const target: IBankTarget = { reconcile: true } as IBankTarget;
+        const target = fakeBankTarget({ reconcile: true });
         const ctx: IReconcileCtx = {
           actualAccountId: 'acc-123',
           balance: 13.84,
@@ -148,7 +149,7 @@ describe('AccountReconciler', () => {
     });
 
     it('skips the 0 sentinel the other card issuers still report', async () => {
-      const target: IBankTarget = { reconcile: true } as IBankTarget;
+      const target = fakeBankTarget({ reconcile: true });
       const ctx: IReconcileCtx = {
         actualAccountId: 'acc-123',
         balance: 0,
@@ -162,7 +163,7 @@ describe('AccountReconciler', () => {
     });
 
     it('still reconciles a real bank account that reports the same figure', async () => {
-      const target: IBankTarget = { reconcile: true } as IBankTarget;
+      const target = fakeBankTarget({ reconcile: true });
       const ctx: IReconcileCtx = {
         actualAccountId: 'acc-123',
         balance: 13.84,
