@@ -31,10 +31,6 @@ export const SCRAPER_ERROR_ADVICE: Record<string, IErrorAdvice> = {
     message: 'Account is locked/blocked',
     action: 'Contact your bank to unlock the account',
   },
-  GENERIC_ERROR: {
-    message: 'Scraping failed unexpectedly',
-    action: 'Bank website may have changed — check for scraper updates',
-  },
   WAF_BLOCKED: {
     message: 'Blocked by bank firewall (WAF)',
     action: 'Wait 1-2 hours before retrying',
@@ -54,6 +50,19 @@ export const SCRAPER_ERROR_ADVICE: Record<string, IErrorAdvice> = {
   NO_PASSWORD: {
     message: 'Missing credentials',
     action: 'Check bank config in config.json — password field is empty',
+  },
+  // Catch-all buckets stay LAST: findCodeAdvice substring-matches in insertion
+  // order, so an earlier catch-all would shadow every specific code that
+  // happens to contain it. The scraper emits the bare wire values GENERIC and
+  // GENERAL_ERROR — neither of which contains the legacy GENERIC_ERROR key —
+  // so both are listed explicitly rather than relying on one to match.
+  GENERAL_ERROR: {
+    message: 'Scraping failed unexpectedly',
+    action: 'Bank website may have changed — check for scraper updates',
+  },
+  GENERIC: {
+    message: 'Scraping failed unexpectedly',
+    action: 'Bank website may have changed — check for scraper updates',
   },
 };
 
@@ -85,6 +94,20 @@ export const UPSTREAM_FAILURE_SIGNATURES: readonly IFailureSignature[] = [
       action:
         'Your credentials are fine — the bank\'s own site failed to load. '
         + 'Retry later; if it persists for more than a day the bank has a server-side fault',
+    },
+  },
+  {
+    // scraper 8.6.9 added a landing-document guard: some bank edges answer the
+    // login URL with a branded 404/maintenance page under HTTP 200. Upstream
+    // classifies it as errorType GENERIC, so without this signature the
+    // operator is told to "check for scraper updates" — the one action that
+    // cannot help, because nothing about the scraper is broken.
+    pattern: /INIT_ERROR_DOCUMENT|bank edge served an error document/iu,
+    advice: {
+      message: 'The bank served an error page instead of its login site',
+      action:
+        'Nothing is wrong with your credentials or this importer — the bank\'s edge is misrouting. '
+        + 'It usually clears within minutes, so retry later',
     },
   },
 ];
