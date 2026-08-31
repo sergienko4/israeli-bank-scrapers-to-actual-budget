@@ -88,7 +88,28 @@ See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scra
 > The command only inspects credit-card accounts, and only ever deletes the
 > wrongly-signed row of a matched pair. A genuine same-day, same-merchant
 > purchase and refund of equal value is indistinguishable from a stale pair,
-> so review the report before passing `--confirm`.
+> so review the report before passing `--confirm`. Accounts shared with a
+> non-card bank are skipped, because a pair found there cannot be attributed
+> to a card issuer.
+
+<!-- MD028: separates two independent upgrade notes -->
+
+> **Upgrade note — Hapoalim signs (scraper 8.6.10).** Bank Hapoalim reports the
+> direction of a transaction in a separate field that earlier scraper versions
+> did not read, so **every Hapoalim charge was imported as income**. Charges now
+> import as outflows, and new imports are correct from the first run on this
+> version.
+>
+> Rows already in your budget are not rewritten, and they are wrong in two
+> different ways: recent ones gain a corrected duplicate alongside the original,
+> while older ones are matched on the bank's reference number and silently keep
+> the wrong amount with no duplicate to notice. Spending alerts will also start
+> counting Hapoalim spending they previously ignored.
+>
+> `--cleanup-card-refunds` does **not** apply here — it assumes the opposite
+> polarity and would delete the corrected row. See
+> [docs/UPGRADING.md](docs/UPGRADING.md) for how to fix the affected rows.
+
 
 ---
 
