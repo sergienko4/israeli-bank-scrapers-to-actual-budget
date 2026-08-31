@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.19](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.18...v1.42.19) (2026-08-31)
+
+
+### Fixed
+
+* **cleanup:** skip mixed-bank Actual accounts in card refund sweep ([#664](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/664)) ([b581771](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b581771942db3c4926ee62c165ab9df392406605))
+* **deps:** bump @sergienko4/israeli-bank-scrapers from 8.6.9 to 8.6.10 ([#663](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/663)) ([ad48099](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ad4809954d9a6215993cc11fe73b1bbd7ee92d7c))
+
 ## [1.42.18](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.17...v1.42.18) (2026-08-30)
 
 
