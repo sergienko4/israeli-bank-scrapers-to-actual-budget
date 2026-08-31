@@ -29,7 +29,7 @@
  *      matcher assumes the WRONG row is the negative one, which is inverted
  *      for this defect: here the stale row is the POSITIVE one.
  *
- * The final test pins the known operational consequence rather than a
+ * One test pins the known operational consequence rather than a
  * desired one: `imported_id` hashes the signed amount, so the 8.6.9 to
  * 8.6.10 correction necessarily yields a different id. A re-scrape of an
  * overlapping window therefore writes the corrected row as a NEW row while
@@ -133,13 +133,13 @@ describe('imported_id impact of the 8.6.9 to 8.6.10 direction fix', () => {
     expect(idFor('hapoalim', after)).not.toBe(idFor('hapoalim', before));
   });
 
-  it('leaves an inbound row byte-identical across the upgrade', () => {
-    const before = mapOne('hapoalim', {
+  it('leaves an inbound row and its id unchanged, since its sign never moved', () => {
+    const inbound: IBankTransaction = {
       date: '2026-01-01', description: 'SALARY', chargedAmount: 9000, originalAmount: 9000,
-    });
-    const after = mapOne('hapoalim', {
-      date: '2026-01-01', description: 'SALARY', chargedAmount: 9000, originalAmount: 9000,
-    });
+    };
+    const before = mapOne('hapoalim', inbound);
+    const after = mapOne('hapoalim', inbound);
+    expect(after).toEqual(before);
     expect(idFor('hapoalim', after)).toBe(idFor('hapoalim', before));
   });
 });

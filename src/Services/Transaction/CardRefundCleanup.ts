@@ -51,12 +51,6 @@ async function connect(config: IImporterConfig): Promise<string> {
 }
 
 /**
- * Groups the configured Actual account ids by the kind of bank writing to them.
- *
- * @param config - The loaded importer configuration.
- * @returns Card-bank account ids and non-card-bank account ids, kept apart.
- */
-/**
  * Collects the Actual account ids targeted by one class of bank.
  *
  * @param config - The loaded importer configuration.

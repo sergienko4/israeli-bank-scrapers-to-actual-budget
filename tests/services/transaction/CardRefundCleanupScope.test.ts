@@ -19,27 +19,44 @@
  * excluded from the command's reach.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { cardAccountIds } from '../../../src/Services/Transaction/CardRefundCleanup.js';
 import type { IImporterConfig } from '../../../src/Types/Index.js';
+import { fakeBankConfig, fakeBankTarget, fakeImporterConfig, fakeUuid } from '../../helpers/factories.js';
 
-const CARD_ONLY = '11111111-1111-1111-1111-111111111111';
-const SHARED = '22222222-2222-2222-2222-222222222222';
-const DEBIT_ONLY = '33333333-3333-3333-3333-333333333333';
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock('../../../src/Logger/Index.js', () => ({
+  getLogger: () => mockLogger,
+  createLogger: vi.fn(),
+  getLogBuffer: vi.fn(),
+  deriveLogFormat: vi.fn(() => 'words'),
+}));
+
+const CARD_ONLY = fakeUuid();
+const SHARED = fakeUuid();
+const DEBIT_ONLY = fakeUuid();
 
 /**
- * Builds a minimal config carrying only the fields the selector reads.
+ * Builds a fully typed config whose banks target the given Actual accounts.
  * @param banks - Map of bank name to the Actual account ids it targets.
  * @returns A config object shaped for {@link cardAccountIds}.
  */
 function configWith(banks: Record<string, readonly string[]>): IImporterConfig {
   const entries = Object.entries(banks).map(([name, ids]) => {
-    const targets = ids.map((actualAccountId) => ({ actualAccountId }));
-    return [name, { targets }];
+    const targets = ids.map((actualAccountId) => fakeBankTarget({ actualAccountId }));
+    return [name, fakeBankConfig({ targets })];
   });
-  return { banks: Object.fromEntries(entries) } as unknown as IImporterConfig;
+  const banksByName = Object.fromEntries(entries);
+  return fakeImporterConfig({ banks: banksByName });
 }
+
+beforeEach(() => {
+  mockLogger.warn.mockClear();
+});
 
 describe('cleanup-card-refunds account selection', () => {
   it('includes an account used only by a card issuer', () => {
@@ -65,5 +82,21 @@ describe('cleanup-card-refunds account selection', () => {
   it('still excludes a shared account when the debit bank is listed first', () => {
     const config = configWith({ hapoalim: [SHARED], max: [SHARED] });
     expect(cardAccountIds(config)).toEqual([]);
+  });
+});
+
+describe('cleanup-card-refunds operator warning', () => {
+  it('names the skipped account and how to make it eligible', () => {
+    const config = configWith({ visacal: [SHARED], hapoalim: [SHARED] });
+    cardAccountIds(config);
+    const [message] = mockLogger.warn.mock.calls[0] as [string];
+    expect(message).toContain(SHARED);
+    expect(message).toContain('its own Actual account');
+  });
+
+  it('stays silent when no account is shared', () => {
+    const config = configWith({ visacal: [CARD_ONLY], hapoalim: [DEBIT_ONLY] });
+    cardAccountIds(config);
+    expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });
