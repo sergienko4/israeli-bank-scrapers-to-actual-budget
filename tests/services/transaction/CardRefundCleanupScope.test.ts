@@ -83,6 +83,18 @@ describe('cleanup-card-refunds account selection', () => {
     const config = configWith({ hapoalim: [SHARED], max: [SHARED] });
     expect(cardAccountIds(config)).toEqual([]);
   });
+
+  it('excludes a shared account when the two banks differ only in UUID casing', () => {
+    const upper = SHARED.toUpperCase();
+    const config = configWith({ visacal: [upper], hapoalim: [SHARED] });
+    expect(cardAccountIds(config)).toEqual([]);
+  });
+
+  it('preserves the configured casing of an account it does sweep', () => {
+    const upper = CARD_ONLY.toUpperCase();
+    const config = configWith({ visacal: [upper] });
+    expect(cardAccountIds(config)).toEqual([upper]);
+  });
 });
 
 describe('cleanup-card-refunds operator warning', () => {

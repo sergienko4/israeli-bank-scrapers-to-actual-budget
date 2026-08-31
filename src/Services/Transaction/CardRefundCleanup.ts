@@ -17,13 +17,18 @@
  * Scope is limited to Actual accounts used exclusively by card issuers; an
  * account shared with a non-card bank is skipped, because the pair's polarity
  * can then no longer be trusted (see {@link cardAccountIds}).
+ *
+ * That scope is derived from the CURRENT config, so it assumes config still
+ * reflects which banks ever wrote to an account. An account a non-card bank
+ * targeted in the past but no longer does reads as card-only today. Review the
+ * report before confirming if a bank was recently retargeted or removed.
  */
 
 import api from '@actual-app/api';
 
 import { getLogger } from '../../Logger/Index.js';
 import { CREDIT_CARD_BANKS } from '../../Types/BankCatalog.js';
-import type { IImporterConfig } from '../../Types/Index.js';
+import type { IBankConfig, IImporterConfig } from '../../Types/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
 import type { IStaleRefundCandidate, IStaleRefundRow } from './StaleRefundFinder.js';
 import findStaleRefundCandidates from './StaleRefundFinder.js';
@@ -51,19 +56,39 @@ async function connect(config: IImporterConfig): Promise<string> {
 }
 
 /**
+ * Adds one bank's target accounts to the accumulator, keyed case-insensitively.
+ *
+ * Config validation accepts a UUID in either case, so the same Actual account
+ * may be written two ways. Keying on the lower-cased form makes the overlap
+ * check in {@link cardAccountIds} immune to that difference, while the value
+ * preserves the casing the operator configured.
+ *
+ * @param bank - The bank whose targets are collected.
+ * @param ids - Accumulator mapping canonical id to configured id.
+ * @returns The same accumulator, so callers can keep threading it.
+ */
+function collectTargetIds(bank: IBankConfig, ids: Map<string, string>): Map<string, string> {
+  for (const target of bank.targets ?? []) {
+    const canonical = target.actualAccountId.toLowerCase();
+    ids.set(canonical, target.actualAccountId);
+  }
+  return ids;
+}
+
+/**
  * Collects the Actual account ids targeted by one class of bank.
  *
  * @param config - The loaded importer configuration.
  * @param wantCard - True to collect card-issuer accounts, false for the rest.
- * @returns Deduplicated account ids for the requested class of bank.
+ * @returns Canonical id to configured id, for the requested class of bank.
  */
-function accountIdsForKind(config: IImporterConfig, wantCard: boolean): Set<string> {
-  const ids = new Set<string>();
+function accountIdsForKind(config: IImporterConfig, wantCard: boolean): Map<string, string> {
+  const ids = new Map<string, string>();
   const entries = Object.entries(config.banks);
   for (const [bankName, bank] of entries) {
     const key = bankName.toLowerCase();
     if (CREDIT_CARD_BANKS.has(key) !== wantCard) continue;
-    for (const target of bank.targets ?? []) ids.add(target.actualAccountId);
+    collectTargetIds(bank, ids);
   }
   return ids;
 }
@@ -96,14 +121,18 @@ function warnSharedAccount(accountId: string): string {
  * where the negative row is the correct one — sweeping a shared account
  * would delete exactly the row the operator wants to keep.
  *
+ * Sharing is detected case-insensitively, since a UUID passes validation in
+ * either case and two banks may spell the same account differently.
+ *
  * @param config - The loaded importer configuration.
  * @returns Deduplicated Actual account UUIDs used only by card banks.
  */
 export function cardAccountIds(config: IImporterConfig): string[] {
   const card = accountIdsForKind(config, true);
   const nonCard = accountIdsForKind(config, false);
-  for (const id of card) if (nonCard.has(id)) warnSharedAccount(id);
-  return [...card].filter((id) => !nonCard.has(id));
+  for (const [canonical, id] of card) if (nonCard.has(canonical)) warnSharedAccount(id);
+  const kept = [...card].filter(([canonical]) => !nonCard.has(canonical));
+  return kept.map(([, id]) => id);
 }
 
 /**
