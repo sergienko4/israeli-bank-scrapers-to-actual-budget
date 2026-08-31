@@ -120,6 +120,23 @@ describe('hapoalim sign policy after scraper 8.6.10', () => {
   });
 });
 
+/**
+ * The inbound salary row exactly as the importer mapped it before 8.6.10,
+ * written out as literals rather than recomputed.
+ *
+ * 8.6.10 only taught the sign stage to read `eventActivityTypeCode`, which an
+ * inbound row does not carry, so this row must survive the upgrade untouched.
+ * Deriving the expectation from the current mapper would assert `f(x) = f(x)`
+ * and pass no matter how the mapper changed; pinning it means a regression on
+ * the inbound path has to move these constants to stay green.
+ */
+const INBOUND_BASELINE_ROW: IBankTransaction = {
+  date: '2026-01-01', description: 'SALARY', chargedAmount: 9000, originalAmount: 9000,
+};
+
+/** The `imported_id` that baseline row has always hashed to. */
+const INBOUND_BASELINE_ID = 'f04b0acee5c3b748';
+
 describe('imported_id impact of the 8.6.9 to 8.6.10 direction fix', () => {
   it('changes the hash when an outbound charge gains its sign', () => {
     const before = mapOne('hapoalim', {
@@ -133,13 +150,10 @@ describe('imported_id impact of the 8.6.9 to 8.6.10 direction fix', () => {
     expect(idFor('hapoalim', after)).not.toBe(idFor('hapoalim', before));
   });
 
-  it('leaves an inbound row and its id unchanged, since its sign never moved', () => {
-    const inbound: IBankTransaction = {
-      date: '2026-01-01', description: 'SALARY', chargedAmount: 9000, originalAmount: 9000,
-    };
-    const before = mapOne('hapoalim', inbound);
-    const after = mapOne('hapoalim', inbound);
-    expect(after).toEqual(before);
-    expect(idFor('hapoalim', after)).toBe(idFor('hapoalim', before));
+  it('leaves an inbound row and its id identical to the pre-8.6.10 baseline', () => {
+    const mapped = mapOne('hapoalim', INBOUND_BASELINE_ROW);
+
+    expect(mapped).toEqual(INBOUND_BASELINE_ROW);
+    expect(idFor('hapoalim', mapped)).toBe(INBOUND_BASELINE_ID);
   });
 });
