@@ -14,6 +14,9 @@
  * SAFETY CONTRACT: reports only by default. Deletion happens exclusively
  * when the operator passes `--confirm`, and only ever targets the
  * negative row of a matched pair — the corrected row is never touched.
+ * Scope is limited to Actual accounts used exclusively by card issuers; an
+ * account shared with a non-card bank is skipped, because the pair's polarity
+ * can then no longer be trusted (see {@link cardAccountIds}).
  */
 
 import api from '@actual-app/api';
@@ -48,23 +51,65 @@ async function connect(config: IImporterConfig): Promise<string> {
 }
 
 /**
+ * Groups the configured Actual account ids by the kind of bank writing to them.
+ *
+ * @param config - The loaded importer configuration.
+ * @returns Card-bank account ids and non-card-bank account ids, kept apart.
+ */
+/**
+ * Collects the Actual account ids targeted by one class of bank.
+ *
+ * @param config - The loaded importer configuration.
+ * @param wantCard - True to collect card-issuer accounts, false for the rest.
+ * @returns Deduplicated account ids for the requested class of bank.
+ */
+function accountIdsForKind(config: IImporterConfig, wantCard: boolean): Set<string> {
+  const ids = new Set<string>();
+  const entries = Object.entries(config.banks);
+  for (const [bankName, bank] of entries) {
+    const key = bankName.toLowerCase();
+    if (CREDIT_CARD_BANKS.has(key) !== wantCard) continue;
+    for (const target of bank.targets ?? []) ids.add(target.actualAccountId);
+  }
+  return ids;
+}
+
+/**
+ * Warns that a shared Actual account is deliberately left untouched.
+ *
+ * @param accountId - UUID of the account excluded from the sweep.
+ * @returns The id that was reported, so callers can collect it.
+ */
+function warnSharedAccount(accountId: string): string {
+  getLogger().warn(
+    `Skipping Actual account ${accountId}: it receives both credit-card and non-card ` +
+    'transactions, so a matched pair cannot be attributed to a card issuer. Give the ' +
+    'non-card bank its own Actual account to make this one eligible for cleanup.'
+  );
+  return accountId;
+}
+
+/**
  * Collects the Actual account IDs that receive credit-card transactions.
  *
  * Non-card banks are skipped entirely — their signs were never flipped,
  * so they cannot hold the artefact this command removes.
  *
+ * Accounts shared with a non-card bank are skipped too, because rows are
+ * fetched by account id with no bank provenance and the matcher assumes the
+ * negative row of a pair is the stale one. That assumption is inverted for a
+ * debit-side sign correction such as the Hapoalim fix in scrapers 8.6.10,
+ * where the negative row is the correct one — sweeping a shared account
+ * would delete exactly the row the operator wants to keep.
+ *
  * @param config - The loaded importer configuration.
- * @returns Deduplicated Actual account UUIDs for card banks only.
+ * @returns Deduplicated Actual account UUIDs used only by card banks.
  */
-function cardAccountIds(config: IImporterConfig): string[] {
-  const ids = new Set<string>();
-  const entries = Object.entries(config.banks);
-  for (const [bankName, bank] of entries) {
-    const key = bankName.toLowerCase();
-    if (!CREDIT_CARD_BANKS.has(key)) continue;
-    for (const target of bank.targets ?? []) ids.add(target.actualAccountId);
-  }
-  return [...ids];
+export function cardAccountIds(config: IImporterConfig): string[] {
+  const card = accountIdsForKind(config, true);
+  const nonCard = accountIdsForKind(config, false);
+  for (const id of card) if (nonCard.has(id)) warnSharedAccount(id);
+  return [...card].filter((id) => !nonCard.has(id));
 }
 
 /**
