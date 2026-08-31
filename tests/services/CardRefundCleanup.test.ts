@@ -174,6 +174,18 @@ describe('runCardRefundCleanup', () => {
     expect(mockApi.deleteTransaction).toHaveBeenCalledWith('stale');
   });
 
+  it('deletes nothing in an account a card issuer shares with a debit bank', async () => {
+    mockApi.aqlQuery.mockResolvedValue({ data: stalePairRows() });
+    const config = configWith({
+      visaCal: bankTargeting('shared-account'),
+      hapoalim: bankTargeting('shared-account'),
+    });
+
+    expect(await runCardRefundCleanup(config, true)).toBe(0);
+    expect(mockApi.q().filter).not.toHaveBeenCalledWith({ account: 'shared-account' });
+    expect(mockApi.deleteTransaction).not.toHaveBeenCalled();
+  });
+
   it('logs every deleted row id so a partial run stays auditable', async () => {
     mockApi.aqlQuery.mockResolvedValue({ data: stalePairRows() });
 

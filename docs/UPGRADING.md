@@ -9,6 +9,70 @@ the new image.
 
 ---
 
+## 1.42.19 — Hapoalim charges import as outflows (scraper 8.6.10)
+
+**Affects:** deployments that import **Bank Hapoalim**. No other institution is
+affected, and no configuration change is required.
+
+### What changed
+
+Hapoalim reports an amount as an unsigned magnitude and puts the direction in a
+separate numeric field (`eventActivityTypeCode`: 1 = money in, 2 = money out).
+Up to scraper 8.6.9 that field was not read, so **every Hapoalim charge was
+imported as a positive amount** — spending appeared in Actual Budget as income.
+Scraper 8.6.10 reads the direction, so charges now import as outflows.
+
+New imports are correct from the first run on this version. The rows already in
+your budget are not rewritten, so some history needs a look.
+
+### Symptom if you skip the migration
+
+Only already-imported Hapoalim rows are wrong, and they go wrong in **two
+different ways** depending on when they were written:
+
+- **Recently imported rows** are matched on a fingerprint that includes the
+  amount. The corrected charge no longer matches, so it arrives as a **new
+  row** and you end up with a pair for the same purchase — one positive, one
+  negative — which double-counts in reports until the positive one is removed.
+- **Older rows** are matched on the bank's own reference number, which does not
+  contain the amount. The corrected charge matches the row that is already
+  there, so it is treated as an existing transaction and **the amount is not
+  updated**. There is no duplicate to notice: the original positive row simply
+  stays wrong.
+
+Because the second case leaves a single row rather than a pair, looking only for
+duplicate pairs will miss it.
+
+Two side effects are worth knowing about:
+
+- **Spending alerts change.** Alerts only ever considered outflows, so Hapoalim
+  spending was invisible to them while it was stored as income. It now counts,
+  and thresholds that were never reached may start firing. This is the intended
+  behaviour, not a regression.
+- **Reconciliation balances shift** for Hapoalim accounts, since the sum of the
+  transactions changes.
+
+### Migration
+
+Filter the Hapoalim account in Actual Budget to the period you have been
+importing and sort by amount:
+
+- Where a purchase appears **twice** with the same date and merchant — once
+  positive, once negative — delete the **positive** row.
+- Where a purchase appears **once** as a positive amount, correct its sign in
+  place.
+
+Do this before relying on Hapoalim figures in reports or spending alerts.
+
+Do **not** use `--cleanup-card-refunds` for this. That command exists for a
+different, credit-card-only defect and assumes the *negative* row of a pair is
+the wrong one — the opposite of this case, so it would delete the corrected row
+and keep the wrong one. It only reads accounts used exclusively by card
+issuers, and from 1.42.19 it explicitly skips any account shared with a
+non-card bank and says so in its output.
+
+---
+
 ## 1.42.12 — `PORTAL_TRUST_PROXY` no longer accepts a proxy hop count
 
 **Affects:** deployments that run the [config portal](configuration/portal.md)

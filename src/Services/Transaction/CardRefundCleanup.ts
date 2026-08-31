@@ -14,13 +14,21 @@
  * SAFETY CONTRACT: reports only by default. Deletion happens exclusively
  * when the operator passes `--confirm`, and only ever targets the
  * negative row of a matched pair — the corrected row is never touched.
+ * Scope is limited to Actual accounts used exclusively by card issuers; an
+ * account shared with a non-card bank is skipped, because the pair's polarity
+ * can then no longer be trusted (see {@link cardAccountIds}).
+ *
+ * That scope is derived from the CURRENT config, so it assumes config still
+ * reflects which banks ever wrote to an account. An account a non-card bank
+ * targeted in the past but no longer does reads as card-only today. Review the
+ * report before confirming if a bank was recently retargeted or removed.
  */
 
 import api from '@actual-app/api';
 
 import { getLogger } from '../../Logger/Index.js';
 import { CREDIT_CARD_BANKS } from '../../Types/BankCatalog.js';
-import type { IImporterConfig } from '../../Types/Index.js';
+import type { IBankConfig, IImporterConfig } from '../../Types/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
 import type { IStaleRefundCandidate, IStaleRefundRow } from './StaleRefundFinder.js';
 import findStaleRefundCandidates from './StaleRefundFinder.js';
@@ -48,23 +56,83 @@ async function connect(config: IImporterConfig): Promise<string> {
 }
 
 /**
+ * Adds one bank's target accounts to the accumulator, keyed case-insensitively.
+ *
+ * Config validation accepts a UUID in either case, so the same Actual account
+ * may be written two ways. Keying on the lower-cased form makes the overlap
+ * check in {@link cardAccountIds} immune to that difference, while the value
+ * preserves the casing the operator configured.
+ *
+ * @param bank - The bank whose targets are collected.
+ * @param ids - Accumulator mapping canonical id to configured id.
+ * @returns The same accumulator, so callers can keep threading it.
+ */
+function collectTargetIds(bank: IBankConfig, ids: Map<string, string>): Map<string, string> {
+  for (const target of bank.targets ?? []) {
+    const canonical = target.actualAccountId.toLowerCase();
+    ids.set(canonical, target.actualAccountId);
+  }
+  return ids;
+}
+
+/**
+ * Collects the Actual account ids targeted by one class of bank.
+ *
+ * @param config - The loaded importer configuration.
+ * @param wantCard - True to collect card-issuer accounts, false for the rest.
+ * @returns Canonical id to configured id, for the requested class of bank.
+ */
+function accountIdsForKind(config: IImporterConfig, wantCard: boolean): Map<string, string> {
+  const ids = new Map<string, string>();
+  const entries = Object.entries(config.banks);
+  for (const [bankName, bank] of entries) {
+    const key = bankName.toLowerCase();
+    if (CREDIT_CARD_BANKS.has(key) !== wantCard) continue;
+    collectTargetIds(bank, ids);
+  }
+  return ids;
+}
+
+/**
+ * Warns that a shared Actual account is deliberately left untouched.
+ *
+ * @param accountId - UUID of the account excluded from the sweep.
+ * @returns The id that was reported, so callers can collect it.
+ */
+function warnSharedAccount(accountId: string): string {
+  getLogger().warn(
+    `Skipping Actual account ${accountId}: it receives both credit-card and non-card ` +
+    'transactions, so a matched pair cannot be attributed to a card issuer. Give the ' +
+    'non-card bank its own Actual account to make this one eligible for cleanup.'
+  );
+  return accountId;
+}
+
+/**
  * Collects the Actual account IDs that receive credit-card transactions.
  *
  * Non-card banks are skipped entirely — their signs were never flipped,
  * so they cannot hold the artefact this command removes.
  *
+ * Accounts shared with a non-card bank are skipped too, because rows are
+ * fetched by account id with no bank provenance and the matcher assumes the
+ * negative row of a pair is the stale one. That assumption is inverted for a
+ * debit-side sign correction such as the Hapoalim fix in scrapers 8.6.10,
+ * where the negative row is the correct one — sweeping a shared account
+ * would delete exactly the row the operator wants to keep.
+ *
+ * Sharing is detected case-insensitively, since a UUID passes validation in
+ * either case and two banks may spell the same account differently.
+ *
  * @param config - The loaded importer configuration.
- * @returns Deduplicated Actual account UUIDs for card banks only.
+ * @returns Deduplicated Actual account UUIDs used only by card banks.
  */
-function cardAccountIds(config: IImporterConfig): string[] {
-  const ids = new Set<string>();
-  const entries = Object.entries(config.banks);
-  for (const [bankName, bank] of entries) {
-    const key = bankName.toLowerCase();
-    if (!CREDIT_CARD_BANKS.has(key)) continue;
-    for (const target of bank.targets ?? []) ids.add(target.actualAccountId);
-  }
-  return [...ids];
+export function cardAccountIds(config: IImporterConfig): string[] {
+  const card = accountIdsForKind(config, true);
+  const nonCard = accountIdsForKind(config, false);
+  for (const [canonical, id] of card) if (nonCard.has(canonical)) warnSharedAccount(id);
+  const kept = [...card].filter(([canonical]) => !nonCard.has(canonical));
+  return kept.map(([, id]) => id);
 }
 
 /**
