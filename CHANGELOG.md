@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.20](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.19...v1.42.20) (2026-09-03)
+
+
+### Fixed
+
+* **deps:** bump @actual-app/api from 26.8.1 to 26.9.0 ([#669](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/669)) ([55cce25](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/55cce25bbc69a71534c2a36b02cf078e6d8b9287))
+* **deps:** bump scrapers to 8.7.0, drop removed options ([#676](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/676)) ([cb7d48c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/cb7d48c0fd807e89ef44adb85f17552b3933b99e))
+* **deps:** clear all blocking security advisories ([#672](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/672)) ([611ceb8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/611ceb85823e420f83063ec63caff880624f01b5))
+
 ## [1.42.19](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.18...v1.42.19) (2026-08-31)
 
 
