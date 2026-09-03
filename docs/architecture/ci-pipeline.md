@@ -25,6 +25,7 @@ graph TD
     SCH[release-please.yml<br/>push to main]
     DOCS[docs.yml<br/>tag push v*]
     E2ES[e2e-schedule.yml<br/>weekly]
+    LFR[lockfile-refresh.yml<br/>weekly cron]
     DMR[dependabot-meta-render.yml<br/>after PR Pipeline]
   end
 
@@ -43,6 +44,7 @@ graph TD
   PR --> E2E
   PR -.triggers.-> DMR
   E2ES --> E2E
+  LFR -.opens PR.-> PR
   PR -.uses.-> SETUP
   PR -.uses.-> BUILD
   PR -.uses.-> TRIVY
@@ -275,6 +277,45 @@ mappings.
 - **github-actions** — 4 groups (actions-core, docker-actions, codeql,
   security-actions).
 
+## Lockfile refresh (`lockfile-refresh.yml`)
+
+Dependabot raises versions **declared** in `package.json`. It does not raise
+transitive versions recorded **inside** `package-lock.json` once their parents'
+ranges already allow a newer release — npm only re-resolves those when
+something regenerates the lockfile.
+
+That gap blocked four unrelated Dependabot PRs at once: `browserslist` sat at
+`4.28.2` while its parent `header-generator` declared `^4.21.1`, a range that
+already allowed the patched `4.28.8`. A CVE against `4.28.2` then failed both
+`npm audit` and Trivy on the production tree.
+
+`lockfile-refresh.yml` closes it. Every Thursday 05:00 UTC (and on
+`workflow_dispatch`) it runs `npm update --package-lock-only --ignore-scripts`,
+and opens a PR when anything moved:
+
+- **Scope is transitive refresh only**, within ranges parents already permit.
+  `npm update` cannot cross a major, and raising a declared range stays
+  Dependabot's job. This is **not** a Dependabot replacement.
+- **No third-party code executes.** `--package-lock-only` ignores
+  `node_modules` and downloads nothing, so no install script exists to run.
+- **The commit type is computed, not hard-coded** —
+  `scripts/summarize-refresh.mjs` emits `fix(deps)` when a non-`dev` entry
+  moved, `chore(deps)` otherwise. `npm update` never edits `package.json`, so
+  the [release signal guard](#release-signal-guard) cannot see a runtime bump
+  made here; a hard-coded `chore` would ship it to users with no release.
+- **Pushes with `RELEASE_TOKEN`**, because a PR opened with `GITHUB_TOKEN`
+  raises no `pull_request` event — every gate in `pr.yml` would be skipped.
+- **At most one open refresh PR**, enforced by a branch-name check before any
+  work is done.
+
+A companion gate, `npm run lint:lockfile` (in `validate:ci`), fails the build
+on a `resolved` URL pointing anywhere but `registry.npmjs.org` or on a `sha1-`
+integrity — both symptoms of a proxy or mirror rewriting the lockfile.
+`npm run refresh-lockfile` repairs foreign hosts in place; integrity
+downgrades fail closed, since a weakened hash cannot be strengthened without
+re-fetching the tarball. Rationale and rejected alternatives:
+[ADR-0001](../decisions/ADR-0001-scheduled-lockfile-refresh.md).
+
 ## Git hooks
 
 Local verification is split across two stages so the cost lands where it
@@ -328,6 +369,7 @@ Every acceptance-stage gate runs in CI and **only** in CI:
 | --- | --- |
 | unit tests + coverage thresholds | `validate` (`validate:ci`) |
 | ESLint canary fixtures | `validate` (`validate:ci`) |
+| lockfile canonicality (`lint:lockfile`) | `validate` (`validate:ci`) |
 | config manifest SSoT | `validate` |
 | markdown link check (lychee) | `docs` |
 | Semgrep | `semgrep` |

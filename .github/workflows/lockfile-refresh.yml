@@ -1,0 +1,205 @@
+name: Lockfile refresh
+
+# Dependabot raises the versions declared in package.json. Nothing raised the
+# transitive versions recorded *inside* package-lock.json once their parents'
+# ranges already allowed a newer release: npm only re-resolves those when
+# something regenerates the lockfile, and no routine job did.
+#
+# That gap was not theoretical. `browserslist` sat pinned at 4.28.2 while its
+# parent `header-generator` declared `^4.21.1` — a range that already allowed
+# the patched 4.28.8. A CVE against 4.28.2 then failed both `npm audit` and
+# Trivy against the production tree and blocked four unrelated Dependabot pull
+# requests at once, none of which had anything to do with browserslist.
+#
+# Pinning a floor in `overrides` cleared that one advisory, but a floor is
+# inert by itself — it is only ever applied when the lockfile is regenerated.
+# This workflow is the thing that regenerates it, so the next stale transitive
+# pin is found on a schedule instead of by a CVE landing on unrelated work.
+#
+# SCOPE: transitive refresh, within ranges parents already permit. This is NOT
+# a Dependabot replacement. `npm update` cannot cross a major version, and
+# raising a *declared* range stays Dependabot's job (.github/dependabot.yml).
+#
+# This supersedes the retired `dependency-check.yml`, whose two recorded
+# failure modes are addressed rather than inherited:
+#   1. It could not cross majors. Still true, and now explicitly out of scope
+#      above rather than an unstated limitation.
+#   2. It crashed on the scraper's patch-package postinstall. Cannot recur:
+#      `--package-lock-only` ignores node_modules and downloads nothing, so no
+#      install script exists to run.
+
+on:
+  schedule:
+    # Thursday 05:00 UTC. GitHub only evaluates cron in UTC — unlike Dependabot,
+    # `schedule` has no `timezone` key, so do not copy that pattern here.
+    # Mid-week deliberately: Dependabot batches Monday 06:00 Asia/Jerusalem and
+    # both e2e-schedule.yml and stale.yml also fire Monday, so a Monday slot
+    # would bury this PR in that pile-up and leave no working days to react.
+    - cron: '0 5 * * 4'
+  workflow_dispatch:
+
+# The job writes through RELEASE_TOKEN, so the workflow token stays read-only.
+# `pull-requests: read` is for the duplicate check below, which must not be
+# able to write anything.
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: lockfile-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh transitive lockfile pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Nothing below runs `npm install`, so husky's `prepare` never executes and
+    # no git hooks are ever planted in this checkout. This is set so that stays
+    # true if a future step adds an install, not to suppress a hook that would
+    # otherwise run — committing with --no-verify is prohibited by CLAUDE.md,
+    # and the gates that matter run on the pull request's own CI.
+    env:
+      HUSKY: 0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # No PAT here and no persisted credentials: a credential left in
+          # .git/config is readable by anything the job runs. The PAT appears
+          # only in the final step, which needs it because a pull request
+          # opened with GITHUB_TOKEN does not raise `pull_request` events — so
+          # every gate in pr.yml would be skipped and the refresh would look
+          # green without having been tested at all.
+          persist-credentials: false
+          # `schedule` always runs on the default branch, but workflow_dispatch
+          # can be aimed at any ref. The pull request is always based on main,
+          # so checking out anything else would carry that ref's unrelated
+          # commits into the refresh.
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # Without this the workflow stacks a near-identical pull request every
+      # week, and the oldest — the one whose CI already ran — is the one that
+      # looks stalest. One open refresh at a time keeps the queue honest.
+      - name: Skip when a refresh pull request is already open
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          open="$(gh pr list --state open --json headRefName \
+            --jq '[.[] | select(.headRefName | startswith("chore/lockfile-refresh-"))] | length')"
+          echo "count=${open}" >> "$GITHUB_OUTPUT"
+          if [ "${open}" != '0' ]; then
+            echo "::notice::A lockfile refresh pull request is already open; nothing to do."
+          fi
+
+      - name: Capture the committed lockfile
+        if: steps.existing.outputs.count == '0'
+        run: cp package-lock.json "${RUNNER_TEMP}/before.json"
+
+      # --package-lock-only ignores node_modules and downloads no tarballs, so
+      # this job never installs or executes third-party code at all. That is
+      # what lets the token step below be safe in the same job: there is no
+      # freshly installed package that could shadow a later command. The
+      # explicit --ignore-scripts is redundant under that flag and kept as
+      # defence in depth, not because a script would otherwise run.
+      - name: Refresh transitive pins
+        if: steps.existing.outputs.count == '0'
+        run: npm update --package-lock-only --ignore-scripts
+
+      - name: Detect whether anything moved
+        id: diff
+        if: steps.existing.outputs.count == '0'
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Every transitive pin is already current.'
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      # `npm update` is documented not to touch package.json, but this asserts
+      # it rather than trusting it: anything else in the tree changing means
+      # npm did something this workflow has not reasoned about, and the commit
+      # below would silently carry it.
+      - name: Verify only the lockfile changed
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          modified="$(git diff --name-only)"
+          if [ "${modified}" != 'package-lock.json' ]; then
+            echo '::error::Expected only package-lock.json to change. Got:'
+            echo "${modified}"
+            exit 1
+          fi
+
+      # The same guard CI runs on every pull request, applied here so a
+      # non-canonical entry is caught before it is committed rather than after.
+      - name: Verify the regenerated lockfile is canonical
+        if: steps.diff.outputs.changed == 'true'
+        run: node scripts/refresh-lockfile.mjs --check
+
+      - name: Summarise the refresh
+        id: summary
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          node scripts/summarize-refresh.mjs \
+            "${RUNNER_TEMP}/before.json" package-lock.json > "${RUNNER_TEMP}/summary.json"
+          {
+            echo "title=$(jq -r .title "${RUNNER_TEMP}/summary.json")"
+            echo 'body<<LOCKFILE_REFRESH_BODY'
+            jq -r .body "${RUNNER_TEMP}/summary.json"
+            echo 'LOCKFILE_REFRESH_BODY'
+          } >> "$GITHUB_OUTPUT"
+
+      # The commit type comes from the summary, not from a hard-coded `chore`.
+      # `npm update` never edits package.json, so the release-signal guard —
+      # which compares package.json and the Dockerfile — cannot see a runtime
+      # bump made here. Hard-coding `chore` would therefore ship a transitive
+      # runtime change to users with no release, which is the exact failure
+      # scripts/release-signal-logic.mjs exists to prevent.
+      - name: Commit the refresh
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          TITLE: ${{ steps.summary.outputs.title }}
+          BRANCH: chore/lockfile-refresh-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "${BRANCH}"
+          # The guard above proved package-lock.json is the only modification,
+          # so naming it stages exactly the intended change.
+          git add package-lock.json
+          git commit -m "${TITLE}" \
+            -m "Opened by the lockfile-refresh workflow (run ${GITHUB_RUN_ID})." \
+            -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
+
+      # The token is confined to the one step that cannot work without it, so
+      # it is absent from every step that produced what is being pushed.
+      - name: Push the branch and open the pull request
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          BRANCH: chore/lockfile-refresh-${{ github.run_id }}
+          TITLE: ${{ steps.summary.outputs.title }}
+          BODY: ${{ steps.summary.outputs.body }}
+        run: |
+          set -euo pipefail
+          # The remote is credential-free by design, so the token is supplied
+          # for this one command rather than left in .git/config for the whole
+          # job. Actions masks it in the log.
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:refs/heads/${BRANCH}"
+
+          gh pr create \
+            --title "${TITLE}" \
+            --base main \
+            --head "${BRANCH}" \
+            --body "${BODY}"
