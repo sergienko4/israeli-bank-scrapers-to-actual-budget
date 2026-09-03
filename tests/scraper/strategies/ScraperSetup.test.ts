@@ -103,8 +103,9 @@ describe('ScraperSetup', () => {
    */
   describe('buildBaseScraperOptions (provider 8.7.0 deprecations)', () => {
     const makeDeps = (level?: string): ILiveScrapeDependencies =>
-      ({ config: { logConfig: level === undefined ? undefined : { level } } })
-        as unknown as ILiveScrapeDependencies;
+      ({
+        config: { logConfig: level === undefined ? undefined : { level } },
+      }) as unknown as ILiveScrapeDependencies;
 
     const makeOpts = (): IResolvedLiveOpts =>
       ({
