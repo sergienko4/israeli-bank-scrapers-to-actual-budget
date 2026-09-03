@@ -145,6 +145,8 @@ nav:
       - Overview: architecture.md
       - CI/CD Pipeline: architecture/ci-pipeline.md
       - "Release & Deployment": architecture/release-pipeline.md
+      - Decisions:
+          - "ADR-0001: Scheduled lockfile refresh": decisions/ADR-0001-scheduled-lockfile-refresh.md
   - Troubleshooting: troubleshooting.md
   - Upgrading: UPGRADING.md
   - Security: SECURITY.md
