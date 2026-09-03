@@ -61,7 +61,7 @@ const ENGLISH_PAYEE = 'Neighborhood Grocery';
 interface ISplitFile {
   banks?: Record<string, {
     targets?: unknown[];
-    navigationRetryCount?: number;
+    timeout?: number;
     username?: string;
     password?: string;
   }>;
@@ -328,15 +328,15 @@ describe('Portal buttons E2E', () => {
       context = opened.context;
       const { page } = opened;
       await gotoBanks(page);
-      const field = byPath(page, 'banks.discount.navigationRetryCount');
+      const field = byPath(page, 'banks.discount.timeout');
       expect(await field.count()).toBe(0);
 
-      await page.selectOption('select[data-add-field="discount"]', 'navigationRetryCount');
+      await page.selectOption('select[data-add-field="discount"]', 'timeout');
       await field.waitFor({ state: 'visible' });
-      await field.fill('2');
+      await field.fill('45000');
 
       await save(page);
-      expect(readSplit(server.configPath).banks?.discount?.navigationRetryCount).toBe(2);
+      expect(readSplit(server.configPath).banks?.discount?.timeout).toBe(45000);
     } finally {
       await teardown(server, context);
     }

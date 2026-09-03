@@ -38,7 +38,6 @@ Every bank entry shares the same shape on top of its credentials:
     { "actualAccountId": "uuid", "reconcile": true, "accounts": "all" }
   ],
   "timeout": 30000,                // optional, raise for slow networks
-  "navigationRetryCount": 0,       // optional, raise for flaky networks
   "twoFactorAuth": false,          // optional
   "twoFactorTimeout": 300          // optional, seconds
 }

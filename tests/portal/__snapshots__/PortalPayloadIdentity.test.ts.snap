@@ -338,13 +338,6 @@ exports[`portal payload identity > serves the manifest unchanged, to full nestin
           "label": "Navigation timeout (ms)",
           "min": 0,
         },
-        {
-          "help": "Retries on page load failure. Default 0.",
-          "key": "navigationRetryCount",
-          "kind": "number",
-          "label": "Navigation retries",
-          "min": 0,
-        },
       ],
       "doc": "configuration/banks.md",
       "icon": "🏦",
