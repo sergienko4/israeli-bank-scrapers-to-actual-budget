@@ -69,7 +69,7 @@ Pass through to the scraper library for banks that timeout on slow connections:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `timeout` | `30000` | Navigation timeout in ms — increase to `60000` for slow networks (Oracle Cloud) |
-| `navigationRetryCount` | `0` | Retries on page-load failure (set `1`–`3` for flaky connections) |
+| `navigationRetryCount` | `0` | **Ignored since scrapers 8.7.0.** Still accepted so existing configs keep loading. Scrape retries are handled by the importer itself (`maxRetryAttempts`, default `3`). |
 | `clearSession` | `false` | Force-clear browser session before scraping |
 
 ## 2FA / OTP

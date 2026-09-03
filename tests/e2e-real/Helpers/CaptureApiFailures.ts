@@ -1,10 +1,9 @@
 /**
  * Diagnostic probe used by the real-bank E2E suites.
  *
- * Deliberately narrow: the provider already photographs a failed session for
- * us via `storeFailureScreenShotPath`, so this adds only what the provider
- * does not expose — which API calls the bank SPA made, how each answered, and
- * the browser-side errors that explain why a bank SPA failed to boot.
+ * Deliberately narrow: it adds only what the scraper library does not expose —
+ * which API calls the bank SPA made, how each answered, and the browser-side
+ * errors that explain why a bank SPA failed to boot.
  *
  * Everything logged here is allowlisted metadata. Response bodies, request
  * payloads, header values and query strings are never printed: this runs

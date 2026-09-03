@@ -13,39 +13,25 @@ The importer uses [pino](https://github.com/pinojs/pino) for structured logging.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `format` | _auto_ | Log format. Auto-derived from `telegram.messageFormat` when not set. |
-| `level` | `info` | Verbosity: `trace`, `debug`, `info`, `warn`, `error`. `debug`/`trace` also enable scraper diagnostics. |
+| `level` | `info` | Verbosity: `trace`, `debug`, `info`, `warn`, `error`. |
 | `logDir` | `./logs` | Directory for rotating log files. In Docker, use an absolute path like `/app/logs` and mount as a volume. |
 
-## Log level and scraper diagnostics
+## Log level
 
 `level` is editable from the **config portal** (Logging section), so you can raise
 verbosity and re-run without editing files over SSH. It falls back to the
 `LOG_LEVEL` environment variable when unset.
 
-Setting `level` to `debug` or `trace` additionally asks the bank scraper to
-photograph any login it fails:
-
-| What you get | Provider option |
-|--------------|-----------------|
-| A screenshot of the page at the moment login failed | `storeFailureScreenShotPath` |
-
-Screenshots land in `logs/failures` below the working directory — which is
-`/app/logs/failures` in the container. Override per bank with
-`failureScreenshotPath`:
-
-```json
-"banks": {
-  "visaCal": { "failureScreenshotPath": "/app/data/shots" }
-}
-```
-
-This is the fastest way to diagnose an opaque scrape failure such as
-*"resolved zero accounts"*, which on its own tells you the session was rejected
-but not why (an expired session, a WAF challenge, or a changed login page).
-
 !!! warning "Turn it back down"
-    `trace` is noisy and screenshots may capture account details. Return `level`
-    to `info` once you have diagnosed the problem.
+    `trace` is noisy. Return `level` to `info` once you have diagnosed the
+    problem.
+
+!!! info "Failure screenshots were removed in scrapers 8.7.0"
+    Earlier releases asked the scraper to photograph a failed login by setting
+    `storeFailureScreenShotPath`. Scrapers 8.7.0 deprecated that option: only
+    its legacy non-Pipeline banks ever honoured it, so for most banks no
+    screenshot was ever taken. The importer no longer sends it, and the
+    per-bank `failureScreenshotPath` setting is now accepted but ignored.
 
 ## Getting the scraper's own log output
 

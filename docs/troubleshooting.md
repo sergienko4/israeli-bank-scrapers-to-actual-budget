@@ -118,7 +118,6 @@ Run with `DRY_RUN=true` first to preview what would be imported.
 ```json
 "amex": {
   "timeout": 60000,
-  "navigationRetryCount": 2,
   "...": "..."
 }
 ```

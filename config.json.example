@@ -71,7 +71,6 @@
       "clearSession": true,
       "daysBack": 30,
       "timeout": 60000,
-      "navigationRetryCount": 2,
       "targets": [{ "actualAccountId": "uuid", "reconcile": false, "accounts": "all" }]
     },
 
@@ -154,7 +153,7 @@
     "id (Max)": "Optional. Israeli ID (ת.ז.) for Max second-login verification (Flow B). Omit if not prompted",
     "clearSession": "false (default). No-op with Camoufox (v7.9.0+). Kept for backward compatibility",
     "timeout": "Navigation timeout in ms. Default: 30000. Increase for slow connections (e.g., 60000)",
-    "navigationRetryCount": "Retries on page load failure. Default: 0. Set 1-3 for flaky networks",
+    "navigationRetryCount": "Ignored since scrapers 8.7.0. Kept for backward compatibility. Scrape retries are handled by the importer",
     "accountName": "Optional. Friendly label shown in logs and Telegram instead of the bank account number",
     "reconcile": "false (default). true = auto-adjust balance to match bank",
     "twoFactorAuth": "false (default). true = bot asks for SMS OTP via Telegram",

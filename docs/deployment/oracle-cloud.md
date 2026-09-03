@@ -27,7 +27,6 @@ The default `timeout` of 30 000 ms is too tight from many Oracle Cloud regions t
   "card6Digits": "...",
   "password": "...",
   "timeout": 60000,
-  "navigationRetryCount": 2,
   "daysBack": 14,
   "targets": [...]
 },
@@ -36,7 +35,6 @@ The default `timeout` of 30 000 ms is too tight from many Oracle Cloud regions t
   "card6Digits": "...",
   "password": "...",
   "timeout": 60000,
-  "navigationRetryCount": 2,
   "daysBack": 14,
   "targets": [...]
 },
@@ -44,7 +42,6 @@ The default `timeout` of 30 000 ms is too tight from many Oracle Cloud regions t
   "username": "...",
   "password": "...",
   "timeout": 60000,
-  "navigationRetryCount": 2,
   "daysBack": 14,
   "targets": [...]
 }
@@ -53,7 +50,6 @@ The default `timeout` of 30 000 ms is too tight from many Oracle Cloud regions t
 | Option | Default | Oracle Cloud value |
 |--------|---------|---------------------|
 | `timeout` | 30 000 ms | **60 000 ms** for Amex / Isracard / Visa Cal |
-| `navigationRetryCount` | 0 | **2** for all three |
 
 ## Rate limiting
 
