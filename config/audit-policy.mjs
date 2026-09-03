@@ -28,20 +28,7 @@ export const SEVERITY_RANK = ['info', 'low', 'moderate', 'high', 'critical'];
  *
  * @type {Array<{ ghsa: string, package: string, expires: string, reason: string }>}
  */
-export const ACCEPTED_ADVISORIES = [
-  {
-    ghsa: 'GHSA-2v37-7h3g-55p8',
-    package: 'nanoid',
-    expires: '2026-11-06',
-    reason:
-      'Dev-only (vite -> postcss -> nanoid); absent from the production tree, ' +
-      'so it never ships in the image. postcss calls nanoid(6) from ' +
-      'nanoid/non-secure with a fixed non-zero size and no custom generator, ' +
-      'so the size-zero infinite loop cannot be reached. No fix is available: ' +
-      'nanoid 3.3.17 named by the advisory was never published to npm, and ' +
-      '5.1.6 is ESM-only which breaks postcss\'s require("nanoid/non-secure").',
-  },
-];
+export const ACCEPTED_ADVISORIES = [];
 
 /**
  * Reports whether a severity meets or exceeds the enforced floor.
