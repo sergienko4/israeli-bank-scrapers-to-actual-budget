@@ -21,6 +21,7 @@ import {
   auditLockfile,
   canonicalizeRegistryUrls,
   formatLockfileReport,
+  formatRepairSummary,
 } from './refresh-lockfile-logic.mjs';
 
 const LOCKFILE = new URL('../package-lock.json', import.meta.url);
@@ -44,13 +45,18 @@ function reportAndExit(lockText) {
 /**
  * Rewrites mirror-sourced registry URLs in place and reports the outcome.
  *
+ * The report names what the rewrite did not prove: the integrity hashes are
+ * the mirror's, and only `npm ci` on CI can check them against the real
+ * tarball. See INTEGRITY_CAVEAT in the logic module for why regenerating them
+ * here would weaken the guarantee rather than strengthen it.
+ *
  * @param {string} lockText The lockfile contents to repair.
  * @returns {never} Always terminates the process.
  */
 function runRepair(lockText) {
   const { text, replaced } = canonicalizeRegistryUrls(lockText);
   if (replaced > 0) writeFileSync(LOCKFILE, text);
-  console.log(`Rewrote ${replaced} mirror-sourced registry URL(s).`);
+  console.log(formatRepairSummary(replaced));
   reportAndExit(text);
 }
 

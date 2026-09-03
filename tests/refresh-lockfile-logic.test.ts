@@ -8,6 +8,7 @@ import {
   findWeakIntegrities,
   formatLockfileReport,
   formatRefreshBody,
+  formatRepairSummary,
   summarizeRefresh,
 } from '../scripts/refresh-lockfile-logic.mjs';
 
@@ -33,6 +34,12 @@ const CLEAN = lockfile({
 const AZURE =
   'https://ms-feed-1.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/browserslist/-/browserslist-4.28.8.tgz';
 const PROXY = 'https://packagefeedproxy.microsoft.io/npm/nanoid/-/nanoid-3.3.18.tgz';
+
+// A scoped package behind the same mirror. Scoped names are the case most
+// likely to break: the `@scope/` prefix is part of the registry path, so
+// dropping it would yield a URL that 404s instead of one that merely looks odd.
+const AZURE_SCOPED =
+  'https://ms-feed-1.pkgs.visualstudio.com/1es-public/_packaging/npm-public/npm/registry/@actual-app/api/-/api-26.9.0.tgz';
 
 describe('CANONICAL_REGISTRY', () => {
   it('is the public npm registry', () => {
@@ -138,6 +145,53 @@ describe('canonicalizeRegistryUrls', () => {
   it('does not touch git URLs', () => {
     const git = lockfile({ 'node_modules/f': { resolved: 'git+ssh://git@github.com/o/r.git#a' } });
     expect(canonicalizeRegistryUrls(git).text).toBe(git);
+  });
+
+  it('keeps the scope prefix when rewriting a scoped package', () => {
+    const { text, replaced } = canonicalizeRegistryUrls(
+      lockfile({ 'node_modules/@actual-app/api': { resolved: AZURE_SCOPED } }),
+    );
+    expect(replaced).toBe(1);
+    expect(text).toContain('https://registry.npmjs.org/@actual-app/api/-/api-26.9.0.tgz');
+    expect(text).not.toContain('visualstudio.com');
+  });
+
+  it('recovers a scoped name from a nested install path', () => {
+    const nested = lockfile({
+      'node_modules/parent/node_modules/@scope/child': {
+        resolved: 'https://packagefeedproxy.microsoft.io/npm/@scope/child/-/child-1.0.0.tgz',
+      },
+    });
+    expect(canonicalizeRegistryUrls(nested).text).toContain(
+      'https://registry.npmjs.org/@scope/child/-/child-1.0.0.tgz',
+    );
+  });
+
+  it('drops a mirror query string rather than carrying it to the registry', () => {
+    const withQuery = lockfile({ 'node_modules/nanoid': { resolved: `${PROXY}?resolve=true` } });
+    const { text } = canonicalizeRegistryUrls(withQuery);
+    expect(text).toContain('https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz');
+    expect(text).not.toContain('resolve=true');
+  });
+});
+
+describe('formatRepairSummary', () => {
+  it('reports how many URLs were rewritten', () => {
+    expect(formatRepairSummary(3)).toContain('Rewrote 3 mirror-sourced registry URL(s).');
+  });
+
+  it('warns that the carried-over integrity hashes are unverified', () => {
+    const summary = formatRepairSummary(1);
+    expect(summary).toContain('NOT verified here');
+    expect(summary).toContain('npm ci');
+  });
+
+  it('explains why the hashes are not regenerated from the registry', () => {
+    expect(formatRepairSummary(1)).toContain('erase the evidence');
+  });
+
+  it('stays quiet about integrity when nothing was rewritten', () => {
+    expect(formatRepairSummary(0)).toBe('Rewrote 0 mirror-sourced registry URL(s).');
   });
 });
 

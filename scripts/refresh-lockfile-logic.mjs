@@ -146,6 +146,41 @@ export function canonicalizeRegistryUrls(lockText) {
   return { text, replaced };
 }
 
+/**
+ * Why a repaired lockfile still carries hashes this tool has not checked.
+ *
+ * Rewriting `resolved` does not re-derive `integrity`, and deliberately so.
+ * Verifying a hash means hashing the public tarball, which is precisely what a
+ * mirrored machine cannot fetch — the condition that makes the repair
+ * necessary in the first place. Fetching a replacement hash from the registry
+ * would not be a stronger check but a weaker one: it would overwrite the only
+ * evidence that the mirror served different bytes, turning a loud `npm ci`
+ * failure into a silent divergence between what was installed here and what
+ * ships. Leaving the mirror's hash in place keeps that failure loud.
+ */
+const INTEGRITY_CAVEAT = [
+  'Their integrity hashes came from the mirror and are NOT verified here:',
+  'checking one means hashing the public tarball, which is the very thing a',
+  'mirrored machine cannot fetch. Replacing them with registry-supplied hashes',
+  'would erase the evidence that the mirror served different bytes, so they are',
+  'left as-is on purpose. `npm ci` in CI verifies them against the real tarball.',
+  'An EINTEGRITY failure there means the bytes differed — re-run the "Lockfile',
+  'refresh" workflow rather than repairing again locally.',
+];
+
+/**
+ * Reports what the repair changed, without overstating what it proved.
+ *
+ * The count alone reads like a clean bill of health, which would leave a
+ * maintainer baffled when CI later rejects the very file this tool just called
+ * repaired. Naming the unverified part here is what makes that outcome
+ * predictable instead of surprising.
+ */
+export function formatRepairSummary(replaced) {
+  const headline = `Rewrote ${replaced} mirror-sourced registry URL(s).`;
+  return replaced === 0 ? headline : [headline, '', ...INTEGRITY_CAVEAT].join('\n');
+}
+
 /** Judges a lockfile against both canonicality rules at once. */
 export function auditLockfile(lockText) {
   const foreignRegistries = findForeignRegistryEntries(lockText);

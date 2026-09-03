@@ -60,6 +60,9 @@ export function findWeakIntegrities(lockText: string): IWeakIntegrityEntry[];
 /** Rewrites every mirror-sourced `resolved` URL back to the public registry. */
 export function canonicalizeRegistryUrls(lockText: string): ICanonicalizeResult;
 
+/** Reports what the repair changed, and which part of it stays unverified. */
+export function formatRepairSummary(replaced: number): string;
+
 /** Judges a lockfile against both canonicality rules at once. */
 export function auditLockfile(lockText: string): ILockfileAudit;
 
