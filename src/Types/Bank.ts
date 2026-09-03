@@ -48,8 +48,11 @@ export interface IBankConfig {
 
   // Scraper tuning (per bank)
   timeout?: number;                  // Navigation timeout in ms. Default: 30000
-  navigationRetryCount?: number;     // Retries on page.goto failure. Default: 0
-  failureScreenshotPath?: string;    // Dir for login-failure screenshots. Default: <cwd>/logs/failures
+  // Ignored since scrapers 8.7.0 — kept so existing configs keep loading.
+  // Scrape retries are owned by the importer (maxRetryAttempts, default 3).
+  navigationRetryCount?: number;
+  // Ignored since scrapers 8.7.0 — the provider no longer takes a screenshot path.
+  failureScreenshotPath?: string;
 
   [key: string]: unknown; // Allow other bank-specific fields
 }
