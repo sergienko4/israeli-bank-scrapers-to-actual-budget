@@ -45,9 +45,6 @@ at any severity, reaches the logs.
 it has decided to attach a transport, so raising it changes importer output
 only.
 
-Failure screenshots are unaffected — the provider writes those straight to
-disk, so they still appear at `debug`/`trace` under `NODE_ENV=production`.
-
 To read the scraper's own narration, run one throwaway container in
 development mode:
 

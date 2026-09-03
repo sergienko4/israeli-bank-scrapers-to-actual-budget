@@ -102,11 +102,20 @@ describe('ScraperSetup', () => {
    * a bank config that still carries the old settings.
    */
   describe('buildBaseScraperOptions (provider 8.7.0 deprecations)', () => {
+    /**
+     * Builds the minimal dependency stub the option builder reads.
+     * @param level - Optional log level; omitting it leaves `logConfig` undefined.
+     * @returns A partial dependency object cast to the full strategy interface.
+     */
     const makeDeps = (level?: string): ILiveScrapeDependencies =>
       ({
         config: { logConfig: level === undefined ? undefined : { level } },
       }) as unknown as ILiveScrapeDependencies;
 
+    /**
+     * Builds scrape options whose bank config still carries both deprecated keys.
+     * @returns Resolved live options shared by every case in this block.
+     */
     const makeOpts = (): IResolvedLiveOpts =>
       ({
         companyType: CompanyTypes.Mizrahi,

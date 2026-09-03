@@ -58,10 +58,6 @@ const BANK_FIELDS: readonly IManifestField[] = [
     key: 'timeout', label: 'Navigation timeout (ms)', kind: 'number', min: 0,
     help: 'Navigation timeout in ms. Default 30000.',
   },
-  {
-    key: 'navigationRetryCount', label: 'Navigation retries', kind: 'number', min: 0,
-    help: 'Retries on page load failure. Default 0.',
-  },
 ];
 
 /** Fields for each Actual Budget target under a bank. */
