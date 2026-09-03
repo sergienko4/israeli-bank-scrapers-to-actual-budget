@@ -59,7 +59,7 @@ stateDiagram-v2
     Scraping --> RetryScrape: TransientError
     Scraping --> Quarantine: AuthError / Captcha
     Scraping --> Fatal: ConfigError / Unknown
-    RetryScrape --> Scraping: attempt < navigationRetryCount
+    RetryScrape --> Scraping: attempt < maxRetryAttempts
     RetryScrape --> Quarantine: attempts exhausted
     Importing --> Reconciling
     Reconciling --> Notify
@@ -68,7 +68,7 @@ stateDiagram-v2
     Fatal --> Notify
 ```
 
-- **TransientError** — network blip, page-load timeout. Retries up to `navigationRetryCount` times (per-bank, default `0`).
+- **TransientError** — network blip, page-load timeout. Retried by the importer's own retry strategy up to `maxRetryAttempts` times (default `3`); banks using 2FA are not retried, since an expired OTP cannot be replayed.
 - **AuthError** — invalid credentials, password change required. No retry; emits an alert with actionable text.
 - **ConfigError** — invalid `targets`, missing field. Halts the bank immediately.
 - **Quarantine** — bank skipped this run. After 3 consecutive failures the next notification adds an escalation tag.
