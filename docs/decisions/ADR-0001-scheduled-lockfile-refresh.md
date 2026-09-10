@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-02-27
+- **Amended:** 2026-09-10 — see the note under Context
 - **Deciders:** Repository maintainer
 - **Supersedes:** the retired `dependency-check.yml` workflow
 
@@ -28,6 +29,16 @@ Two escape hatches were considered and neither existed. `classifyAdvisories()`
 in `config/check-audit.mjs` deliberately forces production-tree advisories into
 violations, so no waiver entry could clear it, and Trivy does not read that
 policy file at all. The advisory could only be cleared by moving the pin.
+
+> **Amended 2026-09-10.** The sentence above describes the policy as it stood on
+> the decision date and is no longer current. `classifyAdvisories` now lives in
+> `config/audit-policy.mjs` and recognises a second, deliberately narrower class:
+> a production-tree advisory may be accepted only when the entry admits
+> reachability, records that no upstream fix exists, carries a tracking URL,
+> states a rationale, and expires within 30 days. The decision this ADR records
+> is unaffected — regeneration remains the primary remedy, and the acceptance
+> class exists only for advisories that regeneration cannot fix, such as
+> `GHSA-vwc7-r8mq-g2x9` in `adm-zip`, where no patched release exists to move to.
 
 The decisive detail is that **the fix was already inside the allowed range**.
 Regeneration alone would have produced `4.28.8`. The lockfile had simply never

@@ -2,19 +2,25 @@
  * Audit policy for the dependency vulnerability gate.
  *
  * The gate (config/check-audit.mjs) fails on every advisory at or above
- * AUDIT_LEVEL. A small number of advisories cannot be fixed because upstream
- * has not published a patched version our dependency range can accept. Those
- * are listed in ACCEPTED_ADVISORIES with a rationale and a hard expiry.
+ * AUDIT_LEVEL. ACCEPTED_ADVISORIES lists the advisories the build does not stop
+ * on, each with a rationale and a hard expiry.
  *
- * An entry here is deliberately weaker than it looks:
- *   - It only suppresses the named advisory, never a whole severity or scope.
- *   - It stops working on its `expires` date, so a stale exception fails the
- *     build instead of quietly becoming permanent.
- *   - It is ignored entirely if the package reaches the production tree, so an
- *     exception can never hide a vulnerability in the published image.
+ * Entries come in two classes, and they do not mean the same thing.
  *
- * Adding an entry requires evidence that the advisory is genuinely unfixable
- * and unreachable. Prefer upgrading, overriding, or removing the dependency.
+ * A development-tree entry is a deferral. The package never reaches the
+ * published image, so the entry withholds a build failure, not a fix.
+ *
+ * A production-tree entry is an accepted risk: the vulnerability ships to
+ * users. Because that is a materially worse thing to do quietly, such an entry
+ * is honoured only when it admits reaching production (`productionReachable`),
+ * states that no upstream fix exists (`noUpstreamFix`), links the upstream work
+ * so that claim can be re-checked (`upstream`), and records when the clock
+ * started (`added`). Its window may not exceed MAX_PRODUCTION_ACCEPTANCE_DAYS,
+ * so it expires into a build failure long before it can be forgotten. It
+ * suppresses only the named advisory, never a severity or a scope.
+ *
+ * Both classes stop working on their `expires` date. Prefer upgrading,
+ * overriding, or removing the dependency over writing either one.
  */
 
 /** Severity floor the gate enforces, matching `npm audit --audit-level`. */
@@ -24,11 +30,66 @@ export const AUDIT_LEVEL = 'moderate';
 export const SEVERITY_RANK = ['info', 'low', 'moderate', 'high', 'critical'];
 
 /**
- * Advisories accepted until a fix exists upstream.
+ * Longest window a production-reachable acceptance may cover, in days.
  *
- * @type {Array<{ ghsa: string, package: string, expires: string, reason: string }>}
+ * Short enough that renewing one is a deliberate act with a fresh review, not
+ * a thing that happens by nobody noticing.
  */
-export const ACCEPTED_ADVISORIES = [];
+export const MAX_PRODUCTION_ACCEPTANCE_DAYS = 30;
+
+/** Milliseconds in a day, used to measure an acceptance window. */
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * Advisories the gate does not block on.
+ *
+ * @type {Array<{ ghsa: string, package: string, expires: string, reason: string,
+ *   added?: string, productionReachable?: boolean, noUpstreamFix?: boolean,
+ *   upstream?: string }>}
+ */
+export const ACCEPTED_ADVISORIES = [
+  {
+    ghsa: 'GHSA-vwc7-r8mq-g2x9',
+    package: 'adm-zip',
+    added: '2026-09-10',
+    expires: '2026-10-10',
+    productionReachable: true,
+    noUpstreamFix: true,
+    upstream: 'https://github.com/cthackers/adm-zip/issues/574',
+    reason:
+      'Reaches production through @sergienko4/israeli-bank-scrapers -> '
+      + '@hieutran094/camoufox-js, which unpacks the Camoufox browser from '
+      + 'GitHub releases and its addons from addons.mozilla.org using '
+      + 'adm-zip. Both extraction paths do run, so this is an accepted risk '
+      + 'rather than an unreachable one. The exposure is not a malicious '
+      + 'archive: per the advisory the write needs no traversal sequence in '
+      + 'the archive at all, so TLS on those two origins does not mitigate '
+      + 'it. It needs an attacker who can pre-create a symlink at a matching '
+      + 'destination path inside the extraction directory, plus overwrite '
+      + 'enabled. The impact is therefore bounded by the location and '
+      + 'ownership of the extraction directory, not by TLS. Both paths write '
+      + 'under INSTALL_DIR: it is overridable via CAMOUFOX_INSTALL_DIR and '
+      + 'otherwise defaults to userCacheDir(camoufox), with addons resolving '
+      + 'beneath it through getPath(addons/<name>). We never set that '
+      + 'variable, so INSTALL_DIR is /home/node/.cache/camoufox, a tree '
+      + 'created at image-build time and owned by the node user the process '
+      + 'runs as, rather than a shared temp directory. Placing the symlink '
+      + 'therefore presupposes code execution as the same user that does the '
+      + 'extracting, and pointing CAMOUFOX_INSTALL_DIR at a shared or '
+      + 'world-writable path would void that reasoning. 0.6.0 is the newest '
+      + 'release and is '
+      + 'unpatched, downgrading trades this moderate advisory for the high '
+      + 'GHSA-xcpc-8h2w-3j85, and generative-bayesian-network requires '
+      + '^0.6.0, so no version in range is clean. Upstream fixes are open '
+      + 'but unmerged (PRs 575 and 576). At expiry either upstream has '
+      + 'shipped and we take the bump, or we vendor an extraction path that '
+      + 'refuses to follow symlinks at the destination: O_NOFOLLOW on the '
+      + 'write plus an lstat check of each destination component, into a '
+      + 'freshly created directory. Lexical containment alone is not a fix, '
+      + 'because comparing the entry name against the resolved root is '
+      + 'precisely the check this advisory defeats.',
+  },
+];
 
 /**
  * Reports whether a severity meets or exceeds the enforced floor.
@@ -49,37 +110,181 @@ export function isInScope(severity) {
  * Finds the accepted-advisory entry covering a given advisory, if any.
  *
  * @param {{ ghsa: string, package: string }} advisory The advisory to match.
- * @returns {{ ghsa: string, package: string, expires: string, reason: string } | undefined} The entry.
+ * @param {Array<object>} [entries] Entries to search, defaulting to the policy.
+ * @returns {object | undefined} The matching entry.
  */
-export function findAcceptedEntry(advisory) {
-  return ACCEPTED_ADVISORIES.find(
+export function findAcceptedEntry(advisory, entries = ACCEPTED_ADVISORIES) {
+  return entries.find(
     entry => entry.ghsa === advisory.ghsa && entry.package === advisory.package,
   );
 }
 
 /**
+ * Parses a strict `YYYY-MM-DD` calendar date into epoch milliseconds.
+ *
+ * `Date.parse` alone is too permissive for policy dates: it rolls `2026-02-31`
+ * forward into March rather than rejecting it, and it accepts nothing at all
+ * for a missing field. Both would let a typo widen a waiver instead of failing
+ * the build, so the value must round-trip back to the exact day it claims.
+ *
+ * @param {unknown} value Candidate date string.
+ * @returns {number | null} Epoch milliseconds at UTC midnight, or null when invalid.
+ */
+function parseIsoDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = Date.parse(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed)) return null;
+  if (new Date(parsed).toISOString().slice(0, 10) !== value) return null;
+  return parsed;
+}
+
+/**
+ * Reports whether a value is a well-formed HTTPS URL.
+ *
+ * The upstream field exists so a reviewer can follow the tracking issue. A
+ * placeholder such as `pending` satisfies "non-empty" while giving a reviewer
+ * nothing to open, so the contract asks for a link that actually resolves.
+ *
+ * @param {unknown} value Candidate URL.
+ * @returns {boolean} True when the value parses as an HTTPS URL.
+ */
+function isHttpsUrl(value) {
+  if (typeof value !== 'string') return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reports whether an entry carries the evidence a production acceptance needs.
+ *
+ * Accepting a production-tree advisory means shipping a known vulnerability, so
+ * the entry has to say so in fields a reviewer can check, rather than in prose
+ * nobody re-reads.
+ *
+ * @param {object} entry Accepted-advisory entry to inspect.
+ * @returns {boolean} True when every required field is present.
+ */
+function hasProductionEvidence(entry) {
+  return entry.productionReachable === true
+    && entry.noUpstreamFix === true
+    && isHttpsUrl(entry.upstream)
+    && parseIsoDate(entry.added) !== null;
+}
+
+/**
+ * Reports whether an acceptance window fits inside the permitted cap.
+ *
+ * The window is measured from `added`, so an entry dated in the future would
+ * otherwise buy more than the cap allows: adding a window that opens next week
+ * pushes the expiry beyond 30 days from today while still measuring 30 days
+ * wide. Back-dating is harmless, so only future dates are refused.
+ *
+ * @param {object} entry Accepted-advisory entry carrying `added` and `expires`.
+ * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
+ * @returns {boolean} True when the window is positive, current, and within the cap.
+ */
+function isWithinAcceptanceCap(entry, todayMs) {
+  const added = parseIsoDate(entry.added);
+  const expires = parseIsoDate(entry.expires);
+  if (added === null || expires === null) return false;
+  if (added > todayMs) return false;
+  const days = (expires - added) / MS_PER_DAY;
+  return days > 0 && days <= MAX_PRODUCTION_ACCEPTANCE_DAYS;
+}
+
+/**
+ * Reports why an entry cannot be honoured regardless of which tree it sits in.
+ *
+ * Every acceptance must carry a rationale. The type allows the field to be
+ * absent so malformed input can be classified rather than crash, which means
+ * the runtime has to reject it here; otherwise a waiver with no justification
+ * is honoured and `check-audit.mjs` reports `undefined` as its reason.
+ *
+ * @param {object} entry Accepted-advisory entry under consideration.
+ * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
+ * @returns {string | null} The blocking reason, or null when the entry stands.
+ */
+function universalBlockingReason(entry, todayMs) {
+  if (typeof entry.reason !== 'string' || entry.reason.trim() === '') {
+    return 'exception has no rationale';
+  }
+  const expiresMs = parseIsoDate(entry.expires);
+  if (expiresMs === null) return 'exception has an invalid expires date';
+  if (expiresMs <= todayMs) return `exception expired on ${entry.expires}`;
+  return null;
+}
+
+/**
+ * Reports why an entry fails the stricter bar applied to the production tree.
+ *
+ * @param {object} entry Accepted-advisory entry under consideration.
+ * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
+ * @returns {string | null} The blocking reason, or null when the entry stands.
+ */
+function productionBlockingReason(entry, todayMs) {
+  if (!hasProductionEvidence(entry)) {
+    return 'reaches the production tree; exception lacks the required evidence';
+  }
+  if (!isWithinAcceptanceCap(entry, todayMs)) {
+    return `production acceptance must start today or earlier and expire within ${MAX_PRODUCTION_ACCEPTANCE_DAYS} days of being added`;
+  }
+  return null;
+}
+
+/**
+ * Explains why an advisory blocks the build, or reports that it is accepted.
+ *
+ * The policy date arrives from the caller rather than being read here, so every
+ * advisory in one run is judged against the same day. Reading the clock per
+ * advisory let a run that crossed UTC midnight accept one entry and reject an
+ * identical one as expired.
+ *
+ * @param {{ package: string }} advisory Advisory under consideration.
+ * @param {object | undefined} entry Matching accepted-advisory entry, if any.
+ * @param {{ productionPackages: Set<string>, todayMs: number }} policy Run-wide
+ *   classification context: the production tree and the policy date in epoch
+ *   milliseconds at UTC midnight.
+ * @returns {string | null} The blocking reason, or null when accepted.
+ */
+function blockingReason(advisory, entry, policy) {
+  if (!entry) return 'no accepted-advisory entry';
+  const universal = universalBlockingReason(entry, policy.todayMs);
+  if (universal !== null) return universal;
+  if (!policy.productionPackages.has(advisory.package)) return null;
+  return productionBlockingReason(entry, policy.todayMs);
+}
+
+/**
  * Classifies advisories into blocking violations and accepted suppressions.
  *
- * An accepted entry is honoured only when it has not expired and the affected
- * package is absent from the production dependency tree.
+ * An entry is honoured only when it has not expired, and, when the package
+ * reaches the production tree, only when it carries production evidence and a
+ * window within MAX_PRODUCTION_ACCEPTANCE_DAYS.
+ *
+ * The policy date is read once here and reused for every advisory, so a run
+ * that crosses UTC midnight cannot judge two entries against different days.
  *
  * @param {Array<{ ghsa: string, package: string, severity: string, title: string }>} advisories Advisories found.
  * @param {Set<string>} productionPackages Packages with advisories in the production tree.
+ * @param {Array<object>} [entries] Entries to apply, defaulting to the policy.
  * @returns {{ violations: Array<object>, accepted: Array<object> }} The classification result.
  */
-export function classifyAdvisories(advisories, productionPackages) {
+export function classifyAdvisories(advisories, productionPackages, entries = ACCEPTED_ADVISORIES) {
   const violations = [];
   const accepted = [];
-  const today = new Date().toISOString().slice(0, 10);
+  const policy = {
+    productionPackages,
+    todayMs: parseIsoDate(new Date().toISOString().slice(0, 10)),
+  };
 
   for (const advisory of advisories.filter(a => isInScope(a.severity))) {
-    const entry = findAcceptedEntry(advisory);
-    if (!entry) {
-      violations.push({ ...advisory, why: 'no accepted-advisory entry' });
-    } else if (productionPackages.has(advisory.package)) {
-      violations.push({ ...advisory, why: 'reaches the production tree; exception does not apply' });
-    } else if (entry.expires <= today) {
-      violations.push({ ...advisory, why: `exception expired on ${entry.expires}` });
+    const entry = findAcceptedEntry(advisory, entries);
+    const why = blockingReason(advisory, entry, policy);
+    if (why) {
+      violations.push({ ...advisory, why });
     } else {
       accepted.push({ ...advisory, expires: entry.expires, reason: entry.reason });
     }
