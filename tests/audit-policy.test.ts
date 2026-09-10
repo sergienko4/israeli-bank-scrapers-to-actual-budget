@@ -250,6 +250,17 @@ describe('classifyAdvisories, production-tree advisories with full evidence', ()
   });
 });
 
+describe('classifyAdvisories, severity scope', () => {
+  it('ignores an advisory below the enforced severity floor', () => {
+    const low = { ...advisory, severity: 'low' };
+
+    const { violations, accepted } = classifyAdvisories([low], inProductionTree, []);
+
+    expect(violations).toEqual([]);
+    expect(accepted).toEqual([]);
+  });
+});
+
 describe('classifyAdvisories, the entries that actually ship', () => {
   // Every other case above supplies synthetic entries, which proves the rules
   // but never the data. This one loads ACCEPTED_ADVISORIES itself, so a typo in
@@ -269,14 +280,5 @@ describe('classifyAdvisories, the entries that actually ship', () => {
       expect(violations, `${entry.package} must not block the build`).toEqual([]);
       expect(accepted).toHaveLength(1);
     }
-  });
-});
-  it('ignores an advisory below the enforced severity floor', () => {
-    const low = { ...advisory, severity: 'low' };
-
-    const { violations, accepted } = classifyAdvisories([low], inProductionTree, []);
-
-    expect(violations).toEqual([]);
-    expect(accepted).toEqual([]);
   });
 });
