@@ -35,6 +35,17 @@ const advisory = {
 const inProductionTree = new Set(['demo-pkg']);
 const notInProductionTree = new Set<string>();
 
+/**
+ * Packages known to reach the published image, tracked here independently of
+ * the waiver entries.
+ *
+ * This deliberately does not read `entry.productionReachable`. A waiver that
+ * dropped that flag would then be graded against the weaker development bar
+ * and keep passing, leaving the production evidence path untested. Holding the
+ * expectation outside the data under test means removing the flag fails.
+ */
+const PRODUCTION_TREE_PACKAGES = new Set(['adm-zip']);
+
 describe('classifyAdvisories, development-tree advisories', () => {
   it('accepts an unexpired entry for a package outside the production tree', () => {
     const entries = [
@@ -337,6 +348,16 @@ describe('classifyAdvisories, the entries that actually ship', () => {
       );
       expect(entry.package.trim(), 'package must be named').not.toBe('');
       expect(entry.reason.trim(), `${entry.package} must carry a rationale`).not.toBe('');
+
+      // Guards the production evidence path against silent downgrade. Without
+      // this, deleting `productionReachable: true` would reclassify the entry
+      // as development-only and every remaining assertion would still pass.
+      if (PRODUCTION_TREE_PACKAGES.has(entry.package)) {
+        expect(
+          entry.productionReachable,
+          `${entry.package} reaches the published image, so its entry must say so`,
+        ).toBe(true);
+      }
     }
   });
 
@@ -349,12 +370,14 @@ describe('classifyAdvisories, the entries that actually ship', () => {
         title: `Shipped acceptance for ${entry.package}`,
       };
 
-      // Only treat the package as production-reachable when the entry says so.
-      // A dev-tree waiver is legitimate, and hardcoding every entry as
-      // production would fail a future dev-only entry that the classifier is
-      // deliberately designed to allow.
-      const productionPackages
-        = entry.productionReachable === true ? new Set([entry.package]) : new Set<string>();
+      // The tree comes from the fixture above, never from the entry under
+      // test. Deriving it from `entry.productionReachable` meant a waiver that
+      // lost that flag was graded against the weaker development bar and still
+      // passed. A package absent from the fixture is development-only, which
+      // the classifier is deliberately designed to allow.
+      const productionPackages = PRODUCTION_TREE_PACKAGES.has(entry.package)
+        ? new Set([entry.package])
+        : new Set<string>();
 
       // No third argument, so the default ACCEPTED_ADVISORIES path is exercised.
       const { violations, accepted } = classifyAdvisories([live], productionPackages);
