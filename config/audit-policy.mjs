@@ -67,8 +67,9 @@ export const ACCEPTED_ADVISORIES = [
       + 'for the high GHSA-xcpc-8h2w-3j85, and generative-bayesian-network '
       + 'requires ^0.6.0, so no version in range is clean. Upstream fixes are '
       + 'open but unmerged (PRs 575 and 576). At expiry either upstream has '
-      + 'shipped, or we patch extraction ourselves as set out in '
-      + 'plans/clear-blocking-audit-advisories-adm-zip.md.',
+      + 'shipped and we take the bump, or we vendor a patched extraction path '
+      + 'that resolves each entry against the destination root and skips any '
+      + 'entry that escapes it.',
   },
 ];
 
@@ -101,6 +102,44 @@ export function findAcceptedEntry(advisory, entries = ACCEPTED_ADVISORIES) {
 }
 
 /**
+ * Parses a strict `YYYY-MM-DD` calendar date into epoch milliseconds.
+ *
+ * `Date.parse` alone is too permissive for policy dates: it rolls `2026-02-31`
+ * forward into March rather than rejecting it, and it accepts nothing at all
+ * for a missing field. Both would let a typo widen a waiver instead of failing
+ * the build, so the value must round-trip back to the exact day it claims.
+ *
+ * @param {unknown} value Candidate date string.
+ * @returns {number | null} Epoch milliseconds at UTC midnight, or null when invalid.
+ */
+function parseIsoDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = Date.parse(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed)) return null;
+  if (new Date(parsed).toISOString().slice(0, 10) !== value) return null;
+  return parsed;
+}
+
+/**
+ * Reports whether a value is a well-formed HTTPS URL.
+ *
+ * The upstream field exists so a reviewer can follow the tracking issue. A
+ * placeholder such as `pending` satisfies "non-empty" while giving a reviewer
+ * nothing to open, so the contract asks for a link that actually resolves.
+ *
+ * @param {unknown} value Candidate URL.
+ * @returns {boolean} True when the value parses as an HTTPS URL.
+ */
+function isHttpsUrl(value) {
+  if (typeof value !== 'string') return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Reports whether an entry carries the evidence a production acceptance needs.
  *
  * Accepting a production-tree advisory means shipping a known vulnerability, so
@@ -113,23 +152,27 @@ export function findAcceptedEntry(advisory, entries = ACCEPTED_ADVISORIES) {
 function hasProductionEvidence(entry) {
   return entry.productionReachable === true
     && entry.noUpstreamFix === true
-    && typeof entry.upstream === 'string' && entry.upstream.length > 0
-    && typeof entry.added === 'string' && entry.added.length > 0;
+    && isHttpsUrl(entry.upstream)
+    && parseIsoDate(entry.added) !== null;
 }
 
 /**
  * Reports whether an acceptance window fits inside the permitted cap.
  *
- * An unparseable or inverted date range is treated as out of bounds so a typo
- * fails the build rather than granting an open-ended waiver.
+ * The window is measured from `added`, so an entry dated in the future would
+ * otherwise buy more than the cap allows: adding a window that opens next week
+ * pushes the expiry beyond 30 days from today while still measuring 30 days
+ * wide. Back-dating is harmless, so only future dates are refused.
  *
  * @param {object} entry Accepted-advisory entry carrying `added` and `expires`.
- * @returns {boolean} True when the window is positive and within the cap.
+ * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
+ * @returns {boolean} True when the window is positive, current, and within the cap.
  */
-function isWithinAcceptanceCap(entry) {
-  const added = Date.parse(`${entry.added}T00:00:00Z`);
-  const expires = Date.parse(`${entry.expires}T00:00:00Z`);
-  if (Number.isNaN(added) || Number.isNaN(expires)) return false;
+function isWithinAcceptanceCap(entry, todayMs) {
+  const added = parseIsoDate(entry.added);
+  const expires = parseIsoDate(entry.expires);
+  if (added === null || expires === null) return false;
+  if (added > todayMs) return false;
   const days = (expires - added) / MS_PER_DAY;
   return days > 0 && days <= MAX_PRODUCTION_ACCEPTANCE_DAYS;
 }
@@ -143,15 +186,17 @@ function isWithinAcceptanceCap(entry) {
  * @returns {string | null} The blocking reason, or null when accepted.
  */
 function blockingReason(advisory, productionPackages, entry) {
-  const today = new Date().toISOString().slice(0, 10);
+  const todayMs = parseIsoDate(new Date().toISOString().slice(0, 10));
   if (!entry) return 'no accepted-advisory entry';
-  if (entry.expires <= today) return `exception expired on ${entry.expires}`;
+  const expiresMs = parseIsoDate(entry.expires);
+  if (expiresMs === null) return 'exception has an invalid expires date';
+  if (expiresMs <= todayMs) return `exception expired on ${entry.expires}`;
   if (!productionPackages.has(advisory.package)) return null;
   if (!hasProductionEvidence(entry)) {
     return 'reaches the production tree; exception lacks the required evidence';
   }
-  if (!isWithinAcceptanceCap(entry)) {
-    return `production acceptance must expire within ${MAX_PRODUCTION_ACCEPTANCE_DAYS} days of being added`;
+  if (!isWithinAcceptanceCap(entry, todayMs)) {
+    return `production acceptance must start today or earlier and expire within ${MAX_PRODUCTION_ACCEPTANCE_DAYS} days of being added`;
   }
   return null;
 }

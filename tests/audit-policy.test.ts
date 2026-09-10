@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyAdvisories } from '../config/audit-policy.mjs';
+import { ACCEPTED_ADVISORIES, classifyAdvisories } from '../config/audit-policy.mjs';
 
 /**
  * Builds an ISO date string offset from today, so the fixtures below never
@@ -56,6 +56,57 @@ describe('classifyAdvisories, development-tree advisories', () => {
 
     expect(accepted).toEqual([]);
     expect(violations[0]?.why).toContain('expired');
+  });
+
+  it('blocks an entry whose expiry is not a real calendar date', () => {
+    // A date comparison done on strings ranks '9999-99-99' after today, so a
+    // malformed value would read as "not expired yet" forever.
+    const entries = [
+      {
+        ghsa: advisory.ghsa,
+        package: advisory.package,
+        expires: '9999-99-99',
+        reason: 'Malformed expiry.',
+      },
+    ];
+
+    const { violations, accepted } = classifyAdvisories([advisory], notInProductionTree, entries);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toContain('invalid expires date');
+  });
+
+  it('blocks an entry whose expiry rolls over into another month', () => {
+    // Date.parse quietly turns 2026-02-31 into 2026-03-03, silently granting
+    // days nobody reviewed.
+    const entries = [
+      {
+        ghsa: advisory.ghsa,
+        package: advisory.package,
+        expires: '2026-02-31',
+        reason: 'Rolled-over expiry.',
+      },
+    ];
+
+    const { violations, accepted } = classifyAdvisories([advisory], notInProductionTree, entries);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toContain('invalid expires date');
+  });
+
+  it('blocks an entry that omits the expiry entirely', () => {
+    const entries = [
+      {
+        ghsa: advisory.ghsa,
+        package: advisory.package,
+        reason: 'No expiry supplied.',
+      },
+    ];
+
+    const { violations, accepted } = classifyAdvisories([advisory], notInProductionTree, entries);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toContain('invalid expires date');
   });
 });
 
@@ -167,9 +218,59 @@ describe('classifyAdvisories, production-tree advisories with full evidence', ()
     expect(accepted).toEqual([]);
     expect(violations[0]?.why).toContain('30 days');
   });
+
+  it('blocks an acceptance dated in the future, which would widen the cap', () => {
+    // The window is measured from `added`, so a start date next week keeps the
+    // window 30 days wide while pushing the expiry past 30 days from today.
+    const entries = [
+      { ...fullEvidence, added: isoDaysFromToday(7), expires: isoDaysFromToday(37) },
+    ];
+
+    const { violations, accepted } = classifyAdvisories([advisory], inProductionTree, entries);
+
+    expect(accepted).toEqual([]);
+    expect(violations).toHaveLength(1);
+  });
+
+  it('blocks an acceptance whose upstream is not a usable link', () => {
+    // A placeholder satisfies "non-empty" while giving a reviewer nothing to open.
+    const entries = [
+      {
+        ...fullEvidence,
+        upstream: 'pending',
+        added: isoDaysFromToday(-1),
+        expires: isoDaysFromToday(29),
+      },
+    ];
+
+    const { violations, accepted } = classifyAdvisories([advisory], inProductionTree, entries);
+
+    expect(accepted).toEqual([]);
+    expect(violations).toHaveLength(1);
+  });
 });
 
-describe('classifyAdvisories, severity scope', () => {
+describe('classifyAdvisories, the entries that actually ship', () => {
+  // Every other case above supplies synthetic entries, which proves the rules
+  // but never the data. This one loads ACCEPTED_ADVISORIES itself, so a typo in
+  // a real waiver fails here instead of in CI.
+  it('accepts each shipped entry against the live policy', () => {
+    for (const entry of ACCEPTED_ADVISORIES) {
+      const live = {
+        ghsa: entry.ghsa,
+        package: entry.package,
+        severity: 'high',
+        title: `Shipped acceptance for ${entry.package}`,
+      };
+
+      // No third argument, so the default ACCEPTED_ADVISORIES path is exercised.
+      const { violations, accepted } = classifyAdvisories([live], new Set([entry.package]));
+
+      expect(violations, `${entry.package} must not block the build`).toEqual([]);
+      expect(accepted).toHaveLength(1);
+    }
+  });
+});
   it('ignores an advisory below the enforced severity floor', () => {
     const low = { ...advisory, severity: 'low' };
 

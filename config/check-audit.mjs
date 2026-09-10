@@ -7,7 +7,8 @@
  * Checks:
  * 1. Every advisory at or above the enforced severity is either fixed or
  *    covered by an unexpired entry in config/audit-policy.mjs.
- * 2. No accepted entry applies to a package that reaches the production tree.
+ * 2. Any accepted entry covering a package that reaches the production tree
+ *    carries explicit evidence and expires inside a short, capped window.
  *
  * Run via: npm run audit
  */
