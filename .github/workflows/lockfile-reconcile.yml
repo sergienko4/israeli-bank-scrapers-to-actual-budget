@@ -1,0 +1,155 @@
+name: Lockfile Reconcile
+
+# Regenerates package-lock.json for a branch whose package.json has already
+# changed, and pushes the result back to that same branch.
+#
+# Why this exists: every contributor here sits behind a registry proxy that
+# serves sha1 `shasum` metadata and strips the canonical sha512 `integrity`.
+# Any lockfile entry added locally therefore arrives with a weak hash and a
+# proxy tarball URL, both of which `scripts/refresh-lockfile.mjs --check`
+# rejects — correctly, since a trustworthy hash needs a trustworthy tarball.
+# The practical effect is that a dependency or overrides edit cannot be
+# completed on a developer machine at all. A hosted runner reaches
+# registry.npmjs.org directly, so it can produce the canonical lockfile the
+# gate demands. Dispatching this workflow is the supported way to finish such
+# a change.
+#
+# This is deliberately NOT part of lockfile-refresh.yml. That workflow raises
+# transitive pins on a schedule and opens a fresh pull request for review; its
+# one-open-refresh guard, summary and `gh pr create --base main` tail are all
+# specific to that job. Reconciling a branch in place shares only the middle
+# four steps, and interleaving the two modes behind `if:` conditions would
+# make both harder to audit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch whose lockfile should be reconciled with its package.json'
+        required: true
+        type: string
+
+# The push below authenticates with a PAT, not GITHUB_TOKEN, so the workflow
+# token itself never needs write access.
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    name: Reconcile lockfile
+    runs-on: ubuntu-latest
+    env:
+      HUSKY: 0
+    steps:
+      # No persisted credentials: a token left in .git/config is readable by
+      # anything the job runs. The PAT appears only in the final step.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # Unlike the scheduled refresh, checking out a non-default branch is
+          # the entire point here — the package.json edit being reconciled
+          # already lives on that branch.
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # Refuse to write to the default branch. main is protected, so a direct
+      # push would be rejected anyway, but failing here says why instead of
+      # surfacing an opaque git error after the work is already done.
+      - name: Refuse to reconcile the default branch
+        env:
+          REF: ${{ inputs.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "${REF}" = "${DEFAULT_BRANCH}" ]; then
+            echo "::error::Reconcile targets a feature branch. Use lockfile-refresh.yml for main."
+            exit 1
+          fi
+
+      # --package-lock-only downloads no tarballs and ignores node_modules, so
+      # this job never installs or executes third-party code. That is what
+      # makes it safe to hold a PAT in the same job: nothing freshly installed
+      # can shadow a later command. --ignore-scripts is redundant under that
+      # flag and kept as defence in depth.
+      #
+      # `install` rather than `update`: the goal is to make the lockfile agree
+      # with the committed package.json, not to raise transitive pins.
+      - name: Reconcile the lockfile with package.json
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Detect whether anything moved
+        id: diff
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::The lockfile already matches package.json; nothing to do.'
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+            # The guard below bounds *which* file moved, not by how much. A
+            # canonical-registry regen can legitimately churn more than the
+            # proxy-built lockfile did, so surface the size for the reviewer.
+            {
+              echo '### Lockfile reconciled'
+              echo
+              echo '```'
+              git diff --stat -- package-lock.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # npm is documented not to edit package.json under --package-lock-only,
+      # but this asserts it rather than trusting it: anything else changing
+      # means npm did something this workflow has not reasoned about, and the
+      # commit below would silently carry it.
+      - name: Verify only the lockfile changed
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          modified="$(git diff --name-only)"
+          if [ "${modified}" != 'package-lock.json' ]; then
+            echo '::error::Expected only package-lock.json to change. Got:'
+            echo "${modified}"
+            exit 1
+          fi
+
+      # The same guard CI runs on every pull request, applied before the push
+      # so a non-canonical entry is caught rather than committed. This is the
+      # check that cannot pass on a developer machine.
+      - name: Verify the regenerated lockfile is canonical
+        if: steps.diff.outputs.changed == 'true'
+        run: node scripts/refresh-lockfile.mjs --check
+
+      - name: Commit the reconciled lockfile
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # The guard above proved package-lock.json is the only modification,
+          # so naming it stages exactly the intended change.
+          git add package-lock.json
+          git commit -m 'chore(deps): reconcile lockfile with package.json' \
+            -m "Regenerated by the lockfile-reconcile workflow (run ${GITHUB_RUN_ID})." \
+            -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
+
+      # The token is confined to the one step that cannot work without it, so
+      # it is absent from every step that produced what is being pushed. It is
+      # a PAT rather than GITHUB_TOKEN because a GITHUB_TOKEN push raises no
+      # `pull_request` event, which would leave every gate in pr.yml skipped
+      # and the branch looking green without having been tested.
+      - name: Push the reconciled lockfile to the branch
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          # The remote is credential-free by design, so the token is supplied
+          # for this one command rather than left in .git/config for the whole
+          # job. Actions masks it in the log.
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:refs/heads/${REF}"
