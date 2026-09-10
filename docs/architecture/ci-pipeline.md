@@ -26,6 +26,7 @@ graph TD
     DOCS[docs.yml<br/>tag push v*]
     E2ES[e2e-schedule.yml<br/>weekly]
     LFR[lockfile-refresh.yml<br/>weekly cron]
+    LFRC[lockfile-reconcile.yml<br/>manual dispatch]
     DMR[dependabot-meta-render.yml<br/>after PR Pipeline]
   end
 
@@ -45,6 +46,7 @@ graph TD
   PR -.triggers.-> DMR
   E2ES --> E2E
   LFR -.opens PR.-> PR
+  LFRC -.pushes to branch.-> PR
   PR -.uses.-> SETUP
   PR -.uses.-> BUILD
   PR -.uses.-> TRIVY
@@ -315,6 +317,42 @@ integrity — both symptoms of a proxy or mirror rewriting the lockfile.
 downgrades fail closed, since a weakened hash cannot be strengthened without
 re-fetching the tarball. Rationale and rejected alternatives:
 [ADR-0001](../decisions/ADR-0001-scheduled-lockfile-refresh.md).
+
+## Lockfile reconcile (`lockfile-reconcile.yml`)
+
+The fail-closed rule above has a consequence: contributors behind a registry
+proxy cannot complete a dependency or `overrides` edit at all. The proxy
+serves `shasum` (sha1) metadata and strips the canonical `sha512` integrity,
+so every lockfile entry **added** locally arrives with a weak hash and a
+mirror `resolved` URL — exactly what `lint:lockfile` rejects. Regenerating
+changes nothing: the canonical hash is unobtainable from that network, and a
+weakened hash must not be "repaired" by hand.
+
+Note the asymmetry: a regeneration that adds **no** entries is byte-identical
+and ships fine. Only newly added entries are affected.
+
+`lockfile-reconcile.yml` closes that gap. It is `workflow_dispatch` only,
+takes the branch to reconcile as an input, and runs on a hosted runner that
+reaches `registry.npmjs.org` directly:
+
+- **Reconcile, not refresh.** It runs `npm install --package-lock-only
+  --ignore-scripts` to make the lockfile agree with the `package.json`
+  already committed on that branch. Raising transitive pins stays
+  `lockfile-refresh.yml`'s job; crossing a declared range stays Dependabot's.
+- **The human edits `package.json`; CI only ever writes `package-lock.json`.**
+  npm does not touch `package.json` under `--package-lock-only`, and the
+  workflow asserts that rather than trusting it.
+- **Canonical before push.** `scripts/refresh-lockfile.mjs --check` runs
+  before the commit, so a non-canonical entry fails the run instead of
+  landing.
+- **Pushes back to the same branch**, using `RELEASE_TOKEN` so `pr.yml`
+  re-runs — a `GITHUB_TOKEN` push raises no `pull_request` event. It refuses
+  to target the default branch.
+
+Expect the branch to be red between pushing the `package.json` edit and
+dispatching the workflow: `npm ci` rejects a lockfile that disagrees with
+`package.json`. Rationale and rejected alternatives:
+[ADR-0002](../decisions/ADR-0002-reconcile-lockfile-on-a-runner.md).
 
 ## Git hooks
 
