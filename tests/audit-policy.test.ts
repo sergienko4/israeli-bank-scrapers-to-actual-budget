@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ACCEPTED_ADVISORIES, classifyAdvisories } from '../config/audit-policy.mjs';
 
@@ -330,6 +330,52 @@ describe('classifyAdvisories, severity scope', () => {
 
     expect(violations).toEqual([]);
     expect(accepted).toEqual([]);
+  });
+});
+
+describe('classifyAdvisories, policy-date consistency', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('judges every advisory in one run against a single policy date', () => {
+    // The clock used to be read once per advisory, so a run crossing UTC
+    // midnight could accept one entry and reject an identical one as expired.
+    // This clock advances a day between reads to force that split if it can
+    // still occur; a single read makes the advance unobservable.
+    const RealDate = Date;
+    let reads = 0;
+
+    class AdvancingDate extends RealDate {
+      public constructor(value?: number) {
+        if (value === undefined) {
+          const offset = reads === 0 ? 0 : 1;
+          reads += 1;
+          super(RealDate.parse(`${isoDaysFromToday(offset)}T00:00:00Z`));
+          return;
+        }
+        super(value);
+      }
+    }
+
+    vi.stubGlobal('Date', AdvancingDate);
+
+    const expires = isoDaysFromToday(1); // valid on day 0, expired on day 1
+    const first = { ...advisory, ghsa: 'GHSA-aaaa-bbbb-cccc', package: 'dev-a' };
+    const second = { ...advisory, ghsa: 'GHSA-dddd-eeee-ffff', package: 'dev-b' };
+    const entries = [
+      { ghsa: first.ghsa, package: first.package, expires, reason: 'Dev-only.' },
+      { ghsa: second.ghsa, package: second.package, expires, reason: 'Dev-only.' },
+    ];
+
+    const { violations, accepted } = classifyAdvisories(
+      [first, second],
+      notInProductionTree,
+      entries,
+    );
+
+    expect(violations).toEqual([]);
+    expect(accepted).toHaveLength(2);
   });
 });
 
