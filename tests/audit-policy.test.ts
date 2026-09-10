@@ -36,15 +36,38 @@ const inProductionTree = new Set(['demo-pkg']);
 const notInProductionTree = new Set<string>();
 
 /**
- * Packages known to reach the published image, tracked here independently of
- * the waiver entries.
+ * How each shipped acceptance reaches the published image, tracked here
+ * independently of the waiver entries.
  *
  * This deliberately does not read `entry.productionReachable`. A waiver that
  * dropped that flag would then be graded against the weaker development bar
  * and keep passing, leaving the production evidence path untested. Holding the
  * expectation outside the data under test means removing the flag fails.
+ *
+ * Lookups fail closed: a shipped package missing from this map is a test
+ * failure rather than a silent downgrade to development rules. Treating an
+ * unlisted package as development-only meant a new production waiver could be
+ * added without `productionReachable`, `noUpstreamFix`, `upstream`, or `added`
+ * and still pass, because nothing forced the fixture to be updated with it.
  */
-const PRODUCTION_TREE_PACKAGES = new Set(['adm-zip']);
+const PACKAGE_TREE: Readonly<Record<string, 'production' | 'development' | undefined>> = {
+  'adm-zip': 'production',
+};
+
+/**
+ * Resolves which tree a shipped package sits in, failing if it is unclassified.
+ *
+ * @param packageName Package named by an entry in `ACCEPTED_ADVISORIES`.
+ * @returns The tree the package belongs to.
+ */
+function treeFor(packageName: string): 'production' | 'development' {
+  const tree = PACKAGE_TREE[packageName];
+  expect(
+    tree,
+    `${packageName} is not classified in PACKAGE_TREE; add it as 'production' or 'development' so it is graded against the right bar`,
+  ).toBeDefined();
+  return tree as 'production' | 'development';
+}
 
 describe('classifyAdvisories, development-tree advisories', () => {
   it('accepts an unexpired entry for a package outside the production tree', () => {
@@ -69,6 +92,28 @@ describe('classifyAdvisories, development-tree advisories', () => {
         ghsa: advisory.ghsa,
         package: advisory.package,
         expires: isoDaysFromToday(-1),
+        reason: 'Dev-only tooling; upstream fix pending.',
+      },
+    ];
+
+    const { violations, accepted } = classifyAdvisories([advisory], notInProductionTree, entries);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toContain('expired');
+  });
+
+  it('blocks an entry on its stated expiry date, not the day after', () => {
+    // The comparison is `expires <= today`, so the waiver is already spent on
+    // the date it advertises. Only a past date was covered before, which left
+    // `<=` free to weaken to `<`: the entry would then survive the whole of its
+    // expiry day, and the date in `ACCEPTED_ADVISORIES` would mean something
+    // other than what it says. Graded on the development path so the cap rules
+    // cannot be what produces the block.
+    const entries = [
+      {
+        ghsa: advisory.ghsa,
+        package: advisory.package,
+        expires: isoDaysFromToday(0),
         reason: 'Dev-only tooling; upstream fix pending.',
       },
     ];
@@ -259,8 +304,14 @@ describe('classifyAdvisories, production-tree advisories with full evidence', ()
 
   it('blocks an acceptance whose window exceeds the 30-day cap', () => {
     // A long window is how a "temporary" waiver quietly becomes permanent.
+    // Pinned at 31 days, the first window over the cap, so the boundary itself
+    // is what fails. A far-over window such as 61 days only catches a change to
+    // MAX_PRODUCTION_ACCEPTANCE_DAYS, because the assertion below reads the
+    // constant back out of the message; it survives a boundary that slips by
+    // one while the constant stays 30, which is exactly how a 31-day waiver
+    // would become legal unnoticed.
     const entries = [
-      { ...fullEvidence, added: isoDaysFromToday(-1), expires: isoDaysFromToday(60) },
+      { ...fullEvidence, added: isoDaysFromToday(-1), expires: isoDaysFromToday(30) },
     ];
 
     const { violations, accepted } = classifyAdvisories([advisory], inProductionTree, entries);
@@ -398,7 +449,10 @@ describe('classifyAdvisories, the entries that actually ship', () => {
       // Guards the production evidence path against silent downgrade. Without
       // this, deleting `productionReachable: true` would reclassify the entry
       // as development-only and every remaining assertion would still pass.
-      if (PRODUCTION_TREE_PACKAGES.has(entry.package)) {
+      // `treeFor` fails on an unclassified package rather than defaulting it
+      // to development, so a new production waiver cannot skip this check by
+      // being absent from the fixture.
+      if (treeFor(entry.package) === 'production') {
         expect(
           entry.productionReachable,
           `${entry.package} reaches the published image, so its entry must say so`,
@@ -419,11 +473,11 @@ describe('classifyAdvisories, the entries that actually ship', () => {
       // The tree comes from the fixture above, never from the entry under
       // test. Deriving it from `entry.productionReachable` meant a waiver that
       // lost that flag was graded against the weaker development bar and still
-      // passed. A package absent from the fixture is development-only, which
-      // the classifier is deliberately designed to allow.
-      const productionPackages = PRODUCTION_TREE_PACKAGES.has(entry.package)
-        ? new Set([entry.package])
-        : new Set<string>();
+      // passed. `treeFor` fails on an unclassified package, so adding a
+      // production waiver without listing it here is a test failure rather
+      // than a silent downgrade to the development rules.
+      const productionPackages =
+        treeFor(entry.package) === 'production' ? new Set([entry.package]) : new Set<string>();
 
       // No third argument, so the default ACCEPTED_ADVISORIES path is exercised.
       const { violations, accepted } = classifyAdvisories([live], productionPackages);
