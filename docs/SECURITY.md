@@ -272,9 +272,10 @@ If a security vulnerability is discovered in a released version:
 #### Dependency Security
 
 - ✅ `npm run audit`: **blocking CI check** (fails at MODERATE+). An advisory
-  passes only if it is fixed, or carries a justified entry in
-  `config/audit-policy.mjs` that has not expired and does not affect the
-  production tree
+  passes only if it is fixed, or carries an unexpired entry in
+  `config/audit-policy.mjs`. An entry covering a package that reaches the
+  production tree is an accepted risk rather than a deferral, so it must also
+  name the upstream fix it waits on and expire within 30 days
 - ✅ Automated dependency updates via Dependabot (npm, Actions, Docker)
 - ✅ CodeQL static analysis on every PR
 - ✅ Latest security patches applied (Node.js 26, TypeScript 6)
