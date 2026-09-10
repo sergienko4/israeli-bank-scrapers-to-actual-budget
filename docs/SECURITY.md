@@ -273,12 +273,12 @@ If a security vulnerability is discovered in a released version:
 
 - ✅ `npm run audit`: **blocking CI check** (fails at MODERATE+). An advisory
   passes only if it is fixed, or carries an entry in `config/audit-policy.mjs`
-  whose `expires` is a real calendar date still in the future. An entry
-  covering a package that reaches the production tree is an accepted risk
-  rather than a deferral, so it must additionally set `productionReachable`
-  and `noUpstreamFix`, carry an `added` date no later than today, give an
-  HTTPS `upstream` link to the work being tracked, and expire within 30 days
-  of `added`
+  that states a non-empty `reason` and whose `expires` is a real calendar date
+  still in the future. An entry covering a package that reaches the production
+  tree is an accepted risk rather than a deferral, so it must additionally set
+  `productionReachable` and `noUpstreamFix`, carry an `added` date no later
+  than today, give an HTTPS `upstream` link to the work being tracked, and
+  expire within 30 days of `added`.
 - ✅ Automated dependency updates via Dependabot (npm, Actions, Docker)
 - ✅ CodeQL static analysis on every PR
 - ✅ Latest security patches applied (Node.js 26, TypeScript 6)

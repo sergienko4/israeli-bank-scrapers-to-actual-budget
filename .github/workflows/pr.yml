@@ -43,8 +43,10 @@ jobs:
           git fetch --depth=1 origin "$BASE_SHA"
           node scripts/check-release-signal.mjs --title "$PR_TITLE" --base "$BASE_SHA"
       # Fails on any advisory at or above "moderate" unless it carries a
-      # justified, expiring entry in config/audit-policy.mjs — an exception
-      # never applies to a package that reaches the production tree.
+      # justified, expiring entry in config/audit-policy.mjs. An entry for a
+      # package that reaches the production tree is held to a stricter bar:
+      # it must admit the exposure, state that no upstream fix exists, link
+      # the tracking work, and expire within 30 days of being added.
       - run: npm run audit
       # Stale `allowScripts` pins do not fail install — npm just silently
       # skips the blocked postinstall, so the break only surfaces ~14min

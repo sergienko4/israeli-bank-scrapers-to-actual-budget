@@ -178,6 +178,45 @@ function isWithinAcceptanceCap(entry, todayMs) {
 }
 
 /**
+ * Reports why an entry cannot be honoured regardless of which tree it sits in.
+ *
+ * Every acceptance must carry a rationale. The type allows the field to be
+ * absent so malformed input can be classified rather than crash, which means
+ * the runtime has to reject it here; otherwise a waiver with no justification
+ * is honoured and `check-audit.mjs` reports `undefined` as its reason.
+ *
+ * @param {object} entry Accepted-advisory entry under consideration.
+ * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
+ * @returns {string | null} The blocking reason, or null when the entry stands.
+ */
+function universalBlockingReason(entry, todayMs) {
+  if (typeof entry.reason !== 'string' || entry.reason.trim() === '') {
+    return 'exception has no rationale';
+  }
+  const expiresMs = parseIsoDate(entry.expires);
+  if (expiresMs === null) return 'exception has an invalid expires date';
+  if (expiresMs <= todayMs) return `exception expired on ${entry.expires}`;
+  return null;
+}
+
+/**
+ * Reports why an entry fails the stricter bar applied to the production tree.
+ *
+ * @param {object} entry Accepted-advisory entry under consideration.
+ * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
+ * @returns {string | null} The blocking reason, or null when the entry stands.
+ */
+function productionBlockingReason(entry, todayMs) {
+  if (!hasProductionEvidence(entry)) {
+    return 'reaches the production tree; exception lacks the required evidence';
+  }
+  if (!isWithinAcceptanceCap(entry, todayMs)) {
+    return `production acceptance must start today or earlier and expire within ${MAX_PRODUCTION_ACCEPTANCE_DAYS} days of being added`;
+  }
+  return null;
+}
+
+/**
  * Explains why an advisory blocks the build, or reports that it is accepted.
  *
  * @param {{ package: string }} advisory Advisory under consideration.
@@ -188,17 +227,10 @@ function isWithinAcceptanceCap(entry, todayMs) {
 function blockingReason(advisory, productionPackages, entry) {
   const todayMs = parseIsoDate(new Date().toISOString().slice(0, 10));
   if (!entry) return 'no accepted-advisory entry';
-  const expiresMs = parseIsoDate(entry.expires);
-  if (expiresMs === null) return 'exception has an invalid expires date';
-  if (expiresMs <= todayMs) return `exception expired on ${entry.expires}`;
+  const universal = universalBlockingReason(entry, todayMs);
+  if (universal !== null) return universal;
   if (!productionPackages.has(advisory.package)) return null;
-  if (!hasProductionEvidence(entry)) {
-    return 'reaches the production tree; exception lacks the required evidence';
-  }
-  if (!isWithinAcceptanceCap(entry, todayMs)) {
-    return `production acceptance must start today or earlier and expire within ${MAX_PRODUCTION_ACCEPTANCE_DAYS} days of being added`;
-  }
-  return null;
+  return productionBlockingReason(entry, todayMs);
 }
 
 /**

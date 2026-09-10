@@ -3,6 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { ACCEPTED_ADVISORIES, classifyAdvisories } from '../config/audit-policy.mjs';
 
 /**
+ * Anchors every fixture date to one UTC instant.
+ *
+ * Each call used to read the clock independently, so a run that crossed UTC
+ * midnight between two calls in the same fixture produced a window one day
+ * wider than intended -- enough to push a 30-day case over the cap and fail a
+ * valid test. Capturing the instant once removes that race.
+ */
+const CLOCK_ANCHOR = new Date();
+
+/**
  * Builds an ISO date string offset from today, so the fixtures below never
  * rot: an entry that is "valid for another week" stays valid tomorrow.
  *
@@ -10,7 +20,7 @@ import { ACCEPTED_ADVISORIES, classifyAdvisories } from '../config/audit-policy.
  * @returns The date as `YYYY-MM-DD`, matching the format entries use.
  */
 function isoDaysFromToday(days: number): string {
-  const date = new Date();
+  const date = new Date(CLOCK_ANCHOR.getTime());
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
@@ -56,6 +66,35 @@ describe('classifyAdvisories, development-tree advisories', () => {
 
     expect(accepted).toEqual([]);
     expect(violations[0]?.why).toContain('expired');
+  });
+
+  it('blocks an entry that omits the rationale entirely', () => {
+    // Without this the waiver is honoured and check-audit.mjs reports
+    // `undefined` as the reason, so the build passes with no stated grounds.
+    const entries = [
+      { ghsa: advisory.ghsa, package: advisory.package, expires: isoDaysFromToday(7) },
+    ];
+
+    const { violations, accepted } = classifyAdvisories([advisory], notInProductionTree, entries);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toContain('rationale');
+  });
+
+  it('blocks an entry whose rationale is only whitespace', () => {
+    const entries = [
+      {
+        ghsa: advisory.ghsa,
+        package: advisory.package,
+        expires: isoDaysFromToday(7),
+        reason: '   ',
+      },
+    ];
+
+    const { violations, accepted } = classifyAdvisories([advisory], notInProductionTree, entries);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toContain('rationale');
   });
 
   it('blocks an entry whose expiry is not a real calendar date', () => {
@@ -248,6 +287,28 @@ describe('classifyAdvisories, production-tree advisories with full evidence', ()
     expect(accepted).toEqual([]);
     expect(violations).toHaveLength(1);
   });
+
+  it('blocks a fully-evidenced acceptance that still omits the rationale', () => {
+    // Evidence and a rationale are separate requirements: satisfying the
+    // stricter production bar does not excuse leaving the grounds unstated.
+    // Written out rather than spread from fullEvidence, which carries a reason.
+    const entries = [
+      {
+        ghsa: advisory.ghsa,
+        package: advisory.package,
+        productionReachable: true,
+        noUpstreamFix: true,
+        upstream: 'https://github.com/example/repo/issues/1',
+        added: isoDaysFromToday(-1),
+        expires: isoDaysFromToday(29),
+      },
+    ];
+
+    const { violations, accepted } = classifyAdvisories([advisory], inProductionTree, entries);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toContain('rationale');
+  });
 });
 
 describe('classifyAdvisories, severity scope', () => {
@@ -262,9 +323,23 @@ describe('classifyAdvisories, severity scope', () => {
 });
 
 describe('classifyAdvisories, the entries that actually ship', () => {
-  // Every other case above supplies synthetic entries, which proves the rules
-  // but never the data. This one loads ACCEPTED_ADVISORIES itself, so a typo in
-  // a real waiver fails here instead of in CI.
+  // Every other case supplies synthetic entries, which proves the rules but
+  // never the data. These two load ACCEPTED_ADVISORIES itself.
+
+  it('gives every shipped entry a well-formed identity and rationale', () => {
+    for (const entry of ACCEPTED_ADVISORIES) {
+      // Checked against a fixed shape rather than against the entry itself.
+      // The acceptance case below derives its fixture from the entry, so a
+      // typo there would be mirrored into the advisory and agree with itself;
+      // only an independent expectation can catch a malformed identity.
+      expect(entry.ghsa, `${entry.package} needs a well-formed GHSA id`).toMatch(
+        /^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/,
+      );
+      expect(entry.package.trim(), 'package must be named').not.toBe('');
+      expect(entry.reason.trim(), `${entry.package} must carry a rationale`).not.toBe('');
+    }
+  });
+
   it('accepts each shipped entry against the live policy', () => {
     for (const entry of ACCEPTED_ADVISORIES) {
       const live = {
@@ -274,8 +349,15 @@ describe('classifyAdvisories, the entries that actually ship', () => {
         title: `Shipped acceptance for ${entry.package}`,
       };
 
+      // Only treat the package as production-reachable when the entry says so.
+      // A dev-tree waiver is legitimate, and hardcoding every entry as
+      // production would fail a future dev-only entry that the classifier is
+      // deliberately designed to allow.
+      const productionPackages
+        = entry.productionReachable === true ? new Set([entry.package]) : new Set<string>();
+
       // No third argument, so the default ACCEPTED_ADVISORIES path is exercised.
-      const { violations, accepted } = classifyAdvisories([live], new Set([entry.package]));
+      const { violations, accepted } = classifyAdvisories([live], productionPackages);
 
       expect(violations, `${entry.package} must not block the build`).toEqual([]);
       expect(accepted).toHaveLength(1);
