@@ -37,32 +37,32 @@ verbosity and re-run without editing files over SSH. It falls back to the
 
 `level` controls the **importer's** logger. The scraper library keeps a
 separate logger, and in the published container image it is switched off
-entirely: the image sets `NODE_ENV=production`, which makes the library skip
-attaching a log transport and fall back to `level: 'silent'`. No scraper line,
-at any severity, reaches the logs.
+entirely: the image sets `PRETTY_LOGS=false`, so the library does not attach
+its pretty transport and falls back to `level: 'silent'`. No scraper line, at
+any severity, reaches the logs. Since scraper 8.7.1, `NODE_ENV` does not control
+the scraper's logging mode.
 
-`LOG_LEVEL` does not rescue it. The library only consults `LOG_LEVEL` *after*
+`LOG_LEVEL` does not rescue it. The library only consults `LOG_LEVEL` _after_
 it has decided to attach a transport, so raising it changes importer output
 only.
 
-To read the scraper's own narration, run one throwaway container in
-development mode:
+To read the scraper's own narration, opt in for one throwaway container:
 
 ```bash
 # Add your usual volumes and flags to this run
 docker run --rm \
-  -e NODE_ENV=development \
+  -e PRETTY_LOGS=true \
   -e LOG_LEVEL=debug \
   sergienko4/israeli-bank-importer
 ```
 
 !!! warning "Diagnostic runs only"
-    Development mode makes the library attach a `pino-pretty` transport, which
-    starts a worker thread per scrape process and emits ANSI colour codes into
-    the container log. Scraper 8.6.3+ caches that transport per destination, so
-    the cost is one ~4 MB worker rather than the leak that once OOM-killed a
-    2 GB container. Production deployments should still keep
-    `NODE_ENV=production` — see
+    `PRETTY_LOGS=true` makes the library attach a `pino-pretty` transport,
+    which starts a worker thread per scrape process and emits ANSI colour codes
+    into the container log. Scraper 8.6.3+ caches that transport per
+    destination, so the cost is one ~4 MB worker rather than the leak that once
+    OOM-killed a 2 GB container. Production deployments should keep
+    `PRETTY_LOGS=false` — see
     [Docker run](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-run.md)
     for the memory background.
 

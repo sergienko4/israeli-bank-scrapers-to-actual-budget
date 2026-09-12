@@ -148,20 +148,12 @@ RUN chmod -R a-w /app/dist /app/node_modules 2>/dev/null || true
 
 # Production logging mode.
 # Declared after the build so `npm ci` still installs devDependencies.
-# Outside production the scraper library attaches a pino-pretty transport, and
-# pino({ transport }) starts a thread-stream worker thread owning a 4 MB
-# SharedArrayBuffer plus a process exit listener. On scraper 8.6.2 the root
-# logger was cached only when a log file was set, so a fresh worker leaked on
-# every log call: 14,336 MB peak RSS (OOM-killed) unset versus 1,008 MB set.
-# Scraper 8.6.3 caches the root logger per destination and fixes that at
-# source. pino-pretty is a runtime dependency and stays installed either way;
-# production mode stops the transport being attached, so no worker is ever
-# started. The trade-off is that the scraper library then logs nothing at all
-# (it falls back to level: 'silent'), and LOG_LEVEL cannot revive it; override
-# with `-e NODE_ENV=development` for a single diagnostic run. Failure
-# screenshots are written straight to disk and are unaffected.
+# Scraper 8.7.1 only attaches its pino-pretty transport when PRETTY_LOGS=true.
+# Keep that opt-in disabled to avoid its worker thread in long-running
+# containers. Override PRETTY_LOGS only for a short diagnostic run.
 # See docs/deployment/docker-run.md before overriding this.
 ENV NODE_ENV=production
+ENV PRETTY_LOGS=false
 
 # Health check (basic process check)
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \

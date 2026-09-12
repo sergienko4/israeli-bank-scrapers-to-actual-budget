@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "accounts": [
+    {
+      "accountNumber": "coverage-e2e-account",
+      "balance": 100,
+      "txns": [],
+      "windowCoverage": {
+        "status": "unproven",
+        "reason": "backfillCeilingReached",
+        "requestedStart": "2026-01-01T00:00:00.000Z",
+        "oldest": "2026-01-08",
+        "gapDays": 7
+      }
+    }
+  ]
+}

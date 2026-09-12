@@ -8,6 +8,7 @@
  */
 import type { IBankConfig, Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
+import normalisePhoneNumber from '../Utils/PhoneNumberNormaliser.js';
 import { CREDENTIAL_SPECS } from './BankCredentialSpecs.js';
 import { BANK_DATE_VALIDATORS } from './Validators/BankDateValidators.js';
 import { isValidUUID } from './Validators/ValidationResult.js';
@@ -176,16 +177,26 @@ function validateFieldFormats(
       (typeof config.email !== 'string' || !EMAIL_RE.test(config.email))) {
     return fail(`Invalid email format for ${bankName}: "${config.email}"`);
   }
-  const phone = typeof config.phoneNumber === 'string'
-    ? config.phoneNumber.replaceAll(/[\s-]/g, '') : '';
-  if (config.phoneNumber && !/^\+?\d{10,15}$/.test(phone)) {
-    return fail(`Invalid phone number format for ${bankName}: "${config.phoneNumber}".`);
+  if (isInvalidPhoneNumber(config.phoneNumber)) {
+    return fail(`Invalid phone number format for ${bankName}. Expected an Israeli mobile number.`);
   }
   if (config.card6Digits &&
       (typeof config.card6Digits !== 'string' || !/^\d{6}$/.test(config.card6Digits))) {
     return fail(`Invalid card6Digits format for ${bankName}: "${config.card6Digits}".`);
   }
   return succeed({ valid: true as const });
+}
+
+/**
+ * Reports whether a configured phone cannot be normalized for Israeli providers.
+ * @param phoneNumber - Optional phone credential supplied by external configuration.
+ * @returns True when a present value is not a supported Israeli phone number.
+ */
+function isInvalidPhoneNumber(phoneNumber: unknown): boolean {
+  if (phoneNumber === undefined || phoneNumber === '') return false;
+  if (typeof phoneNumber !== 'string') return true;
+  const normalized = normalisePhoneNumber(phoneNumber);
+  return isFail(normalized);
 }
 
 /**

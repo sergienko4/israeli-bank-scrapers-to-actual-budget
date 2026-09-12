@@ -8,6 +8,11 @@ Every bank has its own login fields — see [the per-bank pages](https://github.
 
 Common keys: `id`, `username`, `password`, `num`, `card6Digits`, `userCode`, `email`, `phoneNumber`.
 
+Phone-based providers require an Israeli number. The importer accepts canonical
+`972XXXXXXXXX`, `+972`-prefixed, dashed, spaced, and local `0XXXXXXXXX` forms,
+then normalises the value before login. Other country codes fail configuration
+validation without being written to logs.
+
 ## Date range — pick one
 
 Choose **either** `daysBack` (relative) or `startDate` (absolute). You cannot use both on the same bank.
@@ -23,6 +28,12 @@ Recalculated on each run. Range: `1`–`30`.
 ```
 
 Fixed `YYYY-MM-DD`. Maximum one year back.
+
+Some API-direct scrapers can verify whether they reached the requested start
+date. If a provider reports an incomplete or unproven window, the importer logs
+one aggregate warning for that bank and still imports the available
+transactions. The warning contains coverage-state counts only, never account
+numbers or transaction data.
 
 ## Targets — map bank accounts to Actual Budget accounts
 

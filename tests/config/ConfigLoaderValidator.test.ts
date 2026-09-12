@@ -350,6 +350,18 @@ describe('validateBank', () => {
     expect(isFail(result) && result.message).toContain('Invalid phone number format');
   });
 
+  it('rejects a foreign phone number without echoing it', () => {
+    const foreignPhone = '+447700900123';
+    const config = fakeBankConfig({
+      phoneNumber: foreignPhone,
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
+    expect(isFail(result) && result.message).not.toContain(foreignPhone);
+  });
+
   it('rejects a non-string phone number without throwing', () => {
     const config = fakeBankConfig({
       phoneNumber: 12345 as never,
@@ -359,6 +371,16 @@ describe('validateBank', () => {
     const result = validateBank('discount', config);
     expect(result.success).toBe(false);
     expect(isFail(result) && result.message).toContain('Invalid phone number format');
+  });
+
+  it.each([0, null])('rejects the falsy non-string phone number %s', (phoneNumber) => {
+    const config = fakeBankConfig({
+      phoneNumber: phoneNumber as never,
+      daysBack: 7, startDate: undefined,
+      targets: [fakeBankTarget({ actualAccountId: VALID_UUID, accounts: 'all' })],
+    });
+    const result = validateBank('discount', config);
+    expect(result.success).toBe(false);
   });
 
   it('rejects a numeric card6Digits value', () => {

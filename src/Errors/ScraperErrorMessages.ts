@@ -23,6 +23,10 @@ export const SCRAPER_ERROR_ADVICE: Record<string, IErrorAdvice> = {
     message: 'Password incorrect',
     action: 'Verify your password on the bank website',
   },
+  INVALID_PHONE_NUMBER: {
+    message: 'Invalid Israeli phone number',
+    action: 'Use 972XXXXXXXXX or 0XXXXXXXXX in the bank configuration',
+  },
   CHANGE_PASSWORD: {
     message: 'Bank requires password change',
     action: 'Update password on bank website, then update config.json',

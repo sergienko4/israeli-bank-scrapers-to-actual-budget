@@ -103,29 +103,25 @@ the same 2 GB as one.
 A measured end-to-end run of the heaviest bank inside a `--memory 2g` container
 peaks at ~1.2 GB and settles back to ~400 MB between banks.
 
-> **Keep `NODE_ENV=production`.** Outside production the scraper library
-> attaches a `pino-pretty` transport, which starts a `thread-stream` worker
-> thread owning a 4 MB `SharedArrayBuffer` and a `process` exit listener. On
-> scraper 8.6.2 the root logger was cached only when a log file was configured,
-> so a fresh worker leaked on *every log call* — one bank reached 14.3 GB RSS
-> before the kernel OOM-killed it. Scraper 8.6.3 caches the root logger per
-> destination and fixes that at source. `pino-pretty` is a runtime dependency
-> and stays installed either way; production mode stops the transport being
-> attached, so no worker is ever started.
+> **Keep `PRETTY_LOGS=false`.** The scraper library's `pino-pretty` transport
+> starts a `thread-stream` worker thread owning a 4 MB `SharedArrayBuffer` and a
+> `process` exit listener. On scraper 8.6.2 the root logger was cached only when
+> a log file was configured, so a fresh worker leaked on *every log call* — one
+> bank reached 14.3 GB RSS before the kernel OOM-killed it. Scraper 8.6.3 caches
+> the root logger per destination and fixes that at source. Since scraper 8.7.1,
+> the transport is attached only when `PRETTY_LOGS=true`; `NODE_ENV` no longer
+> controls it.
 
-`NODE_ENV=production` silences the *scraper library's* own log output
-completely — the library falls back to `level: 'silent'`, so no scraper line
-reaches the logs at any severity, and `LOG_LEVEL` does not change that. The
-importer's logging is independent and still honours `LOG_LEVEL`, so
-`-e LOG_LEVEL=trace` continues to produce full importer traces. Failure
-screenshots are also unaffected, because the provider writes those straight to
-disk rather than through its logger.
+`PRETTY_LOGS=false` silences the *scraper library's* own log output completely
+unless a file destination is configured upstream. `LOG_LEVEL` alone does not
+attach a transport. The importer's logging is independent and still honours
+`LOG_LEVEL`, so `-e LOG_LEVEL=trace` continues to produce full importer traces.
 
 To read the scraper's own narration for a single diagnostic run, add
-`-e NODE_ENV=development`. Keep it out of long-running deployments: it attaches
-the `pino-pretty` transport described above — on scraper 8.6.3+ that is one
-~4 MB worker per scrape process rather than the old leak, but it also emits
-ANSI colour codes into the container log. See
+`-e PRETTY_LOGS=true`. Keep it out of long-running deployments: it attaches the
+`pino-pretty` transport described above — on scraper 8.6.3+ that is one ~4 MB
+worker per scrape process rather than the old leak, but it also emits ANSI
+colour codes into the container log. See
 [Logging](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/logging.md)
 for the full procedure.
 
