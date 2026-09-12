@@ -109,6 +109,11 @@ describe('BankScraper coordinator', () => {
     );
 
     expect(result.accounts?.[0].txns).toHaveLength(1);
+    expect(result.accounts?.[0].windowCoverage).toEqual({
+      status: 'unproven',
+      requestedStart: '2026-01-01T00:00:00.000Z',
+      reason: 'backfillCeilingReached',
+    });
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('coverage is incomplete'),
       expect.objectContaining({ bankId: 'discount', unprovenAccounts: 1 }),

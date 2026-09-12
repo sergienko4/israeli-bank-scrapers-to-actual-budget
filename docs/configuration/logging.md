@@ -36,15 +36,16 @@ verbosity and re-run without editing files over SSH. It falls back to the
 ## Getting the scraper's own log output
 
 `level` controls the **importer's** logger. The scraper library keeps a
-separate logger, and in the published container image it is switched off
-entirely: the image sets `PRETTY_LOGS=false`, so the library does not attach
-its pretty transport and falls back to `level: 'silent'`. No scraper line, at
-any severity, reaches the logs. Since scraper 8.7.1, `NODE_ENV` does not control
-the scraper's logging mode.
+separate logger. The published image sets `PRETTY_LOGS=false`, so the library
+does not attach its pretty container-log transport. Without an upstream file
+destination, it falls back to `level: 'silent'`, and no scraper line reaches
+the container logs. A configured upstream file destination remains active.
+Since scraper 8.7.1, `NODE_ENV` does not control the scraper's logging mode.
 
-`LOG_LEVEL` does not rescue it. The library only consults `LOG_LEVEL` _after_
-it has decided to attach a transport, so raising it changes importer output
-only.
+`LOG_LEVEL` alone does not enable scraper container logs. The library only
+consults it _after_ deciding to attach a transport, so raising it changes
+importer output unless `PRETTY_LOGS=true` or an upstream file destination
+already enables scraper logging.
 
 To read the scraper's own narration, opt in for one throwaway container:
 
