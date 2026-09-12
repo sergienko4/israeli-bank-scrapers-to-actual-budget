@@ -30,17 +30,31 @@ function evalInImage(snippet: string): string {
 }
 
 describe.runIf(hasDockerImage())('production logging mode E2E', () => {
-  it('runs with NODE_ENV=production', () => {
-    const nodeEnv = evalInImage('process.stdout.write(process.env.NODE_ENV ?? "<unset>")');
+  it(
+    'runs with NODE_ENV=production',
+    /**
+     * Verifies the built image exposes the production runtime mode.
+     * @returns Nothing.
+     */
+    () => {
+      const nodeEnv = evalInImage('process.stdout.write(process.env.NODE_ENV ?? "<unset>")');
 
-    expect(nodeEnv).toBe('production');
-  });
+      expect(nodeEnv).toBe('production');
+    },
+  );
 
-  it('runs with the scraper pretty transport explicitly disabled', () => {
-    const prettyLogs = evalInImage(
-      'process.stdout.write(process.env.PRETTY_LOGS ?? "<unset>")',
-    );
+  it(
+    'runs with the scraper pretty transport explicitly disabled',
+    /**
+     * Verifies the built image disables scraper pretty logging by default.
+     * @returns Nothing.
+     */
+    () => {
+      const prettyLogs = evalInImage(
+        'process.stdout.write(process.env.PRETTY_LOGS ?? "<unset>")',
+      );
 
-    expect(prettyLogs).toBe('false');
-  });
+      expect(prettyLogs).toBe('false');
+    },
+  );
 });

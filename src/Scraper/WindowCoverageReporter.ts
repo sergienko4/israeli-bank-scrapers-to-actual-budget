@@ -21,23 +21,42 @@ interface IWindowCoverageSummary extends LogContext {
 }
 
 /**
- * Counts each assessed account by its provider-reported coverage state.
+ * Counts provider accounts by their assessed coverage state.
  * @param result - Successful provider result before canonical mapping.
- * @returns Aggregate counts without account identifiers or transaction data.
+ * @returns Coverage-state totals without account identifiers or transaction data.
  */
-function summarizeCoverage(result: IScraperScrapingResult): IWindowCoverageSummary {
+function countCoverageStates(result: IScraperScrapingResult): CoverageCounts {
   const counts: CoverageCounts = { covered: 0, lowerBoundReached: 0, unproven: 0 };
   for (const account of result.accounts ?? []) {
     const coverage = account.windowCoverage;
     if (coverage === undefined) continue;
     counts[coverage.status] += 1;
   }
+  return counts;
+}
+
+/**
+ * Builds the structured coverage fields allowed in operational logs.
+ * @param counts - Aggregate totals for each provider coverage state.
+ * @returns PII-safe summary with the assessed-account total.
+ */
+function buildCoverageSummary(counts: CoverageCounts): IWindowCoverageSummary {
   return {
     assessedAccounts: counts.covered + counts.lowerBoundReached + counts.unproven,
     coveredAccounts: counts.covered,
     lowerBoundReachedAccounts: counts.lowerBoundReached,
     unprovenAccounts: counts.unproven,
   };
+}
+
+/**
+ * Summarizes assessed coverage without retaining provider account data.
+ * @param result - Successful provider result before canonical mapping.
+ * @returns Aggregate fields safe for structured logging.
+ */
+function summarizeCoverage(result: IScraperScrapingResult): IWindowCoverageSummary {
+  const counts = countCoverageStates(result);
+  return buildCoverageSummary(counts);
 }
 
 /**

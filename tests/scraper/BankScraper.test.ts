@@ -87,38 +87,45 @@ describe('BankScraper coordinator', () => {
     expect(result.accounts?.[0].accountNumber).toBe('123');
   });
 
-  it('warns about incomplete coverage without blocking mapped transactions', async () => {
-    const logger = makeLogger();
-    const strategy: IBankScrapeStrategy = {
-      scrape: vi.fn().mockResolvedValue(succeed({
-        bankId: 'discount', companyType: 'discount',
-        attemptCount: 1, strategy: 'live',
-        raw: { success: true, accounts: [{
-          accountNumber: '123', balance: 10,
-          txns: [{ chargedAmount: 25, date: '2026-01-01' }],
-          windowCoverage: {
-            status: 'unproven', requestedStart: '2026-01-01T00:00:00.000Z',
-            reason: 'backfillCeilingReached',
-          },
-        }] },
-      })),
-    };
+  it(
+    'warns about incomplete coverage without blocking mapped transactions',
+    /**
+     * Verifies coverage evidence survives mapping while imports remain available.
+     * @returns Promise resolved after the coordinator assertions complete.
+     */
+    async () => {
+      const logger = makeLogger();
+      const strategy: IBankScrapeStrategy = {
+        scrape: vi.fn().mockResolvedValue(succeed({
+          bankId: 'discount', companyType: 'discount',
+          attemptCount: 1, strategy: 'live',
+          raw: { success: true, accounts: [{
+            accountNumber: '123', balance: 10,
+            txns: [{ chargedAmount: 25, date: '2026-01-01' }],
+            windowCoverage: {
+              status: 'unproven', requestedStart: '2026-01-01T00:00:00.000Z',
+              reason: 'backfillCeilingReached',
+            },
+          }] },
+        })),
+      };
 
-    const result = await makeScraper(strategy, logger).scrapeBankWithResilience(
-      'discount', fakeBankConfig(),
-    );
+      const result = await makeScraper(strategy, logger).scrapeBankWithResilience(
+        'discount', fakeBankConfig(),
+      );
 
-    expect(result.accounts?.[0].txns).toHaveLength(1);
-    expect(result.accounts?.[0].windowCoverage).toEqual({
-      status: 'unproven',
-      requestedStart: '2026-01-01T00:00:00.000Z',
-      reason: 'backfillCeilingReached',
-    });
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('coverage is incomplete'),
-      expect.objectContaining({ bankId: 'discount', unprovenAccounts: 1 }),
-    );
-  });
+      expect(result.accounts?.[0].txns).toHaveLength(1);
+      expect(result.accounts?.[0].windowCoverage).toEqual({
+        status: 'unproven',
+        requestedStart: '2026-01-01T00:00:00.000Z',
+        reason: 'backfillCeilingReached',
+      });
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('coverage is incomplete'),
+        expect.objectContaining({ bankId: 'discount', unprovenAccounts: 1 }),
+      );
+    },
+  );
 
   it('delegates unknown banks to the strategy (e.g. mock fixtures)', async () => {
     const strategy: IBankScrapeStrategy = {

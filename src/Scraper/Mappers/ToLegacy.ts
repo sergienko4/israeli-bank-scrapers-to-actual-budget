@@ -49,10 +49,18 @@ function canonicalAccountToProvider(
 function restoreAccounts(
   accounts: readonly ICanonicalAccount[], originalAccounts: readonly ProviderAccount[],
 ): ProviderAccount[] {
-  return accounts.map((account, index) => {
-    const coverage = coverageMetadata(originalAccounts, index);
-    return canonicalAccountToProvider(account, coverage);
-  });
+  return accounts.map(
+    /**
+     * Restores one canonical account with metadata from the same provider position.
+     * @param account - Canonical account whose normalized values are retained.
+     * @param index - Matching position in the original provider account list.
+     * @returns Provider-shaped account with optional coverage metadata.
+     */
+    (account, index) => {
+      const coverage = coverageMetadata(originalAccounts, index);
+      return canonicalAccountToProvider(account, coverage);
+    },
+  );
 }
 
 /**

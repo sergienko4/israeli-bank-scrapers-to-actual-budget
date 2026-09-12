@@ -21,17 +21,31 @@ const NODE_ENV_PRODUCTION = /^\s*ENV\s+NODE_ENV[= ]["']?production["']?\s*$/m;
 const PRETTY_LOGS_DISABLED = /^\s*ENV\s+PRETTY_LOGS[= ]["']?false["']?\s*$/m;
 
 describe('shipped image production logging mode', () => {
-  it('pins NODE_ENV=production for the application runtime', () => {
-    const dockerfile = readFileSync(DOCKERFILE, 'utf8');
+  it(
+    'pins NODE_ENV=production for the application runtime',
+    /**
+     * Verifies the image declares the application's production runtime mode.
+     * @returns Nothing.
+     */
+    () => {
+      const dockerfile = readFileSync(DOCKERFILE, 'utf8');
 
-    expect(dockerfile).toMatch(NODE_ENV_PRODUCTION);
-  });
+      expect(dockerfile).toMatch(NODE_ENV_PRODUCTION);
+    },
+  );
 
-  it('disables the scraper pretty transport explicitly', () => {
-    const dockerfile = readFileSync(DOCKERFILE, 'utf8');
+  it(
+    'disables the scraper pretty transport explicitly',
+    /**
+     * Verifies the image opts out of the scraper's pretty transport.
+     * @returns Nothing.
+     */
+    () => {
+      const dockerfile = readFileSync(DOCKERFILE, 'utf8');
 
-    expect(dockerfile).toMatch(PRETTY_LOGS_DISABLED);
-  });
+      expect(dockerfile).toMatch(PRETTY_LOGS_DISABLED);
+    },
+  );
 
   it('declares NODE_ENV before the process starts, not inside CMD', () => {
     const dockerfile = readFileSync(DOCKERFILE, 'utf8');

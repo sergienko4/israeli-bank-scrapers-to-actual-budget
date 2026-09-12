@@ -22,23 +22,43 @@ const FIXTURES = getFixturesDir();
 const E2E_BUDGET = 'e2e-test-budget-dummy';
 const temp = createTempFileTracker();
 
-afterAll(() => { temp.cleanup(); });
+afterAll(
+  /**
+   * Removes temporary configuration files created by this suite.
+   * @returns Nothing.
+   */
+  () => { temp.cleanup(); },
+);
 
-describe.runIf(hasDockerImage())('window coverage warning E2E', () => {
-  it('warns about unproven coverage and completes a dry run', () => {
-    const configPath = writeTempConfig('window-coverage', createBaseConfig());
-    const budgetId = findBudgetId() ?? E2E_BUDGET;
-    temp.track(configPath);
+describe.runIf(hasDockerImage())(
+  'window coverage warning E2E',
+  /**
+   * Registers the degraded-coverage Docker scenario.
+   * @returns Nothing.
+   */
+  () => {
+    it(
+      'warns about unproven coverage and completes a dry run',
+      /**
+       * Verifies degraded coverage remains visible and non-blocking.
+       * @returns Nothing.
+       */
+      () => {
+        const configPath = writeTempConfig('window-coverage', createBaseConfig());
+        const budgetId = findBudgetId() ?? E2E_BUDGET;
+        temp.track(configPath);
 
-    const result = runImporterDocker({
-      configPath,
-      mockScraperFile: join(FIXTURES, 'mock-scraper-window-unproven.json'),
-      budgetId,
-      env: { E2E_LOCAL_BUDGET_ID: budgetId, DRY_RUN: 'true' },
-    });
+        const result = runImporterDocker({
+          configPath,
+          mockScraperFile: join(FIXTURES, 'mock-scraper-window-unproven.json'),
+          budgetId,
+          env: { E2E_LOCAL_BUDGET_ID: budgetId, DRY_RUN: 'true' },
+        });
 
-    expect(result.output).toContain('Scraper window coverage is incomplete');
-    expect(result.output).toContain('no changes made to Actual Budget');
-    expect(result.exitCode).toBe(0);
-  });
-});
+        expect(result.output).toContain('Scraper window coverage is incomplete');
+        expect(result.output).toContain('no changes made to Actual Budget');
+        expect(result.exitCode).toBe(0);
+      },
+    );
+  },
+);

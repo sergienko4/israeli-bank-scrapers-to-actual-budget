@@ -26,108 +26,158 @@ function makeLogger(): ILogger {
 function successfulResult(
   coverages: readonly (IWindowCoverage | undefined)[],
 ): IScraperScrapingResult {
-  const accounts = coverages.map((windowCoverage, index) => ({
-    accountNumber: `${ACCOUNT_MARKER}-${String(index)}`,
-    txns: [],
-    windowCoverage,
-  }));
+  const accounts = coverages.map(
+    /**
+     * Builds one synthetic provider account for a coverage case.
+     * @param windowCoverage - Optional coverage metadata under test.
+     * @param index - Position used to create a unique account marker.
+     * @returns Provider account carrying the supplied coverage metadata.
+     */
+    (windowCoverage, index) => ({
+      accountNumber: `${ACCOUNT_MARKER}-${String(index)}`,
+      txns: [],
+      windowCoverage,
+    }),
+  );
   return { success: true, accounts };
 }
 
-describe('reportWindowCoverage', () => {
-  it('does not warn when every assessed account is covered', () => {
-    const logger = makeLogger();
-    const result = successfulResult([{
-      status: 'covered',
-      requestedStart: REQUESTED_START,
-      oldest: '2026-01-01',
-    }]);
+describe(
+  'reportWindowCoverage',
+  /**
+   * Registers the provider window-coverage reporting scenarios.
+   * @returns Nothing.
+   */
+  () => {
+    it(
+      'does not warn when every assessed account is covered',
+      /**
+       * Verifies complete coverage stays silent.
+       * @returns Nothing.
+       */
+      () => {
+        const logger = makeLogger();
+        const result = successfulResult([{
+          status: 'covered',
+          requestedStart: REQUESTED_START,
+          oldest: '2026-01-01',
+        }]);
 
-    const warned = reportWindowCoverage('pepper', result, logger);
+        const warned = reportWindowCoverage('pepper', result, logger);
 
-    expect(warned).toBe(false);
-    expect(logger.warn).not.toHaveBeenCalled();
-  });
-
-  it('does not treat missing coverage metadata as a failure', () => {
-    const logger = makeLogger();
-
-    const warned = reportWindowCoverage('discount', successfulResult([undefined]), logger);
-
-    expect(warned).toBe(false);
-    expect(logger.warn).not.toHaveBeenCalled();
-  });
-
-  it('does not warn when a failed provider result includes partial accounts', () => {
-    const logger = makeLogger();
-    const partial = successfulResult([{
-      status: 'unproven',
-      requestedStart: REQUESTED_START,
-      reason: 'backfillCeilingReached',
-    }]);
-    const result: IScraperScrapingResult = {
-      success: false,
-      errorMessage: 'Provider request failed',
-      accounts: partial.accounts,
-    };
-
-    const warned = reportWindowCoverage('discount', result, logger);
-
-    expect(warned).toBe(false);
-    expect(logger.warn).not.toHaveBeenCalled();
-  });
-
-  it('reports degraded account states in one aggregate warning', () => {
-    const logger = makeLogger();
-    const result = successfulResult([
-      {
-        status: 'lowerBoundReached',
-        requestedStart: REQUESTED_START,
-        oldest: '2026-01-01',
-        caveats: ['mappingRejectedRows'],
-      },
-      {
-        status: 'unproven',
-        requestedStart: REQUESTED_START,
-        oldest: '2026-01-08',
-        gapDays: 7,
-        reason: 'backfillCeilingReached',
-      },
-      {
-        status: 'covered',
-        requestedStart: REQUESTED_START,
-        oldest: '2026-01-01',
-      },
-    ]);
-
-    const warned = reportWindowCoverage('pepper', result, logger);
-
-    expect(warned).toBe(true);
-    expect(logger.warn).toHaveBeenCalledOnce();
-    expect(logger.warn).toHaveBeenCalledWith(
-      'Scraper window coverage is incomplete; importing available transactions',
-      {
-        eventName: 'scrape_window_coverage_incomplete',
-        bankId: 'pepper',
-        assessedAccounts: 3,
-        coveredAccounts: 1,
-        lowerBoundReachedAccounts: 1,
-        unprovenAccounts: 1,
+        expect(warned).toBe(false);
+        expect(logger.warn).not.toHaveBeenCalled();
       },
     );
-  });
 
-  it('does not include provider account identifiers in the warning', () => {
-    const logger = makeLogger();
-    const result = successfulResult([{
-      status: 'unproven',
-      requestedStart: REQUESTED_START,
-      reason: 'noRowCarriedAUsableDate',
-    }]);
+    it(
+      'does not treat missing coverage metadata as a failure',
+      /**
+       * Verifies unassessed accounts preserve backward-compatible silence.
+       * @returns Nothing.
+       */
+      () => {
+        const logger = makeLogger();
 
-    reportWindowCoverage('pepper', result, logger);
+        const warned = reportWindowCoverage('discount', successfulResult([undefined]), logger);
 
-    expect(JSON.stringify((logger.warn as ReturnType<typeof vi.fn>).mock.calls))
-      .not.toContain(ACCOUNT_MARKER);
-  });
-});
+        expect(warned).toBe(false);
+        expect(logger.warn).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      'does not warn when a failed provider result includes partial accounts',
+      /**
+       * Verifies failed scrapes do not emit misleading import warnings.
+       * @returns Nothing.
+       */
+      () => {
+        const logger = makeLogger();
+        const partial = successfulResult([{
+          status: 'unproven',
+          requestedStart: REQUESTED_START,
+          reason: 'backfillCeilingReached',
+        }]);
+        const result: IScraperScrapingResult = {
+          success: false,
+          errorMessage: 'Provider request failed',
+          accounts: partial.accounts,
+        };
+
+        const warned = reportWindowCoverage('discount', result, logger);
+
+        expect(warned).toBe(false);
+        expect(logger.warn).not.toHaveBeenCalled();
+      },
+    );
+
+    it(
+      'reports degraded account states in one aggregate warning',
+      /**
+       * Verifies degraded states produce one count-only warning.
+       * @returns Nothing.
+       */
+      () => {
+        const logger = makeLogger();
+        const result = successfulResult([
+          {
+            status: 'lowerBoundReached',
+            requestedStart: REQUESTED_START,
+            oldest: '2026-01-01',
+            caveats: ['mappingRejectedRows'],
+          },
+          {
+            status: 'unproven',
+            requestedStart: REQUESTED_START,
+            oldest: '2026-01-08',
+            gapDays: 7,
+            reason: 'backfillCeilingReached',
+          },
+          {
+            status: 'covered',
+            requestedStart: REQUESTED_START,
+            oldest: '2026-01-01',
+          },
+        ]);
+
+        const warned = reportWindowCoverage('pepper', result, logger);
+
+        expect(warned).toBe(true);
+        expect(logger.warn).toHaveBeenCalledOnce();
+        expect(logger.warn).toHaveBeenCalledWith(
+          'Scraper window coverage is incomplete; importing available transactions',
+          {
+            eventName: 'scrape_window_coverage_incomplete',
+            bankId: 'pepper',
+            assessedAccounts: 3,
+            coveredAccounts: 1,
+            lowerBoundReachedAccounts: 1,
+            unprovenAccounts: 1,
+          },
+        );
+      },
+    );
+
+    it(
+      'does not include provider account identifiers in the warning',
+      /**
+       * Verifies coverage warnings exclude account identifiers.
+       * @returns Nothing.
+       */
+      () => {
+        const logger = makeLogger();
+        const result = successfulResult([{
+          status: 'unproven',
+          requestedStart: REQUESTED_START,
+          reason: 'noRowCarriedAUsableDate',
+        }]);
+
+        reportWindowCoverage('pepper', result, logger);
+
+        expect(JSON.stringify((logger.warn as ReturnType<typeof vi.fn>).mock.calls))
+          .not.toContain(ACCOUNT_MARKER);
+      },
+    );
+  },
+);
