@@ -65,6 +65,14 @@ See [Quick Start guide](https://sergienko4.github.io/israeli-bank-scrapers-to-ac
 
 See per-bank pages: [Banks index](https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/banks/) · [docs/banks/](docs/banks/).
 
+> **Scraper 8.7.1 compatibility.** Phone-based bank configs now reject
+> non-Israeli numbers before login. API-direct scrapers also report when they
+> cannot prove the full requested date window; the importer warns once per bank
+> and continues with the available transactions. Pepper skips unsupported
+> products, principally non-ILS accounts, instead of failing the entire scrape.
+
+<!-- MD028: separates two independent upgrade notes -->
+
 > **Upgrade note — credit-card signs (scraper 8.6.7).** Card issuers (Visa Cal,
 > Max, Isracard, Amex) now emit charges as negative amounts at the source, so
 > this importer no longer flips them. Card charges keep landing as outflows and

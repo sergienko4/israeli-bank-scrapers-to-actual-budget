@@ -21,6 +21,7 @@ import {
 const FIXTURES = getFixturesDir();
 const E2E_TARGET = { actualAccountId: 'e2e00000-0000-0000-0000-000000000001', reconcile: false, accounts: 'all' as const };
 const E2E_BUDGET = 'e2e-test-budget-dummy';
+const FOREIGN_PHONE = '+447700900123';
 const temp = createTempFileTracker();
 
 afterAll(() => { temp.cleanup(); });
@@ -74,6 +75,33 @@ describe.runIf(hasDockerImage())('Config Validation E2E', () => {
       expect(result.output).toContain('startDate');
       expect(result.output).toContain('daysBack');
     });
+
+    it(
+      'rejects a foreign phone before startup without exposing it',
+      /**
+       * Verifies Docker config validation rejects foreign phone credentials safely.
+       * @returns Nothing.
+       */
+      () => {
+        const config = createBaseConfig({
+          banks: {
+            paybox: fakeValidBankConfigFor('paybox', {
+              phoneNumber: FOREIGN_PHONE,
+              targets: [E2E_TARGET],
+            }),
+          },
+        });
+        const configPath = writeTempConfig('foreign-phone', config);
+        temp.track(configPath);
+
+        const result = runImporterDocker({ configPath });
+
+        expect(result.exitCode).toBeGreaterThan(0);
+        expect(result.output).toContain('Invalid phone number format');
+        expect(result.output).not.toContain(FOREIGN_PHONE);
+        expect(result.output).not.toContain('Starting Israeli Bank Importer');
+      },
+    );
   });
 
   // Spec-driven cross-bank E2E. Each iteration runs two real Docker

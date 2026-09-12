@@ -23,15 +23,16 @@ import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
  * declared but not exported as a value by the provider package, so the wire
  * strings are matched directly.
  *
- * INVALID_OTP is absent on purpose: it has a dedicated re-prompt path in
- * AttemptRunner that asks the user for a fresh code, which a blind retry with
- * the same rejected digits would defeat.
+ * INVALID_OTP stays permanent here so this classifier returns it unchanged.
+ * AttemptRunner then recognizes it and requests a fresh code; a blind retry
+ * with the same rejected digits would defeat that flow.
  */
 const PERMANENT_ERROR_TYPES = new Set<string>([
   'INVALID_PASSWORD',
   'CHANGE_PASSWORD',
   'ACCOUNT_BLOCKED',
   'INVALID_OTP',
+  'INVALID_PHONE_NUMBER',
   'TWO_FACTOR_RETRIEVER_MISSING',
 ]);
 

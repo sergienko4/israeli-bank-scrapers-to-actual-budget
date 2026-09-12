@@ -12,6 +12,13 @@ describe('ScraperErrorMessages', () => {
       expect(advice).toContain('Verify your password');
     });
 
+    it('returns Israeli phone-format advice for INVALID_PHONE_NUMBER', () => {
+      const advice = getScraperErrorAdvice('INVALID_PHONE_NUMBER');
+      expect(advice).toContain('Israeli phone number');
+      expect(advice).toContain('972XXXXXXXXX');
+      expect(advice).toContain('0XXXXXXXXX');
+    });
+
     it('returns advice for CHANGE_PASSWORD', () => {
       const advice = getScraperErrorAdvice('CHANGE_PASSWORD');
       expect(advice).toContain('password change');

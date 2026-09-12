@@ -53,6 +53,7 @@ For automated SMS forwarding, see [OTP auto-forward](https://github.com/sergienk
 - `twoFactorAuth: true` is **always required** on first login.
 - Pepper uses the API-direct path — there is no browser session, so `clearSession` and Camoufox-related settings have no effect.
 - The `phoneNumber` must be the one registered with Pepper; the bank rejects unknown numbers with an authentication error.
+- Pepper skips products its transaction resolver cannot serve, principally unsupported non-ILS products. Other supported products continue importing instead of failing the entire scrape.
 - Leave `otpLongTermToken` as an **empty string** on first login. Do **not** insert placeholder text — the importer treats any non-empty value as a warm-start token; if it is invalid, the upstream library falls back to a cold (OTP) login, which the importer now correctly handles by always attaching the OTP retriever.
 - Production crash signature `envelope selector miss: smsAssertionId at /data/control_flow/0/methods/*channels/?type=sms/assertion_id` indicates the auth response did **not** include the SMS channel. Two likely causes: (a) the `phoneNumber` was sent in an unsupported form (now fixed by normalisation at the credential boundary), or (b) the `password` is wrong — Pepper omits SMS from the available factors when uid/password is malformed.
 

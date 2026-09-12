@@ -29,6 +29,7 @@ import isEmptyResult from './EmptyResultDetector.js';
 import type { IScrapeResultMapper } from './Mappers/IScrapeResultMapper.js';
 import type { IDateRangePolicy } from './Policies/DateRangePolicy.js';
 import type { IBankScrapeStrategy } from './Strategies/IBankScrapeStrategy.js';
+import reportWindowCoverage from './WindowCoverageReporter.js';
 
 export { computeStartDate, filterTransactionsByDate } from './DateRangeShims.js';
 export { default as logScrapeFailure } from './FailureLogShim.js';
@@ -88,6 +89,7 @@ export class BankScraper {
   private mapAndAdapt(
     raw: IRawScrape, signPolicy: ISignPolicy, startDate: Date,
   ): IScraperScrapingResult {
+    reportWindowCoverage(raw.bankId, raw.raw, this.opts.logger);
     const canonical = this.opts.mapper.mapToCanonical({
       raw, signPolicy, startDate, endDate: new Date(),
     });

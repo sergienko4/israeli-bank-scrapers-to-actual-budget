@@ -50,6 +50,7 @@ describe('isRetryableProviderFailure', () => {
     'CHANGE_PASSWORD',
     'ACCOUNT_BLOCKED',
     'INVALID_OTP',
+    'INVALID_PHONE_NUMBER',
     'TWO_FACTOR_RETRIEVER_MISSING',
   ])('does not retry the permanent failure %s', (errorType) => {
     expect(isRetryableProviderFailure(failure(errorType))).toBe(false);
