@@ -52,7 +52,7 @@ function hasDegradedCoverage(summary: IWindowCoverageSummary): boolean {
 /**
  * Emits one PII-safe warning when the provider cannot prove complete coverage.
  * @param bankId - Stable bank identifier for operational filtering.
- * @param result - Successful provider result before account metadata is adapted.
+ * @param result - Provider result before account metadata is adapted.
  * @param logger - Structured logger for the current scrape.
  * @returns True when degraded coverage caused a warning.
  */
@@ -61,6 +61,7 @@ export default function reportWindowCoverage(
   result: IScraperScrapingResult,
   logger: ILogger,
 ): boolean {
+  if (!result.success) return false;
   const summary = summarizeCoverage(result);
   if (!hasDegradedCoverage(summary)) return false;
   logger.warn(

@@ -58,6 +58,25 @@ describe('reportWindowCoverage', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it('does not warn when a failed provider result includes partial accounts', () => {
+    const logger = makeLogger();
+    const partial = successfulResult([{
+      status: 'unproven',
+      requestedStart: REQUESTED_START,
+      reason: 'backfillCeilingReached',
+    }]);
+    const result: IScraperScrapingResult = {
+      success: false,
+      errorMessage: 'Provider request failed',
+      accounts: partial.accounts,
+    };
+
+    const warned = reportWindowCoverage('discount', result, logger);
+
+    expect(warned).toBe(false);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it('reports degraded account states in one aggregate warning', () => {
     const logger = makeLogger();
     const result = successfulResult([
