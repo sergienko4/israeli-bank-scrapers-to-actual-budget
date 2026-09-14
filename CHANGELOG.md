@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.42.24](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.23...v1.42.24) (2026-09-14)
+
+
+### Fixed
+
+* **deps:** bump cron-parser from 5.10.0 to 5.10.1 ([#695](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/695)) ([db58d00](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/db58d00e06cb8d912b9976e93218ee72e4c00a98))
+
 ## [1.42.23](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.22...v1.42.23) (2026-09-12)
 
 
