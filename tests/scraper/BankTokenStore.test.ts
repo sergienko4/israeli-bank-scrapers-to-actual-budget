@@ -1,0 +1,206 @@
+import {
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import BankTokenStore from '../../src/Scraper/Tokens/BankTokenStore.js';
+
+let dir = '';
+let storePath = '';
+
+/**
+ * Builds a store rooted in this test's own temp directory.
+ * @returns A store isolated from every other test.
+ */
+function makeStore(): BankTokenStore {
+  return new BankTokenStore(storePath);
+}
+
+/**
+ * Lists every staging artifact left in the store directory.
+ *
+ * <p>Production names temp files `<store>.<uuid>.tmp`, so a fixed
+ * `<store>.tmp` assertion is vacuously true and would still pass if cleanup
+ * were deleted outright.
+ * @returns Names of the temp files still present.
+ */
+function tempFilesInStoreDir(): string[] {
+  const entries = readdirSync(dir);
+  return entries.filter(name => name.endsWith('.tmp'));
+}
+
+/**
+ * Lists the quarantine copies kept beside the store.
+ * @returns Names of the `.corrupt` files present.
+ */
+function quarantineFilesInStoreDir(): string[] {
+  const entries = readdirSync(dir);
+  return entries.filter(name => name.endsWith('.corrupt'));
+}
+
+describe('BankTokenStore', () => {
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'bank-tokens-'));
+    storePath = join(dir, 'bank-tokens.json');
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  describe('read', () => {
+    it('returns an empty token when the store file has never been written', () => {
+      expect(makeStore().read('oneZero')).toBe('');
+    });
+
+    it('returns an empty token for a bank that has no stored entry', () => {
+      const store = makeStore();
+      store.write('oneZero', 'onezero-id-token');
+      expect(store.read('pepper')).toBe('');
+    });
+
+    it('returns an empty token when the store file is not valid JSON', () => {
+      writeFileSync(storePath, '{ this is not json');
+      expect(makeStore().read('oneZero')).toBe('');
+    });
+
+    it('returns an empty token when the stored entry is not shaped as a record', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: { oneZero: 42 } }));
+      expect(makeStore().read('oneZero')).toBe('');
+    });
+
+    it('still reads healthy banks when another bank entry is null', () => {
+      writeFileSync(storePath, JSON.stringify({
+        banks: {
+          oneZero: { token: 'onezero-token', capturedAt: '2026-01-01T00:00:00.000Z' },
+          payBox: null,
+          pepper: { token: 'pepper-token', capturedAt: '2026-01-01T00:00:00.000Z' },
+        },
+      }));
+      const store = makeStore();
+      expect(store.read('oneZero')).toBe('onezero-token');
+      expect(store.read('pepper')).toBe('pepper-token');
+      expect(store.read('payBox')).toBe('');
+    });
+
+    it('reads a well-formed entry that is missing its capturedAt stamp', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: { oneZero: { token: 'bare-token' } } }));
+      expect(makeStore().read('oneZero')).toBe('bare-token');
+    });
+  });
+
+  describe('write', () => {
+    it('round-trips a token through a fresh store', () => {
+      const store = makeStore();
+      const result = store.write('oneZero', 'onezero-id-token');
+      expect(result.success).toBe(true);
+      expect(store.read('oneZero')).toBe('onezero-id-token');
+    });
+
+    it('replaces a previous token for the same bank', () => {
+      const store = makeStore();
+      store.write('oneZero', 'first-token');
+      store.write('oneZero', 'second-token');
+      expect(store.read('oneZero')).toBe('second-token');
+    });
+
+    it('does not destroy healthy banks when writing alongside a null entry', () => {
+      writeFileSync(storePath, JSON.stringify({
+        banks: {
+          oneZero: { token: 'onezero-token', capturedAt: '2026-01-01T00:00:00.000Z' },
+          payBox: null,
+        },
+      }));
+      const store = makeStore();
+      expect(store.write('pepper', 'pepper-token').success).toBe(true);
+      expect(store.read('oneZero')).toBe('onezero-token');
+      expect(store.read('pepper')).toBe('pepper-token');
+    });
+
+    it('quarantines an unparseable store instead of silently deleting it', () => {
+      writeFileSync(storePath, '{ this is not json');
+      expect(makeStore().write('oneZero', 'onezero-token').success).toBe(true);
+      const quarantined = quarantineFilesInStoreDir();
+      expect(quarantined).toHaveLength(1);
+      expect(readFileSync(join(dir, quarantined[0]), 'utf8')).toBe('{ this is not json');
+    });
+
+    it('preserves other banks when one bank is updated', () => {
+      const store = makeStore();
+      store.write('oneZero', 'onezero-token');
+      store.write('payBox', 'paybox-token');
+      store.write('oneZero', 'onezero-token-2');
+      expect(store.read('payBox')).toBe('paybox-token');
+      expect(store.read('oneZero')).toBe('onezero-token-2');
+    });
+
+    it('records when the token was captured so operators can judge its age', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      const parsed = JSON.parse(readFileSync(storePath, 'utf8')) as {
+        banks: Record<string, { capturedAt: string }>;
+      };
+      expect(Date.parse(parsed.banks.oneZero.capturedAt)).not.toBeNaN();
+    });
+
+    it('never persists an empty token, because upstream returns one when none exists', () => {
+      const result = makeStore().write('oneZero', '');
+      expect(result.success).toBe(true);
+      expect(existsSync(storePath)).toBe(false);
+    });
+
+    it('never persists a whitespace-only token', () => {
+      makeStore().write('oneZero', '   ');
+      expect(existsSync(storePath)).toBe(false);
+    });
+
+    it('creates the store file owner-readable only, since the token bypasses 2FA', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(statSync(storePath).mode % 0o1000).toBe(0o600);
+    });
+
+    it('re-tightens permissions when it overwrites a world-readable store file', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: {} }));
+      chmodSync(storePath, 0o666);
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(statSync(storePath).mode % 0o1000).toBe(0o600);
+    });
+
+    it('creates a missing parent directory owner-only', () => {
+      const nested = join(dir, 'state');
+      new BankTokenStore(join(nested, 'bank-tokens.json')).write('oneZero', 'tok');
+      expect(statSync(nested).mode % 0o1000).toBe(0o700);
+    });
+
+    it('leaves no temp file behind after a successful write', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(tempFilesInStoreDir()).toEqual([]);
+    });
+
+    it('leaves no temp file behind when the rename into place fails', () => {
+      mkdirSync(storePath);
+      writeFileSync(join(storePath, 'occupant'), 'makes the rename fail');
+      const result = makeStore().write('oneZero', 'onezero-id-token');
+      expect(result.success).toBe(false);
+      expect(tempFilesInStoreDir()).toEqual([]);
+    });
+
+    it('reports a typed failure instead of throwing when the path is unwritable', () => {
+      const blocker = join(dir, 'blocker');
+      writeFileSync(blocker, 'not a directory');
+      const store = new BankTokenStore(join(blocker, 'bank-tokens.json'));
+      const result = store.write('oneZero', 'onezero-id-token');
+      expect(result.success).toBe(false);
+    });
+
+    it('creates a missing parent directory so a bare-metal run still warms', () => {
+      const nested = join(dir, 'state', 'bank-tokens.json');
+      const store = new BankTokenStore(nested);
+      expect(store.write('oneZero', 'onezero-id-token').success).toBe(true);
+      expect(store.read('oneZero')).toBe('onezero-id-token');
+    });
+  });
+});

@@ -8,6 +8,7 @@ import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import type { IRetryStrategy } from '../../../Resilience/RetryStrategy.js';
 import type { IBankConfig, IRawScrape, Procedure } from '../../../Types/Index.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../../Types/Index.js';
+import { captureResultToken, isApiDirectBank } from '../../Tokens/AuthFlowCapture.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
 import { RetryableProviderFailure, throwIfRetryable } from './ProviderFailure.js';
 import {
@@ -15,7 +16,7 @@ import {
   resolveLiveOpts,
   succeedRawScrape,
 } from './ResultEnvelope.js';
-import { initScrape } from './ScraperSetup.js';
+import { buildTokenCaptureParams, initScrape } from './ScraperSetup.js';
 import type {
   ILiveScrapeDependencies,
   IResolvedLiveOpts,
@@ -50,8 +51,60 @@ async function runWithOtpRetry(
   scrapeOpts: IResolvedLiveOpts,
 ): Promise<Procedure<IRawScrape>> {
   const first = await executeAttempt(deps, scrapeOpts);
-  if (isInvalidOtpFailure(first)) return await handleOtpReject(deps, scrapeOpts);
-  return succeedRawScrape(scrapeOpts, first, 1);
+  if (!isInvalidOtpFailure(first)) return succeedRawScrape(scrapeOpts, first, 1);
+  if (isApiDirectBank(scrapeOpts.companyType)) return await refuseOtpRetry(deps, scrapeOpts, first);
+  return await handleOtpReject(deps, scrapeOpts);
+}
+
+/** Phrase the operator-advice table matches to explain the refusal. */
+const OTP_REFUSAL_REASON = 'one SMS login per scrape is allowed; start a new scrape to try again';
+
+/**
+ * Ends the run after a rejected OTP instead of spending a second SMS login.
+ *
+ * This is a policy, not a provider constraint. An `INVALID_OTP` is raised
+ * while validating the code, before the login chain mints anything, so a
+ * retry would revoke nothing; scraper 8.7.3's own one-cold-login cap is
+ * per-scrape and a retry opens a new scrape with a fresh budget. The choice
+ * made here is that one rejected code costs one run, so an unattended
+ * schedule cannot sit in a prompt-and-reject loop sending SMS after SMS.
+ *
+ * The provider's bare `INVALID_OTP` would otherwise be rendered as "enter it
+ * quickly next time", so the reason is attached to the message the operator
+ * sees and pushed to the notifier, which the retry path also does.
+ * @param deps - Strategy dependencies exposing the notification service.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @param first - Provider result carrying the INVALID_OTP failure.
+ * @returns Procedure success wrapping the single attempt that was made.
+ */
+async function refuseOtpRetry(
+  deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts, first: IScraperScrapingResult,
+): Promise<Procedure<IRawScrape>> {
+  scrapeOpts.logger.warn(`  ⚠️  OTP rejected for ${scrapeOpts.bankId} — ${OTP_REFUSAL_REASON}`);
+  const message = buildOtpRefusalMessage(scrapeOpts.bankId);
+  await deps.notificationService.sendMessage(message);
+  const explained = explainOtpRefusal(first);
+  return succeedRawScrape(scrapeOpts, explained, 1);
+}
+
+/**
+ * Restates the failure so the advice table can explain the refusal.
+ * @param first - Provider result carrying the INVALID_OTP failure.
+ * @returns The same result with the refusal reason added to its message.
+ */
+function explainOtpRefusal(first: IScraperScrapingResult): IScraperScrapingResult {
+  const original = first.errorMessage ?? 'INVALID_OTP';
+  return { ...first, errorMessage: `${original} — ${OTP_REFUSAL_REASON}` };
+}
+
+/**
+ * Builds the notification shown when an OTP rejection ends the run.
+ * @param bankId - Bank identifier shown in the notification.
+ * @returns HTML-safe notification text for the configured notifier.
+ */
+function buildOtpRefusalMessage(bankId: string): string {
+  return `⚠️ OTP for <b>${bankId}</b> was rejected. `
+    + 'No new code will be requested this run — start a new scrape to try again.';
 }
 
 /**
@@ -74,14 +127,36 @@ async function handleOtpReject(
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @returns Provider scrape result returned by israeli-bank-scrapers.
  */
-function executeAttempt(
+async function executeAttempt(
   deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts,
 ): Promise<IScraperScrapingResult> {
   const initialized = initScrape(deps, scrapeOpts);
   const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig);
   const label = `Scraping ${scrapeOpts.bankId}`;
   const params = { deps, ...initialized, logger: scrapeOpts.logger, label };
-  return runAttemptThenSeal(retryStrategy, params);
+  const result = await runAttemptThenSeal(retryStrategy, params);
+  return persistDurableToken(deps, scrapeOpts, result);
+}
+
+/**
+ * Persists the durable token the result carried, then returns it unchanged.
+ *
+ * The completion callback is the primary capture path; this covers the case
+ * where the provider populated the public field without firing it. Storing a
+ * token can never change the scrape's outcome, so the result passes through.
+ * @param deps - Strategy dependencies exposing the token store.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @param result - Provider scrape result to inspect.
+ * @returns The same provider result, unmodified.
+ */
+function persistDurableToken(
+  deps: ILiveScrapeDependencies,
+  scrapeOpts: IResolvedLiveOpts,
+  result: IScraperScrapingResult,
+): IScraperScrapingResult {
+  const captureParams = buildTokenCaptureParams(deps, scrapeOpts);
+  captureResultToken(result, captureParams);
+  return result;
 }
 
 /**

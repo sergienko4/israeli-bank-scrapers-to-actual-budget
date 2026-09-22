@@ -76,7 +76,10 @@ services:
       # a single-file mount) is required so the portal's atomic saves propagate
       # here; see the top-of-file note and docs/configuration/portal.md.
       - ./config:/app/config:ro
-      - importer-data:/app/data             # Actual Budget sync data
+      # READ-WRITE. Actual Budget sync data plus the runtime secrets the
+      # importer writes itself, including bank-tokens.json — the long-term
+      # tokens that let oneZero/payBox/pepper skip the SMS on later runs.
+      - importer-data:/app/data
       - importer-cache:/app/cache           # App cache
     healthcheck:
       # Verify the scheduler node process is alive (mirrors the image default and

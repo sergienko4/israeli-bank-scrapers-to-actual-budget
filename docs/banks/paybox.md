@@ -42,7 +42,16 @@ you skip OTP on subsequent runs.
 
 This bank **requires** 2FA on every login.
 
-After the first successful login, capture the value of `otpLongTermToken` from the logs and add it back to `config.json` to skip OTP on future runs.
+Leave `otpLongTermToken` as an empty string. After the first successful login the
+importer captures the bank's long-term token itself and saves it to
+`/app/data/bank-tokens.json`, then replays it on every later run so no SMS is
+needed. There is nothing to copy out of the logs — since scrapers 8.7.2 the
+token is redacted there.
+
+Run only one importer per account: every SMS login mints a new long-term token
+and revokes the previous one, so two instances sharing an account cancel each
+other out. Each scrape is also allowed exactly one SMS login — if you mistype
+the code, the run ends and you start a new scrape.
 
 For automated SMS forwarding, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
@@ -64,7 +73,7 @@ the replay cache is rebuilt per attempt, so a wrong code is never re-sent.
 - `twoFactorAuth: true` is **always required** on first login.
 - PayBox uses the API-direct path — there is no browser session, so `clearSession` and Camoufox-related settings have no effect.
 - The `phoneNumber` must be the one registered with PayBox; the bank rejects unknown numbers with an authentication error.
-- Leave `otpLongTermToken` as an **empty string** on first login. Do **not** insert placeholder text — the importer treats any non-empty value as a warm-start token; if it is invalid, the upstream library falls back to a cold (OTP) login, which the importer now correctly handles by always attaching the OTP retriever.
+- Leave `otpLongTermToken` as an **empty string** on first login. Do **not** insert placeholder text — any non-empty value is treated as a warm-start token; if it is invalid, the upstream library falls back to a cold (OTP) login, which the importer handles by always attaching the OTP retriever. A token the importer captured itself always takes priority over this config value, so the config field is only ever a one-time seed.
 - Production crash signature `POST /phoneValidate 400 {"errors":"Validation Error"}` indicates the `phoneNumber` was sent in an unsupported form (e.g. raw `+972…` slipped past upstream's international validator). The current importer prevents this by normalising at the credential boundary; if you still hit it, check that your `phoneNumber` contains only digits / `+` / `-` / spaces — no letters or extension suffixes.
 
 ## See also

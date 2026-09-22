@@ -5,26 +5,22 @@
  * stable while the provider setup, OTP, and retry concerns stay isolated.
  */
 
-import type { IRetryStrategy } from '../../Resilience/RetryStrategy.js';
-import type { ITimeoutWrapper } from '../../Resilience/TimeoutWrapper.js';
-import type { ITwoFactorPrompter } from '../../Services/ITwoFactorPrompter.js';
-import type NotificationService from '../../Services/NotificationService.js';
-import type { IImporterConfig, IRawScrape, Procedure } from '../../Types/Index.js';
+import type { IRawScrape, Procedure } from '../../Types/Index.js';
 import type {
   IBankScrapeStrategy,
   IBankScrapeStrategyOpts,
 } from './IBankScrapeStrategy.js';
 import { runLiveScrape } from './Live/Index.js';
+import type { ILiveScrapeDependencies } from './Live/Types.js';
 
-/** Constructor options for the live scrape strategy. */
-export interface ILiveScrapeStrategyOpts {
-  readonly config: IImporterConfig;
-  readonly retryStrategy: IRetryStrategy;
-  readonly noRetryStrategy: IRetryStrategy;
-  readonly timeoutWrapper: ITimeoutWrapper;
-  readonly twoFactorPrompter: ITwoFactorPrompter | null;
-  readonly notificationService: NotificationService;
-}
+/**
+ * Constructor options for the live scrape strategy.
+ *
+ * Aliases the internal dependency contract rather than restating it: the two
+ * lists were already identical field for field, so a second copy could only
+ * ever drift out of step with the one the helpers actually consume.
+ */
+export type ILiveScrapeStrategyOpts = ILiveScrapeDependencies;
 
 /** Strategy driving the real israeli-bank-scrapers package. */
 export class LiveScrapeStrategy implements IBankScrapeStrategy {

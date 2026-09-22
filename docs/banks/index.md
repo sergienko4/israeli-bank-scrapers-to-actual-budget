@@ -49,7 +49,7 @@ Full reference: [Bank options](https://github.com/sergienko4/israeli-bank-scrape
 
 Any bank with an SMS verification screen supports `twoFactorAuth: true`. The Telegram bot prompts for the code. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
-**OneZero, PayBox, and Pepper are API-direct banks** — 2FA is required on every login, but you can capture an `otpLongTermToken` after the first successful run to skip it thereafter.
+**OneZero, PayBox, and Pepper are API-direct banks** — 2FA is required on the first login, after which the importer stores the bank's long-term token in `/app/data/bank-tokens.json` and replays it so later runs need no SMS. Use only one importer instance per account: each SMS login re-mints the token and revokes the previous one.
 
 ## Security tips
 

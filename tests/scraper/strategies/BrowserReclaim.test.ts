@@ -18,7 +18,7 @@ import { TimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
 import TimeoutError from '../../../src/Errors/TimeoutError.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../../src/Types/Index.js';
 import type { IProviderBrowser } from '../../../src/Scraper/Strategies/Live/BrowserRegistry.js';
-import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
+import { fakeBankConfig, fakeBankTokenStore, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
 
 /** Provider options subset carrying the browser lifecycle hook. */
@@ -137,6 +137,7 @@ function makeStrategy(
     retryStrategy, noRetryStrategy: retryStrategy, timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
+    bankTokens: fakeBankTokenStore(),
   });
 }
 

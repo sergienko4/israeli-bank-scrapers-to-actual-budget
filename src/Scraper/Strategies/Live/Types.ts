@@ -15,6 +15,7 @@ import type { ITimeoutWrapper } from '../../../Resilience/TimeoutWrapper.js';
 import type { ITwoFactorPrompter } from '../../../Services/ITwoFactorPrompter.js';
 import type NotificationService from '../../../Services/NotificationService.js';
 import type { IBankConfig, IImporterConfig } from '../../../Types/Index.js';
+import type { IBankTokenStore } from '../../Tokens/BankTokenStore.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
 import type { BrowserRegistry } from './BrowserRegistry.js';
 
@@ -26,6 +27,7 @@ export interface ILiveScrapeDependencies {
   readonly timeoutWrapper: ITimeoutWrapper;
   readonly twoFactorPrompter: ITwoFactorPrompter | null;
   readonly notificationService: NotificationService;
+  readonly bankTokens: IBankTokenStore;
 }
 
 /** Internal opts after companyType is proven present. */

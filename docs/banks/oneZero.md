@@ -53,13 +53,31 @@ This bank **requires** 2FA on every login.
 }
 ```
 
-After the first successful login, capture the value of `otpLongTermToken` from the logs and add it back to `config.json` to skip OTP on future runs.
+Leave `otpLongTermToken` as an empty string. After the first successful login the
+importer captures the bank's long-term token itself and saves it to
+`/app/data/bank-tokens.json`, then replays it on every later run so no SMS is
+needed. There is nothing to copy out of the logs — since scrapers 8.7.2 the
+token is redacted there.
 
 For automated SMS forwarding, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ## Known gotchas
 
-`twoFactorAuth: true` is **always required** on first login. After the first successful run, copy the value of `otpLongTermToken` from the logs and persist it in `config.json` to skip OTP on future runs.
+`twoFactorAuth: true` is **always required** on first login. From the second run
+onwards the stored token is replayed automatically; you only see another SMS if
+the token expires, is rejected, or another importer instance re-mints it.
+
+**Run only one importer per OneZero account.** Each cold (SMS) login mints a new
+long-term token and revokes the previous one, so two instances sharing an account
+cancel each other out and every run falls back to SMS.
+
+Each scrape is allowed exactly one SMS login. The scraper enforces this for the
+login itself, and the importer applies the same rule to a mistyped code: the run
+ends and you start a new scrape rather than being asked again. This keeps an
+unattended schedule from looping on prompts and sending SMS after SMS.
+
+The token file is written to the read-write `/app/data` volume with mode `600`.
+Set `BANK_TOKENS_PATH` to an absolute path to store it elsewhere.
 
 ## See also
 

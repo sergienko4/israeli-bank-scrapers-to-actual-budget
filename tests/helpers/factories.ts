@@ -25,6 +25,7 @@ import type {
   IBankResultsState,
 } from '../../src/Types/Index.js';
 import type { IPipelineConfig } from '../../src/Scrapers/Pipeline/Index.js';
+import type { IBankTokenStore } from '../../src/Scraper/Tokens/BankTokenStore.js';
 import type {
   IImportSummary,
   IBankMetrics,
@@ -221,6 +222,29 @@ export function fakeIAuditEntry(overrides: Partial<IAuditEntry> = {}): IAuditEnt
 }
 
 // ── Phase-3 pipeline factories ──────────────────────────────────────────────
+
+/**
+ * Builds an in-memory bank-token store that never touches the file system.
+ *
+ * Tests that exercise the scrape path need the store only as a collaborator;
+ * writing to the real `/app/data` path would be both unavailable and shared
+ * between tests. Seeded values let a test stand in for a prior warm run.
+ * @param seed - Optional bankId → token pairs the store starts with.
+ * @returns A store backed by a Map, exposing the tokens it holds.
+ */
+export function fakeBankTokenStore(
+  seed: Record<string, string> = {},
+): IBankTokenStore & { readonly tokens: Map<string, string> } {
+  const tokens = new Map<string, string>(Object.entries(seed));
+  return {
+    tokens,
+    read: (bankId: string): string => tokens.get(bankId) ?? '',
+    write: (bankId: string, token: string): Procedure<{ written: boolean }> => {
+      tokens.set(bankId, token);
+      return { success: true, status: 'stored', data: { written: token.length > 0 } };
+    },
+  };
+}
 
 /** Permissive IBankFilter used by default in pipeline test contexts. */
 export const ALLOW_ALL_BANK_FILTER: IBankFilter = Object.freeze({

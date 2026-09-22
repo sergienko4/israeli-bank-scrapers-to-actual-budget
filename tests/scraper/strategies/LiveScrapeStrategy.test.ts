@@ -8,11 +8,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 
 import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeStrategy.js';
+import buildCredentials from '../../../src/Scraper/CredentialsBuilder.js';
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
 import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
-import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
+import { fakeBankConfig, fakeBankTokenStore, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
 
 vi.mock('node:fs');
@@ -70,6 +71,7 @@ function makeStrategy(): LiveScrapeStrategy {
     retryStrategy, noRetryStrategy, timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
+    bankTokens: fakeBankTokenStore(),
   });
 }
 
@@ -172,6 +174,84 @@ describe('LiveScrapeStrategy', () => {
     if (result.success) expect(result.data.attemptCount).toBe(2);
   });
 
+  /**
+   * API-direct banks cap cold SMS logins at one per scrape (provider 8.7.3).
+   * A second scrape would open a fresh budget and mint a replacement token,
+   * so the retry is refused here and the operator is told to start a new run.
+   */
+  describe('INVALID_OTP on API-direct banks', () => {
+    it.each(['oneZero', 'pepper', 'payBox'])(
+      'does not spend a second cold login for %s',
+      async (companyType) => {
+        mockScraper.scrape.mockResolvedValue({
+          success: false, errorType: 'INVALID_OTP', accounts: [],
+        });
+
+        const result = await makeStrategy().scrape({
+          ...makeOpts(), bankId: companyType, companyType: companyType as never,
+        });
+
+        expect(mockScraper.scrape).toHaveBeenCalledTimes(1);
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.attemptCount).toBe(1);
+      },
+    );
+
+    it('tells the operator a new scrape is needed rather than promising a new code', async () => {
+      mockScraper.scrape.mockResolvedValue({
+        success: false, errorType: 'INVALID_OTP', accounts: [],
+      });
+
+      await makeStrategy().scrape({
+        ...makeOpts(), bankId: 'oneZero', companyType: 'oneZero' as never,
+      });
+
+      expect(notificationService.sendMessage).toHaveBeenCalledWith(
+        expect.stringContaining('start a new scrape'),
+      );
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('new scrape'));
+    });
+
+    it('never promises the operator a replacement code it will not request', async () => {
+      mockScraper.scrape.mockResolvedValue({
+        success: false, errorType: 'INVALID_OTP', accounts: [],
+      });
+
+      await makeStrategy().scrape({
+        ...makeOpts(), bankId: 'oneZero', companyType: 'oneZero' as never,
+      });
+
+      const [[sent]] = vi.mocked(notificationService.sendMessage).mock.calls;
+      expect(sent).not.toContain('A new code will be requested');
+    });
+
+    it('carries the refusal reason on the failure the operator is shown', async () => {
+      mockScraper.scrape.mockResolvedValue({
+        success: false, errorType: 'INVALID_OTP', accounts: [],
+      });
+
+      const result = await makeStrategy().scrape({
+        ...makeOpts(), bankId: 'oneZero', companyType: 'oneZero' as never,
+      });
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.raw.errorMessage).toContain('one SMS login per scrape');
+      }
+    });
+
+    it('still retries a browser bank, which has no cold-login budget', async () => {
+      mockScraper.scrape
+        .mockResolvedValueOnce({ success: false, errorType: 'INVALID_OTP', accounts: [] })
+        .mockResolvedValueOnce({ success: true, accounts: [] });
+
+      const result = await makeStrategy().scrape(makeOpts());
+
+      expect(mockScraper.scrape).toHaveBeenCalledTimes(2);
+      if (result.success) expect(result.data.attemptCount).toBe(2);
+    });
+  });
+
   it('clears bank session when clearSession is set', async () => {
     mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
     vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -203,8 +283,7 @@ describe('LiveScrapeStrategy', () => {
     expect(noRetryStrategy.execute).not.toHaveBeenCalled();
   });
 
-  it('attaches OTP retriever even when otpLongTermToken is set (cold-fallback)', async () => {
-    mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
+  it('attaches OTP retriever even when otpLongTermToken is set (cold-fallback)', async () => {    mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
     const createOtpRetriever = vi.fn(() => async () => '123456');
     const twoFactorPrompter: ITwoFactorPrompter = { createOtpRetriever };
     const strategy = new LiveScrapeStrategy({
@@ -212,6 +291,7 @@ describe('LiveScrapeStrategy', () => {
       retryStrategy, noRetryStrategy, timeoutWrapper,
       twoFactorPrompter,
       notificationService: notificationService as never,
+      bankTokens: fakeBankTokenStore(),
     });
     await strategy.scrape(makeOpts({
       twoFactorAuth: true, otpLongTermToken: 'placeholder-not-a-jwt',
@@ -259,5 +339,79 @@ describe('LiveScrapeStrategy', () => {
         expect(mockScraper.scrape).toHaveBeenCalledTimes(3);
       },
     );
+  });
+
+  /**
+   * Backstop for the completion callback. The provider swallows callback
+   * errors and only fires the hook on API-direct banks, so a result that
+   * carries the token while the hook stayed silent must still be persisted —
+   * otherwise the run pays for an SMS it already earned the right to skip.
+   */
+  describe('durable token persistence', () => {
+    /**
+     * Builds a strategy whose token store records what the scrape persisted.
+     * @param bankTokens - Store collaborator under observation.
+     * @returns LiveScrapeStrategy wired to that store.
+     */
+    function strategyWithStore(bankTokens: ReturnType<typeof fakeBankTokenStore>) {
+      return new LiveScrapeStrategy({
+        config: fakeImporterConfig(),
+        retryStrategy, noRetryStrategy, timeoutWrapper,
+        twoFactorPrompter: null,
+        notificationService: notificationService as never,
+        bankTokens,
+      });
+    }
+
+    it('stores the long-term token a successful oneZero result carried', async () => {
+      const bankTokens = fakeBankTokenStore();
+      mockScraper.scrape.mockResolvedValue({
+        success: true, accounts: [], persistentOtpToken: 'ten-year-id-token',
+      });
+
+      await strategyWithStore(bankTokens).scrape({
+        ...makeOpts(), bankId: 'oneZero', companyType: 'oneZero' as never,
+      });
+
+      expect(bankTokens.tokens.get('oneZero')).toBe('ten-year-id-token');
+    });
+
+    it('leaves a stored token untouched when the scrape failed', async () => {
+      const bankTokens = fakeBankTokenStore({ oneZero: 'existing-token' });
+      mockScraper.scrape.mockResolvedValue({
+        success: false, errorType: 'GENERIC', errorMessage: 'nope', accounts: [],
+        persistentOtpToken: 'half-minted-token',
+      });
+
+      await strategyWithStore(bankTokens).scrape({
+        ...makeOpts(), bankId: 'oneZero', companyType: 'oneZero' as never,
+      });
+
+      expect(bankTokens.tokens.get('oneZero')).toBe('existing-token');
+    });
+
+    it('ignores a token reported by a bank that cannot warm-start', async () => {
+      const bankTokens = fakeBankTokenStore();
+      mockScraper.scrape.mockResolvedValue({
+        success: true, accounts: [], persistentOtpToken: 'unexpected-token',
+      });
+
+      await strategyWithStore(bankTokens).scrape(makeOpts());
+
+      expect(bankTokens.tokens.size).toBe(0);
+    });
+
+    it('feeds a stored token back into the credentials on the next run', async () => {
+      const bankTokens = fakeBankTokenStore({ oneZero: 'ten-year-id-token' });
+      mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
+
+      await strategyWithStore(bankTokens).scrape({
+        ...makeOpts({ otpLongTermToken: 'stale-config-seed' }),
+        bankId: 'oneZero', companyType: 'oneZero' as never,
+      });
+
+      const [bankConfig] = vi.mocked(buildCredentials).mock.calls[0] ?? [];
+      expect(bankConfig?.otpLongTermToken).toBe('ten-year-id-token');
+    });
   });
 });
