@@ -134,6 +134,14 @@ function warnNotStored(params: IAuthFlowCaptureParams, detail: string): boolean 
 
 /**
  * Builds the provider callback that persists a completed auth flow's token.
+ *
+ * <p>The last capture to arrive wins, deliberately. A scrape the timeout
+ * abandoned keeps running, so its hook can fire after a later attempt has
+ * already stored a token. Minting revokes the previous token, and upstream
+ * invokes this callback the moment the auth flow completes, so arrival order
+ * tracks mint order: the token that lands last is the one the bank still
+ * honours. Refusing a write from a superseded attempt would therefore keep a
+ * token that attempt had already revoked, and cost the next run an SMS.
  * @param params - Bank identity, store and logger for this capture.
  * @returns Callback the provider invokes once its auth flow completes.
  */

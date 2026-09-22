@@ -183,6 +183,58 @@ describe('captureResultToken', () => {
  * alone would put two real accounts in one slot, where each run replays the
  * other account's token and re-mints — revoking the other on every run.
  */
+/**
+ * Builds an in-memory store that keeps the last token written per key.
+ * @returns A fake store backed by a map.
+ */
+function makeStatefulStore(): IBankTokenStore {
+  const held = new Map<string, string>();
+  return {
+    read: (storeKey: string): string => held.get(storeKey) ?? '',
+    write: (storeKey: string, token: string) => {
+      held.set(storeKey, token);
+      return succeed({ written: true });
+    },
+  };
+}
+
+describe('a capture from a superseded attempt', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Attaches a capture hook for one attempt against a shared store.
+   * @param store - Store every attempt writes through.
+   * @returns The provider options carrying that attempt's hook.
+   */
+  function attemptOptions(store: IBankTokenStore): IAuthFlowHookTarget {
+    const target: IAuthFlowHookTarget = {};
+    attachAuthFlowCapture(target, {
+      bankId: 'oneZero', storeKey: 'oneZero', companyType: 'oneZero', store, logger,
+    });
+    return target;
+  }
+
+  it('keeps the token that arrived last, because it was minted last', async () => {
+    const store = makeStatefulStore();
+    const abandoned = attemptOptions(store);
+    const current = attemptOptions(store);
+    await current.onAuthFlowComplete?.({ longTermToken: 'minted-second', bearer: '' });
+    await abandoned.onAuthFlowComplete?.({ longTermToken: 'minted-third', bearer: '' });
+    expect(store.read('oneZero')).toBe('minted-third');
+  });
+
+  it('never drops a capture for arriving after another attempt wrote', async () => {
+    const store = makeStatefulStore();
+    const abandoned = attemptOptions(store);
+    const current = attemptOptions(store);
+    await current.onAuthFlowComplete?.({ longTermToken: 'minted-second', bearer: '' });
+    await abandoned.onAuthFlowComplete?.({ longTermToken: 'minted-third', bearer: '' });
+    expect(store.read('oneZero')).not.toBe('minted-second');
+  });
+});
+
 describe('buildTokenStoreKey', () => {
   it('separates two config entries that resolve to the same bank id', () => {
     const first = buildTokenStoreKey('onezero', 'oneZero');
