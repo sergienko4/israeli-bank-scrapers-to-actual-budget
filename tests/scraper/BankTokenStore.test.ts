@@ -283,4 +283,54 @@ describe('BankTokenStore', () => {
       expect(quarantineFilesInStoreDir()).toEqual([]);
     });
   });
+
+  describe('read hardening', () => {
+    it('re-tightens a world-readable store that a warm run only reads', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      chmodSync(storePath, 0o666);
+      makeStore().read('oneZero');
+      expect(statSync(storePath).mode % 0o1000).toBe(0o600);
+    });
+
+    it('still returns the token it hardened', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      chmodSync(storePath, 0o666);
+      expect(makeStore().read('oneZero')).toBe('onezero-id-token');
+    });
+
+    it('does not create a store file just because one was read', () => {
+      makeStore().read('oneZero');
+      expect(existsSync(storePath)).toBe(false);
+    });
+  });
+
+  describe('write refuses to destroy what it cannot quarantine', () => {
+    it('fails the write when a damaged store cannot be set aside', () => {
+      mkdirSync(storePath);
+      writeFileSync(join(storePath, 'occupant'), 'blocks the rename');
+      const result = makeStore().write('oneZero', 'onezero-id-token');
+      const reason = result.success ? '' : result.message;
+      expect(reason).toContain('could not be set aside');
+    });
+
+    it('leaves the damaged store in place when it refuses the write', () => {
+      mkdirSync(storePath);
+      writeFileSync(join(storePath, 'occupant'), 'blocks the rename');
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(existsSync(join(storePath, 'occupant'))).toBe(true);
+    });
+
+    it('quarantines a store whose banks key is an array', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: [] }));
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(1);
+    });
+
+    it('still stores the fresh token after quarantining an array store', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: [] }));
+      const store = makeStore();
+      store.write('oneZero', 'onezero-id-token');
+      expect(store.read('oneZero')).toBe('onezero-id-token');
+    });
+  });
 });

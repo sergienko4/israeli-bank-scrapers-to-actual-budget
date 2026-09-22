@@ -30,6 +30,7 @@ import {
 } from 'node:fs';
 import { dirname } from 'node:path';
 
+import TokenStoreError from '../../Errors/TokenStoreError.js';
 import type { Procedure } from '../../Types/Index.js';
 import { fail, succeed } from '../../Types/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
@@ -148,11 +149,18 @@ function collectRecords(banks: Record<string, unknown>): Map<string, IBankTokenR
  * <p>Failure is not fatal. Some volumes (notably Windows bind mounts) ignore
  * chmod outright, and refusing to continue there would cost the run its
  * token to fix an exposure that refusing does not actually reduce.
+ *
+ * <p>Only a regular file is touched. Applying an owner-only mode to a
+ * directory would strip its execute bit and make it untraversable, breaking
+ * every later read of a deployment that mounted something unexpected at the
+ * store path.
  * @param filePath - File whose permissions must be owner-only.
  * @returns True when the file is now owner-only.
  */
 function enforceOwnerOnly(filePath: string): boolean {
   try {
+    const stats = statSync(filePath);
+    if (!stats.isFile()) return false;
     chmodSync(filePath, 0o600);
     return true;
   } catch {
@@ -201,7 +209,8 @@ function quarantineStore(filePath: string): boolean {
     enforceOwnerOnly(target);
     return true;
   } catch {
-    // Losing the quarantine copy must not stop the fresh token being stored.
+    // The caller decides what a lost quarantine copy costs; here it is only
+    // reported, because refusing to continue is not always the right answer.
     return false;
   }
 }
@@ -218,13 +227,28 @@ function damagedRead(): IStoreRead {
 }
 
 /**
+ * Reports whether a parsed value can hold bank entries.
+ *
+ * <p>Arrays are rejected explicitly. `typeof [] === 'object'` and `[] !== null`,
+ * so an array passed the earlier shape check and an empty one then counted as
+ * an intact store with no banks — which meant `{"banks": []}` was overwritten
+ * without the quarantine the write path promises.
+ * @param banks - Candidate value found under the `banks` key.
+ * @returns True when the value can be read as a map of bank entries.
+ */
+function isBankContainer(banks: unknown): boolean {
+  if (typeof banks !== 'object' || banks === null) return false;
+  return !Array.isArray(banks);
+}
+
+/**
  * Narrows parsed JSON to the bank map, reporting whether all of it was read.
  *
  * <p>A file can parse as JSON and still be damaged — `{}`, `{"banks": null}`,
- * or an entry whose token field was mistyped. Those are reported as not
- * intact rather than as an empty store, because the write path uses that
- * distinction to decide whether overwriting would destroy something an
- * operator could still salvage.
+ * `{"banks": []}`, or an entry whose token field was mistyped. Those are
+ * reported as not intact rather than as an empty store, because the write
+ * path uses that distinction to decide whether overwriting would destroy
+ * something an operator could still salvage.
  * @param parsed - Value produced by `JSON.parse` on the store file.
  * @returns The records understood, and whether anything was lost reading them.
  */
@@ -232,7 +256,7 @@ function readBankMap(parsed: unknown): IStoreRead {
   if (typeof parsed !== 'object' || parsed === null) return damagedRead();
   const container = parsed as Record<string, unknown>;
   const banks = container.banks;
-  if (typeof banks !== 'object' || banks === null) return damagedRead();
+  if (!isBankContainer(banks)) return damagedRead();
   const entries = banks as Record<string, unknown>;
   const records = collectRecords(entries);
   const present = Object.keys(entries).length;
@@ -343,10 +367,17 @@ export default class BankTokenStore implements IBankTokenStore {
    * <p>Reports whether the whole file was understood, because "no tokens yet"
    * and "this file is damaged" call for different handling on the write path:
    * the first is routine, the second must not be overwritten unrecorded.
+   *
+   * <p>Hardens the file before reading it. A warm run can touch the store on
+   * this path alone — `withWarmToken` replays the stored token and a scrape
+   * that mints nothing new never reaches `write()` — so leaving the mode to
+   * the write path meant a file restored or hand-edited at 0644 stayed
+   * world-readable for as long as the token kept working.
    * @returns The stored records and whether the file was intact.
    */
   private readStore(): IStoreRead {
     if (!existsSync(this.filePath)) return { records: new Map(), isIntact: true };
+    enforceOwnerOnly(this.filePath);
     try {
       const raw = readFileSync(this.filePath, 'utf8');
       const parsed = JSON.parse(raw) as unknown;
@@ -363,14 +394,33 @@ export default class BankTokenStore implements IBankTokenStore {
    * @param bankId - Bank identifier used as the store key.
    * @param token - Non-blank token to record for that bank.
    * @returns The complete file contents to persist.
+   * @throws TokenStoreError when a damaged store could not be preserved.
    */
   private merge(bankId: string, token: string): IBankTokenFile {
     const store = this.readStore();
-    if (!store.isIntact) quarantineStore(this.filePath);
+    if (!store.isIntact) this.setAsideDamaged();
     const now = new Date();
     const capturedAt = now.toISOString();
     store.records.set(bankId, { token, capturedAt });
     return toFile(store.records);
+  }
+
+  /**
+   * Moves a damaged store aside, refusing the write when that is impossible.
+   *
+   * <p>Proceeding anyway would overwrite the only recoverable copy of a file
+   * the bank will not re-issue without another SMS. Refusing costs this run
+   * its freshly captured token and the next run one SMS, which is recoverable;
+   * destroying a salvageable credential is not.
+   * @returns True once the damaged store has been preserved.
+   * @throws TokenStoreError when the damaged store could not be preserved.
+   */
+  private setAsideDamaged(): boolean {
+    const isKept = quarantineStore(this.filePath);
+    if (isKept) return true;
+    throw new TokenStoreError(
+      `the damaged store at ${this.filePath} could not be set aside, so it was left untouched`,
+    );
   }
 
   /**

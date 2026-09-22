@@ -6,7 +6,8 @@ import {
   TwoFactorAuthError,
   ShutdownError,
   BankScrapingError,
-  ConfigurationError
+  ConfigurationError,
+  TokenStoreError
 } from '../../src/Errors/ErrorTypes.js';
 
 describe('ErrorTypes', () => {
@@ -79,6 +80,15 @@ describe('ErrorTypes', () => {
       const error = new ConfigurationError('Missing password');
       expect(error.name).toBe('ConfigurationError');
       expect(error.message).toBe('Missing password');
+      expect(error).toBeInstanceOf(Error);
+    });
+  });
+
+  describe('TokenStoreError', () => {
+    it('has correct name and message', () => {
+      const error = new TokenStoreError('the damaged store could not be set aside');
+      expect(error.name).toBe('TokenStoreError');
+      expect(error.message).toBe('the damaged store could not be set aside');
       expect(error).toBeInstanceOf(Error);
     });
   });

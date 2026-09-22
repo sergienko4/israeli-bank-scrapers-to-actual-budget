@@ -27,6 +27,9 @@ const ERROR_FORMATS: { name: string; entry: IErrorFormatEntry }[] = [
   { name: 'ShutdownError',  entry: { icon: '🛑', label: 'Operation Cancelled' } },
   { name: 'BankScrapingError', entry: { icon: '❌', label: 'Bank Scraping Error' } },
   { name: 'ConfigurationError', entry: { icon: '⚙️ ', label: 'Configuration Error' } },
+  { name: 'TokenStoreError',
+    entry: { icon: '🗝️ ', label: 'Token Store Error',
+      suffix: '. The next run falls back to a one-time SMS login.' } },
 ];
 
 // Keyword-based fallback categorization (OCP map)
