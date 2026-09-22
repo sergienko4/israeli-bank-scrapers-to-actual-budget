@@ -270,12 +270,20 @@ describe('long-term token round trip', () => {
     process.env.BANK_TOKENS_PATH = join(tokensDir, 'blocker', 'bank-tokens.json');
     writeFileSync(join(tokensDir, 'blocker'), 'a file where a directory must be');
     mockScraper.scrape.mockResolvedValue({
-      success: true, accounts: [], persistentOtpToken: ID_TOKEN,
+      success: true,
+      accounts: [{
+        accountNumber: '1234', balance: 42,
+        txns: [{ identifier: 'txn-1', chargedAmount: -18, description: 'Coffee' }],
+      }],
+      persistentOtpToken: ID_TOKEN,
     });
 
     const result = await makeStrategy().scrape(oneZeroOpts());
 
     expect(result.success).toBe(true);
+    const accounts = result.success ? result.data.raw.accounts : [];
+    expect(accounts?.[0]?.accountNumber).toBe('1234');
+    expect(accounts?.[0]?.txns).toHaveLength(1);
   });
 
   it('tells the operator why a token could not be stored', async () => {

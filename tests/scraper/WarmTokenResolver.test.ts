@@ -51,9 +51,12 @@ describe('withWarmToken', () => {
   it('never consults the store for a bank that cannot warm-start', () => {
     const config = fakeBankConfig({ id: 'hapoalim' });
     const store = fakeBankTokenStore({ hapoalim: STORED });
+    const reads: string[] = [];
+    const counted = { ...store, read: (key: string): string => { reads.push(key); return store.read(key); } };
 
-    const resolved = withWarmToken(config, { store, bankId: 'hapoalim', storeKey: 'hapoalim', companyType: 'hapoalim', logger });
+    const resolved = withWarmToken(config, { store: counted, bankId: 'hapoalim', storeKey: 'hapoalim', companyType: 'hapoalim', logger });
 
+    expect(reads).toEqual([]);
     expect(resolved.otpLongTermToken).toBeUndefined();
   });
 
@@ -101,6 +104,10 @@ describe('withWarmToken', () => {
     const store = fakeBankTokenStore({ oneZero: STORED });
 
     withWarmToken(config, { store, bankId: 'oneZero', storeKey: 'oneZero', companyType: 'oneZero', logger });
+    withWarmToken(
+      config,
+      { store: fakeBankTokenStore(), bankId: 'oneZero', storeKey: 'oneZero', companyType: 'oneZero', logger },
+    );
 
     const calls = [
       ...vi.mocked(logger.info).mock.calls,
