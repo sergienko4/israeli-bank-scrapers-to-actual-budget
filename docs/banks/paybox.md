@@ -7,9 +7,9 @@
 | 2FA / OTP | **required** |
 
 PayBox is an API-direct bank: the importer talks to the bank's mobile-app
-API instead of driving a browser. Every login requires an SMS OTP, but the
-bank issues a long-term token after the first successful run that lets
-you skip OTP on subsequent runs.
+API instead of driving a browser. The first login requires an SMS OTP; the
+bank then issues a long-term token that the importer stores and replays, so
+later runs need no OTP.
 
 ## Login fields
 
@@ -40,7 +40,8 @@ you skip OTP on subsequent runs.
 
 ## 2FA / OTP
 
-This bank **requires** 2FA on every login.
+This bank **requires** 2FA for the first (cold) login. Later runs replay the
+stored long-term token and need no SMS, until the bank expires or revokes it.
 
 Leave `otpLongTermToken` as an empty string. After the first successful login the
 importer captures the bank's long-term token itself and saves it to

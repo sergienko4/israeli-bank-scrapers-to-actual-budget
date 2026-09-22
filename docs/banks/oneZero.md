@@ -36,7 +36,8 @@
 
 ## 2FA / OTP
 
-This bank **requires** 2FA on every login.
+This bank **requires** 2FA for the first (cold) login. Later runs replay the
+stored long-term token and need no SMS, until the bank expires or revokes it.
 
 ```json
 {
