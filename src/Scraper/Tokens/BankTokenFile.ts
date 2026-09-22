@@ -131,17 +131,23 @@ function isBankContainer(banks: unknown): boolean {
  * Reports whether this build can read the whole of a stamped file.
  *
  * <p>An absent stamp is the pre-versioning shape and reads as version one.
- * Anything this build does not write is refused rather than read partially:
- * a newer build may carry fields this one would drop, and every read is a
- * step towards a rewrite that would drop them permanently. Refusing sends
- * the file to quarantine instead, where an operator still has it.
+ * Every other value must match a version this build knows how to read in
+ * full — exactly, not "at most". A lower or fractional number is not an
+ * older format this build can still read; it is a format nothing ever
+ * wrote, so reading it would be guesswork. A higher one may carry fields
+ * this build would drop, and every read is a step towards a rewrite that
+ * would drop them permanently.
+ *
+ * <p>Refusing sends the file to quarantine, where an operator still has it.
+ * When a second version exists this becomes a set of known versions with a
+ * migration for each, which is the point at which reading an older shape
+ * stops being guesswork.
  * @param version - Value found under the `version` key, if any.
  * @returns True when this build can read the file in full.
  */
 function isReadableVersion(version: unknown): boolean {
   if (version === undefined) return true;
-  if (typeof version !== 'number') return false;
-  return version <= STORE_VERSION;
+  return version === STORE_VERSION;
 }
 
 /**

@@ -52,6 +52,18 @@ describe('BankTokenFile', () => {
     it('reports a non-numeric version as damage', () => {
       expect(readBankMap({ version: 'one', banks: {} }).isIntact).toBe(false);
     });
+
+    it('reports a version below the first one as damage', () => {
+      expect(readBankMap({ version: 0, banks: {} }).isIntact).toBe(false);
+    });
+
+    it('reports a negative version as damage', () => {
+      expect(readBankMap({ version: -1, banks: {} }).isIntact).toBe(false);
+    });
+
+    it('reports a fractional version as damage, not as the one below it', () => {
+      expect(readBankMap({ version: 0.5, banks: {} }).isIntact).toBe(false);
+    });
   });
 
   describe('readBankMap reading entries', () => {
