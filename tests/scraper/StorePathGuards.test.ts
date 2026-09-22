@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  enforceOwnerOnly, isMovableStore, isOccupied, isRealFile,
+  enforceOwnerOnly, isMovableStore, isOccupied, isRealFile, readWithoutFollowing,
 } from '../../src/Scraper/Tokens/StorePathGuards.js';
 
 let dir = '';
@@ -101,5 +101,34 @@ describe('isMovableStore', () => {
 
   it('refuses a path holding nothing to move', () => {
     expect(isMovableStore(filePath)).toBe(false);
+  });
+});
+
+describe('readWithoutFollowing', () => {
+  it('returns the contents of a regular file', () => {
+    writeFileSync(filePath, '{"banks":{}}');
+    expect(readWithoutFollowing(filePath)).toBe('{"banks":{}}');
+  });
+
+  it('hardens the file it read to owner-only', () => {
+    writeFileSync(filePath, '{}', { mode: 0o644 });
+    readWithoutFollowing(filePath);
+    expect(statSync(filePath).mode & 0o777).toBe(0o600);
+  });
+
+  it('refuses a symlink rather than reading what it points at', () => {
+    const target = join(dir, 'target.json');
+    writeFileSync(target, '{"banks":{}}');
+    symlinkSync(target, filePath);
+    expect(() => readWithoutFollowing(filePath)).toThrow();
+  });
+
+  it('refuses a directory', () => {
+    mkdirSync(filePath);
+    expect(() => readWithoutFollowing(filePath)).toThrow();
+  });
+
+  it('refuses a path holding nothing', () => {
+    expect(() => readWithoutFollowing(filePath)).toThrow();
   });
 });

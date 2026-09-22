@@ -5,9 +5,17 @@
  * actually at this path, and may this module touch it? All of them use
  * `lstat`, never `stat`, so a symlink is judged as a symlink rather than as
  * whatever it points at.
+ *
+ * <p>Classifying a path and then acting on it are two lookups, so the read
+ * here does both through one descriptor opened with `O_NOFOLLOW`, leaving
+ * nothing to swap in between them.
  */
 
-import { chmodSync, lstatSync } from 'node:fs';
+import {
+  chmodSync, closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readFileSync,
+} from 'node:fs';
+
+import TokenStoreError from '../../Errors/TokenStoreError.js';
 
 /**
  * Reports whether anything at all occupies the store path.
@@ -98,5 +106,66 @@ export function isMovableStore(filePath: string): boolean {
     return stats.isFile() || stats.isSymbolicLink();
   } catch {
     return false;
+  }
+}
+
+/**
+ * Hardens an already-open file to owner-only, reporting rather than failing.
+ *
+ * <p>Works on the descriptor, so it cannot be redirected onto another file
+ * between the check and the change. Failure is not fatal: some volumes
+ * (notably Windows bind mounts) ignore chmod outright, and refusing to
+ * continue there would cost the run its token to fix an exposure that
+ * refusing does not reduce.
+ * @param descriptor - Open descriptor for the file to restrict.
+ * @returns True when the file is now owner-only.
+ */
+function hardenOpenFile(descriptor: number): boolean {
+  try {
+    fchmodSync(descriptor, 0o600);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reads an open descriptor once it is known to be a regular file.
+ * @param descriptor - Open descriptor to classify and read.
+ * @returns The file's contents as UTF-8 text.
+ * @throws TokenStoreError when the descriptor is not a regular file.
+ */
+function readRegularFile(descriptor: number): string {
+  const stats = fstatSync(descriptor);
+  if (!stats.isFile()) {
+    throw new TokenStoreError('the store path is not a regular file');
+  }
+  hardenOpenFile(descriptor);
+  return readFileSync(descriptor, 'utf8');
+}
+
+/**
+ * Reads a file, refusing outright if a symlink occupies the final component.
+ *
+ * <p>An `lstat` classification and a later `readFileSync` are two separate
+ * path lookups, so anything able to replace the final component in between
+ * can swap a symlink in after the check and have the read follow it. That
+ * window is narrow and needs write access to the store's directory, but the
+ * pay-off is a token that bypasses 2FA for years, so it is closed rather
+ * than argued about.
+ *
+ * <p>`O_NOFOLLOW` makes the kernel refuse the open if the final component is
+ * a link, and everything after it works on the descriptor the kernel handed
+ * back — the same file, whatever happens to the path afterwards.
+ * @param filePath - Store path to read without following a final symlink.
+ * @returns The file's contents as UTF-8 text.
+ * @throws Error when the path is a symlink, absent or not a regular file.
+ */
+export function readWithoutFollowing(filePath: string): string {
+  const descriptor = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    return readRegularFile(descriptor);
+  } finally {
+    closeSync(descriptor);
   }
 }

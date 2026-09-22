@@ -30,7 +30,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  mkdirSync, readFileSync, renameSync, rmSync, writeFileSync,
+  mkdirSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -44,7 +44,7 @@ import {
 } from './BankTokenFile.js';
 import resolveBankTokensPath from './BankTokenPath.js';
 import {
-  enforceOwnerOnly, isMovableStore, isOccupied, isRealFile,
+  enforceOwnerOnly, isMovableStore, isOccupied, readWithoutFollowing,
 } from './StorePathGuards.js';
 
 /** Outcome of a write: whether a token was actually persisted. */
@@ -246,19 +246,19 @@ export default class BankTokenStore implements IBankTokenStore {
    * the write path meant a file restored or hand-edited at 0644 stayed
    * world-readable for as long as the token kept working.
    *
-   * <p>Anything that is not a regular file is reported as damage without
-   * being opened. Following a symlink here would serve an unrelated file's
-   * JSON as this importer's bank tokens, and a link pointing at nothing is
-   * damage rather than an empty store: it is evidence the write path must
-   * set aside before it can claim the path.
+   * <p>Anything that is not a regular file is reported as damage rather than
+   * read. Following a symlink here would serve an unrelated file's JSON as
+   * this importer's bank tokens, and a link pointing at nothing is damage
+   * rather than an empty store: it is evidence the write path must set aside
+   * before it can claim the path. Both the classification and the read
+   * happen through one `O_NOFOLLOW` descriptor, so a link cannot be swapped
+   * in between them.
    * @returns The stored records and whether the file was intact.
    */
   private readStore(): IStoreRead {
     if (!isOccupied(this.filePath)) return { records: new Map(), isIntact: true };
-    if (!isRealFile(this.filePath)) return damagedRead();
-    enforceOwnerOnly(this.filePath);
     try {
-      const raw = readFileSync(this.filePath, 'utf8');
+      const raw = readWithoutFollowing(this.filePath);
       const parsed = JSON.parse(raw) as unknown;
       return readBankMap(parsed);
     } catch {
