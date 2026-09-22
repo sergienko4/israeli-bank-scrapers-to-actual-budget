@@ -376,7 +376,7 @@ describe('LiveScrapeStrategy', () => {
       expect(bankTokens.tokens.get('oneZero')).toBe('ten-year-id-token');
     });
 
-    it('leaves a stored token untouched when the scrape failed', async () => {
+    it('stores a token a failed scrape had already minted, replacing the revoked one', async () => {
       const bankTokens = fakeBankTokenStore({ oneZero: 'existing-token' });
       mockScraper.scrape.mockResolvedValue({
         success: false, errorType: 'GENERIC', errorMessage: 'nope', accounts: [],
@@ -387,7 +387,7 @@ describe('LiveScrapeStrategy', () => {
         ...makeOpts(), bankId: 'oneZero', companyType: 'oneZero' as never,
       });
 
-      expect(bankTokens.tokens.get('oneZero')).toBe('existing-token');
+      expect(bankTokens.tokens.get('oneZero')).toBe('half-minted-token');
     });
 
     it('ignores a token reported by a bank that cannot warm-start', async () => {

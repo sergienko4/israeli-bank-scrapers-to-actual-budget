@@ -100,7 +100,7 @@ describe('attachAuthFlowCapture', () => {
     expect(store.calls).toEqual([]);
   });
 
-  it('warns without failing the scrape when the store cannot be written', () => {
+  it('warns without failing the scrape when the store cannot be written', async () => {
     const store: IBankTokenStore = {
       read: (): string => '',
       write: () => {
@@ -109,7 +109,8 @@ describe('attachAuthFlowCapture', () => {
     };
     const target: IAuthFlowHookTarget = {};
     attachAuthFlowCapture(target, { bankId: 'oneZero', storeKey: 'oneZero', companyType: 'oneZero', store, logger });
-    expect(() => target.onAuthFlowComplete?.({ longTermToken: ID_TOKEN, bearer: 'b' })).not.toThrow();
+    await expect(target.onAuthFlowComplete?.({ longTermToken: ID_TOKEN, bearer: 'b' }))
+      .resolves.toBeUndefined();
     expect(vi.mocked(logger.warn)).toHaveBeenCalled();
   });
 
@@ -139,7 +140,7 @@ describe('captureResultToken', () => {
     expect(store.calls).toEqual([{ bankId: 'oneZero', token: ID_TOKEN }]);
   });
 
-  it('still delegates to the store when unchanged, so permissions are re-asserted', () => {
+  it('delegates an unchanged token to the store, which owns deduplication', () => {
     const store = makeStore();
     const stored: IBankTokenStore = { ...store, read: (): string => ID_TOKEN };
     captureResultToken(
@@ -158,13 +159,13 @@ describe('captureResultToken', () => {
     expect(store.calls).toEqual([]);
   });
 
-  it('skips a write for a failed scrape', () => {
+  it('persists a token a failed scrape had already minted', () => {
     const store = makeStore();
     captureResultToken(
       { success: false, accounts: [], errorMessage: 'nope', persistentOtpToken: ID_TOKEN },
       { bankId: 'oneZero', storeKey: 'oneZero', companyType: 'oneZero', store, logger }
     );
-    expect(store.calls).toEqual([]);
+    expect(store.calls).toEqual([{ bankId: 'oneZero', token: ID_TOKEN }]);
   });
 
   it('skips a write for a browser bank that cannot warm-start', () => {

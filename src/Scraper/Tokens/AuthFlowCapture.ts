@@ -142,6 +142,11 @@ function warnNotStored(params: IAuthFlowCaptureParams, detail: string): boolean 
  * tracks mint order: the token that lands last is the one the bank still
  * honours. Refusing a write from a superseded attempt would therefore keep a
  * token that attempt had already revoked, and cost the next run an SMS.
+ *
+ * <p>The ordering holds only while the process is alive. A hook that has not
+ * fired by the time the run ends is lost, and its token with it — the cost is
+ * one SMS on the next run, which is the same price as never having captured
+ * it, so nothing is made worse by letting the process exit.
  * @param params - Bank identity, store and logger for this capture.
  * @returns Callback the provider invokes once its auth flow completes.
  */
@@ -177,10 +182,16 @@ export function attachAuthFlowCapture(
 /**
  * Persists the durable token a successful scrape result carried.
  *
- * <p>Acts as the backstop for the callback. Deduplication is deliberately
- * left to the store rather than short-circuited here: skipping the call when
- * the value is unchanged also skipped the only code that re-asserts
- * owner-only permissions on the store file.
+ * <p>Acts as the backstop for the callback, and asks only whether a token is
+ * present — not whether the scrape as a whole succeeded. A token that exists
+ * has already been minted, which revoked the one before it, so discarding it
+ * because the run failed later would leave the store holding a dead token
+ * and cost the next run an SMS. The provider does not currently attach a
+ * token to a failure result, so this is belt-and-braces rather than a path
+ * in use; it is written this way so the behaviour does not depend on that.
+ *
+ * <p>Deduplication is left to the store rather than short-circuited here,
+ * which keeps the "have I seen this token" rule in one place.
  * @param result - Provider scrape result to inspect.
  * @param params - Bank identity, store and logger for this capture.
  * @returns True when a new token was persisted.
@@ -188,7 +199,6 @@ export function attachAuthFlowCapture(
 export function captureResultToken(
   result: IScraperScrapingResult, params: IAuthFlowCaptureParams,
 ): boolean {
-  if (!result.success) return false;
   if (!isApiDirectBank(params.companyType)) return false;
   const token = result.persistentOtpToken ?? '';
   if (token.length === 0) return false;
