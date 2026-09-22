@@ -1,6 +1,6 @@
 import {
-  chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync,
-  writeFileSync,
+  chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync,
+  statSync, symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -360,6 +360,47 @@ describe('BankTokenStore', () => {
 
     it('still stores the fresh token after quarantining an array store', () => {
       writeFileSync(storePath, JSON.stringify({ banks: [] }));
+      const store = makeStore();
+      store.write('oneZero', 'onezero-id-token');
+      expect(store.read('oneZero')).toBe('onezero-id-token');
+    });
+  });
+
+  describe('a symlink at the store path is never followed', () => {
+    const victimContents = JSON.stringify({ banks: { oneZero: { token: 'someone-elses-token' } } });
+    let victim = '';
+
+    beforeEach(() => {
+      victim = join(dir, 'victim.json');
+      writeFileSync(victim, victimContents, { mode: 0o644 });
+      symlinkSync(victim, storePath);
+    });
+
+    it('does not change the permissions of the file the link points at', () => {
+      makeStore().read('oneZero');
+      expect(statSync(victim).mode % 0o1000).toBe(0o644);
+    });
+
+    it('does not serve the linked file as a stored token', () => {
+      expect(makeStore().read('oneZero')).toBe('');
+    });
+
+    it('moves the link aside rather than writing through it', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(1);
+    });
+
+    it('leaves the linked file untouched when it replaces the store', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(readFileSync(victim, 'utf8')).toBe(victimContents);
+    });
+
+    it('leaves a real file, not another link, in the store path', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(lstatSync(storePath).isSymbolicLink()).toBe(false);
+    });
+
+    it('stores the fresh token in the real file it wrote', () => {
       const store = makeStore();
       store.write('oneZero', 'onezero-id-token');
       expect(store.read('oneZero')).toBe('onezero-id-token');

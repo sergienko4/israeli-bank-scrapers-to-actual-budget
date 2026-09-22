@@ -29,7 +29,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
+  chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -67,6 +67,27 @@ export interface IBankTokenStore {
 }
 
 /**
+ * Reports whether the path is a real file this module may open or chmod.
+ *
+ * <p>Uses `lstat`, so a symlink is judged as a symlink rather than as
+ * whatever it points at. `statSync` follows the link and `chmodSync` follows
+ * it too, so a link dropped at the store path would have had an unrelated
+ * file's mode rewritten to 0600 and its contents read as bank tokens. The
+ * store only ever creates real files, so a link here is either a mistake or
+ * an attempt to aim this module at someone else's file.
+ * @param filePath - Path to classify without following a final symlink.
+ * @returns True when the path is a regular file.
+ */
+function isRealFile(filePath: string): boolean {
+  try {
+    const stats = lstatSync(filePath);
+    return stats.isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Restricts a file holding a token to its owner.
  *
  * <p>Applied to every path this module leaves on disk, not only the ones it
@@ -79,16 +100,15 @@ export interface IBankTokenStore {
  * token to fix an exposure that refusing does not actually reduce.
  *
  * <p>Only a regular file is touched. Applying an owner-only mode to a
- * directory would strip its execute bit and make it untraversable, breaking
- * every later read of a deployment that mounted something unexpected at the
- * store path.
+ * directory would strip its execute bit and make it untraversable, and
+ * applying it through a symlink would silently re-permission the link's
+ * target — a file this module has no business touching at all.
  * @param filePath - File whose permissions must be owner-only.
  * @returns True when the file is now owner-only.
  */
 function enforceOwnerOnly(filePath: string): boolean {
+  if (!isRealFile(filePath)) return false;
   try {
-    const stats = statSync(filePath);
-    if (!stats.isFile()) return false;
     chmodSync(filePath, 0o600);
     return true;
   } catch {
@@ -111,6 +131,29 @@ function quarantineName(filePath: string): string {
 }
 
 /**
+ * Reports whether the path is something a quarantine rename can move.
+ *
+ * <p>A regular file is the ordinary case. A symlink is moved too, because
+ * leaving it in place would mean writing the next store through it: the
+ * rename relocates the link itself and never touches what it points at, so
+ * the operator keeps the evidence and the target keeps its contents.
+ *
+ * <p>Anything else — a directory, a mount point, a socket — is refused. That
+ * means the deployment put something unexpected at the store path, and
+ * silently relocating it would do more damage than refusing the write.
+ * @param filePath - Store path being considered for quarantine.
+ * @returns True when the path may be renamed aside.
+ */
+function isMovableStore(filePath: string): boolean {
+  try {
+    const stats = lstatSync(filePath);
+    return stats.isFile() || stats.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Moves a damaged store aside before it is overwritten.
  *
  * <p>The file holds credentials valid for years that the bank re-issues only
@@ -121,18 +164,14 @@ function quarantineName(filePath: string): string {
  * <p>The copy is re-hardened after the rename because a rename carries the
  * original file's permissions with it: quarantining a world-readable store
  * would otherwise leave the same live credential exposed under a new name.
- *
- * <p>Only a regular file is moved. A directory at the store path means the
- * deployment mounted something unexpected there, and silently relocating a
- * mount point would do more damage than refusing the write.
+ * A quarantined symlink is left alone by that step, which is the point.
  * @param filePath - Store path whose contents could not be understood.
  * @returns True when a quarantine copy was kept.
  */
 function quarantineStore(filePath: string): boolean {
+  if (!isMovableStore(filePath)) return false;
   const target = quarantineName(filePath);
   try {
-    const stats = statSync(filePath);
-    if (!stats.isFile()) return false;
     renameSync(filePath, target);
     enforceOwnerOnly(target);
     return true;
@@ -266,10 +305,15 @@ export default class BankTokenStore implements IBankTokenStore {
    * that mints nothing new never reaches `write()` — so leaving the mode to
    * the write path meant a file restored or hand-edited at 0644 stayed
    * world-readable for as long as the token kept working.
+   *
+   * <p>Anything that is not a regular file is reported as damage without
+   * being opened. Following a symlink here would serve an unrelated file's
+   * JSON as this importer's bank tokens.
    * @returns The stored records and whether the file was intact.
    */
   private readStore(): IStoreRead {
     if (!existsSync(this.filePath)) return { records: new Map(), isIntact: true };
+    if (!isRealFile(this.filePath)) return damagedRead();
     enforceOwnerOnly(this.filePath);
     try {
       const raw = readFileSync(this.filePath, 'utf8');

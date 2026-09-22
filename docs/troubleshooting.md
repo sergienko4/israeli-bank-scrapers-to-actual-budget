@@ -50,6 +50,14 @@ If `bank-tokens.json` is ever damaged, the importer moves it aside as
 `bank-tokens.json.<timestamp>.corrupt` rather than overwriting it, and signs in
 by SMS to mint a replacement. The quarantined copy is safe to delete.
 
+If that move cannot be completed, the importer refuses the write and leaves the
+damaged file exactly where it is, rather than destroying a copy an operator
+could still salvage. The scrape still succeeds; the next run pays for one SMS.
+
+`bank-tokens.json` must be a real file. A symlink at that path is moved aside
+as damage instead of being followed, because following it would read an
+unrelated file as bank tokens and tighten that file's permissions.
+
 For other banks, 2FA cannot be persisted and an OTP is expected on every run.
 
 Better still: [auto-forward OTP codes from your phone](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md) so no manual input is needed.
