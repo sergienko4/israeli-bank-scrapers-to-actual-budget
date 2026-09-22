@@ -6,16 +6,32 @@
  * `lstat`, never `stat`, so a symlink is judged as a symlink rather than as
  * whatever it points at.
  *
- * <p>Classifying a path and then acting on it are two lookups, so the read
- * here does both through one descriptor opened with `O_NOFOLLOW`, leaving
- * nothing to swap in between them.
+ * <p>Classifying a path and then acting on it are two lookups, so anything
+ * touching a file that already exists goes through `useStoreFile`: one
+ * descriptor opened with `O_NOFOLLOW`, with nothing left to swap in between.
  */
 
 import {
-  chmodSync, closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readFileSync,
+  closeSync, constants, fchmodSync, fstatSync, lstatSync, openSync, readFileSync,
 } from 'node:fs';
 
 import TokenStoreError from '../../Errors/TokenStoreError.js';
+
+/**
+ * Reports whether an error means the path holds nothing at all.
+ *
+ * <p>`ENOENT` is an empty slot and `ENOTDIR` is a path whose parent is not a
+ * directory, so neither can hold a store. Every other failure — a permission
+ * error, an I/O error on a network mount — means the answer is unknown, and
+ * an unknown path must not be reported as empty: the write path would then
+ * replace whatever is really there without quarantining it first.
+ * @param error - Failure raised while inspecting the path.
+ * @returns True when the path is known to hold nothing.
+ */
+function isMissing(error: unknown): boolean {
+  if (!(error instanceof Error) || !('code' in error)) return false;
+  return error.code === 'ENOENT' || error.code === 'ENOTDIR';
+}
 
 /**
  * Reports whether anything at all occupies the store path.
@@ -24,63 +40,45 @@ import TokenStoreError from '../../Errors/TokenStoreError.js';
  * answers "no" for a link pointing at nothing. Treating a dangling link as an
  * absent store meant the next write renamed a fresh file straight over it,
  * destroying the one record of where it pointed.
+ *
+ * <p>A path that cannot be inspected counts as occupied. That is the safe
+ * direction: at worst the read that follows fails and the store is treated
+ * as damaged, which preserves whatever is there instead of overwriting it.
  * @param filePath - Path to test without following a final symlink.
- * @returns True when something occupies the path.
+ * @returns True when something occupies the path, or the answer is unknown.
  */
 export function isOccupied(filePath: string): boolean {
   try {
     lstatSync(filePath);
     return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Reports whether the path is a real file this module may open or chmod.
- *
- * <p>Uses `lstat`, so a symlink is judged as a symlink rather than as
- * whatever it points at. `statSync` follows the link and `chmodSync` follows
- * it too, so a link dropped at the store path would have had an unrelated
- * file's mode rewritten to 0600 and its contents read as bank tokens. The
- * store only ever creates real files, so a link here is either a mistake or
- * an attempt to aim this module at someone else's file.
- * @param filePath - Path to classify without following a final symlink.
- * @returns True when the path is a regular file.
- */
-export function isRealFile(filePath: string): boolean {
-  try {
-    const stats = lstatSync(filePath);
-    return stats.isFile();
-  } catch {
-    return false;
+  } catch (error: unknown) {
+    return !isMissing(error);
   }
 }
 
 /**
  * Restricts a file holding a token to its owner.
  *
- * <p>Applied to every path this module leaves on disk, not only the ones it
+ * <p>Applied to every file this module leaves on disk, not only the ones it
  * creates: a store or quarantine copy that arrived with looser permissions —
  * hand-edited, restored from a backup, or inherited through a rename — still
  * holds a credential that bypasses 2FA for years.
  *
- * <p>Failure is not fatal. Some volumes (notably Windows bind mounts) ignore
- * chmod outright, and refusing to continue there would cost the run its
- * token to fix an exposure that refusing does not actually reduce.
+ * <p>Hardening is best-effort by policy. Some volumes (notably Windows bind
+ * mounts) ignore chmod outright, and refusing to continue there would cost
+ * the run its token to fix an exposure that refusing does not reduce. A
+ * caller therefore learns whether the file is owner-only; it is not promised.
  *
- * <p>Only a regular file is touched. Applying an owner-only mode to a
- * directory would strip its execute bit and make it untraversable, and
- * applying it through a symlink would silently re-permission the link's
- * target — a file this module has no business touching at all.
- * @param filePath - File whose permissions must be owner-only.
+ * <p>Nothing but a regular file is touched, and the mode is applied to the
+ * descriptor rather than the path — a directory would lose the execute bit
+ * it needs to stay traversable, and a symlink would silently re-permission
+ * a target this module has no business touching.
+ * @param filePath - File whose permissions should be owner-only.
  * @returns True when the file is now owner-only.
  */
 export function enforceOwnerOnly(filePath: string): boolean {
-  if (!isRealFile(filePath)) return false;
   try {
-    chmodSync(filePath, 0o600);
-    return true;
+    return useStoreFile(filePath, hardenOpenFile);
   } catch {
     return false;
   }
@@ -130,42 +128,56 @@ function hardenOpenFile(descriptor: number): boolean {
 }
 
 /**
- * Reads an open descriptor once it is known to be a regular file.
- * @param descriptor - Open descriptor to classify and read.
- * @returns The file's contents as UTF-8 text.
+ * Runs an operation on an open descriptor known to be a regular file.
+ * @param descriptor - Open descriptor to classify, harden and use.
+ * @param use - Operation to run once the descriptor is known to be safe.
+ * @returns Whatever the operation returned.
  * @throws TokenStoreError when the descriptor is not a regular file.
  */
-function readRegularFile(descriptor: number): string {
+function useRegularFile<T>(descriptor: number, use: (descriptor: number) => T): T {
   const stats = fstatSync(descriptor);
   if (!stats.isFile()) {
     throw new TokenStoreError('the store path is not a regular file');
   }
   hardenOpenFile(descriptor);
-  return readFileSync(descriptor, 'utf8');
+  return use(descriptor);
 }
 
 /**
- * Reads a file, refusing outright if a symlink occupies the final component.
+ * Opens the store, refusing outright if a symlink occupies the final name.
  *
- * <p>An `lstat` classification and a later `readFileSync` are two separate
- * path lookups, so anything able to replace the final component in between
- * can swap a symlink in after the check and have the read follow it. That
- * window is narrow and needs write access to the store's directory, but the
- * pay-off is a token that bypasses 2FA for years, so it is closed rather
- * than argued about.
+ * <p>This is the only way this module touches a file that already exists.
+ * Classifying a path and then acting on it are two separate lookups, so
+ * anything able to replace the final component in between can swap a symlink
+ * in after the check and have the operation follow it. Doing both through
+ * one descriptor leaves nothing to swap: `O_NOFOLLOW` makes the kernel
+ * refuse the open when the final component is a link, and everything after
+ * it works on the handle the kernel returned — the same file, whatever
+ * happens to the path afterwards.
  *
- * <p>`O_NOFOLLOW` makes the kernel refuse the open if the final component is
- * a link, and everything after it works on the descriptor the kernel handed
- * back — the same file, whatever happens to the path afterwards.
- * @param filePath - Store path to read without following a final symlink.
+ * <p>`O_NOFOLLOW` is POSIX-only; on a host without it the flag reads as zero
+ * and the open degrades to an ordinary one. The shipped image is Linux, so
+ * the protection holds where the store actually lives.
+ * @param filePath - Store path to open without following a final symlink.
+ * @param use - Operation to run on the open descriptor.
+ * @returns Whatever the operation returned.
+ * @throws Error when the path is a symlink, absent or not a regular file.
+ */
+function useStoreFile<T>(filePath: string, use: (descriptor: number) => T): T {
+  const descriptor = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    return useRegularFile(descriptor, use);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+/**
+ * Reads the store without ever following a symlink at its final name.
+ * @param filePath - Store path to read.
  * @returns The file's contents as UTF-8 text.
  * @throws Error when the path is a symlink, absent or not a regular file.
  */
 export function readWithoutFollowing(filePath: string): string {
-  const descriptor = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    return readRegularFile(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
+  return useStoreFile(filePath, (descriptor) => readFileSync(descriptor, 'utf8'));
 }

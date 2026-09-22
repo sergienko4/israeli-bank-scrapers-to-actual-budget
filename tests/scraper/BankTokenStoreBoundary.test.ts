@@ -34,6 +34,7 @@ vi.mock('node:fs', async (importOriginal) => {
 const realFs = await vi.importActual<typeof import('node:fs')>('node:fs');
 const realRenameSync = realFs.renameSync;
 const { default: BankTokenStore } = await import('../../src/Scraper/Tokens/BankTokenStore.js');
+const { enforceOwnerOnly, isOccupied } = await import('../../src/Scraper/Tokens/StorePathGuards.js');
 
 let dir = '';
 let storePath = '';
@@ -110,5 +111,19 @@ describe('a symlink swapped in after the path was classified', () => {
     new BankTokenStore(storePath).read('oneZero');
     const target = join(dir, 'someone-elses-secrets.json');
     expect(String(realFs.readFileSync(target))).toContain('not-ours');
+  });
+
+  it('never re-permissions the swapped target while hardening', () => {
+    const target = join(dir, 'someone-elses-secrets.json');
+    realFs.chmodSync(target, 0o644);
+    expect(enforceOwnerOnly(storePath)).toBe(false);
+    expect(realFs.statSync(target).mode & 0o777).toBe(0o644);
+  });
+});
+
+describe('a path the filesystem refuses to describe', () => {
+  it('is treated as occupied, so damage is preserved rather than overwritten', () => {
+    stubLstat.mockImplementation(() => { throw Object.assign(new Error('EIO'), { code: 'EIO' }); });
+    expect(isOccupied(storePath)).toBe(true);
   });
 });

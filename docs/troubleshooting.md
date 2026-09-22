@@ -56,7 +56,9 @@ could still salvage. The scrape still succeeds; the next run pays for one SMS.
 
 `bank-tokens.json` must be a real file. A symlink at that path is moved aside
 as damage instead of being followed, because following it would read an
-unrelated file as bank tokens and tighten that file's permissions.
+unrelated file as this importer's bank tokens. The file is opened in a way the
+kernel refuses when the final name is a link, so a link swapped in after the
+check is refused too, not followed.
 
 For other banks, 2FA cannot be persisted and an OTP is expected on every run.
 

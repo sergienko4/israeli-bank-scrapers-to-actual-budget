@@ -209,11 +209,11 @@ export default class BankTokenStore implements IBankTokenStore {
   /**
    * Records the token, or re-secures the store when it is already current.
    *
-   * <p>The unchanged case still touches the file. Rewriting it would be
-   * pointless work, but skipping it entirely was worse: the atomic write is
-   * the only thing that restores owner-only permissions, so a store left
-   * world-readable stayed that way for as long as the token kept working —
-   * which for these banks is years.
+   * <p>The unchanged case returns without rewriting the file. That is safe
+   * only because the read above already re-asserted owner-only permissions
+   * through the descriptor it opened: a store left world-readable is
+   * re-secured on every run that touches it, not only on the runs that
+   * happen to change its contents.
    *
    * <p>One read serves both the decision and the merge, so the file cannot
    * change between them and a damaged store cannot be judged twice.
@@ -224,10 +224,7 @@ export default class BankTokenStore implements IBankTokenStore {
    */
   private persist(storeKey: string, token: string): Procedure<IBankTokenWrite> {
     const store = this.readStore();
-    if (isAlreadyStored(store, storeKey, token)) {
-      enforceOwnerOnly(this.filePath);
-      return succeed({ written: false });
-    }
+    if (isAlreadyStored(store, storeKey, token)) return succeed({ written: false });
     const contents = this.merge(store, storeKey, token);
     this.commit(contents);
     return succeed({ written: true });

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  enforceOwnerOnly, isMovableStore, isOccupied, isRealFile, readWithoutFollowing,
+  enforceOwnerOnly, isMovableStore, isOccupied, readWithoutFollowing,
 } from '../../src/Scraper/Tokens/StorePathGuards.js';
 
 let dir = '';
@@ -42,25 +42,6 @@ describe('isOccupied', () => {
   });
 });
 
-describe('isRealFile', () => {
-  it('accepts a regular file', () => {
-    writeFileSync(filePath, '{}');
-    expect(isRealFile(filePath)).toBe(true);
-  });
-
-  it('refuses a symlink even when its target is a real file', () => {
-    const target = join(dir, 'target.json');
-    writeFileSync(target, '{}');
-    symlinkSync(target, filePath);
-    expect(isRealFile(filePath)).toBe(false);
-  });
-
-  it('refuses a directory', () => {
-    mkdirSync(filePath);
-    expect(isRealFile(filePath)).toBe(false);
-  });
-});
-
 describe('enforceOwnerOnly', () => {
   it('restricts a world-readable store to its owner', () => {
     writeFileSync(filePath, '{}', { mode: 0o644 });
@@ -80,6 +61,10 @@ describe('enforceOwnerOnly', () => {
     mkdirSync(filePath, { mode: 0o755 });
     expect(enforceOwnerOnly(filePath)).toBe(false);
     expect(statSync(filePath).mode & 0o777).toBe(0o755);
+  });
+
+  it('reports a path holding nothing as not hardened', () => {
+    expect(enforceOwnerOnly(filePath)).toBe(false);
   });
 });
 
