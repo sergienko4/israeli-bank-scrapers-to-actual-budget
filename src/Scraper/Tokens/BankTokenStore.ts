@@ -48,22 +48,31 @@ export interface IBankTokenWrite {
   readonly written: boolean;
 }
 
-/** Read/write access to the durable long-term tokens, keyed by bank id. */
+/**
+ * Read/write access to the durable long-term tokens, keyed by store key.
+ *
+ * <p>The key is opaque and must be stored verbatim. Production passes
+ * `bankId:accountKey` (see `buildTokenStoreKey`) so that two accounts at one
+ * bank keep separate tokens; an implementation that canonicalised, lowercased
+ * or truncated the key would collapse them back onto one entry, and since
+ * every mint revokes the token it replaces, the two accounts would then cost
+ * an SMS each on every single run.
+ */
 export interface IBankTokenStore {
   /**
-   * Returns the stored long-term token for a bank.
-   * @param bankId - Bank identifier used as the store key.
+   * Returns the stored long-term token for one bank account.
+   * @param storeKey - Opaque key identifying one bank account in the store.
    * @returns The stored token, or an empty string when none is available.
    */
-  read: (bankId: string) => string;
+  read: (storeKey: string) => string;
 
   /**
-   * Persists a bank's long-term token, replacing any previous value.
-   * @param bankId - Bank identifier used as the store key.
+   * Persists one bank account's long-term token, replacing any previous value.
+   * @param storeKey - Opaque key identifying one bank account in the store.
    * @param token - The long-term token to persist.
    * @returns Procedure reporting whether a token was written.
    */
-  write: (bankId: string, token: string) => Procedure<IBankTokenWrite>;
+  write: (storeKey: string, token: string) => Procedure<IBankTokenWrite>;
 }
 
 /**
@@ -213,13 +222,13 @@ function commitTemp(tempPath: string, serialized: string, target: string): boole
  * rewritten: the original is set aside, and what could still be read is
  * written back clean.
  * @param store - Records read from the file, with their intactness.
- * @param bankId - Bank identifier used as the store key.
+ * @param storeKey - Opaque key identifying one bank account in the store.
  * @param token - Non-blank token the caller is about to store.
  * @returns True when the file is intact and already holds that token.
  */
-function isAlreadyStored(store: IStoreRead, bankId: string, token: string): boolean {
+function isAlreadyStored(store: IStoreRead, storeKey: string, token: string): boolean {
   if (!store.isIntact) return false;
-  const record = store.records.get(bankId);
+  const record = store.records.get(storeKey);
   return record ? record.token === token : false;
 }
 
@@ -236,12 +245,12 @@ export default class BankTokenStore implements IBankTokenStore {
    *
    * <p>A missing, unreadable or malformed store is indistinguishable from
    * "never captured": both mean the next run must perform a cold login.
-   * @param bankId - Bank identifier used as the store key.
+   * @param storeKey - Opaque key identifying one bank account in the store.
    * @returns The stored token, or an empty string when none is available.
    */
-  public read(bankId: string): string {
+  public read(storeKey: string): string {
     const store = this.readStore();
-    const record = store.records.get(bankId);
+    const record = store.records.get(storeKey);
     return record ? record.token : NO_TOKEN;
   }
 
@@ -251,18 +260,18 @@ export default class BankTokenStore implements IBankTokenStore {
    * <p>Blank tokens are ignored rather than stored: the provider returns an
    * empty string when a run produced no durable artifact, and writing it would
    * erase a working token.
-   * @param bankId - Bank identifier used as the store key.
+   * @param storeKey - Opaque key identifying one bank account in the store.
    * @param token - The long-term token to persist.
    * @returns Procedure reporting whether a token was written, or a typed failure.
    */
-  public write(bankId: string, token: string): Procedure<IBankTokenWrite> {
+  public write(storeKey: string, token: string): Procedure<IBankTokenWrite> {
     const trimmed = token.trim();
     if (trimmed.length === 0) return succeed({ written: false });
     try {
-      return this.persist(bankId, trimmed);
+      return this.persist(storeKey, trimmed);
     } catch (error: unknown) {
       const detail = errorMessage(error);
-      return fail(`Failed to persist the long-term token for ${bankId}: ${detail}`);
+      return fail(`Failed to persist the long-term token for ${storeKey}: ${detail}`);
     }
   }
 
@@ -277,18 +286,18 @@ export default class BankTokenStore implements IBankTokenStore {
    *
    * <p>One read serves both the decision and the merge, so the file cannot
    * change between them and a damaged store cannot be judged twice.
-   * @param bankId - Bank identifier used as the store key.
+   * @param storeKey - Opaque key identifying one bank account in the store.
    * @param token - Non-blank token to record for that bank.
    * @returns Procedure reporting whether a token was written.
    * @throws Error when the directory cannot be created or the file written.
    */
-  private persist(bankId: string, token: string): Procedure<IBankTokenWrite> {
+  private persist(storeKey: string, token: string): Procedure<IBankTokenWrite> {
     const store = this.readStore();
-    if (isAlreadyStored(store, bankId, token)) {
+    if (isAlreadyStored(store, storeKey, token)) {
       enforceOwnerOnly(this.filePath);
       return succeed({ written: false });
     }
-    const contents = this.merge(store, bankId, token);
+    const contents = this.merge(store, storeKey, token);
     this.commit(contents);
     return succeed({ written: true });
   }
@@ -329,16 +338,16 @@ export default class BankTokenStore implements IBankTokenStore {
   /**
    * Builds the next file contents with one bank's token replaced.
    * @param store - Records already read from disk, reused as the merge base.
-   * @param bankId - Bank identifier used as the store key.
+   * @param storeKey - Opaque key identifying one bank account in the store.
    * @param token - Non-blank token to record for that bank.
    * @returns The complete file contents to persist.
    * @throws TokenStoreError when a damaged store could not be preserved.
    */
-  private merge(store: IStoreRead, bankId: string, token: string): IBankTokenFile {
+  private merge(store: IStoreRead, storeKey: string, token: string): IBankTokenFile {
     if (!store.isIntact) this.setAsideDamaged();
     const now = new Date();
     const capturedAt = now.toISOString();
-    store.records.set(bankId, { token, capturedAt });
+    store.records.set(storeKey, { token, capturedAt });
     return toFile(store.records);
   }
 

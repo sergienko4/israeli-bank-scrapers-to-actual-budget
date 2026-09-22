@@ -406,4 +406,31 @@ describe('BankTokenStore', () => {
       expect(store.read('oneZero')).toBe('onezero-id-token');
     });
   });
+  describe('the key is opaque to the store', () => {
+    it('keeps two accounts of one bank apart', () => {
+      const store = makeStore();
+      store.write('oneZero:personal', 'personal-token');
+      store.write('oneZero:business', 'business-token');
+      expect(store.read('oneZero:personal')).toBe('personal-token');
+    });
+
+    it('does not let the second account overwrite the first', () => {
+      const store = makeStore();
+      store.write('oneZero:personal', 'personal-token');
+      store.write('oneZero:business', 'business-token');
+      expect(store.read('oneZero:business')).toBe('business-token');
+    });
+
+    it('treats a bare bank id as a different key from a composite one', () => {
+      const store = makeStore();
+      store.write('oneZero', 'bare-token');
+      store.write('oneZero:personal', 'personal-token');
+      expect(store.read('oneZero')).toBe('bare-token');
+    });
+
+    it('stores each key verbatim, so the file can be matched to a config entry', () => {
+      makeStore().write('oneZero:personal', 'personal-token');
+      expect(readFileSync(storePath, 'utf8')).toContain('"oneZero:personal"');
+    });
+  });
 });

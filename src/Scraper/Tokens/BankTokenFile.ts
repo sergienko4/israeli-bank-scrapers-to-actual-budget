@@ -21,7 +21,7 @@ export interface IBankTokenRecord {
   readonly capturedAt: string;
 }
 
-/** On-disk shape of the store: one record per bank id. */
+/** On-disk shape of the store: one record per store key. */
 export interface IBankTokenFile {
   readonly banks: Record<string, IBankTokenRecord>;
 }
@@ -76,17 +76,17 @@ function readCapturedAt(fields: Record<string, unknown>): string {
  * bank its token and nothing more, because the siblings are the only copy of
  * credentials the bank will not re-issue without another SMS.
  * @param banks - Raw bank entries read from the store file.
- * @returns Well-formed records by bank id.
+ * @returns Well-formed records by store key.
  */
 function collectRecords(banks: Record<string, unknown>): Map<string, IBankTokenRecord> {
   const kept = new Map<string, IBankTokenRecord>();
   const entries = Object.entries(banks);
-  for (const [bankId, entry] of entries) {
+  for (const [storeKey, entry] of entries) {
     const token = readEntryToken(entry);
     if (token.length === 0) continue;
     const fields = entry as Record<string, unknown>;
     const capturedAt = readCapturedAt(fields);
-    kept.set(bankId, { token, capturedAt });
+    kept.set(storeKey, { token, capturedAt });
   }
   return kept;
 }
@@ -141,11 +141,11 @@ export function readBankMap(parsed: unknown): IStoreRead {
 
 /**
  * Converts the in-memory records back to the serialisable file shape.
- * @param records - Records to persist, keyed by bank id.
+ * @param records - Records to persist, keyed by store key.
  * @returns The complete file contents.
  */
 export function toFile(records: Map<string, IBankTokenRecord>): IBankTokenFile {
   const banks: Record<string, IBankTokenRecord> = {};
-  for (const [bankId, record] of records) banks[bankId] = record;
+  for (const [storeKey, record] of records) banks[storeKey] = record;
   return { banks };
 }
