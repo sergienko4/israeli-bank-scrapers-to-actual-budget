@@ -117,6 +117,8 @@ function lastCredentials(): { otpLongTermToken?: string } {
   return (last?.[0] ?? {}) as { otpLongTermToken?: string };
 }
 
+const originalTokensPath = process.env.BANK_TOKENS_PATH;
+
 describe('long-term token round trip', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -126,7 +128,11 @@ describe('long-term token round trip', () => {
   });
 
   afterEach(() => {
-    delete process.env.BANK_TOKENS_PATH;
+    if (originalTokensPath === undefined) {
+      delete process.env.BANK_TOKENS_PATH;
+    } else {
+      process.env.BANK_TOKENS_PATH = originalTokensPath;
+    }
     rmSync(tokensDir, { recursive: true, force: true });
   });
 
