@@ -1,6 +1,6 @@
 import {
-  chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync,
-  statSync, symlinkSync, writeFileSync,
+  chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync,
+  rmSync, statSync, symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -404,6 +404,33 @@ describe('BankTokenStore', () => {
       const store = makeStore();
       store.write('oneZero', 'onezero-id-token');
       expect(store.read('oneZero')).toBe('onezero-id-token');
+    });
+  });
+
+  describe('a dangling symlink is evidence, not an absent store', () => {
+    beforeEach(() => {
+      symlinkSync(join(dir, 'nothing-here.json'), storePath);
+    });
+
+    it('quarantines the link instead of quietly replacing it', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(1);
+    });
+
+    it('keeps where the link pointed, which is the whole evidence', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      const [quarantined] = quarantineFilesInStoreDir();
+      expect(readlinkSync(join(dir, quarantined))).toBe(join(dir, 'nothing-here.json'));
+    });
+
+    it('still stores the fresh token in a real file', () => {
+      const store = makeStore();
+      store.write('oneZero', 'onezero-id-token');
+      expect(store.read('oneZero')).toBe('onezero-id-token');
+    });
+
+    it('reports no token while the link is still in place', () => {
+      expect(makeStore().read('oneZero')).toBe('');
     });
   });
   describe('the key is opaque to the store', () => {
