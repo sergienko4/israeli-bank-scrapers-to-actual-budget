@@ -139,14 +139,14 @@ describe('captureResultToken', () => {
     expect(store.calls).toEqual([{ bankId: 'oneZero', token: ID_TOKEN }]);
   });
 
-  it('skips a write when the stored token already matches', () => {
+  it('still delegates to the store when unchanged, so permissions are re-asserted', () => {
     const store = makeStore();
     const stored: IBankTokenStore = { ...store, read: (): string => ID_TOKEN };
     captureResultToken(
       { success: true, accounts: [], persistentOtpToken: ID_TOKEN },
       { bankId: 'oneZero', storeKey: 'oneZero', companyType: 'oneZero', store: stored, logger }
     );
-    expect(store.calls).toEqual([]);
+    expect(store.calls).toEqual([{ bankId: 'oneZero', token: ID_TOKEN }]);
   });
 
   it('skips a write when the result carries no token', () => {

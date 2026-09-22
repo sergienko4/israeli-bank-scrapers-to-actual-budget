@@ -202,5 +202,61 @@ describe('BankTokenStore', () => {
       expect(store.write('oneZero', 'onezero-id-token').success).toBe(true);
       expect(store.read('oneZero')).toBe('onezero-id-token');
     });
+
+    it('re-tightens a world-readable store even when the token is unchanged', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      chmodSync(storePath, 0o666);
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(statSync(storePath).mode % 0o1000).toBe(0o600);
+    });
+
+    it('reports no write when the stored token already matches', () => {
+      makeStore().write('oneZero', 'onezero-id-token');
+      const result = makeStore().write('oneZero', 'onezero-id-token');
+      expect(result.success && result.data.written).toBe(false);
+    });
+  });
+
+  describe('write quarantine hardening', () => {
+    it('hardens the quarantine copy, which carries the same standing credential', () => {
+      writeFileSync(storePath, 'not json at all');
+      chmodSync(storePath, 0o666);
+      makeStore().write('oneZero', 'onezero-id-token');
+      const [backup] = quarantineFilesInStoreDir();
+      expect(statSync(join(dir, backup ?? '')).mode % 0o1000).toBe(0o600);
+    });
+  });
+
+  describe('write structural damage', () => {
+    it('quarantines a store whose top-level banks key is missing', () => {
+      writeFileSync(storePath, JSON.stringify({}));
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(1);
+    });
+
+    it('quarantines a store whose banks key is not an object', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: null }));
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(1);
+    });
+
+    it('quarantines a store holding an entry whose token field is unreadable', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: { pepper: { tokn: 'typo' } } }));
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(1);
+    });
+
+    it('still stores the fresh token after quarantining a damaged store', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: null }));
+      const store = makeStore();
+      store.write('oneZero', 'onezero-id-token');
+      expect(store.read('oneZero')).toBe('onezero-id-token');
+    });
+
+    it('never quarantines a well-formed store that simply holds no banks yet', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: {} }));
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toEqual([]);
+    });
   });
 });

@@ -26,7 +26,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
+  chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -49,10 +49,10 @@ interface IBankTokenFile {
   readonly banks: Record<string, IBankTokenRecord>;
 }
 
-/** Outcome of reading the store file: its records and whether it parsed. */
+/** Outcome of reading the store file: its records and whether it was intact. */
 interface IStoreRead {
   readonly records: Map<string, IBankTokenRecord>;
-  readonly isReadable: boolean;
+  readonly isIntact: boolean;
 }
 
 /** Outcome of a write: whether a token was actually persisted. */
@@ -132,30 +132,67 @@ function collectRecords(banks: Record<string, unknown>): Map<string, IBankTokenR
 }
 
 /**
- * Moves an unparseable store aside before it is overwritten.
+ * Restricts a file holding a token to its owner.
+ *
+ * <p>Applied to every path this module leaves on disk, not only the ones it
+ * creates: a store or quarantine copy that arrived with looser permissions —
+ * hand-edited, restored from a backup, or inherited through a rename — still
+ * holds a credential that bypasses 2FA for years.
+ *
+ * <p>Failure is not fatal. Some volumes (notably Windows bind mounts) ignore
+ * chmod outright, and refusing to continue there would cost the run its
+ * token to fix an exposure that refusing does not actually reduce.
+ * @param filePath - File whose permissions must be owner-only.
+ * @returns True when the file is now owner-only.
+ */
+function enforceOwnerOnly(filePath: string): boolean {
+  try {
+    chmodSync(filePath, 0o600);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Builds the timestamped name a damaged store is set aside under.
+ * @param filePath - Store path being quarantined.
+ * @returns Sibling path carrying the quarantine moment.
+ */
+function quarantineName(filePath: string): string {
+  const stamp = new Date();
+  const iso = stamp.toISOString();
+  // Colons are legal on Linux but not on a Windows bind mount, and the data
+  // volume is routinely one; a name that cannot be created saves nothing.
+  const suffix = iso.replaceAll(':', '-');
+  return `${filePath}.${suffix}.corrupt`;
+}
+
+/**
+ * Moves a damaged store aside before it is overwritten.
  *
  * <p>The file holds credentials valid for years that the bank re-issues only
  * by SMS, and re-issuing revokes whatever is still live. Overwriting a file
  * nobody has inspected therefore destroys the only salvageable copy, so it is
  * renamed next to the store for an operator to examine.
  *
+ * <p>The copy is re-hardened after the rename because a rename carries the
+ * original file's permissions with it: quarantining a world-readable store
+ * would otherwise leave the same live credential exposed under a new name.
+ *
  * <p>Only a regular file is moved. A directory at the store path means the
  * deployment mounted something unexpected there, and silently relocating a
  * mount point would do more damage than refusing the write.
- * @param filePath - Store path whose contents could not be parsed.
+ * @param filePath - Store path whose contents could not be understood.
  * @returns True when a quarantine copy was kept.
  */
 function quarantineStore(filePath: string): boolean {
-  const stamp = new Date();
-  const iso = stamp.toISOString();
-  // Colons are legal on Linux but not on a Windows bind mount, and the data
-  // volume is routinely one; a name that cannot be created saves nothing.
-  const suffix = iso.replaceAll(':', '-');
-  const target = `${filePath}.${suffix}.corrupt`;
+  const target = quarantineName(filePath);
   try {
     const stats = statSync(filePath);
     if (!stats.isFile()) return false;
     renameSync(filePath, target);
+    enforceOwnerOnly(target);
     return true;
   } catch {
     // Losing the quarantine copy must not stop the fresh token being stored.
@@ -164,16 +201,36 @@ function quarantineStore(filePath: string): boolean {
 }
 
 /**
- * Narrows parsed JSON to the bank map, dropping entries of any other shape.
- * @param parsed - Value produced by `JSON.parse` on the store file.
- * @returns Well-formed records by bank id; empty when nothing is recognisable.
+ * Reports a store whose contents could not be understood.
+ *
+ * <p>Returns a fresh map each call: the caller writes the new token into it,
+ * so a shared instance would leak one bank's token into another's read.
+ * @returns An empty, non-intact read.
  */
-function readBankMap(parsed: unknown): Map<string, IBankTokenRecord> {
-  if (typeof parsed !== 'object' || parsed === null) return new Map();
+function damagedRead(): IStoreRead {
+  return { records: new Map(), isIntact: false };
+}
+
+/**
+ * Narrows parsed JSON to the bank map, reporting whether all of it was read.
+ *
+ * <p>A file can parse as JSON and still be damaged — `{}`, `{"banks": null}`,
+ * or an entry whose token field was mistyped. Those are reported as not
+ * intact rather than as an empty store, because the write path uses that
+ * distinction to decide whether overwriting would destroy something an
+ * operator could still salvage.
+ * @param parsed - Value produced by `JSON.parse` on the store file.
+ * @returns The records understood, and whether anything was lost reading them.
+ */
+function readBankMap(parsed: unknown): IStoreRead {
+  if (typeof parsed !== 'object' || parsed === null) return damagedRead();
   const container = parsed as Record<string, unknown>;
   const banks = container.banks;
-  if (typeof banks !== 'object' || banks === null) return new Map();
-  return collectRecords(banks as Record<string, unknown>);
+  if (typeof banks !== 'object' || banks === null) return damagedRead();
+  const entries = banks as Record<string, unknown>;
+  const records = collectRecords(entries);
+  const present = Object.keys(entries).length;
+  return { records, isIntact: records.size === present };
 }
 
 /**
@@ -243,9 +300,7 @@ export default class BankTokenStore implements IBankTokenStore {
     const trimmed = token.trim();
     if (trimmed.length === 0) return succeed({ written: false });
     try {
-      const contents = this.merge(bankId, trimmed);
-      this.commit(contents);
-      return succeed({ written: true });
+      return this.persist(bankId, trimmed);
     } catch (error: unknown) {
       const detail = errorMessage(error);
       return fail(`Failed to persist the long-term token for ${bankId}: ${detail}`);
@@ -253,23 +308,47 @@ export default class BankTokenStore implements IBankTokenStore {
   }
 
   /**
+   * Records the token, or re-secures the store when it is already current.
+   *
+   * <p>The unchanged case still touches the file. Rewriting it would be
+   * pointless work, but skipping it entirely was worse: the atomic write is
+   * the only thing that restores owner-only permissions, so a store left
+   * world-readable stayed that way for as long as the token kept working —
+   * which for these banks is years.
+   * @param bankId - Bank identifier used as the store key.
+   * @param token - Non-blank token to record for that bank.
+   * @returns Procedure reporting whether a token was written.
+   * @throws Error when the directory cannot be created or the file written.
+   */
+  private persist(bankId: string, token: string): Procedure<IBankTokenWrite> {
+    const current = this.read(bankId);
+    if (current === token) {
+      enforceOwnerOnly(this.filePath);
+      return succeed({ written: false });
+    }
+    const contents = this.merge(bankId, token);
+    this.commit(contents);
+    return succeed({ written: true });
+  }
+
+  /**
    * Reads the current records from disk.
    *
-   * <p>Reports whether the file parsed at all, because "no tokens yet" and
-   * "this file is damaged" call for different handling on the write path: the
-   * first is routine, the second must not be overwritten unrecorded.
-   * @returns The stored records and whether the file was parseable.
+   * <p>Reports whether the whole file was understood, because "no tokens yet"
+   * and "this file is damaged" call for different handling on the write path:
+   * the first is routine, the second must not be overwritten unrecorded.
+   * @returns The stored records and whether the file was intact.
    */
   private readStore(): IStoreRead {
-    if (!existsSync(this.filePath)) return { records: new Map(), isReadable: true };
+    if (!existsSync(this.filePath)) return { records: new Map(), isIntact: true };
     try {
       const raw = readFileSync(this.filePath, 'utf8');
       const parsed = JSON.parse(raw) as unknown;
-      return { records: readBankMap(parsed), isReadable: true };
+      return readBankMap(parsed);
     } catch {
       // A corrupt store is treated as absent so the run falls back to a cold
       // login instead of failing; the write path quarantines it first.
-      return { records: new Map(), isReadable: false };
+      return damagedRead();
     }
   }
 
@@ -281,7 +360,7 @@ export default class BankTokenStore implements IBankTokenStore {
    */
   private merge(bankId: string, token: string): IBankTokenFile {
     const store = this.readStore();
-    if (!store.isReadable) quarantineStore(this.filePath);
+    if (!store.isIntact) quarantineStore(this.filePath);
     const now = new Date();
     const capturedAt = now.toISOString();
     store.records.set(bankId, { token, capturedAt });

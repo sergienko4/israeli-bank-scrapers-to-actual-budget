@@ -169,9 +169,10 @@ export function attachAuthFlowCapture(
 /**
  * Persists the durable token a successful scrape result carried.
  *
- * <p>Acts as the backstop for the callback: a token already identical to the
- * stored one is not rewritten, so a warm run that replays an unchanged value
- * performs no disk work at all.
+ * <p>Acts as the backstop for the callback. Deduplication is deliberately
+ * left to the store rather than short-circuited here: skipping the call when
+ * the value is unchanged also skipped the only code that re-asserts
+ * owner-only permissions on the store file.
  * @param result - Provider scrape result to inspect.
  * @param params - Bank identity, store and logger for this capture.
  * @returns True when a new token was persisted.
@@ -183,7 +184,5 @@ export function captureResultToken(
   if (!isApiDirectBank(params.companyType)) return false;
   const token = result.persistentOtpToken ?? '';
   if (token.length === 0) return false;
-  const stored = params.store.read(params.storeKey);
-  if (stored === token) return false;
   return persistToken(token, params);
 }
