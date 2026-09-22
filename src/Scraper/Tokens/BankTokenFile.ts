@@ -15,6 +15,15 @@
 /** Absence of a token, shared by every "nothing stored" outcome. */
 export const NO_TOKEN = '';
 
+/**
+ * Schema version this build writes and is able to read in full.
+ *
+ * <p>Stamped so a future reader can tell a file it fully understands from one
+ * written by a newer build. A file with no stamp predates versioning and is
+ * read as this version, which is what it is.
+ */
+export const STORE_VERSION = 1;
+
 /** One bank's durable token together with the moment it was captured. */
 export interface IBankTokenRecord {
   readonly token: string;
@@ -23,6 +32,7 @@ export interface IBankTokenRecord {
 
 /** On-disk shape of the store: one record per store key. */
 export interface IBankTokenFile {
+  readonly version: number;
   readonly banks: Record<string, IBankTokenRecord>;
 }
 
@@ -118,6 +128,23 @@ function isBankContainer(banks: unknown): boolean {
 }
 
 /**
+ * Reports whether this build can read the whole of a stamped file.
+ *
+ * <p>An absent stamp is the pre-versioning shape and reads as version one.
+ * Anything this build does not write is refused rather than read partially:
+ * a newer build may carry fields this one would drop, and every read is a
+ * step towards a rewrite that would drop them permanently. Refusing sends
+ * the file to quarantine instead, where an operator still has it.
+ * @param version - Value found under the `version` key, if any.
+ * @returns True when this build can read the file in full.
+ */
+function isReadableVersion(version: unknown): boolean {
+  if (version === undefined) return true;
+  if (typeof version !== 'number') return false;
+  return version <= STORE_VERSION;
+}
+
+/**
  * Narrows parsed JSON to the bank map, reporting whether all of it was read.
  *
  * <p>A file can parse as JSON and still be damaged — `{}`, `{"banks": null}`,
@@ -131,6 +158,7 @@ function isBankContainer(banks: unknown): boolean {
 export function readBankMap(parsed: unknown): IStoreRead {
   if (typeof parsed !== 'object' || parsed === null) return damagedRead();
   const container = parsed as Record<string, unknown>;
+  if (!isReadableVersion(container.version)) return damagedRead();
   const banks = container.banks;
   if (!isBankContainer(banks)) return damagedRead();
   const entries = banks as Record<string, unknown>;
@@ -153,5 +181,5 @@ export function readBankMap(parsed: unknown): IStoreRead {
  */
 export function toFile(records: Map<string, IBankTokenRecord>): IBankTokenFile {
   const banks = Object.fromEntries(records);
-  return { banks };
+  return { version: STORE_VERSION, banks };
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  damagedRead, NO_TOKEN, readBankMap, toFile,
+  damagedRead, NO_TOKEN, readBankMap, STORE_VERSION, toFile,
 } from '../../src/Scraper/Tokens/BankTokenFile.js';
 
 describe('BankTokenFile', () => {
@@ -30,6 +30,27 @@ describe('BankTokenFile', () => {
       const read = readBankMap({ banks: {} });
       expect(read.isIntact).toBe(true);
       expect(read.records.size).toBe(0);
+    });
+  });
+
+  describe('readBankMap checking the schema version', () => {
+    it('reads a file written before versioning as the first version', () => {
+      expect(readBankMap({ banks: {} }).isIntact).toBe(true);
+    });
+
+    it('reads a file stamped with the current version', () => {
+      expect(readBankMap({ version: STORE_VERSION, banks: {} }).isIntact).toBe(true);
+    });
+
+    it('reports a newer version as damage rather than rewriting it', () => {
+      const parsed = { version: STORE_VERSION + 1, banks: { oneZero: { token: 'id-token' } } };
+      const read = readBankMap(parsed);
+      expect(read.isIntact).toBe(false);
+      expect(read.records.size).toBe(0);
+    });
+
+    it('reports a non-numeric version as damage', () => {
+      expect(readBankMap({ version: 'one', banks: {} }).isIntact).toBe(false);
     });
   });
 
@@ -97,7 +118,9 @@ describe('BankTokenFile', () => {
   describe('toFile', () => {
     it('writes every record under the banks key', () => {
       const records = new Map([['oneZero', { token: 'id-token', capturedAt: '' }]]);
-      expect(toFile(records)).toEqual({ banks: { oneZero: { token: 'id-token', capturedAt: '' } } });
+      expect(toFile(records)).toEqual({
+        version: STORE_VERSION, banks: { oneZero: { token: 'id-token', capturedAt: '' } },
+      });
     });
 
     it('round-trips through readBankMap unchanged', () => {
@@ -107,7 +130,7 @@ describe('BankTokenFile', () => {
     });
 
     it('serialises an empty set of records as an empty banks object', () => {
-      expect(toFile(new Map())).toEqual({ banks: {} });
+      expect(toFile(new Map())).toEqual({ version: STORE_VERSION, banks: {} });
     });
 
     it('keeps a __proto__ key as an entry instead of a prototype', () => {
