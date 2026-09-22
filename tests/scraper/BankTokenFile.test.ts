@@ -109,6 +109,25 @@ describe('BankTokenFile', () => {
     it('serialises an empty set of records as an empty banks object', () => {
       expect(toFile(new Map())).toEqual({ banks: {} });
     });
+
+    it('keeps a __proto__ key as an entry instead of a prototype', () => {
+      const records = new Map([['__proto__', { token: 'id-token', capturedAt: '' }]]);
+      const banks = toFile(records).banks;
+      expect(Object.prototype.hasOwnProperty.call(banks, '__proto__')).toBe(true);
+    });
+
+    it('survives JSON for a __proto__ key, which readBankMap accepts', () => {
+      const records = new Map([['__proto__', { token: 'id-token', capturedAt: '' }]]);
+      const serialized = JSON.stringify(toFile(records));
+      const reread = readBankMap(JSON.parse(serialized));
+      expect(reread.records.get('__proto__')?.token).toBe('id-token');
+    });
+
+    it('does not reach Object.prototype while doing so', () => {
+      const records = new Map([['__proto__', { token: 'id-token', capturedAt: '' }]]);
+      toFile(records);
+      expect(Object.prototype.hasOwnProperty.call({}, 'token')).toBe(false);
+    });
   });
 
   describe('NO_TOKEN', () => {

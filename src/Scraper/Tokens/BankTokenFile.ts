@@ -141,11 +141,17 @@ export function readBankMap(parsed: unknown): IStoreRead {
 
 /**
  * Converts the in-memory records back to the serialisable file shape.
+ *
+ * <p>Built with `Object.fromEntries` rather than by assignment. Assigning
+ * `banks['__proto__']` invokes the prototype setter instead of creating an
+ * entry, so a `__proto__` key that `readBankMap` had accepted vanished on the
+ * next write — a silent loss of a credential that costs an SMS to replace.
+ * `fromEntries` defines own properties, so every key the reader accepted
+ * survives the round trip.
  * @param records - Records to persist, keyed by store key.
  * @returns The complete file contents.
  */
 export function toFile(records: Map<string, IBankTokenRecord>): IBankTokenFile {
-  const banks: Record<string, IBankTokenRecord> = {};
-  for (const [storeKey, record] of records) banks[storeKey] = record;
+  const banks = Object.fromEntries(records);
   return { banks };
 }
