@@ -104,8 +104,10 @@ Any bank that shows an SMS verification screen supports `twoFactorAuth`. The Tel
 | `otpLongTermToken` | — | One-time seed only. API-direct banks (oneZero, payBox, pepper) capture and store their own token after the first login |
 
 For oneZero, PayBox and Pepper the importer captures the bank's long-term token
-itself and writes it to `/app/data/bank-tokens.json` (mode `600`), then replays
-it on later runs so no SMS is needed. A stored token always wins over
+itself and writes it to `/app/data/bank-tokens.json`, then replays it on later
+runs so no SMS is needed. The file is created and re-asserted as mode `600` on
+every run that touches it, on any volume that honours `chmod` — some bind
+mounts, notably on Docker Desktop for Windows, silently ignore it. A stored token always wins over
 `otpLongTermToken` in config, which is therefore only a bootstrap seed. Set
 `BANK_TOKENS_PATH` to an absolute path to store the file elsewhere.
 
