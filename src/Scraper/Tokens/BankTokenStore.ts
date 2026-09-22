@@ -83,6 +83,11 @@ export interface IBankTokenStore {
  *
  * <p>An entry of any other shape yields the empty token, which the caller
  * treats as "this bank has nothing stored".
+ *
+ * <p>The value is trimmed, so a hand-edited or damaged entry holding only
+ * whitespace collapses to "nothing stored" rather than to a token of
+ * non-zero length. Left untrimmed it counted as a usable credential and
+ * outranked a working config seed, sending blanks to the provider.
  * @param entry - Candidate value read from the store file.
  * @returns The token carried by a well-formed entry, else an empty string.
  */
@@ -90,7 +95,8 @@ function readEntryToken(entry: unknown): string {
   if (typeof entry !== 'object' || entry === null) return NO_TOKEN;
   const fields = entry as Record<string, unknown>;
   const token = fields.token;
-  return typeof token === 'string' ? token : NO_TOKEN;
+  if (typeof token !== 'string') return NO_TOKEN;
+  return token.trim();
 }
 
 /**

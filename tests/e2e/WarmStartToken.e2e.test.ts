@@ -13,9 +13,9 @@
  * shipped code.
  */
 
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -166,6 +166,16 @@ describe('long-term token round trip', () => {
     await makeStrategy().scrape(oneZeroOpts('stale-operator-seed'));
 
     expect(lastCredentials().otpLongTermToken).toBe(ID_TOKEN);
+  });
+
+  it('never sends a blank stored token in place of a working config seed', async () => {
+    mkdirSync(dirname(tokensPath), { recursive: true });
+    writeFileSync(tokensPath, JSON.stringify({ banks: { oneZero: { token: '   ' } } }));
+    mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
+
+    await makeStrategy().scrape(oneZeroOpts('operator-seed'));
+
+    expect(lastCredentials().otpLongTermToken).toBe('operator-seed');
   });
 
   it('replaces the stored token when a cold login re-mints one', async () => {

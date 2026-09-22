@@ -259,4 +259,28 @@ describe('BankTokenStore', () => {
       expect(quarantineFilesInStoreDir()).toEqual([]);
     });
   });
+
+  describe('read token normalisation', () => {
+    it('treats a whitespace-only stored token as no token at all', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: { oneZero: { token: '   ' } } }));
+      expect(makeStore().read('oneZero')).toBe('');
+    });
+
+    it('strips padding so a hand-edited entry still yields a usable token', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: { oneZero: { token: ' tok ' } } }));
+      expect(makeStore().read('oneZero')).toBe('tok');
+    });
+
+    it('quarantines a store holding a whitespace-only token, which is damage', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: { pepper: { token: '   ' } } }));
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(1);
+    });
+
+    it('does not quarantine merely because a token was stored padded', () => {
+      writeFileSync(storePath, JSON.stringify({ banks: { pepper: { token: ' tok ' } } }));
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toEqual([]);
+    });
+  });
 });
