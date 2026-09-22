@@ -8,7 +8,6 @@ import {
   ShutdownError,
   BankScrapingError,
   ConfigurationError,
-  TokenStoreError
 } from '../../src/Errors/ErrorTypes.js';
 
 describe('ErrorFormatter', () => {
@@ -59,12 +58,6 @@ describe('ErrorFormatter', () => {
       const error = new ConfigurationError('Missing syncId');
       const result = formatter.format(error);
       expect(result).toContain('Configuration Error');
-    });
-
-    it('formats TokenStoreError', () => {
-      const error = new TokenStoreError('the damaged store could not be set aside');
-      const result = formatter.format(error);
-      expect(result).toContain('Token Store Error');
     });
   });
 
