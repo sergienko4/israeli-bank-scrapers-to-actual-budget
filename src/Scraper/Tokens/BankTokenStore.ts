@@ -213,7 +213,8 @@ export default class BankTokenStore implements IBankTokenStore {
    * only because the read above already re-asserted owner-only permissions
    * through the descriptor it opened: a store left world-readable is
    * re-secured on every run that touches it, not only on the runs that
-   * happen to change its contents.
+   * happen to change its contents. Re-asserting is best-effort, as it is
+   * everywhere else — see `enforceOwnerOnly` for why.
    *
    * <p>One read serves both the decision and the merge, so the file cannot
    * change between them and a damaged store cannot be judged twice.
@@ -302,9 +303,10 @@ export default class BankTokenStore implements IBankTokenStore {
   /**
    * Writes the file atomically with owner-only permissions.
    *
-   * <p>The 0600 file mode is the protection that matters and holds on every
-   * write, including one that replaces a file left behind with looser
-   * permissions. The 0700 directory mode applies only when this code creates
+   * <p>The 0600 file mode is the protection that matters and is requested on
+   * every write, including one that replaces a file left behind with looser
+   * permissions. A volume that ignores the mode — some bind mounts do — is
+   * accepted rather than refused, for the reason given on `enforceOwnerOnly`. The 0700 directory mode applies only when this code creates
    * the directory: the shipped image already provisions `/app/data` as 0755,
    * and re-chmod'ing a shared mount point to suit one file would be a
    * surprise for everything else living there. A listable directory is
