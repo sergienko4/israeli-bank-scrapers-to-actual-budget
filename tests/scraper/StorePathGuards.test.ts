@@ -3,6 +3,7 @@
  * and never as whatever it points at.
  */
 
+import { execFileSync } from 'node:child_process';
 import {
   mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync,
 } from 'node:fs';
@@ -11,8 +12,12 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
-  enforceOwnerOnly, isMovableStore, isOccupied, readWithoutFollowing,
+  enforceOwnerOnly, isMovableStore, isOccupied, readWithoutFollowing, STORE_OPEN_FLAGS,
 } from '../../src/Scraper/Tokens/StorePathGuards.js';
+
+/** Opens a path with the store's own flags, in a child that cannot hang this suite. */
+const OPEN_ONCE = 'const fs = require("node:fs");'
+  + 'fs.closeSync(fs.openSync(process.env.TARGET, Number(process.env.FLAGS)));';
 
 let dir = '';
 let filePath = '';
@@ -65,6 +70,17 @@ describe('enforceOwnerOnly', () => {
 
   it('reports a path holding nothing as not hardened', () => {
     expect(enforceOwnerOnly(filePath)).toBe(false);
+  });
+});
+
+describe('STORE_OPEN_FLAGS', () => {
+  it('opens a pipe at once instead of waiting for a writer that never comes', () => {
+    execFileSync('mkfifo', [filePath]);
+    const env = { ...process.env, TARGET: filePath, FLAGS: String(STORE_OPEN_FLAGS) };
+
+    const open = (): unknown => execFileSync(process.execPath, ['-e', OPEN_ONCE], { env, timeout: 3000 });
+
+    expect(open).not.toThrow();
   });
 });
 

@@ -7,8 +7,14 @@
  * whatever it points at.
  *
  * <p>Classifying a path and then acting on it are two lookups, so anything
- * touching a file that already exists goes through `useStoreFile`: one
+ * that opens a file which already exists goes through `useStoreFile`: one
  * descriptor opened with `O_NOFOLLOW`, with nothing left to swap in between.
+ *
+ * <p>Quarantine is the exception and cannot be otherwise: `rename` takes
+ * paths, not descriptors, so `isMovableStore` classifies by path and the
+ * caller renames by path. Nothing is followed there either — `rename` moves
+ * a final symlink itself rather than its target — so a swap can only change
+ * which occupant is moved aside, never what the move reaches.
  */
 
 import {
@@ -16,6 +22,15 @@ import {
 } from 'node:fs';
 
 import TokenStoreError from '../../Errors/TokenStoreError.js';
+
+/**
+ * Flags every open of an existing store uses.
+ *
+ * <p>Exported so a test can prove the combination behaves as claimed without
+ * restating it, which would prove only that the test agrees with itself.
+ */
+export const STORE_OPEN_FLAGS
+  = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
 
 /**
  * Reports whether an error means the path holds nothing at all.
@@ -73,6 +88,13 @@ export function isOccupied(filePath: string): boolean {
  * descriptor rather than the path — a directory would lose the execute bit
  * it needs to stay traversable, and a symlink would silently re-permission
  * a target this module has no business touching.
+ *
+ * <p>Going through a descriptor means a file its own owner cannot open, such
+ * as one restored at mode 0004, is reported as not hardened instead of being
+ * chmod'd by path. That is the price of closing the swap window, and it is
+ * the right way round: this module never creates such a file, so the case
+ * only arises for one an operator already broke, and leaving it as it was
+ * beats racing to fix it.
  * @param filePath - File whose permissions should be owner-only.
  * @returns True when the file is now owner-only.
  */
@@ -158,13 +180,19 @@ function useRegularFile<T>(descriptor: number, use: (descriptor: number) => T): 
  * <p>`O_NOFOLLOW` is POSIX-only; on a host without it the flag reads as zero
  * and the open degrades to an ordinary one. The shipped image is Linux, so
  * the protection holds where the store actually lives.
+ *
+ * <p>`O_NONBLOCK` is here for the open itself, not for the read. Opening a
+ * FIFO for reading waits for a writer, so a pipe left at the store path
+ * would hang the importer before `fstat` ever got to reject it. With the
+ * flag the open returns at once and the rejection happens as it should.
+ * The flag has no effect on the regular files this module actually reads.
  * @param filePath - Store path to open without following a final symlink.
  * @param use - Operation to run on the open descriptor.
  * @returns Whatever the operation returned.
  * @throws Error when the path is a symlink, absent or not a regular file.
  */
 function useStoreFile<T>(filePath: string, use: (descriptor: number) => T): T {
-  const descriptor = openSync(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const descriptor = openSync(filePath, STORE_OPEN_FLAGS);
   try {
     return useRegularFile(descriptor, use);
   } finally {
