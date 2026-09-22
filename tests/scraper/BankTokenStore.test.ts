@@ -180,11 +180,16 @@ describe('BankTokenStore', () => {
       expect(tempFilesInStoreDir()).toEqual([]);
     });
 
-    it('leaves no temp file behind when the rename into place fails', () => {
+    it('refuses the write when a directory occupies the store path', () => {
       mkdirSync(storePath);
-      writeFileSync(join(storePath, 'occupant'), 'makes the rename fail');
+      writeFileSync(join(storePath, 'occupant'), 'not a store this can move');
       const result = makeStore().write('oneZero', 'onezero-id-token');
       expect(result.success).toBe(false);
+    });
+
+    it('stages nothing when it refuses a store path it cannot quarantine', () => {
+      mkdirSync(storePath);
+      makeStore().write('oneZero', 'onezero-id-token');
       expect(tempFilesInStoreDir()).toEqual([]);
     });
 
