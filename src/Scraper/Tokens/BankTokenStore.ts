@@ -163,6 +163,27 @@ function commitTemp(tempPath: string, serialized: string, target: string): boole
   }
 }
 
+/**
+ * Reports whether the file already holds exactly what a write would store.
+ *
+ * <p>Intactness is part of the question, not a separate one. A store can hold
+ * this bank's token unchanged while another entry is unreadable, and treating
+ * that as "nothing to do" left the damage on disk with no quarantine and no
+ * record — the fast path reads a token, so the one signal that the rest of
+ * the file was lost went nowhere. A damaged store is therefore always
+ * rewritten: the original is set aside, and what could still be read is
+ * written back clean.
+ * @param store - Records read from the file, with their intactness.
+ * @param bankId - Bank identifier used as the store key.
+ * @param token - Non-blank token the caller is about to store.
+ * @returns True when the file is intact and already holds that token.
+ */
+function isAlreadyStored(store: IStoreRead, bankId: string, token: string): boolean {
+  if (!store.isIntact) return false;
+  const record = store.records.get(bankId);
+  return record ? record.token === token : false;
+}
+
 /** Durable long-term bank tokens persisted on the shared data volume. */
 export default class BankTokenStore implements IBankTokenStore {
   /**
@@ -214,18 +235,21 @@ export default class BankTokenStore implements IBankTokenStore {
    * the only thing that restores owner-only permissions, so a store left
    * world-readable stayed that way for as long as the token kept working —
    * which for these banks is years.
+   *
+   * <p>One read serves both the decision and the merge, so the file cannot
+   * change between them and a damaged store cannot be judged twice.
    * @param bankId - Bank identifier used as the store key.
    * @param token - Non-blank token to record for that bank.
    * @returns Procedure reporting whether a token was written.
    * @throws Error when the directory cannot be created or the file written.
    */
   private persist(bankId: string, token: string): Procedure<IBankTokenWrite> {
-    const current = this.read(bankId);
-    if (current === token) {
+    const store = this.readStore();
+    if (isAlreadyStored(store, bankId, token)) {
       enforceOwnerOnly(this.filePath);
       return succeed({ written: false });
     }
-    const contents = this.merge(bankId, token);
+    const contents = this.merge(store, bankId, token);
     this.commit(contents);
     return succeed({ written: true });
   }
@@ -260,13 +284,13 @@ export default class BankTokenStore implements IBankTokenStore {
 
   /**
    * Builds the next file contents with one bank's token replaced.
+   * @param store - Records already read from disk, reused as the merge base.
    * @param bankId - Bank identifier used as the store key.
    * @param token - Non-blank token to record for that bank.
    * @returns The complete file contents to persist.
    * @throws TokenStoreError when a damaged store could not be preserved.
    */
-  private merge(bankId: string, token: string): IBankTokenFile {
-    const store = this.readStore();
+  private merge(store: IStoreRead, bankId: string, token: string): IBankTokenFile {
     if (!store.isIntact) this.setAsideDamaged();
     const now = new Date();
     const capturedAt = now.toISOString();

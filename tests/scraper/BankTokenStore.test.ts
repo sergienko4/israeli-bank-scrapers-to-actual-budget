@@ -217,6 +217,38 @@ describe('BankTokenStore', () => {
     });
   });
 
+  describe('an unchanged token does not excuse a damaged store', () => {
+    const damaged = JSON.stringify({
+      banks: { oneZero: { token: 'onezero-id-token' }, pepper: null },
+    });
+
+    it('quarantines the damage even when this bank has nothing new to store', () => {
+      writeFileSync(storePath, damaged);
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(1);
+    });
+
+    it('rewrites the store, keeping the entries it could still understand', () => {
+      writeFileSync(storePath, damaged);
+      const store = makeStore();
+      store.write('oneZero', 'onezero-id-token');
+      expect(store.read('oneZero')).toBe('onezero-id-token');
+    });
+
+    it('leaves a clean store behind, so the next run finds no damage', () => {
+      writeFileSync(storePath, damaged);
+      makeStore().write('oneZero', 'onezero-id-token');
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(1);
+    });
+
+    it('reports a write, because the file on disk was replaced', () => {
+      writeFileSync(storePath, damaged);
+      const result = makeStore().write('oneZero', 'onezero-id-token');
+      expect(result.success && result.data.written).toBe(true);
+    });
+  });
+
   describe('write quarantine hardening', () => {
     it('hardens the quarantine copy, which carries the same standing credential', () => {
       writeFileSync(storePath, 'not json at all');
