@@ -57,6 +57,26 @@ describe('withWarmToken', () => {
     expect(resolved.otpLongTermToken).toBeUndefined();
   });
 
+  it('says the configured seed is in use when the store holds nothing', () => {
+    const config = fakeBankConfig({ id: 'oneZero', otpLongTermToken: SEEDED });
+    const store = fakeBankTokenStore();
+
+    withWarmToken(config, { store, bankId: 'oneZero', storeKey: 'oneZero', companyType: 'oneZero', logger });
+
+    const [[line]] = vi.mocked(logger.info).mock.calls;
+    expect(line).toContain('Using the configured long-term token');
+  });
+
+  it('warns an SMS is coming when neither source holds a token', () => {
+    const config = fakeBankConfig({ id: 'oneZero' });
+    const store = fakeBankTokenStore();
+
+    withWarmToken(config, { store, bankId: 'oneZero', storeKey: 'oneZero', companyType: 'oneZero', logger });
+
+    const [[line]] = vi.mocked(logger.info).mock.calls;
+    expect(line).toContain('expect one SMS this run');
+  });
+
   it('does not mutate the caller\'s bank config', () => {
     const config = fakeBankConfig({ id: 'oneZero', otpLongTermToken: SEEDED });
     const store = fakeBankTokenStore({ oneZero: STORED });

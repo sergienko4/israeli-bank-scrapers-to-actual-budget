@@ -46,7 +46,21 @@ export function withWarmToken(
 ): IBankConfig {
   if (!isApiDirectBank(params.companyType)) return bankConfig;
   const stored = params.store.read(params.storeKey);
-  if (stored.length === 0) return reportSeed(bankConfig, params);
+  if (stored.length > 0) return replayStored(bankConfig, stored, params);
+  reportSeed(bankConfig, params);
+  return bankConfig;
+}
+
+/**
+ * Announces the stored token is being replayed and applies it to the config.
+ * @param bankConfig - Bank config to copy rather than mutate.
+ * @param stored - Token a previous run captured, known to be non-blank.
+ * @param params - Token store, bank identity and logger for this bank.
+ * @returns A copy of the config carrying the stored token.
+ */
+function replayStored(
+  bankConfig: IBankConfig, stored: string, params: IWarmTokenParams,
+): IBankConfig {
   params.logger.info(
     `  🔑 Replaying the stored long-term token for ${params.bankId} — no SMS expected`,
   );
@@ -54,19 +68,24 @@ export function withWarmToken(
 }
 
 /**
- * Reports that the run is falling back to the operator's config seed.
+ * Reports which seed state this run starts from, having found nothing stored.
+ *
+ * <p>Returns whether a seed exists rather than the config it was handed. The
+ * config was the same object on both branches, which made the return value
+ * carry no information and hid the fact that this function exists only to
+ * distinguish the two states in the log.
  * @param bankConfig - Bank config carrying the operator's bootstrap seed.
  * @param params - Token store, bank identity and logger for this bank.
- * @returns The caller's config, unchanged.
+ * @returns True when a configured seed will be replayed this run.
  */
-function reportSeed(bankConfig: IBankConfig, params: IWarmTokenParams): IBankConfig {
+function reportSeed(bankConfig: IBankConfig, params: IWarmTokenParams): boolean {
   const seed = bankConfig.otpLongTermToken ?? '';
   if (seed.length > 0) {
     params.logger.info(`  🔑 Using the configured long-term token for ${params.bankId}`);
-    return bankConfig;
+    return true;
   }
   params.logger.info(
     `  📩 No long-term token for ${params.bankId} yet — expect one SMS this run`,
   );
-  return bankConfig;
+  return false;
 }
