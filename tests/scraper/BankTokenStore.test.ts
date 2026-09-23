@@ -1,5 +1,5 @@
 import {
-  chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync,
+  chmodSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync,
   rmSync, statSync, symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -299,6 +299,22 @@ describe('BankTokenStore', () => {
       makeStore().write('oneZero', 'onezero-id-token');
       const [backup] = quarantineFilesInStoreDir();
       expect(statSync(join(dir, backup ?? '')).mode % 0o1000).toBe(0o600);
+    });
+
+    it('does not re-permission an unrelated file sharing the store inode', () => {
+      const other = join(dir, 'someone-elses-file.txt');
+      writeFileSync(other, 'not a token store', { mode: 0o644 });
+      linkSync(other, storePath);
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(statSync(other).mode % 0o1000).toBe(0o644);
+    });
+
+    it('leaves that file its contents, the rename having moved a name only', () => {
+      const other = join(dir, 'someone-elses-file.txt');
+      writeFileSync(other, 'not a token store', { mode: 0o644 });
+      linkSync(other, storePath);
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(readFileSync(other, 'utf8')).toBe('not a token store');
     });
   });
 

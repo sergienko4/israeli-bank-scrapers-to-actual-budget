@@ -5,7 +5,7 @@
 
 import { execFileSync } from 'node:child_process';
 import {
-  mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync,
+  linkSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -73,6 +73,20 @@ describe('enforceOwnerOnly', () => {
 
   it('reports a path holding nothing as not hardened', () => {
     expect(enforceOwnerOnly(filePath)).toBe(false);
+  });
+
+  it('leaves a hard-linked inode alone, since its mode is shared', () => {
+    const other = join(dir, 'someone-elses-file.txt');
+    writeFileSync(other, 'not ours', { mode: 0o644 });
+    linkSync(other, filePath);
+    expect(enforceOwnerOnly(filePath)).toBe(false);
+    expect(statSync(other).mode & 0o777).toBe(0o644);
+  });
+
+  it('still hardens an ordinary store, which shares its inode with nothing', () => {
+    writeFileSync(filePath, '{}', { mode: 0o644 });
+    expect(enforceOwnerOnly(filePath)).toBe(true);
+    expect(statSync(filePath).mode & 0o777).toBe(0o600);
   });
 });
 
