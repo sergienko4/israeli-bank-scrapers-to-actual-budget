@@ -168,7 +168,7 @@ function useRegularFile<T>(descriptor: number, use: (descriptor: number) => T): 
 /**
  * Opens the store, refusing outright if a symlink occupies the final name.
  *
- * <p>This is the only way this module touches a file that already exists.
+ * <p>This is the only way this module opens a file that already exists.
  * Classifying a path and then acting on it are two separate lookups, so
  * anything able to replace the final component in between can swap a symlink
  * in after the check and have the operation follow it. Doing both through

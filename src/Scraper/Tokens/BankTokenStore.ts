@@ -207,13 +207,14 @@ export default class BankTokenStore implements IBankTokenStore {
   }
 
   /**
-   * Records the token, or re-secures the store when it is already current.
+   * Records the token, or asks for owner-only permissions again when the
+   * store is already current.
    *
    * <p>The unchanged case returns without rewriting the file. That is safe
-   * only because the read above already re-asserted owner-only permissions
-   * through the descriptor it opened: a store left world-readable is
-   * re-secured on every run that touches it, not only on the runs that
-   * happen to change its contents. Re-asserting is best-effort, as it is
+   * only because the read above already asked for owner-only permissions
+   * through the descriptor it opened: a store left world-readable has them
+   * re-asserted on every run that touches it, not only on the runs that
+   * happen to change its contents. Asking is best-effort, as it is
    * everywhere else — see `enforceOwnerOnly` for why.
    *
    * <p>One read serves both the decision and the merge, so the file cannot
@@ -306,13 +307,13 @@ export default class BankTokenStore implements IBankTokenStore {
   }
 
   /**
-   * Writes the file atomically with owner-only permissions.
+   * Writes the file atomically, requesting owner-only permissions.
    *
-   * <p>The 0600 file mode is the protection that matters and is requested on
-   * every write, including one that replaces a file left behind with looser
-   * permissions. A volume that ignores the mode — some bind mounts do — is
-   * accepted rather than refused, for the reason given on `enforceOwnerOnly`. The 0700 directory mode applies only when this code creates
-   * the directory: the shipped image already provisions `/app/data` as 0755,
+   * <p>The 0600 file mode is requested on every write, including one that
+   * replaces a file left behind with looser permissions. A volume that
+   * ignores the mode — some bind mounts do — is accepted rather than
+   * refused, for the reason given on `enforceOwnerOnly`. The 0700 directory
+   * mode applies only when this code creates the directory: the shipped image already provisions `/app/data` as 0755,
    * and re-chmod'ing a shared mount point to suit one file would be a
    * surprise for everything else living there. A listable directory is
    * harmless while the file itself stays unreadable.

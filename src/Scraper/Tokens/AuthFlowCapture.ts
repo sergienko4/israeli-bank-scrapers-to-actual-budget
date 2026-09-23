@@ -147,8 +147,9 @@ function warnNotStored(params: IAuthFlowCaptureParams, detail: string): boolean 
  * fired by the time the run ends is lost, and its token with it. The store is
  * then left holding a token the mint already revoked, so the state is worse
  * than before the run — but the cost of that state is one SMS on the next
- * run, which is the same cost as never having captured anything. Waiting the
- * process out to close the window would buy nothing for the price.
+ * run, which is the same cost as never having captured anything. Waiting for
+ * a hook that may never fire would buy back that one SMS at the price of a
+ * run that cannot be relied on to end, which is the worse trade.
  * @param params - Bank identity, store and logger for this capture.
  * @returns Callback the provider invokes once its auth flow completes.
  */
