@@ -5,7 +5,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BankTokenStore from '../../src/Scraper/Tokens/BankTokenStore.js';
 
@@ -251,6 +251,44 @@ describe('BankTokenStore', () => {
       writeFileSync(storePath, damaged);
       const result = makeStore().write('oneZero', 'onezero-id-token');
       expect(result.success && result.data.written).toBe(true);
+    });
+  });
+
+  describe('repeated quarantine', () => {
+    /**
+     * Freezes the clock so both quarantines fall in the same millisecond.
+     *
+     * <p>Real damage rarely recurs that fast, so leaving the timing to chance
+     * makes the test pass or fail depending on how quick the machine is. The
+     * collision this guards against is a property of the name, not the speed.
+     * @returns Nothing; the caller restores the clock.
+     */
+    function freezeClock(): void {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-23T08:00:00.000Z'));
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('keeps every salvage copy when damage recurs within the same moment', () => {
+      freezeClock();
+      writeFileSync(storePath, 'first damage holding a live credential');
+      makeStore().write('oneZero', 'onezero-id-token');
+      writeFileSync(storePath, 'second damage holding another credential');
+      makeStore().write('oneZero', 'onezero-id-token');
+      expect(quarantineFilesInStoreDir()).toHaveLength(2);
+    });
+
+    it('does not let a later salvage overwrite the contents of an earlier one', () => {
+      freezeClock();
+      writeFileSync(storePath, 'first damage holding a live credential');
+      makeStore().write('oneZero', 'onezero-id-token');
+      writeFileSync(storePath, 'second damage holding another credential');
+      makeStore().write('oneZero', 'onezero-id-token');
+      const saved = quarantineFilesInStoreDir().map(n => readFileSync(join(dir, n), 'utf8'));
+      expect(saved).toContain('first damage holding a live credential');
     });
   });
 

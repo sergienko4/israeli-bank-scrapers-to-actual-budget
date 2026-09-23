@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import resolveBankTokensPath from '../../src/Scraper/Tokens/BankTokenPath.js';
 
@@ -56,5 +56,43 @@ describe('resolveBankTokensPath', () => {
   it('keeps the root separator, which is the path rather than a trailing one', () => {
     process.env.BANK_TOKENS_PATH = '/';
     expect(resolveBankTokensPath()).toBe('/');
+  });
+
+  describe('on a Windows host, where the root carries a drive letter', () => {
+    /**
+     * Resolves the path with `node:path` behaving as it does on Windows.
+     *
+     * <p>The separator and the shape of a root are baked in at import time
+     * from the running platform, so POSIX test runners can never reach the
+     * drive-letter branch. Substituting the win32 implementation exercises
+     * the contract an operator on Windows actually gets.
+     * @param override - Value to place in `BANK_TOKENS_PATH`.
+     * @returns The resolved store path under win32 semantics.
+     */
+    async function resolveAsWindows(override: string): Promise<string> {
+      vi.resetModules();
+      vi.doMock('node:path', async () => {
+        const actual = await vi.importActual<typeof import('node:path')>('node:path');
+        return { ...actual.win32, default: actual.win32 };
+      });
+      process.env.BANK_TOKENS_PATH = override;
+      const fresh = await import('../../src/Scraper/Tokens/BankTokenPath.js');
+      return fresh.default();
+    }
+
+    afterEach(() => {
+      vi.doUnmock('node:path');
+      vi.resetModules();
+    });
+
+    it('keeps a drive root absolute rather than making it drive-relative', async () => {
+      const resolved = await resolveAsWindows('C:\\');
+      expect(resolved).toBe('C:\\');
+    });
+
+    it('still strips a trailing separator from a real file path', async () => {
+      const resolved = await resolveAsWindows('C:\\data\\bank-tokens.json\\');
+      expect(resolved).toBe('C:\\data\\bank-tokens.json');
+    });
   });
 });
