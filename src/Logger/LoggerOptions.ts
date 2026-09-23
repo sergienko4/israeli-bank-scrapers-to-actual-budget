@@ -79,7 +79,26 @@ function redactArg(value: unknown): unknown {
 }
 
 /**
- * pino `logMethod` hook: masks the context, the message and its values.
+ * Drops the values a call gives its message's `%s`-style placeholders.
+ *
+ * <p>A key can sit in the message and its value in an argument, as in
+ * `('token: %s', value)`. Masked apart, the pair is missed; filled in first,
+ * a value with spaces is only partly hidden. So only the context and the
+ * message are kept, and pino, given no values, writes the message as the
+ * call wrote it. The importer's own loggers never pass such values. pino
+ * takes the message from the first argument, or from the second when the
+ * first is an object or undefined; see "Logging Method Parameters" in
+ * https://github.com/pinojs/pino/blob/v10.3.1/docs/api.md
+ * @param args - The log call's arguments.
+ * @returns The context, when the call has one, and the message.
+ */
+function dropValues(args: unknown[]): unknown[] {
+  const at = typeof args[0] === 'object' || args[0] === undefined ? 1 : 0;
+  return args.slice(0, at + 1);
+}
+
+/**
+ * pino `logMethod` hook: masks the context and the message, drops any values.
  *
  * <p>`redact.paths` only hides fields by exact name. Error text reaches the
  * log in the message itself, often quoting a bank's response body, so it is
@@ -92,7 +111,7 @@ function redactArg(value: unknown): unknown {
 function redactMessageArgs(
   this: pino.Logger, args: Parameters<pino.LogFn>, method: pino.LogFn,
 ): Parameters<pino.LogFn> {
-  const masked = args.map(redactArg) as Parameters<pino.LogFn>;
+  const masked = dropValues(args).map(redactArg) as Parameters<pino.LogFn>;
   method.apply(this, masked);
   return masked;
 }

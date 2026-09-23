@@ -163,7 +163,10 @@ inside another field's text is masked as above. The importer logs a message
 and one level of fields, and these rules cover exactly that. Other things pino
 can log are outside them: fields nested deeper and fields bound to a child
 logger are hidden by exact name only, and a logged `Error` object is written as
-pino serialises it.
+pino serialises it. A message's `%s`-style values are never written: the
+message is written as the call wrote it, placeholders included, because a key
+in the message and its value in an argument, as in `token: %s`, cannot be
+masked as a pair.
 
 Masking covers stdout, the log files that `/logs` reads, and error alerts on
 Telegram, webhook and push.

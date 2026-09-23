@@ -134,4 +134,49 @@ describe('secrets quoted in log message text', () => {
     const line = logOnce({}, 'Imported 5 transactions for oneZero');
     expect(JSON.parse(line).msg).toBe('Imported 5 transactions for oneZero');
   });
+
+  it('masks a key in the message whose value is an interpolation value', () => {
+    const line = logOnce({}, 'token: %s bank: %s', TEST_CREDENTIAL, 'leumi');
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(JSON.parse(line).msg).toBe('token=[REDACTED] bank: %s');
+  });
+
+  it.each([
+    ['after an unknown placeholder', ['token=%x safe=%s', TEST_CREDENTIAL, 'public'], TEST_CREDENTIAL],
+    ['with spaces, after a key', ['userPass' + 'word=%s', `blue ${TEST_CREDENTIAL} river`], TEST_CREDENTIAL],
+    ['whose key is a value too', ['%s=%s', 'token', TEST_CREDENTIAL], TEST_CREDENTIAL],
+    ['that is a one-time code', ['sms code %d', 482913], '482913'],
+    ['that is an object', ['session %j', { code: TEST_CREDENTIAL }], TEST_CREDENTIAL],
+  ])('never writes a value %s', (_shape, args, secret) => {
+    const lines: string[] = [];
+    const sink = { write: (line: string): number => lines.push(line) };
+    const logger = pino({ ...baseOptions(), level: 'info' }, sink);
+    (logger.info as (...values: unknown[]) => void)(...args);
+    expect(lines).toHaveLength(1);
+    expect(lines.join('')).not.toContain(secret);
+  });
+
+  it.each([
+    ['a null context', [null, 'event'], 'event'],
+    ['an undefined context', [undefined, 'token: %s bank: %s', TEST_CREDENTIAL, 'leumi'], 'token=[REDACTED] bank: %s'],
+    ['a null value', ['value %s', null], 'value %s'],
+    ['a literal percent', ['100%% of %s synced', 'leumi'], '100%% of %s synced'],
+    ['a message that is not text', [{}, 42, 'leumi'], 42],
+    ...['%d', '%i', '%f', '%j', '%o', '%O', '%s'].map(
+      (placeholder): [string, unknown[], string] => [placeholder, [`${placeholder} synced`, 1], `${placeholder} synced`],
+    ),
+  ])('writes the message of a call with %s as the call wrote it', (_shape, args, expected) => {
+    const lines: string[] = [];
+    const sink = { write: (line: string): number => lines.push(line) };
+    const logger = pino({ ...baseOptions(), level: 'info' }, sink);
+    (logger.info as (...values: unknown[]) => void)(...args);
+    expect(JSON.parse(lines.join('')).msg).toBe(expected);
+  });
+
+  it('masks an interpolated message logged without a context', () => {
+    const lines: string[] = [];
+    const sink = { write: (line: string): number => lines.push(line) };
+    pino({ ...baseOptions(), level: 'info' }, sink).info('idToken=%s for %s', TEST_CREDENTIAL, 'leumi');
+    expect(JSON.parse(lines.join('')).msg).toBe('idToken=[REDACTED] for %s');
+  });
 });
