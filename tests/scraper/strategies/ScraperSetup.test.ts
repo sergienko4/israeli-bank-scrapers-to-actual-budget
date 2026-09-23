@@ -8,12 +8,22 @@
  * 3. Deprecated provider options are never forwarded (scrapers 8.7.0)
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   attachOtpRetriever,
   buildBaseScraperOptions,
+  buildScraperOptions,
+  buildTokenCaptureParams,
 } from '../../../src/Scraper/Strategies/Live/ScraperSetup.js';
+import BankTokenStore from '../../../src/Scraper/Tokens/BankTokenStore.js';
+import type { IBankTokenStore } from '../../../src/Scraper/Tokens/BankTokenStore.js';
+import { withWarmToken } from '../../../src/Scraper/Tokens/WarmTokenResolver.js';
+import { succeed } from '../../../src/Types/Index.js';
 import type {
   ILiveScrapeDependencies,
   IResolvedLiveOpts,
@@ -159,6 +169,112 @@ describe('ScraperSetup', () => {
       const options = buildBaseScraperOptions(makeDeps(), opts);
 
       expect(options.defaultTimeout).toBe(60_000);
+    });
+  });
+
+  /**
+   * Provider 8.7.2 redacts the long-term token from its own logs, so the
+   * only way to obtain it is the completion callback. Without this wiring an
+   * API-direct bank pays for an SMS on every single run.
+   */
+  describe('buildScraperOptions (long-term token capture)', () => {
+    const writes: { bankId: string; token: string }[] = [];
+    const bankTokens: IBankTokenStore = {
+      read: (): string => '',
+      write: (bankId: string, token: string) => {
+        writes.push({ bankId, token });
+        return succeed({ written: true });
+      },
+    };
+
+    /**
+     * Builds the minimal dependency stub carrying a capturing token store.
+     * @returns A partial dependency object cast to the full strategy interface.
+     */
+    const makeDeps = (): ILiveScrapeDependencies =>
+      ({ config: {}, bankTokens }) as unknown as ILiveScrapeDependencies;
+
+    /**
+     * Builds resolved live options for one bank.
+     * @param companyType - Provider company id under test.
+     * @returns Resolved live options for that bank.
+     */
+    const makeOpts = (companyType: CompanyTypes): IResolvedLiveOpts =>
+      ({
+        bankId: companyType, companyType,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        bankConfig: {}, logger: { info: vi.fn(), warn: vi.fn() },
+      }) as unknown as IResolvedLiveOpts;
+
+    it('attaches the capture callback for oneZero', () => {
+      const options = buildScraperOptions(makeDeps(), makeOpts(CompanyTypes.OneZero), undefined);
+
+      expect(typeof options.onAuthFlowComplete).toBe('function');
+    });
+
+    it('persists the token the provider hands back through the callback', async () => {
+      writes.length = 0;
+      const options = buildScraperOptions(makeDeps(), makeOpts(CompanyTypes.PayBox), undefined);
+
+      await options.onAuthFlowComplete?.({ longTermToken: 'id-token', bearer: 'session' });
+
+      expect(writes).toEqual([{ bankId: 'payBox', token: 'id-token' }]);
+    });
+
+    it('leaves browser banks without a callback they can never fire', () => {
+      const options = buildScraperOptions(makeDeps(), makeOpts(CompanyTypes.Hapoalim), undefined);
+
+      expect(options).not.toHaveProperty('onAuthFlowComplete');
+    });
+  });
+
+  /**
+   * Two config entries can resolve to one bankId, because the registry matches
+   * aliases case-insensitively and `onezero` lists both `oneZero` and
+   * `onezero`. Sharing one token slot between two real accounts would make
+   * each run replay the other account's token, fail the warm start, and
+   * re-mint — revoking the other account's token on every single run.
+   */
+  describe('per-account token isolation', () => {
+    /**
+     * Builds resolved live options for one configured account of a bank.
+     * @param accountKey - Config entry name the scrape came from.
+     * @returns Resolved live options carrying that account key.
+     */
+    const makeAccountOpts = (accountKey: string): IResolvedLiveOpts =>
+      ({
+        bankId: 'onezero', companyType: CompanyTypes.OneZero, accountKey,
+        startDate: new Date('2024-01-01T00:00:00.000Z'),
+        bankConfig: {}, logger: { info: vi.fn(), warn: vi.fn() },
+      }) as unknown as IResolvedLiveOpts;
+
+    it('does not replay one account token for a second account of the same bank', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'scraper-setup-tokens-'));
+      const store = new BankTokenStore(join(dir, 'bank-tokens.json'));
+      const deps = ({ config: {}, bankTokens: store }) as unknown as ILiveScrapeDependencies;
+      const first = makeAccountOpts('oneZero');
+      const options = buildScraperOptions(deps, first, undefined);
+
+      await options.onAuthFlowComplete?.({ longTermToken: 'first-token', bearer: 'session' });
+      const secondParams = buildTokenCaptureParams(deps, makeAccountOpts('onezero'));
+      const replayed = withWarmToken({}, secondParams);
+
+      rmSync(dir, { recursive: true, force: true });
+      expect(replayed.otpLongTermToken).toBeUndefined();
+    });
+
+    it('replays the token back to the same account that captured it', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'scraper-setup-tokens-'));
+      const store = new BankTokenStore(join(dir, 'bank-tokens.json'));
+      const deps = ({ config: {}, bankTokens: store }) as unknown as ILiveScrapeDependencies;
+      const options = buildScraperOptions(deps, makeAccountOpts('oneZero'), undefined);
+
+      await options.onAuthFlowComplete?.({ longTermToken: 'first-token', bearer: 'session' });
+      const sameParams = buildTokenCaptureParams(deps, makeAccountOpts('oneZero'));
+      const replayed = withWarmToken({}, sameParams);
+
+      rmSync(dir, { recursive: true, force: true });
+      expect(replayed.otpLongTermToken).toBe('first-token');
     });
   });
 });

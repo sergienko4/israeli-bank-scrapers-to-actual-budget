@@ -18,6 +18,7 @@ import type { ILogger } from '../Logger/ILogger.js';
 import type { IBankScrapeStrategy } from '../Scraper/Strategies/IBankScrapeStrategy.js';
 import { LiveScrapeStrategy } from '../Scraper/Strategies/LiveScrapeStrategy.js';
 import { MockScrapeStrategy } from '../Scraper/Strategies/MockScrapeStrategy.js';
+import BankTokenStore from '../Scraper/Tokens/BankTokenStore.js';
 import { ChainBuilder } from '../Scrapers/Pipeline/Index.js';
 import createEvaluateSpendingWatchStep from '../Scrapers/Pipeline/Steps/EvaluateSpendingWatchStep.js';
 import createFinalizeImportStep from '../Scrapers/Pipeline/Steps/FinalizeImportStep.js';
@@ -84,6 +85,7 @@ export function buildScrapeStrategy(inputs: IScrapeStrategyInputs): IBankScrapeS
     timeoutWrapper: resilience.timeoutWrapper,
     twoFactorPrompter: services.twoFactorPrompter,
     notificationService: services.notificationService,
+    bankTokens: new BankTokenStore(),
   });
 }
 

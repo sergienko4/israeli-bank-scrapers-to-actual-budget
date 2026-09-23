@@ -24,6 +24,15 @@ export interface IBankScrapeStrategyOpts {
    */
   readonly companyType?: CompanyTypes;
   readonly bankConfig: IBankConfig;
+  /**
+   * Name of the `banks` config entry this scrape came from.
+   *
+   * <p>Distinct from `bankId`: the registry matches aliases
+   * case-insensitively, so two entries can resolve to one bankId. Anything
+   * stored per login identity — durable tokens above all — must be keyed on
+   * this as well, or two accounts at one provider share a single slot.
+   */
+  readonly accountKey?: string;
   readonly startDate: Date;
   readonly logger: ILogger;
   readonly otpRetriever?: () => Promise<string>;

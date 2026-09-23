@@ -71,7 +71,7 @@ export class BankScraper {
       `  📅 Date range: ${this.opts.datePolicy.formatDateRange(bankConfig)}`);
     const rawResult = await this.opts.strategy.scrape({
       bankId: entry?.bankId ?? bankName,
-      companyType: entry?.companyType,
+      companyType: entry?.companyType, accountKey: bankName,
       bankConfig, startDate, logger: this.opts.logger,
     });
     if (!rawResult.success) return BankScraper.buildFailureResult(rawResult.message);
