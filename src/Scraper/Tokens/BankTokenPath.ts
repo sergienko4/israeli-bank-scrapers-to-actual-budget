@@ -113,7 +113,7 @@ const PATH_RULES: readonly IPathRule[] = [
  * <p>An unset, empty or whitespace-only override is treated as absent, so a
  * blank environment variable never yields an unusable path. Otherwise the
  * override is returned as written, not normalised, once it passes every
- * {@link PATH_RULES} check. Unsafe segments are refused rather than rewritten,
+ * check in `PATH_RULES`. Unsafe segments are refused rather than rewritten,
  * because rewriting them is what made lexical and on-disk resolution disagree.
  * Repeated separators and `.` segments resolve the same both ways once device
  * prefixes are refused, so they pass through.
