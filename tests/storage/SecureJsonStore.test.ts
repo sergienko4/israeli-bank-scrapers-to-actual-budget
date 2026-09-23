@@ -212,12 +212,23 @@ describe('SecureJsonStore read path', () => {
     expect(fileSystem.modeOf(STORE_PATH)).toBe(OWNER_ONLY);
   });
 
-  it('threat 7: tolerates a hardening failure on a store it returns nothing from', () => {
+  it('threat 29: refuses an oversized store it cannot make owner-only', () => {
     const { store, fileSystem } = makeStore();
     fileSystem.seedFile(STORE_PATH, 'x'.repeat(MAX_STORE_BYTES + 1), 0o644);
     fileSystem.forcedFailures.set('restrictToOwner', 'EPERM');
     const snapshot = store.read();
-    expect(snapshot.success && snapshot.data.state).toBe('damaged');
+    expect(!snapshot.success && snapshot.status).toBe('EPERM');
+    expect(!snapshot.success && snapshot.message).toMatch(/readable by others/);
+  });
+
+  it('threat 29: never reports damaged a store its quarantine would refuse', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, 'x'.repeat(MAX_STORE_BYTES + 1), 0o644);
+    fileSystem.seedHardLink(STORE_PATH, '/data/someone-elses-name');
+    const snapshot = store.read();
+    const committed = store.commit({ records: { a: 'b' }, shouldQuarantine: true });
+    expect(!snapshot.success && snapshot.status).toBe('EMLINK');
+    expect(!committed.success && committed.status).toBe('EMLINK');
   });
 
   it('threat 7: never chmods an irregular entry it did not create', () => {

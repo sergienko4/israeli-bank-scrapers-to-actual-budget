@@ -334,6 +334,11 @@ export default class SecureJsonStore {
 
   /**
    * Assesses an open descriptor and reads it when it is safe to do so.
+   *
+   * <p>Hardening is judged before size. An oversized store is reported as
+   * `damaged`, which tells the caller to quarantine it, and the quarantine
+   * refuses anything that cannot be made owner-only; judging size first
+   * would advise a quarantine that fails on every run.
    * @param file - Descriptor returned by the open.
    * @returns A snapshot, or a failure when the contents cannot be read.
    */
@@ -343,14 +348,14 @@ export default class SecureJsonStore {
       return succeed(irregular);
     }
     const hardened = this._fileSystem.restrictToOwner(file);
-    if (file.sizeBytes > MAX_STORE_BYTES) {
-      const oversized = oversizedSnapshot(file.sizeBytes);
-      return succeed(oversized);
-    }
     if (!hardened.success) {
       return fail(`Refusing to read a store left readable by others at ${this._filePath}`, {
         status: hardened.status,
       });
+    }
+    if (file.sizeBytes > MAX_STORE_BYTES) {
+      const oversized = oversizedSnapshot(file.sizeBytes);
+      return succeed(oversized);
     }
     const contents = this._fileSystem.readAll(file, MAX_STORE_BYTES);
     if (!contents.success) return this.classifyReadFailure(contents.status);
