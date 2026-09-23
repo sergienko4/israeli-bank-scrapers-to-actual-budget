@@ -114,6 +114,21 @@ export const UPSTREAM_FAILURE_SIGNATURES: readonly IFailureSignature[] = [
         + 'It usually clears within minutes, so retry later',
     },
   },
+  {
+    // Two different refusals, one remedy. Scraper 8.7.3 caps cold SMS logins
+    // at one per scrape and reports the refusal as GENERIC; this importer
+    // applies the same cap to a rejected OTP on an API-direct bank. Without
+    // this signature the first is blamed on a stale scraper and the second
+    // renders the INVALID_OTP advice — "enter it quickly next time" — when
+    // there is deliberately no next time inside this run.
+    pattern: /already spent its one cold SMS login|one SMS login per scrape/iu,
+    advice: {
+      message: 'This run already used its one SMS login',
+      action:
+        'Nothing is broken — one SMS login is allowed per scrape. '
+        + 'Start a new scrape to try again',
+    },
+  },
 ];
 
 /**

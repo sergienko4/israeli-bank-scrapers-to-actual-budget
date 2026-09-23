@@ -150,4 +150,65 @@ describe('ScraperErrorMessages', () => {
       expect(advice).not.toContain('error page');
     });
   });
+
+  /**
+   * Scraper 8.7.3 caps cold SMS logins at one per scrape. The refusal is
+   * raised as ScraperErrorTypes.Generic, so without a signature the operator
+   * is told to "check for scraper updates" — which cannot help, because the
+   * cap is a deliberate policy and the remedy is to start a new scrape.
+   */
+  describe('cold-login budget spent (scraper 8.7.3)', () => {
+    // Copied verbatim from the provider's BUDGET_SPENT_MESSAGE so this suite
+    // fails loudly if the wording our signature matches on drifts.
+    const BUDGET_SPENT =
+      'GENERIC this scrape has already spent its one cold SMS login; the session '
+      + 'cannot be re-minted in-run — start a new scrape';
+
+    it('explains that the run used its one permitted SMS login', () => {
+      const advice = getScraperErrorAdvice(BUDGET_SPENT);
+      expect(advice).toContain('one SMS login');
+    });
+
+    it('tells the operator to start a new scrape', () => {
+      const advice = getScraperErrorAdvice(BUDGET_SPENT);
+      expect(advice).toContain('new scrape');
+    });
+
+    it('does not blame a stale scraper for a deliberate policy cap', () => {
+      const advice = getScraperErrorAdvice(BUDGET_SPENT);
+      expect(advice).not.toContain('check for scraper updates');
+    });
+
+    it('does not fire on an ordinary GENERIC failure', () => {
+      const advice = getScraperErrorAdvice('GENERIC navigation timed out');
+      expect(advice).not.toContain('one SMS login');
+    });
+  });
+
+  /**
+   * This importer refuses a second SMS login after a rejected OTP on an
+   * API-direct bank. The provider result still carries INVALID_OTP, whose
+   * stock advice is "enter it quickly next time" — actively wrong when the
+   * run has deliberately declined to ask again.
+   */
+  describe('refused OTP retry (importer policy)', () => {
+    // Mirrors the reason AttemptRunner appends to the provider's message.
+    const REFUSED =
+      'INVALID_OTP — one SMS login per scrape is allowed; start a new scrape to try again';
+
+    it('tells the operator to start a new scrape', () => {
+      const advice = getScraperErrorAdvice(REFUSED);
+      expect(advice).toContain('new scrape');
+    });
+
+    it('does not tell the operator to enter the next code more quickly', () => {
+      const advice = getScraperErrorAdvice(REFUSED);
+      expect(advice).not.toContain('quickly');
+    });
+
+    it('still gives the stock advice when an OTP is rejected but retried', () => {
+      const advice = getScraperErrorAdvice('INVALID_OTP the code was rejected');
+      expect(advice).toContain('quickly');
+    });
+  });
 });
