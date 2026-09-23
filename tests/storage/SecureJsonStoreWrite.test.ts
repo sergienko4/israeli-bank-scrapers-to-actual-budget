@@ -322,7 +322,7 @@ describe('SecureJsonStore write path', () => {
     expect(committed.message).not.toContain(SECRET);
   });
 
-  it('counts what it wrote, not what an accessor claimed on the way past', () => {
+  it('threat 24: refuses an unstable accessor rather than trusting its first answer', () => {
     const { store, fileSystem } = makeStore();
     const records: Record<string, unknown> = {};
     let reads = 0;
@@ -334,9 +334,9 @@ describe('SecureJsonStore write path', () => {
       },
     });
     const committed = store.commit({ records, shouldQuarantine: false });
-    if (!committed.success) throw new Error('expected the first read to be the one committed');
-    expect(committed.data.summary).toContain('1 records');
-    expect(fileSystem.contentsOf(STORE_PATH)).toContain('value');
+    if (committed.success) throw new Error('expected an accessor to be refused');
+    expect(reads).toBe(0);
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
   });
 
   it('threat 8: refuses a payload it would later be unable to read back', () => {
@@ -478,7 +478,7 @@ describe('SecureJsonStore write path', () => {
     expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
   });
 
-  it('threat 20: still commits the records alongside a rejected one', () => {
+  it('threat 20: refuses the whole commit rather than storing a rejected key', () => {
     const { store } = makeStore();
     const polluting = JSON.parse('{"__proto__":"tok","real":"kept"}') as Record<string, unknown>;
     const committed = store.commit({ records: polluting, shouldQuarantine: false });
@@ -514,5 +514,172 @@ describe('SecureJsonStore write path', () => {
     const vanishing = { kept: SECRET, lost: { toJSON: (): undefined => undefined } };
     store.commit({ records: vanishing, shouldQuarantine: false });
     expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 21: refuses a root toJSON that erases itself along with a record', () => {
+    const { store, fileSystem } = makeStore();
+    const vanishing: Record<string, unknown> = { alpha: SECRET, beta: 'second' };
+    vanishing.toJSON = function (this: Record<string, unknown>): Record<string, unknown> {
+      delete this.toJSON;
+      delete this.beta;
+      return { alpha: this.alpha };
+    };
+    const committed = store.commit({ records: vanishing, shouldQuarantine: false });
+    expect(committed.success).toBe(false);
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 21: refuses a root toJSON that injects a record nobody asked to store', () => {
+    const { store, fileSystem } = makeStore();
+    const injecting: Record<string, unknown> = { alpha: SECRET };
+    injecting.toJSON = function (this: Record<string, unknown>): Record<string, unknown> {
+      return { alpha: this.alpha, toJSON: 'kept as data', injected: 'never handed over' };
+    };
+    const committed = store.commit({ records: injecting, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected the commit to be refused');
+    expect(committed.message).not.toContain('missing');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 21: never names a key the serialisation invented', () => {
+    const { store } = makeStore();
+    const promoting: Record<string, unknown> = { alpha: SECRET };
+    promoting.toJSON = function (this: Record<string, unknown>): Record<string, unknown> {
+      delete this.toJSON;
+      return { alpha: this.alpha, [String(this.alpha)]: 'promoted to a key' };
+    };
+    const committed = store.commit({ records: promoting, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected the commit to be refused');
+    expect(committed.message).not.toContain(SECRET);
+  });
+
+  it('threat 21: refuses a root toJSON that swaps values but keeps the key set', () => {
+    const { store, fileSystem } = makeStore();
+    const swapping: Record<string, unknown> = { token: SECRET };
+    swapping.toJSON = function (): Record<string, unknown> {
+      return { token: 'SUBSTITUTED', toJSON: 'kept as data' };
+    };
+    const committed = store.commit({ records: swapping, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected the commit to be refused');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 24: refuses a record set whose getter deletes another record', () => {
+    const { store, fileSystem } = makeStore();
+    const shrinking: Record<string, unknown> = {};
+    Object.defineProperty(shrinking, 'first', {
+      enumerable: true,
+      get(): string {
+        delete shrinking.second;
+        return 'A';
+      },
+    });
+    shrinking.second = SECRET;
+    const committed = store.commit({ records: shrinking, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected the commit to be refused');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 24: refuses records carried on symbol keys that JSON would drop', () => {
+    const { store, fileSystem } = makeStore();
+    const symbolled: Record<string, unknown> = { visible: 'V' };
+    Object.defineProperty(symbolled, Symbol('token'), { enumerable: true, value: SECRET });
+    const committed = store.commit({ records: symbolled, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected the commit to be refused');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 24: refuses an array posing as a record set', () => {
+    const { store, fileSystem } = makeStore();
+    const listed = ['A', SECRET] as unknown as Record<string, unknown>;
+    const committed = store.commit({ records: listed, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected the commit to be refused');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 25: returns a failure when a record set refuses to be inspected', () => {
+    const { store, fileSystem } = makeStore();
+    const hostile = new Proxy({}, {
+      ownKeys: () => {
+        throw new Error('ownKeys refuses');
+      },
+    }) as Record<string, unknown>;
+    const committed = store.commit({ records: hostile, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected an uninspectable set to be refused');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 25: writes the copy, so a hidden toJSON never reaches the bytes', () => {
+    const { store, fileSystem } = makeStore();
+    const liar = new Proxy({ token: 'kept' }, {
+      get: (target, key) => {
+        if (key === 'toJSON') return () => ({ token: 'SUBSTITUTED', injected: SECRET });
+        return Reflect.get(target, key);
+      },
+    }) as Record<string, unknown>;
+    const committed = store.commit({ records: liar, shouldQuarantine: false });
+    if (!committed.success) throw new Error('expected the caller\'s own data to commit');
+    const written = fileSystem.contentsOf(STORE_PATH);
+    expect(written).toContain('kept');
+    expect(written).not.toContain('SUBSTITUTED');
+    expect(written).not.toContain(SECRET);
+  });
+
+  it('threat 24: refuses an array even when it is wearing a plain prototype', () => {
+    const { store, fileSystem } = makeStore();
+    const disguised = ['A', SECRET];
+    Object.setPrototypeOf(disguised, Object.prototype);
+    const committed = store.commit({
+      records: disguised as unknown as Record<string, unknown>,
+      shouldQuarantine: false,
+    });
+    if (committed.success) throw new Error('expected a disguised array to be refused');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 24: refuses a class instance, whose prototype JSON would discard', () => {
+    const { store, fileSystem } = makeStore();
+    class Holder {
+      public readonly token = SECRET;
+    }
+    const instance = new Holder() as unknown as Record<string, unknown>;
+    const committed = store.commit({ records: instance, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected a class instance to be refused');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 24: accepts a record set with no prototype at all', () => {
+    const { store, fileSystem } = makeStore();
+    const bare = Object.create(null) as Record<string, unknown>;
+    bare.token = 'kept';
+    const committed = store.commit({ records: bare, shouldQuarantine: false });
+    if (!committed.success) throw new Error('expected a null-prototype set to be accepted');
+    expect(fileSystem.contentsOf(STORE_PATH)).toContain('kept');
+  });
+
+  it('threat 25: refuses a proxy that describes a key once, then denies it', () => {
+    const { store, fileSystem } = makeStore();
+    const target = { token: SECRET };
+    let describes = 0;
+    const liar = new Proxy(target, {
+      getOwnPropertyDescriptor: (owned, key) => {
+        if (key !== 'token') return Reflect.getOwnPropertyDescriptor(owned, key);
+        describes += 1;
+        if (describes > 1) return undefined;
+        return Reflect.getOwnPropertyDescriptor(owned, key);
+      },
+    }) as Record<string, unknown>;
+    const committed = store.commit({ records: liar, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected an undescribable key to be refused');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 21: still commits an ordinary record set unchanged', () => {
+    const { store, fileSystem } = makeStore();
+    const records = { alpha: SECRET, beta: 'second' };
+    const committed = store.commit({ records, shouldQuarantine: false });
+    if (!committed.success) throw new Error(`expected the commit to succeed: ${committed.message}`);
+    expect(committed.data.summary).toBe('Committed 2 records');
+    expect(JSON.parse(fileSystem.contentsOf(STORE_PATH))).toEqual(records);
   });
 });

@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { dirname } from 'node:path';
+import { basename, dirname } from 'node:path';
 
 /** Characters that are illegal or awkward in a filename. */
 const UNSAFE_IN_NAMES = /[:.]/g;
@@ -63,14 +63,24 @@ export function directoryOf(filePath: string): string {
  *
  * <p>The suffix still matters independently: a quarantined file shares the
  * prefix but is the only copy of salvaged data, and must never be swept.
+ *
+ * <p>Both sides are reduced to their file name first. The candidates come
+ * from a directory listing, which joins and so normalises, while the store
+ * path arrives however the operator configured it: a store at
+ * `./data/tokens.json` compared as a whole string would match none of its own
+ * staged files and sweep nothing, leaving live tokens on disk forever.
+ * Normalising the store path instead would be wrong — collapsing `..`
+ * lexically can point at a different file when a symlink precedes it — and
+ * the candidate is known to sit in the listed directory already.
  * @param filePath - Absolute path of the store.
  * @param candidate - Path found alongside it.
  * @returns True when the candidate is this store's staging file.
  */
 export function isStagingPath(filePath: string, candidate: string): boolean {
-  const prefix = `${filePath}.`;
-  if (!candidate.startsWith(prefix)) return false;
-  if (!candidate.endsWith(STAGING_SUFFIX)) return false;
-  const token = candidate.slice(prefix.length, candidate.length - STAGING_SUFFIX.length);
+  const prefix = `${basename(filePath)}.`;
+  const name = basename(candidate);
+  if (!name.startsWith(prefix)) return false;
+  if (!name.endsWith(STAGING_SUFFIX)) return false;
+  const token = name.slice(prefix.length, name.length - STAGING_SUFFIX.length);
   return STAGING_TOKEN.test(token);
 }

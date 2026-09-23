@@ -9,6 +9,7 @@
 
 import type { Procedure } from '../Types/Procedure.js';
 import { fail, succeed } from '../Types/ProcedureHelpers.js';
+import { acceptRecordSet, POLLUTING_KEY } from './RecordContract.js';
 import type { IStoreSnapshot, StoreState } from './StoreTypes.js';
 
 /**
@@ -18,14 +19,6 @@ import type { IStoreSnapshot, StoreState } from './StoreTypes.js';
  * turns a read into an out-of-memory crash.
  */
 export const MAX_STORE_BYTES = 8 * 1024 * 1024;
-
-/**
- * Key that turns a later `target[key] = value` into prototype pollution.
- *
- * <p>Survives `JSON.parse` as an ordinary own property, so copying entries
- * into a null-prototype object is not on its own enough to neutralise it.
- */
-const POLLUTING_KEY = '__proto__';
 
 /**
  * Builds a snapshot with no records.
@@ -83,24 +76,75 @@ export function parseSnapshot(contents: string): IStoreSnapshot {
 }
 
 /**
- * Names the records that did not survive the round trip through JSON.
+ * Names the ways the serialised text differs from the records asked for.
  *
- * <p>A shallow `typeof` check is not enough. A value whose `toJSON` returns
- * `undefined` is an ordinary object on the way in and absent on the way out,
- * so the only count that can be trusted is the one taken from the text that
- * will actually be written. Without this the report claims a credential was
- * stored when the staged file never contained it.
- *
- * <p>The text is not assumed to describe an object either: a `toJSON` on the
- * record set itself can turn the whole store into `null` or an array.
- * @param expected - Keys the caller asked to persist.
- * @param json - Text `JSON.stringify` produced for them.
- * @returns The omitted keys, which are names rather than secrets.
+ * <p>Missing keys are named: they come from the caller's own record set, so
+ * they are identifiers the caller already knows. Unexpected keys are only
+ * counted. They come out of the serialisation rather than the caller, and a
+ * record set that rewrites itself can promote a credential into a key name —
+ * naming those would print the secret into the very error an operator logs.
+ * @param expected - Keys read before serialisation.
+ * @param written - Object the serialised text parses back to.
+ * @returns One note per kind of difference, naming no value the text invented.
  */
-function droppedKeys(expected: readonly string[], json: string): readonly string[] {
+function keyDifferences(
+  expected: readonly string[],
+  written: Record<string, unknown>,
+): readonly string[] {
+  const asked = new Set(expected);
+  const missing = expected.filter((key) => !Object.hasOwn(written, key));
+  const present = Object.keys(written);
+  const unexpected = present.filter((key) => !asked.has(key));
+  const notes: string[] = [];
+  if (missing.length > 0) notes.push(`missing ${missing.join(', ')}`);
+  if (unexpected.length > 0) notes.push(`${String(unexpected.length)} it never gave`);
+  return notes;
+}
+
+/**
+ * Accepts serialised text only when it holds exactly the records asked for.
+ *
+ * <p>Checking that nothing was dropped is half a check. A record set able to
+ * rewrite itself during serialisation can add records as easily as lose
+ * them, and a subset test calls both a faithful write, so the comparison has
+ * to run in both directions against a key set captured beforehand.
+ *
+ * <p>Two things now make that cheap. {@link acceptRecordSet} refuses
+ * behaviour before anything is read, and what gets serialised is the copy,
+ * never the caller's object — so a `toJSON` reached through a prototype or a
+ * proxy trap cannot touch the bytes. The remaining live case is a *nested*
+ * value whose own `toJSON` returns `undefined`, which is ordinary JSON
+ * semantics and quietly drops the record.
+ *
+ * <p>The unexpected-key half therefore has no way to fire today. It is kept
+ * because it costs one comparison and it is what makes the order above a
+ * checked property rather than a convention: serialise the original instead
+ * of the copy and this is the check that notices.
+ *
+ * <p>Value fidelity at depth is still not promised: a nested `Date` is meant
+ * to serialise as a string. The caller owns values; this owns the set.
+ * @param expected - Keys read before serialisation.
+ * @param json - Text `JSON.stringify` produced for them.
+ * @returns The text and its record count, or a failure naming no values.
+ */
+function confirmExactRoundTrip(
+  expected: readonly string[],
+  json: string,
+): Procedure<ISerialised> {
   const written: unknown = JSON.parse(json);
-  if (!isKeyedRecord(written)) return expected;
-  return expected.filter((key) => !Object.hasOwn(written, key));
+  // Narrowing `JSON.parse`, which is typed `any`. A copy of a validated plain
+  // object always parses back to one, so the branch below is unreachable.
+  if (!isKeyedRecord(written)) {
+    return fail('Records serialise to something that is not an object of records', {
+      status: 'EINVAL',
+    });
+  }
+  const differences = keyDifferences(expected, written);
+  if (differences.length > 0) {
+    const notes = differences.join('; ');
+    return fail(`Records did not survive JSON unchanged: ${notes}`, { status: 'EINVAL' });
+  }
+  return succeed({ json, count: expected.length });
 }
 
 /** Serialised records, with the count that was actually written. */
@@ -113,24 +157,23 @@ export interface ISerialised {
 }
 
 /**
- * Takes a private copy of the caller's records.
+ * Takes a private copy of an already-accepted record set.
  *
- * <p>Every property is read exactly once, here, behind a guard. Reading them
- * twice would let an accessor return a value to be inspected and a different
- * one to be written, and reading them unguarded would let a throwing accessor
- * escape the commit as an exception instead of a failure.
- * @param records - Records the caller asked to persist.
- * @returns A plain copy, or a failure naming no values.
+ * <p>Everything downstream works on this copy rather than the caller's
+ * object, and that is load-bearing twice over. It fixes the values at one
+ * moment, so nothing can change under the checks; and it strips the identity
+ * of the original, so a `toJSON` reached through a prototype or a proxy trap
+ * has no way to intercept `JSON.stringify`.
+ *
+ * <p>Total, because {@link acceptRecordSet} has already refused anything that
+ * could run code while being copied.
+ * @param records - Records that passed the contract.
+ * @returns A plain copy carrying the same keys and values.
  */
 function snapshotRecords(
   records: Readonly<Record<string, unknown>>,
-): Procedure<Record<string, unknown>> {
-  try {
-    const copy = { ...records };
-    return succeed(copy);
-  } catch {
-    return fail('Records could not be read', { status: 'EINVAL' });
-  }
+): Record<string, unknown> {
+  return { ...records };
 }
 
 /**
@@ -149,68 +192,34 @@ function snapshotRecords(
 export function serialiseRecords(
   records: Readonly<Record<string, unknown>>,
 ): Procedure<ISerialised> {
-  const snapshot = snapshotRecords(records);
-  if (!snapshot.success) return snapshot;
-  const accepted = acceptForWriting(snapshot.data);
-  if (!accepted.success) return accepted;
-  return stringifyAndVerify(accepted.data);
-}
-
-/**
- * Refuses a record set holding a key the read path would strip.
- *
- * <p>An own `__proto__` survives both the copy and `JSON.stringify`, so no
- * later check sees a loss, yet the read path drops it. Committing it would
- * report a credential stored that no read could ever return.
- * @param records - Private copy of the caller's records.
- * @returns The same records, or a failure naming the offending key.
- */
-function acceptForWriting(
-  records: Record<string, unknown>,
-): Procedure<Record<string, unknown>> {
-  if (Object.hasOwn(records, POLLUTING_KEY)) {
-    return fail(`Records cannot include ${POLLUTING_KEY}: it is stripped on read`, {
-      status: 'EINVAL',
-    });
+  try {
+    const accepted = acceptRecordSet(records);
+    if (!accepted.success) return accepted;
+    const snapshot = snapshotRecords(records);
+    return stringifyAndVerify(snapshot);
+  } catch {
+    return fail('Records could not be read', { status: 'EINVAL' });
   }
-  return succeed(records);
 }
 
 /**
- * Serialises accepted records and proves the text still holds all of them.
- * @param records - Records cleared for writing.
+ * Serialises the copy and proves the text still holds all of it.
+ *
+ * <p>The key set is read before `JSON.stringify`, not after. That ordering
+ * cost nothing and is what closed the original hole, where keys read
+ * afterwards described the serialisation rather than the request.
+ * @param records - Private copy cleared for writing.
  * @returns The JSON text and its record count, or a failure naming no values.
  */
 function stringifyAndVerify(records: Record<string, unknown>): Procedure<ISerialised> {
-  let json: unknown;
+  const expected = Object.keys(records);
+  let json: string;
   try {
     json = JSON.stringify(records, undefined, 2);
   } catch {
     return fail('Records could not be serialised as JSON', { status: 'EINVAL' });
   }
-  if (typeof json !== 'string') {
-    return fail('Records serialise to nothing at all', { status: 'EINVAL' });
-  }
-  const expected = Object.keys(records);
-  return confirmNothingDropped(expected, json);
-}
-
-/**
- * Accepts serialised text only when every record the caller gave survived it.
- * @param expected - Keys the caller asked to persist.
- * @param json - Text about to be staged.
- * @returns The text and its record count, or a failure naming the losses.
- */
-function confirmNothingDropped(
-  expected: readonly string[],
-  json: string,
-): Procedure<ISerialised> {
-  const dropped = droppedKeys(expected, json);
-  if (dropped.length > 0) {
-    const names = dropped.join(', ');
-    return fail(`Records cannot be stored as JSON: ${names}`, { status: 'EINVAL' });
-  }
-  return succeed({ json, count: expected.length });
+  return confirmExactRoundTrip(expected, json);
 }
 
 /**

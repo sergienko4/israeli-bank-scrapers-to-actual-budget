@@ -102,9 +102,13 @@ export default class SecureJsonStore {
   /**
    * Replaces the store's contents, optionally moving a damaged file aside.
    *
-   * <p>Ordering is the whole point: the replacement is staged and verified
-   * before anything at the canonical path is disturbed, so a crash leaves
-   * either the old file or the new one there, never nothing.
+   * <p>Ordering is the whole point: the replacement is staged, flushed and
+   * verified before anything at the canonical path is disturbed, so a crash
+   * leaves either the old file or the new one there, never nothing. The
+   * staged bytes are fsynced before the rename; the directory entry that
+   * rename creates is not, so on a filesystem that reorders metadata a power
+   * loss can still show the predecessor. That is the weaker of the two
+   * outcomes already promised here, not a third one.
    *
    * <p>One exception, and it is narrow. Quarantining a damaged predecessor
    * takes two renames that cannot be made one, so a crash between them

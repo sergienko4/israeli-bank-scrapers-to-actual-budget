@@ -13,8 +13,8 @@
  */
 
 import {
-  closeSync, constants, fchmodSync, fstatSync, openSync, readdirSync, readSync, renameSync,
-  unlinkSync, writeFileSync,
+  closeSync, constants, fchmodSync, fstatSync, fsyncSync, openSync, readdirSync, readSync,
+  renameSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
 
@@ -220,6 +220,15 @@ function restrictToOwner(file: IOpenFile): Procedure<IHardenOutcome> {
  * <p>A failing close counts as a failure too. Buffered filesystems report
  * deferred write errors there, so staging a file whose close failed would
  * commit bytes that may never have reached the disk.
+ *
+ * <p>The payload is flushed before the call returns. Closing a descriptor
+ * surfaces deferred errors but does not make the data durable, and the
+ * caller's next move is to rename this file over the store: a crash can
+ * persist that rename while the contents are still only in page cache,
+ * leaving the canonical path pointing at an empty file and every stored
+ * credential gone. Flushing the directory entry afterwards is a separate
+ * concern and is not needed here — an unpersisted rename leaves the previous
+ * state on disk, which is an outcome the commit already promises.
  * @param descriptor - Descriptor for the newly created file.
  * @param filePath - Path that descriptor was created at.
  * @param contents - Payload to write, treated as opaque.
@@ -231,6 +240,7 @@ function writeCreated(
   const bytesWritten = Buffer.byteLength(contents, 'utf8');
   try {
     writeFileSync(descriptor, contents, { encoding: 'utf8' });
+    fsyncSync(descriptor);
   } catch (error: unknown) {
     const failure = failed('write', filePath, error);
     closeQuietly(descriptor);

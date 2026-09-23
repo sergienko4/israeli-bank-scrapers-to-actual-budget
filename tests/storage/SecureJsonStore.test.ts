@@ -2,8 +2,8 @@
  * Read-path behaviour of {@link SecureJsonStore}.
  *
  * <p>Every case here maps to a numbered row of the threat model in
- * `plans/secure-json-store-spec.md`. The row is named in the test title so a
- * future reader can tell which guard a failure has removed.
+ * `docs/architecture/secure-json-store.md`. The row is named in the test title
+ * so a future reader can tell which guard a failure has removed.
  *
  * <p>Runs entirely against {@link FakeFileSystem}: no temp directories, no
  * `vi.mock`, and errnos that would be awkward to provoke for real.
