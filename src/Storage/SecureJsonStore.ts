@@ -238,8 +238,9 @@ export default class SecureJsonStore {
    *
    * <p>Quarantine renames whatever the name points at, so a directory there
    * would be relocated whole, taking unrelated files with it. Only an entry
-   * positively established as movable qualifies: a regular file, or a
-   * symlink, where the rename moves the link and never its target.
+   * positively established as movable qualifies: a regular file that could
+   * be made owner-only, or a symlink, where the rename moves the link and
+   * never its target — which is why a link is never re-permissioned either.
    *
    * <p>This narrows the window rather than closing it. The type is read from
    * a descriptor, but the rename that follows acts on the name, and Node
@@ -255,11 +256,38 @@ export default class SecureJsonStore {
         status: opened.status,
       });
     }
-    const { isRegularFile } = opened.data;
-    this._fileSystem.close(opened.data);
-    if (isRegularFile) return succeed(true);
-    return fail(`Refusing to quarantine ${this._filePath}: not a regular file`, {
-      status: 'ENOTSUP',
+    try {
+      return this.screenOpened(opened.data);
+    } finally {
+      this._fileSystem.close(opened.data);
+    }
+  }
+
+  /**
+   * Clears an open predecessor for quarantine, making it owner-only first.
+   *
+   * <p>Nothing revisits a quarantined file, so it keeps whatever mode it is
+   * moved with for good. {@link read} hardens a store before trusting it, but
+   * `commit` does not require a `read` first and cannot assume one happened:
+   * a `0644` predecessor moved aside as found would outlive the store that
+   * replaced it, readable by every local user under a name nobody checks.
+   *
+   * <p>So a predecessor that cannot be made owner-only — including one with
+   * a second hard link, which `read` refuses for the same reason — aborts the
+   * commit and stays where the next run will look at it again.
+   * @param file - Descriptor for whatever sits at the store path.
+   * @returns Whether it may be moved, or why it must stay.
+   */
+  private screenOpened(file: IOpenFile): Procedure<boolean> {
+    if (!file.isRegularFile) {
+      return fail(`Refusing to quarantine ${this._filePath}: not a regular file`, {
+        status: 'ENOTSUP',
+      });
+    }
+    const hardened = this._fileSystem.restrictToOwner(file);
+    if (hardened.success) return succeed(true);
+    return fail(`Refusing to quarantine a store left readable by others at ${this._filePath}`, {
+      status: hardened.status,
     });
   }
 

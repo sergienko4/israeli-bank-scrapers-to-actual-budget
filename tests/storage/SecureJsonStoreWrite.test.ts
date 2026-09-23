@@ -102,6 +102,9 @@ const STORE_PATH = '/data/tokens.json';
 /** Owner read/write only. */
 const OWNER_ONLY = 0o600;
 
+/** Mode a store must never be left at, and never be moved aside at. */
+const WORLD_READABLE = 0o644;
+
 /** A credential value no error message may ever repeat. */
 const SECRET = 'eyJhbGciOiJIUzI1NiJ9.super-secret-refresh-token';
 
@@ -205,6 +208,46 @@ describe('SecureJsonStore write path', () => {
     store.commit({ records: { a: 'b' }, shouldQuarantine: true });
     const [quarantined] = fileSystem.names().filter((name) => name.includes('quarantined'));
     expect(fileSystem.contentsOf(quarantined ?? '')).toBe('corrupt-but-precious');
+  });
+
+  it('threat 29: hardens a world-readable predecessor before quarantining it', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, `{"token":"${SECRET}"}`, WORLD_READABLE);
+    const committed = store.commit({ records: { a: 'b' }, shouldQuarantine: true });
+    expect(committed.success).toBe(true);
+    const [quarantined] = fileSystem.names().filter((name) => name.includes('quarantined'));
+    expect(fileSystem.modeOf(quarantined ?? '')).toBe(OWNER_ONLY);
+  });
+
+  it('threat 29: refuses to quarantine a store it cannot make owner-only', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, `{"token":"${SECRET}"}`, WORLD_READABLE);
+    fileSystem.forcedFailures.set('restrictToOwner', 'EPERM');
+    const committed = store.commit({ records: { a: 'b' }, shouldQuarantine: true });
+    if (committed.success) throw new Error('expected an unhardenable store to abort');
+    expect(committed.message).toContain('readable by others');
+    expect(fileSystem.names().filter((name) => name.includes('quarantined'))).toHaveLength(0);
+    expect(leftovers(fileSystem)).toHaveLength(0);
+  });
+
+  it('threat 29: refuses to quarantine a hard-linked predecessor, as read refuses it', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, `{"token":"${SECRET}"}`, WORLD_READABLE);
+    fileSystem.seedHardLink(STORE_PATH, '/data/someone-elses-name');
+    const committed = store.commit({ records: { a: 'b' }, shouldQuarantine: true });
+    if (committed.success) throw new Error('expected a hard-linked store to abort');
+    expect(committed.status).toBe('EMLINK');
+    expect(fileSystem.modeOf('/data/someone-elses-name')).toBe(WORLD_READABLE);
+    expect(fileSystem.names().filter((name) => name.includes('quarantined'))).toHaveLength(0);
+  });
+
+  it('threat 29: quarantines a symlink without re-permissioning its target', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile('/data/elsewhere', 'target-contents', WORLD_READABLE);
+    fileSystem.seedSymlink(STORE_PATH, '/data/elsewhere');
+    const committed = store.commit({ records: { token: SECRET }, shouldQuarantine: true });
+    expect(committed.success).toBe(true);
+    expect(fileSystem.modeOf('/data/elsewhere')).toBe(WORLD_READABLE);
   });
 
   it('aborts rather than destroying the damaged file when quarantine fails', () => {
@@ -451,7 +494,9 @@ describe('SecureJsonStore write path', () => {
     const { store, fileSystem } = makeStore();
     fileSystem.seedDirectory(STORE_PATH);
     const committed = store.commit({ records: { token: SECRET }, shouldQuarantine: true });
-    expect(committed.success).toBe(false);
+    if (committed.success) throw new Error('expected a directory to be refused');
+    expect(committed.status).toBe('ENOTSUP');
+    expect(fileSystem.calls).not.toContain('restrictToOwner');
     expect(fileSystem.hasEntry(STORE_PATH)).toBe(true);
   });
 
