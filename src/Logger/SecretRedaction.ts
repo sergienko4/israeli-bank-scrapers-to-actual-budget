@@ -24,12 +24,18 @@ const SECRET_KEYS = [
  * A secret key, then its value.
  *
  * <p>The key may be quoted, even escaped (`\"idToken\"`), as in an echoed
- * JSON body. The value may be quoted or wrapped in an array. It may also
- * open with an auth scheme: a bearer is `Bearer <jwt>`, and a match that
- * stopped at the first word would hide the scheme and print the jwt.
+ * JSON body. A plain value may be quoted, and may open with an auth scheme:
+ * a bearer is `Bearer <jwt>`, and a match that stopped at the first word
+ * would hide the scheme and print the jwt.
+ *
+ * <p>A value that opens an object or a list hides the rest of the text. Its
+ * inner fields may be secrets under harmless names, and the bank's snippet
+ * is often cut off before the closing brace, so there is no end to match.
  */
 const SECRET_PATTERN = new RegExp(
-  String.raw`\b(${SECRET_KEYS})[\\"']*\s*[=:][\s\\"'[]*(?:(?:Bearer|Basic)\s+)?\S+`, 'gi',
+  String.raw`\b(${SECRET_KEYS})[\\"']*\s*[=:]\s*` +
+    String.raw`(?:[{[][\s\S]*|[\\"']*(?:(?:Bearer|Basic)\s+)?\S+)`,
+  'gi',
 );
 
 /**

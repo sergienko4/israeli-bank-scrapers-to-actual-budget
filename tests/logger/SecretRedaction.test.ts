@@ -33,6 +33,12 @@ describe('redactSecrets', () => {
     ['an inspected bearer', `{ bearer: 'Bearer ${TEST_CREDENTIAL}' }`],
     ['an inspected hyphenated key', `{ 'x-auth-token': '${TEST_CREDENTIAL}' }`],
     ['a header array', `{"Authorization":["Bearer ${TEST_CREDENTIAL}"]}`],
+    ['a spaced list of values', `{"Authorization": ["Basic abc", "${TEST_CREDENTIAL}"]}`],
+    ['a secret nested under a secret key', `{"auth": {"otpLongTermToken": "${TEST_CREDENTIAL}"}}`],
+    ['an object held by a secret key', `{"token": {"value": "${TEST_CREDENTIAL}", "exp": 1}}`],
+    ['a pretty-printed object', `{\n  "token": {\n    "value": "${TEST_CREDENTIAL}"\n  }\n}`],
+    ['a value on the next line', `token:\n  ${TEST_CREDENTIAL}`],
+    ['a URL query string', `GET /sync?access_token=${TEST_CREDENTIAL}&page=2`],
   ])('hides the value of %s', (_shape, text) => {
     expect(redactSecrets(`login failed ${text}`)).not.toContain(TEST_CREDENTIAL);
   });

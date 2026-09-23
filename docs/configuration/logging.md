@@ -144,7 +144,8 @@ A `Bearer` or `Basic` word in front of the value is hidden with it, so
 `authorization: Bearer <jwt>` is written as `authorization=[REDACTED]`. The
 key itself is kept, so you can still tell what was hidden. The mask runs to
 the next space, so in a quoted JSON body the fields after a secret are hidden
-too.
+too. When a secret key holds an object or a list, the rest of the message is
+hidden, because the fields inside it can be secrets under ordinary names.
 
 Masking covers stdout, the log files that `/logs` reads, and error alerts on
 Telegram, webhook and push.
