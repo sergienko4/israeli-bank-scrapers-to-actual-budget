@@ -5,7 +5,7 @@ API-direct banks (OneZero, Pepper, PayBox) mint after an SMS login, so a
 later run can log in without another SMS. A token is a standing bypass of the
 second factor, and OneZero's is valid for ten years.
 
-The store is a thin adapter over [`SecureJsonStore`](secure-json-store.md),
+The store is a thin adapter over [`SecureJsonStore`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/secure-json-store.md),
 which owns every filesystem guarantee: no-follow reads, owner-only files,
 exclusive staging, atomic publish, quarantine and the size cap. Read that
 page's threat model before changing how the file is touched. This page covers
@@ -103,8 +103,12 @@ Failures name the store key and never the token.
 ## Leftover staging files
 
 A process killed mid-write can leave a staged file holding a live token.
-`sweepStagedLeftovers()` removes those older than an hour. Whoever constructs
-the store should call it once at startup; commits also sweep afterwards.
+`sweepStagedLeftovers()` removes those older than an hour. Whoever owns the
+store's lifecycle should call it at startup and again on every scheduled run.
+Startup alone is not enough: a file staged just before a restart is still
+younger than an hour when the process comes back, and a warm run that writes
+nothing never commits, so a long-running scheduler would otherwise keep that
+copy of a live token until the next restart. Commits also sweep afterwards.
 
 ## Limits
 
