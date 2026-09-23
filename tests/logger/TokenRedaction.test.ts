@@ -83,7 +83,7 @@ describe('structured fields under any key the text masker names', () => {
   it('masks a secret quoted inside a text field', () => {
     const line = logOnce({ error: `POST /sessions 401: {"idToken":"${TEST_CREDENTIAL}"}` }, 'failed');
     expect(line).not.toContain(TEST_CREDENTIAL);
-    expect(JSON.parse(line).error).toBe('POST /sessions 401: {"idToken=[REDACTED]');
+    expect(JSON.parse(line).error).toBe('POST /sessions 401: {"idToken":"[REDACTED]"}');
   });
 
   it('keeps fields whose names only contain a secret word', () => {

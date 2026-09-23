@@ -144,10 +144,17 @@ followed by `=` or `:`:
 
 A `Bearer` or `Basic` word in front of the value is hidden with it, so
 `authorization: Bearer <jwt>` is written as `authorization=[REDACTED]`. The
-key itself is kept, so you can still tell what was hidden. The mask runs to
-the next space, so in a quoted JSON body the fields after a secret are hidden
-too. When a secret key holds an object or a list, the rest of the message is
-hidden, because the fields inside it can be secrets under ordinary names.
+key itself is kept, so you can still tell what was hidden. A quoted value is
+hidden through its closing quote, spaces included, and keeps its quotes:
+`{"idToken":"..."}` is written as `{"idToken":"[REDACTED]"}`, still valid JSON,
+and the fields after it stay readable. Double quotes, single quotes and
+backticks all count. A value the bank's reply cut off before its closing quote
+hides the rest of the reply. An unquoted value is
+hidden up to the next space. A `=` or `:` inside it opens another value, which
+is hidden too: the quoted value in `{"token":null,"idToken": "..."}`, or the
+secret after `Basic` in `token=null,auth=Basic ...`. When a secret key holds an
+object or a list, the rest of the reply is hidden, because the fields inside it
+can be secrets under ordinary names. Masking a line twice gives the same line.
 
 Structured log fields follow the same keys, in any letter case: a field named
 `authToken` or `Authorization` is written as `[REDACTED]`, and a secret quoted
