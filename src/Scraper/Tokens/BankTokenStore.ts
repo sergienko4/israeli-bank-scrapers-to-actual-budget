@@ -150,6 +150,21 @@ function removeTemp(tempPath: string): boolean {
 }
 
 /**
+ * Reports whether staging failed because the path was already occupied.
+ *
+ * <p>Exclusive staging refuses rather than overwriting, so `EEXIST` means the
+ * file sitting there belongs to someone else and this attempt created nothing.
+ * Cleaning up after it would delete a file this write never made — turning a
+ * refused write into the destruction of an unrelated file.
+ * @param error - Failure raised while staging the payload.
+ * @returns True when the staging path was already taken.
+ */
+function wasPathAlreadyTaken(error: unknown): boolean {
+  if (!(error instanceof Error) || !('code' in error)) return false;
+  return error.code === 'EEXIST';
+}
+
+/**
  * Stages the payload then renames it into place, cleaning up on failure.
  *
  * <p>Staging is exclusive (`wx`). The default `w` flag follows a symlink and
@@ -159,6 +174,10 @@ function removeTemp(tempPath: string): boolean {
  * there with whatever permissions that file had. The random suffix makes the
  * path hard to guess, but `wx` means guessing it correctly still achieves
  * nothing — the create fails rather than writing through the link.
+ *
+ * <p>Cleanup is therefore skipped when the path was already taken: this
+ * attempt created nothing, and removing the occupant would let a refused
+ * write delete a file belonging to someone else.
  * @param tempPath - Sibling temp file staged before the rename.
  * @param serialized - Complete JSON payload to persist.
  * @param target - Final path the temp file is renamed onto.
@@ -171,7 +190,8 @@ function commitTemp(tempPath: string, serialized: string, target: string): boole
     renameSync(tempPath, target);
     return true;
   } catch (error: unknown) {
-    removeTemp(tempPath);
+    const wasTaken = wasPathAlreadyTaken(error);
+    if (!wasTaken) removeTemp(tempPath);
     const detail = errorMessage(error);
     throw error instanceof Error ? error : new Error(detail);
   }

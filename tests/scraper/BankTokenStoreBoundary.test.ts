@@ -151,6 +151,36 @@ describe('a symlink planted at the staging path', () => {
     store.write('oneZero', 'onezero-id-token');
     expect(store.read('oneZero')).toBe('');
   });
+
+  it('leaves the planted link itself in place, having created nothing', () => {
+    const planted = `${storePath}.${STAGING_SUFFIX}.tmp`;
+    new BankTokenStore(storePath).write('oneZero', 'onezero-id-token');
+    expect(realFs.existsSync(planted)).toBe(true);
+  });
+});
+
+describe('an unrelated file already occupying the staging path', () => {
+  let occupant = '';
+
+  beforeEach(() => {
+    occupant = `${storePath}.${STAGING_SUFFIX}.tmp`;
+    writeFileSync(occupant, 'SOMEONE ELSES DATA', { mode: 0o644 });
+  });
+
+  it('does not delete a file this write never created', () => {
+    new BankTokenStore(storePath).write('oneZero', 'onezero-id-token');
+    expect(realFs.existsSync(occupant)).toBe(true);
+  });
+
+  it('leaves that file byte-for-byte untouched', () => {
+    new BankTokenStore(storePath).write('oneZero', 'onezero-id-token');
+    expect(String(realFs.readFileSync(occupant))).toBe('SOMEONE ELSES DATA');
+  });
+
+  it('still reports the write as failed rather than silently succeeding', () => {
+    const result = new BankTokenStore(storePath).write('oneZero', 'onezero-id-token');
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('a close that fails after the store was read', () => {
