@@ -1,32 +1,11 @@
 /** Owns bank-metrics state and exposes the MetricsService public class.
  * @internal */
+import redactSecrets from '../../Logger/SecretRedaction.js';
 import type { Procedure } from '../../Types/Index.js';
 import { fail, succeed } from '../../Types/Index.js';
 import { printImportSummary } from './Serializer.js';
 import buildImportSummary from './Summary.js';
 import type { IAccountTransactionsRecord, IBankMetrics, IImportSummary } from './Types.js';
-/**
- * Keys whose `key=value` / `key: value` value is redacted from error text.
- *
- * <p>The last five are scraper 8.7.2's names for the durable login token and
- * its session bearer. `\btoken` cannot match inside `otpLongTermToken`,
- * because the letter before `Token` is a word character, so each is listed.
- */
-const SENSITIVE_KEYS = [
-  'password', 'token', 'secret', 'auth(?:orization)?', 'creditcard', 'cvv',
-  'otpLongTermToken', 'longTermToken', 'persistentOtpToken', 'idToken', 'bearer',
-].join('|');
-/**
- * A sensitive key, then its value.
- *
- * <p>The key may be quoted, as in an echoed JSON body. The value may be
- * quoted too, and may open with an auth scheme: the scraper's `bearer` is
- * `Bearer <jwt>`, and matching one word would hide the scheme and print the
- * credential after it.
- */
-const SENSITIVE_PATTERN = new RegExp(
-  String.raw`\b(${SENSITIVE_KEYS})["']?\s*[=:]\s*["']?(?:(?:Bearer|Basic)\s+)?\S+`, 'gi',
-);
 /** Tracks metrics for import runs and individual banks. */
 export default class MetricsService {
   private readonly _banks = new Map<string, IBankMetrics>();
@@ -158,19 +137,9 @@ export default class MetricsService {
    * @returns completed metrics. */
   private static completeFailure(metrics: IBankMetrics, error: Error): IBankMetrics {
     MetricsService.finishMetrics(metrics, 'failure');
-    const safeMsg = error.message ? MetricsService.redactSensitive(error.message) : '';
+    const safeMsg = error.message ? redactSecrets(error.message) : '';
     metrics.error = safeMsg ? `${error.name}: ${safeMsg}` : error.name;
     return metrics;
-  }
-  /** Redacts sensitive credential patterns from a free-text string.
-   * Matches `key=value` / `key: value` where key is a known sensitive
-   * keyword; replaces value with `[REDACTED]`. Does not redact bare
-   * keyword occurrences (e.g. `AuthenticationError` is preserved) per
-   * `logging-pii-guidlines.md` §1 preventive-masking rule.
-   * @param text input string to redact.
-   * @returns redacted string. */
-  private static redactSensitive(text: string): string {
-    return text.replace(SENSITIVE_PATTERN, (_match, key: string) => `${key}=[REDACTED]`);
   }
   /** Marks metrics complete.
    * @param metrics bank metrics.

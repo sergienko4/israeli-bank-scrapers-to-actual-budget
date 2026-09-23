@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import NotificationService from '../../src/Services/NotificationService.js';
 import { IImportSummary } from '../../src/Services/MetricsService.js';
 import * as LoggerModule from '../../src/Logger/Index.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 const mockSendSummary = vi.fn().mockResolvedValue(undefined);
 const mockSendError = vi.fn().mockResolvedValue(undefined);
@@ -85,6 +86,18 @@ describe('NotificationService', () => {
     expect(mockSendError).toHaveBeenCalledWith('Critical failure');
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.sent).toBe(1);
+  });
+
+  it('redacts secrets from error text before any channel sees it', async () => {
+    const service = new NotificationService({
+      enabled: true,
+      telegram: { botToken: '123:ABC', chatId: '-100' }
+    });
+
+    await service.sendError(`Import failed for oneZero: 401: {"idToken":"${TEST_CREDENTIAL}"}`);
+    const sent = String(mockSendError.mock.calls[0]?.[0]);
+    expect(sent).not.toContain(TEST_CREDENTIAL);
+    expect(sent).toContain('Import failed for oneZero: 401:');
   });
 
   it('returns fail when all notifiers reject', async () => {

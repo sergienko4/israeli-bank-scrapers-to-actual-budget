@@ -127,6 +127,28 @@ The `/logs` Telegram command reads from these files — so `logDir` is required 
 -v /host/logs:/app/logs
 ```
 
+## Secret masking
+
+Log lines and error alerts can quote a bank's reply, and some banks echo
+credentials in it. Before a line is written or an alert is sent, the importer
+replaces the value after any of these keys with `[REDACTED]` when the key is
+followed by `=` or `:`:
+
+- any name ending in `token`, which covers the long-term login token under
+  each of its names: `otpLongTermToken`, `longTermToken`,
+  `persistentOtpToken`, `idToken` and `access_token`
+- `password`, `secret`, `auth`, `authorization`, `bearer`, `jwt`,
+  `creditCard` and `cvv`
+
+A `Bearer` or `Basic` word in front of the value is hidden with it, so
+`authorization: Bearer <jwt>` is written as `authorization=[REDACTED]`. The
+key itself is kept, so you can still tell what was hidden. The mask runs to
+the next space, so in a quoted JSON body the fields after a secret are hidden
+too.
+
+Masking covers stdout, the log files that `/logs` reads, and error alerts on
+Telegram, webhook and push.
+
 ## Deprecated: `maxBufferSize`
 
 `maxBufferSize` is ignored. The `/logs` command now reads from log files (no in-memory buffer).

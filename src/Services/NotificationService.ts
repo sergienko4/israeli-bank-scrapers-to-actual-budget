@@ -10,6 +10,7 @@
  * Pattern A (validated on smallest service first per `spec.md` PR 4).
  */
 
+import redactSecrets from '../Logger/SecretRedaction.js';
 import type { INotificationConfig, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
 import type { IImportSummary } from './MetricsService.js';
@@ -45,12 +46,16 @@ export default class NotificationService {
 
   /**
    * Sends an error notification to all registered channels.
+   *
+   * <p>Error text can quote a bank's response body, so its secrets are
+   * masked once here, before any channel sends it off the host.
    * @param error - The error message string to broadcast.
    * @returns Procedure with the count of notifiers that succeeded.
    */
   public async sendError(error: string): Promise<Procedure<{ sent: number }>> {
+    const masked = redactSecrets(error);
     return await dispatchToAll(this._notifiers, async (n) => {
-      await n.sendError(error);
+      await n.sendError(masked);
       return succeed({ sent: true });
     });
   }
