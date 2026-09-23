@@ -167,12 +167,44 @@ describe('SecureJsonStore read path', () => {
     expect(fileSystem.modeOf(STORE_PATH)).toBe(OWNER_ONLY);
   });
 
-  it('threat 7: still returns the records when hardening is refused', () => {
+  it('threat 7: withholds the records when hardening is refused', () => {
     const { store, fileSystem } = makeStore();
     fileSystem.seedFile(STORE_PATH, '{"a":"b"}', 0o644);
     fileSystem.forcedFailures.set('restrictToOwner', 'EPERM');
     const snapshot = store.read();
-    expect(snapshot.success && snapshot.data.records['a']).toBe('b');
+    expect(snapshot.success).toBe(false);
+    expect(fileSystem.calls).not.toContain('readAll');
+  });
+
+  it('threat 7: withholds the records when the store is hard-linked', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.seedHardLink(STORE_PATH, '/data/someone-elses-name');
+    const snapshot = store.read();
+    expect(snapshot.success).toBe(false);
+  });
+
+  it('threat 7: hardens an oversized store it is about to reject', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, 'x'.repeat(MAX_STORE_BYTES + 1), 0o644);
+    const snapshot = store.read();
+    expect(snapshot.success && snapshot.data.state).toBe('damaged');
+    expect(fileSystem.modeOf(STORE_PATH)).toBe(OWNER_ONLY);
+  });
+
+  it('threat 7: tolerates a hardening failure on a store it returns nothing from', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, 'x'.repeat(MAX_STORE_BYTES + 1), 0o644);
+    fileSystem.forcedFailures.set('restrictToOwner', 'EPERM');
+    const snapshot = store.read();
+    expect(snapshot.success && snapshot.data.state).toBe('damaged');
+  });
+
+  it('threat 7: never chmods an irregular entry it did not create', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedDirectory(STORE_PATH);
+    store.read();
+    expect(fileSystem.calls).not.toContain('restrictToOwner');
   });
 
   it('reports a permission error as a failure, not as absence or damage', () => {

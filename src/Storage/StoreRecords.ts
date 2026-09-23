@@ -82,19 +82,25 @@ export function parseSnapshot(contents: string): IStoreSnapshot {
   return { state: 'healthy', records, summary: `Loaded ${count} records` };
 }
 
-/** Value kinds `JSON.stringify` omits, taking their key with them. */
-const OMITTED_KINDS = new Set(['undefined', 'function', 'symbol']);
-
 /**
- * Names the records JSON would silently drop on the way to disk.
+ * Names the records that did not survive the round trip through JSON.
  *
- * <p>Without this the commit report counts keys that were never written, so
- * a caller is told a credential was stored when it was not.
- * @param records - Records the caller asked to persist.
- * @returns The offending keys, which are names rather than secrets.
+ * <p>A shallow `typeof` check is not enough. A value whose `toJSON` returns
+ * `undefined` is an ordinary object on the way in and absent on the way out,
+ * so the only count that can be trusted is the one taken from the text that
+ * will actually be written. Without this the report claims a credential was
+ * stored when the staged file never contained it.
+ *
+ * <p>The text is not assumed to describe an object either: a `toJSON` on the
+ * record set itself can turn the whole store into `null` or an array.
+ * @param expected - Keys the caller asked to persist.
+ * @param json - Text `JSON.stringify` produced for them.
+ * @returns The omitted keys, which are names rather than secrets.
  */
-function unwritableKeys(records: Readonly<Record<string, unknown>>): readonly string[] {
-  return Object.keys(records).filter((key) => OMITTED_KINDS.has(typeof records[key]));
+function droppedKeys(expected: readonly string[], json: string): readonly string[] {
+  const written: unknown = JSON.parse(json);
+  if (!isKeyedRecord(written)) return expected;
+  return expected.filter((key) => !Object.hasOwn(written, key));
 }
 
 /** Serialised records, with the count that was actually written. */
@@ -140,16 +146,48 @@ export function serialiseRecords(
 ): Procedure<ISerialised> {
   const snapshot = snapshotRecords(records);
   if (!snapshot.success) return snapshot;
-  const dropped = unwritableKeys(snapshot.data);
-  if (dropped.length > 0) {
-    return fail(`Records cannot be stored as JSON: ${dropped.join(', ')}`, { status: 'EINVAL' });
-  }
+  let json: unknown;
   try {
-    const json = JSON.stringify(snapshot.data, undefined, 2);
-    return succeed({ json, count: Object.keys(snapshot.data).length });
+    json = JSON.stringify(snapshot.data, undefined, 2);
   } catch {
     return fail('Records could not be serialised as JSON', { status: 'EINVAL' });
   }
+  if (typeof json !== 'string') {
+    return fail('Records serialise to nothing at all', { status: 'EINVAL' });
+  }
+  const expected = Object.keys(snapshot.data);
+  return confirmNothingDropped(expected, json);
+}
+
+/**
+ * Accepts serialised text only when every record the caller gave survived it.
+ * @param expected - Keys the caller asked to persist.
+ * @param json - Text about to be staged.
+ * @returns The text and its record count, or a failure naming the losses.
+ */
+function confirmNothingDropped(
+  expected: readonly string[],
+  json: string,
+): Procedure<ISerialised> {
+  const dropped = droppedKeys(expected, json);
+  if (dropped.length > 0) {
+    const names = dropped.join(', ');
+    return fail(`Records cannot be stored as JSON: ${names}`, { status: 'EINVAL' });
+  }
+  return succeed({ json, count: expected.length });
+}
+
+/**
+ * Describes a store too large to read, without reading any of it.
+ *
+ * <p>Damage rather than failure: something is at the canonical path, so
+ * calling it absent would license overwriting it.
+ * @param sizeBytes - Size reported for the open descriptor.
+ * @returns A damaged snapshot naming the size but no contents.
+ */
+export function oversizedSnapshot(sizeBytes: number): IStoreSnapshot {
+  const size = String(sizeBytes);
+  return emptySnapshot('damaged', `Store is ${size} bytes, above the cap`);
 }
 
 /**
@@ -161,4 +199,24 @@ export function checkWritableSize(json: string): Procedure<number> {
   const bytes = Buffer.byteLength(json, 'utf8');
   if (bytes <= MAX_STORE_BYTES) return succeed(bytes);
   return fail(`Records serialise to ${String(bytes)} bytes, above the cap`, { status: 'EFBIG' });
+}
+
+/**
+ * Rejects a stage the filesystem reported as successful but incomplete.
+ *
+ * <p>The port returns a byte count for exactly this reason. Trusting the
+ * success flag alone would publish truncated JSON, which reads back as a
+ * damaged store and loses every credential the file used to hold.
+ * @param bytesWritten - What the filesystem said it staged.
+ * @param bytesExpected - What the payload actually measures.
+ * @returns The byte count when the two agree, a failure when they do not.
+ */
+export function checkWholeWrite(
+  bytesWritten: number,
+  bytesExpected: number,
+): Procedure<number> {
+  if (bytesWritten === bytesExpected) return succeed(bytesWritten);
+  const staged = String(bytesWritten);
+  const expected = String(bytesExpected);
+  return fail(`Staged ${staged} of ${expected} bytes`, { status: 'EIO' });
 }

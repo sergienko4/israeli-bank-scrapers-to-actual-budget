@@ -21,7 +21,8 @@ import {
   directoryOf, isStagingPath, quarantinePathFor, stagingPathFor,
 } from './StagingPaths.js';
 import {
-  checkWritableSize, emptySnapshot, MAX_STORE_BYTES, parseSnapshot, serialiseRecords,
+  checkWholeWrite, checkWritableSize, emptySnapshot, MAX_STORE_BYTES, oversizedSnapshot,
+  parseSnapshot, serialiseRecords,
 } from './StoreRecords.js';
 import type {
   ICommitReport, ICommitRequest, IStoreSnapshot, ISweepReport,
@@ -58,36 +59,15 @@ const ABSENT_ERRNOS = new Set(['ENOENT']);
 const SQUATTED_ERRNOS = new Set(['ELOOP']);
 
 /**
- * Whether an open store is worth reading, and what to report when it is not.
+ * What the quarantine step did, carrying the name it used.
  *
- * <p>A union rather than an optional snapshot, because "nothing to report"
- * and "report this damage" are different answers and collapsing them into
- * `undefined` is how one of them gets dropped.
+ * <p>The path travels with the outcome because it is freshly generated on
+ * every call: a rollback that recomputed it would name a file that does not
+ * exist and silently leave the store missing.
  */
-type ScreenOutcome =
-  | { readonly isReadable: true }
-  | { readonly isReadable: false; readonly snapshot: IStoreSnapshot };
-
-/**
- * Rejects an open file the store must not read, before any bytes are taken.
- *
- * <p>Both refusals are damage rather than failure: something is at the
- * canonical path, so calling it absent would license overwriting it.
- * @param file - Descriptor returned by the open.
- * @returns Whether to proceed, with the snapshot to report when not.
- */
-function screenOpened(file: IOpenFile): ScreenOutcome {
-  if (!file.isRegularFile) {
-    const irregular = emptySnapshot('damaged', 'Store path is not a regular file');
-    return { isReadable: false, snapshot: irregular };
-  }
-  if (file.sizeBytes > MAX_STORE_BYTES) {
-    const size = String(file.sizeBytes);
-    const oversized = emptySnapshot('damaged', `Store is ${size} bytes, above the cap`);
-    return { isReadable: false, snapshot: oversized };
-  }
-  return { isReadable: true };
-}
+type QuarantineOutcome =
+  | { readonly wasQuarantined: false }
+  | { readonly wasQuarantined: true; readonly path: string };
 
 /** Reads and writes a JSON record store without trusting what it finds. */
 export default class SecureJsonStore {
@@ -122,9 +102,16 @@ export default class SecureJsonStore {
   /**
    * Replaces the store's contents, optionally moving a damaged file aside.
    *
-   * <p>Ordering is the whole point: the replacement is staged first, so a
-   * crash at any later step leaves either the old file or the new one at the
-   * canonical path, never nothing.
+   * <p>Ordering is the whole point: the replacement is staged and verified
+   * before anything at the canonical path is disturbed, so a crash leaves
+   * either the old file or the new one there, never nothing.
+   *
+   * <p>One exception, and it is narrow. Quarantining a damaged predecessor
+   * takes two renames that cannot be made one, so a crash between them
+   * leaves the canonical path empty with the old bytes under the quarantine
+   * name. A failure between them is recovered by putting the predecessor
+   * back; a `SIGKILL` cannot be, and the next read reports a cold start
+   * while the damaged evidence survives for an operator to find.
    * @param request - Records to persist and whether to quarantine first.
    * @returns What the commit did, or why it did nothing.
    */
@@ -136,12 +123,11 @@ export default class SecureJsonStore {
     const stagedPath = stagingPathFor(this._filePath);
     const staged = this._fileSystem.createExclusive(stagedPath, serialised.data.json);
     if (!staged.success) return staged;
+    const whole = checkWholeWrite(staged.data.bytesWritten, sized.data);
+    if (!whole.success) return this.abandon(stagedPath, whole);
     const quarantined = this.quarantineIfAsked(request.shouldQuarantine);
     if (!quarantined.success) return this.abandon(stagedPath, quarantined);
-    const moved = this._fileSystem.rename(stagedPath, this._filePath);
-    if (!moved.success) return this.abandon(stagedPath, moved);
-    this.sweepStagedLeftovers();
-    return this.reportCommit(serialised.data.count, quarantined.data);
+    return this.publish(stagedPath, serialised.data.count, quarantined.data);
   }
 
   /**
@@ -173,6 +159,49 @@ export default class SecureJsonStore {
       summary: `Removed ${String(removedCount)} abandoned staged files`,
     };
     return succeed(report);
+  }
+
+  /**
+   * Moves the staged replacement onto the canonical path.
+   *
+   * <p>A failure here is the one case where the predecessor has already been
+   * moved aside, so it is put back before the failure is reported. Otherwise
+   * a failed commit would leave the store absent while its only copy sat
+   * under a quarantine name nothing looks for.
+   * @param stagedPath - Path the replacement was staged at.
+   * @param recordCount - How many records the staged JSON holds.
+   * @param quarantined - What the quarantine step did, and where.
+   * @returns The commit report, or the failure that stopped it.
+   */
+  private publish(
+    stagedPath: string,
+    recordCount: number,
+    quarantined: QuarantineOutcome,
+  ): Procedure<ICommitReport> {
+    const moved = this._fileSystem.rename(stagedPath, this._filePath);
+    if (!moved.success) {
+      const reported = this.restorePredecessor(quarantined, moved);
+      return this.abandon(stagedPath, reported);
+    }
+    this.sweepStagedLeftovers();
+    return this.reportCommit(recordCount, quarantined.wasQuarantined);
+  }
+
+  /**
+   * Puts a quarantined predecessor back when the replacement never landed.
+   * @param quarantined - What the quarantine step did, and where.
+   * @param failure - The failure that stopped the commit.
+   * @returns The original failure, noting a restore that did not work.
+   */
+  private restorePredecessor(
+    quarantined: QuarantineOutcome,
+    failure: IProcedureFailure,
+  ): IProcedureFailure {
+    if (!quarantined.wasQuarantined) return failure;
+    const restored = this._fileSystem.rename(quarantined.path, this._filePath);
+    if (restored.success) return failure;
+    const details = [...(failure.details ?? []), `Previous store remains at ${quarantined.path}`];
+    return { ...failure, details };
   }
 
   /**
@@ -239,15 +268,48 @@ export default class SecureJsonStore {
    * Any other failure aborts the commit, because destroying a damaged file
    * loses the only evidence of what went wrong.
    * @param shouldQuarantine - Whether the caller asked for a quarantine.
-   * @returns Whether a file was moved aside, or why one could not be.
+   * @returns Where the file was moved, or why one could not be.
    */
-  private quarantineIfAsked(shouldQuarantine: boolean): Procedure<boolean> {
-    if (!shouldQuarantine) return succeed(false);
+  private quarantineIfAsked(shouldQuarantine: boolean): Procedure<QuarantineOutcome> {
+    if (!shouldQuarantine) return succeed({ wasQuarantined: false });
+    const salvageable = this.screenForQuarantine();
+    if (!salvageable.success) return salvageable;
+    if (!salvageable.data) return succeed({ wasQuarantined: false });
     const quarantinePath = quarantinePathFor(this._filePath);
     const moved = this._fileSystem.rename(this._filePath, quarantinePath);
-    if (moved.success) return succeed(true);
-    if (moved.status === 'ENOENT') return succeed(false);
+    if (moved.success) return succeed({ wasQuarantined: true, path: quarantinePath });
+    if (moved.status === 'ENOENT') return succeed({ wasQuarantined: false });
     return moved;
+  }
+
+  /**
+   * Decides whether what sits at the store path may be moved aside at all.
+   *
+   * <p>Quarantine renames whatever the name points at, so a directory there
+   * would be relocated whole, taking unrelated files with it. Only an entry
+   * positively established as movable qualifies: a regular file, or a
+   * symlink, where the rename moves the link and never its target.
+   *
+   * <p>This narrows the window rather than closing it. The type is read from
+   * a descriptor, but the rename that follows acts on the name, and Node
+   * offers nothing that would let both refer to the same inode.
+   * @returns Whether to move it, or why the entry cannot be assessed.
+   */
+  private screenForQuarantine(): Procedure<boolean> {
+    const opened = this._fileSystem.openForRead(this._filePath);
+    if (!opened.success) {
+      if (ABSENT_ERRNOS.has(opened.status)) return succeed(false);
+      if (SQUATTED_ERRNOS.has(opened.status)) return succeed(true);
+      return fail(`Cannot assess the store before quarantine: ${opened.status}`, {
+        status: opened.status,
+      });
+    }
+    const { isRegularFile } = opened.data;
+    this._fileSystem.close(opened.data);
+    if (isRegularFile) return succeed(true);
+    return fail(`Refusing to quarantine ${this._filePath}: not a regular file`, {
+      status: 'ENOTSUP',
+    });
   }
 
   /**
@@ -304,9 +366,20 @@ export default class SecureJsonStore {
    * @returns A snapshot, or a failure when the contents cannot be read.
    */
   private readOpened(file: IOpenFile): Procedure<IStoreSnapshot> {
-    const screened = screenOpened(file);
-    if (!screened.isReadable) return succeed(screened.snapshot);
-    this._fileSystem.restrictToOwner(file);
+    if (!file.isRegularFile) {
+      const irregular = emptySnapshot('damaged', 'Store path is not a regular file');
+      return succeed(irregular);
+    }
+    const hardened = this._fileSystem.restrictToOwner(file);
+    if (file.sizeBytes > MAX_STORE_BYTES) {
+      const oversized = oversizedSnapshot(file.sizeBytes);
+      return succeed(oversized);
+    }
+    if (!hardened.success) {
+      return fail(`Refusing to read a store left readable by others at ${this._filePath}`, {
+        status: hardened.status,
+      });
+    }
     const contents = this._fileSystem.readAll(file, MAX_STORE_BYTES);
     if (!contents.success) return this.classifyReadFailure(contents.status);
     const snapshot = parseSnapshot(contents.data);

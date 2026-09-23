@@ -9,11 +9,11 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { IMoveOutcome, IRemoveOutcome } from '../../src/Storage/FileSystemPort.js';
+import type { IMoveOutcome, IRemoveOutcome, IWriteOutcome } from '../../src/Storage/FileSystemPort.js';
 import SecureJsonStore from '../../src/Storage/SecureJsonStore.js';
 import { MAX_STORE_BYTES } from '../../src/Storage/StoreRecords.js';
 import type { Procedure } from '../../src/Types/Procedure.js';
-import { fail } from '../../src/Types/ProcedureHelpers.js';
+import { fail, succeed } from '../../src/Types/ProcedureHelpers.js';
 import FakeFileSystem from './FakeFileSystem.js';
 
 /**
@@ -51,6 +51,48 @@ class ThrowingRemoveFileSystem extends FakeFileSystem {
    */
   public override remove(): Procedure<IRemoveOutcome> {
     throw new Error('remove exploded');
+  }
+}
+
+/**
+ * A filesystem that accepts every rename except the one that publishes.
+ *
+ * <p>Isolates the failure the quarantine ordering creates: the predecessor
+ * has already been moved aside, and nothing has replaced it.
+ */
+class FailsThePublishFileSystem extends FakeFileSystem {
+  /**
+   * Refuses to move a staged file onto the canonical path.
+   * @param fromPath - Existing name to move.
+   * @param toPath - Destination name.
+   * @returns A failure for the publish, the real behaviour otherwise.
+   */
+  public override rename(fromPath: string, toPath: string): Procedure<IMoveOutcome> {
+    if (fromPath.endsWith('.tmp')) return fail('forced publish failure', { status: 'EIO' });
+    return super.rename(fromPath, toPath);
+  }
+}
+
+/**
+ * A filesystem that reports success after writing fewer bytes than it was given.
+ *
+ * <p>The port returns `bytesWritten` precisely so a caller can catch this, and
+ * a store that ignores it publishes truncated JSON as a successful commit.
+ */
+class ShortWriteFileSystem extends FakeFileSystem {
+  /**
+   * Stages one byte short and calls it a success.
+   * @param filePath - Path to create.
+   * @param contents - Payload the caller asked to stage.
+   * @returns A success reporting fewer bytes than were requested.
+   */
+  public override createExclusive(
+    filePath: string,
+    contents: string,
+  ): Procedure<IWriteOutcome> {
+    const written = super.createExclusive(filePath, contents.slice(0, -1));
+    if (!written.success) return written;
+    return succeed({ bytesWritten: written.data.bytesWritten });
   }
 }
 
@@ -368,5 +410,93 @@ describe('SecureJsonStore write path', () => {
     fileSystem.forcedFailuresOnce.set('rename', 'EACCES');
     store.commit({ records: { token: SECRET }, shouldQuarantine: true });
     expect(leftovers(fileSystem)).toHaveLength(0);
+  });
+
+  it('threat 15: refuses to publish a short write as a successful commit', () => {
+    const fileSystem = new ShortWriteFileSystem();
+    const store = new SecureJsonStore(fileSystem, STORE_PATH);
+    const committed = store.commit({ records: { token: SECRET }, shouldQuarantine: false });
+    expect(committed.success).toBe(false);
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 15: removes the truncated stage instead of leaving it on disk', () => {
+    const fileSystem = new ShortWriteFileSystem();
+    const store = new SecureJsonStore(fileSystem, STORE_PATH);
+    store.commit({ records: { token: SECRET }, shouldQuarantine: false });
+    expect(leftovers(fileSystem)).toHaveLength(0);
+  });
+
+  it('threat 16: puts the predecessor back when the publish fails after quarantine', () => {
+    const fileSystem = new FailsThePublishFileSystem();
+    const store = new SecureJsonStore(fileSystem, STORE_PATH);
+    fileSystem.seedFile(STORE_PATH, 'damaged-but-mine', OWNER_ONLY);
+    const committed = store.commit({ records: { token: SECRET }, shouldQuarantine: true });
+    expect(committed.success).toBe(false);
+    expect(fileSystem.contentsOf(STORE_PATH)).toBe('damaged-but-mine');
+  });
+
+  it('threat 16: says where the predecessor is when it cannot be put back', () => {
+    const fileSystem = new FailsAfterQuarantineFileSystem();
+    const store = new SecureJsonStore(fileSystem, STORE_PATH);
+    fileSystem.seedFile(STORE_PATH, 'damaged-but-mine', OWNER_ONLY);
+    const committed = store.commit({ records: { token: SECRET }, shouldQuarantine: true });
+    if (committed.success) throw new Error('expected the commit to fail');
+    const detail = (committed.details ?? []).join(' ');
+    expect(detail).toContain('.quarantined-');
+  });
+
+  it('threat 17: refuses to relocate a directory sitting at the store path', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedDirectory(STORE_PATH);
+    const committed = store.commit({ records: { token: SECRET }, shouldQuarantine: true });
+    expect(committed.success).toBe(false);
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(true);
+  });
+
+  it('threat 17: leaves no staged credential behind when it refuses a directory', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedDirectory(STORE_PATH);
+    store.commit({ records: { token: SECRET }, shouldQuarantine: true });
+    expect(leftovers(fileSystem).filter((name) => name !== STORE_PATH)).toHaveLength(0);
+  });
+
+  it('threat 17: still quarantines a symlink, which moves the link and not its target', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile('/data/elsewhere', 'target-contents', OWNER_ONLY);
+    fileSystem.seedSymlink(STORE_PATH, '/data/elsewhere');
+    const committed = store.commit({ records: { token: SECRET }, shouldQuarantine: true });
+    expect(committed.success).toBe(true);
+    expect(fileSystem.contentsOf('/data/elsewhere')).toBe('target-contents');
+  });
+
+  it('threat 18: rejects records whose own toJSON replaces them with a non-object', () => {
+    const { store, fileSystem } = makeStore();
+    const erasing = { toJSON: (): null => null };
+    const committed = store.commit({ records: erasing, shouldQuarantine: false });
+    expect(committed.success).toBe(false);
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 18: rejects records whose own toJSON erases the whole store', () => {
+    const { store, fileSystem } = makeStore();
+    const erasing = { toJSON: (): undefined => undefined };
+    const committed = store.commit({ records: erasing, shouldQuarantine: false });
+    expect(committed.success).toBe(false);
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 18: rejects a record whose toJSON drops it from the serialised store', () => {
+    const { store } = makeStore();
+    const vanishing = { token: { toJSON: (): undefined => undefined } };
+    const committed = store.commit({ records: vanishing, shouldQuarantine: false });
+    expect(committed.success).toBe(false);
+  });
+
+  it('threat 18: never reports more records than the staged JSON actually holds', () => {
+    const { store, fileSystem } = makeStore();
+    const vanishing = { kept: SECRET, lost: { toJSON: (): undefined => undefined } };
+    store.commit({ records: vanishing, shouldQuarantine: false });
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
   });
 });
