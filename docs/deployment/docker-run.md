@@ -130,7 +130,7 @@ for the full procedure.
 | Mount | Purpose | Required |
 |-------|---------|----------|
 | `/app/config.json` | Bank credentials + Actual Budget connection | Yes (mount `:ro`) |
-| `/app/data` | Actual Budget local sync data | Yes |
+| `/app/data` | Actual Budget local sync data, plus `bank-tokens.json` (long-term bank tokens, mode `600` where the volume honours `chmod`) | Yes |
 | `/app/cache` | Scraper run cache | Recommended |
 | `/app/chrome-data` | Legacy browser session (no-op with Camoufox v7.9.0+) | Optional |
 | `/app/logs` | Rotating log files | Required for `/logs` Telegram command |

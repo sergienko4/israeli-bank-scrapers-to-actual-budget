@@ -34,7 +34,33 @@ cap_add:
 
 **Symptom:** every import asks for an OTP, even for banks that support persistence (oneZero).
 
-**Fix:** after the first successful login, add `"otpLongTermToken"` to that bank's config block. For oneZero this is captured automatically on the first run.
+**Fix:** nothing to do for oneZero, PayBox or Pepper — the importer captures the
+bank's long-term token on the first successful login, saves it to
+`/app/data/bank-tokens.json`, and replays it afterwards. If you still get an OTP
+every run, check that `/app/data` is mounted read-write and that only **one**
+importer instance uses that bank account: each SMS login re-mints the token and
+revokes the previous one, so two instances permanently cancel each other out.
+
+A token that cannot be saved is logged as `Could not store the long-term token
+for <bank>` with the underlying reason — `EROFS` means the volume is read-only
+and `ENOSPC` means it is full. The scrape itself still succeeds; only the next
+run pays for another SMS.
+
+If `bank-tokens.json` is ever damaged, the importer moves it aside as
+`bank-tokens.json.<timestamp>.corrupt` rather than overwriting it, and signs in
+by SMS to mint a replacement. The quarantined copy is safe to delete.
+
+If that move cannot be completed, the importer refuses the write and leaves the
+damaged file exactly where it is, rather than destroying a copy an operator
+could still salvage. The scrape still succeeds; the next run pays for one SMS.
+
+`bank-tokens.json` must be a real file. A symlink at that path is moved aside
+as damage instead of being followed, because following it would read an
+unrelated file as this importer's bank tokens. The file is opened in a way the
+kernel refuses when the final name is a link, so a link swapped in after the
+check is refused too, not followed.
+
+For other banks, 2FA cannot be persisted and an OTP is expected on every run.
 
 Better still: [auto-forward OTP codes from your phone](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md) so no manual input is needed.
 
