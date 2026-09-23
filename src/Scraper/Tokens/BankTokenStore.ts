@@ -80,9 +80,15 @@ export interface IBankTokenStore {
 }
 
 /**
- * Builds the timestamped name a damaged store is set aside under.
+ * Builds the unique name a damaged store is set aside under.
+ *
+ * <p>The timestamp alone resolves only to the millisecond, and `rename`
+ * replaces its destination without complaint. Two quarantines in the same
+ * millisecond would therefore leave the second silently sitting on top of
+ * the first, destroying a salvage copy holding a credential the bank
+ * re-issues only by SMS. The random component makes every target distinct.
  * @param filePath - Store path being quarantined.
- * @returns Sibling path carrying the quarantine moment.
+ * @returns Sibling path carrying the quarantine moment and a unique mark.
  */
 function quarantineName(filePath: string): string {
   const stamp = new Date();
@@ -90,7 +96,8 @@ function quarantineName(filePath: string): string {
   // Colons are legal on Linux but not on a Windows bind mount, and the data
   // volume is routinely one; a name that cannot be created saves nothing.
   const suffix = iso.replaceAll(':', '-');
-  return `${filePath}.${suffix}.corrupt`;
+  const unique = randomUUID();
+  return `${filePath}.${suffix}.${unique}.corrupt`;
 }
 
 /**
