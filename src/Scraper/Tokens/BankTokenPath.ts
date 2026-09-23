@@ -101,7 +101,7 @@ const PATH_RULES: readonly IPathRule[] = [
   { isBroken: isNotFullyQualified, message: 'BANK_TOKENS_PATH must be an absolute path' },
   {
     isBroken: hasDevicePrefix,
-    message: 'BANK_TOKENS_PATH must not use a \\\\?\\ or \\\\.\\ device prefix',
+    message: String.raw`BANK_TOKENS_PATH must not use a \\?\ or \\.\ device prefix`,
   },
   { isBroken: hasParentSegment, message: 'BANK_TOKENS_PATH must not contain a ".." segment' },
   { isBroken: namesDirectory, message: 'BANK_TOKENS_PATH must name a file, not a directory' },
