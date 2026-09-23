@@ -16,19 +16,21 @@
  */
 
 import {
-  mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync,
+  mkdtempSync, readdirSync, symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { stubRename, stubLstat } = vi.hoisted(() => ({
-  stubRename: vi.fn(), stubLstat: vi.fn(),
+const { stubRename, stubLstat, stubRm } = vi.hoisted(() => ({
+  stubRename: vi.fn(), stubLstat: vi.fn(), stubRm: vi.fn(),
 }));
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
-  return { ...actual, renameSync: stubRename, lstatSync: stubLstat };
+  return {
+    ...actual, renameSync: stubRename, lstatSync: stubLstat, rmSync: stubRm,
+  };
 });
 
 const realFs = await vi.importActual<typeof import('node:fs')>('node:fs');
@@ -52,11 +54,12 @@ beforeEach(() => {
   storePath = join(dir, 'bank-tokens.json');
   stubRename.mockImplementation(realRenameSync);
   stubLstat.mockImplementation(realFs.lstatSync);
+  stubRm.mockImplementation(realFs.rmSync);
 });
 
 afterEach(() => {
   vi.clearAllMocks();
-  rmSync(dir, { recursive: true, force: true });
+  realFs.rmSync(dir, { recursive: true, force: true });
 });
 
 describe('a rename that fails after the payload is staged', () => {
@@ -81,6 +84,33 @@ describe('a rename that fails after the payload is staged', () => {
     const store = new BankTokenStore(storePath);
     store.write('oneZero', 'onezero-id-token');
     expect(store.read('oneZero')).toBe('');
+  });
+});
+
+describe('a cleanup that fails after the rename already failed', () => {
+  beforeEach(() => {
+    stubRename.mockImplementation((from: string) => {
+      if (String(from).endsWith('.tmp')) throw new Error('EXDEV: cross-device link');
+      return realRenameSync(from, storePath);
+    });
+    stubRm.mockImplementation((path: string) => {
+      if (String(path).endsWith('.tmp')) throw new Error('EBUSY: sharing violation');
+      return undefined;
+    });
+  });
+
+  it('reports why the write failed, not why the cleanup did', () => {
+    const result = new BankTokenStore(storePath).write('oneZero', 'onezero-id-token');
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.message).toContain('EXDEV');
+  });
+
+  it('never reports the cleanup error, which explains nothing to the operator', () => {
+    const result = new BankTokenStore(storePath).write('oneZero', 'onezero-id-token');
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.message).not.toContain('EBUSY');
   });
 });
 

@@ -123,12 +123,32 @@ function quarantineStore(filePath: string): boolean {
 }
 
 /**
+ * Removes one staged temp file best-effort, swallowing any error.
+ *
+ * <p>A temp file that cannot be deleted is not a reason to hide why the
+ * write failed: the removal error explains nothing the operator can act on,
+ * while the commit error explains everything. The leftover carries the
+ * store's own 0600 mode and a name no read path ever looks for.
+ * @param tempPath - Temp path to remove; a missing path is a no-op.
+ * @returns True when the file was removed, false when the error was swallowed.
+ */
+function removeTemp(tempPath: string): boolean {
+  try {
+    rmSync(tempPath, { force: true });
+    return true;
+  } catch {
+    // Best-effort cleanup: ignore so the original commit error still throws.
+    return false;
+  }
+}
+
+/**
  * Stages the payload then renames it into place, cleaning up on failure.
  * @param tempPath - Sibling temp file staged before the rename.
  * @param serialized - Complete JSON payload to persist.
  * @param target - Final path the temp file is renamed onto.
  * @returns True once the rename into place has completed.
- * @throws Error when staging or renaming fails.
+ * @throws Error when staging or renaming fails, never when cleanup does.
  */
 function commitTemp(tempPath: string, serialized: string, target: string): boolean {
   try {
@@ -136,7 +156,7 @@ function commitTemp(tempPath: string, serialized: string, target: string): boole
     renameSync(tempPath, target);
     return true;
   } catch (error: unknown) {
-    rmSync(tempPath, { force: true });
+    removeTemp(tempPath);
     const detail = errorMessage(error);
     throw error instanceof Error ? error : new Error(detail);
   }
