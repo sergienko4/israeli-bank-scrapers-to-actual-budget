@@ -10,15 +10,25 @@
 /**
  * Keys whose value is hidden.
  *
- * `\w*token` covers every name ending in "token", so the scraper's durable
- * login token is hidden under each of its names: `otpLongTermToken`,
- * `longTermToken`, `persistentOtpToken`, `idToken` and PayBox's
- * `access_token`. Listing them one by one would miss the next rename.
+ * <p>Any name ending in "token", "password" or "secret" is a secret, so the
+ * scraper's durable login token is hidden under each of its names:
+ * `otpLongTermToken`, `longTermToken`, `persistentOtpToken`, `idToken` and
+ * PayBox's `access_token`, as are `clientSecret` and `new_password`. Listing
+ * them one by one would miss the next rename.
+ *
+ * <p>The other keys must be a word of their own, so the importer's own
+ * `twoFactorAuth: true` hint and `OAuth:` stay readable.
  */
 const SECRET_KEYS = [
-  String.raw`\w*token`, 'password', 'secret', 'auth(?:orization)?', 'creditcard', 'cvv',
-  'bearer', 'jwt',
+  // Starts only where a word does. Starting after every `_` would rescan the
+  // rest of the word from each one, which is quadratic on `a_a_a_...`.
+  String.raw`\b\w*(?:token|password|secret)`,
+  // Here `_` also splits words, so `card_cvv` is caught; `\b` would not be.
+  '(?<![a-z0-9])(?:auth(?:orization)?|creditcard|cvv|bearer|jwt)',
 ].join('|');
+
+/** A field name that ends in a secret key, in any case. */
+const SECRET_KEY_NAME = new RegExp(`(?:${SECRET_KEYS})$`, 'i');
 
 /**
  * A secret key, then its value.
@@ -33,10 +43,22 @@ const SECRET_KEYS = [
  * is often cut off before the closing brace, so there is no end to match.
  */
 const SECRET_PATTERN = new RegExp(
-  String.raw`\b(${SECRET_KEYS})[\\"']*\s*[=:]\s*` +
+  String.raw`(${SECRET_KEYS})[\\"']*\s*[=:]\s*` +
     String.raw`(?:[{[][\s\S]*|[\\"']*(?:(?:Bearer|Basic)\s+)?\S+)`,
   'gi',
 );
+
+/**
+ * Tells whether a structured field's name marks its value as a secret.
+ *
+ * <p>Uses the same keys as the text masker, so a logged `{ authToken }` is
+ * hidden exactly when `authToken=...` in a message would be.
+ * @param name - The field name, such as a key of a log call's context.
+ * @returns True when the name ends in a secret key.
+ */
+export function isSecretKey(name: string): boolean {
+  return SECRET_KEY_NAME.test(name);
+}
 
 /**
  * Replaces each quoted secret value with `[REDACTED]`, keeping its key.

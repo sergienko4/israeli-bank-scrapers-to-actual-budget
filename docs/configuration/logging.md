@@ -134,11 +134,13 @@ credentials in it. Before a line is written or an alert is sent, the importer
 replaces the value after any of these keys with `[REDACTED]` when the key is
 followed by `=` or `:`:
 
-- any name ending in `token`, which covers the long-term login token under
-  each of its names: `otpLongTermToken`, `longTermToken`,
-  `persistentOtpToken`, `idToken` and `access_token`
-- `password`, `secret`, `auth`, `authorization`, `bearer`, `jwt`,
-  `creditCard` and `cvv`
+- any name ending in `token`, `password` or `secret`, which covers the
+  long-term login token under each of its names (`otpLongTermToken`,
+  `longTermToken`, `persistentOtpToken`, `idToken` and `access_token`) as well
+  as names like `clientSecret` and `new_password`
+- `auth`, `authorization`, `bearer`, `jwt`, `creditCard` and `cvv` as a word
+  of their own, at the start of a name or after `_`, `-` or `.`: `card_cvv`
+  is hidden, while the `twoFactorAuth: true` hint stays readable
 
 A `Bearer` or `Basic` word in front of the value is hidden with it, so
 `authorization: Bearer <jwt>` is written as `authorization=[REDACTED]`. The
@@ -146,6 +148,14 @@ key itself is kept, so you can still tell what was hidden. The mask runs to
 the next space, so in a quoted JSON body the fields after a secret are hidden
 too. When a secret key holds an object or a list, the rest of the message is
 hidden, because the fields inside it can be secrets under ordinary names.
+
+Structured log fields follow the same keys, in any letter case: a field named
+`authToken` or `Authorization` is written as `[REDACTED]`, and a secret quoted
+inside another field's text is masked as above. The importer logs a message
+and one level of fields, and these rules cover exactly that. Other things pino
+can log are outside them: fields nested deeper and fields bound to a child
+logger are hidden by exact name only, and a logged `Error` object is written as
+pino serialises it.
 
 Masking covers stdout, the log files that `/logs` reads, and error alerts on
 Telegram, webhook and push.

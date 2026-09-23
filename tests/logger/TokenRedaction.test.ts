@@ -60,6 +60,63 @@ describe('long-term token redaction', () => {
   });
 });
 
+describe('structured fields under any key the text masker names', () => {
+  const TOP_LEVEL_KEYS = [
+    'authorization', 'Authorization', 'jwt', 'id_token', 'authToken', 'refresh_token',
+    'x-auth-token', 'secret', 'auth', 'creditCard', 'cvv', 'password', 'token',
+    'client_secret', 'clientSecret', 'new_password', 'userPassword', 'card_cvv',
+  ];
+  const NESTED_KEYS = ['authorization', 'jwt', 'id_token', 'secret', 'auth', 'creditCard', 'cvv'];
+
+  it.each(TOP_LEVEL_KEYS)('redacts %s at the top level of an entry', (key) => {
+    const line = logOnce({ [key]: TEST_CREDENTIAL }, 'event');
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(JSON.parse(line)[key]).toBe('[REDACTED]');
+  });
+
+  it.each(NESTED_KEYS)('redacts %s one level down, as in logged headers', (key) => {
+    const line = logOnce({ headers: { [key]: TEST_CREDENTIAL } }, 'event');
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(JSON.parse(line).headers[key]).toBe('[REDACTED]');
+  });
+
+  it('masks a secret quoted inside a text field', () => {
+    const line = logOnce({ error: `POST /sessions 401: {"idToken":"${TEST_CREDENTIAL}"}` }, 'failed');
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(JSON.parse(line).error).toBe('POST /sessions 401: {"idToken=[REDACTED]');
+  });
+
+  it('keeps fields whose names only contain a secret word', () => {
+    const fields = { tokenCount: 3, authorName: 'dana', twoFactorAuth: true };
+    expect(JSON.parse(logOnce(fields, 'event'))).toMatchObject(fields);
+  });
+
+  it('masks a context object built without a prototype', () => {
+    const fields: Record<string, unknown> = Object.create(null);
+    fields.authToken = TEST_CREDENTIAL;
+    expect(logOnce(fields, 'event')).not.toContain(TEST_CREDENTIAL);
+  });
+
+  it.each([
+    'password', 'token', 'secret', 'auth', 'creditCard', 'cvv', 'authorization', 'jwt',
+    'id_token', 'phoneNumber', 'otpLongTermToken', 'longTermToken', 'persistentOtpToken',
+    'idToken', 'bearer', 'access_token',
+  ])('redacts %s bound to a child logger, which the hook never sees', (key) => {
+    const lines: string[] = [];
+    const sink = { write: (line: string): number => lines.push(line) };
+    const parent = pino({ ...baseOptions(), level: 'info' }, sink);
+    parent.child({ [key]: TEST_CREDENTIAL }).info('event');
+    expect(lines.join('')).not.toContain(TEST_CREDENTIAL);
+  });
+
+  it('leaves an Error for pino to serialise', () => {
+    const lines: string[] = [];
+    const sink = { write: (line: string): number => lines.push(line) };
+    pino({ ...baseOptions(), level: 'info' }, sink).error(new Error('boom'), 'failed');
+    expect(JSON.parse(lines.join('')).err.message).toBe('boom');
+  });
+});
+
 describe('secrets quoted in log message text', () => {
   it('redacts a token a bank echoed into an error message', () => {
     const body = `{"idToken":"${TEST_CREDENTIAL}","code":"E1"}`;

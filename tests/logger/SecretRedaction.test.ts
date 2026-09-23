@@ -39,6 +39,11 @@ describe('redactSecrets', () => {
     ['a pretty-printed object', `{\n  "token": {\n    "value": "${TEST_CREDENTIAL}"\n  }\n}`],
     ['a value on the next line', `token:\n  ${TEST_CREDENTIAL}`],
     ['a URL query string', `GET /sync?access_token=${TEST_CREDENTIAL}&page=2`],
+    ['a snake-case client secret', `{"client_secret":"${TEST_CREDENTIAL}"}`],
+    ['a camel-case client secret', `clientSecret: ${TEST_CREDENTIAL}`],
+    ['a snake-case password', `new_password=${TEST_CREDENTIAL}`],
+    ['a camel-case password', `userPassword: ${TEST_CREDENTIAL}`],
+    ['a snake-case card code', `card_cvv=${TEST_CREDENTIAL}`],
   ])('hides the value of %s', (_shape, text) => {
     expect(redactSecrets(`login failed ${text}`)).not.toContain(TEST_CREDENTIAL);
   });
@@ -53,12 +58,20 @@ describe('redactSecrets', () => {
     expect(redactSecrets(text)).toBe('TOKEN=[REDACTED] CreditCard=[REDACTED]');
   });
 
+  it.each(['_', 'a_', 'a-'])('scans a long run of %j in linear time', (unit) => {
+    const text = unit.repeat(100_000);
+    const started = performance.now();
+    redactSecrets(text);
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
   it.each([
     'AuthenticationError: bank rejected the login',
     'tokenize: step failed',
     'maxTokens: 5',
     'author: someone',
     'OAuth: provider unavailable',
+    'Set twoFactorAuth: true for this bank and configure Telegram or the mobile app',
     'Config portal on http://127.0.0.1:3000 (auth mode: password)',
     '',
   ])('leaves %j unchanged', (text) => {
