@@ -37,10 +37,14 @@ const CLOSE_DEADLINE = new TimeoutWrapper();
  * @returns True when a still-connected browser was closed by this call.
  */
 async function closeQuietly(browser: IProviderBrowser, logger: ILogger): Promise<boolean> {
-  if (!browser.isConnected()) return false;
-  const closing = browser.close();
-  const deadline = CLOSE_DEADLINE.wrap(closing, BROWSER_CLOSE_TIMEOUT_MS, 'Closing browser');
-  return await deadline.then(() => true, (error: unknown) => reportCloseFailure(error, logger));
+  try {
+    if (!browser.isConnected()) return false;
+    const closing = browser.close();
+    const deadline = CLOSE_DEADLINE.wrap(closing, BROWSER_CLOSE_TIMEOUT_MS, 'Closing browser');
+    return await deadline.then(() => true, (error: unknown) => reportCloseFailure(error, logger));
+  } catch (error: unknown) {
+    return reportCloseFailure(error, logger);
+  }
 }
 
 /**

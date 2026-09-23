@@ -18,7 +18,7 @@ import { TimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
 import TimeoutError from '../../../src/Errors/TimeoutError.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../../src/Types/Index.js';
 import type { IProviderBrowser } from '../../../src/Scraper/Strategies/Live/BrowserRegistry.js';
-import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
+import { fakeBankConfig, fakeBankTokenStore, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
 
 /** Provider options subset carrying the browser lifecycle hook. */
@@ -137,6 +137,7 @@ function makeStrategy(
     retryStrategy, noRetryStrategy: retryStrategy, timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
+    bankTokens: fakeBankTokenStore(),
   });
 }
 
@@ -247,6 +248,34 @@ describe('live scrape browser reclamation', () => {
     mockScraper.scrape.mockImplementation(async () => {
       const browser = await launchBrowser();
       browser.close.mockRejectedValue(new Error('close failed'));
+      return await Promise.resolve({ success: true, accounts: [] });
+    });
+
+    const result = await makeStrategy(passthroughTimeout()).scrape(makeOpts());
+
+    expect(result.success).toBe(true);
+  });
+
+  it('still surfaces the scrape result when a browser handle throws on inspection', async () => {
+    mockScraper.scrape.mockImplementation(async () => {
+      const browser = await launchBrowser();
+      browser.isConnected.mockImplementation((): boolean => {
+        throw new Error('handle is gone');
+      });
+      return await Promise.resolve({ success: true, accounts: [] });
+    });
+
+    const result = await makeStrategy(passthroughTimeout()).scrape(makeOpts());
+
+    expect(result.success).toBe(true);
+  });
+
+  it('still surfaces the scrape result when closing throws synchronously', async () => {
+    mockScraper.scrape.mockImplementation(async () => {
+      const browser = await launchBrowser();
+      browser.close.mockImplementation((): Promise<void> => {
+        throw new Error('close threw before returning a promise');
+      });
       return await Promise.resolve({ success: true, accounts: [] });
     });
 
