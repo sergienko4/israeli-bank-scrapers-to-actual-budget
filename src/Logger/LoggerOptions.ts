@@ -11,6 +11,11 @@ export const REDACT_PATHS = [
   'password', 'token', 'secret', 'auth', 'creditCard', 'cvv',
   'headers.authorization', '*.password', '*.token',
   'phoneNumber', '*.phoneNumber',
+  // Scraper 8.7.2's names for the durable login token and its session bearer.
+  // pino matches exact key names, so `token` above does not cover them.
+  'otpLongTermToken', '*.otpLongTermToken', 'longTermToken', '*.longTermToken',
+  'persistentOtpToken', '*.persistentOtpToken', 'idToken', '*.idToken',
+  'bearer', '*.bearer',
 ];
 
 /**

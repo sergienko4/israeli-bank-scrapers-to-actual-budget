@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MetricsService } from '../../src/Services/MetricsService.js';
 import { fakeAccountTransactionsRecord } from '../helpers/factories.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -98,6 +99,49 @@ describe('MetricsService', () => {
       if (bankResult.success) {
         expect(bankResult.data.error).toBe('AuthenticationError: Something broke');
       }
+    });
+
+    it.each(['otpLongTermToken', 'longTermToken', 'persistentOtpToken', 'idToken', 'bearer'])(
+      'redacts a %s value quoted in the failure message',
+      (alias) => {
+        metrics.startBank('oneZero');
+        metrics.recordBankFailure('oneZero', new Error(`login failed ${alias}=${TEST_CREDENTIAL}`));
+        const bankResult = metrics.getBankMetrics('oneZero');
+        expect(bankResult.success && bankResult.data.error)
+          .toBe(`Error: login failed ${alias}=[REDACTED]`);
+      },
+    );
+
+    it('redacts a long-term token quoted with a colon separator', () => {
+      metrics.startBank('oneZero');
+      const error = new Error(`rejected persistentOtpToken: ${TEST_CREDENTIAL}`);
+      metrics.recordBankFailure('oneZero', error);
+      const bankResult = metrics.getBankMetrics('oneZero');
+      expect(bankResult.success && bankResult.data.error)
+        .toBe('Error: rejected persistentOtpToken=[REDACTED]');
+    });
+
+    it.each([
+      ['a bearer header value', `bearer=Bearer ${TEST_CREDENTIAL}`],
+      ['an authorization header', `Authorization: Bearer ${TEST_CREDENTIAL}`],
+      ['a basic authorization header', `authorization: Basic ${TEST_CREDENTIAL}`],
+      ['a quoted JSON key', `{"longTermToken":"${TEST_CREDENTIAL}"}`],
+      ['a quoted JSON bearer', `{"bearer": "Bearer ${TEST_CREDENTIAL}"}`],
+    ])('redacts the whole secret in %s', (_shape, message) => {
+      metrics.startBank('oneZero');
+      metrics.recordBankFailure('oneZero', new Error(`login failed ${message}`));
+      const bankResult = metrics.getBankMetrics('oneZero');
+      expect(bankResult.success).toBe(true);
+      if (bankResult.success) expect(bankResult.data.error).not.toContain(TEST_CREDENTIAL);
+    });
+
+    it('redacts every sensitive value in one message, whatever the key case', () => {
+      metrics.startBank('oneZero');
+      const error = new Error(`creditCard=${TEST_CREDENTIAL} otpLongTermToken=${TEST_CREDENTIAL}`);
+      metrics.recordBankFailure('oneZero', error);
+      const bankResult = metrics.getBankMetrics('oneZero');
+      expect(bankResult.success && bankResult.data.error)
+        .toBe('Error: creditCard=[REDACTED] otpLongTermToken=[REDACTED]');
     });
 
     it('does not expose "undefined" when scraper error message is sanitized to Unknown error', () => {
