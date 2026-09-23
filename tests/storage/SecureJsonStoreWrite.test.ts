@@ -335,6 +335,7 @@ describe('SecureJsonStore write path', () => {
     });
     const committed = store.commit({ records, shouldQuarantine: false });
     if (committed.success) throw new Error('expected an accessor to be refused');
+    expect(committed.message).toContain('not a plain data property');
     expect(reads).toBe(0);
     expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
   });
@@ -625,6 +626,27 @@ describe('SecureJsonStore write path', () => {
     expect(written).not.toContain(SECRET);
   });
 
+  it('threat 24: refuses a record set that is not an object at all', () => {
+    const { store, fileSystem } = makeStore();
+    const committed = store.commit({
+      records: null as unknown as Record<string, unknown>,
+      shouldQuarantine: false,
+    });
+    if (committed.success) throw new Error('expected a non-object to be refused');
+    expect(committed.message).toContain('object of records');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 24: refuses a hidden record rather than leaving it out of the file', () => {
+    const { store, fileSystem } = makeStore();
+    const hidden: Record<string, unknown> = { visible: 'V' };
+    Object.defineProperty(hidden, 'token', { enumerable: false, value: SECRET });
+    const committed = store.commit({ records: hidden, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected a hidden record to be refused');
+    expect(committed.message).toContain('hidden');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
   it('threat 24: refuses an array even when it is wearing a plain prototype', () => {
     const { store, fileSystem } = makeStore();
     const disguised = ['A', SECRET];
@@ -634,6 +656,7 @@ describe('SecureJsonStore write path', () => {
       shouldQuarantine: false,
     });
     if (committed.success) throw new Error('expected a disguised array to be refused');
+    expect(committed.message).toContain('array');
     expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
   });
 
@@ -657,21 +680,75 @@ describe('SecureJsonStore write path', () => {
     expect(fileSystem.contentsOf(STORE_PATH)).toContain('kept');
   });
 
-  it('threat 25: refuses a proxy that describes a key once, then denies it', () => {
+  it('threat 25: refuses a key the caller lists but will not describe', () => {
     const { store, fileSystem } = makeStore();
-    const target = { token: SECRET };
-    let describes = 0;
-    const liar = new Proxy(target, {
-      getOwnPropertyDescriptor: (owned, key) => {
-        if (key !== 'token') return Reflect.getOwnPropertyDescriptor(owned, key);
-        describes += 1;
-        if (describes > 1) return undefined;
-        return Reflect.getOwnPropertyDescriptor(owned, key);
-      },
+    const liar = new Proxy({}, {
+      ownKeys: () => ['token'],
+      getOwnPropertyDescriptor: () => undefined,
     }) as Record<string, unknown>;
     const committed = store.commit({ records: liar, shouldQuarantine: false });
     if (committed.success) throw new Error('expected an undescribable key to be refused');
+    expect(committed.message).toContain('will not describe itself');
     expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 26: writes the value it validated, not one swapped in afterwards', () => {
+    const { store, fileSystem } = makeStore();
+    let reads = 0;
+    const flipping = new Proxy({ token: 'CLEAN' }, {
+      get: (target, key) => {
+        if (key !== 'token') return Reflect.get(target, key);
+        reads += 1;
+        return reads === 1 ? 'CLEAN' : 'EVIL';
+      },
+    }) as Record<string, unknown>;
+    const committed = store.commit({ records: flipping, shouldQuarantine: false });
+    if (!committed.success) throw new Error('expected the validated value to commit');
+    expect(reads).toBe(0);
+    const written = fileSystem.contentsOf(STORE_PATH);
+    expect(written).toContain('CLEAN');
+    expect(written).not.toContain('EVIL');
+  });
+
+  it('threat 26: returns a failure when the request will not yield its records', () => {
+    const { store, fileSystem } = makeStore();
+    const request = {
+      get records(): Record<string, unknown> {
+        throw new Error('records refuses');
+      },
+      shouldQuarantine: false,
+    };
+    const committed = store.commit(request);
+    if (committed.success) throw new Error('expected an unreadable request to be refused');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 26: stages no credential when the request lies about quarantining', () => {
+    const { store, fileSystem } = makeStore();
+    const request = {
+      records: { token: SECRET },
+      get shouldQuarantine(): boolean {
+        throw new Error('shouldQuarantine refuses');
+      },
+    };
+    const committed = store.commit(request);
+    if (committed.success) throw new Error('expected an unreadable request to be refused');
+    expect(leftovers(fileSystem)).toHaveLength(0);
+  });
+
+  it('threat 27: a toJSON inherited from Object.prototype cannot reach the bytes', () => {
+    const { store, fileSystem } = makeStore();
+    const prototype = Object.prototype as unknown as Record<string, unknown>;
+    prototype.toJSON = (): Record<string, unknown> => ({ hijacked: true });
+    try {
+      const committed = store.commit({ records: { token: 'kept' }, shouldQuarantine: false });
+      if (!committed.success) throw new Error('expected an ordinary record set to commit');
+      const written = fileSystem.contentsOf(STORE_PATH);
+      expect(written).toContain('kept');
+      expect(written).not.toContain('hijacked');
+    } finally {
+      delete prototype.toJSON;
+    }
   });
 
   it('threat 21: still commits an ordinary record set unchanged', () => {

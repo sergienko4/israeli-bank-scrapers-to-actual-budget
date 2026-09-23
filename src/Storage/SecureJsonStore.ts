@@ -17,6 +17,7 @@
 import type { IProcedureFailure, Procedure } from '../Types/Procedure.js';
 import { fail, succeed } from '../Types/ProcedureHelpers.js';
 import type { IFileSystem, IOpenFile } from './FileSystemPort.js';
+import ownRequest from './OwnedRecords.js';
 import {
   directoryOf, isStagingPath, quarantinePathFor, stagingPathFor,
 } from './StagingPaths.js';
@@ -25,7 +26,7 @@ import {
   oversizedSnapshot, parseSnapshot, serialiseRecords,
 } from './StoreRecords.js';
 import type {
-  ICommitReport, ICommitRequest, IStoreSnapshot, ISweepReport,
+  ICommitReport, ICommitRequest, IOwnedRequest, IStoreSnapshot, ISweepReport,
 } from './StoreTypes.js';
 
 /**
@@ -105,10 +106,9 @@ export default class SecureJsonStore {
    * <p>Ordering is the whole point: the replacement is staged, flushed and
    * verified before anything at the canonical path is disturbed, so a crash
    * leaves either the old file or the new one there, never nothing. The
-   * staged bytes are fsynced before the rename; the directory entry that
-   * rename creates is not, so on a filesystem that reorders metadata a power
-   * loss can still show the predecessor. That is the weaker of the two
-   * outcomes already promised here, not a third one.
+   * staged bytes are fsynced before the rename; the directory entry is not,
+   * so a power loss can still show the predecessor — the weaker of those two
+   * outcomes, not a third one.
    *
    * <p>One exception, and it is narrow. Quarantining a damaged predecessor
    * takes two renames that cannot be made one, so a crash between them
@@ -120,18 +120,8 @@ export default class SecureJsonStore {
    * @returns What the commit did, or why it did nothing.
    */
   public commit(request: ICommitRequest): Procedure<ICommitReport> {
-    const serialised = serialiseRecords(request.records);
-    if (!serialised.success) return serialised;
-    const sized = checkWritableSize(serialised.data.json);
-    if (!sized.success) return sized;
-    const stagedPath = stagingPathFor(this._filePath);
-    const staged = this._fileSystem.createExclusive(stagedPath, serialised.data.json);
-    if (!staged.success) return staged;
-    const whole = checkWholeWrite(staged.data.bytesWritten, sized.data);
-    if (!whole.success) return this.abandon(stagedPath, whole);
-    const quarantined = this.quarantineIfAsked(request.shouldQuarantine);
-    if (!quarantined.success) return this.abandon(stagedPath, quarantined);
-    return this.publish(stagedPath, serialised.data.count, quarantined.data);
+    const owned = ownRequest(request);
+    return owned.success ? this.commitOwned(owned.data) : owned;
   }
 
   /**
@@ -163,6 +153,29 @@ export default class SecureJsonStore {
       summary: `Removed ${String(removedCount)} abandoned staged files`,
     };
     return succeed(report);
+  }
+
+  /**
+   * Stages, verifies and publishes records the store already owns.
+   *
+   * <p>Ordering starts before this: {@link ownRequest} read the request in
+   * full, so nothing decided here can change while a credential sits staged.
+   * @param request - A request the store owns outright.
+   * @returns What the commit did, or why it did nothing.
+   */
+  private commitOwned(request: IOwnedRequest): Procedure<ICommitReport> {
+    const serialised = serialiseRecords(request.records);
+    if (!serialised.success) return serialised;
+    const sized = checkWritableSize(serialised.data.json);
+    if (!sized.success) return sized;
+    const stagedPath = stagingPathFor(this._filePath);
+    const staged = this._fileSystem.createExclusive(stagedPath, serialised.data.json);
+    if (!staged.success) return staged;
+    const whole = checkWholeWrite(staged.data.bytesWritten, sized.data);
+    if (!whole.success) return this.abandon(stagedPath, whole);
+    const quarantined = this.quarantineIfAsked(request.shouldQuarantine);
+    if (!quarantined.success) return this.abandon(stagedPath, quarantined);
+    return this.publish(stagedPath, serialised.data.count, quarantined.data);
   }
 
   /**

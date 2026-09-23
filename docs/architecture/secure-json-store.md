@@ -54,19 +54,32 @@ disclosure, **D**enial of service, **E**levation of privilege.
 | 22 | Store path and listing disagree | I | A relative or double-slashed store path makes the sweep's prefix disagree with the joined paths a directory listing returns, so abandoned staging files holding live tokens are never collected and the sweep still reports success | Match on file name, not on the whole path. Normalising the store path instead would be worse: collapsing `..` lexically can select a different file when a symlink precedes it, and the candidate already comes from the listed directory | integration (real fs) |
 | 23 | Staged data not durable before rename | T, D | `close` surfaces deferred write errors but does not flush; a crash can persist the rename while the contents are still in page cache, leaving the canonical path pointing at an empty file | `fsync` the staged descriptor before the call returns | not unit-testable |
 | 24 | Record set is behaviour, not data | T, D | Threats 18-21 are each a different way for a caller's object to disagree with the bytes written: a getter that deletes a sibling mid-copy, a `toJSON` that erases itself, one that injects a record, one that keeps the key set and swaps every value, keys held on symbols that JSON drops without a word, an array whose entries reappear as `"0"` and `"1"`. Detecting each mechanism after the fact is an endless list, and the value-swap variant is undetectable in principle | Refuse behaviour at the door. A record set must be a plain object of plain data: no array or class instance at the root, no symbol keys, no `__proto__`, no accessors, no function values. With no code to run, copying, serialising and re-reading are guaranteed to agree, and the descriptor check never invokes a getter | unit (fake) |
-| 25 | Caller's object lies to reflection | T, D | A `Proxy` can satisfy every check in threat 24 and still misbehave: `ownKeys` can throw, turning a commit that promises a result into one that throws; `getOwnPropertyDescriptor` can describe a key once and deny it the next call; a `get` trap can supply a `toJSON` that is not an own key at all | Two answers, neither of them another detector. Serialisation runs over the *copy*, so a trap-supplied `toJSON` never reaches the bytes; and the whole marshalling chain sits inside one `try`, so an object that refuses inspection returns a failure like any other | unit (fake) |
+| 25 | Caller's object lies to reflection | T, D | A `Proxy` can satisfy every shape check and still misbehave: `ownKeys` can throw, turning a commit that promises a result into one that throws; a key can be listed and then not described, so a helper that skips it would drop a credential and report success | Read keys once and describe each once, refusing a key that will not describe itself, with the whole pass inside one `try` | unit (fake) |
+| 26 | Input re-read after it was checked | T, D | Validating the caller's object and then reading it again to copy it leaves a gap a proxy can drive through: the checked read returned `CLEAN`, the copying read returned `EVIL`, and the store wrote the second. The same applies to the request itself — `shouldQuarantine` was read *after* a credential had been staged, so a getter throwing there left that credential on disk with nothing left running to remove it | Read everything exactly once, up front, into a value the store owns. Values are lifted out of property descriptors rather than fetched again, so there is no second read to disagree with the first | unit (fake) |
+| 27 | `toJSON` inherited rather than owned | T, D | Refusing an own `toJSON` does nothing about one inherited from `Object.prototype`. Any prototype pollution elsewhere in the process rewrites every commit: a store of real credentials serialises as `{"hijacked":true}` and reports success | Copy into a `null`-prototype object. There is no prototype left to inherit from, so the question cannot arise rather than being checked for | unit (fake) |
 
-Threat 21 guarded the record *set*, not the values, and the value-swap
-variant it could not see is what forced threat 24. Two decisions then made
-most of threat 21 unreachable rather than merely guarded: behaviour is refused
-at the door, and what gets serialised is the copy, never the caller's object.
+Threats 18 through 27 are one bug wearing ten masks, and the fix for the
+tenth is what should have been the fix for the first. The store kept
+*re-reading* an object it did not own — check it, read it again to copy it,
+read the request again to decide about quarantine — and each read was a fresh
+opportunity for the caller's object to answer differently. No amount of
+checking closes that, because every new check is one more read.
+
+`OwnedRecords` reads everything once and returns a value the store owns:
+keys and values lifted straight out of property descriptors, copied into a
+frozen object with no prototype, behind a type only that module can produce.
+Values cannot change after validation because nothing reads them twice; no
+accessor can run during serialisation because none survived the copy; no
+inherited `toJSON` can intercept `JSON.stringify` because the copy has no
+prototype. These are properties of the construction, not assertions checked
+afterwards.
+
 The unexpected-key half of the round-trip check consequently has no way to
-fire today. It is kept because it costs one comparison and because it is what
-turns "serialise the copy, not the original" from a convention into a checked
-property. The missing-key half stays live: a *nested* value may define its own
-`toJSON` and return `undefined`. Nested values are still not byte-for-byte —
-a `Date` is meant to serialise as a string. The caller owns values; the store
-owns the set.
+fire. It is kept because it costs one comparison and it is what would notice
+if serialisation were ever pointed back at a caller's object. The missing-key
+half stays live: a *nested* value may define its own `toJSON` and return
+`undefined`. Nested values are still not byte-for-byte — a `Date` is meant to
+serialise as a string. The caller owns values; the store owns the set.
 
 Threat 23 has no automated test. Proving it needs a real power loss or a
 filesystem fault injector, and faking it would mean mocking `node:fs` — the

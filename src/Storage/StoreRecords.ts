@@ -9,8 +9,17 @@
 
 import type { Procedure } from '../Types/Procedure.js';
 import { fail, succeed } from '../Types/ProcedureHelpers.js';
-import { acceptRecordSet, POLLUTING_KEY } from './RecordContract.js';
-import type { IStoreSnapshot, StoreState } from './StoreTypes.js';
+import type { IOwnedRecords, IStoreSnapshot, StoreState } from './StoreTypes.js';
+
+/**
+ * Key that turns a later `target[key] = value` into prototype pollution.
+ *
+ * <p>Survives `JSON.parse` as an ordinary own property, so copying entries
+ * into a null-prototype object is not on its own enough to neutralise it.
+ * Defined here, with the read path that strips it: the write path refuses it
+ * only because this is what a read would do to it.
+ */
+export const POLLUTING_KEY = '__proto__';
 
 /**
  * Largest store this will read into memory.
@@ -109,17 +118,15 @@ function keyDifferences(
  * them, and a subset test calls both a faithful write, so the comparison has
  * to run in both directions against a key set captured beforehand.
  *
- * <p>Two things now make that cheap. {@link acceptRecordSet} refuses
- * behaviour before anything is read, and what gets serialised is the copy,
- * never the caller's object — so a `toJSON` reached through a prototype or a
- * proxy trap cannot touch the bytes. The remaining live case is a *nested*
- * value whose own `toJSON` returns `undefined`, which is ordinary JSON
- * semantics and quietly drops the record.
+ * <p>Ownership now makes that cheap. What arrives is a frozen, prototype-less
+ * copy the store took itself, so nothing here can run code or change between
+ * reads. The remaining live case is a *nested* value whose own `toJSON`
+ * returns `undefined`, which is ordinary JSON semantics and quietly drops
+ * the record.
  *
  * <p>The unexpected-key half therefore has no way to fire today. It is kept
- * because it costs one comparison and it is what makes the order above a
- * checked property rather than a convention: serialise the original instead
- * of the copy and this is the check that notices.
+ * because it costs one comparison and it is the check that would notice if
+ * serialisation were ever pointed back at a caller's object.
  *
  * <p>Value fidelity at depth is still not promised: a nested `Date` is meant
  * to serialise as a string. The caller owns values; this owns the set.
@@ -157,49 +164,18 @@ export interface ISerialised {
 }
 
 /**
- * Takes a private copy of an already-accepted record set.
+ * Serialises records the store already owns.
  *
- * <p>Everything downstream works on this copy rather than the caller's
- * object, and that is load-bearing twice over. It fixes the values at one
- * moment, so nothing can change under the checks; and it strips the identity
- * of the original, so a `toJSON` reached through a prototype or a proxy trap
- * has no way to intercept `JSON.stringify`.
- *
- * <p>Total, because {@link acceptRecordSet} has already refused anything that
- * could run code while being copied.
- * @param records - Records that passed the contract.
- * @returns A plain copy carrying the same keys and values.
+ * <p>Takes {@link IOwnedRecords} rather than anything the caller still holds
+ * a reference to. That is the whole defence: there is no copy step here to
+ * get wrong and no second read to disagree with the first, because the value
+ * arriving was read once, frozen, and stripped of its prototype before it
+ * ever reached this module.
+ * @param owned - Records the store copied out of the request.
+ * @returns The JSON text and its record count, or why it cannot be written.
  */
-function snapshotRecords(
-  records: Readonly<Record<string, unknown>>,
-): Record<string, unknown> {
-  return { ...records };
-}
-
-/**
- * Serialises records, treating an unserialisable graph as a caller error.
- *
- * <p>The thrown message is discarded: it can quote the offending property
- * path, and those properties hold credentials.
- *
- * <p>An own `__proto__` is refused outright rather than counted. It survives
- * both the copy and `JSON.stringify`, so nothing downstream sees a loss, but
- * the read path strips it — committing it would report a credential stored
- * that no later read could ever return.
- * @param records - Records to persist.
- * @returns The JSON text and its record count, or a failure naming no values.
- */
-export function serialiseRecords(
-  records: Readonly<Record<string, unknown>>,
-): Procedure<ISerialised> {
-  try {
-    const accepted = acceptRecordSet(records);
-    if (!accepted.success) return accepted;
-    const snapshot = snapshotRecords(records);
-    return stringifyAndVerify(snapshot);
-  } catch {
-    return fail('Records could not be read', { status: 'EINVAL' });
-  }
+export function serialiseRecords(owned: IOwnedRecords): Procedure<ISerialised> {
+  return stringifyAndVerify(owned.values);
 }
 
 /**
