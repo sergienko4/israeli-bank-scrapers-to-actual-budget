@@ -55,15 +55,20 @@ export default function resolveBankTokensPath(): string {
  * a hidden sibling that can never be renamed into place. The store could
  * never be written, and the only symptom was a warning on every run.
  *
- * <p>The root is left alone. Its separator is the path itself, not a trailing
- * one, and stripping it would turn an absolute path into an empty string.
+ * <p>A root is left alone, because its separator is the path rather than a
+ * trailing one. Testing that by length holds only for `/`: a Windows root
+ * carries a drive letter, and trimming `C:\` to `C:` yields a drive-relative
+ * path that resolves against the current directory. Absoluteness is the
+ * property that actually matters here, so it is what the loop checks.
  * @param filePath - Normalised absolute path to trim.
- * @returns The path without a trailing separator.
+ * @returns The path without a trailing separator, still absolute.
  */
 function withoutTrailingSeparator(filePath: string): string {
   let trimmed = filePath;
-  while (trimmed.length > 1 && trimmed.endsWith(sep)) {
-    trimmed = trimmed.slice(0, -1);
+  while (trimmed.endsWith(sep)) {
+    const shorter = trimmed.slice(0, -1);
+    if (!isAbsolute(shorter)) return trimmed;
+    trimmed = shorter;
   }
   return trimmed;
 }
