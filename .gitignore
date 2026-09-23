@@ -83,3 +83,8 @@ site/
 # installs behind a corporate proxy. Registry provenance is enforced by
 # the resolved URLs and integrity hashes in package-lock.json instead.
 .npmrc
+
+# Local planning notes (specs, task breakdowns, threat models). These are
+# working artefacts for whoever is doing the task, not project documentation:
+# decisions that outlive the task belong in docs/decisions/ as an ADR.
+plans/
