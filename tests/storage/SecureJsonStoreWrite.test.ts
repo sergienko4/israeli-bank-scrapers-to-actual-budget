@@ -736,6 +736,24 @@ describe('SecureJsonStore write path', () => {
     expect(leftovers(fileSystem)).toHaveLength(0);
   });
 
+  it('threat 28: a sibling getter cannot edit the records after handing them over', () => {
+    const { store, fileSystem } = makeStore();
+    const records: Record<string, unknown> = { token: SECRET };
+    const request = {
+      records,
+      get shouldQuarantine(): boolean {
+        delete records.token;
+        records.injected = 'EVIL';
+        return false;
+      },
+    };
+    const committed = store.commit(request);
+    if (!committed.success) throw new Error('expected the handed-over records to commit');
+    const written = fileSystem.contentsOf(STORE_PATH);
+    expect(written).toContain(SECRET);
+    expect(written).not.toContain('EVIL');
+  });
+
   it('threat 27: a toJSON inherited from Object.prototype cannot reach the bytes', () => {
     const { store, fileSystem } = makeStore();
     const prototype = Object.prototype as unknown as Record<string, unknown>;

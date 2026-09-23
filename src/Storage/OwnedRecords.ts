@@ -141,23 +141,24 @@ function ownKeysOf(source: object): Procedure<readonly string[]> {
 /**
  * Reads a commit request once, in full, and copies what it holds.
  *
- * <p>Both properties are read here and nowhere else. `shouldQuarantine` in
- * particular used to be read after the credential had already been staged, so
- * a getter that threw there left that staged credential on disk with nothing
- * left running to clean it up.
+ * <p>Both properties are read here and nowhere else, and the order matters
+ * twice over. `shouldQuarantine` is read last because it is caller code: a
+ * getter there can edit the very object `records` just handed over, so
+ * reading it first let a caller supply one record set and have a different
+ * one written. It is still read before the filesystem is touched, which is
+ * what stops a getter that throws from orphaning a staged credential.
  * @param request - The caller's request object, still untrusted.
  * @returns An owned request, or why the caller's could not be read.
  */
 function readRequestOnce(request: ICommitRequest): Procedure<IOwnedRequest> {
   const candidate: unknown = request.records;
-  const shouldQuarantine = request.shouldQuarantine;
   const rooted = checkRoot(candidate);
   if (!rooted.success) return rooted;
   const keys = ownKeysOf(rooted.data);
   if (!keys.success) return keys;
   const owned = ownEveryRecord(rooted.data, keys.data);
   if (!owned.success) return owned;
-  return succeed({ records: owned.data, shouldQuarantine });
+  return succeed({ records: owned.data, shouldQuarantine: request.shouldQuarantine });
 }
 
 /**

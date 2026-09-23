@@ -57,13 +57,21 @@ disclosure, **D**enial of service, **E**levation of privilege.
 | 25 | Caller's object lies to reflection | T, D | A `Proxy` can satisfy every shape check and still misbehave: `ownKeys` can throw, turning a commit that promises a result into one that throws; a key can be listed and then not described, so a helper that skips it would drop a credential and report success | Read keys once and describe each once, refusing a key that will not describe itself, with the whole pass inside one `try` | unit (fake) |
 | 26 | Input re-read after it was checked | T, D | Validating the caller's object and then reading it again to copy it leaves a gap a proxy can drive through: the checked read returned `CLEAN`, the copying read returned `EVIL`, and the store wrote the second. The same applies to the request itself — `shouldQuarantine` was read *after* a credential had been staged, so a getter throwing there left that credential on disk with nothing left running to remove it | Read everything exactly once, up front, into a value the store owns. Values are lifted out of property descriptors rather than fetched again, so there is no second read to disagree with the first | unit (fake) |
 | 27 | `toJSON` inherited rather than owned | T, D | Refusing an own `toJSON` does nothing about one inherited from `Object.prototype`. Any prototype pollution elsewhere in the process rewrites every commit: a store of real credentials serialises as `{"hijacked":true}` and reports success | Copy into a `null`-prototype object. There is no prototype left to inherit from, so the question cannot arise rather than being checked for | unit (fake) |
+| 28 | Sibling property edits the records after handover | T, D | Reading `records` and then `shouldQuarantine` takes a reference to the caller's object and *then* runs caller code. A getter on `shouldQuarantine` can delete every key of the object `records` just handed over and add its own, so the set copied afterwards is not the set supplied — a commit of `{token}` wrote `{injected}` and reported success | Copy the records before reading the second property. Nothing the caller controls runs between the reference being taken and the copy being made; `shouldQuarantine` is still read before the filesystem is touched, so a getter that throws there still cannot orphan a staged credential | unit (fake) |
 
-Threats 18 through 27 are one bug wearing ten masks, and the fix for the
-tenth is what should have been the fix for the first. The store kept
+Threats 18 through 28 are one bug wearing eleven masks, and the fix for the
+eleventh is what should have been the fix for the first. The store kept
 *re-reading* an object it did not own — check it, read it again to copy it,
 read the request again to decide about quarantine — and each read was a fresh
 opportunity for the caller's object to answer differently. No amount of
 checking closes that, because every new check is one more read.
+
+Threat 28 is the same bug caught one step further out, and worth stating
+plainly: *taking a reference is not taking a copy*. Reading `records` only
+borrows the caller's object, so any caller code invited to run afterwards -
+including a sibling getter on the request - is still running before the copy
+exists. Ordering is therefore part of the contract, not an implementation
+detail: copy first, read the rest of the request second.
 
 `OwnedRecords` reads everything once and returns a value the store owns:
 keys and values lifted straight out of property descriptors, copied into a
