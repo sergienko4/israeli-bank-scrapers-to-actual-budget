@@ -8,4 +8,5 @@ export { default as ConfigurationError } from './ConfigurationError.js';
 export { default as NetworkError } from './NetworkError.js';
 export { default as ShutdownError } from './ShutdownError.js';
 export { default as TimeoutError } from './TimeoutError.js';
+export { default as TokenStoreError } from './TokenStoreError.js';
 export { default as TwoFactorAuthError } from './TwoFactorAuthError.js';
