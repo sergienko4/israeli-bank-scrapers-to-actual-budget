@@ -91,6 +91,11 @@ export interface IFileSystem {
    * <p>The cap belongs here, with the read that does the allocating, rather
    * than with an earlier size observation: a file can grow between being
    * measured and being read.
+   *
+   * <p>Implementations must decode strictly and report `EILSEQ` rather than
+   * substituting for malformed bytes. Replacing them can turn a corrupted
+   * file into valid JSON holding a quietly altered credential, which the
+   * layer above would accept as healthy.
    * @param file - Descriptor previously returned by `openForRead`.
    * @param maxBytes - Largest payload to accept before failing with `EFBIG`.
    * @returns The file contents, or a failure carrying the errno in `status`.

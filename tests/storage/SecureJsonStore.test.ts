@@ -207,6 +207,14 @@ describe('SecureJsonStore read path', () => {
     expect(fileSystem.calls).not.toContain('restrictToOwner');
   });
 
+  it('threat 19: treats an undecodable store as damage, not as a hard failure', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.forcedFailures.set('readAll', 'EILSEQ');
+    const snapshot = store.read();
+    expect(snapshot.success && snapshot.data.state).toBe('damaged');
+  });
+
   it('reports a permission error as a failure, not as absence or damage', () => {
     const { store, fileSystem } = makeStore();
     fileSystem.forcedFailures.set('openForRead', 'EACCES');

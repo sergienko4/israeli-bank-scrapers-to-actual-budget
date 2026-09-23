@@ -137,6 +137,31 @@ function fillFrom(descriptor: number, buffer: Buffer): number {
 }
 
 /**
+ * Decoder that rejects malformed input rather than substituting for it.
+ *
+ * <p>`Buffer.toString('utf8')` replaces every bad sequence with U+FFFD, which
+ * can turn a corrupted file into valid JSON holding a silently altered
+ * credential. Refusing is the only way the damage stays visible.
+ */
+const STRICT_UTF8 = new TextDecoder('utf-8', { fatal: true });
+
+/**
+ * Decodes the filled part of a buffer, refusing to guess at bad bytes.
+ * @param buffer - Buffer the read filled.
+ * @param length - How many bytes of it are meaningful.
+ * @returns The text, or a failure carrying `EILSEQ`.
+ */
+function decodeUtf8(buffer: Buffer, length: number): Procedure<string> {
+  const filled = buffer.subarray(0, length);
+  try {
+    const text = STRICT_UTF8.decode(filled);
+    return succeed(text);
+  } catch {
+    return fail('Contents are not valid UTF-8', { status: 'EILSEQ' });
+  }
+}
+
+/**
  * Reads an open descriptor as UTF-8, refusing to allocate past a cap.
  *
  * <p>The cap is enforced here rather than by an earlier `fstat`, because a
@@ -159,8 +184,7 @@ function readAll(file: IOpenFile, maxBytes: number): Procedure<string> {
   if (filled > maxBytes) {
     return fail(`Contents at ${subject} exceed ${String(maxBytes)} bytes`, { status: 'EFBIG' });
   }
-  const contents = buffer.toString('utf8', 0, filled);
-  return succeed(contents);
+  return decodeUtf8(buffer, filled);
 }
 
 /**

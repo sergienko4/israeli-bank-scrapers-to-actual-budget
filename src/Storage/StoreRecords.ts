@@ -138,6 +138,11 @@ function snapshotRecords(
  *
  * <p>The thrown message is discarded: it can quote the offending property
  * path, and those properties hold credentials.
+ *
+ * <p>An own `__proto__` is refused outright rather than counted. It survives
+ * both the copy and `JSON.stringify`, so nothing downstream sees a loss, but
+ * the read path strips it — committing it would report a credential stored
+ * that no later read could ever return.
  * @param records - Records to persist.
  * @returns The JSON text and its record count, or a failure naming no values.
  */
@@ -146,16 +151,47 @@ export function serialiseRecords(
 ): Procedure<ISerialised> {
   const snapshot = snapshotRecords(records);
   if (!snapshot.success) return snapshot;
+  const accepted = acceptForWriting(snapshot.data);
+  if (!accepted.success) return accepted;
+  return stringifyAndVerify(accepted.data);
+}
+
+/**
+ * Refuses a record set holding a key the read path would strip.
+ *
+ * <p>An own `__proto__` survives both the copy and `JSON.stringify`, so no
+ * later check sees a loss, yet the read path drops it. Committing it would
+ * report a credential stored that no read could ever return.
+ * @param records - Private copy of the caller's records.
+ * @returns The same records, or a failure naming the offending key.
+ */
+function acceptForWriting(
+  records: Record<string, unknown>,
+): Procedure<Record<string, unknown>> {
+  if (Object.hasOwn(records, POLLUTING_KEY)) {
+    return fail(`Records cannot include ${POLLUTING_KEY}: it is stripped on read`, {
+      status: 'EINVAL',
+    });
+  }
+  return succeed(records);
+}
+
+/**
+ * Serialises accepted records and proves the text still holds all of them.
+ * @param records - Records cleared for writing.
+ * @returns The JSON text and its record count, or a failure naming no values.
+ */
+function stringifyAndVerify(records: Record<string, unknown>): Procedure<ISerialised> {
   let json: unknown;
   try {
-    json = JSON.stringify(snapshot.data, undefined, 2);
+    json = JSON.stringify(records, undefined, 2);
   } catch {
     return fail('Records could not be serialised as JSON', { status: 'EINVAL' });
   }
   if (typeof json !== 'string') {
     return fail('Records serialise to nothing at all', { status: 'EINVAL' });
   }
-  const expected = Object.keys(snapshot.data);
+  const expected = Object.keys(records);
   return confirmNothingDropped(expected, json);
 }
 
@@ -219,4 +255,35 @@ export function checkWholeWrite(
   const staged = String(bytesWritten);
   const expected = String(bytesExpected);
   return fail(`Staged ${staged} of ${expected} bytes`, { status: 'EIO' });
+}
+
+/**
+ * Read failures that describe the file rather than the attempt to read it.
+ *
+ * <p>A `Map` rather than an object literal: the errno is untrusted input, and
+ * a plain object would answer `constructor` or `toString` out of its
+ * prototype and report inherited nonsense as a damage summary.
+ */
+const DAMAGED_READ_SUMMARIES = new Map<string, string>([
+  ['EFBIG', 'Store grew past the cap while being read'],
+  ['EILSEQ', 'Store is not valid UTF-8'],
+]);
+
+/**
+ * Describes a read the file itself defeated, rather than the attempt.
+ *
+ * <p>Both cases are damage: the bytes on disk are wrong, so reporting an
+ * error would stall the caller where reporting damage lets it quarantine and
+ * start cold. `EFBIG` means the file was within the cap when it was measured
+ * and grew past it before it could be read, which is exactly what an attacker
+ * would produce. `EILSEQ` means it is not valid UTF-8, and decoding it
+ * leniently would hand back a silently altered credential.
+ * @param status - Errno reported by the read.
+ * @returns A damaged snapshot, or a failure when the file is not at fault.
+ */
+export function damagedReadSnapshot(status: string): Procedure<IStoreSnapshot> {
+  const summary = DAMAGED_READ_SUMMARIES.get(status);
+  if (summary === undefined) return fail(`Read failed with ${status}`, { status });
+  const damaged = emptySnapshot('damaged', summary);
+  return succeed(damaged);
 }

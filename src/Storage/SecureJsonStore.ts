@@ -21,8 +21,8 @@ import {
   directoryOf, isStagingPath, quarantinePathFor, stagingPathFor,
 } from './StagingPaths.js';
 import {
-  checkWholeWrite, checkWritableSize, emptySnapshot, MAX_STORE_BYTES, oversizedSnapshot,
-  parseSnapshot, serialiseRecords,
+  checkWholeWrite, checkWritableSize, damagedReadSnapshot, emptySnapshot, MAX_STORE_BYTES,
+  oversizedSnapshot, parseSnapshot, serialiseRecords,
 } from './StoreRecords.js';
 import type {
   ICommitReport, ICommitRequest, IStoreSnapshot, ISweepReport,
@@ -389,17 +389,16 @@ export default class SecureJsonStore {
   /**
    * Decides what a failed read means for the store.
    *
-   * <p>`EFBIG` is damage rather than an error: the file was within the cap
-   * when it was measured and grew past it before it could be read, which is
-   * exactly the behaviour an attacker would produce.
+   * <p>The distinction is whether the bytes or the attempt were at fault.
+   * {@link DAMAGED_READ_SUMMARIES} names the failures that describe the file
+   * itself, which the caller can quarantine; everything else is an error the
+   * caller must surface.
    * @param status - Errno reported by the read.
-   * @returns A damaged snapshot for an overgrown store, a failure otherwise.
+   * @returns A damaged snapshot for a faulty file, a failure otherwise.
    */
   private classifyReadFailure(status: string): Procedure<IStoreSnapshot> {
-    if (status !== 'EFBIG') {
-      return fail(`Could not read store at ${this._filePath}`, { status });
-    }
-    const grew = emptySnapshot('damaged', 'Store grew past the cap while being read');
-    return succeed(grew);
+    const damaged = damagedReadSnapshot(status);
+    if (damaged.success) return damaged;
+    return fail(`Could not read store at ${this._filePath}`, { status });
   }
 }

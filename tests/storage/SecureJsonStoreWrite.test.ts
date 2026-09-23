@@ -470,6 +470,22 @@ describe('SecureJsonStore write path', () => {
     expect(fileSystem.contentsOf('/data/elsewhere')).toBe('target-contents');
   });
 
+  it('threat 20: refuses to commit a record the read path would strip', () => {
+    const { store, fileSystem } = makeStore();
+    const polluting = JSON.parse('{"__proto__":"tok"}') as Record<string, unknown>;
+    const committed = store.commit({ records: polluting, shouldQuarantine: false });
+    expect(committed.success).toBe(false);
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
+  it('threat 20: still commits the records alongside a rejected one', () => {
+    const { store } = makeStore();
+    const polluting = JSON.parse('{"__proto__":"tok","real":"kept"}') as Record<string, unknown>;
+    const committed = store.commit({ records: polluting, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected the commit to be refused');
+    expect(committed.message).toContain('__proto__');
+  });
+
   it('threat 18: rejects records whose own toJSON replaces them with a non-object', () => {
     const { store, fileSystem } = makeStore();
     const erasing = { toJSON: (): null => null };

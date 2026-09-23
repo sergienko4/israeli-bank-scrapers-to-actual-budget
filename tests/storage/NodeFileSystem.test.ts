@@ -118,4 +118,29 @@ describe('NodeFileSystem syscall fidelity', () => {
     if (created.success) throw new Error('expected the create to fail');
     expect(created.message).not.toContain('secret-token');
   });
+
+  it('threat 19: refuses a file that is not valid UTF-8 instead of altering it', () => {
+    // Adapter-only: the fake holds JS strings and cannot represent bad bytes.
+    const world = makeRealWorld();
+    const malformed = Buffer.from([0x7b, 0x22, 0x74, 0x22, 0x3a, 0x22, 0x61, 0xff, 0x62, 0x22, 0x7d]);
+    writeFileSync(world.path('store.json'), malformed, { mode: 0o600 });
+    const fileSystem = createNodeFileSystem();
+    const opened = fileSystem.openForRead(world.path('store.json'));
+    if (!opened.success) throw new Error('expected the open to succeed');
+    const contents = fileSystem.readAll(opened.data, 1024);
+    fileSystem.close(opened.data);
+    if (contents.success) throw new Error('expected the read to reject malformed UTF-8');
+    expect(contents.status).toBe('EILSEQ');
+  });
+
+  it('threat 19: still reads multi-byte UTF-8 that happens to be valid', () => {
+    const world = makeRealWorld();
+    world.writeFile('store.json', '{"t":"\u05e9\u05dc\u05d5\u05dd"}', 0o600);
+    const fileSystem = createNodeFileSystem();
+    const opened = fileSystem.openForRead(world.path('store.json'));
+    if (!opened.success) throw new Error('expected the open to succeed');
+    const contents = fileSystem.readAll(opened.data, 1024);
+    fileSystem.close(opened.data);
+    expect(contents.success && contents.data).toBe('{"t":"\u05e9\u05dc\u05d5\u05dd"}');
+  });
 });
