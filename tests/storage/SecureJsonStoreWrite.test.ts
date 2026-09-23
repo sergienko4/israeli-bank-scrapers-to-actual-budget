@@ -270,6 +270,18 @@ describe('SecureJsonStore write path', () => {
     expect(fileSystem.contentsOf(STORE_PATH)).toBe('corrupt-but-precious');
   });
 
+  it('aborts when the predecessor cannot be assessed before quarantine', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, 'corrupt-but-precious', OWNER_ONLY);
+    fileSystem.forcedFailuresOnce.set('openForRead', 'EIO');
+    const committed = store.commit({ records: { token: SECRET }, shouldQuarantine: true });
+    expect(committed.success).toBe(false);
+    expect(!committed.success && committed.status).toBe('EIO');
+    expect(!committed.success && committed.message).toMatch(/Cannot assess/);
+    expect(fileSystem.contentsOf(STORE_PATH)).toBe('corrupt-but-precious');
+    expect(leftovers(fileSystem)).toHaveLength(0);
+  });
+
   it('threat 14: removes the staged credential when quarantine fails', () => {
     const { store, fileSystem } = makeStore();
     fileSystem.seedFile(STORE_PATH, 'corrupt', OWNER_ONLY);
