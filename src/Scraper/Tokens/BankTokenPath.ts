@@ -10,7 +10,7 @@
  * importer at its own location.
  */
 
-import { isAbsolute, normalize } from 'node:path';
+import { isAbsolute, normalize, sep } from 'node:path';
 
 import ConfigurationError from '../../Errors/ConfigurationError.js';
 
@@ -42,5 +42,28 @@ export default function resolveBankTokensPath(): string {
       'BANK_TOKENS_PATH must be an absolute path shared by the portal and importer'
     );
   }
-  return normalize(override);
+  const normalised = normalize(override);
+  return withoutTrailingSeparator(normalised);
+}
+
+/**
+ * Drops a trailing separator, which names a directory rather than a file.
+ *
+ * <p>`normalize` keeps one, and everything downstream then reads the value as
+ * the directory it looks like: `dirname` returns the parent, so the directory
+ * the store is created in is the wrong one, and the staged temp file becomes
+ * a hidden sibling that can never be renamed into place. The store could
+ * never be written, and the only symptom was a warning on every run.
+ *
+ * <p>The root is left alone. Its separator is the path itself, not a trailing
+ * one, and stripping it would turn an absolute path into an empty string.
+ * @param filePath - Normalised absolute path to trim.
+ * @returns The path without a trailing separator.
+ */
+function withoutTrailingSeparator(filePath: string): string {
+  let trimmed = filePath;
+  while (trimmed.length > 1 && trimmed.endsWith(sep)) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return trimmed;
 }

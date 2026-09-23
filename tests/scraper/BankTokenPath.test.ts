@@ -38,8 +38,23 @@ describe('resolveBankTokensPath', () => {
     expect(resolveBankTokensPath()).toBe('/etc/bank-tokens.json');
   });
 
-  it('strips a trailing separator so one path never yields two store files', () => {
+  it('collapses repeated and dot segments so one path never yields two stores', () => {
     process.env.BANK_TOKENS_PATH = '/app/data//nested/./bank-tokens.json';
     expect(resolveBankTokensPath()).toBe('/app/data/nested/bank-tokens.json');
+  });
+
+  it('strips a trailing separator, which would otherwise name the directory', () => {
+    process.env.BANK_TOKENS_PATH = '/app/data/bank-tokens.json/';
+    expect(resolveBankTokensPath()).toBe('/app/data/bank-tokens.json');
+  });
+
+  it('strips repeated trailing separators too', () => {
+    process.env.BANK_TOKENS_PATH = '/app/data/bank-tokens.json///';
+    expect(resolveBankTokensPath()).toBe('/app/data/bank-tokens.json');
+  });
+
+  it('keeps the root separator, which is the path rather than a trailing one', () => {
+    process.env.BANK_TOKENS_PATH = '/';
+    expect(resolveBankTokensPath()).toBe('/');
   });
 });
