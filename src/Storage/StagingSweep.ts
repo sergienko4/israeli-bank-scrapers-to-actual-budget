@@ -9,7 +9,8 @@
 
 import type { Procedure } from '../Types/Procedure.js';
 import { succeed } from '../Types/ProcedureHelpers.js';
-import type { IFileSystem } from './FileSystemPort.js';
+import type { IFileSystem, IOpenFile } from './FileSystemPort.js';
+import closeAfter from './OpenFileScope.js';
 import { directoryOf, isStagingPath } from './StagingPaths.js';
 import type { ISweepReport } from './StoreTypes.js';
 
@@ -52,11 +53,23 @@ function deleteStaged(fileSystem: IFileSystem, stagedPath: string): boolean {
 }
 
 /**
+ * Decides from an open descriptor whether a staged file was abandoned.
+ * @param file - Descriptor for the candidate.
+ * @returns Whether it is a regular file older than the grace period.
+ */
+function isAbandoned(file: IOpenFile): Procedure<boolean> {
+  const isStale = Date.now() - file.modifiedAtMs > STALE_STAGING_AGE_MS;
+  return succeed(file.isRegularFile && isStale);
+}
+
+/**
  * Removes one staged file if it is a stale regular file.
  *
  * <p>Anything that will not open — a symlink refused by `O_NOFOLLOW`, a
  * file another process holds exclusively — is left alone, because its age
- * cannot be established and an unaged file might still be in use.
+ * cannot be established and an unaged file might still be in use. A file
+ * whose descriptor would not close is left alone for the same reason: the
+ * inspection did not finish cleanly, and the next sweep will try again.
  * @param fileSystem - Injected filesystem access.
  * @param stagedPath - Candidate found alongside the store.
  * @returns Whether the file was deleted.
@@ -64,10 +77,8 @@ function deleteStaged(fileSystem: IFileSystem, stagedPath: string): boolean {
 function removeIfAbandoned(fileSystem: IFileSystem, stagedPath: string): boolean {
   const opened = fileSystem.openForRead(stagedPath);
   if (!opened.success) return false;
-  const { isRegularFile, modifiedAtMs } = opened.data;
-  fileSystem.close(opened.data);
-  if (!isRegularFile) return false;
-  if (Date.now() - modifiedAtMs <= STALE_STAGING_AGE_MS) return false;
+  const abandoned = closeAfter(fileSystem, opened.data, isAbandoned);
+  if (!abandoned.success || !abandoned.data) return false;
   return deleteStaged(fileSystem, stagedPath);
 }
 

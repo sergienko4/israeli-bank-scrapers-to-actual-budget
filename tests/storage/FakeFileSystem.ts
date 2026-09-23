@@ -281,12 +281,18 @@ export default class FakeFileSystem implements IFileSystem {
 
   /**
    * Releases a descriptor.
+   *
+   * <p>A forced failure still releases it, as Linux does: `close(2)` frees
+   * the descriptor before reporting the error, which is why a caller must
+   * report a refused close rather than retry it.
    * @param file - Descriptor previously returned by `openForRead`.
    * @returns Whether the descriptor was released cleanly.
    */
   public close(file: IOpenFile): ICloseOutcome {
     this.calls.push('close');
-    return { wasClosed: this._open.delete(file.descriptor) };
+    const wasOpen = this._open.delete(file.descriptor);
+    const refused = this.forced('close');
+    return { wasClosed: wasOpen && refused === undefined };
   }
 
   /**

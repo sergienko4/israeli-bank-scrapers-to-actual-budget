@@ -250,6 +250,17 @@ describe('SecureJsonStore write path', () => {
     expect(fileSystem.modeOf('/data/elsewhere')).toBe(WORLD_READABLE);
   });
 
+  it('threat 30: aborts a quarantine whose screen could not release its descriptor', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, 'corrupt-but-precious', OWNER_ONLY);
+    fileSystem.forcedFailuresOnce.set('close', 'EIO');
+    const committed = store.commit({ records: { a: 'b' }, shouldQuarantine: true });
+    if (committed.success) throw new Error('expected a refused close to abort the commit');
+    expect(committed.status).toBe('EIO');
+    expect(fileSystem.contentsOf(STORE_PATH)).toBe('corrupt-but-precious');
+    expect(leftovers(fileSystem)).toHaveLength(0);
+  });
+
   it('aborts rather than destroying the damaged file when quarantine fails', () => {
     const { store, fileSystem } = makeStore();
     fileSystem.seedFile(STORE_PATH, 'corrupt-but-precious', OWNER_ONLY);

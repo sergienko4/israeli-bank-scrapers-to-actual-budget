@@ -17,6 +17,7 @@
 import type { IProcedureFailure, Procedure } from '../Types/Procedure.js';
 import { fail, succeed } from '../Types/ProcedureHelpers.js';
 import type { IFileSystem, IOpenFile } from './FileSystemPort.js';
+import closeAfter from './OpenFileScope.js';
 import ownRequest from './OwnedRecords.js';
 import { quarantinePathFor, stagingPathFor } from './StagingPaths.js';
 import sweepStaged from './StagingSweep.js';
@@ -76,11 +77,7 @@ export default class SecureJsonStore {
   public read(): Procedure<IStoreSnapshot> {
     const opened = this._fileSystem.openForRead(this._filePath);
     if (!opened.success) return this.classifyOpenFailure(opened.status);
-    try {
-      return this.readOpened(opened.data);
-    } finally {
-      this._fileSystem.close(opened.data);
-    }
+    return closeAfter(this._fileSystem, opened.data, (file) => this.readOpened(file));
   }
 
   /**
@@ -256,11 +253,7 @@ export default class SecureJsonStore {
         status: opened.status,
       });
     }
-    try {
-      return this.screenOpened(opened.data);
-    } finally {
-      this._fileSystem.close(opened.data);
-    }
+    return closeAfter(this._fileSystem, opened.data, (file) => this.screenOpened(file));
   }
 
   /**

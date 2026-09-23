@@ -265,4 +265,25 @@ describe('SecureJsonStore leftover staging', () => {
     expect(committed.success).toBe(true);
     expect(fileSystem.contentsOf(STORE_PATH)).toContain('fresh');
   });
+  it('threat 30: leaves a staged file it could not cleanly inspect for the next sweep', () => {
+    const { store, fileSystem } = makeSubject();
+    freezeClock();
+    const abandoned = `${STORE_PATH}.${UUID}.tmp`;
+    seedStagedAged(fileSystem, abandoned, STALE_STAGING_AGE_MS + 1);
+    fileSystem.forcedFailuresOnce.set('close', 'EIO');
+    const refused = store.sweepStagedLeftovers();
+    expect(refused.success && refused.data.removedCount).toBe(0);
+    expect(fileSystem.hasEntry(abandoned)).toBe(true);
+    const retried = store.sweepStagedLeftovers();
+    expect(retried.success && retried.data.removedCount).toBe(1);
+  });
+  it('leaves a staged file whose age cannot be measured', () => {
+    const { store, fileSystem } = makeSubject();
+    freezeClock();
+    const unmeasured = `${STORE_PATH}.${UUID}.tmp`;
+    seedStagedAged(fileSystem, unmeasured, Number.NaN);
+    const swept = store.sweepStagedLeftovers();
+    expect(swept.success && swept.data.removedCount).toBe(0);
+    expect(fileSystem.hasEntry(unmeasured)).toBe(true);
+  });
 });

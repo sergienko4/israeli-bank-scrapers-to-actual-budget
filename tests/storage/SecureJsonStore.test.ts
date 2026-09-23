@@ -11,7 +11,10 @@
 
 import { describe, expect, it } from 'vitest';
 
+import type { IOpenFile } from '../../src/Storage/FileSystemPort.js';
+
 import SecureJsonStore from '../../src/Storage/SecureJsonStore.js';
+import type { Procedure } from '../../src/Types/Procedure.js';
 import { MAX_STORE_BYTES } from '../../src/Storage/StoreRecords.js';
 import FakeFileSystem from './FakeFileSystem.js';
 
@@ -31,6 +34,23 @@ const SECRET = 'eyJhbGciOiJIUzI1NiJ9.super-secret-refresh-token';
 function makeStore(): { store: SecureJsonStore; fileSystem: FakeFileSystem } {
   const fileSystem = new FakeFileSystem();
   return { store: new SecureJsonStore(fileSystem, STORE_PATH), fileSystem };
+}
+
+/**
+ * A filesystem whose read raises instead of reporting a failure.
+ *
+ * <p>Models an adapter that breaks its own contract, which is the case a
+ * descriptor is most likely to be leaked in: the store must still close it.
+ */
+class ThrowingReadFileSystem extends FakeFileSystem {
+  /**
+   * Fails loudly instead of returning contents.
+   * @param file - Descriptor the store opened.
+   * @returns Never; always throws.
+   */
+  public override readAll(file: IOpenFile): Procedure<string> {
+    throw new Error(`read exploded on ${String(file.descriptor)}`);
+  }
 }
 
 describe('SecureJsonStore read path', () => {
@@ -243,5 +263,33 @@ describe('SecureJsonStore read path', () => {
     fileSystem.seedFile(STORE_PATH, 'not json', OWNER_ONLY);
     store.read();
     expect(fileSystem.calls).toContain('close');
+  });
+  it('threat 30: fails a read whose descriptor would not close', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.forcedFailures.set('close', 'EIO');
+    const snapshot = store.read();
+    if (snapshot.success) throw new Error('expected a refused close to fail the read');
+    expect(snapshot.status).toBe('EIO');
+    expect(snapshot.message).toContain('could not be released');
+  });
+
+  it('threat 30: keeps the original failure when the close is refused as well', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.seedHardLink(STORE_PATH, '/data/someone-elses-name');
+    fileSystem.forcedFailures.set('close', 'EIO');
+    const snapshot = store.read();
+    if (snapshot.success) throw new Error('expected the hard-linked read to fail');
+    expect(snapshot.status).toBe('EMLINK');
+    expect(snapshot.details?.join(' ')).toContain('could not be released');
+  });
+
+  it('threat 30: releases the descriptor even when the adapter throws mid-read', () => {
+    const fileSystem = new ThrowingReadFileSystem();
+    const store = new SecureJsonStore(fileSystem, STORE_PATH);
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    expect(() => store.read()).toThrow('read exploded');
+    expect(fileSystem.openDescriptorCount()).toBe(0);
   });
 });
