@@ -137,11 +137,21 @@ export function isMovableStore(filePath: string): boolean {
  * (notably Windows bind mounts) ignore chmod outright, and refusing to
  * continue there would cost the run its token to fix an exposure that
  * refusing does not reduce.
+ *
+ * <p>A file carrying more than one link is left alone. Permissions belong to
+ * the inode, not the name, so hardening one would silently re-permission
+ * every other name for the same data — a file this module does not own and
+ * was never asked to touch. `O_NOFOLLOW` cannot catch that, because a hard
+ * link is a regular file by every test the descriptor can make. Reading and
+ * writing still proceed: the store is replaced by rename, which rebinds this
+ * name alone and leaves the other pointing at the content it always had.
  * @param descriptor - Open descriptor for the file to restrict.
  * @returns True when the file is now owner-only.
  */
 function hardenOpenFile(descriptor: number): boolean {
   try {
+    const stats = fstatSync(descriptor);
+    if (stats.nlink > 1) return false;
     fchmodSync(descriptor, 0o600);
     return true;
   } catch {
