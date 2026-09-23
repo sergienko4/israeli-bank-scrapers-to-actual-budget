@@ -244,6 +244,11 @@ export default class BankTokenStore implements IBankTokenStore {
    * the write path meant a file restored or hand-edited at 0644 stayed
    * world-readable for as long as the token kept working.
    *
+   * <p>The occupancy check sits inside the same guard as the read. It answers
+   * rather than throws today, but a guard outside would let any future throw
+   * escape `read()` and fail a scrape over a store that only needed to be
+   * treated as damaged.
+   *
    * <p>Anything that is not a regular file is reported as damage rather than
    * read. Following a symlink here would serve an unrelated file's JSON as
    * this importer's bank tokens, and a link pointing at nothing is damage
@@ -254,8 +259,8 @@ export default class BankTokenStore implements IBankTokenStore {
    * @returns The stored records and whether the file was intact.
    */
   private readStore(): IStoreRead {
-    if (!isOccupied(this.filePath)) return { records: new Map(), isIntact: true };
     try {
+      if (!isOccupied(this.filePath)) return { records: new Map(), isIntact: true };
       const raw = readWithoutFollowing(this.filePath);
       const parsed = JSON.parse(raw) as unknown;
       return readBankMap(parsed);
