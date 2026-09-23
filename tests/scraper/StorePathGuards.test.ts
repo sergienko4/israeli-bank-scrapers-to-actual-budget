@@ -19,6 +19,9 @@ import {
 const OPEN_ONCE = 'const fs = require("node:fs");'
   + 'fs.closeSync(fs.openSync(process.env.TARGET, Number(process.env.FLAGS)));';
 
+/** Windows has neither the `mkfifo` binary nor the flags the pipe case proves. */
+const IS_WINDOWS = process.platform === 'win32';
+
 let dir = '';
 let filePath = '';
 
@@ -74,7 +77,7 @@ describe('enforceOwnerOnly', () => {
 });
 
 describe('STORE_OPEN_FLAGS', () => {
-  it('opens a pipe at once instead of waiting for a writer that never comes', () => {
+  it.skipIf(IS_WINDOWS)('opens a pipe at once instead of waiting for a writer that never comes', () => {
     execFileSync('mkfifo', [filePath]);
     const env = { ...process.env, TARGET: filePath, FLAGS: String(STORE_OPEN_FLAGS) };
 
