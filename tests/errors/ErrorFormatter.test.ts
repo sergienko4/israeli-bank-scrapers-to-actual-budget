@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { ErrorFormatter } from '../../src/Errors/ErrorFormatter.js';
+import redactSecrets from '../../src/Logger/SecretRedaction.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 import {
   TimeoutError,
   AuthenticationError,
@@ -58,6 +60,31 @@ describe('ErrorFormatter', () => {
       const error = new ConfigurationError('Missing syncId');
       const result = formatter.format(error);
       expect(result).toContain('Configuration Error');
+    });
+  });
+
+  describe('a message holding a secret the bank snippet cut off', () => {
+    const snippet = `POST /sessions 401: {"idToken":"${TEST_CREDENTIAL}`;
+
+    it('keeps the suffix of a known error type readable', () => {
+      const result = formatter.format(new AuthenticationError(snippet));
+      expect(result).toBe(
+        '🔐 Authentication Error: POST /sessions 401: {"idToken=[REDACTED]. Please verify your credentials.',
+      );
+      expect(redactSecrets(result)).toBe(result);
+    });
+
+    it('keeps the WAF advice readable', () => {
+      const error = new Error(snippet);
+      error.name = 'WafBlockError';
+      const result = formatter.format(error);
+      expect(result).toBe('🛡️ WAF Blocked: POST /sessions 401: {"idToken=[REDACTED]. Wait 1-2 hours and retry.');
+      expect(redactSecrets(result)).toBe(result);
+    });
+
+    it('masks the message of an error it cannot categorise', () => {
+      const result = formatter.format(new Error(snippet));
+      expect(result).toBe('❌ Error: POST /sessions 401: {"idToken=[REDACTED]');
     });
   });
 

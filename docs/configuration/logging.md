@@ -149,7 +149,8 @@ hidden through its closing quote, spaces included, and keeps its quotes:
 `{"idToken":"..."}` is written as `{"idToken":"[REDACTED]"}`, still valid JSON,
 and the fields after it stay readable. Double quotes, single quotes and
 backticks all count. A value the bank's reply cut off before its closing quote
-hides the rest of the reply. An unquoted value is
+hides the rest of the reply, but the importer's own advice after it, such as
+"Verify your password on the bank website", stays readable. An unquoted value is
 hidden up to the next space. A `=` or `:` inside it opens another value, which
 is hidden too: the quoted value in `{"token":null,"idToken": "..."}`, or the
 secret after `Basic` in `token=null,auth=Basic ...`. When a secret key holds an

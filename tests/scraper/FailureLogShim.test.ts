@@ -17,10 +17,13 @@ vi.mock('../../src/Logger/Index.js', () => ({
 }));
 
 const { default: logScrapeFailure } = await import('../../src/Scraper/FailureLogShim.js');
+const { default: redactSecrets } = await import('../../src/Logger/SecretRedaction.js');
+const { TEST_CREDENTIAL } = await import('../helpers/testCredentials.js');
 
 const WAF_BLOCKED_ERROR_TYPE = 'WAF_BLOCKED' as unknown as IScraperScrapingResult['errorType'];
 const UNKNOWN_ERROR_TYPE = 'UNKNOWN_ERROR_TYPE_FOR_TEST' as unknown as IScraperScrapingResult['errorType'];
 const GENERIC_ERROR_TYPE = 'GENERIC' as unknown as IScraperScrapingResult['errorType'];
+const INVALID_PASSWORD_ERROR_TYPE = 'INVALID_PASSWORD' as unknown as IScraperScrapingResult['errorType'];
 
 describe('FailureLogShim.logScrapeFailure', () => {
   beforeEach(() => {
@@ -93,5 +96,19 @@ describe('FailureLogShim.logScrapeFailure', () => {
     const line = mockLogger.error.mock.calls[0][0] as string;
     expect(line).toContain('bank returned no accounts');
     expect(line).toContain('credentials are fine');
+  });
+
+  it('keeps the advice readable after a secret the bank snippet cut off', () => {
+    const result: IScraperScrapingResult = {
+      success: false,
+      errorType: INVALID_PASSWORD_ERROR_TYPE,
+      errorMessage: `POST /sessions 401: {"idToken":"${TEST_CREDENTIAL}`,
+      accounts: [],
+    };
+    logScrapeFailure('visaCal', result);
+    const line = mockLogger.error.mock.calls[0][0] as string;
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(line).toMatch(/401: \{"idToken=\[REDACTED\]\. \S/);
+    expect(redactSecrets(line)).toBe(line);
   });
 });

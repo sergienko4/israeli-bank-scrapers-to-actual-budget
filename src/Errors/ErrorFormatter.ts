@@ -3,6 +3,8 @@
  * Follows Open/Closed Principle: Add new error types to the map without modifying format()
  */
 
+import redactSecrets from '../Logger/SecretRedaction.js';
+
 export interface IErrorFormatter {
   format(error: Error, context?: string): string;
 }
@@ -52,25 +54,33 @@ export class ErrorFormatter implements IErrorFormatter {
 
   /**
    * Format an error into a user-friendly message string.
+   *
+   * <p>The message is masked before a suffix is appended: a secret a bank's
+   * snippet cut off hides the rest of the text it is masked in, so masking
+   * the whole string later would hide the advice too.
    * @param error - The error to format.
    * @param context - Optional context label appended in parentheses.
    * @returns A formatted string with icon, label, and error detail.
    */
   public format(error: Error, context = ''): string {
     const ctx = context ? ` (${context})` : '';
+    const detail = redactSecrets(error.message);
     if (error.name === 'WafBlockError') {
-      return `🛡️ WAF Blocked${ctx}: ${error.message}. Wait 1-2 hours and retry.`;
+      return `🛡️ WAF Blocked${ctx}: ${detail}. Wait 1-2 hours and retry.`;
     }
     const match = this._formats.find(f => error.name === f.name);
     if (match) {
       const suffix = match.entry.suffix || '';
-      return `${match.entry.icon} ${match.entry.label}${ctx}: ${error.message}${suffix}`;
+      return `${match.entry.icon} ${match.entry.label}${ctx}: ${detail}${suffix}`;
     }
     return ErrorFormatter.categorizeByMessage(error, ctx);
   }
 
   /**
    * Classify an unknown error by keywords in its message.
+   *
+   * <p>Keywords are read from the raw message, so a masked value cannot hide
+   * one; the message is masked only where it is shown.
    * @param error - The error whose message will be inspected.
    * @param ctx - Formatted context string to include in the output.
    * @returns A categorized or generic error string.
@@ -78,10 +88,11 @@ export class ErrorFormatter implements IErrorFormatter {
   private static categorizeByMessage(error: Error, ctx: string): string {
     const message = error.message || 'Unknown error';
     const match = MESSAGE_CATEGORIES.find(c => c.keywords.some(k => message.includes(k)));
+    const shown = redactSecrets(message);
     if (match) {
-      const detail = match.suffix ? match.suffix.slice(2) : message;
+      const detail = match.suffix ? match.suffix.slice(2) : shown;
       return `${match.icon} ${match.label}${ctx}: ${detail}`;
     }
-    return `❌ Error${ctx}: ${message}`;
+    return `❌ Error${ctx}: ${shown}`;
   }
 }

@@ -3,7 +3,8 @@
  * Short-circuits on failure. Checks shutdown between steps.
  */
 
-import type { Procedure } from '../../../Types/Index.js';
+import redactSecrets from '../../../Logger/SecretRedaction.js';
+import type { IProcedureFailure, Procedure } from '../../../Types/Index.js';
 import { fail, isFail, succeed } from '../../../Types/Index.js';
 import type { IPipelineContext } from '../Types/PipelineContext.js';
 import type { INamedStep } from '../Types/PipelineStep.js';
@@ -32,6 +33,22 @@ function formatCause(error?: Error): string {
 }
 
 /**
+ * Builds the log line for a failed step.
+ *
+ * <p>The step's message is masked before its cause is appended: a secret a
+ * bank's snippet cut off hides the rest of the text it is masked in, so
+ * masking the whole line later would hide the cause too.
+ * @param name - The failed step's name.
+ * @param failure - The step's failure.
+ * @returns The line to log.
+ */
+function failureLine(name: string, failure: IProcedureFailure): string {
+  const detail = redactSecrets(failure.message);
+  const cause = formatCause(failure.error);
+  return `✖ Step [${name}] failed: ${detail}${cause}`;
+}
+
+/**
  * Recursively executes one step at the given index.
  * @param steps - Full step array.
  * @param ctx - Current context from previous step.
@@ -54,8 +71,8 @@ async function executeStep(
   const result = await step.execute(ctx);
 
   if (isFail(result)) {
-    const cause = formatCause(result.error);
-    ctx.logger.error(`✖ Step [${step.meta.name}] failed: ${result.message}${cause}`);
+    const line = failureLine(step.meta.name, result);
+    ctx.logger.error(line);
     return fail(result.message, { status: `step-failed:${step.meta.name}`, error: result.error });
   }
 
