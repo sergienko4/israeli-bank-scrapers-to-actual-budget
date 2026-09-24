@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync, existsSync, readdirSync, unlinkSync, rmdirSyn
 import { join } from 'path';
 import { tmpdir } from 'os';
 import LogFileReader from '../../src/Logger/LogFileReader.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 let testDir: string;
 
@@ -97,5 +98,30 @@ describe('LogFileReader', () => {
     expect(entries[1]).toContain('INFO '); // fallback label
     expect(entries[0]).toContain('fatal message');
     expect(entries[1]).toContain('trace message');
+  });
+
+  it('hides a token an older release logged unmasked', () => {
+    writeLog('app.2026-03-01.log', [pinoLine(`login failed idToken=${TEST_CREDENTIAL} bank=x`)]);
+    const entries = new LogFileReader(testDir).getRecent(10);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatch(/INFO {2}login failed idToken=\[REDACTED\] bank=x$/);
+  });
+
+  it('keeps an entry that logged only fields, with an empty message', () => {
+    writeLog('app.2026-03-01.log', [JSON.stringify({ time: Date.now(), level: 30 })]);
+    const entries = new LogFileReader(testDir).getRecent(10);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatch(/^\[\d{2}:\d{2}:\d{2}\] INFO  $/);
+  });
+
+  it.each([
+    [42, '42'],
+    [null, 'null'],
+    [true, 'true'],
+  ])('keeps an entry whose message pino wrote as %j', (msg, shown) => {
+    writeLog('app.2026-03-01.log', [JSON.stringify({ time: Date.now(), level: 30, msg })]);
+    const entries = new LogFileReader(testDir).getRecent(10);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatch(new RegExp(String.raw`^\[\d{2}:\d{2}:\d{2}\] INFO  ${shown}$`));
   });
 });

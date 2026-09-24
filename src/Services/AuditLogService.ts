@@ -56,7 +56,8 @@ export class AuditLogService implements IAuditLog {
    */
   public record(summary: IImportSummary): Procedure<{ status: 'recorded' }> {
     try {
-      const entry = AuditLogService.buildEntry(summary);
+      const built = AuditLogService.buildEntry(summary);
+      const entry = AuditLogService.maskEntry(built);
       const entries = this.loadEntries();
       entries.push(entry);
       const trimmed = entries.slice(-this.maxEntries);
@@ -165,7 +166,8 @@ export class AuditLogService implements IAuditLog {
    * Masks secrets in an entry's stored failure reasons. Older releases masked
    * them less thoroughly, and every reader (the portal, the app, Telegram)
    * sends them on, so each read masks them again and the next record saves
-   * them masked.
+   * them masked. A new entry is masked before it is saved too, whoever built
+   * the summary it came from.
    * @param entry - An entry as parsed from the file, which may be malformed.
    * @returns The entry with each bank's error masked, or as stored without banks.
    */

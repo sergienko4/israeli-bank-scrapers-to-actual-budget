@@ -8,8 +8,28 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import redactSecrets from '../../src/Logger/SecretRedaction.js';
+import redactSecrets, { isSecretKey } from '../../src/Logger/SecretRedaction.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
+
+/** The time a linear scan of a 100k-repeat text stays well within. */
+const LINEAR_LIMIT_MS = 250;
+
+/**
+ * Times a scan, trying up to three times until one finishes within the
+ * limit. Other work on the machine can only slow a run, so one slow run is
+ * noise, while a quadratic scan is slow every time.
+ * @param scan - The scan to time.
+ * @returns The fastest run's time, in milliseconds.
+ */
+function fastestRunMs(scan: () => unknown): number {
+  let fastest = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < 3 && fastest >= LINEAR_LIMIT_MS; attempt++) {
+    const started = performance.now();
+    scan();
+    fastest = Math.min(fastest, performance.now() - started);
+  }
+  return fastest;
+}
 
 describe('redactSecrets', () => {
   it.each([
@@ -48,6 +68,8 @@ describe('redactSecrets', () => {
     ['a capitalised phone number', `PhoneNumber: ${TEST_CREDENTIAL}`],
     ['a snake-case phone number in JSON', `{"phone_number":"${TEST_CREDENTIAL}"}`],
     ['a hyphenated phone number', `phone-number=${TEST_CREDENTIAL}`],
+    ['a card code after a Hebrew prefix letter', `בCVV: ${TEST_CREDENTIAL}`],
+    ['an auth key after a mark, which may end the word before it', `twoFactor\u200eAuth: ${TEST_CREDENTIAL}`],
   ])('hides the value of %s', (_shape, text) => {
     expect(redactSecrets(`login failed ${text}`)).not.toContain(TEST_CREDENTIAL);
   });
@@ -179,6 +201,7 @@ describe('redactSecrets', () => {
     ['a header line ending in CRLF', `Authorization: Digest response="${TEST_CREDENTIAL}"\r\nHost: bank`, 'Authorization=[REDACTED]\r\nHost: bank'],
     ['a line folded onto a space', `Authorization: Digest\n username="leumi-user", response="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
     ['a line folded onto a tab after CRLF', `Authorization: Digest\r\n\tusername="leumi-user", response="${TEST_CREDENTIAL}"\r\nHost: bank`, 'Authorization=[REDACTED]\r\nHost: bank'],
+    ['a folded line that starts with a mark', `Authorization: Digest username="u",\n\u200e response="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
     ['a blank line after the header', `Authorization: Digest response="${TEST_CREDENTIAL}"\n\nbody`, 'Authorization=[REDACTED]\n\nbody'],
     ['a mark after the scheme', `Authorization: Digest\u200eresponse="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
     ['a mark before a plain first parameter', `Authorization: Digest\u200eusername="leumi-user", response="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
@@ -201,10 +224,19 @@ describe('redactSecrets', () => {
     ['a line folded onto a space', `Authorization: AWS4-HMAC-SHA256\n Credential=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
     ['a line ending in CRLF', `Authorization: Hawk mac="${TEST_CREDENTIAL}"\r\nHost: bank`, 'Authorization=[REDACTED]\r\nHost: bank'],
     ['a mark after the scheme', `Authorization: AWS4-HMAC-SHA256\u200eCredential=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a U+FEFF after the scheme', `Authorization: AWS4-HMAC-SHA256\ufeffCredential=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a mark in the parameter\'s name', `Authorization: AWS4-HMAC-SHA256 Cred\u200eential=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a mark before the parameter\'s =', `Authorization: AWS4-HMAC-SHA256 Credential\u200e=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a folded line that starts with a mark', `Authorization: AWS4-HMAC-SHA256 Credential=a,\n\u200e Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a folded line before the parameter\'s =', `Authorization: AWS4-HMAC-SHA256 Credential\r\n\t=a, Signature=${TEST_CREDENTIAL}\r\nnext`, 'Authorization=[REDACTED]\r\nnext'],
+    ['marks alone, then a folded line before the =', `Authorization: AWS4-HMAC-SHA256\u200eCredential\n\u200e =a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
     ['a bare null, then an unlisted scheme', `token=null,authorization=AWS4-HMAC-SHA256 Credential=a, Signature=${TEST_CREDENTIAL}\nnext`, 'token=[REDACTED]\nnext'],
     ['a quoted key before a bare value', `"authorization": Hawk mac=${TEST_CREDENTIAL}\nnext`, '"authorization=[REDACTED]\nnext'],
     ['a space before the colon', `Authorization : Hawk mac=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
     ['a scheme that starts with an underscore', `Authorization: _Custom sig=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a + in the parameter\'s name', `Authorization: Custom sig+alg=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a ! in the scheme\'s name', `Authorization: Cus!tom sig=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a scheme that starts with a digit', `Authorization: 4Custom sig=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
   ];
 
   it.each(UNLISTED_SCHEME_VALUES)('hides the rest of the line after an unlisted scheme with parameters in %s', (_shape, text, expected) => {
@@ -213,6 +245,7 @@ describe('redactSecrets', () => {
 
   it.each([
     ['a listed one-word scheme', `authorization: Token ${TEST_CREDENTIAL}== bank=leumi`, 'authorization=[REDACTED] bank=leumi'],
+    ['a bare token holding a =', `authorization: ${TEST_CREDENTIAL}=x bank=leumi`, 'authorization=[REDACTED] bank=leumi'],
     ['a quoted value', `{"authorization":"AWS4-HMAC-SHA256 Credential=a, Signature=${TEST_CREDENTIAL}","bank":"leumi"}`, '{"authorization":"[REDACTED]","bank":"leumi"}'],
     ['a key that is not an auth header', `token=${TEST_CREDENTIAL} bank=leumi`, 'token=[REDACTED] bank=leumi'],
     ['a name that only ends in auth', 'twoFactorAuth=Custom sig=x', 'twoFactorAuth=Custom sig=x'],
@@ -306,37 +339,47 @@ describe('redactSecrets', () => {
 
   it.each(['_', 'a_', 'a-', 'token="\\', 'token: ', 'token:\n', 'token: a: ', 'phone_', 'aphone-', 'phonenumber', 'token:\u200e ', 'token=\u200e', 'token=a:\u200e'])('scans a long run of %j in linear time', (unit) => {
     const text = unit.repeat(100_000);
-    const started = performance.now();
-    redactSecrets(text);
-    expect(performance.now() - started).toBeLessThan(250);
+    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each(['1 ', '(+1', '1-', '1\u00a0', '- ', '1x ', '\u200e1 ', '(\u2066'])('scans a long phone value of %j in linear time', (unit) => {
     const text = `phoneNumber=${unit.repeat(100_000)}x tail`;
-    const started = performance.now();
-    redactSecrets(text);
-    expect(performance.now() - started).toBeLessThan(250);
+    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
-  it.each(['\n ', ' ', '\u200e', '\ufeff'])('scans a long gap of %j after an auth scheme in linear time', (unit) => {
+  it.each(['\n ', ' ', '\u200e', '\ufeff', '\n\u200e x', '\u200e x', 'x\u200e'])('scans a long gap of %j after an auth scheme in linear time', (unit) => {
     const text = `authorization=a${unit.repeat(100_000)}`;
-    const started = performance.now();
-    redactSecrets(text);
-    expect(performance.now() - started).toBeLessThan(250);
+    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it('scans a long run of invisible marks after a key in linear time', () => {
     const text = `token=${'\u200e'.repeat(20_000)} `;
-    const started = performance.now();
-    redactSecrets(text);
-    expect(performance.now() - started).toBeLessThan(250);
+    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each(['token="', String.raw`token=\"`])('scans a long run of backslashes after %j in linear time', (opening) => {
     const text = `${opening}${'\\'.repeat(100_000)} tail`;
-    const started = performance.now();
-    redactSecrets(text);
-    expect(performance.now() - started).toBeLessThan(250);
+    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+  });
+
+  it.each(['toke\u200e', '\u200eauth', 'phone-\u200e', 'idTok\u200een ', 'token"\u200e ', '"auth\u200e"\u200e: '])('scans a long run of %j, with marks in or after a key, in linear time', (unit) => {
+    const text = unit.repeat(100_000);
+    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+  });
+
+  it.each(['phone', 'phone_', 'tok', 'auth', 'authorization: A'])('scans a long run of invisible marks after %j in linear time', (start) => {
+    const text = `${start}${'\u200e'.repeat(20_000)}x`;
+    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+  });
+
+  it.each(['A\u200e\u200e', 'A\ufeff\ufeff', 'Bea\u200e', 'Di\u200e', 'x\u200e ', 'A\ufeff ', 'A \n\t', 'A\u200e\n ', 'Credential\r\n\t', '!\u200e\u200e', '4\u200e'])('scans a long auth value of %j, with marks in its scheme, in linear time', (unit) => {
+    const text = `authorization: ${unit.repeat(100_000)}`;
+    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+  });
+
+  it.each(['phone\u200e', 'auth\u200e', 't\u200e'])('reads a long field name of %j in linear time', (unit) => {
+    const name = unit.repeat(100_000);
+    expect(fastestRunMs(() => isSecretKey(name))).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each([

@@ -141,8 +141,17 @@ followed by `=` or `:`:
 - any name ending in `phoneNumber`, `phone_number` or `phone-number`, since a
   phone number is personal data and the login for OneZero, PayBox and Pepper
 - `auth`, `authorization`, `bearer`, `jwt`, `creditCard` and `cvv` as a word
-  of their own, at the start of a name or after `_`, `-` or `.`: `card_cvv`
-  is hidden, while the `twoFactorAuth: true` hint stays readable
+  of their own: at the start of a name, or after any character that is not an
+  English letter or digit, such as `_`, `.` or a Hebrew prefix letter as in
+  `בCVV`. So `card_cvv` is hidden, while the `twoFactorAuth: true` hint stays
+  readable
+
+An invisible format character inside a key, such as a right-to-left mark
+between `idTok` and `en`, reads as nothing, so the key is still found. A mark
+just before one of the whole-word keys above may also end the word before it,
+and a key found either way is hidden: `twoFactorAuth: true` with a mark
+before `Auth` is hidden. Spaces and marks after a key, even inside its quotes
+as in `{"idToken " : "..."}`, do not stop its value from being found either.
 
 An auth scheme in front of the value is hidden with it: `Basic`, `Bearer`,
 `DPoP`, `GNAP`, `Negotiate`, `NTLM` or `Token`, in any letter case. So
@@ -152,7 +161,12 @@ scheme that sends a list of parameters (`Concealed`, `Digest`, `HOBA`,
 hides the rest of its line, and any folded line after it that starts with a
 space or a tab, since any parameter can carry the secret. Under `auth` or
 `authorization`, any other scheme followed by a `name=` parameter, such as
-`AWS4-HMAC-SHA256 Credential=..., Signature=...`, is hidden the same way. The
+`AWS4-HMAC-SHA256 Credential=..., Signature=...`, is hidden the same way.
+Either name may hold any character HTTP allows in a token, such as `+` or
+`!`, and the scheme may start with a digit.
+Marks read as nothing there too: inside a scheme's or a parameter's name,
+between the two, before the parameter's `=`, and at the start of a folded
+line. A folded line may also sit between a parameter's name and its `=`. The
 key itself is kept, so you can still tell what was hidden. A quoted value is
 hidden through its closing quote, spaces included, and keeps its quotes:
 `{"idToken":"..."}` is written as `{"idToken":"[REDACTED]"}`, still valid JSON,
@@ -189,11 +203,15 @@ in the message and its value in an argument, as in `token: %s`, cannot be
 masked as a pair.
 
 Masking covers stdout, the log files that `/logs` reads, and error alerts on
-Telegram, webhook and push. It also covers the failure reasons kept in the
-import history, which `/api/status` serves to the portal and the app, and
-which the reply after a failed import quotes. A reason that an older release
-stored with less thorough masking is masked again each time the history is
-read, and is saved masked the next time an import is recorded.
+Telegram, webhook and push. It also covers each failed bank's reason, in the
+error's name as well as its message, which the import summary sends on those
+same channels and the import history keeps. `/api/status` serves that history
+to the portal and the app, and the reply after a failed import quotes it. A
+reason that an older release stored with less thorough masking is masked
+again each time the history is read, and is saved masked the next time an
+import is recorded. In the same way, `/logs` masks each message again as it
+reads it, so a log file written by an older release shows no more than a new
+one would.
 
 ## Deprecated: `maxBufferSize`
 

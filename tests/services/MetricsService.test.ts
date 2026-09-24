@@ -130,6 +130,20 @@ describe('MetricsService', () => {
         .toBe('Error: creditCard=[REDACTED] otpLongTermToken=[REDACTED]');
     });
 
+    it('redacts a secret in the error name, even with no message', () => {
+      metrics.startBank('oneZero');
+      metrics.recordBankFailure('oneZero', Object.assign(new Error(''), { name: `idToken=${TEST_CREDENTIAL}` }));
+      const bankResult = metrics.getBankMetrics('oneZero');
+      expect(bankResult.success && bankResult.data.error).toBe('idToken=[REDACTED]');
+    });
+
+    it('keeps the message after an error name that ends in a secret word', () => {
+      metrics.startBank('oneZero');
+      metrics.recordBankFailure('oneZero', Object.assign(new Error('bank rejected the login'), { name: 'INVALID_PASSWORD' }));
+      const bankResult = metrics.getBankMetrics('oneZero');
+      expect(bankResult.success && bankResult.data.error).toBe('INVALID_PASSWORD: bank rejected the login');
+    });
+
     it('does not expose "undefined" when scraper error message is sanitized to Unknown error', () => {
       metrics.startBank('visaCal');
       metrics.recordBankFailure('visaCal', new Error('Unknown error'));

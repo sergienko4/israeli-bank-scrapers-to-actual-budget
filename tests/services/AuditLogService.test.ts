@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'fs';
-import { fakeImportSummary } from '../helpers/factories.js';
+import { createAuditQuery } from '../../src/Services/Telegram/AuditQuery.js';
+import { buildBatchErrorReply } from '../../src/Services/Telegram/BatchFailureReply.js';
+import { fakeBatchResult, fakeImportJobResult, fakeImportSummary } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 // A fixed path under the shared C:\tmp loses races against the Windows virus
@@ -280,9 +282,10 @@ describe('AuditLogService', () => {
     /**
      * Writes an audit file as an older release left it, with the error unmasked.
      * @param banks - The per-bank rows of the single stored entry.
+     * @param fields - Entry fields to set, such as its timestamp.
      */
-    function seedLegacyEntry(banks: unknown[]): void {
-      const entry = { ...fakeImportSummary(), timestamp: '2026-01-01T00:00:00.000Z', banks };
+    function seedLegacyEntry(banks: unknown[], fields: Record<string, unknown> = {}): void {
+      const entry = { ...fakeImportSummary(), timestamp: '2026-01-01T00:00:00.000Z', ...fields, banks };
       writeFileSync(TEST_FILE, JSON.stringify([entry]));
     }
 
@@ -294,6 +297,25 @@ describe('AuditLogService', () => {
       const error = result.data[0].banks[0].error ?? '';
       expect(error).toContain('OneZero login failed');
       expect(error).not.toContain(TEST_CREDENTIAL);
+    });
+
+    it.each([
+      ['one job per bank', 'oneZero'],
+      ['one job for every bank', 'all'],
+    ])('hides a stored token from the Telegram failure reply for %s', (_shape, jobLabel) => {
+      const failedRun = { timestamp: new Date().toISOString(), successfulBanks: 0, failedBanks: 1 };
+      seedLegacyEntry([{ name: 'oneZero', status: 'failure', txns: 0, error: leakedError }], failedRun);
+      const audit = createAuditQuery(service);
+      const batch = fakeBatchResult({
+        jobs: [fakeImportJobResult(jobLabel, 1)], totalDurationMs: 60_000, failureCount: 1,
+      });
+      const fresh = audit.getFreshEntryFor(batch);
+      const reply = buildBatchErrorReply({
+        batch, entry: fresh.success ? fresh.data : undefined,
+        entries: audit.getFreshEntriesFor(batch), auditLog: service,
+      });
+      expect(reply).toContain('OneZero login failed');
+      expect(reply).not.toContain(TEST_CREDENTIAL);
     });
 
     it('rewrites the stored token masked on the next record', () => {

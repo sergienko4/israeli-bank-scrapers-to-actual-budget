@@ -132,13 +132,18 @@ export default class MetricsService {
     return metrics;
   }
   /** Completes a failed bank.
+   *
+   * <p>The error's name and message are masked apart: any library can name an
+   * error, and a name such as `INVALID_PASSWORD` ends in a secret word, so
+   * masking the joined text would hide the message after it.
    * @param metrics bank metrics.
    * @param error failure cause.
    * @returns completed metrics. */
   private static completeFailure(metrics: IBankMetrics, error: Error): IBankMetrics {
     MetricsService.finishMetrics(metrics, 'failure');
+    const name = redactSecrets(error.name);
     const safeMsg = error.message ? redactSecrets(error.message) : '';
-    metrics.error = safeMsg ? `${error.name}: ${safeMsg}` : error.name;
+    metrics.error = safeMsg ? `${name}: ${safeMsg}` : name;
     return metrics;
   }
   /** Marks metrics complete.

@@ -55,15 +55,15 @@ export class ErrorFormatter implements IErrorFormatter {
   /**
    * Format an error into a user-friendly message string.
    *
-   * <p>The message is masked before a suffix is appended: a secret a bank's
-   * snippet cut off hides the rest of the text it is masked in, so masking
-   * the whole string later would hide the advice too.
+   * <p>The message and the context label are each masked before a suffix is
+   * appended: a secret a bank's snippet cut off hides the rest of the text it
+   * is masked in, so masking the whole string later would hide the advice too.
    * @param error - The error to format.
    * @param context - Optional context label appended in parentheses.
    * @returns A formatted string with icon, label, and error detail.
    */
   public format(error: Error, context = ''): string {
-    const ctx = context ? ` (${context})` : '';
+    const ctx = context ? ` (${redactSecrets(context)})` : '';
     const detail = redactSecrets(error.message);
     if (error.name === 'WafBlockError') {
       return `🛡️ WAF Blocked${ctx}: ${detail}. Wait 1-2 hours and retry.`;
