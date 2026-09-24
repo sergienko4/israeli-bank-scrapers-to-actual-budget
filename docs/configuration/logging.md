@@ -146,7 +146,11 @@ followed by `=` or `:`:
 
 An auth scheme in front of the value is hidden with it: `Basic`, `Bearer`,
 `DPoP`, `GNAP`, `Negotiate`, `NTLM` or `Token`, in any letter case. So
-`authorization: Bearer <jwt>` is written as `authorization=[REDACTED]`. The
+`authorization: Bearer <jwt>` is written as `authorization=[REDACTED]`. A
+scheme that sends a list of parameters (`Concealed`, `Digest`, `HOBA`,
+`Mutual`, `OAuth`, `PrivateToken`, `SCRAM-SHA-1`, `SCRAM-SHA-256` or `vapid`)
+hides the rest of its line, and any folded line after it that starts with a
+space or a tab, since any parameter can carry the secret. The
 key itself is kept, so you can still tell what was hidden. A quoted value is
 hidden through its closing quote, spaces included, and keeps its quotes:
 `{"idToken":"..."}` is written as `{"idToken":"[REDACTED]"}`, still valid JSON,

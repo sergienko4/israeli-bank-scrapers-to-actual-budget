@@ -54,10 +54,22 @@ const NUMBER_VALUE = String.raw`(?:[(+]\p{Cf}*)*\d\S*(?:[^\S\r\n]+[^\s\p{L}]+(?!
  *
  * <p>These are the schemes IANA registers with a single-word credential
  * (RFC 9110 §11.4), and the unregistered `Token` and `NTLM` in common use.
- * A scheme that sends a list of parameters, such as `Digest`, is not listed:
- * hiding one more word would hide only its first parameter.
  */
-const AUTH_SCHEME = '(?:Basic|Bearer|DPoP|GNAP|Negotiate|NTLM|Token)';
+const ONE_WORD_SCHEME = '(?:Basic|Bearer|DPoP|GNAP|Negotiate|NTLM|Token)';
+
+/**
+ * An auth scheme whose credential is a list of parameters.
+ *
+ * <p>These are the other schemes IANA registers. Any parameter can carry the
+ * secret under a name of its own, such as Digest's `response` or vapid's `t`,
+ * so hiding one more word would hide only the first of them. A chained value
+ * may not start with one either: were an invisible mark to join the scheme to
+ * its first parameter, as in `Digest\u200eusername="u", response="..."`, that
+ * parameter's `=` would read as a separator and end the match before
+ * `response`.
+ */
+const PARAM_LIST_SCHEME =
+  '(?:Concealed|Digest|HOBA|Mutual|OAuth|PrivateToken|SCRAM-SHA-1|SCRAM-SHA-256|vapid)';
 
 /**
  * A secret key, then its value.
@@ -77,7 +89,7 @@ const AUTH_SCHEME = '(?:Basic|Bearer|DPoP|GNAP|Negotiate|NTLM|Token)';
  * or in an empty value before `authToken:` on the next line, a key is
  * waiting for that value, and printing it would fail open. A quoted value,
  * an escaped one or an object is not bare, so a `: ` inside it cannot cut it
- * short. Then the value takes one of four shapes:
+ * short. Then the value takes one of five shapes:
  *
  * <ul>
  * <li>An object or a list hides the rest of the text. Its inner fields may be
@@ -97,8 +109,11 @@ const AUTH_SCHEME = '(?:Basic|Bearer|DPoP|GNAP|Negotiate|NTLM|Token)';
  * after it on the same line that holds no letter, so a phone number is
  * hidden whole however its groups are spaced or dashed, and the punctuation
  * after it goes too. A word such as `2nd` or `retry` ends it.</li>
+ * <li>A value that opens with a whole scheme name from `PARAM_LIST_SCHEME`
+ * hides the rest of its line, and each line after it that starts with a space
+ * or a tab, as an obsolete folded header carries on there.</li>
  * <li>Any other value is hidden up to the next space. It may open with an
- * auth scheme from `AUTH_SCHEME`, which is hidden with the word after it:
+ * auth scheme from `ONE_WORD_SCHEME`, which is hidden with the word after it:
  * a bearer is `Bearer <jwt>`, and a match that stopped at the first word
  * would hide the scheme and print the jwt.</li>
  * </ul>
@@ -106,12 +121,14 @@ const AUTH_SCHEME = '(?:Basic|Bearer|DPoP|GNAP|Negotiate|NTLM|Token)';
 const SECRET_PATTERN = new RegExp(
   String.raw`(?<key>${SECRET_KEYS})(?<sep>[\\"']*${GAP}*[=:]${GAP}*)` +
     String.raw`(?!\[REDACTED\]\.?(?:\s|$))` +
-    String.raw`(?:(?![\\"'\x60{[\p{Cf}])\S*?[=:]${GAP}*)*(?:[{[][\s\S]*` +
+    String.raw`(?:(?![\\"'\x60{[\p{Cf}]|${PARAM_LIST_SCHEME}\b)\S*?[=:]${GAP}*)*` +
+    String.raw`(?:[{[][\s\S]*` +
     String.raw`|(?<esc>\\*)(?<quote>["'\x60])[\s\S]*?` +
     String.raw`(?:(?<!\\)(?:\k<esc>\\\k<esc>\\)*(?<close>\k<esc>\k<quote>)` +
     String.raw`(?=[\s,;)\]}]|\.(?!\S)|$)|$)` +
     `|${NUMBER_VALUE}` +
-    String.raw`|(?:${AUTH_SCHEME}${GAP}+)?\S+)`,
+    String.raw`|${PARAM_LIST_SCHEME}\b[^\r\n]*(?:\r?\n[ \t][^\r\n]*)*` +
+    String.raw`|(?:${ONE_WORD_SCHEME}${GAP}+)?\S+)`,
   'giu',
 );
 

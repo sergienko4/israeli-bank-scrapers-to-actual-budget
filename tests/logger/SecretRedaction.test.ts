@@ -165,6 +165,40 @@ describe('redactSecrets', () => {
     expect(redactSecrets(text)).toBe(expected);
   });
 
+  const PARAM_SCHEME_VALUES: [string, string, string][] = [
+    ['a Digest scheme', `Authorization: Digest username="leumi-user", realm="api", response="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a lowercase digest scheme', `authorization: digest response="${TEST_CREDENTIAL}"\nnext`, 'authorization=[REDACTED]\nnext'],
+    ['an OAuth scheme', `Authorization: OAuth oauth_consumer_key="k1", oauth_signature="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a vapid scheme', `Authorization: vapid t=${TEST_CREDENTIAL}, k=BPublicKey\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a HOBA scheme', `Authorization: HOBA result="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a Mutual scheme', `Authorization: Mutual sid=1, kc1="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a Concealed scheme', `Authorization: Concealed k="key1", s="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a PrivateToken scheme', `Authorization: PrivateToken token="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a SCRAM-SHA-1 scheme', `Authorization: SCRAM-SHA-1 data=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a SCRAM-SHA-256 scheme', `Authorization: SCRAM-SHA-256 data=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a header line ending in CRLF', `Authorization: Digest response="${TEST_CREDENTIAL}"\r\nHost: bank`, 'Authorization=[REDACTED]\r\nHost: bank'],
+    ['a line folded onto a space', `Authorization: Digest\n username="leumi-user", response="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a line folded onto a tab after CRLF', `Authorization: Digest\r\n\tusername="leumi-user", response="${TEST_CREDENTIAL}"\r\nHost: bank`, 'Authorization=[REDACTED]\r\nHost: bank'],
+    ['a blank line after the header', `Authorization: Digest response="${TEST_CREDENTIAL}"\n\nbody`, 'Authorization=[REDACTED]\n\nbody'],
+    ['a mark after the scheme', `Authorization: Digest\u200eresponse="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a mark before a plain first parameter', `Authorization: Digest\u200eusername="leumi-user", response="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a bare null, then a mark after the scheme', `token=null,authorization=Digest\u200eusername="leumi-user", response="${TEST_CREDENTIAL}"\nnext`, 'token=[REDACTED]\nnext'],
+    ['a proxy header', `Proxy-Authorization: Digest response="${TEST_CREDENTIAL}"\nnext`, 'Proxy-Authorization=[REDACTED]\nnext'],
+    ['a bare null, then a Digest scheme', `token=null,authorization=Digest response="${TEST_CREDENTIAL}"\nnext`, 'token=[REDACTED]\nnext'],
+  ];
+
+  it.each(PARAM_SCHEME_VALUES)('hides the rest of the line after the parameter scheme in %s', (_shape, text, expected) => {
+    expect(redactSecrets(text)).toBe(expected);
+  });
+
+  it.each([
+    ['a longer word', 'authorization: Digests pending retry', 'authorization=[REDACTED] pending retry'],
+    ['a longer scheme name', 'authorization: SCRAM-SHA-10 pending retry', 'authorization=[REDACTED] pending retry'],
+    ['a longer word before a separator', 'secret=Digests:"blue river" next', 'secret="[REDACTED]" next'],
+  ])('hides only the first word when it merely starts like a parameter scheme: %s', (_shape, text, expected) => {
+    expect(redactSecrets(text)).toBe(expected);
+  });
+
   it('keeps the sentence after a quoted value', () => {
     expect(redactSecrets('secret: "blue river". Verify it')).toBe('secret: "[REDACTED]". Verify it');
   });
@@ -205,7 +239,7 @@ describe('redactSecrets', () => {
     expect(JSON.parse(redactSecrets(text))).toEqual({ idToken: '[REDACTED]', bank: 'leumi' });
   });
 
-  it.each([...WHOLE_VALUES, ...CHAINED_VALUES, ...SEPARATOR_VALUES, ...PHONE_VALUES, ...INVISIBLE_VALUES, ...SCHEME_VALUES])(
+  it.each([...WHOLE_VALUES, ...CHAINED_VALUES, ...SEPARATOR_VALUES, ...PHONE_VALUES, ...INVISIBLE_VALUES, ...SCHEME_VALUES, ...PARAM_SCHEME_VALUES])(
     'masks %s the same way a second time', (_shape, text) => {
       const once = redactSecrets(text);
       expect(redactSecrets(once)).toBe(once);
