@@ -1,5 +1,5 @@
 /**
- * Masks credential values quoted in free text.
+ * Masks credential values and phone numbers quoted in free text.
  *
  * Scraper errors carry the first 120 characters of a bank's response body,
  * and banks sometimes echo credentials there. This is the one redactor that
@@ -14,7 +14,9 @@
  * scraper's durable login token is hidden under each of its names:
  * `otpLongTermToken`, `longTermToken`, `persistentOtpToken`, `idToken` and
  * PayBox's `access_token`, as are `clientSecret` and `new_password`. Listing
- * them one by one would miss the next rename.
+ * them one by one would miss the next rename. A name ending in
+ * `phoneNumber`, `phone_number` or `phone-number` is hidden too: a phone
+ * number is personal data, and the login for OneZero, PayBox and Pepper.
  *
  * <p>The other keys must be a word of their own, so the importer's own
  * `twoFactorAuth: true` hint and `OAuth:` stay readable.
@@ -22,13 +24,30 @@
 const SECRET_KEYS = [
   // Starts only where a word does. Starting after every `_` would rescan the
   // rest of the word from each one, which is quadratic on `a_a_a_...`.
-  String.raw`\b\w*(?:token|password|secret)`,
+  String.raw`\b\w*(?:token|password|secret|phone[_-]?number)`,
   // Here `_` also splits words, so `card_cvv` is caught; `\b` would not be.
   '(?<![a-z0-9])(?:auth(?:orization)?|creditcard|cvv|bearer|jwt)',
 ].join('|');
 
 /** A field name that ends in a secret key, in any case. */
 const SECRET_KEY_NAME = new RegExp(`(?:${SECRET_KEYS})$`, 'i');
+
+/**
+ * A space, or an invisible format character such as a bidi mark.
+ *
+ * <p>Right-to-left text wraps a number in marks like U+200E and U+2066 that
+ * show as nothing, so one between a key and its value must not end the
+ * value's search at the mark and print the value after it. A chained value
+ * may not start with such a mark, so only this gap can take one; were both
+ * able to, a run of marks could be split between them in many ways.
+ */
+const GAP = String.raw`[\s\p{Cf}]`;
+
+/**
+ * A value that starts like a number, with the words after it on its line
+ * that hold no letter, such as `+972 50-000-0016` or `050\u00a0123 4567!`.
+ */
+const NUMBER_VALUE = String.raw`(?:[(+]\p{Cf}*)*\d\S*(?:[^\S\r\n]+[^\s\p{L}]+(?!\S))*`;
 
 /**
  * A secret key, then its value.
@@ -48,7 +67,7 @@ const SECRET_KEY_NAME = new RegExp(`(?:${SECRET_KEYS})$`, 'i');
  * or in an empty value before `authToken:` on the next line, a key is
  * waiting for that value, and printing it would fail open. A quoted value,
  * an escaped one or an object is not bare, so a `: ` inside it cannot cut it
- * short. Then the value takes one of three shapes:
+ * short. Then the value takes one of four shapes:
  *
  * <ul>
  * <li>An object or a list hides the rest of the text. Its inner fields may be
@@ -64,20 +83,25 @@ const SECRET_KEY_NAME = new RegExp(`(?:${SECRET_KEYS})$`, 'i');
  * the text, so a stray quote inside the value cannot end it early. A value
  * the snippet cut off before its closing quote hides the rest of the
  * text.</li>
+ * <li>A value that starts with a digit, `+` or `(` runs on through each word
+ * after it on the same line that holds no letter, so a phone number is
+ * hidden whole however its groups are spaced or dashed, and the punctuation
+ * after it goes too. A word such as `2nd` or `retry` ends it.</li>
  * <li>Any other value is hidden up to the next space. It may open with an
  * auth scheme: a bearer is `Bearer <jwt>`, and a match that stopped at the
  * first word would hide the scheme and print the jwt.</li>
  * </ul>
  */
 const SECRET_PATTERN = new RegExp(
-  String.raw`(?<key>${SECRET_KEYS})(?<sep>[\\"']*\s*[=:]\s*)` +
+  String.raw`(?<key>${SECRET_KEYS})(?<sep>[\\"']*${GAP}*[=:]${GAP}*)` +
     String.raw`(?!\[REDACTED\]\.?(?:\s|$))` +
-    String.raw`(?:(?![\\"'\x60{[])\S*?[=:]\s*)*(?:[{[][\s\S]*` +
+    String.raw`(?:(?![\\"'\x60{[\p{Cf}])\S*?[=:]${GAP}*)*(?:[{[][\s\S]*` +
     String.raw`|(?<esc>\\*)(?<quote>["'\x60])[\s\S]*?` +
     String.raw`(?:(?<!\\)(?:\k<esc>\\\k<esc>\\)*(?<close>\k<esc>\k<quote>)` +
     String.raw`(?=[\s,;)\]}]|\.(?!\S)|$)|$)` +
-    String.raw`|(?:(?:Bearer|Basic)\s+)?\S+)`,
-  'gi',
+    `|${NUMBER_VALUE}` +
+    String.raw`|(?:(?:Bearer|Basic)${GAP}+)?\S+)`,
+  'giu',
 );
 
 /** The named parts of a secret match that its masked form keeps. */

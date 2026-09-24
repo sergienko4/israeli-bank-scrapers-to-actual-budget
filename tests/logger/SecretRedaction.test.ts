@@ -44,6 +44,10 @@ describe('redactSecrets', () => {
     ['a snake-case password', `new_password=${TEST_CREDENTIAL}`],
     ['a camel-case password', `userPassword: ${TEST_CREDENTIAL}`],
     ['a snake-case card code', `card_cvv=${TEST_CREDENTIAL}`],
+    ['a phone number', `phoneNumber=${TEST_CREDENTIAL}`],
+    ['a capitalised phone number', `PhoneNumber: ${TEST_CREDENTIAL}`],
+    ['a snake-case phone number in JSON', `{"phone_number":"${TEST_CREDENTIAL}"}`],
+    ['a hyphenated phone number', `phone-number=${TEST_CREDENTIAL}`],
   ])('hides the value of %s', (_shape, text) => {
     expect(redactSecrets(`login failed ${text}`)).not.toContain(TEST_CREDENTIAL);
   });
@@ -109,6 +113,43 @@ describe('redactSecrets', () => {
     expect(redactSecrets(text)).toBe(expected);
   });
 
+  const PHONE_VALUES: [string, string, string][] = [
+    ['an international number', 'login failed phoneNumber=+972 50-000-0016', 'login failed phoneNumber=[REDACTED]'],
+    ['a local number in groups', 'phone_number: 050 000 0016 retry', 'phone_number=[REDACTED] retry'],
+    ['a bracketed country code', 'phoneNumber=(+972) 50 000 0016, retry', 'phoneNumber=[REDACTED] retry'],
+    ['groups split by tabs', 'phoneNumber=050\t000\t0016 retry', 'phoneNumber=[REDACTED] retry'],
+    ['a word that only starts with a digit', 'phoneNumber=050 000 0016 2nd try', 'phoneNumber=[REDACTED] 2nd try'],
+    ['a number on the next line', 'phoneNumber=050\n2 attempts', 'phoneNumber=[REDACTED]\n2 attempts'],
+    ['groups split by no-break spaces', 'phoneNumber=+972\u00a050\u00a0123\u00a04567 retry', 'phoneNumber=[REDACTED] retry'],
+    ['groups split by narrow no-break spaces', 'phoneNumber=050\u202f123\u202f4567 retry', 'phoneNumber=[REDACTED] retry'],
+    ['groups split by spaced dashes', 'phoneNumber=050 \u2013 123 - 4567 retry', 'phoneNumber=[REDACTED] retry'],
+    ['a number before an exclamation mark', 'phoneNumber=050 1234567! retry', 'phoneNumber=[REDACTED] retry'],
+    ['a number before a question mark', 'phoneNumber=050 123 4567? retry', 'phoneNumber=[REDACTED] retry'],
+    ['a number before a colon', 'phoneNumber=050 123 4567: retry', 'phoneNumber=[REDACTED] retry'],
+    ['a number in brackets', '[phoneNumber=050 123 4567] retry', '[phoneNumber=[REDACTED] retry'],
+    ['a number before Hebrew text', 'phoneNumber=050 123 4567 \u05e0\u05e1\u05d4', 'phoneNumber=[REDACTED] \u05e0\u05e1\u05d4'],
+  ];
+
+  it.each(PHONE_VALUES)('hides every digit group of %s', (_shape, text, expected) => {
+    expect(redactSecrets(text)).toBe(expected);
+  });
+
+  const INVISIBLE_VALUES: [string, string, string][] = [
+    ['a left-to-right mark before a spaced number', 'phoneNumber=\u200e +972 50-123-4567', 'phoneNumber=[REDACTED]'],
+    ['a right-to-left mark before a number', 'phoneNumber=\u200f050 123 4567 retry', 'phoneNumber=[REDACTED] retry'],
+    ['a bidi isolate around a number', 'phone_number=\u2066+972 50-123-4567\u2069 failed', 'phone_number=[REDACTED] failed'],
+    ['a bidi isolate inside a bracket', 'phoneNumber=(\u2066+972) 50 123 retry', 'phoneNumber=[REDACTED] retry'],
+    ['a zero-width space after the plus', 'phoneNumber=+\u200b972 50 retry', 'phoneNumber=[REDACTED] retry'],
+    ['a mark before the separator', 'phoneNumber\u200e=050 123 retry', 'phoneNumber=[REDACTED] retry'],
+    ['a mark before a token', `idToken=\u200e ${TEST_CREDENTIAL} tail`, 'idToken=[REDACTED] tail'],
+    ['a mark after an auth scheme', `authorization: Basic\u200e ${TEST_CREDENTIAL} tail`, 'authorization=[REDACTED] tail'],
+    ['a mark after a chained separator', `token=null,idToken:\u200e ${TEST_CREDENTIAL} tail`, 'token=[REDACTED] tail'],
+  ];
+
+  it.each(INVISIBLE_VALUES)('reads an invisible format character as a space: %s', (_shape, text, expected) => {
+    expect(redactSecrets(text)).toBe(expected);
+  });
+
   it('keeps the sentence after a quoted value', () => {
     expect(redactSecrets('secret: "blue river". Verify it')).toBe('secret: "[REDACTED]". Verify it');
   });
@@ -149,7 +190,7 @@ describe('redactSecrets', () => {
     expect(JSON.parse(redactSecrets(text))).toEqual({ idToken: '[REDACTED]', bank: 'leumi' });
   });
 
-  it.each([...WHOLE_VALUES, ...CHAINED_VALUES, ...SEPARATOR_VALUES])(
+  it.each([...WHOLE_VALUES, ...CHAINED_VALUES, ...SEPARATOR_VALUES, ...PHONE_VALUES, ...INVISIBLE_VALUES])(
     'masks %s the same way a second time', (_shape, text) => {
       const once = redactSecrets(text);
       expect(redactSecrets(once)).toBe(once);
@@ -183,8 +224,22 @@ describe('redactSecrets', () => {
     expect(redactSecrets(text)).toBe('TOKEN=[REDACTED] CreditCard=[REDACTED]');
   });
 
-  it.each(['_', 'a_', 'a-', 'token="\\', 'token: ', 'token:\n', 'token: a: '])('scans a long run of %j in linear time', (unit) => {
+  it.each(['_', 'a_', 'a-', 'token="\\', 'token: ', 'token:\n', 'token: a: ', 'phone_', 'aphone-', 'phonenumber', 'token:\u200e ', 'token=\u200e', 'token=a:\u200e'])('scans a long run of %j in linear time', (unit) => {
     const text = unit.repeat(100_000);
+    const started = performance.now();
+    redactSecrets(text);
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
+  it.each(['1 ', '(+1', '1-', '1\u00a0', '- ', '1x ', '\u200e1 ', '(\u2066'])('scans a long phone value of %j in linear time', (unit) => {
+    const text = `phoneNumber=${unit.repeat(100_000)}x tail`;
+    const started = performance.now();
+    redactSecrets(text);
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
+  it('scans a long run of invisible marks after a key in linear time', () => {
+    const text = `token=${'\u200e'.repeat(20_000)} `;
     const started = performance.now();
     redactSecrets(text);
     expect(performance.now() - started).toBeLessThan(250);
@@ -203,6 +258,7 @@ describe('redactSecrets', () => {
     'maxTokens: 5',
     'author: someone',
     'OAuth: provider unavailable',
+    'phoneNumberCount: 3',
     'Set twoFactorAuth: true for this bank and configure Telegram or the mobile app',
     'Config portal on http://127.0.0.1:3000 (auth mode: password)',
     '',

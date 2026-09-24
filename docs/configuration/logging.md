@@ -138,6 +138,8 @@ followed by `=` or `:`:
   long-term login token under each of its names (`otpLongTermToken`,
   `longTermToken`, `persistentOtpToken`, `idToken` and `access_token`) as well
   as names like `clientSecret` and `new_password`
+- any name ending in `phoneNumber`, `phone_number` or `phone-number`, since a
+  phone number is personal data and the login for OneZero, PayBox and Pepper
 - `auth`, `authorization`, `bearer`, `jwt`, `creditCard` and `cvv` as a word
   of their own, at the start of a name or after `_`, `-` or `.`: `card_cvv`
   is hidden, while the `twoFactorAuth: true` hint stays readable
@@ -151,19 +153,27 @@ and the fields after it stay readable. Double quotes, single quotes and
 backticks all count. A value the bank's reply cut off before its closing quote
 hides the rest of the reply, but the importer's own advice after it, such as
 "Verify your password on the bank website", stays readable. An unquoted value is
-hidden up to the next space. A `=` or `:` inside it opens another value, which
+hidden up to the next space, except that one starting with a digit, `+` or
+`(` is hidden with each word after it on the same line that holds no letter,
+so a phone number such as `+972 50-000-0016` is hidden whole, however it is
+spaced. An invisible format character, such as the right-to-left marks that
+Hebrew text puts around a number, counts as a space, so it cannot cut a value
+short. A `=` or `:` inside it opens another value, which
 is hidden too: the quoted value in `{"token":null,"idToken": "..."}`, or the
 secret after `Basic` in `token=null,auth=Basic ...`. When a secret key holds an
 object or a list, the rest of the reply is hidden, because the fields inside it
 can be secrets under ordinary names. Masking a line twice gives the same line.
 
-Structured log fields follow the same keys, in any letter case: a field named
-`authToken` or `Authorization` is written as `[REDACTED]`, and a secret quoted
-inside another field's text is masked as above. The importer logs a message
-and one level of fields, and these rules cover exactly that. Other things pino
-can log are outside them: fields nested deeper and fields bound to a child
-logger are hidden by exact name only, and a logged `Error` object is written as
-pino serialises it. A message's `%s`-style values are never written: the
+Structured log fields follow the same keys, in any letter case and at any
+depth: a field named `authToken` or `Authorization` is written as
+`[REDACTED]`, whether the call logged it, a child logger bound it, or it sits
+in a nested object or a list. A phone number field is hidden the same way. A
+secret quoted inside any field's text or name is masked as above, and so is
+one in a logged `Error`'s message and stack. This masking runs on each
+finished line just before it is written, so it covers every field pino
+writes; numbers, including ones too large for a double, are written
+unchanged. A line that is not valid JSON, or is nested too deep to read, is
+masked as text instead. A message's `%s`-style values are never written: the
 message is written as the call wrote it, placeholders included, because a key
 in the message and its value in an argument, as in `token: %s`, cannot be
 masked as a pair.
