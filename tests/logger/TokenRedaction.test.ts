@@ -352,6 +352,12 @@ describe('secrets quoted in log message text', () => {
     expect(JSON.parse(line).msg).toBe('Imported 5 transactions for oneZero');
   });
 
+  it('hides the credential after a Token scheme a bank echoed', () => {
+    const line = logOnce({}, `Pipeline failed: 401: Authorization: Token ${TEST_CREDENTIAL} rejected`);
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(JSON.parse(line).msg).toBe('Pipeline failed: 401: Authorization=[REDACTED] rejected');
+  });
+
   it('masks a key in the message whose value is an interpolation value', () => {
     const line = logOnce({}, 'token: %s bank: %s', TEST_CREDENTIAL, 'leumi');
     expect(line).not.toContain(TEST_CREDENTIAL);

@@ -144,7 +144,8 @@ followed by `=` or `:`:
   of their own, at the start of a name or after `_`, `-` or `.`: `card_cvv`
   is hidden, while the `twoFactorAuth: true` hint stays readable
 
-A `Bearer` or `Basic` word in front of the value is hidden with it, so
+An auth scheme in front of the value is hidden with it: `Basic`, `Bearer`,
+`DPoP`, `GNAP`, `Negotiate`, `NTLM` or `Token`, in any letter case. So
 `authorization: Bearer <jwt>` is written as `authorization=[REDACTED]`. The
 key itself is kept, so you can still tell what was hidden. A quoted value is
 hidden through its closing quote, spaces included, and keeps its quotes:

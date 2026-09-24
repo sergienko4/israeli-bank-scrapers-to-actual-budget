@@ -50,6 +50,16 @@ const GAP = String.raw`[\s\p{Cf}]`;
 const NUMBER_VALUE = String.raw`(?:[(+]\p{Cf}*)*\d\S*(?:[^\S\r\n]+[^\s\p{L}]+(?!\S))*`;
 
 /**
+ * An auth scheme whose credential is the one word after it.
+ *
+ * <p>These are the schemes IANA registers with a single-word credential
+ * (RFC 9110 §11.4), and the unregistered `Token` and `NTLM` in common use.
+ * A scheme that sends a list of parameters, such as `Digest`, is not listed:
+ * hiding one more word would hide only its first parameter.
+ */
+const AUTH_SCHEME = '(?:Basic|Bearer|DPoP|GNAP|Negotiate|NTLM|Token)';
+
+/**
  * A secret key, then its value.
  *
  * <p>The key may be quoted, even escaped (`\"idToken\"`), as in an echoed
@@ -88,8 +98,9 @@ const NUMBER_VALUE = String.raw`(?:[(+]\p{Cf}*)*\d\S*(?:[^\S\r\n]+[^\s\p{L}]+(?!
  * hidden whole however its groups are spaced or dashed, and the punctuation
  * after it goes too. A word such as `2nd` or `retry` ends it.</li>
  * <li>Any other value is hidden up to the next space. It may open with an
- * auth scheme: a bearer is `Bearer <jwt>`, and a match that stopped at the
- * first word would hide the scheme and print the jwt.</li>
+ * auth scheme from `AUTH_SCHEME`, which is hidden with the word after it:
+ * a bearer is `Bearer <jwt>`, and a match that stopped at the first word
+ * would hide the scheme and print the jwt.</li>
  * </ul>
  */
 const SECRET_PATTERN = new RegExp(
@@ -100,7 +111,7 @@ const SECRET_PATTERN = new RegExp(
     String.raw`(?:(?<!\\)(?:\k<esc>\\\k<esc>\\)*(?<close>\k<esc>\k<quote>)` +
     String.raw`(?=[\s,;)\]}]|\.(?!\S)|$)|$)` +
     `|${NUMBER_VALUE}` +
-    String.raw`|(?:(?:Bearer|Basic)${GAP}+)?\S+)`,
+    String.raw`|(?:${AUTH_SCHEME}${GAP}+)?\S+)`,
   'giu',
 );
 

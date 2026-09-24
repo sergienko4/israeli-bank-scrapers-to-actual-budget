@@ -150,6 +150,21 @@ describe('redactSecrets', () => {
     expect(redactSecrets(text)).toBe(expected);
   });
 
+  const SCHEME_VALUES: [string, string, string][] = [
+    ['a Token scheme', `Authorization: Token ${TEST_CREDENTIAL} tail`, 'Authorization=[REDACTED] tail'],
+    ['a lowercase token scheme', `authorization: token ${TEST_CREDENTIAL} tail`, 'authorization=[REDACTED] tail'],
+    ['a DPoP scheme', `Authorization: DPoP ${TEST_CREDENTIAL} tail`, 'Authorization=[REDACTED] tail'],
+    ['a GNAP scheme', `Authorization: GNAP ${TEST_CREDENTIAL} tail`, 'Authorization=[REDACTED] tail'],
+    ['a Negotiate scheme', `Authorization: Negotiate ${TEST_CREDENTIAL} tail`, 'Authorization=[REDACTED] tail'],
+    ['an NTLM scheme', `Authorization: NTLM ${TEST_CREDENTIAL} tail`, 'Authorization=[REDACTED] tail'],
+    ['a proxy header with a Token scheme', `Proxy-Authorization: Token ${TEST_CREDENTIAL} tail`, 'Proxy-Authorization=[REDACTED] tail'],
+    ['a bare null, then a Token scheme', `token=null,authorization=Token ${TEST_CREDENTIAL} tail`, 'token=[REDACTED] tail'],
+  ];
+
+  it.each(SCHEME_VALUES)('hides the credential after the auth scheme in %s', (_shape, text, expected) => {
+    expect(redactSecrets(text)).toBe(expected);
+  });
+
   it('keeps the sentence after a quoted value', () => {
     expect(redactSecrets('secret: "blue river". Verify it')).toBe('secret: "[REDACTED]". Verify it');
   });
@@ -190,7 +205,7 @@ describe('redactSecrets', () => {
     expect(JSON.parse(redactSecrets(text))).toEqual({ idToken: '[REDACTED]', bank: 'leumi' });
   });
 
-  it.each([...WHOLE_VALUES, ...CHAINED_VALUES, ...SEPARATOR_VALUES, ...PHONE_VALUES, ...INVISIBLE_VALUES])(
+  it.each([...WHOLE_VALUES, ...CHAINED_VALUES, ...SEPARATOR_VALUES, ...PHONE_VALUES, ...INVISIBLE_VALUES, ...SCHEME_VALUES])(
     'masks %s the same way a second time', (_shape, text) => {
       const once = redactSecrets(text);
       expect(redactSecrets(once)).toBe(once);
