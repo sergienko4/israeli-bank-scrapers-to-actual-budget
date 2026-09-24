@@ -185,6 +185,22 @@ secret after `Basic` in `token=null,auth=Basic ...`. When a secret key holds an
 object or a list, the rest of the reply is hidden, because the fields inside it
 can be secrets under ordinary names. Masking a line twice gives the same line.
 
+One kind of text is kept although it looks like a key and its value: a
+failure code from the bank scraper followed by its own text, as in
+`INVALID_PASSWORD: Invalid credentials`. The codes are `CHANGE_PASSWORD`,
+`INVALID_PASSWORD`, `INVALID_PHONE_NUMBER` and `NO_PASSWORD`. The code must be
+in capitals and followed by one colon, one space and a word made only of
+letters, which may end in a period or a comma. The scraper's `Form:` label and
+one space may come before that word, as in `INVALID_PASSWORD: Form: Invalid username`,
+when a bank's login form shows its own error. Anything else after the code,
+such as a number, a word with a digit or a symbol in it, a quoted value,
+another label or another key, is hidden as after any other key, and so is the
+same name in lower case or after `=`. The code must also start the text or
+follow whitespace, such as a space or a line break, or a `"`: a `.`, `-`, `/`, `:` or invisible mark before it
+makes it part of a longer name, such as `creds.INVALID_PASSWORD`, which is
+hidden. The trade-off is that a secret made only of letters would stay
+readable in that one place; the scraper writes its own text there.
+
 Structured log fields follow the same keys, in any letter case and at any
 depth: a field named `authToken` or `Authorization` is written as
 `[REDACTED]`, whether the call logged it, a child logger bound it, or it sits

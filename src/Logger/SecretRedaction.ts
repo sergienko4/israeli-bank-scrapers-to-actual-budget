@@ -250,17 +250,73 @@ interface ISecretParts {
 }
 
 /**
+ * The provider's failure codes that end in a secret key but name no secret.
+ *
+ * <p>A failed scrape reads as the code, `: ` and the provider's prose, as in
+ * `INVALID_PASSWORD: Invalid credentials`, which looks like a key and its
+ * value. Only these codes, in capitals as the provider writes them, are
+ * exempt, so `invalid_password: ...` and `API_SECRET: ...` are still hidden.
+ */
+const FAILURE_CODES: ReadonlySet<string> = new Set([
+  'CHANGE_PASSWORD', 'INVALID_PASSWORD', 'INVALID_PHONE_NUMBER', 'NO_PASSWORD',
+]);
+
+/**
+ * The prose a failure code may keep after it: one word of letters, which may
+ * end in a period or a comma, or the `Form: ` label the provider puts before
+ * a login form's own error and that error's first word. Never a number, a
+ * quoted value, another label, a chained key or a word with a digit in it.
+ */
+const PROSE_START = /^(?:Form: )?\p{L}+[.,]?$/u;
+
+/**
+ * What may come just before a failure code: nothing, whitespace or the
+ * quote that opens a message. A `.`, `-`, `/`, `:` or invisible mark there,
+ * even the byte order mark that `\s` counts as a space, makes the code the
+ * end of a longer name, such as `creds.INVALID_PASSWORD`, which is hidden.
+ */
+const CODE_START = /^(?!\p{Cf})[\s"]?$/u;
+
+/**
+ * Tells whether a match is a provider failure code and the prose after it,
+ * rather than a key and its value.
+ *
+ * <p>The code must start the text or follow whitespace or an opening
+ * quote, and be followed by exactly `: ` and the prose `PROSE_START` allows.
+ * Anything else after it, such as a quoted value, an object, a chained key, a
+ * scheme with its credential, a number or a word with a digit, is hidden as
+ * after any other key.
+ * @param match - The whole match, from the key to the end of its value.
+ * @param parts - The match's named parts.
+ * @param before - The character just before the match, or `''` at the start.
+ * @returns True when the match is kept as it is.
+ */
+function isFailureCode(match: string, parts: ISecretParts, before: string): boolean {
+  if (!FAILURE_CODES.has(parts.key) || parts.sep !== ': ') return false;
+  if (!CODE_START.test(before)) return false;
+  const value = match.slice(parts.key.length + parts.sep.length);
+  return PROSE_START.test(value);
+}
+
+/**
  * Writes the masked form of one secret match.
  *
  * <p>A value closed by its quote keeps its quotes and the key's separator, so
  * `{"idToken":"x"}` stays valid JSON as `{"idToken":"[REDACTED]"}` and masking
  * it again writes the same text. Any other value, including one cut off
- * before its closing quote, is written as `key=[REDACTED]`.
- * @param args - The replace callback's arguments; the last is the named groups.
+ * before its closing quote, is written as `key=[REDACTED]`. A provider
+ * failure code and its prose, per `isFailureCode`, are kept.
+ * @param args - The replace callback's arguments: the whole match first,
+ * then the groups, the match's offset, the whole text and the named groups.
  * @returns The key with its value replaced by `[REDACTED]`.
  */
 function maskMatch(...args: unknown[]): string {
-  const { key, sep, close } = args.at(-1) as ISecretParts;
+  const match = args[0] as string;
+  const offset = args.at(-3) as number;
+  const before = (args.at(-2) as string).charAt(offset - 1);
+  const parts = args.at(-1) as ISecretParts;
+  if (isFailureCode(match, parts, before)) return match;
+  const { key, sep, close } = parts;
   if (close === undefined) return `${key}=[REDACTED]`;
   return `${key}${sep}${close}[REDACTED]${close}`;
 }
