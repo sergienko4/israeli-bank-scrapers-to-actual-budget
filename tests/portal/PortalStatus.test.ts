@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
 import { fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 let app: FastifyInstance;
 let dir: string;
@@ -76,5 +77,24 @@ describe('Portal /api/status', () => {
     expect(body.runs).toHaveLength(1);
     expect(body.runs[0].banks[0].name).toBe('leumi');
     rmSync(auditDir, { recursive: true, force: true });
+  });
+  it('hides a token an older release stored in a failure reason', async () => {
+    const auditDir = mkdtempSync(join(tmpdir(), 'audit-'));
+    const auditPath = join(auditDir, 'audit-log.json');
+    const error = `OneZero login failed: idToken=${TEST_CREDENTIAL}`;
+    const entry = {
+      timestamp: '2026-01-01T00:00:00.000Z', totalBanks: 1, successfulBanks: 0, failedBanks: 1,
+      totalTransactions: 0, totalDuplicates: 0, totalDuration: 1000, successRate: 0,
+      banks: [{ name: 'oneZero', status: 'failure', duration: 900, txns: 0, error }],
+    };
+    writeFileSync(auditPath, JSON.stringify([entry]), 'utf8');
+    process.env.AUDIT_LOG_PATH = auditPath;
+
+    const cookie = await loginCookie();
+    const res = await app.inject({ method: 'GET', url: '/api/status', cookies: { portal_session: cookie } });
+    rmSync(auditDir, { recursive: true, force: true });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('OneZero login failed');
+    expect(res.body).not.toContain(TEST_CREDENTIAL);
   });
 });

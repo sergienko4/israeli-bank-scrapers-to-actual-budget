@@ -191,6 +191,37 @@ describe('redactSecrets', () => {
     expect(redactSecrets(text)).toBe(expected);
   });
 
+  const UNLISTED_SCHEME_VALUES: [string, string, string][] = [
+    ['an AWS SigV4 header', `Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20240101/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-date, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a Hawk header', `Authorization: Hawk id="dh37fgj492je", ts="1353832234", mac="${TEST_CREDENTIAL}"\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a lowercase key after =', `authorization=AWS4-HMAC-SHA256 Credential=a, Signature=${TEST_CREDENTIAL}\nnext`, 'authorization=[REDACTED]\nnext'],
+    ['an auth key', `auth: Custom realm="api", sig=${TEST_CREDENTIAL}\nnext`, 'auth=[REDACTED]\nnext'],
+    ['a proxy header', `Proxy-Authorization: Custom sig=${TEST_CREDENTIAL}\nnext`, 'Proxy-Authorization=[REDACTED]\nnext'],
+    ['spaces around the parameter\'s =', `Authorization: Custom sig = ${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a line folded onto a space', `Authorization: AWS4-HMAC-SHA256\n Credential=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a line ending in CRLF', `Authorization: Hawk mac="${TEST_CREDENTIAL}"\r\nHost: bank`, 'Authorization=[REDACTED]\r\nHost: bank'],
+    ['a mark after the scheme', `Authorization: AWS4-HMAC-SHA256\u200eCredential=a, Signature=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a bare null, then an unlisted scheme', `token=null,authorization=AWS4-HMAC-SHA256 Credential=a, Signature=${TEST_CREDENTIAL}\nnext`, 'token=[REDACTED]\nnext'],
+    ['a quoted key before a bare value', `"authorization": Hawk mac=${TEST_CREDENTIAL}\nnext`, '"authorization=[REDACTED]\nnext'],
+    ['a space before the colon', `Authorization : Hawk mac=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+    ['a scheme that starts with an underscore', `Authorization: _Custom sig=${TEST_CREDENTIAL}\nnext`, 'Authorization=[REDACTED]\nnext'],
+  ];
+
+  it.each(UNLISTED_SCHEME_VALUES)('hides the rest of the line after an unlisted scheme with parameters in %s', (_shape, text, expected) => {
+    expect(redactSecrets(text)).toBe(expected);
+  });
+
+  it.each([
+    ['a listed one-word scheme', `authorization: Token ${TEST_CREDENTIAL}== bank=leumi`, 'authorization=[REDACTED] bank=leumi'],
+    ['a quoted value', `{"authorization":"AWS4-HMAC-SHA256 Credential=a, Signature=${TEST_CREDENTIAL}","bank":"leumi"}`, '{"authorization":"[REDACTED]","bank":"leumi"}'],
+    ['a key that is not an auth header', `token=${TEST_CREDENTIAL} bank=leumi`, 'token=[REDACTED] bank=leumi'],
+    ['a name that only ends in auth', 'twoFactorAuth=Custom sig=x', 'twoFactorAuth=Custom sig=x'],
+    ['a chained name that only ends in auth', 'token=null,twoFactorAuth=Custom sig=x', 'token=[REDACTED] sig=x'],
+    ['a word with no parameter after it', 'auth: required for this bank', 'auth=[REDACTED] for this bank'],
+  ])('keeps what follows the value of %s', (_shape, text, expected) => {
+    expect(redactSecrets(text)).toBe(expected);
+  });
+
   it.each([
     ['a longer word', 'authorization: Digests pending retry', 'authorization=[REDACTED] pending retry'],
     ['a longer scheme name', 'authorization: SCRAM-SHA-10 pending retry', 'authorization=[REDACTED] pending retry'],
@@ -239,7 +270,7 @@ describe('redactSecrets', () => {
     expect(JSON.parse(redactSecrets(text))).toEqual({ idToken: '[REDACTED]', bank: 'leumi' });
   });
 
-  it.each([...WHOLE_VALUES, ...CHAINED_VALUES, ...SEPARATOR_VALUES, ...PHONE_VALUES, ...INVISIBLE_VALUES, ...SCHEME_VALUES, ...PARAM_SCHEME_VALUES])(
+  it.each([...WHOLE_VALUES, ...CHAINED_VALUES, ...SEPARATOR_VALUES, ...PHONE_VALUES, ...INVISIBLE_VALUES, ...SCHEME_VALUES, ...PARAM_SCHEME_VALUES, ...UNLISTED_SCHEME_VALUES])(
     'masks %s the same way a second time', (_shape, text) => {
       const once = redactSecrets(text);
       expect(redactSecrets(once)).toBe(once);
@@ -282,6 +313,13 @@ describe('redactSecrets', () => {
 
   it.each(['1 ', '(+1', '1-', '1\u00a0', '- ', '1x ', '\u200e1 ', '(\u2066'])('scans a long phone value of %j in linear time', (unit) => {
     const text = `phoneNumber=${unit.repeat(100_000)}x tail`;
+    const started = performance.now();
+    redactSecrets(text);
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
+  it.each(['\n ', ' ', '\u200e', '\ufeff'])('scans a long gap of %j after an auth scheme in linear time', (unit) => {
+    const text = `authorization=a${unit.repeat(100_000)}`;
     const started = performance.now();
     redactSecrets(text);
     expect(performance.now() - started).toBeLessThan(250);

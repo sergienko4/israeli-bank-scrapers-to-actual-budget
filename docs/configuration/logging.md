@@ -150,7 +150,9 @@ An auth scheme in front of the value is hidden with it: `Basic`, `Bearer`,
 scheme that sends a list of parameters (`Concealed`, `Digest`, `HOBA`,
 `Mutual`, `OAuth`, `PrivateToken`, `SCRAM-SHA-1`, `SCRAM-SHA-256` or `vapid`)
 hides the rest of its line, and any folded line after it that starts with a
-space or a tab, since any parameter can carry the secret. The
+space or a tab, since any parameter can carry the secret. Under `auth` or
+`authorization`, any other scheme followed by a `name=` parameter, such as
+`AWS4-HMAC-SHA256 Credential=..., Signature=...`, is hidden the same way. The
 key itself is kept, so you can still tell what was hidden. A quoted value is
 hidden through its closing quote, spaces included, and keeps its quotes:
 `{"idToken":"..."}` is written as `{"idToken":"[REDACTED]"}`, still valid JSON,
@@ -172,9 +174,12 @@ can be secrets under ordinary names. Masking a line twice gives the same line.
 Structured log fields follow the same keys, in any letter case and at any
 depth: a field named `authToken` or `Authorization` is written as
 `[REDACTED]`, whether the call logged it, a child logger bound it, or it sits
-in a nested object or a list. A phone number field is hidden the same way. A
-secret quoted inside any field's text or name is masked as above, and so is
-one in a logged `Error`'s message and stack. This masking runs on each
+in a nested object or a list. A phone number field is hidden the same way,
+and so is a name with spaces or invisible marks after the key, such as
+`idToken` followed by a right-to-left mark, or with an invisible mark inside
+it, such as one between `idTok` and `en`. A secret quoted inside any
+field's text or name is masked as above, and so is one in a logged
+`Error`'s message and stack. This masking runs on each
 finished line just before it is written, so it covers every field pino
 writes; numbers, including ones too large for a double, are written
 unchanged. A line that is not valid JSON, or is nested too deep to read, is
@@ -184,7 +189,11 @@ in the message and its value in an argument, as in `token: %s`, cannot be
 masked as a pair.
 
 Masking covers stdout, the log files that `/logs` reads, and error alerts on
-Telegram, webhook and push.
+Telegram, webhook and push. It also covers the failure reasons kept in the
+import history, which `/api/status` serves to the portal and the app, and
+which the reply after a failed import quotes. A reason that an older release
+stored with less thorough masking is masked again each time the history is
+read, and is saved masked the next time an import is recorded.
 
 ## Deprecated: `maxBufferSize`
 

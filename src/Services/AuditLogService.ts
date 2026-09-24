@@ -5,6 +5,7 @@
 
 import { existsSync,readFileSync, writeFileSync } from 'node:fs';
 
+import redactSecrets from '../Logger/SecretRedaction.js';
 import type { Procedure } from '../Types/Index.js';
 import { fail,succeed } from '../Types/Index.js';
 import resolveAuditLogPath from './AuditLogPath.js';
@@ -31,6 +32,8 @@ export interface IAuditLog {
   getLastFailedBanks(): Procedure<string[]>;
   getConsecutiveFailures(bankName: string): Procedure<number>;
 }
+
+type AuditBank = IAuditEntry['banks'][number];
 
 const DEFAULT_MAX_ENTRIES = 90;
 
@@ -152,9 +155,35 @@ export class AuditLogService implements IAuditLog {
     if (!existsSync(this.filePath)) return [];
     try {
       const fileContent = readFileSync(this.filePath, 'utf8');
-      return JSON.parse(fileContent) as IAuditEntry[];
+      const entries = JSON.parse(fileContent) as IAuditEntry[];
+      return entries.map(entry => AuditLogService.maskEntry(entry));
     }
     catch { return []; }
+  }
+
+  /**
+   * Masks secrets in an entry's stored failure reasons. Older releases masked
+   * them less thoroughly, and every reader (the portal, the app, Telegram)
+   * sends them on, so each read masks them again and the next record saves
+   * them masked.
+   * @param entry - An entry as parsed from the file, which may be malformed.
+   * @returns The entry with each bank's error masked, or as stored without banks.
+   */
+  private static maskEntry(entry: IAuditEntry): IAuditEntry {
+    const banks: unknown = (entry as Partial<IAuditEntry> | null)?.banks;
+    if (!Array.isArray(banks)) return entry;
+    return { ...entry, banks: entry.banks.map(bank => AuditLogService.maskBank(bank)) };
+  }
+
+  /**
+   * Masks secrets in one bank row's stored failure reason.
+   * @param bank - A bank row as parsed from the file, which may be malformed.
+   * @returns The row with its error masked, or as stored when it has no error text.
+   */
+  private static maskBank(bank: AuditBank): AuditBank {
+    const error: unknown = (bank as Partial<AuditBank> | null)?.error;
+    if (typeof error !== 'string') return bank;
+    return { ...bank, error: redactSecrets(error) };
   }
 
   /**

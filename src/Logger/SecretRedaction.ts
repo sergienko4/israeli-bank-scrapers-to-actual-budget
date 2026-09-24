@@ -29,9 +29,6 @@ const SECRET_KEYS = [
   '(?<![a-z0-9])(?:auth(?:orization)?|creditcard|cvv|bearer|jwt)',
 ].join('|');
 
-/** A field name that ends in a secret key, in any case. */
-const SECRET_KEY_NAME = new RegExp(`(?:${SECRET_KEYS})$`, 'i');
-
 /**
  * A space, or an invisible format character such as a bidi mark.
  *
@@ -42,6 +39,17 @@ const SECRET_KEY_NAME = new RegExp(`(?:${SECRET_KEYS})$`, 'i');
  * able to, a run of marks could be split between them in many ways.
  */
 const GAP = String.raw`[\s\p{Cf}]`;
+
+/**
+ * A field name that ends in a secret key, in any case.
+ *
+ * <p>Spaces and invisible marks after the key are read as nothing, as the
+ * text masker reads them before a separator, so `idToken\u200e` is a secret.
+ */
+const SECRET_KEY_NAME = new RegExp(`(?:${SECRET_KEYS})${GAP}*$`, 'iu');
+
+/** Every invisible format character in a field name, such as a bidi mark. */
+const FORMAT_MARKS = /\p{Cf}/gu;
 
 /**
  * A value that starts like a number, with the words after it on its line
@@ -72,6 +80,25 @@ const PARAM_LIST_SCHEME =
   '(?:Concealed|Digest|HOBA|Mutual|OAuth|PrivateToken|SCRAM-SHA-1|SCRAM-SHA-256|vapid)';
 
 /**
+ * An auth header's value that opens with a scheme neither list names, then a
+ * parameter, such as `AWS4-HMAC-SHA256 Credential=..., Signature=...`.
+ *
+ * <p>A `name=` after the scheme shows that it sends parameters, so its value
+ * is hidden as a `PARAM_LIST_SCHEME` value is. Only an `auth` or
+ * `authorization` key is read this way, as under any key `token=abc bank=x`
+ * would lose `bank`. A listed one-word scheme keeps its own rule. As with
+ * `PARAM_LIST_SCHEME`, a chained value may not start here, so an invisible
+ * mark joining the scheme to its first parameter cannot end the match there.
+ */
+const UNLISTED_PARAM_SCHEME =
+  `(?!${ONE_WORD_SCHEME}${GAP})` +
+  String.raw`(?=\w[\w.+-]*(?:(?![\r\n])${GAP}|\r?\n[ \t])+[\w.-]+[ \t]*=)` +
+  String.raw`(?<=(?<![a-z0-9])auth(?:orization)?[\\"']*${GAP}*[=:]${GAP}*)`;
+
+/** The rest of a header's line, and each folded line after it. */
+const HEADER_REST = String.raw`[^\r\n]*(?:\r?\n[ \t][^\r\n]*)*`;
+
+/**
  * A secret key, then its value.
  *
  * <p>The key may be quoted, even escaped (`\"idToken\"`), as in an echoed
@@ -89,7 +116,7 @@ const PARAM_LIST_SCHEME =
  * or in an empty value before `authToken:` on the next line, a key is
  * waiting for that value, and printing it would fail open. A quoted value,
  * an escaped one or an object is not bare, so a `: ` inside it cannot cut it
- * short. Then the value takes one of five shapes:
+ * short. Then the value takes one of six shapes:
  *
  * <ul>
  * <li>An object or a list hides the rest of the text. Its inner fields may be
@@ -112,6 +139,9 @@ const PARAM_LIST_SCHEME =
  * <li>A value that opens with a whole scheme name from `PARAM_LIST_SCHEME`
  * hides the rest of its line, and each line after it that starts with a space
  * or a tab, as an obsolete folded header carries on there.</li>
+ * <li>Under an `auth` or `authorization` key, a value that opens with any
+ * other scheme and then a `name=` parameter, per `UNLISTED_PARAM_SCHEME`,
+ * hides the same.</li>
  * <li>Any other value is hidden up to the next space. It may open with an
  * auth scheme from `ONE_WORD_SCHEME`, which is hidden with the word after it:
  * a bearer is `Bearer <jwt>`, and a match that stopped at the first word
@@ -121,13 +151,15 @@ const PARAM_LIST_SCHEME =
 const SECRET_PATTERN = new RegExp(
   String.raw`(?<key>${SECRET_KEYS})(?<sep>[\\"']*${GAP}*[=:]${GAP}*)` +
     String.raw`(?!\[REDACTED\]\.?(?:\s|$))` +
-    String.raw`(?:(?![\\"'\x60{[\p{Cf}]|${PARAM_LIST_SCHEME}\b)\S*?[=:]${GAP}*)*` +
+    String.raw`(?:(?![\\"'\x60{[\p{Cf}]|${PARAM_LIST_SCHEME}\b|${UNLISTED_PARAM_SCHEME})` +
+    String.raw`\S*?[=:]${GAP}*)*` +
     String.raw`(?:[{[][\s\S]*` +
     String.raw`|(?<esc>\\*)(?<quote>["'\x60])[\s\S]*?` +
     String.raw`(?:(?<!\\)(?:\k<esc>\\\k<esc>\\)*(?<close>\k<esc>\k<quote>)` +
     String.raw`(?=[\s,;)\]}]|\.(?!\S)|$)|$)` +
     `|${NUMBER_VALUE}` +
-    String.raw`|${PARAM_LIST_SCHEME}\b[^\r\n]*(?:\r?\n[ \t][^\r\n]*)*` +
+    String.raw`|${PARAM_LIST_SCHEME}\b${HEADER_REST}` +
+    `|${UNLISTED_PARAM_SCHEME}${HEADER_REST}` +
     String.raw`|(?:${ONE_WORD_SCHEME}${GAP}+)?\S+)`,
   'giu',
 );
@@ -162,12 +194,16 @@ function maskMatch(...args: unknown[]): string {
  * Tells whether a structured field's name marks its value as a secret.
  *
  * <p>Uses the same keys as the text masker, so a logged `{ authToken }` is
- * hidden exactly when `authToken=...` in a message would be.
+ * hidden whenever `authToken=...` in a message would be. An invisible mark
+ * inside the name is read both as a gap and as nothing, and the name is a
+ * secret if either reading makes it one: `idTok\u200een` is, and so is
+ * `two\u200eauth`, whose mark ends the word before `auth`.
  * @param name - The field name, such as a key of a log call's context.
- * @returns True when the name ends in a secret key.
+ * @returns True when the name, read either way, ends in a secret key.
  */
 export function isSecretKey(name: string): boolean {
-  return SECRET_KEY_NAME.test(name);
+  const unmarked = name.replace(FORMAT_MARKS, '');
+  return SECRET_KEY_NAME.test(name) || SECRET_KEY_NAME.test(unmarked);
 }
 
 /**

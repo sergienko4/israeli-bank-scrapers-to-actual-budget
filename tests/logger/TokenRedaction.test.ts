@@ -87,8 +87,47 @@ describe('structured fields under any key the text masker names', () => {
     expect(JSON.parse(line).error).toBe('POST /sessions 401: {"idToken":"[REDACTED]"}');
   });
 
+  const MARKED_KEYS: [string, string][] = [
+    ['idToken, then a bidi mark', 'idToken\u200e'],
+    ['Authorization, then an isolate mark', 'Authorization\u2066'],
+    ['password, then two marks', 'password\u200e\u200f'],
+    ['secret, then a space', 'secret '],
+    ['idToken, with a bidi mark inside', 'idTok\u200een'],
+    ['cvv, with a mark between each letter', 'c\u200ev\u200fv'],
+    ['auth, after a mark that ends the word before it', 'two\u200eauth'],
+  ];
+
+  it.each(MARKED_KEYS)('redacts %s at the top level of an entry', (_shape, key) => {
+    const line = logOnce({ [key]: TEST_CREDENTIAL }, 'event');
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(JSON.parse(line)[key]).toBe('[REDACTED]');
+  });
+
+  it.each(MARKED_KEYS)('redacts %s one level down', (_shape, key) => {
+    const line = logOnce({ headers: { [key]: TEST_CREDENTIAL } }, 'event');
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(JSON.parse(line).headers[key]).toBe('[REDACTED]');
+  });
+
+  it.each(MARKED_KEYS)('redacts %s bound to a child logger', (_shape, key) => {
+    const lines: string[] = [];
+    const sink = { write: (line: string): number => lines.push(line) };
+    pino({ ...baseOptions(), level: 'info' }, sink).child({ [key]: TEST_CREDENTIAL }).info('event');
+    expect(lines.join('')).not.toContain(TEST_CREDENTIAL);
+  });
+
   it('keeps fields whose names only contain a secret word', () => {
     const fields = { tokenCount: 3, authorName: 'dana', twoFactorAuth: true };
+    expect(JSON.parse(logOnce(fields, 'event'))).toMatchObject(fields);
+  });
+
+  it('keeps a field whose name only contains a secret word around a mark', () => {
+    const fields = { 'tok\u200eenCount': 3, 'two\u200eFactorAuth': true };
+    expect(JSON.parse(logOnce(fields, 'event'))).toMatchObject(fields);
+  });
+
+  it('keeps a field whose name only contains a secret word before a mark', () => {
+    const fields = { 'tokenCount\u200e': 3, 'twoFactorAuth\u200e': true };
     expect(JSON.parse(logOnce(fields, 'event'))).toMatchObject(fields);
   });
 
