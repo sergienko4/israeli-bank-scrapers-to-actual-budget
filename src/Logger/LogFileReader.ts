@@ -6,10 +6,13 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import redactSecrets from './SecretRedaction.js';
+
 interface IPinoEntry {
   time: number;
   level: number;
-  msg: string;
+  /** Absent when the call logged only fields; a lone number, boolean or null stays one. */
+  msg?: string | number | boolean | null;
 }
 
 const LEVEL_LABELS: Record<number, string> = {
@@ -73,6 +76,9 @@ export default class LogFileReader {
 
   /**
    * Parses one NDJSON line into a human-readable [HH:MM:SS] LEVEL msg string.
+   *
+   * <p>The message is masked again, as a file an older release wrote may
+   * still hold a secret its masker let through; masking twice changes nothing.
    * @param json - Raw NDJSON log line to parse.
    * @returns Formatted string, or empty string if the line cannot be parsed.
    */
@@ -81,7 +87,8 @@ export default class LogFileReader {
       const entry = JSON.parse(json) as IPinoEntry;
       const time = new Date(entry.time).toTimeString().slice(0, 8);
       const level = LEVEL_LABELS[entry.level] ?? 'INFO ';
-      return `[${time}] ${level} ${entry.msg}`;
+      const message = redactSecrets(entry.msg === undefined ? '' : String(entry.msg));
+      return `[${time}] ${level} ${message}`;
     } catch {
       return '';
     }

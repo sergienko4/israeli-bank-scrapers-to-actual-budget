@@ -131,4 +131,12 @@ describe('FileLogger', () => {
     const entry = JSON.parse((await waitForLogContent()).trim());
     expect(entry.password).toBe('[REDACTED]');
   });
+
+  it('redacts a secret quoted in the message text', async () => {
+    const logger = new FileLogger(testDir);
+    logger.error(`Pipeline failed: 401: {"longTermToken":"${TEST_CREDENTIAL}"}`);
+    const content = await waitForLogContent();
+    expect(content).not.toContain(TEST_CREDENTIAL);
+    expect(JSON.parse(content.trim()).msg).toContain('Pipeline failed: 401:');
+  });
 });

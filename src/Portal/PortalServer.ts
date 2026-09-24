@@ -156,7 +156,7 @@ export async function startPortal(
   const app = await buildPortal(rt, new PortalConfigStore(configPath));
   await app.listen({ host: rt.host, port: rt.port });
   const url = `http://${rt.host}:${String(rt.port)}`;
-  getLogger().info(`🖥️  Config portal on ${url} (auth: ${rt.authMode})`);
+  getLogger().info(`🖥️  Config portal on ${url} (auth mode: ${rt.authMode})`);
   const warnings = bootWarnings(rt);
   for (const warning of warnings) getLogger().warn(warning);
   return app;

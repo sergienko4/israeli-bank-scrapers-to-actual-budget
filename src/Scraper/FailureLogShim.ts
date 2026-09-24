@@ -14,6 +14,7 @@ import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
 import { getScraperErrorAdvice } from '../Errors/ScraperErrorMessages.js';
 import { getLogger } from '../Logger/Index.js';
+import redactSecrets from '../Logger/SecretRedaction.js';
 import type { IProcedureSuccess } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
 
@@ -27,6 +28,10 @@ import { succeed } from '../Types/Index.js';
  * some upstream failures arrive under a catch-all code and are only
  * identifiable from their message text.
  *
+ * The message is masked before the advice is appended. A secret the bank's
+ * snippet cut off hides the rest of the text it is masked in, so masking the
+ * whole line would hide the advice too.
+ *
  * @param bankName - Name of the bank that failed.
  * @param result - Failed IScraperScrapingResult containing error details.
  * @returns Successful Procedure indicating the failure was logged.
@@ -38,6 +43,7 @@ export default function logScrapeFailure(
   const errorType = result.errorType ?? '';
   const advice = getScraperErrorAdvice(`${errorType} ${baseMsg}`);
   const hint = advice ? `. ${advice}` : '';
-  getLogger().error(`  ❌ Failed to scrape ${bankName}: ${baseMsg}${hint}`);
+  const safeMsg = redactSecrets(baseMsg);
+  getLogger().error(`  ❌ Failed to scrape ${bankName}: ${safeMsg}${hint}`);
   return succeed({ status: 'logged' });
 }

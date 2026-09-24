@@ -127,6 +127,92 @@ The `/logs` Telegram command reads from these files — so `logDir` is required 
 -v /host/logs:/app/logs
 ```
 
+## Secret masking
+
+Log lines and error alerts can quote a bank's reply, and some banks echo
+credentials in it. Before a line is written or an alert is sent, the importer
+replaces the value after any of these keys with `[REDACTED]` when the key is
+followed by `=` or `:`:
+
+- any name ending in `token`, `password` or `secret`, which covers the
+  long-term login token under each of its names (`otpLongTermToken`,
+  `longTermToken`, `persistentOtpToken`, `idToken` and `access_token`) as well
+  as names like `clientSecret` and `new_password`
+- any name ending in `phoneNumber`, `phone_number` or `phone-number`, since a
+  phone number is personal data and the login for OneZero, PayBox and Pepper
+- `auth`, `authorization`, `bearer`, `jwt`, `creditCard` and `cvv` as a word
+  of their own: at the start of a name, or after any character that is not an
+  English letter or digit, such as `_`, `.` or a Hebrew prefix letter as in
+  `בCVV`. So `card_cvv` is hidden, while the `twoFactorAuth: true` hint stays
+  readable
+
+An invisible format character inside a key, such as a right-to-left mark
+between `idTok` and `en`, reads as nothing, so the key is still found. A mark
+just before one of the whole-word keys above may also end the word before it,
+and a key found either way is hidden: `twoFactorAuth: true` with a mark
+before `Auth` is hidden. Spaces and marks after a key, even inside its quotes
+as in `{"idToken " : "..."}`, do not stop its value from being found either.
+
+An auth scheme in front of the value is hidden with it: `Basic`, `Bearer`,
+`DPoP`, `GNAP`, `Negotiate`, `NTLM` or `Token`, in any letter case. So
+`authorization: Bearer <jwt>` is written as `authorization=[REDACTED]`. A
+scheme that sends a list of parameters (`Concealed`, `Digest`, `HOBA`,
+`Mutual`, `OAuth`, `PrivateToken`, `SCRAM-SHA-1`, `SCRAM-SHA-256` or `vapid`)
+hides the rest of its line, and any folded line after it that starts with a
+space or a tab, since any parameter can carry the secret. Under `auth` or
+`authorization`, any other scheme followed by a `name=` parameter, such as
+`AWS4-HMAC-SHA256 Credential=..., Signature=...`, is hidden the same way.
+Either name may hold any character HTTP allows in a token, such as `+` or
+`!`, and the scheme may start with a digit.
+Marks read as nothing there too: inside a scheme's or a parameter's name,
+between the two, before the parameter's `=`, and at the start of a folded
+line. A folded line may also sit between a parameter's name and its `=`. The
+key itself is kept, so you can still tell what was hidden. A quoted value is
+hidden through its closing quote, spaces included, and keeps its quotes:
+`{"idToken":"..."}` is written as `{"idToken":"[REDACTED]"}`, still valid JSON,
+and the fields after it stay readable. Double quotes, single quotes and
+backticks all count. A value the bank's reply cut off before its closing quote
+hides the rest of the reply, but the importer's own advice after it, such as
+"Verify your password on the bank website", stays readable. An unquoted value is
+hidden up to the next space, except that one starting with a digit, `+` or
+`(` is hidden with each word after it on the same line that holds no letter,
+so a phone number such as `+972 50-000-0016` is hidden whole, however it is
+spaced. An invisible format character, such as the right-to-left marks that
+Hebrew text puts around a number, counts as a space, so it cannot cut a value
+short. A `=` or `:` inside it opens another value, which
+is hidden too: the quoted value in `{"token":null,"idToken": "..."}`, or the
+secret after `Basic` in `token=null,auth=Basic ...`. When a secret key holds an
+object or a list, the rest of the reply is hidden, because the fields inside it
+can be secrets under ordinary names. Masking a line twice gives the same line.
+
+Structured log fields follow the same keys, in any letter case and at any
+depth: a field named `authToken` or `Authorization` is written as
+`[REDACTED]`, whether the call logged it, a child logger bound it, or it sits
+in a nested object or a list. A phone number field is hidden the same way,
+and so is a name with spaces or invisible marks after the key, such as
+`idToken` followed by a right-to-left mark, or with an invisible mark inside
+it, such as one between `idTok` and `en`. A secret quoted inside any
+field's text or name is masked as above, and so is one in a logged
+`Error`'s message and stack. This masking runs on each
+finished line just before it is written, so it covers every field pino
+writes; numbers, including ones too large for a double, are written
+unchanged. A line that is not valid JSON, or is nested too deep to read, is
+masked as text instead. A message's `%s`-style values are never written: the
+message is written as the call wrote it, placeholders included, because a key
+in the message and its value in an argument, as in `token: %s`, cannot be
+masked as a pair.
+
+Masking covers stdout, the log files that `/logs` reads, and error alerts on
+Telegram, webhook and push. It also covers each failed bank's reason, in the
+error's name as well as its message, which the import summary sends on those
+same channels and the import history keeps. `/api/status` serves that history
+to the portal and the app, and the reply after a failed import quotes it. A
+reason that an older release stored with less thorough masking is masked
+again each time the history is read, and is saved masked the next time an
+import is recorded. In the same way, `/logs` masks each message again as it
+reads it, so a log file written by an older release shows no more than a new
+one would.
+
 ## Deprecated: `maxBufferSize`
 
 `maxBufferSize` is ignored. The `/logs` command now reads from log files (no in-memory buffer).

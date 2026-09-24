@@ -3,6 +3,8 @@ import execute from '../../../src/Scrapers/Pipeline/Runner/PipelineRunner.js';
 import { succeed, fail, isSuccess, isFail } from '../../../src/Types/ProcedureHelpers.js';
 import type { IPipelineContext } from '../../../src/Scrapers/Pipeline/Types/PipelineContext.js';
 import type { INamedStep } from '../../../src/Scrapers/Pipeline/Types/PipelineStep.js';
+import redactSecrets from '../../../src/Logger/SecretRedaction.js';
+import { TEST_CREDENTIAL } from '../../helpers/testCredentials.js';
 
 function makeCtx(overrides: Partial<IPipelineContext> = {}): IPipelineContext {
   return {
@@ -111,5 +113,19 @@ describe('PipelineRunner', () => {
 
     await execute(steps, ctx);
     expect(ctx.logger.error).toHaveBeenCalledWith(expect.stringContaining('boom-root-cause'));
+  });
+
+  it('keeps the cause readable after a secret the bank snippet cut off', async () => {
+    const ctx = makeCtx();
+    const cause = new Error('boom-root-cause');
+    const message = `POST /sessions 401: {"idToken":"${TEST_CREDENTIAL}`;
+    const steps: INamedStep[] = [
+      makeStep('broken', async () => fail(message, { status: 'login-failed', error: cause })),
+    ];
+
+    await execute(steps, ctx);
+    const line = vi.mocked(ctx.logger.error).mock.calls[0][0];
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(redactSecrets(line)).toContain('boom-root-cause');
   });
 });

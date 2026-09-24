@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'fs';
-import { fakeImportSummary } from '../helpers/factories.js';
+import { createAuditQuery } from '../../src/Services/Telegram/AuditQuery.js';
+import { buildBatchErrorReply } from '../../src/Services/Telegram/BatchFailureReply.js';
+import { fakeBatchResult, fakeImportJobResult, fakeImportSummary } from '../helpers/factories.js';
+import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 // A fixed path under the shared C:\tmp loses races against the Windows virus
 // scanner: under full-suite parallel load, unlink intermittently failed with
@@ -272,5 +275,75 @@ describe('AuditLogService', () => {
     const result = service.getLastFailedBanks();
     expect(result.success).toBe(true);
     if (result.success) expect(result.data).toEqual([]);
+  });
+  describe('entries written before the secret masker', () => {
+    const leakedError = `OneZero login failed: {"idToken":"${TEST_CREDENTIAL}"}`;
+
+    /**
+     * Writes an audit file as an older release left it, with the error unmasked.
+     * @param banks - The per-bank rows of the single stored entry.
+     * @param fields - Entry fields to set, such as its timestamp.
+     */
+    function seedLegacyEntry(banks: unknown[], fields: Record<string, unknown> = {}): void {
+      const entry = { ...fakeImportSummary(), timestamp: '2026-01-01T00:00:00.000Z', ...fields, banks };
+      writeFileSync(TEST_FILE, JSON.stringify([entry]));
+    }
+
+    it('hides a stored token from the entries getRecent returns', () => {
+      seedLegacyEntry([{ name: 'oneZero', status: 'failure', txns: 0, error: leakedError }]);
+      const result = service.getRecent(1);
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      const error = result.data[0].banks[0].error ?? '';
+      expect(error).toContain('OneZero login failed');
+      expect(error).not.toContain(TEST_CREDENTIAL);
+    });
+
+    it.each([
+      ['one job per bank', 'oneZero'],
+      ['one job for every bank', 'all'],
+    ])('hides a stored token from the Telegram failure reply for %s', (_shape, jobLabel) => {
+      const failedRun = { timestamp: new Date().toISOString(), successfulBanks: 0, failedBanks: 1 };
+      seedLegacyEntry([{ name: 'oneZero', status: 'failure', txns: 0, error: leakedError }], failedRun);
+      const audit = createAuditQuery(service);
+      const batch = fakeBatchResult({
+        jobs: [fakeImportJobResult(jobLabel, 1)], totalDurationMs: 60_000, failureCount: 1,
+      });
+      const fresh = audit.getFreshEntryFor(batch);
+      const reply = buildBatchErrorReply({
+        batch, entry: fresh.success ? fresh.data : undefined,
+        entries: audit.getFreshEntriesFor(batch), auditLog: service,
+      });
+      expect(reply).toContain('OneZero login failed');
+      expect(reply).not.toContain(TEST_CREDENTIAL);
+    });
+
+    it('rewrites the stored token masked on the next record', () => {
+      seedLegacyEntry([{ name: 'oneZero', status: 'failure', txns: 0, error: leakedError }]);
+      service.record(fakeImportSummary());
+      expect(readFileSync(TEST_FILE, 'utf8')).not.toContain(TEST_CREDENTIAL);
+    });
+
+    it('keeps rows that carry no error text unchanged', () => {
+      const rows = [{ name: 'leumi', status: 'success', txns: 3 }, { name: 'max', status: 'failure', txns: 0, error: 7 }, null];
+      seedLegacyEntry(rows);
+      const result = service.getRecent(1);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data[0].banks).toEqual(rows);
+    });
+
+    it('reads a file that holds no list as a corrupt one', () => {
+      writeFileSync(TEST_FILE, '{}');
+      const result = service.getRecent(5);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data).toEqual([]);
+    });
+
+    it('keeps an entry without a bank list instead of dropping the log', () => {
+      writeFileSync(TEST_FILE, JSON.stringify([{ timestamp: 'x' }, null]));
+      const result = service.getRecent(5);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data).toEqual([{ timestamp: 'x' }, null]);
+    });
   });
 });

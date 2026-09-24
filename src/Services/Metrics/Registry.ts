@@ -1,5 +1,6 @@
 /** Owns bank-metrics state and exposes the MetricsService public class.
  * @internal */
+import redactSecrets from '../../Logger/SecretRedaction.js';
 import type { Procedure } from '../../Types/Index.js';
 import { fail, succeed } from '../../Types/Index.js';
 import { printImportSummary } from './Serializer.js';
@@ -131,25 +132,19 @@ export default class MetricsService {
     return metrics;
   }
   /** Completes a failed bank.
+   *
+   * <p>The error's name and message are masked apart: any library can name an
+   * error, and a name such as `INVALID_PASSWORD` ends in a secret word, so
+   * masking the joined text would hide the message after it.
    * @param metrics bank metrics.
    * @param error failure cause.
    * @returns completed metrics. */
   private static completeFailure(metrics: IBankMetrics, error: Error): IBankMetrics {
     MetricsService.finishMetrics(metrics, 'failure');
-    const safeMsg = error.message ? MetricsService.redactSensitive(error.message) : '';
-    metrics.error = safeMsg ? `${error.name}: ${safeMsg}` : error.name;
+    const name = redactSecrets(error.name);
+    const safeMsg = error.message ? redactSecrets(error.message) : '';
+    metrics.error = safeMsg ? `${name}: ${safeMsg}` : name;
     return metrics;
-  }
-  /** Redacts sensitive credential patterns from a free-text string.
-   * Matches `key=value` / `key: value` where key is a known sensitive
-   * keyword; replaces value with `[REDACTED]`. Does not redact bare
-   * keyword occurrences (e.g. `AuthenticationError` is preserved) per
-   * `logging-pii-guidlines.md` §1 preventive-masking rule.
-   * @param text input string to redact.
-   * @returns redacted string. */
-  private static redactSensitive(text: string): string {
-    const re = /\b(password|token|secret|auth(?:orization)?|creditcard|cvv)\s*[=:]\s*\S+/gi;
-    return text.replace(re, (_match, key: string) => `${key}=[REDACTED]`);
   }
   /** Marks metrics complete.
    * @param metrics bank metrics.
