@@ -53,19 +53,20 @@ This bank **requires** 2FA on every login.
 }
 ```
 
-After an SMS login the importer saves the bank's long-term token in
-`bank-tokens.json` on the data volume. The logs never show it. The importer
-does not reuse the saved token yet, so to skip the SMS on later runs, copy
-it into `otpLongTermToken` yourself and keep `twoFactorAuth: true`. See
-[Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) for the steps.
+After the first SMS login the importer saves the bank's long-term token in
+`bank-tokens.json` on the data volume and sends it on later runs, so they
+skip the SMS. Keep `twoFactorAuth: true`: when the bank refuses the token, the
+importer logs in with one SMS and saves the new one. The logs never show the
+token. Changing the email or renaming the `banks` entry costs one SMS. See
+[Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token).
 
 For automated SMS forwarding, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ## Known gotchas
 
-`twoFactorAuth: true` is **always required** on first login. Keep it on after
-you set `otpLongTermToken`: without it the importer cannot ask for a code when
-the bank refuses the token.
+`twoFactorAuth: true` is **always required** on first login. Keep it on
+afterwards: without it the importer cannot ask for a code when the bank
+refuses the saved token, and the run fails.
 
 ## See also
 

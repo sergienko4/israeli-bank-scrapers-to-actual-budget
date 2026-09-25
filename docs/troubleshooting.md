@@ -34,9 +34,15 @@ cap_add:
 
 **Symptom:** every import asks for an OTP, even for banks that issue a long-term token (OneZero, Pepper and PayBox).
 
-**Cause:** the importer saves the long-term token after each SMS login, in `bank-tokens.json` on the data volume, but does not reuse it yet. The logs never show the token.
+**Cause:** the importer saves the long-term token after each SMS login, in `bank-tokens.json` on the data volume, and sends it on the next run. An SMS every run means the token is not saved or not sent. The log lines in [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) say which:
 
-**Fix:** copy the saved token into that bank's `otpLongTermToken` and keep `twoFactorAuth: true`; see [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token). If the SMS comes back later, the bank refused the configured token and the importer saved a new one; copy it again.
+- `Could not store the long-term token`: the warning names the cause, most often a data volume that is not writable (`EROFS`, `EACCES`). Mount `/app/data` read/write, or point `BANK_TOKENS_PATH` at a writable file.
+- `belongs to another login`: the entry's email or phone number changed. That costs one SMS, then the new token is used.
+- `The token file is damaged`: the importer sets the file aside when it saves the next token, so this costs at most one SMS.
+- `Could not read the long-term token`: the warning names the cause, such as a permission error. Fix it so the importer can read and write the file.
+- Two `banks` entries that log in to the same account: each SMS login makes the bank refuse the other entry's token. Keep one entry per login.
+
+**Fix:** keep `twoFactorAuth: true` so a refused token costs one SMS, not a failed run. The logs never show the token.
 
 Better still: [auto-forward OTP codes from your phone](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md) so no manual input is needed.
 

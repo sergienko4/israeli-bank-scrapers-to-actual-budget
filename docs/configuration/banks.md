@@ -101,36 +101,67 @@ Any bank that shows an SMS verification screen supports `twoFactorAuth`. The Tel
 |--------|---------|-------------|
 | `twoFactorAuth` | `false` | Enable 2FA flow for this bank |
 | `twoFactorTimeout` | `300` | Seconds to wait for OTP reply before failing |
-| `otpLongTermToken` | — | Long-term token that skips the SMS on future logins (OneZero, Pepper and PayBox). See [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) |
+| `otpLongTermToken` | — | Optional (OneZero, Pepper and PayBox). The importer saves and reuses the long-term token by itself; set this only to bring one from another install. See [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) |
 
 For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ### Long-term token
 
-OneZero, Pepper and PayBox return a long-term token after an SMS login. When
-the token is set as `otpLongTermToken`, later logins skip the SMS.
+OneZero, Pepper and PayBox return a long-term token after an SMS login. The
+importer saves it and sends it on later logins, so they skip the SMS. You do
+not need to set anything.
 
-- The importer saves the token after every login of these banks, in
-  `bank-tokens.json` on the data volume (`/app/data`, or the absolute path in
-  `BANK_TOKENS_PATH`). Only the importer's user can read the file.
-- The logs never show the token: log lines and alerts mask it.
-- The importer does not read the saved token back yet, so you still set
-  `otpLongTermToken` yourself:
-  1. Run one import with `twoFactorAuth: true` and answer the SMS prompt.
-  2. Open `bank-tokens.json`, for example with
-     `docker exec <importer container> cat /app/data/bank-tokens.json` (the
-     Compose file names the container `israeli-bank-importer`).
-  3. Find the entry named `<bank id>:<banks entry name>`, such as
-     `onezero:oneZero` for a `banks` entry named `oneZero`, and copy its
-     `token` value into that bank's `otpLongTermToken` (in `config.json`,
-     `credentials.json` or the web portal). The next run uses it.
-- Keep `twoFactorAuth: true`. Without it the importer cannot ask for a code
-  when the bank refuses the token.
-- Each SMS login creates a new token, and the bank stops accepting the one
-  before it. If the bank refuses your configured token, the importer logs in
-  with an SMS and saves the new token; copy it again.
-- The file holds live login tokens. Do not paste its contents into issues or
-  chats.
+- **Where it is saved:** `bank-tokens.json` on the data volume (`/app/data`,
+  or the absolute path in `BANK_TOKENS_PATH`). The volume must be writable.
+  Only the importer's user can read the file.
+- **Which token a login sends:** the token saved for this `banks` entry. If
+  none is saved yet, the entry's `otpLongTermToken`. Otherwise none, and the
+  bank asks for an SMS; the token from that login is saved and used from then
+  on.
+- **Each token belongs to one login.** The importer records which login
+  created each token: the email for OneZero, the phone number for Pepper and
+  PayBox. A Pepper or PayBox token logs in by itself, so sending it for
+  another login would import another account. A token is never sent for a
+  login other than its own:
+  - after you change an entry's email or phone number, the next run logs in
+    with one SMS and saves a token for the new login;
+  - an `otpLongTermToken` that the file saved for another login is not sent.
+- **Renaming a `banks` entry** also costs one SMS. Tokens are saved per entry,
+  under `<bank id>:<entry name>`, such as `onezero:oneZero`.
+- **Keep `twoFactorAuth: true`.** Each SMS login creates a new token, and the
+  bank stops accepting the one before it. When the bank refuses a token, the
+  importer logs in with an SMS and saves the new one. With `twoFactorAuth:
+  false` it cannot ask for a code: a run with no usable token fails and logs
+  how to fix it, and a run whose token the bank refuses fails with
+  `TWO_FACTOR_RETRIEVER_MISSING`.
+- **If the file is damaged or cannot be read**, the configured
+  `otpLongTermToken` is not sent, because the file cannot say whose it is.
+  Tokens the importer can still read from a damaged file keep working;
+  otherwise the run logs in with an SMS. A damaged file is set aside before
+  the next token is saved.
+- **How long a token lasts:** upstream measured one OneZero token valid for
+  ten years. That is one observation, not a promise, and Pepper and PayBox
+  publish none. The bank can refuse a token at any time.
+- **Setting `otpLongTermToken` by hand** is only for bringing a token from
+  another install. Until the importer has saved a token, it cannot tell whose
+  it is, so it trusts a configured token to belong to the entry's own login.
+  Paste only a token that the same login created.
+- The logs never show the token: log lines and alerts mask it. The file holds
+  live login tokens. Do not paste its contents into issues or chats.
+
+To see what a run did with the token, look for these log lines (`<key>` is
+the `<bank id>:<entry name>` above):
+
+| Log line | Meaning |
+|---|---|
+| `Using the stored long-term token for <key>` | The saved token was sent. |
+| `Using the configured long-term token for <key>` | `otpLongTermToken` was sent, because nothing is saved for the entry yet. |
+| `Stored the long-term token for <key>` | A new token was saved. |
+| `The stored long-term token for <key> belongs to another login` | The email or phone number changed; the run logs in with one SMS. |
+| `The configured long-term token for <key> belongs to another login` | `otpLongTermToken` was not sent. |
+| `The token file is damaged` or `Could not read the long-term token for <key>` | No token was sent; the warning names the cause. |
+| `No usable long-term token for <key>, and this run cannot ask for an SMS code` | Turn on `twoFactorAuth` for one SMS login, or restore the token file. |
+| `Could not store the long-term token for <key>` | The next run needs an SMS; check that `/app/data` is writable. |
 
 The [token store design](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md)
 covers the file layout and its protections.

@@ -307,7 +307,7 @@ exports[`portal payload identity > serves the manifest unchanged, to full nestin
           "label": "Phone number",
         },
         {
-          "help": "Saved after first 2FA login to skip OTP next time.",
+          "help": "Optional. The importer saves and reuses this token by itself; set it only to bring one from another install.",
           "key": "otpLongTermToken",
           "kind": "secret",
           "label": "OTP long-term token",
