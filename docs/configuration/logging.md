@@ -185,8 +185,8 @@ secret after `Basic` in `token=null,auth=Basic ...`. When a secret key holds an
 object or a list, the rest of the reply is hidden, because the fields inside it
 can be secrets under ordinary names. Masking a line twice gives the same line.
 
-No text is kept because of how it looks: the masker decides by the key alone.
-Some of the bank scraper's failure codes end in a secret word, such as
+No text is kept because of how it looks: after a key, the masker decides by
+the key alone. Some of the bank scraper's failure codes end in a secret word, such as
 `INVALID_PASSWORD` or `INVALID_PHONE_NUMBER`, so the importer joins a code to
 the bank's own text with a dash, as in
 `INVALID_PASSWORD — Form: Invalid username or code`, and the masker never reads
@@ -197,8 +197,23 @@ history and in `/logs`. The scraper's own reasons for a phone number it cannot
 use start with the field's name, as in
 `phoneNumber: must start with country code 972`, so the word after it is hidden
 like any phone value: `phoneNumber=[REDACTED] start with country code 972`.
-The masker only hides a value after a key; it does not look for a secret in
-the text around it.
+
+A bank can also quote a credential back with no key in front of it, as the
+visible text of its login form's error. So the importer hides every credential
+it holds wherever it appears, with a key or without one:
+`INVALID_PASSWORD — <your user code> is not a valid login` is written as
+`INVALID_PASSWORD — [REDACTED] is not a valid login`. Every secret field in
+the config, the same fields the portal masks and `credentials.json` holds, is
+added to this list when the config is loaded or saved, and so is every
+long-term token the token store reads or is about to write. Each is matched as
+written, as a JSON string escapes it and percent-encoded in an address, in any
+letter case. A phone number is also matched in its `972` form and as its nine
+national digits, which every form a bank sends contains, so `+972501234567` is
+written as `+[REDACTED]`. A value shorter than four characters is not matched
+as bare text, as that would hide those characters in every line, but it is
+still hidden after its key. The token file is read by the import run, not by
+the Telegram bot, so the bot's `/logs` and history replies know a stored token
+only from records that the run masked as it wrote them.
 
 Structured log fields follow the same keys, in any letter case and at any
 depth: a field named `authToken` or `Authorization` is written as
