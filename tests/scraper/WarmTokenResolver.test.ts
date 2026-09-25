@@ -43,6 +43,12 @@ interface IResolved {
   readonly logger: SpyLogger;
 }
 
+/** A configured token, and the other entries the file holds beside the one under test. */
+interface ISeedArrangement {
+  readonly seed: unknown;
+  readonly others: Record<string, unknown>;
+}
+
 /** How a case wires one resolution. */
 interface IResolveSetup {
   /** The configured `otpLongTermToken`; none unless given. */
@@ -101,18 +107,18 @@ function everythingLogged(logger: SpyLogger): string {
   return JSON.stringify(calls);
 }
 
-/** One logged line: its level and its text. */
-type LoggedLine = readonly [level: keyof ILogger, message: string];
+/** One logged line: its level, its text and any context passed with it. */
+type LoggedLine = readonly [level: keyof ILogger, ...args: Parameters<ILogger['info']>];
 
 /**
  * Lists every line a resolution logged at any level, so a case can pin all of them.
  * @param logger - Logger the resolution used.
- * @returns Each call's level and message, level by level.
+ * @returns Each call's level and every argument, level by level.
  */
 function linesLogged(logger: SpyLogger): LoggedLine[] {
   const levels = ['debug', 'info', 'warn', 'error'] as const;
   return levels.flatMap((level) =>
-    logger[level].mock.calls.map(([message]): LoggedLine => [level, message]));
+    logger[level].mock.calls.map((args): LoggedLine => [level, ...args]));
 }
 
 /**
@@ -159,6 +165,32 @@ describe('resolveWarmToken', () => {
       const { bankConfig } = resolveOver(store, { seed: fakeToken() });
 
       expect(bankConfig.otpLongTermToken).toBe(stored);
+    });
+
+    const unsendableSeeds = [
+      { why: 'is not text', arrange: (): ISeedArrangement => ({ seed: 12_345, others: {} }) },
+      {
+        why: 'belongs to another login',
+        arrange: (): ISeedArrangement => {
+          const seed = fakeToken();
+          return { seed, others: { 'onezero:other': { token: seed, capturedAt: CAPTURED_AT, login: OTHER_LOGIN } } };
+        },
+      },
+    ];
+
+    it.each(unsendableSeeds)('sends the stored token, silent on a configured one that $why', ({ arrange }) => {
+      const { store, fileSystem } = makeStore();
+      const { seed, others } = arrange();
+      const stored = fakeToken();
+      seedRecords(fileSystem, {
+        ...others,
+        [STORE_KEY]: { token: stored, capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+      });
+
+      const { bankConfig, logger } = resolveOver(store, { seed });
+
+      expect(bankConfig.otpLongTermToken).toBe(stored);
+      expect(linesLogged(logger)).toEqual([['info', `  🔐 Using the stored long-term token for ${STORE_KEY}`]]);
     });
 
     it('sends the stored token even when another entry in the file is damaged', () => {
@@ -363,11 +395,14 @@ describe('resolveWarmToken', () => {
   });
 
   describe('what it returns', () => {
-    it('leaves the config entry it was given untouched', () => {
+    it.each([
+      { why: 'it removes the configured token', login: NO_LOGIN, sendsSeed: false },
+      { why: 'it sends the configured token as given', login: ACCOUNT_LOGIN, sendsSeed: true },
+    ])('returns a new config entry and leaves the given one untouched when $why', ({ login, sendsSeed }) => {
       const { store } = makeStore();
       const logger = spyLogger();
       const params: IAuthFlowCaptureParams = {
-        storeKey: STORE_KEY, companyType: CompanyTypes.OneZero, login: NO_LOGIN, store, logger,
+        storeKey: STORE_KEY, companyType: CompanyTypes.OneZero, login, store, logger,
       };
       const seed = fakeToken();
       const bankConfig = configWith(seed);
@@ -375,6 +410,7 @@ describe('resolveWarmToken', () => {
       const resolved = resolveWarmToken(params, { bankConfig, canAskForOtp: true });
 
       expect(resolved).not.toBe(bankConfig);
+      expect(resolved.otpLongTermToken).toBe(sendsSeed ? seed : undefined);
       expect(bankConfig.otpLongTermToken).toBe(seed);
     });
 
@@ -392,12 +428,13 @@ describe('resolveWarmToken', () => {
       expect(rest).toEqual(expected);
     });
 
-    it('hides the configured token it sends from every output', () => {
+    it.each([true, false])('hides the configured token it sends from every output (canAskForOtp: %s)', (canAskForOtp) => {
       const { store } = makeStore();
       const seed = fakeToken();
 
-      resolveOver(store, { seed });
+      const { bankConfig } = resolveOver(store, { seed, canAskForOtp });
 
+      expect(bankConfig.otpLongTermToken).toBe(seed);
       expect(redactSecrets(`provider said ${seed} back`)).not.toContain(seed);
     });
   });
