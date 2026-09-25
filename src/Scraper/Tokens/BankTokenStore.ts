@@ -55,6 +55,12 @@ export interface IBankTokenStore {
    * @returns Whether the file was replaced, or why it was not.
    */
   write: (storeKey: string, token: string) => Procedure<IBankTokenWrite>;
+
+  /**
+   * Deletes staged token files an earlier run was killed before cleaning up.
+   * @returns How many were removed, or why the directory could not be read.
+   */
+  sweepStagedLeftovers: () => Procedure<ISweepReport>;
 }
 
 /**
@@ -155,10 +161,11 @@ export default class BankTokenStore implements IBankTokenStore {
    * Deletes staged token files an earlier run was killed before cleaning up.
    *
    * <p>Each one holds a live credential, and a crashed process never returns
-   * to remove it. Whoever owns the store should call this at startup and on
-   * every scheduled run: a file staged just before a restart is still inside
-   * the grace period at startup, and a warm run that writes nothing never
-   * commits. The store itself only collects leftovers after its own commits.
+   * to remove it. Whoever owns the store should call this on every run, not
+   * only after a restart: a file staged just before a restart is still inside
+   * the grace period when the process comes back, and a warm run that writes
+   * nothing never commits. The store itself only collects leftovers after its
+   * own commits.
    * @returns How many were removed, or why the directory could not be read.
    */
   public sweepStagedLeftovers(): Procedure<ISweepReport> {
