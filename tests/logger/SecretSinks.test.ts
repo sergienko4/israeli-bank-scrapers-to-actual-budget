@@ -29,6 +29,7 @@ import redactSecrets, { isSecretKey } from '../../src/Logger/SecretRedaction.js'
 import { isFail } from '../../src/Scrapers/Pipeline/Index.js';
 import scrapeStage from '../../src/Scrapers/Pipeline/Steps/Bank/ScrapeStage.js';
 import type { IBankOpts } from '../../src/Scrapers/Pipeline/Steps/Bank/Shared.js';
+import buildBanksFailedMessage from '../../src/Scrapers/Pipeline/Steps/BanksFailedMessage.js';
 import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
 import type { IBankMetrics, IImportSummary } from '../../src/Services/MetricsService.js';
@@ -36,6 +37,7 @@ import { MetricsService } from '../../src/Services/MetricsService.js';
 import { formatSummaryMessage } from '../../src/Services/Notifications/TelegramFormatter.js';
 import { formatWebhookSummary } from '../../src/Services/Notifications/Webhook/Index.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import { fakeBankQuarantineEntry } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 /** Text outside the secret, which every output must still carry. */
@@ -536,6 +538,17 @@ function loggedLines(texts: readonly string[], write: (logger: pino.Logger, text
   return lines;
 }
 
+/**
+ * Builds the notice for a run whose one bank failed, as the pipeline runner
+ * masks it before logging and sending it.
+ * @param text - The bank's error message.
+ * @returns The notice that reaches the log and the error alert.
+ */
+function failedNotice(text: string): string {
+  const quarantined = [fakeBankQuarantineEntry({ bankName: 'oneZero', error: new Error(text) })];
+  return redactSecrets(buildBanksFailedMessage({ successful: [], quarantined, totalBanks: 1 }));
+}
+
 /** Each output a failed scrape's message reaches, and what it writes for each case. */
 const FAILURE_SINKS: readonly [string, (texts: readonly string[]) => string[], boolean][] = [
   ['the text masker', texts => texts.map(text => redactSecrets(text)), true],
@@ -553,6 +566,7 @@ const FAILURE_SINKS: readonly [string, (texts: readonly string[]) => string[], b
     return result.success ? result.data[0].banks.map(bank => bank.error ?? '') : [];
   }, true],
   ['the /logs replay', texts => new LogFileReader(seedLogDir(texts)).getRecent(texts.length), true],
+  ['the all-banks-failed notice', texts => texts.map(failedNotice), false],
 ];
 
 describe('a provider failure code reaches every output readable', () => {
@@ -626,7 +640,8 @@ describe('a letters-only secret after a failure code reaches no output', () => {
 /**
  * Credentials as a config holds them, each with characters an output may
  * escape or encode: HTML marks, a quote and a backslash, an address, Hebrew,
- * the dots of a long-term token, digits and a formatted phone number.
+ * the dots of a long-term token, digits, two spaces in a row and a formatted
+ * phone number.
  */
 const HELD = {
   clientSecret: 'Zk4&Wq8<Rt2>Pm6',
@@ -635,6 +650,7 @@ const HELD = {
   username: 'סיסמהZr8-Yu3',
   otpLongTermToken: 'eyJhbGc.Pq7Rs3.Uv6Wx1',
   card6Digits: '738291',
+  password: 'Kd2  Vn5 Bx8',
   phoneNumber: '052-765-4321',
 };
 
@@ -721,5 +737,42 @@ describe('a credential a bank quotes back with no key reaches no output', () => 
   it('a log line too torn to parse hides it as its JSON text escapes it', () => {
     const torn = ECHO_CASES.map(({ text }) => JSON.stringify({ level: 30, msg: text }).slice(0, -2));
     expect(echoLeaks(torn.map(line => redactLogLine(line)), false)).toEqual([]);
+  });
+});
+
+/** The characters of a reason the all-banks-failed notice keeps before its ellipsis. */
+const NOTICE_REASON_KEPT = 159;
+
+/** What the scrape stage writes before a bank's prose, which the notice keeps. */
+const NOTICE_LEAD = 'INVALID_PASSWORD \u2014 Form: ';
+
+/**
+ * Places a credential so the notice's cut falls inside it.
+ * @param value - A held credential.
+ * @param shown - How many of its characters fall before the cut.
+ * @returns A reason whose cut splits the credential.
+ */
+function acrossTheCut(value: string, shown: number): string {
+  const padding = '.'.repeat(NOTICE_REASON_KEPT - NOTICE_LEAD.length - shown);
+  return `${NOTICE_LEAD}${padding}${value} at this branch`;
+}
+
+/** Each held credential other than the phone, split by the cut after its first three characters and before its last. */
+const CUT_CASES = Object.entries(HELD).filter(([key]) => key !== 'phoneNumber').flatMap(([, value]) =>
+  [3, value.length - 1].map(shown => ({ text: acrossTheCut(value, shown), shownPart: value.slice(0, shown) })));
+
+describe('a held credential the all-banks-failed notice would cut reaches no output', () => {
+  it('cuts every credential where a leak check can see its first part', () => {
+    const uncut = CUT_CASES.filter(({ text, shownPart }) => text.indexOf(shownPart) + shownPart.length !== NOTICE_REASON_KEPT);
+    expect(uncut).toEqual([]);
+  });
+
+  it('shows no part of it, and keeps the failure code', () => {
+    const leaks = CUT_CASES.flatMap(({ text, shownPart }) => {
+      const notice = failedNotice(text);
+      const safe = !notice.includes(shownPart) && notice.includes(NOTICE_LEAD);
+      return safe ? [] : [`${JSON.stringify(text)} -> ${JSON.stringify(notice)}`];
+    });
+    expect(leaks).toEqual([]);
   });
 });

@@ -10,6 +10,7 @@
  */
 
 import type { IBankQuarantineEntry, IBankResultsState } from '../Index.js';
+import { redactSecrets } from '../Index.js';
 
 /** Maximum failed banks named before the message is elided. */
 const LISTED_BANK_CAP = 5;
@@ -43,11 +44,16 @@ function condenseReason(raw: string): string {
 
 /**
  * Renders one quarantined bank as a `name: reason` fragment.
+ *
+ * <p>The reason is masked before it is condensed: a credential that the cut
+ * splits, or whose spaces the collapse joins, no longer matches the value it
+ * is masked as.
  * @param entry - Quarantine entry recorded for the failed bank.
  * @returns Single-line description of the bank and its failure reason.
  */
 function describeBank(entry: IBankQuarantineEntry): string {
-  const reason = condenseReason(entry.error.message);
+  const masked = redactSecrets(entry.error.message);
+  const reason = condenseReason(masked);
   return `${entry.bankName}: ${reason}`;
 }
 
