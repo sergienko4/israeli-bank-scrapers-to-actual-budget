@@ -20,10 +20,11 @@ import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import registerConfigSecrets from '../../src/Config/ConfigSecretValues.js';
 import { ErrorFormatter } from '../../src/Errors/ErrorFormatter.js';
 import { SCRAPER_ERROR_ADVICE } from '../../src/Errors/ScraperErrorMessages.js';
 import LogFileReader from '../../src/Logger/LogFileReader.js';
-import { baseOptions } from '../../src/Logger/LoggerOptions.js';
+import { baseOptions, redactLogLine } from '../../src/Logger/LoggerOptions.js';
 import redactSecrets, { isSecretKey } from '../../src/Logger/SecretRedaction.js';
 import { isFail } from '../../src/Scrapers/Pipeline/Index.js';
 import scrapeStage from '../../src/Scrapers/Pipeline/Steps/Bank/ScrapeStage.js';
@@ -34,6 +35,7 @@ import type { IBankMetrics, IImportSummary } from '../../src/Services/MetricsSer
 import { MetricsService } from '../../src/Services/MetricsService.js';
 import { formatSummaryMessage } from '../../src/Services/Notifications/TelegramFormatter.js';
 import { formatWebhookSummary } from '../../src/Services/Notifications/Webhook/Index.js';
+import type { IImporterConfig } from '../../src/Types/Index.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 /** Text outside the secret, which every output must still carry. */
@@ -618,5 +620,106 @@ describe('a letters-only secret after a failure code reaches no output', () => {
 
   it.each(FAILURE_SINKS)('%s hides it, including a record an older release stored', (_sink, outputsFor, keepsText) => {
     expect(lettersLeaks(OLD_CODE_TEXTS, outputsFor(OLD_CODE_TEXTS), keepsText)).toEqual([]);
+  });
+});
+
+/**
+ * Credentials as a config holds them, each with characters an output may
+ * escape or encode: HTML marks, a quote and a backslash, an address, Hebrew,
+ * the dots of a long-term token, digits and a formatted phone number.
+ */
+const HELD = {
+  clientSecret: 'Zk4&Wq8<Rt2>Pm6',
+  userCode: String.raw`Hy3"Ld5\Nb7'Cv1`,
+  email: 'Xj9.Tg4+Fw2@Qe5.io',
+  username: 'סיסמהZr8-Yu3',
+  otpLongTermToken: 'eyJhbGc.Pq7Rs3.Uv6Wx1',
+  card6Digits: '738291',
+  phoneNumber: '052-765-4321',
+};
+
+/**
+ * Lists the runs of ASCII letters and digits in a value, which no escaping or
+ * encoding changes, and its runs of other letters, as written. Finding one in
+ * an output means the value got through.
+ * @param value - A held credential.
+ * @returns Its runs of three or more.
+ */
+function coresOf(value: string): string[] {
+  return value.match(/[A-Za-z0-9]{3,}|[^\x00-\x7f]{3,}/gu) ?? [];
+}
+
+/** What a bank quotes back, and the runs of it no output may show. */
+const ECHOES: readonly { echo: string; cores: readonly string[] }[] = [
+  ...Object.entries(HELD).filter(([key]) => key !== 'phoneNumber').map(([, value]) => ({
+    echo: value, cores: coresOf(value),
+  })),
+  { echo: HELD.email.toUpperCase(), cores: coresOf(HELD.email) },
+  ...['+972527654321', '972-527654321', '972527654321', '0527654321'].map(echo => ({
+    echo, cores: ['527654321'],
+  })),
+];
+
+/** Where a provider can put a quoted credential in its failure. */
+const ECHO_PLACEMENTS: readonly ((echo: string) => [string, string])[] = [
+  echo => ['INVALID_PASSWORD', echo],
+  echo => ['INVALID_PASSWORD', `Form: no user ${echo} at this branch`],
+  echo => ['GENERIC', `Login failed with invalid error \u2014 url: https://bank.example/login?u=${encodeURIComponent(echo)}`],
+  echo => ['GENERIC', `Auth API gateway (401): "${echo}"`],
+];
+
+/** Each quoted credential in each placement, as the scrape stage writes it. */
+const ECHO_CASES = await Promise.all(ECHOES.flatMap(({ echo, cores }) => ECHO_PLACEMENTS.map(async place => {
+  const [code, prose] = place(echo);
+  const text = await stageMessage(code, prose);
+  return { code, cores, text: `${text}, ${CANARY}` };
+})));
+
+/**
+ * Whether a text shows any run of a credential, in any letter case.
+ * @param text - An input or an output.
+ * @param cores - The credential's runs.
+ * @returns True when one of them is in the text.
+ */
+function showsCore(text: string, cores: readonly string[]): boolean {
+  const folded = text.toLowerCase();
+  return cores.some(core => folded.includes(core.toLowerCase()));
+}
+
+/**
+ * Lists the cases whose output shows a run of the credential, in any letter
+ * case, or lost the failure code or the canary.
+ * @param outputs - What the sink produced for each case, in case order.
+ * @param keepsText - Whether this sink passes the text on.
+ * @returns A readable line per failing case; empty when the sink is safe.
+ */
+function echoLeaks(outputs: readonly string[], keepsText: boolean): string[] {
+  expect(outputs).toHaveLength(ECHO_CASES.length);
+  return ECHO_CASES.flatMap(({ code, cores, text }, index) => {
+    const output = outputs[index];
+    const leaked = showsCore(output, cores);
+    const lost = keepsText && !(output.includes(`${code} \u2014 `) && output.includes(CANARY));
+    if (!leaked && !lost) return [];
+    return [`${leaked ? 'LEAK' : 'LOST'} ${JSON.stringify(text)} -> ${JSON.stringify(output)}`];
+  });
+}
+
+describe('a credential a bank quotes back with no key reaches no output', () => {
+  registerConfigSecrets({ banks: { oneZero: HELD } } as unknown as IImporterConfig);
+
+  it('quotes every held credential in every placement, where a leak check can see it', () => {
+    expect(ECHO_CASES).toHaveLength(ECHOES.length * ECHO_PLACEMENTS.length);
+    const unseen = ECHO_CASES.filter(({ text, cores }) => !showsCore(text, cores));
+    expect(unseen).toEqual([]);
+  });
+
+  it.each(FAILURE_SINKS)('%s hides it, including a record an older release stored', (_sink, outputsFor, keepsText) => {
+    const texts = ECHO_CASES.map(({ text }) => text);
+    expect(echoLeaks(outputsFor(texts), keepsText)).toEqual([]);
+  });
+
+  it('a log line too torn to parse hides it as its JSON text escapes it', () => {
+    const torn = ECHO_CASES.map(({ text }) => JSON.stringify({ level: 30, msg: text }).slice(0, -2));
+    expect(echoLeaks(torn.map(line => redactLogLine(line)), false)).toEqual([]);
   });
 });
