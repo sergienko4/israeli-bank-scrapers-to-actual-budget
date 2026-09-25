@@ -21,8 +21,9 @@ const MASK = '[REDACTED]';
 
 /**
  * The fewest characters a value needs to be masked as bare text. A shorter
- * one would hide that run of characters in every line it occurs in, and the
- * key rule still hides it after its key.
+ * one would hide that run of characters in every line it occurs in. It is
+ * hidden only after one of the key rule's keys, so a short value sent under
+ * another name, such as `num`, can show.
  */
 const MIN_LENGTH = 4;
 

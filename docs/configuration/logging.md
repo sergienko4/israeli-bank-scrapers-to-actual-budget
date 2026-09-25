@@ -208,12 +208,24 @@ added to this list when the config is loaded or saved, and so is every
 long-term token the token store reads or is about to write. Each is matched as
 written, as a JSON string escapes it and percent-encoded in an address, in any
 letter case. A phone number is also matched in its `972` form and as its nine
-national digits, which every form a bank sends contains, so `+972501234567` is
-written as `+[REDACTED]`. A value shorter than four characters is not matched
-as bare text, as that would hide those characters in every line, but it is
-still hidden after its key. The token file is read by the import run, not by
-the Telegram bot, so the bot's `/logs` and history replies know a stored token
-only from records that the run masked as it wrote them.
+national digits, which every form a bank sends contains, so no form of it
+shows: `+972501234567` is written as `[REDACTED]` or `+[REDACTED]`, depending
+on how the config writes the number. A value shorter than four characters is
+not matched as bare text, as that would hide those characters in every line.
+It is hidden only after one of the keys above, so a short value sent under
+another name, such as `num` or `userCode`, can show. The token file is read by
+the import run, not by the Telegram bot, so the bot's `/logs` and history
+replies know a stored token only from records that the run masked as it wrote
+them.
+
+A value is matched inside longer words too, so that no part of it shows, such
+as a phone's national digits after its leading `0`. So a credential that is
+also an ordinary word is hidden wherever that word appears. With the user code
+`Password` held, `INVALID_PASSWORD` is written as `INVALID_[REDACTED]`, and the
+`/status`, `/scan` and `/retry` replies, which read the masked history, add no
+advice for it. A held value that is part of a secret key still leaves the key's
+value hidden: with `secret` held, `client_secret=...` is written as
+`client_[REDACTED]=[REDACTED]`.
 
 Structured log fields follow the same keys, in any letter case and at any
 depth: a field named `authToken` or `Authorization` is written as
