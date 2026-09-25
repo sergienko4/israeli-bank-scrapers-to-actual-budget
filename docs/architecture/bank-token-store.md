@@ -113,7 +113,7 @@ A process killed mid-write can leave a staged file holding a live token.
 store's lifecycle should call it on every run, not only after a restart: a
 file staged just before a restart is still younger than an hour when the
 process comes back, and a warm run that writes nothing never commits. Commits
-also sweep afterwards. [Wiring](#wiring) says where the importer calls it.
+also sweep afterwards. [Wiring](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#wiring) says where the importer calls it.
 
 ## Wiring
 
