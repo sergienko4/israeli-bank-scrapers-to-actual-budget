@@ -66,8 +66,8 @@ describe('registerConfigSecrets', () => {
     ['in local form', '0527654321'],
     ['as national digits', '527654321'],
   ])('hides a phone number %s', (_form, wire) => {
-    const phone = { banks: { oneZero: { phoneNumber: '+972 52-765-4321' } } };
-    registerConfigSecrets(phone as unknown as IImporterConfig);
+    const oneZero = fakeBankConfig({ phoneNumber: '+972 52-765-4321' });
+    registerConfigSecrets(fakeImporterConfig({ banks: { oneZero } }));
     const masked = redactSecrets(echoed(wire));
     expect(masked).not.toContain('527654321');
     expect(masked).not.toContain('52-765-4321');
