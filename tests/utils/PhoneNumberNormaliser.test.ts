@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import normalisePhoneNumber from '../../src/Utils/PhoneNumberNormaliser.js';
+import normalisePhoneNumber, { toProviderPhone } from '../../src/Utils/PhoneNumberNormaliser.js';
 
 describe('normalisePhoneNumber', () => {
   it('TC-NORM-001 — strips leading plus', () => {
@@ -63,5 +63,22 @@ describe('normalisePhoneNumber', () => {
   it('TC-NORM-010 — rejects too-short input', () => {
     const result = normalisePhoneNumber('972123');
     expect(result.success).toBe(false);
+  });
+});
+
+describe('toProviderPhone', () => {
+  it.each([
+    ['+972527654321', '972527654321'],
+    ['052-765-4321', '972527654321'],
+    ['972 52 765 4321', '972527654321'],
+  ])('sends %s in canonical form', (raw, expected) => {
+    expect(toProviderPhone(raw)).toBe(expected);
+  });
+
+  it.each([
+    ['+44 7700-900123', '447700900123'],
+    ['972-3-1234567', '97231234567'],
+  ])('sends %s stripped when it is not a canonical Israeli mobile', (raw, expected) => {
+    expect(toProviderPhone(raw)).toBe(expected);
   });
 });
