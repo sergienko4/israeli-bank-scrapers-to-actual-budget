@@ -13,6 +13,9 @@
  * instead would put a masker into each one's wiring.
  */
 
+import type { IMaskSpan } from './MaskSpans.js';
+import writeSpans, { matchesIn } from './MaskSpans.js';
+
 /** What a masked value becomes: the same mark the key rule writes. */
 const MASK = '[REDACTED]';
 
@@ -76,6 +79,16 @@ function buildPattern(values: ReadonlySet<string>): RegExp {
   return new RegExp(source, 'gi');
 }
 
+/**
+ * Turns one match of a known value into the span that masks it.
+ * @param match - A match of the known values' pattern.
+ * @returns The stretch it covers, written as the mask.
+ */
+function toMaskSpan(match: RegExpExecArray): IMaskSpan {
+  const start = match.index;
+  return { start, end: start + match[0].length, text: MASK };
+}
+
 /** A growing list of secret values, and the text masker they make. */
 export class SecretValues {
   private readonly _values = new Set<string>();
@@ -95,13 +108,24 @@ export class SecretValues {
   }
 
   /**
+   * Finds every known value in a text, and any mask already there.
+   * @param text - Any text an output is about to write.
+   * @returns A span for each, which writes the mask.
+   */
+  public find(text: string): IMaskSpan[] {
+    if (this._values.size === 0) return [];
+    const matches = matchesIn(text, this._pattern);
+    return matches.map(toMaskSpan);
+  }
+
+  /**
    * Replaces every known value in a text with the mask.
    * @param text - Any text an output is about to write.
    * @returns The text with each known value masked.
    */
   public mask(text: string): string {
-    if (this._values.size === 0) return text;
-    return text.replace(this._pattern, MASK);
+    const spans = this.find(text);
+    return writeSpans(text, spans);
   }
 }
 
@@ -118,10 +142,10 @@ export function registerSecretValues(values: readonly string[]): number {
 }
 
 /**
- * Masks every secret value this process holds in a text.
+ * Finds every secret value this process holds in a text.
  * @param text - Any text an output is about to write.
- * @returns The text with each known value masked.
+ * @returns A span for each, which writes the mask.
  */
-export function maskSecretValues(text: string): string {
-  return PROCESS_VALUES.mask(text);
+export function findSecretValues(text: string): IMaskSpan[] {
+  return PROCESS_VALUES.find(text);
 }

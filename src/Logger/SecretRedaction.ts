@@ -8,7 +8,9 @@
  * one of them.
  */
 
-import { maskSecretValues } from './SecretValues.js';
+import type { IMaskSpan } from './MaskSpans.js';
+import writeSpans, { matchesIn } from './MaskSpans.js';
+import { findSecretValues } from './SecretValues.js';
 
 /**
  * Spells a key or scheme word so an invisible mark may sit between any two of
@@ -253,20 +255,30 @@ interface ISecretParts {
 }
 
 /**
- * Writes the masked form of one secret match.
+ * Writes what follows a secret key once its value is masked.
  *
  * <p>A value closed by its quote keeps its quotes and the key's separator, so
  * `{"idToken":"x"}` stays valid JSON as `{"idToken":"[REDACTED]"}` and masking
  * it again writes the same text. Any other value, including one cut off
  * before its closing quote, is written as `key=[REDACTED]`.
- * @param args - The replace callback's arguments, whose last is the named
- * groups.
- * @returns The key with its value replaced by `[REDACTED]`.
+ * @param parts - The match's named groups.
+ * @returns The separator and the masked value that replace the key's tail.
  */
-function maskMatch(...args: unknown[]): string {
-  const { key, sep, close } = args.at(-1) as ISecretParts;
-  if (close === undefined) return `${key}=[REDACTED]`;
-  return `${key}${sep}${close}[REDACTED]${close}`;
+function maskedTail(parts: ISecretParts): string {
+  if (parts.close === undefined) return '=[REDACTED]';
+  return `${parts.sep}${parts.close}[REDACTED]${parts.close}`;
+}
+
+/**
+ * Finds the stretch after one secret key that its masked form replaces. The
+ * key itself is left out, so a held value inside it is masked on its own.
+ * @param match - One match of `SECRET_PATTERN`.
+ * @returns The span from the key's end to the match's end.
+ */
+function keyTail(match: RegExpExecArray): IMaskSpan {
+  const parts = match.groups as unknown as ISecretParts;
+  const start = match.index + parts.key.length;
+  return { start, end: match.index + match[0].length, text: maskedTail(parts) };
 }
 
 /**
@@ -288,14 +300,18 @@ export function isSecretKey(name: string): boolean {
  *
  * <p>Two rules apply, per the preventive-masking rule in
  * `logging-pii-guidlines.md` §1. Every value this process holds is masked
- * wherever it appears, with or without a key (see `SecretValues`). Then any
- * other value after a secret key is masked, and the key is kept. Bare
- * keywords are kept, so `AuthenticationError` still reads as the error it
- * is; only a key followed by `=` or `:` loses its value.
+ * wherever it appears, with or without a key (see `SecretValues`). Any other
+ * value after a secret key is masked, and the key is kept. Bare keywords are
+ * kept, so `AuthenticationError` still reads as the error it is; only a key
+ * followed by `=` or `:` loses its value. Both rules read the original text,
+ * and where their stretches overlap the one that starts first is written
+ * (see `MaskSpans`), so a held value that is part of a key, such as `secret`
+ * in `client_secret`, cannot keep the key rule from masking what follows.
  * @param text - Free text that may quote a credential, such as an error.
  * @returns The text with every secret value replaced.
  */
 export default function redactSecrets(text: string): string {
-  const knownMasked = maskSecretValues(text);
-  return knownMasked.replace(SECRET_PATTERN, maskMatch);
+  const tails = matchesIn(text, SECRET_PATTERN).map(keyTail);
+  const values = findSecretValues(text);
+  return writeSpans(text, [...tails, ...values]);
 }
