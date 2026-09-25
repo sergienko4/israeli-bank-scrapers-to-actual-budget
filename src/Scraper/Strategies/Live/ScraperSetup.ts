@@ -6,11 +6,15 @@
 import { existsSync, rmSync } from 'node:fs';
 
 import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
-import { CompanyTypes, createScraper } from '@sergienko4/israeli-bank-scrapers';
+import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 
 import { errorMessage } from '../../../Utils/Index.js';
 import buildCredentials from '../../CredentialsBuilder.js';
 import { buildChromeArgs, getChromeDataDir } from '../../ScraperOptionsBuilder.js';
+import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
+import {
+  attachAuthFlowCapture, buildTokenStoreKey, isApiDirectBank,
+} from '../../Tokens/AuthFlowCapture.js';
 import { BrowserRegistry } from './BrowserRegistry.js';
 import { resolveOtpRetriever } from './OtpRetriever.js';
 import type {
@@ -89,10 +93,12 @@ export function attachBrowserCapture(
 }
 
 /**
- * Assembles provider options including start date and OTP retriever.
+ * Assembles provider options including start date, OTP retriever and token capture.
  * The OTP retriever is conditionally attached based on bank type to avoid
  * double prompts for banks that read from credentials (oneZero, pepper, payBox).
- * @param deps - Strategy dependencies used to resolve Chrome args.
+ * Those same banks mint a durable long-term token, so the capture callback is
+ * attached for exactly the banks the retriever skips.
+ * @param deps - Strategy dependencies used to resolve Chrome args and the token store.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @param otpRetriever - Optional OTP retriever attached for 2FA banks.
  * @returns Provider options passed to createScraper().
@@ -102,7 +108,29 @@ export function buildScraperOptions(
 ): ScraperOptions {
   const options = buildBaseScraperOptions(deps, scrapeOpts);
   attachOtpRetriever(options, otpRetriever, scrapeOpts.companyType);
+  const captureParams = buildTokenCaptureParams(deps, scrapeOpts);
+  attachAuthFlowCapture(options, captureParams);
   return options;
+}
+
+/**
+ * Bundles the account key, token store and logger one capture needs.
+ *
+ * Shared by the login callback, the attempt runner's result backstop and the
+ * leftover sweep, so the callback and the backstop derive the same key and
+ * all three apply the same bank filter.
+ * @param deps - Strategy dependencies exposing the token store.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @returns Parameter bundle accepted by the capture helpers.
+ */
+export function buildTokenCaptureParams(
+  deps: LiveDeps, scrapeOpts: LiveOpts,
+): IAuthFlowCaptureParams {
+  const storeKey = buildTokenStoreKey(scrapeOpts.bankId, scrapeOpts.accountKey);
+  return {
+    storeKey, companyType: scrapeOpts.companyType,
+    store: deps.bankTokens, logger: scrapeOpts.logger,
+  };
 }
 
 /**
@@ -126,21 +154,12 @@ export function buildBaseScraperOptions(deps: LiveDeps, scrapeOpts: LiveOpts): S
 }
 
 /**
- * Banks that read otpCodeRetriever from credentials, not ScraperOptions.
- * Built from the CompanyTypes enum rather than string literals: the enum
- * values are camelCase (`payBox`), so a hand-written PascalCase literal
- * silently never matches and the guard below stops working.
- */
-const CREDS_ONLY_BANKS = new Set<string>([
-  CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox,
-]);
-
-/**
  * Attaches the OTP adapter expected by the provider package.
  * Only attaches for banks that use OtpHandler (beinleumi). Banks that read
  * otpCodeRetriever from credentials (OneZero, Pepper, PayBox) already have
  * it attached by buildCredentials and should NOT get it in ScraperOptions
- * to avoid double OTP prompts.
+ * to avoid double OTP prompts. Those are exactly the API-direct banks, so the
+ * set is shared with the token capture rather than restated.
  * @param target - Provider options object that receives the adapter.
  * @param otpRetriever - Optional OTP retriever attached for 2FA banks.
  * @param companyId - CompanyType enum value to determine if bank uses OtpHandler.
@@ -149,7 +168,7 @@ const CREDS_ONLY_BANKS = new Set<string>([
 export function attachOtpRetriever(
   target: ScraperOptions, otpRetriever: OtpRetriever, companyId: string,
 ): boolean {
-  if (!otpRetriever || CREDS_ONLY_BANKS.has(companyId)) return false;
+  if (!otpRetriever || isApiDirectBank(companyId)) return false;
   target.otpCodeRetriever = otpRetriever;
   return true;
 }

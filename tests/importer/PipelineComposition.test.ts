@@ -36,6 +36,8 @@ import {
   resolveWatchService,
   type IScrapeStrategyInputs,
 } from '../../src/Importer/PipelineComposition.js';
+import ConfigurationError from '../../src/Errors/ConfigurationError.js';
+import BankTokenStore from '../../src/Scraper/Tokens/BankTokenStore.js';
 import { isSuccess } from '../../src/Types/ProcedureHelpers.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
 
@@ -58,13 +60,16 @@ function makeInputs(): IScrapeStrategyInputs {
 describe('PipelineComposition', () => {
   let originalDir: string | undefined;
   let originalFile: string | undefined;
+  let originalTokensPath: string | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
     originalDir = process.env.E2E_MOCK_SCRAPER_DIR;
     originalFile = process.env.E2E_MOCK_SCRAPER_FILE;
+    originalTokensPath = process.env.BANK_TOKENS_PATH;
     delete process.env.E2E_MOCK_SCRAPER_DIR;
     delete process.env.E2E_MOCK_SCRAPER_FILE;
+    delete process.env.BANK_TOKENS_PATH;
   });
 
   afterEach(() => {
@@ -72,6 +77,8 @@ describe('PipelineComposition', () => {
     else process.env.E2E_MOCK_SCRAPER_DIR = originalDir;
     if (originalFile === undefined) delete process.env.E2E_MOCK_SCRAPER_FILE;
     else process.env.E2E_MOCK_SCRAPER_FILE = originalFile;
+    if (originalTokensPath === undefined) delete process.env.BANK_TOKENS_PATH;
+    else process.env.BANK_TOKENS_PATH = originalTokensPath;
   });
 
   describe('NO_OP_WATCH', () => {
@@ -116,6 +123,20 @@ describe('PipelineComposition', () => {
       expect(strategy.opts.noRetryStrategy).toBe(inputs.resilience.noRetryStrategy);
       expect(strategy.opts.timeoutWrapper).toBe(inputs.resilience.timeoutWrapper);
       expect(strategy.opts.notificationService).toBe(inputs.services.notificationService);
+      expect(strategy.opts.bankTokens).toBeInstanceOf(BankTokenStore);
+    });
+
+    it('refuses a relative BANK_TOKENS_PATH at startup, before any scrape', () => {
+      process.env.BANK_TOKENS_PATH = 'data/bank-tokens.json';
+
+      expect(() => buildScrapeStrategy(makeInputs())).toThrow(ConfigurationError);
+    });
+
+    it('never builds the token store for a mock run', () => {
+      process.env.E2E_MOCK_SCRAPER_DIR = '/fake/dir';
+      process.env.BANK_TOKENS_PATH = 'data/bank-tokens.json';
+
+      expect(() => buildScrapeStrategy(makeInputs())).not.toThrow();
     });
   });
 

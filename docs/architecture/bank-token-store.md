@@ -46,15 +46,21 @@ One flat record per bank account, keyed by the store key:
 
 ```json
 {
-  "oneZero": { "token": "…", "capturedAt": "2026-09-23T15:11:00.000Z" },
-  "oneZero:business": { "token": "…", "capturedAt": "2026-09-24T08:30:00.000Z" }
+  "onezero:oneZero": { "token": "…", "capturedAt": "2026-09-23T15:11:00.000Z" },
+  "pepper:pepper": { "token": "…", "capturedAt": "2026-09-24T08:30:00.000Z" }
 }
 ```
 
-The key is `bankId`, or `bankId:<config entry name>` when one bank has several
-accounts. It is stored verbatim: normalising it would put two accounts on one
-entry, and because each mint revokes the previous token, both would then need
-an SMS on every run.
+The key is `<bankId>:<config entry name>`: the registry's bank id, then the
+name of the `banks` entry the scrape came from. The registry trims entry
+names and matches them case-insensitively, so `oneZero`, `onezero` and
+`oneZero` followed by a space are one bank but three accounts, and get three
+keys. Renaming an entry orphans its token, which costs one SMS. A blank or
+missing entry name falls back to `bankId` alone.
+
+The entry name is used verbatim, and the key is stored verbatim: normalising
+either would put two accounts on one entry, and because each mint revokes the
+previous token, both would then need an SMS on every run.
 
 ## Reading
 
@@ -104,11 +110,49 @@ Failures name the store key and never the token.
 
 A process killed mid-write can leave a staged file holding a live token.
 `sweepStagedLeftovers()` removes those older than an hour. Whoever owns the
-store's lifecycle should call it at startup and again on every scheduled run.
-Startup alone is not enough: a file staged just before a restart is still
-younger than an hour when the process comes back, and a warm run that writes
-nothing never commits, so a long-running scheduler would otherwise keep that
-copy of a live token until the next restart. Commits also sweep afterwards.
+store's lifecycle should call it on every run, not only after a restart: a
+file staged just before a restart is still younger than an hour when the
+process comes back, and a warm run that writes nothing never commits. Commits
+also sweep afterwards. [Wiring](#wiring) says where the importer calls it.
+
+## Wiring
+
+`buildScrapeStrategy` in `src/Importer/PipelineComposition.ts` builds one
+store per import process and hands it to the live strategy. Building it
+touches no file, so a run that scrapes only browser banks never opens the
+token file; a malformed `BANK_TOKENS_PATH` still fails the run at startup.
+Mock runs (`E2E_MOCK_SCRAPER_DIR` or `E2E_MOCK_SCRAPER_FILE`) build no store.
+
+For each API-direct scrape, `src/Scraper/Tokens/AuthFlowCapture.ts`:
+
+1. sweeps leftover staging files before the first attempt. Every import,
+   scheduled or on demand, is its own child process, so this runs on every
+   run that can stage a token;
+2. attaches `onAuthFlowComplete` to the provider options. The provider calls
+   it as soon as a login completes, including a login it repeats mid-run
+   because the bank rejected the session, so the new token is stored even if
+   the scrape then fails;
+3. when an attempt returns a result, stores its `persistentOtpToken` as
+   well, in case a path fills it without calling back. The provider fills
+   that field only on success, and a failure the retry policy turns into an
+   error returns no result, so the callback is what keeps a token minted
+   before a failure. The store skips a token it already holds, so after the
+   callback stored a token the backstop writes nothing. After the callback
+   failed to store it, the backstop tries once more, so a store that stays
+   broken warns twice.
+
+`buildTokenCaptureParams` in `src/Scraper/Strategies/Live/ScraperSetup.ts`
+builds what all three steps share, so the callback and the backstop use the
+same key and all three skip browser banks.
+
+A failed write is logged as a warning naming the store key and the cause,
+such as `EROFS` or `ENOSPC`; a failed sweep names the directory and the cause.
+The scrape's result and transactions are returned unchanged. Neither the token
+nor the session bearer is logged.
+
+Nothing reads this store back yet. A config entry with `otpLongTermToken`
+set still logs in with that token, and its login reports the token like any
+other, so it is copied into the store; every other run logs in with an SMS.
 
 ## Limits
 

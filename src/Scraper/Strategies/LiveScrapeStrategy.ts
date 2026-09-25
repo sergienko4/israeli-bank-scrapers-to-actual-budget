@@ -10,6 +10,7 @@ import type { ITimeoutWrapper } from '../../Resilience/TimeoutWrapper.js';
 import type { ITwoFactorPrompter } from '../../Services/ITwoFactorPrompter.js';
 import type NotificationService from '../../Services/NotificationService.js';
 import type { IImporterConfig, IRawScrape, Procedure } from '../../Types/Index.js';
+import type { IBankTokenStore } from '../Tokens/BankTokenStore.js';
 import type {
   IBankScrapeStrategy,
   IBankScrapeStrategyOpts,
@@ -24,6 +25,8 @@ export interface ILiveScrapeStrategyOpts {
   readonly timeoutWrapper: ITimeoutWrapper;
   readonly twoFactorPrompter: ITwoFactorPrompter | null;
   readonly notificationService: NotificationService;
+  /** Where API-direct banks' long-term tokens are kept between runs. */
+  readonly bankTokens: IBankTokenStore;
 }
 
 /** Strategy driving the real israeli-bank-scrapers package. */

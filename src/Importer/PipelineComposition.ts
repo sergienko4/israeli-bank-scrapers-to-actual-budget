@@ -18,6 +18,8 @@ import type { ILogger } from '../Logger/ILogger.js';
 import type { IBankScrapeStrategy } from '../Scraper/Strategies/IBankScrapeStrategy.js';
 import { LiveScrapeStrategy } from '../Scraper/Strategies/LiveScrapeStrategy.js';
 import { MockScrapeStrategy } from '../Scraper/Strategies/MockScrapeStrategy.js';
+import resolveBankTokensPath from '../Scraper/Tokens/BankTokenPath.js';
+import BankTokenStore from '../Scraper/Tokens/BankTokenStore.js';
 import { ChainBuilder } from '../Scrapers/Pipeline/Index.js';
 import createEvaluateSpendingWatchStep from '../Scrapers/Pipeline/Steps/EvaluateSpendingWatchStep.js';
 import createFinalizeImportStep from '../Scrapers/Pipeline/Steps/FinalizeImportStep.js';
@@ -26,6 +28,7 @@ import createInitializeCategoryResolverStep from '../Scrapers/Pipeline/Steps/Ini
 import createProcessAllBanksStep from '../Scrapers/Pipeline/Steps/ProcessAllBanksStep.js';
 import type { INamedStep } from '../Scrapers/Pipeline/Types/PipelineStep.js';
 import SpendingWatchService from '../Services/SpendingWatchService.js';
+import createNodeFileSystem from '../Storage/NodeFileSystem.js';
 import type { IImporterConfig, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
 import type { ICoreServices } from './CoreServicesWiring.js';
@@ -67,6 +70,9 @@ export type EffectiveWatchService = SpendingWatchService | typeof NO_OP_WATCH;
 /**
  * Selects the scrape strategy by env: mock when E2E vars are set, live otherwise.
  *
+ * The live strategy owns the long-term token store at `BANK_TOKENS_PATH`.
+ * Building it touches no file; a malformed override throws here, at startup,
+ * rather than part-way through a scrape.
  * @param inputs - The shared wiring inputs (config, resilience, services, logger).
  * @returns The IBankScrapeStrategy chosen for this run.
  */
@@ -84,6 +90,7 @@ export function buildScrapeStrategy(inputs: IScrapeStrategyInputs): IBankScrapeS
     timeoutWrapper: resilience.timeoutWrapper,
     twoFactorPrompter: services.twoFactorPrompter,
     notificationService: services.notificationService,
+    bankTokens: new BankTokenStore(createNodeFileSystem(), resolveBankTokensPath()),
   });
 }
 

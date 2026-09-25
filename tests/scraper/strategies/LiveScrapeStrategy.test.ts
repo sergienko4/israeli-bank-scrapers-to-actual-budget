@@ -14,6 +14,7 @@ import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js'
 import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
 import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
+import { makeStore } from '../BankTokenStoreFixture.js';
 
 vi.mock('node:fs');
 
@@ -70,6 +71,7 @@ function makeStrategy(): LiveScrapeStrategy {
     retryStrategy, noRetryStrategy, timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
+    bankTokens: makeStore().store,
   });
 }
 
@@ -212,6 +214,7 @@ describe('LiveScrapeStrategy', () => {
       retryStrategy, noRetryStrategy, timeoutWrapper,
       twoFactorPrompter,
       notificationService: notificationService as never,
+      bankTokens: makeStore().store,
     });
     await strategy.scrape(makeOpts({
       twoFactorAuth: true, otpLongTermToken: 'placeholder-not-a-jwt',
