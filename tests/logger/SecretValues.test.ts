@@ -16,6 +16,12 @@ const VALUE = 'Qz7-echoed-Lk9';
 /** Text outside the value, which masking must keep. */
 const CANARY = 'form-error-canary';
 
+/** A value that would backtrack for ever on a run of `b`s if read as a pattern. */
+const BACKTRACKING = '(b+)+$';
+
+/** Far more than masking one short line takes, and far less than backtracking. */
+const FAST_MS = 250;
+
 /**
  * Builds a fresh list that knows the given values.
  * @param values - The values to register.
@@ -70,6 +76,15 @@ describe('SecretValues', () => {
   it('reads a value\'s regex characters as text', () => {
     const masked = knowing('a.b*c+(d)').mask(`a.b*c+(d) aXbbbc+d ${CANARY}`);
     expect(masked).toBe(`[REDACTED] aXbbbc+d ${CANARY}`);
+  });
+
+  it('reads a value that would backtrack as text, so masking stays fast', () => {
+    const run = 'b'.repeat(26);
+    const started = performance.now();
+    const masked = knowing(BACKTRACKING).mask(`${run}! ${BACKTRACKING} ${CANARY}`);
+    const elapsedMs = performance.now() - started;
+    expect(masked).toBe(`${run}! [REDACTED] ${CANARY}`);
+    expect(elapsedMs).toBeLessThan(FAST_MS);
   });
 
   it.each(['', 'a', 'ab', 'abc'])('does not mask %j, shorter than four characters, as bare text', (value) => {

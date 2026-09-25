@@ -77,7 +77,9 @@ function buildPattern(values: ReadonlySet<string>): RegExp {
   const sorted = [...values].sort(longestFirst);
   const sources = [MASK, ...sorted].map(asPattern);
   const source = sources.join('|');
-  return new RegExp(source, 'gi');
+  // Every value is escaped into a literal, so the pattern is an alternation
+  // of plain text with no quantifier and cannot backtrack; a test pins this.
+  return new RegExp(source, 'gi'); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
 }
 
 /**
