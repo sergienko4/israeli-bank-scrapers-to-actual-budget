@@ -1,10 +1,20 @@
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
-import { getLogger } from '../../src/Logger/Index.js';
 import buildCredentials from '../../src/Scraper/CredentialsBuilder.js';
 import { toProviderPhone } from '../../src/Utils/PhoneNumberNormaliser.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
+import { fakeBankConfig } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
+
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock('../../src/Logger/Index.js', () => ({
+  getLogger: () => mockLogger,
+  createLogger: vi.fn(),
+  getLogBuffer: vi.fn(),
+}));
 
 const idBank = { id: 'user123', password: TEST_CREDENTIAL } as IBankConfig;
 const emailBank = {
@@ -144,8 +154,8 @@ describe('buildCredentials', () => {
     const phones = ['+972527654321', '052-765-4321', '972 52 765 4321', '+44 7700-900123'];
 
     it.each(phones)('sends %s in the form toProviderPhone gives, with or without a token', (raw) => {
-      const withToken = buildCredentials({ phoneNumber: raw, otpLongTermToken: 'lt' } as IBankConfig);
-      const withoutToken = buildCredentials({ phoneNumber: raw } as IBankConfig);
+      const withToken = buildCredentials(fakeBankConfig({ phoneNumber: raw, otpLongTermToken: 'lt' }));
+      const withoutToken = buildCredentials(fakeBankConfig({ phoneNumber: raw }));
 
       expect((withToken as Record<string, unknown>).phoneNumber).toBe(toProviderPhone(raw));
       expect((withoutToken as Record<string, unknown>).phoneNumber).toBe(toProviderPhone(raw));
@@ -153,14 +163,14 @@ describe('buildCredentials', () => {
   });
 
   describe('phone normalisation warning', () => {
-    afterEach(() => {
-      vi.restoreAllMocks();
+    beforeEach(() => {
+      mockLogger.warn.mockClear();
     });
 
     it('warns once, with the phone masked, when the phone is not an Israeli mobile', () => {
-      const warn = vi.spyOn(getLogger(), 'warn');
+      const { warn } = mockLogger;
 
-      buildCredentials({ id: 'pepper', phoneNumber: '+44 7700-900123' } as IBankConfig);
+      buildCredentials(fakeBankConfig({ id: 'pepper', phoneNumber: '+44 7700-900123' }));
 
       expect(warn).toHaveBeenCalledTimes(1);
       expect(String(warn.mock.calls[0]?.[0])).toContain('Phone normalisation failed for pepper (<masked>)');
@@ -168,9 +178,9 @@ describe('buildCredentials', () => {
     });
 
     it('does not warn for an Israeli mobile', () => {
-      const warn = vi.spyOn(getLogger(), 'warn');
+      const { warn } = mockLogger;
 
-      buildCredentials({ phoneNumber: '052-765-4321' } as IBankConfig);
+      buildCredentials(fakeBankConfig({ phoneNumber: '052-765-4321' }));
 
       expect(warn).not.toHaveBeenCalled();
     });
