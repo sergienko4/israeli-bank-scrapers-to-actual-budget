@@ -217,8 +217,11 @@ browser banks never read it. The order is:
    token;
 3. otherwise no token, so the provider logs in cold with an SMS.
 
-Every doubt fails closed. No login fingerprint, a store that cannot be read or
-throws, and a damaged file each give a WARN naming the key, and no token. When
+Every doubt fails closed. No login fingerprint, and a store that cannot be read
+or throws, each give a WARN naming the key, and no token. A damaged file warns
+only when it stops a configured token from being sent: with no configured
+token the run logs in with an SMS without a warning, and a stored token the
+store can still read is sent as usual. When
 no token is sent and the attempt has no OTP retriever (`twoFactorAuth` off),
 a WARN names both fixes. Upstream then fails the cold login with
 `TWO_FACTOR_RETRIEVER_MISSING`, which the importer treats as permanent and
