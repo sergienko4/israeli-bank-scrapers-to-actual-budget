@@ -16,8 +16,13 @@
  * the loser's account keeps its previous token, the bank rejects it, and the
  * next cold login re-mints it at the cost of one SMS. No lock is taken, because
  * a lock able to wedge a scheduled scrape would cost more than that.
+ *
+ * <p>Every token read from the file, and every token about to be written, is
+ * handed to the value masker first, so no output shows one even when a bank
+ * quotes it back with no key in front of it.
  */
 
+import { registerSecretValues } from '../../Logger/SecretValues.js';
 import type { IFileSystem } from '../../Storage/FileSystemPort.js';
 import SecureJsonStore from '../../Storage/SecureJsonStore.js';
 import type { ISweepReport } from '../../Storage/StoreTypes.js';
@@ -55,6 +60,12 @@ export interface IBankTokenStore {
    * @returns Whether the file was replaced, or why it was not.
    */
   write: (storeKey: string, token: string) => Procedure<IBankTokenWrite>;
+
+  /**
+   * Deletes staged token files an earlier run was killed before cleaning up.
+   * @returns How many were removed, or why the directory could not be read.
+   */
+  sweepStagedLeftovers: () => Procedure<ISweepReport>;
 }
 
 /**
@@ -86,6 +97,16 @@ interface ILoadedTokens {
 function isAlreadyStored(loaded: ILoadedTokens, storeKey: string, token: string): boolean {
   if (!loaded.isIntact) return false;
   return loaded.tokens.get(storeKey)?.token === token;
+}
+
+/**
+ * Lists the token values a set of records holds.
+ * @param tokens - Records by store key.
+ * @returns Each record's token.
+ */
+function tokenValues(tokens: ReadonlyMap<string, IBankTokenRecord>): string[] {
+  const records = [...tokens.values()];
+  return records.map(({ token }) => token);
 }
 
 /**
@@ -145,6 +166,7 @@ export default class BankTokenStore implements IBankTokenStore {
   public write(storeKey: string, token: string): Procedure<IBankTokenWrite> {
     const trimmed = token.trim();
     if (trimmed.length === 0) return succeed({ written: false });
+    registerSecretValues([trimmed]);
     const loaded = this.load();
     if (!loaded.success) return tokenNotStored(storeKey, loaded);
     if (isAlreadyStored(loaded.data, storeKey, trimmed)) return succeed({ written: false });
@@ -155,10 +177,11 @@ export default class BankTokenStore implements IBankTokenStore {
    * Deletes staged token files an earlier run was killed before cleaning up.
    *
    * <p>Each one holds a live credential, and a crashed process never returns
-   * to remove it. Whoever owns the store should call this at startup and on
-   * every scheduled run: a file staged just before a restart is still inside
-   * the grace period at startup, and a warm run that writes nothing never
-   * commits. The store itself only collects leftovers after its own commits.
+   * to remove it. Whoever owns the store should call this on every run, not
+   * only after a restart: a file staged just before a restart is still inside
+   * the grace period when the process comes back, and a warm run that writes
+   * nothing never commits. The store itself only collects leftovers after its
+   * own commits.
    * @returns How many were removed, or why the directory could not be read.
    */
   public sweepStagedLeftovers(): Procedure<ISweepReport> {
@@ -198,6 +221,8 @@ export default class BankTokenStore implements IBankTokenStore {
     if (!snapshot.success) return snapshot;
     const { state, records } = snapshot.data;
     const read = readTokenRecords(records);
+    const values = tokenValues(read.tokens);
+    registerSecretValues(values);
     const isIntact = state !== 'damaged' && read.droppedCount === 0;
     return succeed({ tokens: read.tokens, isIntact });
   }

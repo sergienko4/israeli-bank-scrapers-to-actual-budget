@@ -10,10 +10,11 @@ import { ConfigurationError } from '../Errors/ErrorTypes.js';
 import { getLogger } from '../Logger/Index.js';
 import type {
   IImporterConfig, Procedure} from '../Types/Index.js';
-import { fail, isFail, succeed } from '../Types/Index.js';
+import { fail, isFail, isSuccess, succeed } from '../Types/Index.js';
 import {
 validateActualConfig, validateBank,
 validateServerUrl} from './ConfigLoaderValidator.js';
+import registerConfigSecrets from './ConfigSecretValues.js';
 import deepMerge from './Loaders/ConfigMerger.js';
 import loadFromEnvironment from './Loaders/EnvLoader.js';
 import readJsonFile from './Loaders/JsonFileReader.js';
@@ -81,11 +82,22 @@ export class ConfigLoader implements IConfigLoader {
 
   /**
    * Loads config.json (+ credentials.json), falling back to environment-only
-   * config when no config file exists. A parse/config error is returned as-is;
+   * config when no config file exists, and registers the secret values it
+   * holds with the value masker. A parse/config error is returned as-is;
    * a missing file is not an error (environment config is used instead).
    * @returns Procedure with the merged config, or a file parse/config failure.
    */
   private mergeFileOrEnv(): Procedure<IImporterConfig> {
+    const merged = this.readFileOrEnv();
+    if (isSuccess(merged)) registerConfigSecrets(merged.data);
+    return merged;
+  }
+
+  /**
+   * Reads config.json (+ credentials.json), or the environment when no file exists.
+   * @returns Procedure with the merged config, or a file parse/config failure.
+   */
+  private readFileOrEnv(): Procedure<IImporterConfig> {
     const fileResult = this.loadFromFile();
     if (isFail(fileResult) && fileResult.status !== 'not-found') return fileResult;
     if (!isFail(fileResult)) return fileResult;

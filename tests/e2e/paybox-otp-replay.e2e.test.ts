@@ -20,6 +20,7 @@ import type {
 import type { ITwoFactorPrompter } from '../../src/Services/ITwoFactorPrompter.js';
 import type { IBankConfig, IImporterConfig } from '../../src/Types/Index.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
+import { makeStore } from '../scraper/BankTokenStoreFixture.js';
 
 const SMS_CODE = '482913';
 
@@ -59,6 +60,7 @@ function buildDeps(prompter: ITwoFactorPrompter): ILiveScrapeDependencies {
     timeoutWrapper: { wrap: vi.fn() } as unknown as ILiveScrapeDependencies['timeoutWrapper'],
     twoFactorPrompter: prompter,
     notificationService: {} as unknown as ILiveScrapeDependencies['notificationService'],
+    bankTokens: makeStore().store,
   };
 }
 

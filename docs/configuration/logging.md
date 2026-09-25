@@ -185,6 +185,53 @@ secret after `Basic` in `token=null,auth=Basic ...`. When a secret key holds an
 object or a list, the rest of the reply is hidden, because the fields inside it
 can be secrets under ordinary names. Masking a line twice gives the same line.
 
+No text is kept because of how it looks: after a key, the masker decides by
+the key alone. Some of the bank scraper's failure codes end in a secret word, such as
+`INVALID_PASSWORD` or `INVALID_PHONE_NUMBER`, so the importer joins a code to
+the bank's own text with a dash, as in
+`INVALID_PASSWORD — Form: Invalid username or code`, and the masker never reads
+it as a key and its value. A record that an older release wrote with a colon,
+such as `INVALID_PASSWORD: Invalid credentials`, now shows the first word
+hidden, as in `INVALID_PASSWORD=[REDACTED] credentials`, in the import
+history and in `/logs`. The scraper's own reasons for a phone number it cannot
+use start with the field's name, as in
+`phoneNumber: must start with country code 972`, so the word after it is hidden
+like any phone value: `phoneNumber=[REDACTED] start with country code 972`.
+
+A bank can also quote a credential back with no key in front of it, as the
+visible text of its login form's error. So the importer hides every credential
+it holds wherever it appears, with a key or without one:
+`INVALID_PASSWORD — <your user code> is not a valid login` is written as
+`INVALID_PASSWORD — [REDACTED] is not a valid login`. Every secret field in
+the config, the same fields the portal masks and `credentials.json` holds, is
+added to this list when the config is loaded or saved, and so is every
+long-term token the token store reads or is about to write. Each is matched as
+written, as a JSON string escapes it and percent-encoded in an address, in any
+letter case. A phone number is also matched in its `972` form and as its nine
+national digits, which every form a bank sends contains, so no form of it
+shows: `+972501234567` is written as `[REDACTED]` or `+[REDACTED]`, depending
+on how the config writes the number. A form shorter than six characters could
+be an ordinary word's letters or a number's digits, so it is matched only
+where it stands as a whole word, with no letter or digit right before or
+after it. With the user code `test` held, `e2e-test-bank` is written as
+`e2e-[REDACTED]-bank`, while the bank name `e2eTestBank` stays readable. So a
+one-character credential hides that character wherever it stands alone:
+with `1` held, `Successful: 1 (100.0%)` is written as
+`Successful: [REDACTED] (100.0%)`. The token file is read by
+the import run, not by the Telegram bot, so the bot's `/logs` and history
+replies know a stored token only from records that the run masked as it wrote
+them.
+
+A form of six characters or more is matched inside longer words too, so that
+no part of it shows, such as a phone's national digits after its leading `0`.
+So a credential of that length that is also an ordinary word is hidden
+wherever that word appears. With the user code
+`Password` held, `INVALID_PASSWORD` is written as `INVALID_[REDACTED]`, and the
+`/status`, `/scan` and `/retry` replies, which read the masked history, add no
+advice for it. A held value that is part of a secret key still leaves the key's
+value hidden: with `secret` held, `client_secret=...` is written as
+`client_[REDACTED]=[REDACTED]`.
+
 Structured log fields follow the same keys, in any letter case and at any
 depth: a field named `authToken` or `Authorization` is written as
 `[REDACTED]`, whether the call logged it, a child logger bound it, or it sits

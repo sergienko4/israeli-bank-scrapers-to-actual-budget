@@ -49,7 +49,8 @@ export interface IBankConfig {
   // Scraper tuning (per bank)
   timeout?: number;                  // Navigation timeout in ms. Default: 30000
   // Ignored since scrapers 8.7.0 — kept so existing configs keep loading.
-  // Scrape retries are owned by the importer (maxRetryAttempts, default 3).
+  // Scrape retries are owned by the importer (maxRetryAttempts, default 3);
+  // 2FA scrapes and API-direct banks (OneZero, Pepper, PayBox) get one try.
   navigationRetryCount?: number;
   // Ignored since scrapers 8.7.0 — the provider no longer takes a screenshot path.
   failureScreenshotPath?: string;

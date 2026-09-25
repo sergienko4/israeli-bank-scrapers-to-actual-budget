@@ -14,20 +14,30 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import registerConfigSecrets from '../../src/Config/ConfigSecretValues.js';
 import { ErrorFormatter } from '../../src/Errors/ErrorFormatter.js';
+import { SCRAPER_ERROR_ADVICE } from '../../src/Errors/ScraperErrorMessages.js';
 import LogFileReader from '../../src/Logger/LogFileReader.js';
-import { baseOptions } from '../../src/Logger/LoggerOptions.js';
-import redactSecrets from '../../src/Logger/SecretRedaction.js';
+import { baseOptions, redactLogLine } from '../../src/Logger/LoggerOptions.js';
+import redactSecrets, { isSecretKey } from '../../src/Logger/SecretRedaction.js';
+import { isFail } from '../../src/Scrapers/Pipeline/Index.js';
+import scrapeStage from '../../src/Scrapers/Pipeline/Steps/Bank/ScrapeStage.js';
+import type { IBankOpts } from '../../src/Scrapers/Pipeline/Steps/Bank/Shared.js';
+import buildBanksFailedMessage from '../../src/Scrapers/Pipeline/Steps/BanksFailedMessage.js';
 import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
 import type { IBankMetrics, IImportSummary } from '../../src/Services/MetricsService.js';
 import { MetricsService } from '../../src/Services/MetricsService.js';
 import { formatSummaryMessage } from '../../src/Services/Notifications/TelegramFormatter.js';
 import { formatWebhookSummary } from '../../src/Services/Notifications/Webhook/Index.js';
+import type { IImporterConfig } from '../../src/Types/Index.js';
+import { fakeBankQuarantineEntry } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 /** Text outside the secret, which every output must still carry. */
@@ -210,6 +220,10 @@ const FIELDS = KEYS.flatMap(key => FIELD_SHAPES.map(shape => shape(key)));
 /** Temp directory holding the files that older releases would have left. */
 const DIR = mkdtempSync(join(tmpdir(), 'secret-sinks-'));
 
+afterAll(() => {
+  rmSync(DIR, { recursive: true, force: true });
+});
+
 /**
  * Builds a logger with the shared options that collects each written line.
  * @returns The logger and the lines it has written, in order.
@@ -241,11 +255,12 @@ function failures(inputs: readonly unknown[], outputs: readonly string[], keepsC
 /**
  * Writes an audit file the way an older release left it, with one failed
  * bank per text case and its error unmasked.
+ * @param texts - One failed bank's error per case.
  * @returns The audit file's path.
  */
-function seedAuditFile(): string {
-  const path = join(DIR, 'audit-log.json');
-  const banks = TEXTS.map((error, index) => ({ name: `bank${String(index)}`, status: 'failure', txns: 0, error }));
+function seedAuditFile(texts: readonly string[]): string {
+  const path = join(mkdtempSync(join(DIR, 'audit-')), 'audit-log.json');
+  const banks = texts.map((error, index) => ({ name: `bank${String(index)}`, status: 'failure', txns: 0, error }));
   const entry = {
     timestamp: '2026-01-01T00:00:00.000Z', totalBanks: banks.length, successfulBanks: 0,
     failedBanks: banks.length, totalTransactions: 0, totalDuplicates: 0, totalDuration: 0,
@@ -289,22 +304,36 @@ function failedRun(error: Error): IImportSummary {
 }
 
 /**
+ * Records one failed bank per case into a fresh import history, then reads
+ * back the errors the file holds.
+ * @param texts - One failed bank's error per case.
+ * @returns The errors as written to disk, in case order.
+ */
+function recordedErrors(texts: readonly string[]): string[] {
+  const path = join(mkdtempSync(join(DIR, 'recorded-')), 'audit-log.json');
+  const banks = texts.map((error, index): IBankMetrics => ({
+    bankName: `bank${String(index)}`, startTime: 0, status: 'failure',
+    transactionsImported: 0, transactionsSkipped: 0, accounts: [], error,
+  }));
+  expect(new AuditLogService(path).record(summaryOf(banks)).success).toBe(true);
+  const [entry] = JSON.parse(readFileSync(path, 'utf8')) as IAuditEntry[];
+  return entry.banks.map(bank => bank.error ?? '');
+}
+
+/**
  * Writes a log file the way an older release left it, one unmasked line per
  * text case.
+ * @param texts - One logged message per case.
  * @returns The directory holding the log file.
  */
-function seedLogDir(): string {
+function seedLogDir(texts: readonly string[]): string {
   const logDir = mkdtempSync(join(DIR, 'logs-'));
-  const lines = TEXTS.map(msg => JSON.stringify({ time: 0, level: 30, msg }));
+  const lines = texts.map(msg => JSON.stringify({ time: 0, level: 30, msg }));
   writeFileSync(join(logDir, 'app.2026-01-01.1.log'), `${lines.join('\n')}\n`);
   return logDir;
 }
 
 describe('a secret under any key spelling reaches no output', () => {
-  afterAll(() => {
-    rmSync(DIR, { recursive: true, force: true });
-  });
-
   it('covers enough spellings to mean something', () => {
     expect(KEYS.length).toBeGreaterThan(400);
     expect(PAIRS.length).toBe(KEYS.length * TEXT_SHAPES.length);
@@ -370,14 +399,7 @@ describe('a secret under any key spelling reaches no output', () => {
   });
 
   it('the import history a new record writes hides it on disk', () => {
-    const path = join(DIR, 'recorded-audit-log.json');
-    const banks = TEXTS.map((error, index): IBankMetrics => ({
-      bankName: `bank${String(index)}`, startTime: 0, status: 'failure',
-      transactionsImported: 0, transactionsSkipped: 0, accounts: [], error,
-    }));
-    expect(new AuditLogService(path).record(summaryOf(banks)).success).toBe(true);
-    const [entry] = JSON.parse(readFileSync(path, 'utf8')) as IAuditEntry[];
-    expect(failures(TEXTS, entry.banks.map(bank => bank.error ?? ''))).toEqual([]);
+    expect(failures(TEXTS, recordedErrors(TEXTS))).toEqual([]);
   });
 
   it('a structured field hides it at any depth', () => {
@@ -393,14 +415,366 @@ describe('a secret under any key spelling reaches no output', () => {
   });
 
   it('the import history an older release stored hides it', () => {
-    const result = new AuditLogService(seedAuditFile()).getRecent(1);
+    const result = new AuditLogService(seedAuditFile(TEXTS)).getRecent(1);
     expect(result.success).toBe(true);
     const errors = result.success ? result.data[0].banks.map(bank => bank.error ?? '') : [];
     expect(failures(TEXTS, errors)).toEqual([]);
   });
 
   it('the /logs replay of a file an older release wrote hides it', () => {
-    const replayed = new LogFileReader(seedLogDir()).getRecent(TEXTS.length);
+    const replayed = new LogFileReader(seedLogDir(TEXTS)).getRecent(TEXTS.length);
     expect(failures(TEXTS, replayed)).toEqual([]);
+  });
+});
+
+/** The provider package's type declarations, which hold its failure codes. */
+const PROVIDER_TYPES = fileURLToPath(new URL(
+  '../../node_modules/@sergienko4/israeli-bank-scrapers/lib/index.d.ts', import.meta.url,
+));
+
+/**
+ * Reads the provider's failure codes from its type declarations: the package
+ * declares `ScraperErrorTypes` but exports no value to import.
+ * @returns Every wire value the enum declares.
+ */
+function providerFailureCodes(): string[] {
+  const declarations = readFileSync(PROVIDER_TYPES, 'utf8');
+  const body = /declare enum ScraperErrorTypes \{(?<body>[^}]*)\}/u.exec(declarations)?.groups?.body ?? '';
+  return [...body.matchAll(/= "(?<code>[A-Z_]+)"/gu)].map(match => match.groups?.code ?? '');
+}
+
+/** Every failure code the provider sends or the importer gives advice for. */
+const FAILURE_CODES = [...new Set([...providerFailureCodes(), ...Object.keys(SCRAPER_ERROR_ADVICE)])];
+
+/**
+ * The provider's own failure prose for the codes that end in a secret key, as
+ * its 8.7 release words them, so a shape the masker hides is caught.
+ */
+const PROVIDER_FAILURES: readonly [string, string][] = [
+  ['INVALID_PASSWORD', 'Form: שם המשתמש או הסיסמה שגויים'],
+  ['INVALID_PASSWORD', 'Form: Invalid username or code'],
+  ['INVALID_PASSWORD', 'Auth API gateway (401): Unauthorized'],
+  ['INVALID_PASSWORD', 'LOGIN POST: scope intact + URL unchanged — credentials likely invalid'],
+  ['INVALID_PASSWORD', 'LOGIN POST: bounced back to login path /login'],
+  ['INVALID_PASSWORD', 'Login failed with invalid error — url: https://bank.example/login'],
+  ['CHANGE_PASSWORD', 'Password change required'],
+];
+
+/**
+ * Writes a failed scrape's message through the scrape stage, the one place
+ * that joins a failure code to the provider's prose.
+ * @param errorType - The provider's failure code.
+ * @param errorMessage - The provider's prose.
+ * @returns The message the scrape stage fails with.
+ */
+async function stageMessage(errorType: string, errorMessage: string): Promise<string> {
+  const result = { success: false, errorType, errorMessage, accounts: [] } as unknown as IScraperScrapingResult;
+  const bankScraper = { scrapeBankWithResilience: (): Promise<IScraperScrapingResult> => Promise.resolve(result) };
+  const opts = { entry: { bankName: 'oneZero', bankConfig: {} }, ctx: { services: { bankScraper } }, start: 0 };
+  const outcome = await scrapeStage(opts as unknown as IBankOpts);
+  if (!isFail(outcome)) throw new Error(`expected the scrape stage to fail for ${errorType}`);
+  return outcome.message;
+}
+
+/** A failed scrape's message per case, as the scrape stage writes it: the code, then the provider's prose. */
+const FAILURE_TEXTS = (await Promise.all([
+  ...FAILURE_CODES.map(code => stageMessage(code, 'Login failed at the bank')),
+  ...PROVIDER_FAILURES.map(([code, prose]) => stageMessage(code, prose)),
+])).map(text => `${text}, ${CANARY}`);
+
+/**
+ * The provider's reasons for a phone number it cannot use, as its 8.7.3
+ * release words them. Each starts with the `phoneNumber:` field label, a
+ * secret key, so the word after it is hidden like any phone value; the rest of
+ * the reason must stay readable.
+ */
+const PHONE_REASONS = [
+  'phoneNumber: expected ≥10 digits, got 9',
+  'phoneNumber: must be digits-only international form (no +, -, spaces)',
+  'phoneNumber: must start with country code 972',
+].map(reason => `${reason} (cannot be normalised to the international-plus wire format)`);
+
+/** Each phone reason as the scrape stage writes it, with the canary after it. */
+const PHONE_TEXTS = (await Promise.all(PHONE_REASONS.map(reason => stageMessage('INVALID_PHONE_NUMBER', reason))))
+  .map(text => `${text}, ${CANARY}`);
+
+/**
+ * What an output must show for a phone reason: the code, the label with its
+ * first word hidden, and every word after that.
+ * @param reason - The provider's reason.
+ * @returns The text the output must contain.
+ */
+function phoneReasonShown(reason: string): string {
+  const rest = reason.split(' ').slice(2).join(' ');
+  return `INVALID_PHONE_NUMBER — phoneNumber=[REDACTED] ${rest}, ${CANARY}`;
+}
+
+/**
+ * Lists the cases the masker touched, or whose output lost the case's text.
+ * @param texts - The cases, in order.
+ * @param outputs - What the sink produced for each case, in the same order.
+ * @param keepsText - Whether this sink passes the text on, rather than
+ * replacing some of it with advice, as the error alert does.
+ * @returns A readable line per failing case; empty when every text survived.
+ */
+function unreadable(texts: readonly string[], outputs: readonly string[], keepsText: boolean): string[] {
+  expect(outputs).toHaveLength(texts.length);
+  return texts.flatMap((text, index) => {
+    const output = outputs[index];
+    const lost = output.includes('[REDACTED]') || (keepsText && !output.includes(text));
+    return lost ? [`${JSON.stringify(text)} -> ${JSON.stringify(output)}`] : [];
+  });
+}
+
+/**
+ * Logs each case through the shared options and collects the lines.
+ * @param texts - One message per case.
+ * @param write - How one case is logged.
+ * @returns One written line per case.
+ */
+function loggedLines(texts: readonly string[], write: (logger: pino.Logger, text: string) => void): string[] {
+  const { logger, lines } = collectingLogger();
+  for (const text of texts) write(logger, text);
+  return lines;
+}
+
+/**
+ * Builds the notice for a run whose one bank failed, as the pipeline runner
+ * masks it before logging and sending it.
+ * @param text - The bank's error message.
+ * @returns The notice that reaches the log and the error alert.
+ */
+function failedNotice(text: string): string {
+  const quarantined = [fakeBankQuarantineEntry({ bankName: 'oneZero', error: new Error(text) })];
+  return redactSecrets(buildBanksFailedMessage({ successful: [], quarantined, totalBanks: 1 }));
+}
+
+/** Each output a failed scrape's message reaches, and what it writes for each case. */
+const FAILURE_SINKS: readonly [string, (texts: readonly string[]) => string[], boolean][] = [
+  ['the text masker', texts => texts.map(text => redactSecrets(text)), true],
+  ['a log message', texts => loggedLines(texts, (logger, text) => { logger.info(text); }), true],
+  ['a logged error', texts => loggedLines(texts, (logger, text) => { logger.error(new Error(text)); }), true],
+  ['an error alert', texts => texts.map(text => new ErrorFormatter().format(new Error(text))), false],
+  ['a failure reason', texts => texts.map(text => failedRun(new Error(text)).banks[0]?.error ?? ''), true],
+  ['a Telegram summary', texts => texts.map(text => formatSummaryMessage(
+    failedRun(new Error(text)), 'summary', { showTransactions: 'none', maxTransactions: 0 },
+  )), true],
+  ['a webhook summary', texts => texts.map(text => formatWebhookSummary('plain', failedRun(new Error(text)))), true],
+  ['the import history a new record writes', recordedErrors, true],
+  ['the import history an older release stored', texts => {
+    const result = new AuditLogService(seedAuditFile(texts)).getRecent(1);
+    return result.success ? result.data[0].banks.map(bank => bank.error ?? '') : [];
+  }, true],
+  ['the /logs replay', texts => new LogFileReader(seedLogDir(texts)).getRecent(texts.length), true],
+  ['the all-banks-failed notice', texts => texts.map(failedNotice), false],
+];
+
+describe('a provider failure code reaches every output readable', () => {
+  it('reads every code the provider declares', () => {
+    expect(providerFailureCodes()).toEqual(expect.arrayContaining(['INVALID_PASSWORD', 'CHANGE_PASSWORD', 'GENERIC']));
+    expect(FAILURE_CODES.length).toBeGreaterThan(10);
+  });
+
+  it.each(FAILURE_SINKS)('%s keeps the code and the prose after it', (_sink, outputsFor, keepsText) => {
+    expect(unreadable(FAILURE_TEXTS, outputsFor(FAILURE_TEXTS), keepsText)).toEqual([]);
+  });
+
+  it.each(FAILURE_SINKS.filter(([, , keepsText]) => keepsText))(
+    '%s keeps a phone reason readable after the word its label hides',
+    (_sink, outputsFor) => {
+      const outputs = outputsFor(PHONE_TEXTS);
+      const unshown = PHONE_REASONS.filter((reason, index) => !outputs[index]?.includes(phoneReasonShown(reason)));
+      expect(unshown).toEqual([]);
+    },
+  );
+});
+
+/** A secret of letters only, the shape an older release let through after a failure code. */
+const LETTERS_SECRET = TEST_CREDENTIAL.replaceAll('-', '');
+
+/** How an older release's records put a failure code before a value. */
+const OLD_CODE_SHAPES: readonly ((code: string) => string)[] = [
+  code => `${code}: ${LETTERS_SECRET}`,
+  code => `❌ oneZero: ${code}: ${LETTERS_SECRET}`,
+  code => `error "${code}: ${LETTERS_SECRET}"`,
+  code => `Import failed\n${code}: ${LETTERS_SECRET}`,
+  code => `${code}: Form: ${LETTERS_SECRET}`,
+];
+
+/** The failure codes that end in a secret word, so the value after them is a secret's. */
+const SECRET_CODES = FAILURE_CODES.filter(code => isSecretKey(code));
+
+/** Each secret-word code before a letters-only secret, in each older shape. */
+const OLD_CODE_TEXTS = SECRET_CODES.flatMap(code => OLD_CODE_SHAPES.map(shape => `${shape(code)}, ${CANARY}`));
+
+/**
+ * Lists the cases whose output shows the letters-only secret, or lost the canary.
+ * @param texts - The cases, in order.
+ * @param outputs - What the sink produced for each case, in the same order.
+ * @param keepsCanary - Whether this sink passes the text around the secret on.
+ * @returns A readable line per failing case; empty when the sink is safe.
+ */
+function lettersLeaks(texts: readonly string[], outputs: readonly string[], keepsCanary: boolean): string[] {
+  expect(outputs).toHaveLength(texts.length);
+  return texts.flatMap((text, index) => {
+    const output = outputs[index];
+    const leaked = output.includes(LETTERS_SECRET);
+    const lost = keepsCanary && !output.includes(CANARY);
+    if (!leaked && !lost) return [];
+    return [`${leaked ? 'LEAK' : 'LOST'} ${JSON.stringify(text)} -> ${JSON.stringify(output)}`];
+  });
+}
+
+describe('a letters-only secret after a failure code reaches no output', () => {
+  it('reads the codes that end in a secret word', () => {
+    expect(SECRET_CODES).toEqual(expect.arrayContaining([
+      'CHANGE_PASSWORD', 'INVALID_PASSWORD', 'INVALID_PHONE_NUMBER', 'NO_PASSWORD',
+    ]));
+  });
+
+  it.each(FAILURE_SINKS)('%s hides it, including a record an older release stored', (_sink, outputsFor, keepsText) => {
+    expect(lettersLeaks(OLD_CODE_TEXTS, outputsFor(OLD_CODE_TEXTS), keepsText)).toEqual([]);
+  });
+});
+
+/**
+ * Credentials as a config holds them, each with characters an output may
+ * escape or encode: HTML marks, a quote and a backslash, an address, Hebrew,
+ * the dots of a long-term token, digits, two spaces in a row, a formatted
+ * phone number, and a value of three characters, which masking hides only
+ * where it stands as a whole word.
+ */
+const HELD = {
+  clientSecret: 'Zk4&Wq8<Rt2>Pm6',
+  userCode: String.raw`Hy3"Ld5\Nb7'Cv1`,
+  email: 'Xj9.Tg4+Fw2@Qe5.io',
+  username: 'סיסמהZr8-Yu3',
+  otpLongTermToken: 'eyJhbGc.Pq7Rs3.Uv6Wx1',
+  card6Digits: '738291',
+  password: 'Kd2  Vn5 Bx8',
+  phoneNumber: '052-765-4321',
+  num: 'k9Q',
+};
+
+/**
+ * Lists the runs of ASCII letters and digits in a value, which no escaping or
+ * encoding changes, and its runs of other letters, as written. Finding one in
+ * an output means the value got through.
+ * @param value - A held credential.
+ * @returns Its runs of three or more.
+ */
+function coresOf(value: string): string[] {
+  return value.match(/[A-Za-z0-9]{3,}|[^\x00-\x7f]{3,}/gu) ?? [];
+}
+
+/** What a bank quotes back, and the runs of it no output may show. */
+const ECHOES: readonly { echo: string; cores: readonly string[] }[] = [
+  ...Object.entries(HELD).filter(([key]) => key !== 'phoneNumber').map(([, value]) => ({
+    echo: value, cores: coresOf(value),
+  })),
+  { echo: HELD.email.toUpperCase(), cores: coresOf(HELD.email) },
+  ...['+972527654321', '972-527654321', '972527654321', '0527654321'].map(echo => ({
+    echo, cores: ['527654321'],
+  })),
+];
+
+/** Where a provider can put a quoted credential in its failure. */
+const ECHO_PLACEMENTS: readonly ((echo: string) => [string, string])[] = [
+  echo => ['INVALID_PASSWORD', echo],
+  echo => ['INVALID_PASSWORD', `Form: no user ${echo} at this branch`],
+  echo => ['GENERIC', `Login failed with invalid error \u2014 url: https://bank.example/login?u=${encodeURIComponent(echo)}`],
+  echo => ['GENERIC', `Auth API gateway (401): "${echo}"`],
+];
+
+/** Each quoted credential in each placement, as the scrape stage writes it. */
+const ECHO_CASES = await Promise.all(ECHOES.flatMap(({ echo, cores }) => ECHO_PLACEMENTS.map(async place => {
+  const [code, prose] = place(echo);
+  const text = await stageMessage(code, prose);
+  return { code, cores, text: `${text}, ${CANARY}` };
+})));
+
+/**
+ * Whether a text shows any run of a credential, in any letter case.
+ * @param text - An input or an output.
+ * @param cores - The credential's runs.
+ * @returns True when one of them is in the text.
+ */
+function showsCore(text: string, cores: readonly string[]): boolean {
+  const folded = text.toLowerCase();
+  return cores.some(core => folded.includes(core.toLowerCase()));
+}
+
+/**
+ * Lists the cases whose output shows a run of the credential, in any letter
+ * case, or lost the failure code or the canary.
+ * @param outputs - What the sink produced for each case, in case order.
+ * @param keepsText - Whether this sink passes the text on.
+ * @returns A readable line per failing case; empty when the sink is safe.
+ */
+function echoLeaks(outputs: readonly string[], keepsText: boolean): string[] {
+  expect(outputs).toHaveLength(ECHO_CASES.length);
+  return ECHO_CASES.flatMap(({ code, cores, text }, index) => {
+    const output = outputs[index];
+    const leaked = showsCore(output, cores);
+    const lost = keepsText && !(output.includes(`${code} \u2014 `) && output.includes(CANARY));
+    if (!leaked && !lost) return [];
+    return [`${leaked ? 'LEAK' : 'LOST'} ${JSON.stringify(text)} -> ${JSON.stringify(output)}`];
+  });
+}
+
+describe('a credential a bank quotes back with no key reaches no output', () => {
+  registerConfigSecrets({ banks: { oneZero: HELD } } as unknown as IImporterConfig);
+
+  it('quotes every held credential in every placement, where a leak check can see it', () => {
+    expect(ECHO_CASES).toHaveLength(ECHOES.length * ECHO_PLACEMENTS.length);
+    const unseen = ECHO_CASES.filter(({ text, cores }) => !showsCore(text, cores));
+    expect(unseen).toEqual([]);
+  });
+
+  it.each(FAILURE_SINKS)('%s hides it, including a record an older release stored', (_sink, outputsFor, keepsText) => {
+    const texts = ECHO_CASES.map(({ text }) => text);
+    expect(echoLeaks(outputsFor(texts), keepsText)).toEqual([]);
+  });
+
+  it('a log line too torn to parse hides it as its JSON text escapes it', () => {
+    const torn = ECHO_CASES.map(({ text }) => JSON.stringify({ level: 30, msg: text }).slice(0, -2));
+    expect(echoLeaks(torn.map(line => redactLogLine(line)), false)).toEqual([]);
+  });
+});
+
+/** The characters of a reason the all-banks-failed notice keeps before its ellipsis. */
+const NOTICE_REASON_KEPT = 159;
+
+/** What the scrape stage writes before a bank's prose, which the notice keeps. */
+const NOTICE_LEAD = 'INVALID_PASSWORD \u2014 Form: ';
+
+/**
+ * Places a credential so the notice's cut falls inside it.
+ * @param value - A held credential.
+ * @param shown - How many of its characters fall before the cut.
+ * @returns A reason whose cut splits the credential.
+ */
+function acrossTheCut(value: string, shown: number): string {
+  const padding = '.'.repeat(NOTICE_REASON_KEPT - NOTICE_LEAD.length - shown);
+  return `${NOTICE_LEAD}${padding}${value} at this branch`;
+}
+
+/** Each held credential other than the phone, split by the cut after its first three characters and before its last. */
+const CUT_CASES = Object.entries(HELD).filter(([key]) => key !== 'phoneNumber').flatMap(([, value]) =>
+  [3, value.length - 1].map(shown => ({ text: acrossTheCut(value, shown), shownPart: value.slice(0, shown) })));
+
+describe('a held credential the all-banks-failed notice would cut reaches no output', () => {
+  it('cuts every credential where a leak check can see its first part', () => {
+    const uncut = CUT_CASES.filter(({ text, shownPart }) => text.indexOf(shownPart) + shownPart.length !== NOTICE_REASON_KEPT);
+    expect(uncut).toEqual([]);
+  });
+
+  it('shows no part of it, and keeps the failure code', () => {
+    const leaks = CUT_CASES.flatMap(({ text, shownPart }) => {
+      const notice = failedNotice(text);
+      const safe = !notice.includes(shownPart) && notice.includes(NOTICE_LEAD);
+      return safe ? [] : [`${JSON.stringify(text)} -> ${JSON.stringify(notice)}`];
+    });
+    expect(leaks).toEqual([]);
   });
 });
