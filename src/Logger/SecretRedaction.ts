@@ -4,8 +4,11 @@
  * Scraper errors carry the first 120 characters of a bank's response body,
  * and banks sometimes echo credentials there. This is the one redactor that
  * log lines, metrics records and error notifications all share, so a key
- * added here is hidden from every one of them.
+ * added here, or a value registered with `SecretValues`, is hidden from every
+ * one of them.
  */
+
+import { maskSecretValues } from './SecretValues.js';
 
 /**
  * Spells a key or scheme word so an invisible mark may sit between any two of
@@ -283,12 +286,16 @@ export function isSecretKey(name: string): boolean {
 /**
  * Replaces each secret value with `[REDACTED]`, keeping its key.
  *
- * <p>Bare keywords are kept, so `AuthenticationError` still reads as the
- * error it is; only a key followed by `=` or `:` loses its value, per the
- * preventive-masking rule in `logging-pii-guidlines.md` §1.
+ * <p>Two rules apply, per the preventive-masking rule in
+ * `logging-pii-guidlines.md` §1. Every value this process holds is masked
+ * wherever it appears, with or without a key (see `SecretValues`). Then any
+ * other value after a secret key is masked, and the key is kept. Bare
+ * keywords are kept, so `AuthenticationError` still reads as the error it
+ * is; only a key followed by `=` or `:` loses its value.
  * @param text - Free text that may quote a credential, such as an error.
  * @returns The text with every secret value replaced.
  */
 export default function redactSecrets(text: string): string {
-  return text.replace(SECRET_PATTERN, maskMatch);
+  const knownMasked = maskSecretValues(text);
+  return knownMasked.replace(SECRET_PATTERN, maskMatch);
 }

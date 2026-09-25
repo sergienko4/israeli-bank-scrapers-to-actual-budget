@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import redactSecrets, { isSecretKey } from '../../src/Logger/SecretRedaction.js';
+import { registerSecretValues } from '../../src/Logger/SecretValues.js';
 import { TEST_CREDENTIAL, TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
 /** The provider's failure codes that end in a secret word. */
@@ -460,5 +461,21 @@ describe('redactSecrets', () => {
     '',
   ])('leaves %j unchanged', (text) => {
     expect(redactSecrets(text)).toBe(text);
+  });
+});
+
+describe('redactSecrets with the values the importer holds', () => {
+  /** A credential the bank quotes back with no key in front of it. */
+  const ECHOED = 'Echoed-4vX-credential';
+
+  it('hides a registered value that has no key', () => {
+    registerSecretValues([ECHOED]);
+    expect(redactSecrets(`Form: no account for ${ECHOED} at this branch`))
+      .toBe('Form: no account for [REDACTED] at this branch');
+  });
+
+  it('still hides a value after its key, once the known values are masked', () => {
+    registerSecretValues([ECHOED]);
+    expect(redactSecrets(`token=${TEST_CREDENTIAL} ${ECHOED}`)).toBe('token=[REDACTED] [REDACTED]');
   });
 });
