@@ -4,17 +4,21 @@
  * BankScraper.
  */
 
+import { CompanyTypes, createScraper } from '@sergienko4/israeli-bank-scrapers';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 
+import buildCredentials from '../../../src/Scraper/CredentialsBuilder.js';
 import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeStrategy.js';
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
+import type { IBankTokenStore } from '../../../src/Scraper/Tokens/BankTokenStore.js';
+import loginFingerprint from '../../../src/Scraper/Tokens/LoginFingerprint.js';
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
 import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
-import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
+import { fakeBankConfig, fakeImporterConfig, fakeValidBankConfigFor } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
-import { makeStore } from '../BankTokenStoreFixture.js';
+import { fakeToken, makeStore } from '../BankTokenStoreFixture.js';
 
 vi.mock('node:fs');
 
@@ -63,15 +67,16 @@ const notificationService = {
 
 /**
  * Constructs a default LiveScrapeStrategy with shared mock collaborators.
+ * @param bankTokens - Token store the strategy reads and writes; an empty one unless given.
  * @returns LiveScrapeStrategy ready for invocation.
  */
-function makeStrategy(): LiveScrapeStrategy {
+function makeStrategy(bankTokens: IBankTokenStore = makeStore().store): LiveScrapeStrategy {
   return new LiveScrapeStrategy({
     config: fakeImporterConfig(),
     retryStrategy, noRetryStrategy, timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
-    bankTokens: makeStore().store,
+    bankTokens,
   });
 }
 
@@ -172,6 +177,31 @@ describe('LiveScrapeStrategy', () => {
       expect.stringContaining('rejected'));
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.attemptCount).toBe(2);
+  });
+
+  it('logs the INVALID_OTP retry in with the token stored since the first attempt began', async () => {
+    const { store } = makeStore();
+    const bankConfig = fakeValidBankConfigFor('onezero');
+    const fingerprint = loginFingerprint(CompanyTypes.OneZero, bankConfig);
+    const login = fingerprint.success ? fingerprint.data : '';
+    const first = fakeToken();
+    const renewed = fakeToken();
+    store.write('onezero:primary', first, login);
+    mockScraper.scrape
+      .mockImplementationOnce(async () => {
+        store.write('onezero:primary', renewed, login);
+        return { success: false, errorType: 'INVALID_OTP', accounts: [] };
+      })
+      .mockResolvedValueOnce({ success: true, accounts: [] });
+
+    await makeStrategy(store).scrape({
+      bankId: 'onezero', companyType: CompanyTypes.OneZero, accountKey: 'primary',
+      bankConfig, startDate: new Date(), logger,
+    });
+
+    const sent = vi.mocked(buildCredentials).mock.calls.map(([config]) => config.otpLongTermToken);
+    expect(sent).toEqual([first, renewed]);
+    expect(createScraper).toHaveBeenCalledTimes(2);
   });
 
   it('clears bank session when clearSession is set', async () => {

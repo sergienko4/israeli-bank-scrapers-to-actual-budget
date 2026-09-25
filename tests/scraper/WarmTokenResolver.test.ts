@@ -101,6 +101,20 @@ function everythingLogged(logger: SpyLogger): string {
   return JSON.stringify(calls);
 }
 
+/** One logged line: its level and its text. */
+type LoggedLine = readonly [level: keyof ILogger, message: string];
+
+/**
+ * Lists every line a resolution logged at any level, so a case can pin all of them.
+ * @param logger - Logger the resolution used.
+ * @returns Each call's level and message, level by level.
+ */
+function linesLogged(logger: SpyLogger): LoggedLine[] {
+  const levels = ['debug', 'info', 'warn', 'error'] as const;
+  return levels.flatMap((level) =>
+    logger[level].mock.calls.map(([message]): LoggedLine => [level, message]));
+}
+
 /**
  * Builds a store whose read reports a failure, and counts its reads.
  * @param read - What `read` does.
@@ -133,7 +147,7 @@ describe('resolveWarmToken', () => {
 
       const { logger } = resolveOver(store);
 
-      expect(logger.info).toHaveBeenCalledWith(`  🔐 Using the stored long-term token for ${STORE_KEY}`);
+      expect(linesLogged(logger)).toEqual([['info', `  🔐 Using the stored long-term token for ${STORE_KEY}`]]);
       expect(everythingLogged(logger)).not.toContain(stored);
     });
 
@@ -184,9 +198,10 @@ describe('resolveWarmToken', () => {
 
       const { logger } = resolveOver(store);
 
-      expect(logger.info).toHaveBeenCalledWith(
+      expect(linesLogged(logger)).toEqual([[
+        'info',
         `  🔐 The stored long-term token for ${STORE_KEY} belongs to another login; logging in with an SMS`,
-      );
+      ]]);
     });
   });
 
@@ -206,7 +221,7 @@ describe('resolveWarmToken', () => {
 
       const { logger } = resolveOver(store, { seed });
 
-      expect(logger.info).toHaveBeenCalledWith(`  🔐 Using the configured long-term token for ${STORE_KEY}`);
+      expect(linesLogged(logger)).toEqual([['info', `  🔐 Using the configured long-term token for ${STORE_KEY}`]]);
       expect(everythingLogged(logger)).not.toContain(seed);
     });
 
@@ -261,7 +276,7 @@ describe('resolveWarmToken', () => {
       const { bankConfig, logger } = resolveOver(store, { seed });
 
       expect(bankConfig.otpLongTermToken).toBeUndefined();
-      expect(logger.warn).toHaveBeenCalledWith(`  ⚠️  ${warning}`);
+      expect(linesLogged(logger)).toEqual([['warn', `  ⚠️  ${warning}`]]);
     });
   });
 
@@ -272,8 +287,7 @@ describe('resolveWarmToken', () => {
       const { bankConfig, logger } = resolveOver(store, { seed });
 
       expect(bankConfig.otpLongTermToken).toBeUndefined();
-      expect(logger.info).not.toHaveBeenCalled();
-      expect(logger.warn).not.toHaveBeenCalled();
+      expect(linesLogged(logger)).toEqual([]);
     });
 
     it('sends no token, and warns, when the entry has no login to bind one to', () => {
@@ -283,15 +297,15 @@ describe('resolveWarmToken', () => {
       const { bankConfig, logger } = resolveOver(store, { login: NO_LOGIN, seed: fakeToken() });
 
       expect(bankConfig.otpLongTermToken).toBeUndefined();
-      expect(logger.warn).toHaveBeenCalledWith(
-        `  ⚠️  No login identity for ${STORE_KEY}, so no long-term token is sent`,
-      );
+      expect(linesLogged(logger)).toEqual([
+        ['warn', `  ⚠️  No login identity for ${STORE_KEY}, so no long-term token is sent`],
+      ]);
     });
 
-    it('does not read the store for an entry with no login', () => {
+    it('does not read the store for an entry with no login, even one with a configured token', () => {
       const store = storeThatReads(() => fail('never asked'));
 
-      resolveOver(store, { login: NO_LOGIN });
+      resolveOver(store, { login: NO_LOGIN, seed: fakeToken() });
 
       expect(store.read).not.toHaveBeenCalled();
     });
@@ -302,9 +316,9 @@ describe('resolveWarmToken', () => {
       const { bankConfig, logger } = resolveOver(store, { seed: fakeToken() });
 
       expect(bankConfig.otpLongTermToken).toBeUndefined();
-      expect(logger.warn).toHaveBeenCalledWith(
-        `  ⚠️  Could not read the long-term token for ${STORE_KEY}: EACCES: permission denied`,
-      );
+      expect(linesLogged(logger)).toEqual([
+        ['warn', `  ⚠️  Could not read the long-term token for ${STORE_KEY}: EACCES: permission denied`],
+      ]);
     });
 
     it('sends no token, and warns with the cause, when reading the store throws', () => {
@@ -313,9 +327,9 @@ describe('resolveWarmToken', () => {
       const { bankConfig, logger } = resolveOver(store, { seed: fakeToken() });
 
       expect(bankConfig.otpLongTermToken).toBeUndefined();
-      expect(logger.warn).toHaveBeenCalledWith(
-        `  ⚠️  Could not read the long-term token for ${STORE_KEY}: disk vanished`,
-      );
+      expect(linesLogged(logger)).toEqual([
+        ['warn', `  ⚠️  Could not read the long-term token for ${STORE_KEY}: disk vanished`],
+      ]);
     });
   });
 
@@ -328,7 +342,7 @@ describe('resolveWarmToken', () => {
 
       const { logger } = resolveOver(store, { canAskForOtp: false });
 
-      expect(logger.warn).toHaveBeenCalledWith(`  ⚠️  ${fix}`);
+      expect(linesLogged(logger)).toEqual([['warn', `  ⚠️  ${fix}`]]);
     });
 
     it('does not warn about the fix when a token is sent', () => {

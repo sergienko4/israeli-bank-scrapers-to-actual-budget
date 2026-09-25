@@ -235,13 +235,16 @@ describe('ScraperSetup', () => {
         config: fakeImporterConfig(), bankTokens: store, twoFactorPrompter: null,
       }) as unknown as ILiveScrapeDependencies;
 
+    /** The config entry name every attempt here comes from. */
+    const ACCOUNT_KEY = 'primary';
+
     /**
-     * Builds the options one attempt resolves to, keyed by the entry's bank id.
+     * Builds the options one attempt resolves to, from the entry {@link ACCOUNT_KEY}.
      * @param entry - The bank entry, and optionally its OTP retriever.
      * @returns Resolved live options with a spy logger.
      */
     const liveOpts = (entry: IEntry): IResolvedLiveOpts =>
-      ({ ...entry, accountKey: entry.bankId, startDate: new Date(), logger: spyLogger() });
+      ({ ...entry, accountKey: ACCOUNT_KEY, startDate: new Date(), logger: spyLogger() });
 
     /**
      * Builds a OneZero entry.
@@ -254,15 +257,33 @@ describe('ScraperSetup', () => {
     });
 
     /**
-     * Stores a fresh token for the attempt, bound to the login it logs in with.
+     * Names the store slot an attempt owns, written out rather than built by the
+     * code under test, so a key that dropped the entry name would miss it.
+     * @param opts - The attempt's options.
+     * @returns `bankId:accountKey`.
+     */
+    const ownKey = (opts: IResolvedLiveOpts): string => `${opts.bankId}:${ACCOUNT_KEY}`;
+
+    /**
+     * Fingerprints the login an attempt logs in with, straight from its entry.
+     * @param opts - The attempt's options.
+     * @returns The login fingerprint.
+     */
+    const ownLogin = (opts: IResolvedLiveOpts): string => {
+      const fingerprint = loginFingerprint(opts.companyType, opts.bankConfig);
+      if (!fingerprint.success) throw new Error(`no login for ${opts.bankId}: ${fingerprint.message}`);
+      return fingerprint.data;
+    };
+
+    /**
+     * Stores a fresh token in the attempt's own slot, bound to the login it logs in with.
      * @param deps - Dependencies carrying the store.
      * @param opts - The attempt's options.
      * @returns The stored token.
      */
     const storeOwnToken = (deps: ILiveScrapeDependencies, opts: IResolvedLiveOpts): string => {
-      const { storeKey, login } = buildTokenCaptureParams(deps, opts);
       const token = fakeToken();
-      deps.bankTokens.write(storeKey, token, login);
+      deps.bankTokens.write(ownKey(opts), token, ownLogin(opts));
       return token;
     };
 
@@ -294,8 +315,7 @@ describe('ScraperSetup', () => {
     it('sends no token the store binds to another login, even when one is configured', () => {
       const opts = liveOpts(oneZero({ otpLongTermToken: fakeToken() }));
       const deps = liveDeps(makeStore().store);
-      const { storeKey } = buildTokenCaptureParams(deps, opts);
-      deps.bankTokens.write(storeKey, fakeToken(), fakeLoginFingerprint());
+      deps.bankTokens.write(ownKey(opts), fakeToken(), fakeLoginFingerprint());
 
       const { credentials } = initScrape(deps, opts);
 
