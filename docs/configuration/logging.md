@@ -210,17 +210,22 @@ written, as a JSON string escapes it and percent-encoded in an address, in any
 letter case. A phone number is also matched in its `972` form and as its nine
 national digits, which every form a bank sends contains, so no form of it
 shows: `+972501234567` is written as `[REDACTED]` or `+[REDACTED]`, depending
-on how the config writes the number. A value shorter than four characters is
-not matched as bare text, as that would hide those characters in every line.
-It is hidden only after one of the keys above, so a short value sent under
-another name, such as `num` or `userCode`, can show. The token file is read by
+on how the config writes the number. A form shorter than six characters could
+be an ordinary word's letters or a number's digits, so it is matched only
+where it stands as a whole word, with no letter or digit right before or
+after it. With the user code `test` held, `e2e-test-bank` is written as
+`e2e-[REDACTED]-bank`, while the bank name `e2eTestBank` stays readable. So a
+one-character credential hides that character wherever it stands alone:
+with `1` held, `Successful: 1 (100.0%)` is written as
+`Successful: [REDACTED] (100.0%)`. The token file is read by
 the import run, not by the Telegram bot, so the bot's `/logs` and history
 replies know a stored token only from records that the run masked as it wrote
 them.
 
-A value is matched inside longer words too, so that no part of it shows, such
-as a phone's national digits after its leading `0`. So a credential that is
-also an ordinary word is hidden wherever that word appears. With the user code
+A form of six characters or more is matched inside longer words too, so that
+no part of it shows, such as a phone's national digits after its leading `0`.
+So a credential of that length that is also an ordinary word is hidden
+wherever that word appears. With the user code
 `Password` held, `INVALID_PASSWORD` is written as `INVALID_[REDACTED]`, and the
 `/status`, `/scan` and `/retry` replies, which read the masked history, add no
 advice for it. A held value that is part of a secret key still leaves the key's
