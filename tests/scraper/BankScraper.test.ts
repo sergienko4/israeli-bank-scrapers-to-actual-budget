@@ -183,6 +183,20 @@ describe('BankScraper coordinator', () => {
     expect(callArg.startDate).toBeInstanceOf(Date);
   });
 
+  it('passes the config entry name as accountKey beside the canonical bankId', async () => {
+    const strategy: IBankScrapeStrategy = {
+      scrape: vi.fn().mockResolvedValue(succeed({
+        bankId: 'onezero', companyType: 'oneZero',
+        attemptCount: 1, strategy: 'live',
+        raw: { success: true, accounts: [] },
+      })),
+    };
+    await makeScraper(strategy).scrapeBankWithResilience('oneZero', fakeBankConfig());
+    const callArg = (strategy.scrape as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(callArg.bankId).toBe('onezero');
+    expect(callArg.accountKey).toBe('oneZero');
+  });
+
   it('passes credit-card amounts through unflipped (visaCal, scraper 8.6.7)', async () => {
     const strategy: IBankScrapeStrategy = {
       scrape: vi.fn().mockResolvedValue(succeed({
