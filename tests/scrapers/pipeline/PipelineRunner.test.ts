@@ -128,4 +128,17 @@ describe('PipelineRunner', () => {
     expect(line).not.toContain(TEST_CREDENTIAL);
     expect(redactSecrets(line)).toContain('boom-root-cause');
   });
+
+  it('hands the logger a cause whose error quoted a secret already masked', async () => {
+    const ctx = makeCtx();
+    const cause = new Error(`POST /sessions 401: {"idToken":"${TEST_CREDENTIAL}`);
+    const steps: INamedStep[] = [
+      makeStep('broken', async () => fail('login failed at the bank', { status: 'login-failed', error: cause })),
+    ];
+
+    await execute(steps, ctx);
+    const line = vi.mocked(ctx.logger.error).mock.calls[0][0];
+    expect(line).not.toContain(TEST_CREDENTIAL);
+    expect(line).toContain('login failed at the bank | cause: Error: POST /sessions 401');
+  });
 });

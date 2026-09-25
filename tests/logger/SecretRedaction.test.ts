@@ -9,7 +9,14 @@
 import { describe, expect, it } from 'vitest';
 
 import redactSecrets, { isSecretKey } from '../../src/Logger/SecretRedaction.js';
-import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
+import { registerSecretValues } from '../../src/Logger/SecretValues.js';
+import { TEST_CREDENTIAL, TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
+
+/** The provider's failure codes that end in a secret word. */
+const FAILURE_CODE_KEYS = ['CHANGE_PASSWORD', 'INVALID_PASSWORD', 'INVALID_PHONE_NUMBER', 'NO_PASSWORD'];
+
+/** A secret of letters only, the shape a failure code's prose was once let through as. */
+const LETTERS_VALUE = TEST_CREDENTIAL.replaceAll('-', '');
 
 /** The time a linear scan of a 100k-repeat text stays well within. */
 const LINEAR_LIMIT_MS = 250;
@@ -332,6 +339,66 @@ describe('redactSecrets', () => {
     expect(redactSecrets(text)).toBe('rejected persistentOtpToken=[REDACTED]');
   });
 
+  it('treats each failure code that ends in a secret word as a key', () => {
+    expect(FAILURE_CODE_KEYS.filter(code => !isSecretKey(code))).toEqual([]);
+  });
+
+  it.each([
+    ['at the start', (code: string) => `${code}: ${LETTERS_VALUE}`],
+    ['inside a log line', (code: string) => `❌ oneZero: ${code}: ${LETTERS_VALUE}`],
+    ['in a quoted message', (code: string) => `error "${code}: ${LETTERS_VALUE}"`],
+    ['on a new line', (code: string) => `Import failed\n${code}: ${LETTERS_VALUE}`],
+    ['after the form label', (code: string) => `${code}: Form: ${LETTERS_VALUE}`],
+    ['before a period', (code: string) => `${code}: ${LETTERS_VALUE}. Try again`],
+    ['before a comma', (code: string) => `${code}: ${LETTERS_VALUE}, add one`],
+  ])('hides a value of letters only after a failure code %s', (_shape, textFor) => {
+    const leaked = FAILURE_CODE_KEYS.map(textFor).filter(text => redactSecrets(text).includes(LETTERS_VALUE));
+    expect(leaked).toEqual([]);
+  });
+
+  it.each([
+    ['a wrong password', 'INVALID_PASSWORD — Invalid credentials'],
+    ['an expired password', 'CHANGE_PASSWORD — Password expired, change it on the bank site'],
+    ['a missing password', 'NO_PASSWORD — missing'],
+    ['an unusable phone number', 'INVALID_PHONE_NUMBER — Unusable phone number'],
+    ['a code inside a log line', '❌ oneZero: INVALID_PASSWORD — הסיסמה שגויה'],
+    ['a login form error', 'INVALID_PASSWORD — Form: שם המשתמש שגוי'],
+  ])('keeps a failure code joined to its prose with a dash: %s', (_shape, text) => {
+    expect(redactSecrets(text)).toBe(text);
+  });
+
+  it.each([
+    ['in lower case', `invalid_password: ${TEST_CREDENTIAL_SHORT}`, 'invalid_password=[REDACTED]'],
+    ['in mixed case', `Change_Password: ${TEST_CREDENTIAL_SHORT}`, 'Change_Password=[REDACTED]'],
+    ['with an equals sign', `INVALID_PASSWORD=${TEST_CREDENTIAL_SHORT}`, 'INVALID_PASSWORD=[REDACTED]'],
+    ['with no space', `NO_PASSWORD:${TEST_CREDENTIAL_SHORT}`, 'NO_PASSWORD=[REDACTED]'],
+    ['with two spaces', `NO_PASSWORD:  ${TEST_CREDENTIAL_SHORT}`, 'NO_PASSWORD=[REDACTED]'],
+    ['before a quoted value', `INVALID_PASSWORD: "sms ${TEST_CREDENTIAL}" tail`, 'INVALID_PASSWORD: "[REDACTED]" tail'],
+    ['before a chained key', `INVALID_PASSWORD: idToken=${TEST_CREDENTIAL} tail`, 'INVALID_PASSWORD=[REDACTED] tail'],
+    ['before an object', `INVALID_PASSWORD: {"pin":"${TEST_CREDENTIAL}"}`, 'INVALID_PASSWORD=[REDACTED]'],
+    ['before a one-word scheme', `INVALID_PASSWORD: Basic ${TEST_CREDENTIAL} tail`, 'INVALID_PASSWORD=[REDACTED] tail'],
+    ['before a phone number', 'CHANGE_PASSWORD: 050 123 4567 tail', 'CHANGE_PASSWORD=[REDACTED] tail'],
+    ['before one word that starts with a digit', 'INVALID_PHONE_NUMBER: 0501234567 tail', 'INVALID_PHONE_NUMBER=[REDACTED] tail'],
+    ['before a word with a digit in it', 'INVALID_PASSWORD: Passw0rd tail', 'INVALID_PASSWORD=[REDACTED] tail'],
+    ['before a word with a separator in it', `INVALID_PASSWORD: user:${TEST_CREDENTIAL} tail`, 'INVALID_PASSWORD=[REDACTED] tail'],
+    ['before a word with a period in it', 'NO_PASSWORD: secret.value tail', 'NO_PASSWORD=[REDACTED] tail'],
+    ['for a code the provider does not send', `API_SECRET: ${TEST_CREDENTIAL_SHORT}`, 'API_SECRET=[REDACTED]'],
+    ['for a longer name', `OLD_INVALID_PASSWORD: ${TEST_CREDENTIAL_SHORT}`, 'OLD_INVALID_PASSWORD=[REDACTED]'],
+    ['for a bare key', `PASSWORD: ${TEST_CREDENTIAL_SHORT}`, 'PASSWORD=[REDACTED]'],
+    ['that ends a dotted name', `creds.INVALID_PASSWORD: ${TEST_CREDENTIAL_SHORT}`, 'creds.INVALID_PASSWORD=[REDACTED]'],
+    ['that ends a hyphenated name', `auth-INVALID_PASSWORD: ${TEST_CREDENTIAL_SHORT}`, 'auth-INVALID_PASSWORD=[REDACTED]'],
+    ['that ends a path', `cfg/NO_PASSWORD: ${TEST_CREDENTIAL_SHORT}`, 'cfg/NO_PASSWORD=[REDACTED]'],
+    ['after another separator', `cfg:CHANGE_PASSWORD: ${TEST_CREDENTIAL_SHORT}`, 'cfg:CHANGE_PASSWORD=[REDACTED]'],
+    ['after an invisible mark', `creds.\u200eINVALID_PASSWORD: ${TEST_CREDENTIAL_SHORT}`, 'creds.\u200eINVALID_PASSWORD=[REDACTED]'],
+    ['after a byte order mark', `creds.\ufeffINVALID_PASSWORD: ${TEST_CREDENTIAL_SHORT}`, 'creds.\ufeffINVALID_PASSWORD=[REDACTED]'],
+    ['before another label', `INVALID_PASSWORD: pin: ${TEST_CREDENTIAL_SHORT} tail`, 'INVALID_PASSWORD=[REDACTED] tail'],
+    ['before the form label in lower case', `INVALID_PASSWORD: form: ${TEST_CREDENTIAL_SHORT} tail`, 'INVALID_PASSWORD=[REDACTED] tail'],
+    ['before the form label and a digit', 'INVALID_PASSWORD: Form: 1234 tail', 'INVALID_PASSWORD=[REDACTED] tail'],
+    ['before the form label twice', `INVALID_PASSWORD: Form: Form: ${TEST_CREDENTIAL_SHORT} tail`, 'INVALID_PASSWORD=[REDACTED] tail'],
+  ])('hides the value after a failure-code key %s', (_shape, text, expected) => {
+    expect(redactSecrets(text)).toBe(expected);
+  });
+
   it('hides every secret in one message, whatever the key case', () => {
     const text = `TOKEN=${TEST_CREDENTIAL} CreditCard: ${TEST_CREDENTIAL}`;
     expect(redactSecrets(text)).toBe('TOKEN=[REDACTED] CreditCard=[REDACTED]');
@@ -394,5 +461,21 @@ describe('redactSecrets', () => {
     '',
   ])('leaves %j unchanged', (text) => {
     expect(redactSecrets(text)).toBe(text);
+  });
+});
+
+describe('redactSecrets with the values the importer holds', () => {
+  /** A credential the bank quotes back with no key in front of it. */
+  const ECHOED = 'Echoed-4vX-credential';
+
+  it('hides a registered value that has no key', () => {
+    registerSecretValues([ECHOED]);
+    expect(redactSecrets(`Form: no account for ${ECHOED} at this branch`))
+      .toBe('Form: no account for [REDACTED] at this branch');
+  });
+
+  it('still hides a value after its key, once the known values are masked', () => {
+    registerSecretValues([ECHOED]);
+    expect(redactSecrets(`token=${TEST_CREDENTIAL} ${ECHOED}`)).toBe('token=[REDACTED] [REDACTED]');
   });
 });

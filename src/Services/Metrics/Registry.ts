@@ -134,7 +134,7 @@ export default class MetricsService {
   /** Completes a failed bank.
    *
    * <p>The error's name and message are masked apart: any library can name an
-   * error, and a name such as `INVALID_PASSWORD` ends in a secret word, so
+   * error, and a name such as `SESSION_TOKEN` ends in a secret word, so
    * masking the joined text would hide the message after it.
    * @param metrics bank metrics.
    * @param error failure cause.

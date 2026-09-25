@@ -32,9 +32,11 @@ cap_add:
 
 ## 2FA / OTP requested every run
 
-**Symptom:** every import asks for an OTP, even for banks that support persistence (oneZero).
+**Symptom:** every import asks for an OTP, even for banks that issue a long-term token (OneZero, Pepper and PayBox).
 
-**Fix:** after the first successful login, add `"otpLongTermToken"` to that bank's config block. For oneZero this is captured automatically on the first run.
+**Cause:** the importer saves the long-term token after each SMS login, in `bank-tokens.json` on the data volume, but does not reuse it yet. The logs never show the token.
+
+**Fix:** copy the saved token into that bank's `otpLongTermToken` and keep `twoFactorAuth: true`; see [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token). If the SMS comes back later, the bank refused the configured token and the importer saved a new one; copy it again.
 
 Better still: [auto-forward OTP codes from your phone](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md) so no manual input is needed.
 

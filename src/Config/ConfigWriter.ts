@@ -16,6 +16,7 @@ import type { IImporterConfig, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import { encryptConfig, getEncryptionPassword } from './ConfigEncryption.js';
+import registerConfigSecrets from './ConfigSecretValues.js';
 import splitSecrets from './SecretSplitter.js';
 
 /** A pending file write: destination path + serialized JSON payload. */
@@ -118,11 +119,14 @@ export default class ConfigWriter {
 
   /**
    * Splits and writes the full config; secrets are encrypted when configured.
+   * The secret values are registered with the value masker first, so a new
+   * credential saved from the portal is hidden from every output at once.
    * @param config - The merged importer config to persist.
    * @returns Procedure resolving when both files are written, or failure.
    */
   public write(config: IImporterConfig): Procedure<{ written: true }> {
     try {
+      registerConfigSecrets(config);
       const { settings, secrets } = splitSecrets(config);
       const configDir = dirname(this._configPath);
       const credPath = join(configDir, 'credentials.json');

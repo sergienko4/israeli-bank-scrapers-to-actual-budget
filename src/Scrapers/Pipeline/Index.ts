@@ -18,3 +18,6 @@ export type {
   IBankFilter, IBankMetricsDelta, IBankQuarantineEntry,
   IBankQuarantineStage, IBankResult, IBankResultsState,
 } from '../../Types/Pipeline/Index.js';
+
+// Re-export the secret masker so Steps can mask text before they cut or re-space it
+export { default as redactSecrets } from '../../Logger/SecretRedaction.js';

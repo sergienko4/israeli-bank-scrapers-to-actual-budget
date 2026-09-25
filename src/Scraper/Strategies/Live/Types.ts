@@ -15,6 +15,7 @@ import type { ITimeoutWrapper } from '../../../Resilience/TimeoutWrapper.js';
 import type { ITwoFactorPrompter } from '../../../Services/ITwoFactorPrompter.js';
 import type NotificationService from '../../../Services/NotificationService.js';
 import type { IBankConfig, IImporterConfig } from '../../../Types/Index.js';
+import type { IBankTokenStore } from '../../Tokens/BankTokenStore.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
 import type { BrowserRegistry } from './BrowserRegistry.js';
 
@@ -22,10 +23,16 @@ import type { BrowserRegistry } from './BrowserRegistry.js';
 export interface ILiveScrapeDependencies {
   readonly config: IImporterConfig;
   readonly retryStrategy: IRetryStrategy;
+  /**
+   * Must run its callback at most once. 2FA logins and logins that mint a
+   * durable token use it so that no try can overlap another.
+   */
   readonly noRetryStrategy: IRetryStrategy;
   readonly timeoutWrapper: ITimeoutWrapper;
   readonly twoFactorPrompter: ITwoFactorPrompter | null;
   readonly notificationService: NotificationService;
+  /** Where API-direct banks' long-term tokens are kept between runs. */
+  readonly bankTokens: IBankTokenStore;
 }
 
 /** Internal opts after companyType is proven present. */
@@ -55,6 +62,8 @@ export interface IInitializedLiveScrape {
   readonly scraper: ILiveProviderScraper;
   readonly credentials: ScraperCredentials;
   readonly browsers: BrowserRegistry;
+  /** True when the login callback stores the durable token each login mints. */
+  readonly hasTokenCapture: boolean;
 }
 
 /** Timeout wrapper input bundle for one provider scrape invocation. */

@@ -8,6 +8,7 @@ import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import type { IRetryStrategy } from '../../../Resilience/RetryStrategy.js';
 import type { IBankConfig, IRawScrape, Procedure } from '../../../Types/Index.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../../Types/Index.js';
+import { captureResultToken, sweepTokenLeftovers } from '../../Tokens/AuthFlowCapture.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
 import { RetryableProviderFailure, throwIfRetryable } from './ProviderFailure.js';
 import {
@@ -15,7 +16,7 @@ import {
   resolveLiveOpts,
   succeedRawScrape,
 } from './ResultEnvelope.js';
-import { initScrape } from './ScraperSetup.js';
+import { buildTokenCaptureParams, initScrape } from './ScraperSetup.js';
 import type {
   ILiveScrapeDependencies,
   IResolvedLiveOpts,
@@ -35,8 +36,23 @@ export default async function runLiveScrape(
 ): Promise<Procedure<IRawScrape>> {
   const resolved = resolveLiveOpts(scrapeOpts);
   if (!resolved.success) return resolved;
-  resolved.data.logger.info(`  🔍 Scraping transactions from ${resolved.data.bankId}...`);
+  startScrape(deps, resolved.data);
   return await runWithOtpRetry(deps, resolved.data);
+}
+
+/**
+ * Announces the scrape and clears staged token files a killed run left behind.
+ *
+ * Only API-direct banks sweep, and the sweep only ever warns, so it cannot
+ * cost the scrape.
+ * @param deps - Strategy dependencies exposing the token store.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @returns True when the token store was swept.
+ */
+function startScrape(deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts): boolean {
+  scrapeOpts.logger.info(`  🔍 Scraping transactions from ${scrapeOpts.bankId}...`);
+  const captureParams = buildTokenCaptureParams(deps, scrapeOpts);
+  return sweepTokenLeftovers(captureParams);
 }
 
 /**
@@ -74,14 +90,35 @@ async function handleOtpReject(
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @returns Provider scrape result returned by israeli-bank-scrapers.
  */
-function executeAttempt(
+async function executeAttempt(
   deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts,
 ): Promise<IScraperScrapingResult> {
-  const initialized = initScrape(deps, scrapeOpts);
-  const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig);
+  const { hasTokenCapture, ...prepared } = initScrape(deps, scrapeOpts);
+  const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig, hasTokenCapture);
   const label = `Scraping ${scrapeOpts.bankId}`;
-  const params = { deps, ...initialized, logger: scrapeOpts.logger, label };
-  return runAttemptThenSeal(retryStrategy, params);
+  const params = { deps, ...prepared, logger: scrapeOpts.logger, label };
+  const result = await runAttemptThenSeal(retryStrategy, params);
+  return keepMintedToken(deps, scrapeOpts, result);
+}
+
+/**
+ * Stores the durable token an attempt's result carried.
+ *
+ * Runs only when the attempt returns a result. A failure the retry policy
+ * turns into an error skips it; the login callback has already stored any
+ * token minted before that failure. A store failure is a warning, never an
+ * error.
+ * @param deps - Strategy dependencies exposing the token store.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @param result - Provider result of the attempt.
+ * @returns The same result, unchanged.
+ */
+function keepMintedToken(
+  deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts, result: IScraperScrapingResult,
+): IScraperScrapingResult {
+  const captureParams = buildTokenCaptureParams(deps, scrapeOpts);
+  captureResultToken(result, captureParams);
+  return result;
 }
 
 /**
@@ -138,16 +175,24 @@ function restoreProviderResult(error: unknown): IScraperScrapingResult {
 }
 
 /**
- * Selects no-retry for 2FA banks because OTP flows own retry cadence.
+ * Selects the single-try policy for any attempt whose tries must not overlap.
+ *
+ * The timeout abandons a try rather than cancelling it, so a retry runs beside
+ * the try it replaced. A 2FA login owns its OTP cadence. A login that mints a
+ * durable token revokes the one before it, so a timed-out try's late callback
+ * would store a token the bank no longer honours once a retry had logged in.
+ * With one try per attempt, and the INVALID_OTP attempt starting only after
+ * the first has returned, tokens reach the store in the order they were minted.
  * @param deps - Strategy dependencies exposing retry policies.
  * @param bankConfig - Bank config whose twoFactorAuth flag is inspected.
+ * @param hasTokenCapture - Whether the attempt's login callback stores a token.
  * @returns Retry policy used for this live scrape attempt.
  */
 function pickRetryStrategy(
-  deps: ILiveScrapeDependencies,
-  bankConfig: IBankConfig,
+  deps: ILiveScrapeDependencies, bankConfig: IBankConfig, hasTokenCapture: boolean,
 ): IRetryStrategy {
-  return bankConfig.twoFactorAuth ? deps.noRetryStrategy : deps.retryStrategy;
+  const isSingleTry = Boolean(bankConfig.twoFactorAuth) || hasTokenCapture;
+  return isSingleTry ? deps.noRetryStrategy : deps.retryStrategy;
 }
 
 /**

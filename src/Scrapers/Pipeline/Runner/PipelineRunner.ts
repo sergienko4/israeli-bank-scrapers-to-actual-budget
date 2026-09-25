@@ -24,20 +24,24 @@ export default async function execute(
 /**
  * Builds a cause suffix from a failed step's underlying error so the real
  * error surfaces in logs instead of being hidden behind the step message.
+ *
+ * <p>The cause is masked on its own: an error can quote a server reply that
+ * holds a token, and the line must be safe whichever logger receives it.
  * @param error - Optional original error carried by the failure.
- * @returns A ' | cause: <stack>' suffix, or '' when no error is present.
+ * @returns A masked ' | cause: <stack>' suffix, or '' when no error is present.
  */
 function formatCause(error?: Error): string {
   if (!error) return '';
-  return ` | cause: ${error.stack ?? error.message}`;
+  const cause = redactSecrets(error.stack ?? error.message);
+  return ` | cause: ${cause}`;
 }
 
 /**
  * Builds the log line for a failed step.
  *
- * <p>The step's message is masked before its cause is appended: a secret a
- * bank's snippet cut off hides the rest of the text it is masked in, so
- * masking the whole line later would hide the cause too.
+ * <p>The step's message and its cause are masked apart: a secret a bank's
+ * snippet cut off hides the rest of the text it is masked in, so masking the
+ * whole line at once would hide the cause too.
  * @param name - The failed step's name.
  * @param failure - The step's failure.
  * @returns The line to log.

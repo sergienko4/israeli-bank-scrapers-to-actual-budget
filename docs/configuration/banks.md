@@ -80,7 +80,7 @@ Pass through to the scraper library for banks that timeout on slow connections:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `timeout` | `30000` | Navigation timeout in ms — increase to `60000` for slow networks (Oracle Cloud) |
-| `navigationRetryCount` | — | **Ignored since scrapers 8.7.0.** Still accepted so existing configs keep loading, but no longer offered in the web portal. Scrape retries are handled by the importer itself (`maxRetryAttempts`, default `3`). |
+| `navigationRetryCount` | — | **Ignored since scrapers 8.7.0.** Still accepted so existing configs keep loading, but no longer offered in the web portal. Scrape retries are handled by the importer itself (`maxRetryAttempts`, default `3`), for browser banks without `twoFactorAuth`. A bank with `twoFactorAuth`, and OneZero, Pepper and PayBox always, get a single try. |
 | `clearSession` | `false` | Force-clear browser session before scraping |
 
 ## 2FA / OTP
@@ -101,9 +101,39 @@ Any bank that shows an SMS verification screen supports `twoFactorAuth`. The Tel
 |--------|---------|-------------|
 | `twoFactorAuth` | `false` | Enable 2FA flow for this bank |
 | `twoFactorTimeout` | `300` | Seconds to wait for OTP reply before failing |
-| `otpLongTermToken` | — | Persistent token to skip OTP on future runs (oneZero only) |
+| `otpLongTermToken` | — | Long-term token that skips the SMS on future logins (OneZero, Pepper and PayBox). See [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) |
 
 For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
+
+### Long-term token
+
+OneZero, Pepper and PayBox return a long-term token after an SMS login. When
+the token is set as `otpLongTermToken`, later logins skip the SMS.
+
+- The importer saves the token after every login of these banks, in
+  `bank-tokens.json` on the data volume (`/app/data`, or the absolute path in
+  `BANK_TOKENS_PATH`). Only the importer's user can read the file.
+- The logs never show the token: log lines and alerts mask it.
+- The importer does not read the saved token back yet, so you still set
+  `otpLongTermToken` yourself:
+  1. Run one import with `twoFactorAuth: true` and answer the SMS prompt.
+  2. Open `bank-tokens.json`, for example with
+     `docker exec <importer container> cat /app/data/bank-tokens.json` (the
+     Compose file names the container `israeli-bank-importer`).
+  3. Find the entry named `<bank id>:<banks entry name>`, such as
+     `onezero:oneZero` for a `banks` entry named `oneZero`, and copy its
+     `token` value into that bank's `otpLongTermToken` (in `config.json`,
+     `credentials.json` or the web portal). The next run uses it.
+- Keep `twoFactorAuth: true`. Without it the importer cannot ask for a code
+  when the bank refuses the token.
+- Each SMS login creates a new token, and the bank stops accepting the one
+  before it. If the bank refuses your configured token, the importer logs in
+  with an SMS and saves the new token; copy it again.
+- The file holds live login tokens. Do not paste its contents into issues or
+  chats.
+
+The [token store design](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md)
+covers the file layout and its protections.
 
 ## Global options
 
