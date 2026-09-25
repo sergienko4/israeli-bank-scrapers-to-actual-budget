@@ -33,17 +33,30 @@ function knowing(...values: string[]): SecretValues {
   return known;
 }
 
-/** Where a quoted credential can sit in a bank's words. */
-const PLACEMENTS: readonly [string, string][] = [
-  ['the first word', `${VALUE} ${CANARY}`],
-  ['mid-sentence', `Form: user ${VALUE} is not valid ${CANARY}`],
-  ['the last word', `${CANARY} ${VALUE}`],
-  ['twice', `${VALUE} ${CANARY} ${VALUE}`],
-  ['between punctuation', `${CANARY} (${VALUE}).`],
-  ['inside quotes', `${CANARY} "${VALUE}"`],
-  ['inside an address', `GET https://bank.example/login?user=${VALUE}&x=1 ${CANARY}`],
-  ['with no space around it', `${CANARY}:${VALUE}:${CANARY}`],
+/** What a masked value becomes. */
+const MASK = '[REDACTED]';
+
+/** Where a quoted credential can sit in a bank's words, for any value. */
+const PLACED: readonly [string, (value: string) => string][] = [
+  ['the first word', value => `${value} ${CANARY}`],
+  ['mid-sentence', value => `Form: user ${value} is not valid ${CANARY}`],
+  ['the last word', value => `${CANARY} ${value}`],
+  ['twice', value => `${value} ${CANARY} ${value}`],
+  ['between punctuation', value => `${CANARY} (${value}).`],
+  ['inside quotes', value => `${CANARY} "${value}"`],
+  ['inside an address', value => `GET https://bank.example/login?user=${value}&x=1 ${CANARY}`],
+  ['with no space around it', value => `${CANARY}:${value}:${CANARY}`],
 ];
+
+/** Each placement, with the long value in it. */
+const PLACEMENTS: readonly [string, string][] = PLACED.map(([placement, place]) => [placement, place(VALUE)]);
+
+/** Values under six characters, which are masked only where they stand as a whole word. */
+const SHORT_VALUES = ['k', 'k9', 'k9Q', 'k9Qa', 'k9Qab', '123', 'דני'];
+
+/** Each short value in each placement, and the text masking must write for it. */
+const SHORT_CASES = SHORT_VALUES.flatMap(value =>
+  PLACED.map(([placement, place]) => [value, placement, place(value), place(MASK)] as const));
 
 describe('SecretValues', () => {
   it.each(PLACEMENTS)('hides a known value as %s', (_placement, text) => {
@@ -87,10 +100,6 @@ describe('SecretValues', () => {
     expect(elapsedMs).toBeLessThan(FAST_MS);
   });
 
-  it.each(['', 'a', 'ab', 'abc'])('does not mask %j, shorter than four characters, as bare text', (value) => {
-    expect(knowing(value).mask(`abc ${CANARY}`)).toBe(`abc ${CANARY}`);
-  });
-
   it.each(PLACEMENTS)('masking a masked text as %s again changes nothing', (_placement, text) => {
     const known = knowing(VALUE);
     const once = known.mask(text);
@@ -123,5 +132,48 @@ describe('SecretValues', () => {
     ['lower case', 'operator@example.com'],
   ])('hides a value the bank quotes back in %s', (_letterCase, quoted) => {
     expect(knowing('Operator@Example.com').mask(`${quoted} ${CANARY}`)).toBe(`[REDACTED] ${CANARY}`);
+  });
+});
+
+describe('SecretValues with a value under six characters', () => {
+  it.each(SHORT_CASES)('hides %j standing alone as %s', (value, _placement, text, masked) => {
+    expect(knowing(value).mask(text)).toBe(masked);
+  });
+
+  it.each([
+    ['test', 'Processing bank: e2eTestBank'],
+    ['a', `abc ${CANARY}`],
+    ['k9Qab', `Xk9QabY ${CANARY}`],
+    ['k9Q', `Xk9Q ${CANARY}`],
+    ['123', 'Balance: 1234.5 ILS'],
+    ['דני', `דניאל ${CANARY}`],
+  ])('keeps %j where it is only part of %j', (value, text) => {
+    expect(knowing(value).mask(text)).toBe(text);
+  });
+
+  it.each([
+    ['test', 'e2e-test-bank', 'e2e-[REDACTED]-bank'],
+    ['test', 'INVALID_TEST', 'INVALID_[REDACTED]'],
+    ['-k9', `ab-k9 ${CANARY}`, `ab[REDACTED] ${CANARY}`],
+    ['k9-', `k9-ab ${CANARY}`, `[REDACTED]ab ${CANARY}`],
+  ])('hides %j in %j, where a separator ends the word', (value, text, masked) => {
+    expect(knowing(value).mask(text)).toBe(masked);
+  });
+
+  it('hides a value of six characters inside a longer word', () => {
+    expect(knowing('k9Qab7').mask(`Xk9Qab7Y ${CANARY}`)).toBe(`X[REDACTED]Y ${CANARY}`);
+  });
+
+  it.each(['[', 'R', ']', 'D]', 'ED'])('keeps a mask whole with %j held, and masking again changes nothing', value => {
+    const known = knowing(value);
+    const once = known.mask(`[REDACTED] ${value} ${CANARY}`);
+    expect(once).toBe(`[REDACTED] [REDACTED] ${CANARY}`);
+    expect(known.mask(once)).toBe(once);
+  });
+
+  it('registers no form of an empty value', () => {
+    const known = new SecretValues();
+    expect(known.register([''])).toBe(0);
+    expect(known.mask(`abc ${CANARY}`)).toBe(`abc ${CANARY}`);
   });
 });

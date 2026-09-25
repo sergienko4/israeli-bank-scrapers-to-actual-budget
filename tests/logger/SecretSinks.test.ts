@@ -640,8 +640,9 @@ describe('a letters-only secret after a failure code reaches no output', () => {
 /**
  * Credentials as a config holds them, each with characters an output may
  * escape or encode: HTML marks, a quote and a backslash, an address, Hebrew,
- * the dots of a long-term token, digits, two spaces in a row and a formatted
- * phone number.
+ * the dots of a long-term token, digits, two spaces in a row, a formatted
+ * phone number, and a value of three characters, which masking hides only
+ * where it stands as a whole word.
  */
 const HELD = {
   clientSecret: 'Zk4&Wq8<Rt2>Pm6',
@@ -652,6 +653,7 @@ const HELD = {
   card6Digits: '738291',
   password: 'Kd2  Vn5 Bx8',
   phoneNumber: '052-765-4321',
+  num: 'k9Q',
 };
 
 /**
