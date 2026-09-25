@@ -4,9 +4,10 @@
  * <p>A long-term token is what lets an unattended run skip the SMS login, and
  * for Pepper and PayBox it logs in by itself, so the token a run sends decides
  * whose account it imports. This suite drives the shipped composition through
- * {@link runImport} against a fake bank that behaves the way that matters: it
- * honours only the latest token it minted for each account, it imports the
- * account the token belongs to, and a cold login costs one SMS code.
+ * {@link runImport}, once for each API-direct bank, against a fake bank
+ * ({@link openApiDirectBank}) that knows its customers, honours only the
+ * latest fresh token it minted for each account, imports the account the
+ * token belongs to, and charges one SMS code for a cold login.
  *
  * <p>Each account returns its own account number, so a run that sends a token
  * for the wrong login shows up as the wrong account, not just a wrong call.
@@ -16,16 +17,18 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { faker } from '@faker-js/faker';
-import type { IScraperScrapingResult, ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import loginFingerprint from '../../src/Scraper/Tokens/LoginFingerprint.js';
 import type { ITwoFactorPrompter } from '../../src/Services/ITwoFactorPrompter.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
-import { fakeBankTransactions, fakeCanonicalAccount, fakeUuid, fakeValidBankConfigFor } from '../helpers/factories.js';
+import type { IApiDirectBank } from '../helpers/apiDirectBanks.js';
+import { accountOf, API_DIRECT_BANKS } from '../helpers/apiDirectBanks.js';
+import type { IFakeApiDirectBank } from './helpers/fakeApiDirectBank.js';
+import { accountNumberOf, openApiDirectBank } from './helpers/fakeApiDirectBank.js';
 import type { IRun, ITokenStoreDir, SpyLogger } from './helpers/warmStartHarness.js';
 import {
-  closeTokenStore, ENTRY, everythingLogged, openTokenStore, runImport, STORE_KEY, spyLogger, storedTokens,
+  closeTokenStore, everythingLogged, openTokenStore, runImport, storedTokens,
 } from './helpers/warmStartHarness.js';
 
 const provider = vi.hoisted(() => ({ createScraper: vi.fn() }));
@@ -34,49 +37,8 @@ vi.mock('@sergienko4/israeli-bank-scrapers', async (importOriginal) => {
   return { ...actual, createScraper: provider.createScraper };
 });
 
-/** The second alias of OneZero, the only way to configure a second OneZero entry. */
-const SECOND_ENTRY = 'onezero';
-
-/** What the fake bank reads from the credentials of one login. */
-interface IOneZeroLogin {
-  readonly email: string;
-  readonly otpLongTermToken?: string;
-  readonly otpCodeRetriever?: () => Promise<string>;
-}
-
-/** A logged-in session: whose account it is, and the token the bank now honours for it. */
-interface ISession {
-  readonly account: string;
-  readonly token: string;
-}
-
-/** The bank's memory of the tokens it minted. */
-interface IBankLedger {
-  /** The long-term token each login sent, in order; undefined for none. */
-  readonly sent: (string | undefined)[];
-  /** Every token the bank minted, in order. */
-  readonly minted: string[];
-  /** The account each minted token logs into. */
-  readonly ownerOf: Map<string, string>;
-  /** The one token the bank still honours for each account. */
-  readonly latestOf: Map<string, string>;
-}
-
-/** A fake bank, and what a case can do to it. */
-interface IFakeBank extends Pick<IBankLedger, 'sent' | 'minted'> {
-  /** Revokes an account's current token, as the bank does when it expires. */
-  readonly revoke: (account: string) => void;
-}
-
 /** One run, and how many SMS codes it asked the operator for. */
 interface IReplayRun extends IRun {
-  readonly smsCount: number;
-}
-
-/** An import that threw, what it logged, and how many SMS codes it asked for. */
-interface IFailedRun {
-  readonly error: unknown;
-  readonly logger: SpyLogger;
   readonly smsCount: number;
 }
 
@@ -86,120 +48,23 @@ interface ICountingPrompter {
   readonly smsCount: () => number;
 }
 
+/** A way the bank stops honouring a token it minted. */
+interface IRefusal {
+  readonly why: string;
+  readonly refuse: (bank: IFakeApiDirectBank, bankConfig: IBankConfig) => void;
+}
+
 /** A way the token file can fail, and the warning the run gives for it. */
 interface IBrokenStore {
   readonly why: string;
   readonly breakStore: () => void;
-  readonly warning: string;
+  readonly warning: (storeKey: string) => string;
 }
+
+/** What upstream returns when a cold login is due and the credentials carry no SMS code retriever. */
+const NO_RETRIEVER = { success: false, errorType: 'TWO_FACTOR_RETRIEVER_MISSING' };
 
 let store: ITokenStoreDir;
-let bank: IFakeBank;
-
-/**
- * Logs in warm when the token is the latest one the bank minted for its account.
- * @param ledger - The bank's memory.
- * @param token - The long-term token the login sent, if any.
- * @returns The session of the token's owner, or undefined when the token is not honoured.
- */
-function warmSession(ledger: IBankLedger, token: string | undefined): ISession | undefined {
-  if (token === undefined) return undefined;
-  const account = ledger.ownerOf.get(token);
-  if (account === undefined || ledger.latestOf.get(account) !== token) return undefined;
-  return { account, token };
-}
-
-/**
- * Logs in cold: asks for one SMS code, then mints a token that revokes the account's previous one.
- * @param ledger - The bank's memory.
- * @param login - The credentials the login sent.
- * @returns The new session, or undefined when the login cannot ask for a code.
- */
-async function coldSession(ledger: IBankLedger, login: IOneZeroLogin): Promise<ISession | undefined> {
-  if (login.otpCodeRetriever === undefined) return undefined;
-  await login.otpCodeRetriever();
-  const token = `lt-${fakeUuid()}`;
-  ledger.minted.push(token);
-  ledger.ownerOf.set(token, login.email);
-  ledger.latestOf.set(login.email, token);
-  return { account: login.email, token };
-}
-
-/**
- * Names the account an entry logs into; the fake bank keys accounts by email.
- * @param bankConfig - The entry's config.
- * @returns The entry's email.
- */
-function accountOf(bankConfig: IBankConfig): string {
-  if (bankConfig.email === undefined) throw new Error('A OneZero entry needs an email');
-  return bankConfig.email;
-}
-
-/**
- * Names the account number the fake bank returns for an account.
- * @param account - The account's email.
- * @returns Its account number.
- */
-function accountNumberOf(account: string): string {
-  return `acct-${account}`;
-}
-
-/**
- * Builds the result of a scrape of one account.
- * @param session - The logged-in session.
- * @returns A successful scrape of the session's account, carrying its token.
- */
-function scrapeOf(session: ISession): IScraperScrapingResult {
-  const txns = fakeBankTransactions(2, { date: new Date().toISOString() });
-  const account = fakeCanonicalAccount({ accountNumber: accountNumberOf(session.account), txns });
-  return { success: true, accounts: [account], persistentOtpToken: session.token } as IScraperScrapingResult;
-}
-
-/**
- * Makes the provider a bank that honours only the latest token it minted for each account.
- *
- * <p>Like upstream, the provider reports the token it holds through
- * `onAuthFlowComplete` after a warm and after a cold login.
- * @returns The bank's ledger and its revoke control.
- */
-function openBank(): IFakeBank {
-  const ledger: IBankLedger = { sent: [], minted: [], ownerOf: new Map(), latestOf: new Map() };
-  provider.createScraper.mockImplementation((options: ScraperOptions) => ({
-    /**
-     * Logs in warm or cold, reports the token, then scrapes the session's account.
-     * @param login - The credentials the importer built.
-     * @returns The scrape, or a failure when a cold login cannot ask for a code.
-     */
-    scrape: async (login: IOneZeroLogin): Promise<IScraperScrapingResult> => {
-      ledger.sent.push(login.otpLongTermToken);
-      const session = warmSession(ledger, login.otpLongTermToken) ?? await coldSession(ledger, login);
-      if (session === undefined) {
-        return { success: false, errorType: 'GENERIC', errorMessage: 'no SMS code retriever' } as IScraperScrapingResult;
-      }
-      await options.onAuthFlowComplete?.({ longTermToken: session.token, bearer: `bearer-${fakeUuid()}` });
-      return scrapeOf(session);
-    },
-  }));
-  return {
-    sent: ledger.sent,
-    minted: ledger.minted,
-    /**
-     * Revokes an account's current token.
-     * @param account - The account's email.
-     * @returns Nothing.
-     */
-    revoke: (account: string): void => { ledger.latestOf.delete(account); },
-  };
-}
-
-/**
- * Builds a OneZero config entry with a login of its own and 2FA on.
- * @param overrides - Fields a case pins.
- * @returns The entry.
- */
-function oneZeroEntry(overrides: Partial<IBankConfig> = {}): IBankConfig {
-  return fakeValidBankConfigFor('onezero', { twoFactorAuth: true, ...overrides });
-}
 
 /**
  * Builds a prompter that answers with a fresh SMS code and counts how often it is asked.
@@ -219,27 +84,14 @@ function countingPrompter(): ICountingPrompter {
 
 /**
  * Imports one entry, with a prompter that counts the SMS codes it is asked for.
- * @param bankConfig - The entry's config.
  * @param entry - The entry's name.
+ * @param bankConfig - The entry's config.
  * @returns The run, and how many SMS codes it asked for.
  */
-async function importOnce(bankConfig: IBankConfig, entry = ENTRY): Promise<IReplayRun> {
+async function importOnce(entry: string, bankConfig: IBankConfig): Promise<IReplayRun> {
   const sms = countingPrompter();
   const run = await runImport({ entry, bankConfig, prompter: sms.prompter });
   return { ...run, smsCount: sms.smsCount() };
-}
-
-/**
- * Imports one entry whose import throws, keeping what it logged.
- * @param bankConfig - The entry's config.
- * @returns The error, the logger, and how many SMS codes the run asked for.
- */
-async function importThatThrows(bankConfig: IBankConfig): Promise<IFailedRun> {
-  const sms = countingPrompter();
-  const logger = spyLogger();
-  const error = await runImport({ bankConfig, prompter: sms.prompter, logger })
-    .then((): unknown => undefined, (thrown: unknown) => thrown);
-  return { error, logger, smsCount: sms.smsCount() };
 }
 
 /**
@@ -252,21 +104,72 @@ function importedAccount(run: IRun): string | undefined {
 }
 
 /**
- * Fingerprints an entry's login the way the importer binds tokens.
- * @param bankConfig - The entry's config.
- * @returns The login fingerprint.
+ * Serialises what a logger method was called with, for message checks.
+ * @param spy - One logger method.
+ * @returns All its calls as one string.
  */
-function loginOf(bankConfig: IBankConfig): string {
-  const login = loginFingerprint('oneZero', bankConfig);
-  if (!login.success) throw new Error(login.message);
-  return login.data;
+function said(spy: SpyLogger['info']): string {
+  return JSON.stringify(spy.mock.calls);
 }
 
-describe('E2E: long-term token replay', () => {
+const refusals: IRefusal[] = [
+  { why: 'a revoked', refuse: (bank, bankConfig): void => { bank.revoke(bankConfig); } },
+  { why: 'an expired', refuse: (bank, bankConfig): void => { bank.expire(bankConfig); } },
+];
+
+const brokenStores: IBrokenStore[] = [
+  {
+    why: 'is damaged',
+    breakStore: (): void => {
+      rmSync(store.tokensPath);
+      mkdirSync(store.tokensPath);
+    },
+    warning: (storeKey) => `The token file is damaged, so the configured long-term token for ${storeKey} is not sent`,
+  },
+  {
+    why: 'cannot be read',
+    breakStore: (): void => {
+      const notADirectory = join(store.directory, 'not-a-directory');
+      writeFileSync(notADirectory, '');
+      process.env.BANK_TOKENS_PATH = join(notADirectory, 'bank-tokens.json');
+    },
+    warning: (storeKey) => `Could not read the long-term token for ${storeKey}`,
+  },
+];
+
+describe.each(API_DIRECT_BANKS)('E2E: long-term token replay, $name', (row: IApiDirectBank) => {
+  const [FIRST, SECOND] = row.entries;
+  let bank: IFakeApiDirectBank;
+
+  /**
+   * Names the store key of one of this bank's entries.
+   * @param entry - The entry's name.
+   * @returns `<bankId>:<entry>`.
+   */
+  const keyOf = (entry: string): string => `${row.bankId}:${entry}`;
+
+  /**
+   * Fingerprints an entry's login the way the importer binds tokens.
+   * @param bankConfig - The entry's config.
+   * @returns The login fingerprint.
+   */
+  const loginOf = (bankConfig: IBankConfig): string => {
+    const login = loginFingerprint(row.companyType, bankConfig);
+    if (!login.success) throw new Error(login.message);
+    return login.data;
+  };
+
+  /**
+   * Names the account number the bank returns for an entry's login.
+   * @param bankConfig - The entry's config.
+   * @returns The account number.
+   */
+  const accountNumberFor = (bankConfig: IBankConfig): string => accountNumberOf(accountOf(row, bankConfig));
+
   beforeEach(() => {
     vi.clearAllMocks();
     store = openTokenStore('warm-start-replay-');
-    bank = openBank();
+    bank = openApiDirectBank(provider.createScraper, row);
   });
 
   afterEach(() => {
@@ -274,139 +177,149 @@ describe('E2E: long-term token replay', () => {
   });
 
   it('logs in cold with one SMS, then with the stored token and no SMS', async () => {
-    const entry = oneZeroEntry();
+    const entry = bank.customer();
 
-    const cold = await importOnce(entry);
-    const warm = await importOnce(entry);
+    const cold = await importOnce(FIRST, entry);
+    const warm = await importOnce(FIRST, entry);
 
     expect([cold.smsCount, warm.smsCount]).toEqual([1, 0]);
     expect(bank.sent).toEqual([undefined, bank.minted[0]]);
-    expect(importedAccount(warm)).toBe(accountNumberOf(accountOf(entry)));
-    expect(JSON.stringify(warm.logger.info.mock.calls))
-      .toContain(`Using the stored long-term token for ${STORE_KEY}`);
+    expect(importedAccount(warm)).toBe(accountNumberFor(entry));
+    expect(said(warm.logger.info)).toContain(`Using the stored long-term token for ${keyOf(FIRST)}`);
   });
 
   it('logs in with the stored token and no SMS when twoFactorAuth is off', async () => {
-    const entry = oneZeroEntry();
-    await importOnce(entry);
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
 
-    const unattended = await importOnce({ ...entry, twoFactorAuth: false });
+    const unattended = await importOnce(FIRST, { ...entry, twoFactorAuth: false });
 
     expect(unattended.result.success).toBe(true);
     expect(unattended.smsCount).toBe(0);
     expect(bank.sent.at(-1)).toBe(bank.minted[0]);
   });
 
-  it('pays one SMS for a revoked token, then logs in with its replacement', async () => {
-    const entry = oneZeroEntry();
-    await importOnce(entry);
-    bank.revoke(accountOf(entry));
+  it.each(refusals)('pays one SMS for $why token, then logs in with its replacement', async ({ refuse }) => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    refuse(bank, entry);
 
-    const revoked = await importOnce(entry);
-    const replaced = await importOnce(entry);
+    const refused = await importOnce(FIRST, entry);
+    const replaced = await importOnce(FIRST, entry);
 
-    expect([revoked.smsCount, replaced.smsCount]).toEqual([1, 0]);
+    expect([refused.smsCount, replaced.smsCount]).toEqual([1, 0]);
     expect(bank.sent).toEqual([undefined, bank.minted[0], bank.minted[1]]);
-    expect(storedTokens(store.tokensPath)[STORE_KEY]?.token).toBe(bank.minted[1]);
+    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[1]);
+  });
+
+  it.each(refusals)('fails with no SMS for $why token when twoFactorAuth is off, keeping the token', async ({
+    refuse,
+  }) => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    refuse(bank, entry);
+
+    const stuck = await importOnce(FIRST, { ...entry, twoFactorAuth: false });
+
+    expect(stuck.result).toMatchObject(NO_RETRIEVER);
+    expect(stuck.smsCount).toBe(0);
+    expect(bank.sent).toEqual([undefined, bank.minted[0]]);
+    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[0]);
   });
 
   it('keeps a token per entry, so two entries of one bank both log in without SMS', async () => {
-    const first = oneZeroEntry();
-    const second = oneZeroEntry();
-    await importOnce(first, ENTRY);
-    await importOnce(second, SECOND_ENTRY);
+    const first = bank.customer();
+    const second = bank.customer();
+    expect(loginOf(second)).not.toBe(loginOf(first));
+    await importOnce(FIRST, first);
+    await importOnce(SECOND, second);
 
-    const again = [await importOnce(first, ENTRY), await importOnce(second, SECOND_ENTRY)];
+    const again = [await importOnce(FIRST, first), await importOnce(SECOND, second)];
 
     expect(again.map((run) => run.smsCount)).toEqual([0, 0]);
-    expect(again.map(importedAccount)).toEqual([
-      accountNumberOf(accountOf(first)), accountNumberOf(accountOf(second)),
-    ]);
+    expect(again.map(importedAccount)).toEqual([accountNumberFor(first), accountNumberFor(second)]);
   });
 
   it('never sends the stored token after the login changes, and binds the new one', async () => {
-    const before = oneZeroEntry();
-    await importOnce(before);
-    const after = { ...before, email: oneZeroEntry().email };
+    const before = bank.customer();
+    await importOnce(FIRST, before);
+    const after = bank.movedTo(before);
+    expect(loginOf(after)).not.toBe(loginOf(before));
 
-    const changed = await importOnce(after);
+    const changed = await importOnce(FIRST, after);
 
     expect(bank.sent[1]).toBeUndefined();
     expect(changed.smsCount).toBe(1);
-    expect(importedAccount(changed)).toBe(accountNumberOf(accountOf(after)));
-    expect(storedTokens(store.tokensPath)[STORE_KEY]).toMatchObject({ token: bank.minted[1], login: loginOf(after) });
+    expect(importedAccount(changed)).toBe(accountNumberFor(after));
+    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]).toMatchObject({ token: bank.minted[1], login: loginOf(after) });
   });
 
   it('never sends a configured token minted for another login', async () => {
-    const owner = oneZeroEntry();
-    await importOnce(owner, ENTRY);
-    const clone = oneZeroEntry({ otpLongTermToken: bank.minted[0] });
+    const owner = bank.customer();
+    await importOnce(FIRST, owner);
+    const clone = bank.customer({ otpLongTermToken: bank.minted[0] });
+    expect(loginOf(clone)).not.toBe(loginOf(owner));
 
-    const cloned = await importOnce(clone, SECOND_ENTRY);
+    const cloned = await importOnce(SECOND, clone);
 
     expect(bank.sent[1]).toBeUndefined();
-    expect(importedAccount(cloned)).toBe(accountNumberOf(accountOf(clone)));
-    expect(JSON.stringify(cloned.logger.warn.mock.calls)).toContain(
-      `The configured long-term token for onezero:${SECOND_ENTRY} belongs to another login, so it is not sent`,
+    expect(importedAccount(cloned)).toBe(accountNumberFor(clone));
+    expect(said(cloned.logger.warn)).toContain(
+      `The configured long-term token for ${keyOf(SECOND)} belongs to another login, so it is not sent`,
     );
   });
 
-  const brokenStores: IBrokenStore[] = [
-    {
-      why: 'is damaged',
-      breakStore: (): void => {
-        rmSync(store.tokensPath);
-        mkdirSync(store.tokensPath);
-      },
-      warning: `The token file is damaged, so the configured long-term token for ${STORE_KEY} is not sent`,
-    },
-    {
-      why: 'cannot be read',
-      breakStore: (): void => {
-        const notADirectory = join(store.directory, 'not-a-directory');
-        writeFileSync(notADirectory, '');
-        process.env.BANK_TOKENS_PATH = join(notADirectory, 'bank-tokens.json');
-      },
-      warning: `Could not read the long-term token for ${STORE_KEY}`,
-    },
-  ];
+  it('sends a configured token the store has never seen, with no SMS, and binds it to the login', async () => {
+    const entry = bank.customer();
+    const seed = bank.mintElsewhere(entry);
+
+    const seeded = await importOnce(FIRST, { ...entry, otpLongTermToken: seed });
+
+    expect(seeded.smsCount).toBe(0);
+    expect(bank.sent).toEqual([seed]);
+    expect(importedAccount(seeded)).toBe(accountNumberFor(entry));
+    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]).toMatchObject({ token: seed, login: loginOf(entry) });
+  });
 
   it.each(brokenStores)('sends no token, not even its own configured one, when the token file $why', async ({
     breakStore, warning,
   }) => {
-    const entry = oneZeroEntry();
-    await importOnce(entry);
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
     breakStore();
 
-    const broken = await importOnce({ ...entry, otpLongTermToken: bank.minted[0] });
+    const broken = await importOnce(FIRST, { ...entry, otpLongTermToken: bank.minted[0] });
 
     expect(bank.sent[1]).toBeUndefined();
     expect(broken.smsCount).toBe(1);
-    expect(JSON.stringify(broken.logger.warn.mock.calls)).toContain(warning);
+    expect(said(broken.logger.warn)).toContain(warning(keyOf(FIRST)));
   });
 
   it('fails, and says how to fix it, when twoFactorAuth is off and no token is usable', async () => {
-    const entry = oneZeroEntry({ twoFactorAuth: false });
+    const entry = bank.customer({ twoFactorAuth: false });
 
-    const stuck = await importThatThrows(entry);
+    const stuck = await importOnce(FIRST, entry);
 
-    expect(stuck.error).toBeInstanceOf(Error);
+    expect(stuck.result).toMatchObject(NO_RETRIEVER);
     expect(stuck.smsCount).toBe(0);
-    expect(JSON.stringify(stuck.logger.warn.mock.calls)).toContain(
-      `No usable long-term token for ${STORE_KEY}, and this run cannot ask for an SMS code: `
+    expect(bank.sent).toEqual([undefined]);
+    expect(said(stuck.logger.warn)).toContain(
+      `No usable long-term token for ${keyOf(FIRST)}, and this run cannot ask for an SMS code: `
       + 'turn on twoFactorAuth for one SMS login, or restore the token file',
     );
   });
 
-  it('never logs a token, cold, warm, revoked or after a login change', async () => {
-    const entry = oneZeroEntry();
-    const runs = [await importOnce(entry), await importOnce(entry)];
-    bank.revoke(accountOf(entry));
-    runs.push(await importOnce(entry), await importOnce({ ...entry, email: oneZeroEntry().email }));
+  it('never logs a token, cold, warm, revoked, expired or after a login change', async () => {
+    const entry = bank.customer();
+    const runs = [await importOnce(FIRST, entry), await importOnce(FIRST, entry)];
+    bank.revoke(entry);
+    runs.push(await importOnce(FIRST, entry));
+    bank.expire(entry);
+    runs.push(await importOnce(FIRST, entry), await importOnce(FIRST, bank.movedTo(entry)));
 
     const logged = runs.map((run) => everythingLogged(run.logger)).join('\n');
 
-    expect(bank.minted).toHaveLength(3);
+    expect(bank.minted).toHaveLength(4);
     for (const token of bank.minted) expect(logged).not.toContain(token);
   });
 });
