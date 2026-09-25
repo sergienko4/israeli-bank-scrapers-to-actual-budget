@@ -32,9 +32,9 @@ import { createDateRangePolicy } from '../../../src/Scraper/Policies/DateRangePo
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import { ExponentialBackoffRetry } from '../../../src/Resilience/RetryStrategy.js';
 import { TimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
-import type { IBankConfig } from '../../../src/Types/Index.js';
-import { fakeBankTransactions, fakeImporterConfig, fakeUuid } from '../../helpers/factories.js';
-import { TEST_CREDENTIAL } from '../../helpers/testCredentials.js';
+import {
+  fakeBankTransactions, fakeCanonicalAccount, fakeImporterConfig, fakeUuid, fakeValidBankConfigFor,
+} from '../../helpers/factories.js';
 
 /** Owner read/write only. */
 export const OWNER_ONLY = 0o600;
@@ -138,7 +138,7 @@ export function providerWill(createScraper: Mock, script: IProviderScript): void
  */
 export function scrapedAccount(): IScraperScrapingResult {
   const txns = fakeBankTransactions(2, { date: new Date().toISOString() });
-  return { success: true, accounts: [{ accountNumber: '4012', txns }] } as IScraperScrapingResult;
+  return { success: true, accounts: [fakeCanonicalAccount({ txns })] } as IScraperScrapingResult;
 }
 
 /**
@@ -180,10 +180,7 @@ export async function runImport(setup: IImportSetup = {}): Promise<IRun> {
     datePolicy: createDateRangePolicy(),
     logger,
   });
-  const bankConfig = {
-    email: 'operator@example.com', password: TEST_CREDENTIAL,
-    phoneNumber: '0501234567', twoFactorAuth: setup.twoFactorAuth ?? true, daysBack: 7,
-  } as IBankConfig;
+  const bankConfig = fakeValidBankConfigFor('onezero', { twoFactorAuth: setup.twoFactorAuth ?? true });
   const result = await scraper.scrapeBankWithResilience(setup.entry ?? ENTRY, bankConfig);
   return { result, logger };
 }
