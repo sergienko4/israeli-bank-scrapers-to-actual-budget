@@ -145,6 +145,18 @@ For each API-direct scrape, `src/Scraper/Tokens/AuthFlowCapture.ts`:
 builds what all three steps share, so the callback and the backstop use the
 same key and all three skip browser banks.
 
+An attempt that captures a token runs a single try. The timeout abandons a
+scrape rather than cancelling it, so a retry would log in beside the try it
+replaced, and since every login revokes the token before it, the abandoned
+try's late callback could store a token the bank no longer honours.
+`pickRetryStrategy` in `src/Scraper/Strategies/Live/AttemptRunner.ts` gives
+these attempts the single-try policy it gives every 2FA bank, so a timeout
+ends the attempt. The INVALID_OTP retry starts a new attempt only after the
+first returned, so within one config entry's scrape, tokens reach the store in
+the order they were minted. A login that finishes after its try timed out is
+then the only login, and storing its token is correct; if the process exits
+first, the token is lost and the next run logs in cold.
+
 A failed write is logged as a warning naming the store key and the cause,
 such as `EROFS` or `ENOSPC`; a failed sweep names the directory and the cause.
 The scrape's result and transactions are returned unchanged. Neither the token
@@ -160,3 +172,10 @@ One writer is assumed. Two importers sharing one file can lose an update: the
 losing account keeps its previous token, the bank rejects it, and the next
 cold login re-mints it for the cost of one SMS. No lock is taken, because a
 lock that could wedge a scheduled scrape would cost more than that.
+
+Keep one config entry per bank login. Entries are scraped one after another
+and each is stored under its own key, so a login abandoned by one entry never
+overwrites another entry's token. Two entries that log in to the same account
+are the exception: each login revokes the token the other stored, with or
+without a timeout, so once stored tokens are replayed both would need an SMS
+on every run.

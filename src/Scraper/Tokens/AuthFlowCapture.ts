@@ -124,10 +124,12 @@ function persistToken(token: string, params: IAuthFlowCaptureParams): boolean {
 /**
  * Builds the provider callback that persists a completed login's token.
  *
- * <p>The last token to arrive wins. A scrape the timeout abandoned keeps
- * running, so its callback can fire after a later attempt stored a token; each
- * login revokes the one before it, so the latest arrival is the token the bank
- * still honours.
+ * <p>Tokens arrive in the order they were minted, so each write replaces the
+ * previous token with a newer one. Every login revokes the token before it,
+ * and the attempt runner never lets two logins of one attempt overlap: an
+ * attempt that captures tokens runs a single try, so a scrape the timeout
+ * abandoned is the only login, and its late callback stores the token the
+ * bank still honours.
  * @param params - Account key, store and logger for this capture.
  * @returns Callback the provider invokes once its login completes.
  */

@@ -68,7 +68,7 @@ stateDiagram-v2
     Fatal --> Notify
 ```
 
-- **TransientError** — network blip, page-load timeout. Retried by the importer's own retry strategy up to `maxRetryAttempts` times (default `3`); banks using 2FA are not retried, since an expired OTP cannot be replayed.
+- **TransientError** — network blip, page-load timeout. Retried by the importer's own retry strategy up to `maxRetryAttempts` times (default `3`); banks using 2FA are not retried, since an expired OTP cannot be replayed, and neither are OneZero, Pepper and PayBox, since each login revokes the long-term token the one before it minted.
 - **AuthError** — invalid credentials, password change required. No retry; emits an alert with actionable text.
 - **ConfigError** — invalid `targets`, missing field. Halts the bank immediately.
 - **Quarantine** — bank skipped this run. After 3 consecutive failures the next notification adds an escalation tag.

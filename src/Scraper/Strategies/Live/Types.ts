@@ -23,6 +23,10 @@ import type { BrowserRegistry } from './BrowserRegistry.js';
 export interface ILiveScrapeDependencies {
   readonly config: IImporterConfig;
   readonly retryStrategy: IRetryStrategy;
+  /**
+   * Must run its callback at most once. 2FA logins and logins that mint a
+   * durable token use it so that no try can overlap another.
+   */
   readonly noRetryStrategy: IRetryStrategy;
   readonly timeoutWrapper: ITimeoutWrapper;
   readonly twoFactorPrompter: ITwoFactorPrompter | null;
@@ -58,6 +62,8 @@ export interface IInitializedLiveScrape {
   readonly scraper: ILiveProviderScraper;
   readonly credentials: ScraperCredentials;
   readonly browsers: BrowserRegistry;
+  /** True when the login callback stores the durable token each login mints. */
+  readonly hasTokenCapture: boolean;
 }
 
 /** Timeout wrapper input bundle for one provider scrape invocation. */

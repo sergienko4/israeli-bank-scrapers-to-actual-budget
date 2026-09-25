@@ -80,7 +80,7 @@ Pass through to the scraper library for banks that timeout on slow connections:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `timeout` | `30000` | Navigation timeout in ms — increase to `60000` for slow networks (Oracle Cloud) |
-| `navigationRetryCount` | — | **Ignored since scrapers 8.7.0.** Still accepted so existing configs keep loading, but no longer offered in the web portal. Scrape retries are handled by the importer itself (`maxRetryAttempts`, default `3`). |
+| `navigationRetryCount` | — | **Ignored since scrapers 8.7.0.** Still accepted so existing configs keep loading, but no longer offered in the web portal. Scrape retries are handled by the importer itself (`maxRetryAttempts`, default `3`), for browser banks without `twoFactorAuth`. A bank with `twoFactorAuth`, and OneZero, Pepper and PayBox always, get a single try. |
 | `clearSession` | `false` | Force-clear browser session before scraping |
 
 ## 2FA / OTP

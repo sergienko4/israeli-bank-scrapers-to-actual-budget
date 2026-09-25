@@ -14,7 +14,9 @@
  * provider does, before the result exists. The retry and timeout policies are
  * the shipped classes with the shipped single-attempt settings, minus the
  * shutdown handler, which would attach process signal listeners per case.
- * The 2FA prompter and notifier are not reached by an API-direct scrape.
+ * The cases where a try times out also wire the shipped retrying policy and
+ * run under fake timers, so the ten-minute deadline and the backoff elapse at
+ * once. The 2FA prompter and notifier are not reached by an API-direct scrape.
  */
 
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
@@ -32,10 +34,12 @@ import { BankScraper } from '../../src/Scraper/BankScraper.js';
 import { createBankRegistry } from '../../src/Scraper/BankRegistry.js';
 import createScrapeResultMapper from '../../src/Scraper/Mappers/DefaultScrapeResultMapper.js';
 import { createDateRangePolicy } from '../../src/Scraper/Policies/DateRangePolicy.js';
+import type { IRetryStrategy } from '../../src/Resilience/RetryStrategy.js';
 import { ExponentialBackoffRetry } from '../../src/Resilience/RetryStrategy.js';
 import { TimeoutWrapper } from '../../src/Resilience/TimeoutWrapper.js';
 import { STALE_STAGING_AGE_MS } from '../../src/Storage/SecureJsonStore.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
+import { DEFAULT_RESILIENCE_CONFIG } from '../../src/Types/Index.js';
 import { fakeBankTransactions, fakeImporterConfig, fakeUuid } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
@@ -69,6 +73,26 @@ interface IProviderScript {
   readonly longTermToken?: string;
   readonly bearer?: string;
   readonly result: IScraperScrapingResult;
+}
+
+/** How one import is wired, beyond what every case shares. */
+interface IImportSetup {
+  /** Name of the `banks` config entry to scrape. */
+  readonly entry?: string;
+  /** The entry's 2FA flag; on unless a case says otherwise. */
+  readonly twoFactorAuth?: boolean;
+  /** Policy for scrapes without 2FA; the single-attempt one unless given. */
+  readonly retryStrategy?: IRetryStrategy;
+}
+
+/** A bank whose first login outlasts the scrape timeout. */
+interface IStalledBank {
+  /** Tokens in the order the bank minted them; only the last is still honoured. */
+  readonly minted: string[];
+  /** Every login the provider started, so a case can wait for the abandoned one. */
+  readonly logins: Promise<IScraperScrapingResult>[];
+  /** Lets the first login report its token. */
+  readonly releaseFirstLogin: () => void;
 }
 
 /** Env vars each case rewrites, restored afterwards. */
@@ -108,20 +132,81 @@ function scrapedAccount(): IScraperScrapingResult {
 }
 
 /**
+ * Makes the provider a bank whose first login stalls past the scrape timeout.
+ *
+ * Each login mints a token that revokes the ones before it. The first login
+ * reports its token only once released, as a scrape the timeout abandoned
+ * does; later logins report theirs and return at once.
+ * @returns The bank's ledger and the release for the first login.
+ */
+function providerStallsFirstLogin(): IStalledBank {
+  const minted: string[] = [];
+  const logins: Promise<IScraperScrapingResult>[] = [];
+  let releaseFirstLogin: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => { releaseFirstLogin = resolve; });
+  provider.createScraper.mockImplementation((options: ScraperOptions) => ({
+    /**
+     * Logs in once, recording the login so the case can await it.
+     * @returns The scrape the importer awaits.
+     */
+    scrape: (): Promise<IScraperScrapingResult> => {
+      const login = mintThenReport(options, minted, held);
+      logins.push(login);
+      return login;
+    },
+  }));
+  return { minted, logins, releaseFirstLogin };
+}
+
+/**
+ * Mints a token, waits if it is the first login, then reports it both ways.
+ * @param options - Provider options carrying the login callback.
+ * @param minted - The bank's ledger of minted tokens.
+ * @param held - Settles once the case releases the first login.
+ * @returns A successful scrape carrying the minted token.
+ */
+async function mintThenReport(
+  options: ScraperOptions, minted: string[], held: Promise<void>,
+): Promise<IScraperScrapingResult> {
+  const token = `lt-${fakeUuid()}`;
+  minted.push(token);
+  if (minted.length === 1) await held;
+  await options.onAuthFlowComplete?.({ longTermToken: token, bearer: `bearer-${fakeUuid()}` });
+  return { ...scrapedAccount(), persistentOtpToken: token };
+}
+
+/**
+ * Builds the shipped retrying policy, minus the shutdown handler.
+ * @returns Retry policy with the shipped attempt budget and backoff.
+ */
+function shippedRetry(): ExponentialBackoffRetry {
+  return new ExponentialBackoffRetry({
+    maxAttempts: DEFAULT_RESILIENCE_CONFIG.maxRetryAttempts,
+    initialBackoffMs: DEFAULT_RESILIENCE_CONFIG.initialBackoffMs,
+    /**
+     * Declines to retry a WAF block, as the shipped policy does.
+     * @param error - The error from the failed try.
+     * @returns True to retry.
+     */
+    shouldRetry: (error: Error): boolean => error.name !== 'WafBlockError',
+  });
+}
+
+/**
  * Builds the wiring inputs the composition root receives.
  *
- * Every case scrapes with `twoFactorAuth` on, so only the single-attempt
- * policy runs; the retrying one is the same object so no case can wait on a
- * backoff.
+ * Unless a case passes a retrying policy, both ports get the single-attempt
+ * one, so no case can wait on a backoff.
  * @param logger - Logger the run reports through.
+ * @param retryStrategy - Policy for scrapes without 2FA, when a case needs one.
  * @returns Inputs with the shipped resilience classes.
  */
-function strategyInputs(logger: ILogger): IScrapeStrategyInputs {
+function strategyInputs(logger: ILogger, retryStrategy?: IRetryStrategy): IScrapeStrategyInputs {
   const singleAttempt = new ExponentialBackoffRetry({ maxAttempts: 1, initialBackoffMs: 0 });
   return {
     config: fakeImporterConfig(),
     resilience: {
-      retryStrategy: singleAttempt, noRetryStrategy: singleAttempt,
+      retryStrategy: retryStrategy ?? singleAttempt, noRetryStrategy: singleAttempt,
       timeoutWrapper: new TimeoutWrapper(),
     },
     services: { twoFactorPrompter: null, notificationService: { sendMessage: vi.fn() } },
@@ -130,27 +215,27 @@ function strategyInputs(logger: ILogger): IScrapeStrategyInputs {
 }
 
 /**
- * Runs one import of the given config entry through the shipped assembly.
- * @param entry - Name of the `banks` config entry to scrape.
+ * Runs one import of a config entry through the shipped assembly.
+ * @param setup - Entry, 2FA flag and retry policy, where a case needs its own.
  * @returns The legacy result and the logger the run used.
  */
-async function runImport(entry = ENTRY): Promise<IRun> {
+async function runImport(setup: IImportSetup = {}): Promise<IRun> {
   const logger: SpyLogger = {
     debug: vi.fn<ILogger['debug']>(), info: vi.fn<ILogger['info']>(),
     warn: vi.fn<ILogger['warn']>(), error: vi.fn<ILogger['error']>(),
   };
   const scraper = new BankScraper({
     registry: createBankRegistry(),
-    strategy: buildScrapeStrategy(strategyInputs(logger)),
+    strategy: buildScrapeStrategy(strategyInputs(logger, setup.retryStrategy)),
     mapper: createScrapeResultMapper(),
     datePolicy: createDateRangePolicy(),
     logger,
   });
   const bankConfig = {
     email: 'operator@example.com', password: TEST_CREDENTIAL,
-    phoneNumber: '0501234567', twoFactorAuth: true, daysBack: 7,
+    phoneNumber: '0501234567', twoFactorAuth: setup.twoFactorAuth ?? true, daysBack: 7,
   } as IBankConfig;
-  const result = await scraper.scrapeBankWithResilience(entry, bankConfig);
+  const result = await scraper.scrapeBankWithResilience(setup.entry ?? ENTRY, bankConfig);
   return { result, logger };
 }
 
@@ -160,6 +245,21 @@ async function runImport(entry = ENTRY): Promise<IRun> {
  */
 function storedTokens(): Record<string, { token?: string }> {
   return JSON.parse(readFileSync(tokensPath, 'utf8')) as Record<string, { token?: string }>;
+}
+
+/**
+ * Imports an entry without 2FA whose first login outlasts the timeout.
+ *
+ * The shipped retrying policy is wired, so only the token-capture rule can
+ * keep a second login from starting beside the abandoned one.
+ * @returns The bank's ledger, and whether the import succeeded.
+ */
+async function importWhoseFirstLoginTimesOut(): Promise<{ bank: IStalledBank; succeeded: boolean }> {
+  const bank = providerStallsFirstLogin();
+  const run = runImport({ twoFactorAuth: false, retryStrategy: shippedRetry() })
+    .then(({ result }) => result.success, () => false);
+  await vi.runAllTimersAsync();
+  return { bank, succeeded: await run };
 }
 
 /**
@@ -262,10 +362,40 @@ describe('E2E: long-term token capture', () => {
   it('leaves the token store alone for a browser bank', async () => {
     providerWill({ result: scrapedAccount() });
 
-    await runImport('discount');
+    await runImport({ entry: 'discount' });
 
     const options = provider.createScraper.mock.calls[0]?.[0] as ScraperOptions;
     expect(options.onAuthFlowComplete).toBeUndefined();
     expect(existsSync(tokensPath)).toBe(false);
+  });
+
+  describe('when a login outlasts its try', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('ends the attempt after one try, even with 2FA off', async () => {
+      const { bank, succeeded } = await importWhoseFirstLoginTimesOut();
+      bank.releaseFirstLogin();
+      await Promise.allSettled(bank.logins);
+
+      expect(succeeded).toBe(false);
+      expect(bank.minted).toHaveLength(1);
+    });
+
+    it('stores the token of the login that finished after its try timed out', async () => {
+      const { bank } = await importWhoseFirstLoginTimesOut();
+
+      bank.releaseFirstLogin();
+      await Promise.allSettled(bank.logins);
+
+      expect(Object.keys(storedTokens())).toEqual([STORE_KEY]);
+      expect(storedTokens()).toMatchObject({ [STORE_KEY]: { token: bank.minted.at(-1) } });
+      expect(statSync(tokensPath).mode & PERMISSION_BITS).toBe(OWNER_ONLY);
+    });
   });
 });

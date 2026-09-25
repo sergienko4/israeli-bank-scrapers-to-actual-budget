@@ -93,10 +93,10 @@ async function handleOtpReject(
 async function executeAttempt(
   deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts,
 ): Promise<IScraperScrapingResult> {
-  const initialized = initScrape(deps, scrapeOpts);
-  const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig);
+  const { hasTokenCapture, ...prepared } = initScrape(deps, scrapeOpts);
+  const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig, hasTokenCapture);
   const label = `Scraping ${scrapeOpts.bankId}`;
-  const params = { deps, ...initialized, logger: scrapeOpts.logger, label };
+  const params = { deps, ...prepared, logger: scrapeOpts.logger, label };
   const result = await runAttemptThenSeal(retryStrategy, params);
   return keepMintedToken(deps, scrapeOpts, result);
 }
@@ -175,16 +175,24 @@ function restoreProviderResult(error: unknown): IScraperScrapingResult {
 }
 
 /**
- * Selects no-retry for 2FA banks because OTP flows own retry cadence.
+ * Selects the single-try policy for any attempt whose tries must not overlap.
+ *
+ * The timeout abandons a try rather than cancelling it, so a retry runs beside
+ * the try it replaced. A 2FA login owns its OTP cadence. A login that mints a
+ * durable token revokes the one before it, so a timed-out try's late callback
+ * would store a token the bank no longer honours once a retry had logged in.
+ * With one try per attempt, and the INVALID_OTP attempt starting only after
+ * the first has returned, tokens reach the store in the order they were minted.
  * @param deps - Strategy dependencies exposing retry policies.
  * @param bankConfig - Bank config whose twoFactorAuth flag is inspected.
+ * @param hasTokenCapture - Whether the attempt's login callback stores a token.
  * @returns Retry policy used for this live scrape attempt.
  */
 function pickRetryStrategy(
-  deps: ILiveScrapeDependencies,
-  bankConfig: IBankConfig,
+  deps: ILiveScrapeDependencies, bankConfig: IBankConfig, hasTokenCapture: boolean,
 ): IRetryStrategy {
-  return bankConfig.twoFactorAuth ? deps.noRetryStrategy : deps.retryStrategy;
+  const isSingleTry = Boolean(bankConfig.twoFactorAuth) || hasTokenCapture;
+  return isSingleTry ? deps.noRetryStrategy : deps.retryStrategy;
 }
 
 /**
