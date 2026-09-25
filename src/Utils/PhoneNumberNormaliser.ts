@@ -59,3 +59,17 @@ export default function normalisePhoneNumber(raw: string): Procedure<string> {
   }
   return succeed(candidate);
 }
+
+/**
+ * The phone as an API-direct provider receives it: the canonical form when
+ * the input is an Israeli mobile, otherwise the stripped candidate. Every
+ * consumer that must agree with what is sent — the credentials builder and
+ * the login fingerprint — calls this one function, so they cannot drift.
+ * @param raw - Raw phone string as supplied by config.json or env.
+ * @returns Canonical `972XXXXXXXXX`, or the stripped digits on mismatch.
+ */
+export function toProviderPhone(raw: string): string {
+  logger.debug('toProviderPhone');
+  const result = normalisePhoneNumber(raw);
+  return result.success ? result.data : stripPhoneFormatting(raw);
+}

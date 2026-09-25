@@ -1,7 +1,20 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+
 import buildCredentials from '../../src/Scraper/CredentialsBuilder.js';
+import { toProviderPhone } from '../../src/Utils/PhoneNumberNormaliser.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
+import { fakeBankConfig } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
+
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock('../../src/Logger/Index.js', () => ({
+  getLogger: () => mockLogger,
+  createLogger: vi.fn(),
+  getLogBuffer: vi.fn(),
+}));
 
 const idBank = { id: 'user123', password: TEST_CREDENTIAL } as IBankConfig;
 const emailBank = {
@@ -134,6 +147,42 @@ describe('buildCredentials', () => {
       const config = { phoneNumber: '0521234567' } as IBankConfig;
       const creds = buildCredentials(config) as Record<string, unknown>;
       expect(creds.phoneNumber).toBe('972521234567');
+    });
+  });
+
+  describe('phone sent to the provider', () => {
+    const phones = ['+972527654321', '052-765-4321', '972 52 765 4321', '+44 7700-900123'];
+
+    it.each(phones)('sends %s in the form toProviderPhone gives, with or without a token', (raw) => {
+      const withToken = buildCredentials(fakeBankConfig({ phoneNumber: raw, otpLongTermToken: 'lt' }));
+      const withoutToken = buildCredentials(fakeBankConfig({ phoneNumber: raw }));
+
+      expect((withToken as Record<string, unknown>).phoneNumber).toBe(toProviderPhone(raw));
+      expect((withoutToken as Record<string, unknown>).phoneNumber).toBe(toProviderPhone(raw));
+    });
+  });
+
+  describe('phone normalisation warning', () => {
+    beforeEach(() => {
+      mockLogger.warn.mockClear();
+    });
+
+    it('warns once, with the phone masked, when the phone is not an Israeli mobile', () => {
+      const { warn } = mockLogger;
+
+      buildCredentials(fakeBankConfig({ id: 'pepper', phoneNumber: '+44 7700-900123' }));
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain('Phone normalisation failed for pepper (<masked>)');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('7700');
+    });
+
+    it('does not warn for an Israeli mobile', () => {
+      const { warn } = mockLogger;
+
+      buildCredentials(fakeBankConfig({ phoneNumber: '052-765-4321' }));
+
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 });

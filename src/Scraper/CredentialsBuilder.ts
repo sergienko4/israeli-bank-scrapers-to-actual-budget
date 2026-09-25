@@ -3,25 +3,26 @@ import type { ScraperCredentials } from '@sergienko4/israeli-bank-scrapers';
 import { getLogger } from '../Logger/Index.js';
 import maskPhone from '../Logger/MaskPhone.js';
 import type { IBankConfig } from '../Types/Index.js';
-import normalisePhoneNumber, { stripPhoneFormatting } from '../Utils/PhoneNumberNormaliser.js';
+import normalisePhoneNumber, { toProviderPhone } from '../Utils/PhoneNumberNormaliser.js';
 
 /**
- * Coerces a config phoneNumber to the upstream-required canonical form,
- * logging a masked WARN on normalisation failure and returning the
- * stripped candidate (no `+`/`-`/spaces) so the upstream wire-format
- * step is never asked to handle separator characters.
+ * Coerces a config phoneNumber to the form the provider receives
+ * ({@link toProviderPhone}), logging a masked WARN when it is not a
+ * canonical Israeli mobile, so the upstream wire-format step is never asked
+ * to handle separator characters.
  * @param raw - phoneNumber from IBankConfig, already verified non-empty.
  * @param bankId - bank id used in the failure WARN; '' when unknown.
  * @returns canonical digits-only string, or stripped candidate on failure.
  */
 function coerceCredsPhone(raw: string, bankId: string): string {
   const result = normalisePhoneNumber(raw);
-  if (result.success) return result.data;
-  const label = bankId === '' ? 'bank' : bankId;
-  getLogger().warn(
-    `Phone normalisation failed for ${label} (${maskPhone(raw)}): ${result.message}`
-  );
-  return stripPhoneFormatting(raw);
+  if (!result.success) {
+    const label = bankId === '' ? 'bank' : bankId;
+    getLogger().warn(
+      `Phone normalisation failed for ${label} (${maskPhone(raw)}): ${result.message}`
+    );
+  }
+  return toProviderPhone(raw);
 }
 
 /**
