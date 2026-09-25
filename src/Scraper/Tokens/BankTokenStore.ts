@@ -16,8 +16,13 @@
  * the loser's account keeps its previous token, the bank rejects it, and the
  * next cold login re-mints it at the cost of one SMS. No lock is taken, because
  * a lock able to wedge a scheduled scrape would cost more than that.
+ *
+ * <p>Every token read from the file, and every token about to be written, is
+ * handed to the value masker first, so no output shows one even when a bank
+ * quotes it back with no key in front of it.
  */
 
+import { registerSecretValues } from '../../Logger/SecretValues.js';
 import type { IFileSystem } from '../../Storage/FileSystemPort.js';
 import SecureJsonStore from '../../Storage/SecureJsonStore.js';
 import type { ISweepReport } from '../../Storage/StoreTypes.js';
@@ -95,6 +100,16 @@ function isAlreadyStored(loaded: ILoadedTokens, storeKey: string, token: string)
 }
 
 /**
+ * Lists the token values a set of records holds.
+ * @param tokens - Records by store key.
+ * @returns Each record's token.
+ */
+function tokenValues(tokens: ReadonlyMap<string, IBankTokenRecord>): string[] {
+  const records = [...tokens.values()];
+  return records.map(({ token }) => token);
+}
+
+/**
  * Explains a write that did not happen, naming the account but not the token.
  * @param storeKey - Opaque key identifying one bank account.
  * @param failure - Why the store refused.
@@ -151,6 +166,7 @@ export default class BankTokenStore implements IBankTokenStore {
   public write(storeKey: string, token: string): Procedure<IBankTokenWrite> {
     const trimmed = token.trim();
     if (trimmed.length === 0) return succeed({ written: false });
+    registerSecretValues([trimmed]);
     const loaded = this.load();
     if (!loaded.success) return tokenNotStored(storeKey, loaded);
     if (isAlreadyStored(loaded.data, storeKey, trimmed)) return succeed({ written: false });
@@ -205,6 +221,8 @@ export default class BankTokenStore implements IBankTokenStore {
     if (!snapshot.success) return snapshot;
     const { state, records } = snapshot.data;
     const read = readTokenRecords(records);
+    const values = tokenValues(read.tokens);
+    registerSecretValues(values);
     const isIntact = state !== 'damaged' && read.droppedCount === 0;
     return succeed({ tokens: read.tokens, isIntact });
   }
