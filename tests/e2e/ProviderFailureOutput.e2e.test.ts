@@ -6,8 +6,9 @@
  * `/logs`, `/scan`, `/retry` and `/status` replies and the Telegram and webhook
  * summaries. Each output that reports the error must show the failure code and
  * the bank's own words, and no output may show a credential the bank's reply
- * quoted. This suite drives the
- * shipped assembly — `buildScrapeStrategy`, `BankScraper`, the real
+ * quoted, with a key or with none. This suite drives the
+ * shipped assembly — the config read by the real `ConfigLoader`, which hands
+ * its credentials to the value masker, `buildScrapeStrategy`, `BankScraper`, the real
  * `ProcessAllBanksStep`, `MetricsService`, `AuditLogService` on a temp file,
  * the file logger on a temp directory and the real `TelegramCommandHandler`
  * with a real `ImportMediator` — and reads each output back.
@@ -18,13 +19,14 @@
  * in this process and exits non-zero as a failed import does.
  */
 
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { ConfigLoader } from '../../src/Config/ConfigLoader.js';
 import type { IScrapeStrategyInputs } from '../../src/Importer/PipelineComposition.js';
 import { buildScrapeStrategy } from '../../src/Importer/PipelineComposition.js';
 import type { ILogger } from '../../src/Logger/ILogger.js';
@@ -60,6 +62,15 @@ const ENTRY = 'oneZero';
 /** A part of the credential that no output may show, even cut short. */
 const SECRET_PART = TEST_CREDENTIAL.slice(TEST_CREDENTIAL.indexOf('-') + 1);
 
+/** The address the config holds for the bank. */
+const EMAIL = 'operator@example.com';
+
+/** The phone number the config holds for the bank, in local form. */
+const PHONE = '0501234567';
+
+/** Parts of the held credentials that no output may show, in any letter case. */
+const HELD_PARTS = [SECRET_PART, EMAIL, PHONE.slice(1)];
+
 /** Env vars the suite rewrites, restored afterwards. */
 const TOUCHED_ENV = ['BANK_TOKENS_PATH', 'E2E_MOCK_SCRAPER_DIR', 'E2E_MOCK_SCRAPER_FILE'] as const;
 
@@ -92,6 +103,21 @@ const FAILURES: readonly [string, IProviderFailure][] = [
     errorType: 'INVALID_PASSWORD',
     errorMessage: `LOGIN POST: bounced back to login path /login?password=${TEST_CREDENTIAL}`,
     words: 'LOGIN POST: bounced back to login path',
+  }],
+  ['a login form error that opens with the credential, with no key', {
+    errorType: 'INVALID_PASSWORD',
+    errorMessage: `${TEST_CREDENTIAL} is not a valid login`,
+    words: '[REDACTED] is not a valid login',
+  }],
+  ['a login form error that quotes the address, with no key', {
+    errorType: 'INVALID_PASSWORD',
+    errorMessage: `Form: no account for ${EMAIL.toUpperCase()} at this branch`,
+    words: 'Form: no account for [REDACTED] at this branch',
+  }],
+  ['a phone rejection that quotes the number in its wire form', {
+    errorType: 'INVALID_PHONE_NUMBER',
+    errorMessage: `Unknown phone +972${PHONE.slice(1)} at this bank`,
+    words: 'Unknown phone +[REDACTED] at this bank',
   }],
   ['an unusable phone number, whose label hides the reason\'s first word', {
     errorType: 'INVALID_PHONE_NUMBER',
@@ -146,17 +172,37 @@ function shippedScraper(logger: ILogger): BankScraper {
 }
 
 /**
+ * Reads the bank's config the way a run does: from config.json, through the
+ * real loader, which hands every credential to the value masker.
+ * @param directory - The run's directory, where config.json is written.
+ * @returns The bank's config as loaded.
+ */
+function loadedBankConfig(directory: string): IBankConfig {
+  const bankConfig = {
+    email: EMAIL, password: TEST_CREDENTIAL, phoneNumber: PHONE, twoFactorAuth: false, daysBack: 7,
+  } as IBankConfig;
+  const configPath = join(directory, 'config.json');
+  writeFileSync(configPath, JSON.stringify(fakeImporterConfig({ banks: { [ENTRY]: bankConfig } })));
+  const loaded = new ConfigLoader(configPath).loadRaw();
+  if (!loaded.success) throw new Error(`the config did not load: ${loaded.message}`);
+  return loaded.data.banks[ENTRY];
+}
+
+/** What one import child process runs with. */
+interface IImportParts {
+  readonly logger: ILogger;
+  readonly metrics: MetricsService;
+  readonly auditLog: AuditLogService;
+  readonly bankConfig: IBankConfig;
+}
+
+/**
  * Builds the pipeline context one import child process runs with.
- * @param logger - The run's logger, which writes the log file.
- * @param metrics - The run's metrics.
- * @param auditLog - The import history the run records into.
+ * @param parts - The run's logger, metrics, import history and bank config.
  * @returns A context for the shipped process-all-banks step.
  */
-function importContext(logger: ILogger, metrics: MetricsService, auditLog: AuditLogService): IPipelineContext {
-  const bankConfig = {
-    email: 'operator@example.com', password: TEST_CREDENTIAL,
-    phoneNumber: '0501234567', twoFactorAuth: false, daysBack: 7,
-  } as IBankConfig;
+function importContext(parts: IImportParts): IPipelineContext {
+  const { logger, metrics, auditLog, bankConfig } = parts;
   return {
     config: fakePipelineConfig({ banks: { [ENTRY]: bankConfig } }),
     logger,
@@ -191,6 +237,7 @@ async function runFailedImport(directory: string): Promise<Outputs> {
   const auditPath = join(directory, 'audit-log.json');
   const auditLog = new AuditLogService(auditPath, 10);
   const metrics = new MetricsService();
+  const bankConfig = loadedBankConfig(directory);
   const sent: string[] = [];
   const notifier: INotifier = {
     /**
@@ -216,7 +263,7 @@ async function runFailedImport(directory: string): Promise<Outputs> {
      * @returns The child's exit code.
      */
     spawnImport: async (): Promise<number> => {
-      const outcome = await createProcessAllBanksStep()(importContext(logger, metrics, auditLog));
+      const outcome = await createProcessAllBanksStep()(importContext({ logger, metrics, auditLog, bankConfig }));
       return outcome.success ? 0 : 1;
     },
     getBankNames: () => [ENTRY], notifier: null,
@@ -317,7 +364,8 @@ describe.each(FAILURES)('after %s, every output', (_case, failure) => {
     expect(outputs[name]).toContain(failure.words);
   });
 
-  it.each(OUTPUT_NAMES)('%s never shows the credential', (name) => {
-    expect(outputs[name]).not.toContain(SECRET_PART);
+  it.each(OUTPUT_NAMES)('%s never shows a held credential', (name) => {
+    const folded = outputs[name].toLowerCase();
+    expect(HELD_PARTS.filter(part => folded.includes(part.toLowerCase()))).toEqual([]);
   });
 });
