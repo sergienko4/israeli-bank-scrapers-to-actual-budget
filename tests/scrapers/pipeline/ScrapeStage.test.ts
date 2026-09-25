@@ -64,6 +64,15 @@ describe('scrapeStage provider failure adaptation', () => {
     expect(outcome.error?.message).toContain('ACCOUNT_BLOCKED');
   });
 
+  it('joins the type to the provider prose with a dash, so no masker reads a key and its value', async () => {
+    const message = await failureMessageFor({
+      success: false, errorType: 'INVALID_PASSWORD',
+      errorMessage: 'Form: Invalid username or code', accounts: [],
+    } as unknown as IScraperScrapingResult);
+
+    expect(message).toBe('INVALID_PASSWORD — Form: Invalid username or code');
+  });
+
   it('does not repeat a type the provider already spelled out in its message', async () => {
     const message = await failureMessageFor({
       success: false, errorType: 'GENERIC',

@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import pino from 'pino';
 import { afterAll, describe, expect, it } from 'vitest';
 
@@ -23,7 +24,10 @@ import { ErrorFormatter } from '../../src/Errors/ErrorFormatter.js';
 import { SCRAPER_ERROR_ADVICE } from '../../src/Errors/ScraperErrorMessages.js';
 import LogFileReader from '../../src/Logger/LogFileReader.js';
 import { baseOptions } from '../../src/Logger/LoggerOptions.js';
-import redactSecrets from '../../src/Logger/SecretRedaction.js';
+import redactSecrets, { isSecretKey } from '../../src/Logger/SecretRedaction.js';
+import { isFail } from '../../src/Scrapers/Pipeline/Index.js';
+import scrapeStage from '../../src/Scrapers/Pipeline/Steps/Bank/ScrapeStage.js';
+import type { IBankOpts } from '../../src/Scrapers/Pipeline/Steps/Bank/Shared.js';
 import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
 import type { IBankMetrics, IImportSummary } from '../../src/Services/MetricsService.js';
@@ -439,25 +443,41 @@ function providerFailureCodes(): string[] {
 const FAILURE_CODES = [...new Set([...providerFailureCodes(), ...Object.keys(SCRAPER_ERROR_ADVICE)])];
 
 /**
- * The provider's own failure messages for the codes that end in a secret
- * key, as its 8.7 release words them, so a shape the masker hides is caught.
+ * The provider's own failure prose for the codes that end in a secret key, as
+ * its 8.7 release words them, so a shape the masker hides is caught.
  */
-const PROVIDER_MESSAGES = [
-  'INVALID_PASSWORD: Form: שם המשתמש או הסיסמה שגויים',
-  'INVALID_PASSWORD: Form: Invalid username or code',
-  'INVALID_PASSWORD: Auth API gateway (401): Unauthorized',
-  'INVALID_PASSWORD: LOGIN POST: scope intact + URL unchanged — credentials likely invalid',
-  'INVALID_PASSWORD: LOGIN POST: bounced back to login path /login',
-  'INVALID_PASSWORD: Login failed with invalid error — url: https://bank.example/login',
-  'CHANGE_PASSWORD: Password change required',
-  'INVALID_PHONE_NUMBER: unknown shape (cannot be normalised to the E164 wire format)',
+const PROVIDER_FAILURES: readonly [string, string][] = [
+  ['INVALID_PASSWORD', 'Form: שם המשתמש או הסיסמה שגויים'],
+  ['INVALID_PASSWORD', 'Form: Invalid username or code'],
+  ['INVALID_PASSWORD', 'Auth API gateway (401): Unauthorized'],
+  ['INVALID_PASSWORD', 'LOGIN POST: scope intact + URL unchanged — credentials likely invalid'],
+  ['INVALID_PASSWORD', 'LOGIN POST: bounced back to login path /login'],
+  ['INVALID_PASSWORD', 'Login failed with invalid error — url: https://bank.example/login'],
+  ['CHANGE_PASSWORD', 'Password change required'],
+  ['INVALID_PHONE_NUMBER', 'unknown shape (cannot be normalised to the E164 wire format)'],
 ];
 
+/**
+ * Writes a failed scrape's message through the scrape stage, the one place
+ * that joins a failure code to the provider's prose.
+ * @param errorType - The provider's failure code.
+ * @param errorMessage - The provider's prose.
+ * @returns The message the scrape stage fails with.
+ */
+async function stageMessage(errorType: string, errorMessage: string): Promise<string> {
+  const result = { success: false, errorType, errorMessage, accounts: [] } as unknown as IScraperScrapingResult;
+  const bankScraper = { scrapeBankWithResilience: (): Promise<IScraperScrapingResult> => Promise.resolve(result) };
+  const opts = { entry: { bankName: 'oneZero', bankConfig: {} }, ctx: { services: { bankScraper } }, start: 0 };
+  const outcome = await scrapeStage(opts as unknown as IBankOpts);
+  if (!isFail(outcome)) throw new Error(`expected the scrape stage to fail for ${errorType}`);
+  return outcome.message;
+}
+
 /** A failed scrape's message per case, as the scrape stage writes it: the code, then the provider's prose. */
-const FAILURE_TEXTS = [
-  ...FAILURE_CODES.map(code => `${code}: Login failed at the bank`),
-  ...PROVIDER_MESSAGES,
-].map(text => `${text}, ${CANARY}`);
+const FAILURE_TEXTS = (await Promise.all([
+  ...FAILURE_CODES.map(code => stageMessage(code, 'Login failed at the bank')),
+  ...PROVIDER_FAILURES.map(([code, prose]) => stageMessage(code, prose)),
+])).map(text => `${text}, ${CANARY}`);
 
 /**
  * Lists the cases the masker touched, or whose output lost the case's text.
@@ -515,5 +535,53 @@ describe('a provider failure code reaches every output readable', () => {
 
   it.each(FAILURE_SINKS)('%s keeps the code and the prose after it', (_sink, outputsFor, keepsText) => {
     expect(unreadable(FAILURE_TEXTS, outputsFor(FAILURE_TEXTS), keepsText)).toEqual([]);
+  });
+});
+
+/** A secret of letters only, the shape an older release let through after a failure code. */
+const LETTERS_SECRET = TEST_CREDENTIAL.replaceAll('-', '');
+
+/** How an older release's records put a failure code before a value. */
+const OLD_CODE_SHAPES: readonly ((code: string) => string)[] = [
+  code => `${code}: ${LETTERS_SECRET}`,
+  code => `❌ oneZero: ${code}: ${LETTERS_SECRET}`,
+  code => `error "${code}: ${LETTERS_SECRET}"`,
+  code => `Import failed\n${code}: ${LETTERS_SECRET}`,
+  code => `${code}: Form: ${LETTERS_SECRET}`,
+];
+
+/** The failure codes that end in a secret word, so the value after them is a secret's. */
+const SECRET_CODES = FAILURE_CODES.filter(code => isSecretKey(code));
+
+/** Each secret-word code before a letters-only secret, in each older shape. */
+const OLD_CODE_TEXTS = SECRET_CODES.flatMap(code => OLD_CODE_SHAPES.map(shape => `${shape(code)}, ${CANARY}`));
+
+/**
+ * Lists the cases whose output shows the letters-only secret, or lost the canary.
+ * @param texts - The cases, in order.
+ * @param outputs - What the sink produced for each case, in the same order.
+ * @param keepsCanary - Whether this sink passes the text around the secret on.
+ * @returns A readable line per failing case; empty when the sink is safe.
+ */
+function lettersLeaks(texts: readonly string[], outputs: readonly string[], keepsCanary: boolean): string[] {
+  expect(outputs).toHaveLength(texts.length);
+  return texts.flatMap((text, index) => {
+    const output = outputs[index];
+    const leaked = output.includes(LETTERS_SECRET);
+    const lost = keepsCanary && !output.includes(CANARY);
+    if (!leaked && !lost) return [];
+    return [`${leaked ? 'LEAK' : 'LOST'} ${JSON.stringify(text)} -> ${JSON.stringify(output)}`];
+  });
+}
+
+describe('a letters-only secret after a failure code reaches no output', () => {
+  it('reads the codes that end in a secret word', () => {
+    expect(SECRET_CODES).toEqual(expect.arrayContaining([
+      'CHANGE_PASSWORD', 'INVALID_PASSWORD', 'INVALID_PHONE_NUMBER', 'NO_PASSWORD',
+    ]));
+  });
+
+  it.each(FAILURE_SINKS)('%s hides it, including a record an older release stored', (_sink, outputsFor, keepsText) => {
+    expect(lettersLeaks(OLD_CODE_TEXTS, outputsFor(OLD_CODE_TEXTS), keepsText)).toEqual([]);
   });
 });

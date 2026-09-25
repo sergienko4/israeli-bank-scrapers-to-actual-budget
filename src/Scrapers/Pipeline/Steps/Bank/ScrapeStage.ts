@@ -55,7 +55,10 @@ function checkScrapeSuccess(
  * The type is prefixed rather than appended so it survives the 80-character
  * truncation the Telegram formatter applies, and is skipped when the provider
  * already spelled it out (scraper 8.6.9 front-loads its own codes, e.g.
- * `INIT_ERROR_DOCUMENT: ...`) so the text is never stuttered.
+ * `INIT_ERROR_DOCUMENT: ...`) so the text is never stuttered. It is joined
+ * with ` — `, not `: `, because a code such as `INVALID_PASSWORD` ends in a
+ * secret word: the masker would read `INVALID_PASSWORD: Invalid` as a key and
+ * its value and hide the provider's first word.
  * @param result - Failed provider result to describe.
  * @returns Message carrying both the error type and the provider's prose.
  */
@@ -64,5 +67,5 @@ function describeScrapeFailure(result: IScraperScrapingResult): string {
   const errorType = result.errorType;
   if (errorType === undefined) return detail;
   if (detail.includes(errorType)) return detail;
-  return `${errorType}: ${detail}`;
+  return `${errorType} — ${detail}`;
 }

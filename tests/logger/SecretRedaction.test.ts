@@ -11,6 +11,12 @@ import { describe, expect, it } from 'vitest';
 import redactSecrets, { isSecretKey } from '../../src/Logger/SecretRedaction.js';
 import { TEST_CREDENTIAL, TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
+/** The provider's failure codes that end in a secret word. */
+const FAILURE_CODE_KEYS = ['CHANGE_PASSWORD', 'INVALID_PASSWORD', 'INVALID_PHONE_NUMBER', 'NO_PASSWORD'];
+
+/** A secret of letters only, the shape a failure code's prose was once let through as. */
+const LETTERS_VALUE = TEST_CREDENTIAL.replaceAll('-', '');
+
 /** The time a linear scan of a 100k-repeat text stays well within. */
 const LINEAR_LIMIT_MS = 250;
 
@@ -332,18 +338,31 @@ describe('redactSecrets', () => {
     expect(redactSecrets(text)).toBe('rejected persistentOtpToken=[REDACTED]');
   });
 
+  it('treats each failure code that ends in a secret word as a key', () => {
+    expect(FAILURE_CODE_KEYS.filter(code => !isSecretKey(code))).toEqual([]);
+  });
+
   it.each([
-    ['a wrong password', 'INVALID_PASSWORD: Invalid credentials'],
-    ['an expired password', 'CHANGE_PASSWORD: Password expired, change it on the bank site'],
-    ['a missing password', 'NO_PASSWORD: missing'],
-    ['an unusable phone number', 'INVALID_PHONE_NUMBER: Unusable phone number'],
-    ['a code inside a log line', '❌ oneZero: INVALID_PASSWORD: הסיסמה שגויה'],
-    ['a first word that ends a sentence', 'INVALID_PASSWORD: Rejected. Try again'],
-    ['a first word that ends a clause', 'NO_PASSWORD: missing, add one to the config'],
-    ['a code in a quoted message', `error "INVALID_PASSWORD: Invalid credentials"`],
-    ['a code on a new line', 'Import failed\nCHANGE_PASSWORD: Expired'],
-    ['a login form error', 'INVALID_PASSWORD: Form: שם המשתמש שגוי'],
-  ])('keeps a provider failure code and the prose after it: %s', (_shape, text) => {
+    ['at the start', (code: string) => `${code}: ${LETTERS_VALUE}`],
+    ['inside a log line', (code: string) => `❌ oneZero: ${code}: ${LETTERS_VALUE}`],
+    ['in a quoted message', (code: string) => `error "${code}: ${LETTERS_VALUE}"`],
+    ['on a new line', (code: string) => `Import failed\n${code}: ${LETTERS_VALUE}`],
+    ['after the form label', (code: string) => `${code}: Form: ${LETTERS_VALUE}`],
+    ['before a period', (code: string) => `${code}: ${LETTERS_VALUE}. Try again`],
+    ['before a comma', (code: string) => `${code}: ${LETTERS_VALUE}, add one`],
+  ])('hides a value of letters only after a failure code %s', (_shape, textFor) => {
+    const leaked = FAILURE_CODE_KEYS.map(textFor).filter(text => redactSecrets(text).includes(LETTERS_VALUE));
+    expect(leaked).toEqual([]);
+  });
+
+  it.each([
+    ['a wrong password', 'INVALID_PASSWORD — Invalid credentials'],
+    ['an expired password', 'CHANGE_PASSWORD — Password expired, change it on the bank site'],
+    ['a missing password', 'NO_PASSWORD — missing'],
+    ['an unusable phone number', 'INVALID_PHONE_NUMBER — Unusable phone number'],
+    ['a code inside a log line', '❌ oneZero: INVALID_PASSWORD — הסיסמה שגויה'],
+    ['a login form error', 'INVALID_PASSWORD — Form: שם המשתמש שגוי'],
+  ])('keeps a failure code joined to its prose with a dash: %s', (_shape, text) => {
     expect(redactSecrets(text)).toBe(text);
   });
 
@@ -375,7 +394,7 @@ describe('redactSecrets', () => {
     ['before the form label in lower case', `INVALID_PASSWORD: form: ${TEST_CREDENTIAL_SHORT} tail`, 'INVALID_PASSWORD=[REDACTED] tail'],
     ['before the form label and a digit', 'INVALID_PASSWORD: Form: 1234 tail', 'INVALID_PASSWORD=[REDACTED] tail'],
     ['before the form label twice', `INVALID_PASSWORD: Form: Form: ${TEST_CREDENTIAL_SHORT} tail`, 'INVALID_PASSWORD=[REDACTED] tail'],
-  ])('still hides the value after a code-like key %s', (_shape, text, expected) => {
+  ])('hides the value after a failure-code key %s', (_shape, text, expected) => {
     expect(redactSecrets(text)).toBe(expected);
   });
 
