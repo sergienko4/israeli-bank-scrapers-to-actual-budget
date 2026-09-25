@@ -32,6 +32,7 @@ import { createDateRangePolicy } from '../../../src/Scraper/Policies/DateRangePo
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import { ExponentialBackoffRetry } from '../../../src/Resilience/RetryStrategy.js';
 import { TimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
+import type { IBankConfig } from '../../../src/Types/Index.js';
 import {
   fakeBankTransactions, fakeCanonicalAccount, fakeImporterConfig, fakeUuid, fakeValidBankConfigFor,
 } from '../../helpers/factories.js';
@@ -53,6 +54,8 @@ export type SpyLogger = { readonly [K in keyof ILogger]: Mock<ILogger[K]> };
 export interface IRun {
   readonly result: IScraperScrapingResult;
   readonly logger: SpyLogger;
+  /** The config entry the run logged in with. */
+  readonly bankConfig: IBankConfig;
 }
 
 /** What the fake provider mints during login and returns afterwards. */
@@ -182,7 +185,7 @@ export async function runImport(setup: IImportSetup = {}): Promise<IRun> {
   });
   const bankConfig = fakeValidBankConfigFor('onezero', { twoFactorAuth: setup.twoFactorAuth ?? true });
   const result = await scraper.scrapeBankWithResilience(setup.entry ?? ENTRY, bankConfig);
-  return { result, logger };
+  return { result, logger, bankConfig };
 }
 
 /**
@@ -190,8 +193,8 @@ export async function runImport(setup: IImportSetup = {}): Promise<IRun> {
  * @param tokensPath - Path of the case's token file.
  * @returns Stored entries by key.
  */
-export function storedTokens(tokensPath: string): Record<string, { token?: string }> {
-  return JSON.parse(readFileSync(tokensPath, 'utf8')) as Record<string, { token?: string }>;
+export function storedTokens(tokensPath: string): Record<string, { token?: string; login?: string }> {
+  return JSON.parse(readFileSync(tokensPath, 'utf8')) as Record<string, { token?: string; login?: string }>;
 }
 
 /**

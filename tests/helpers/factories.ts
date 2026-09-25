@@ -40,6 +40,14 @@ export function fakeUuid(): string {
   return faker.string.uuid();
 }
 
+/**
+ * Builds a login fingerprint shaped like the SHA-256 hex a stored token is bound to.
+ * @returns 64 lowercase hex characters.
+ */
+export function fakeLoginFingerprint(): string {
+  return faker.string.hexadecimal({ length: 64, casing: 'lower', prefix: '' });
+}
+
 export function fakeBankTransaction(overrides?: Partial<IBankTransaction>): IBankTransaction {
   const amount = faker.number.float({ min: 1, max: 5000, fractionDigits: 2 });
   return {

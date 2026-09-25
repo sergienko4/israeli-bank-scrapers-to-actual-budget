@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import BankTokenStore from '../../src/Scraper/Tokens/BankTokenStore.js';
 import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { STALE_STAGING_AGE_MS } from '../../src/Storage/SecureJsonStore.js';
-import { fakeToken } from './BankTokenStoreFixture.js';
+import { ACCOUNT_LOGIN, fakeToken } from './BankTokenStoreFixture.js';
 
 /** Temp directories to delete once each case is done with them. */
 const directories: string[] = [];
@@ -62,13 +62,13 @@ describe('BankTokenStore on a real filesystem', () => {
   it('returns a written token from a later read', () => {
     const { store } = makeStore();
     const token = fakeToken();
-    store.write('oneZero', token);
-    expect(store.read('oneZero')).toMatchObject({ success: true, data: token });
+    store.write('oneZero', token, ACCOUNT_LOGIN);
+    expect(store.read('oneZero')).toMatchObject({ success: true, data: { record: { token: token } } });
   });
 
   it.skipIf(process.platform === 'win32')('creates the token file owner-only', () => {
     const { store, storePath } = makeStore();
-    store.write('oneZero', fakeToken());
+    store.write('oneZero', fakeToken(), ACCOUNT_LOGIN);
     expect(statSync(storePath).mode & PERMISSION_BITS).toBe(OWNER_ONLY);
   });
 
@@ -76,16 +76,16 @@ describe('BankTokenStore on a real filesystem', () => {
     const { store } = makeStore();
     const personal = fakeToken();
     const business = fakeToken();
-    store.write('oneZero:personal', personal);
-    store.write('oneZero:business', business);
+    store.write('oneZero:personal', personal, ACCOUNT_LOGIN);
+    store.write('oneZero:business', business, ACCOUNT_LOGIN);
     expect([store.read('oneZero:personal'), store.read('oneZero:business')])
-      .toMatchObject([{ data: personal }, { data: business }]);
+      .toMatchObject([{ data: { record: { token: personal } } }, { data: { record: { token: business } } }]);
   });
 
   it('reports a missing directory as a failure instead of creating it', () => {
     const storePath = join(makeDirectory(), 'not-provisioned', 'bank-tokens.json');
     const store = new BankTokenStore(createNodeFileSystem(), storePath);
-    expect(store.write('oneZero', fakeToken())).toMatchObject({ success: false, status: 'ENOENT' });
+    expect(store.write('oneZero', fakeToken(), ACCOUNT_LOGIN)).toMatchObject({ success: false, status: 'ENOENT' });
   });
 
   it('collects a staged token an earlier run was killed before cleaning up', () => {

@@ -52,6 +52,11 @@ export interface IAuthFlowCaptureParams {
   /** The account's key in the store, built by {@link buildTokenStoreKey}. */
   readonly storeKey: string;
   readonly companyType: string;
+  /**
+   * Fingerprint of the login this attempt logs in with, which every token it
+   * captures is bound to; empty when the entry has no identity to fingerprint.
+   */
+  readonly login: string;
   readonly store: IBankTokenStore;
   readonly logger: ILogger;
 }
@@ -101,15 +106,15 @@ function warnOf(params: IAuthFlowCaptureParams, message: string): false {
  * Persists one captured token, turning any failure into a warning.
  *
  * <p>The store owns the rules for what is written: it skips a blank token and
- * one it already holds, so both the callback and the backstop can hand it
- * whatever they received.
+ * one it already holds, and refuses one bound to another login, so both the
+ * callback and the backstop can hand it whatever they received.
  * @param token - The long-term token the provider returned.
  * @param params - Account key, store and logger for this capture.
  * @returns True when the file now holds a token it did not hold before.
  */
 function persistToken(token: string, params: IAuthFlowCaptureParams): boolean {
   try {
-    const result = params.store.write(params.storeKey, token);
+    const result = params.store.write(params.storeKey, token, params.login);
     if (!result.success) return warnOf(params, result.message);
     if (result.data.written) {
       params.logger.info(`  🔐 Stored the long-term token for ${params.storeKey}`);

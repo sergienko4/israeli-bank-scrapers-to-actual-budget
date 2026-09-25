@@ -24,7 +24,7 @@ import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js'
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
 import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeStrategy.js';
 import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
-import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
+import { fakeImporterConfig, fakeValidBankConfigFor } from '../../helpers/factories.js';
 import type { IStoreUnderTest } from '../BankTokenStoreFixture.js';
 import { makeStore } from '../BankTokenStoreFixture.js';
 
@@ -163,7 +163,7 @@ function makeOpts(row: IOverlapRow): IBankScrapeStrategyOpts {
   const logger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
   return {
     bankId: row.bankId.toLowerCase(), companyType: row.bankId as never,
-    bankConfig: fakeBankConfig({ twoFactorAuth: row.twoFactorAuth }),
+    bankConfig: fakeValidBankConfigFor(row.bankId.toLowerCase(), { twoFactorAuth: row.twoFactorAuth }),
     accountKey: ENTRY, startDate: new Date(), logger,
     ...(row.hasInjectedRetriever ? { otpRetriever: async () => '654321' } : {}),
   };
@@ -196,7 +196,7 @@ async function scrapeThenLetStalledLoginFinish(
  */
 function storedToken(row: IOverlapRow, subject: IStoreUnderTest): string {
   const read = subject.store.read(`${row.bankId.toLowerCase()}:${ENTRY}`);
-  return read.success ? read.data : `unreadable: ${read.message}`;
+  return read.success ? read.data.record.token : `unreadable: ${read.message}`;
 }
 
 /**

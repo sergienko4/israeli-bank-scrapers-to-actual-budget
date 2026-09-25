@@ -7,7 +7,7 @@
  */
 
 import BankTokenStore from '../../src/Scraper/Tokens/BankTokenStore.js';
-import { fakeUuid } from '../helpers/factories.js';
+import { fakeLoginFingerprint, fakeUuid } from '../helpers/factories.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
 
 /** Directory the store lives in, as the image provisions it. */
@@ -24,6 +24,9 @@ export const WORLD_READABLE = 0o644;
 
 /** Capture moment used where the exact value is asserted. */
 export const CAPTURED_AT = '2026-09-23T15:11:00.000Z';
+
+/** Login every case binds its tokens to, unless it needs a second one. */
+export const ACCOUNT_LOGIN = fakeLoginFingerprint();
 
 /** A store under test and the filesystem behind it. */
 export interface IStoreUnderTest {

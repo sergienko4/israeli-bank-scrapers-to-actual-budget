@@ -15,6 +15,8 @@ import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
 import {
   attachAuthFlowCapture, buildTokenStoreKey, isApiDirectBank,
 } from '../../Tokens/AuthFlowCapture.js';
+import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
+import loginFingerprint from '../../Tokens/LoginFingerprint.js';
 import { BrowserRegistry } from './BrowserRegistry.js';
 import { resolveOtpRetriever } from './OtpRetriever.js';
 import type {
@@ -131,11 +133,22 @@ export function buildScraperOptions(
 }
 
 /**
- * Bundles the account key, token store and logger one capture needs.
+ * Fingerprints the login an attempt logs in with.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @returns The fingerprint, or {@link NO_LOGIN} when the entry has no identity,
+ *          which the store refuses to bind a token to.
+ */
+function attemptLogin(scrapeOpts: LiveOpts): string {
+  const fingerprint = loginFingerprint(scrapeOpts.companyType, scrapeOpts.bankConfig);
+  return fingerprint.success ? fingerprint.data : NO_LOGIN;
+}
+
+/**
+ * Bundles the account key, login, token store and logger one capture needs.
  *
  * Shared by the login callback, the attempt runner's result backstop and the
  * leftover sweep, so the callback and the backstop derive the same key and
- * all three apply the same bank filter.
+ * login, and all three apply the same bank filter.
  * @param deps - Strategy dependencies exposing the token store.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @returns Parameter bundle accepted by the capture helpers.
@@ -145,7 +158,7 @@ export function buildTokenCaptureParams(
 ): IAuthFlowCaptureParams {
   const storeKey = buildTokenStoreKey(scrapeOpts.bankId, scrapeOpts.accountKey);
   return {
-    storeKey, companyType: scrapeOpts.companyType,
+    storeKey, companyType: scrapeOpts.companyType, login: attemptLogin(scrapeOpts),
     store: deps.bankTokens, logger: scrapeOpts.logger,
   };
 }

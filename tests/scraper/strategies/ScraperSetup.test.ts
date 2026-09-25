@@ -13,11 +13,15 @@ import { describe, it, expect } from 'vitest';
 import {
   attachOtpRetriever,
   buildBaseScraperOptions,
+  buildTokenCaptureParams,
 } from '../../../src/Scraper/Strategies/Live/ScraperSetup.js';
 import type {
   ILiveScrapeDependencies,
   IResolvedLiveOpts,
 } from '../../../src/Scraper/Strategies/Live/Types.js';
+import loginFingerprint from '../../../src/Scraper/Tokens/LoginFingerprint.js';
+import type { IBankConfig } from '../../../src/Types/Index.js';
+import { fakeValidBankConfigFor } from '../../helpers/factories.js';
 
 describe('ScraperSetup', () => {
   describe('attachOtpRetriever (fix for paybox-double-otp)', () => {
@@ -159,6 +163,37 @@ describe('ScraperSetup', () => {
       const options = buildBaseScraperOptions(makeDeps(), opts);
 
       expect(options.defaultTimeout).toBe(60_000);
+    });
+  });
+  describe('buildTokenCaptureParams', () => {
+    /**
+     * Builds the options one OneZero attempt resolves to.
+     * @param bankConfig - The entry the attempt logs in with.
+     * @returns Resolved live options for the entry `oneZero`.
+     */
+    const oneZeroOpts = (bankConfig: IBankConfig): IResolvedLiveOpts =>
+      ({
+        companyType: CompanyTypes.OneZero, bankId: 'onezero', accountKey: 'oneZero', bankConfig,
+      }) as unknown as IResolvedLiveOpts;
+
+    /** Dependencies whose token store the bundle carries. */
+    const deps = { bankTokens: {} } as unknown as ILiveScrapeDependencies;
+
+    it('binds the capture to the fingerprint of the login the entry logs in with', () => {
+      const bankConfig = fakeValidBankConfigFor('onezero');
+      const expected = loginFingerprint(CompanyTypes.OneZero, bankConfig);
+
+      const params = buildTokenCaptureParams(deps, oneZeroOpts(bankConfig));
+
+      expect(expected.success && params.login).toBe(expected.success && expected.data);
+    });
+
+    it('carries no login for an entry with no identity to fingerprint', () => {
+      const bankConfig = fakeValidBankConfigFor('onezero', { email: '' });
+
+      const params = buildTokenCaptureParams(deps, oneZeroOpts(bankConfig));
+
+      expect(params.login).toBe('');
     });
   });
 });
