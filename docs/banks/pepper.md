@@ -44,7 +44,11 @@ first successful run that lets you skip OTP on subsequent runs.
 
 This bank **requires** 2FA on every login.
 
-After the first successful login, capture the value of `otpLongTermToken` from the logs and add it back to `config.json` to skip OTP on future runs.
+After an SMS login the importer saves the bank's long-term token in
+`bank-tokens.json` on the data volume. The logs never show it. The importer
+does not reuse the saved token yet, so to skip the SMS on later runs, copy
+it into `otpLongTermToken` yourself and keep `twoFactorAuth: true`. See
+[Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) for the steps.
 
 For automated SMS forwarding, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
