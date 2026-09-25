@@ -454,7 +454,6 @@ const PROVIDER_FAILURES: readonly [string, string][] = [
   ['INVALID_PASSWORD', 'LOGIN POST: bounced back to login path /login'],
   ['INVALID_PASSWORD', 'Login failed with invalid error — url: https://bank.example/login'],
   ['CHANGE_PASSWORD', 'Password change required'],
-  ['INVALID_PHONE_NUMBER', 'unknown shape (cannot be normalised to the E164 wire format)'],
 ];
 
 /**
@@ -478,6 +477,33 @@ const FAILURE_TEXTS = (await Promise.all([
   ...FAILURE_CODES.map(code => stageMessage(code, 'Login failed at the bank')),
   ...PROVIDER_FAILURES.map(([code, prose]) => stageMessage(code, prose)),
 ])).map(text => `${text}, ${CANARY}`);
+
+/**
+ * The provider's reasons for a phone number it cannot use, as its 8.7.3
+ * release words them. Each starts with the `phoneNumber:` field label, a
+ * secret key, so the word after it is hidden like any phone value; the rest of
+ * the reason must stay readable.
+ */
+const PHONE_REASONS = [
+  'phoneNumber: expected ≥10 digits, got 9',
+  'phoneNumber: must be digits-only international form (no +, -, spaces)',
+  'phoneNumber: must start with country code 972',
+].map(reason => `${reason} (cannot be normalised to the international-plus wire format)`);
+
+/** Each phone reason as the scrape stage writes it, with the canary after it. */
+const PHONE_TEXTS = (await Promise.all(PHONE_REASONS.map(reason => stageMessage('INVALID_PHONE_NUMBER', reason))))
+  .map(text => `${text}, ${CANARY}`);
+
+/**
+ * What an output must show for a phone reason: the code, the label with its
+ * first word hidden, and every word after that.
+ * @param reason - The provider's reason.
+ * @returns The text the output must contain.
+ */
+function phoneReasonShown(reason: string): string {
+  const rest = reason.split(' ').slice(2).join(' ');
+  return `INVALID_PHONE_NUMBER — phoneNumber=[REDACTED] ${rest}, ${CANARY}`;
+}
 
 /**
  * Lists the cases the masker touched, or whose output lost the case's text.
@@ -536,6 +562,15 @@ describe('a provider failure code reaches every output readable', () => {
   it.each(FAILURE_SINKS)('%s keeps the code and the prose after it', (_sink, outputsFor, keepsText) => {
     expect(unreadable(FAILURE_TEXTS, outputsFor(FAILURE_TEXTS), keepsText)).toEqual([]);
   });
+
+  it.each(FAILURE_SINKS.filter(([, , keepsText]) => keepsText))(
+    '%s keeps a phone reason readable after the word its label hides',
+    (_sink, outputsFor) => {
+      const outputs = outputsFor(PHONE_TEXTS);
+      const unshown = PHONE_REASONS.filter((reason, index) => !outputs[index]?.includes(phoneReasonShown(reason)));
+      expect(unshown).toEqual([]);
+    },
+  );
 });
 
 /** A secret of letters only, the shape an older release let through after a failure code. */

@@ -193,8 +193,12 @@ the bank's own text with a dash, as in
 it as a key and its value. A record that an older release wrote with a colon,
 such as `INVALID_PASSWORD: Invalid credentials`, now shows the first word
 hidden, as in `INVALID_PASSWORD=[REDACTED] credentials`, in the import
-history and in `/logs`. The masker only hides a value after a key; it does not
-look for a secret in the text around it.
+history and in `/logs`. The scraper's own reasons for a phone number it cannot
+use start with the field's name, as in
+`phoneNumber: must start with country code 972`, so the word after it is hidden
+like any phone value: `phoneNumber=[REDACTED] start with country code 972`.
+The masker only hides a value after a key; it does not look for a secret in
+the text around it.
 
 Structured log fields follow the same keys, in any letter case and at any
 depth: a field named `authToken` or `Authorization` is written as

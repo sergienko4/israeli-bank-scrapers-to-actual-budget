@@ -69,14 +69,14 @@ interface IProviderFailure {
   readonly errorType: string;
   /** The provider's own words, which may quote the bank's reply. */
   readonly errorMessage: string;
-  /** The bank's words the operator must still read, whole. */
+  /** What the operator must still read of the provider's words, whole. */
   readonly words: string;
 }
 
 /** Everything one failed import wrote or sent, by the output's name. */
 type Outputs = Readonly<Record<string, string>>;
 
-/** The provider's 8.7 wording for a rejected login, one case per shape. */
+/** The provider's 8.7.3 wording for a failed login, one case per shape. */
 const FAILURES: readonly [string, IProviderFailure][] = [
   ['a login form error', {
     errorType: 'INVALID_PASSWORD',
@@ -92,6 +92,11 @@ const FAILURES: readonly [string, IProviderFailure][] = [
     errorType: 'INVALID_PASSWORD',
     errorMessage: `LOGIN POST: bounced back to login path /login?password=${TEST_CREDENTIAL}`,
     words: 'LOGIN POST: bounced back to login path',
+  }],
+  ['an unusable phone number, whose label hides the reason\'s first word', {
+    errorType: 'INVALID_PHONE_NUMBER',
+    errorMessage: 'phoneNumber: expected ≥10 digits, got 9 (cannot be normalised to the international-plus wire format)',
+    words: 'phoneNumber=[REDACTED] ≥10 digits, got 9',
   }],
 ];
 
