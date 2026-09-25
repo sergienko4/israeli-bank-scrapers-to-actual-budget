@@ -72,10 +72,9 @@ export interface IAuthFlowCaptureParams {
  * @param accountKey - Name of the `banks` config entry, when known.
  * @returns `bankId:accountKey`, or `bankId` when the entry name is blank.
  */
-export function buildTokenStoreKey(bankId: string, accountKey?: string): string {
-  const account = accountKey ?? '';
-  if (account.trim().length === 0) return bankId;
-  return `${bankId}:${account}`;
+export function buildTokenStoreKey(bankId: string, accountKey = ''): string {
+  if (accountKey.trim().length === 0) return bankId;
+  return `${bankId}:${accountKey}`;
 }
 
 /**
