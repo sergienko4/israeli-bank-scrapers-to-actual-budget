@@ -143,6 +143,27 @@ export interface IFileSystem {
   rename(fromPath: string, toPath: string): Procedure<IMoveOutcome>;
 
   /**
+   * Gives a staged file a final name only if that name is free, then removes
+   * the stage.
+   *
+   * <p>Unlike {@link IFileSystem.rename}, which replaces the destination, this
+   * never touches a taken name, so of two writers racing for one name exactly
+   * one wins and the other gets `EEXIST`. The final name is a second name for
+   * the finished file, so it appears with the whole contents or not at all,
+   * and a symlink already at the final name counts as taken rather than being
+   * followed. It needs a filesystem with hard links.
+   *
+   * <p>On failure the stage is left for the caller to remove. On success the
+   * stage is removed; if that removal fails, the file is still published and
+   * the stage is a leftover for the caller's sweep.
+   * @param stagePath - Finished file made by {@link IFileSystem.createExclusive}.
+   * @param finalPath - Name to publish it under, which must be free.
+   * @returns The final path, or a failure carrying the errno; `EEXIST` means
+   *   the name was taken.
+   */
+  publishExclusive(stagePath: string, finalPath: string): Procedure<IMoveOutcome>;
+
+  /**
    * Lists the full paths of everything directly inside a directory.
    *
    * <p>Full paths rather than bare names, so no caller has to join them and

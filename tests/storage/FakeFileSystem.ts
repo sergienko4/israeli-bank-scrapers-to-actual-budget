@@ -381,6 +381,26 @@ export default class FakeFileSystem implements IFileSystem {
   }
 
   /**
+   * Publishes a staged name under a free one, then removes the stage.
+   * @param stagePath - Staged name to publish.
+   * @param finalPath - Name to publish it under, which must be free.
+   * @returns The final path, or a failure carrying the errno.
+   */
+  public publishExclusive(stagePath: string, finalPath: string): Procedure<IMoveOutcome> {
+    this.calls.push('publishExclusive');
+    const forced = this.forced('publishExclusive');
+    if (forced) return forced;
+    const entry = this._entries.get(stagePath);
+    if (!entry) return fail(`Could not publish ${finalPath}: ENOENT`, { status: 'ENOENT' });
+    if (this._entries.has(finalPath)) {
+      return fail(`Could not publish ${finalPath}: EEXIST`, { status: 'EEXIST' });
+    }
+    this._entries.set(finalPath, entry);
+    this._entries.delete(stagePath);
+    return succeed({ path: finalPath });
+  }
+
+  /**
    * Lists the full paths of everything directly inside a directory.
    * @param directoryPath - Directory to list.
    * @returns The paths, or a failure carrying the errno in `status`.

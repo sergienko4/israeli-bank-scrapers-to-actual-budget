@@ -67,6 +67,7 @@ export function describeFileSystemContract(
     describeClose(makeSubject);
     describeCreateExclusive(makeSubject);
     describeRenameAndRemove(makeSubject);
+    describePublishExclusive(makeSubject);
     describeListNames(makeSubject);
   });
 }
@@ -462,6 +463,90 @@ function describeRenameAndRemove(makeSubject: () => IContractSubject): void {
       const removed = fileSystem.remove(world.path('absent.tmp'));
       if (!removed.success) throw new Error('expected removing an absent path to succeed');
       expect(removed.data.wasPresent).toBe(false);
+    });
+  });
+}
+
+/**
+ * Covers publishing a staged file under a name only if that name is free.
+ * @param makeSubject - Builds a fresh subject for each test.
+ * @returns Nothing; registers tests as a side effect.
+ */
+function describePublishExclusive(makeSubject: () => IContractSubject): void {
+  describe('publishExclusive', () => {
+    it('publishes the whole staged contents under a free name, owner-only', () => {
+      const { fileSystem, world } = makeSubject();
+      fileSystem.createExclusive(world.path('staged.tmp'), '{"code":"123456"}');
+      const published = fileSystem.publishExclusive(
+        world.path('staged.tmp'), world.path('answer.json'),
+      );
+      expect(published.success && published.data.path).toBe(world.path('answer.json'));
+      expect(world.contentsOf('answer.json')).toBe('{"code":"123456"}');
+      expect(world.modeOf('answer.json') & 0o777).toBe(0o600);
+    });
+
+    it('removes the stage, leaving the published file a single name', () => {
+      const { fileSystem, world } = makeSubject();
+      fileSystem.createExclusive(world.path('staged.tmp'), '{}');
+      fileSystem.publishExclusive(world.path('staged.tmp'), world.path('answer.json'));
+      expect(world.hasEntry('staged.tmp')).toBe(false);
+      const opened = fileSystem.openForRead(world.path('answer.json'));
+      if (!opened.success) throw new Error(`expected the answer to open: ${opened.message}`);
+      expect(opened.data.linkCount).toBe(1);
+      fileSystem.close(opened.data);
+    });
+
+    it('refuses a taken name with EEXIST, leaving it untouched', () => {
+      const { fileSystem, world } = makeSubject();
+      world.writeFile('answer.json', 'first', 0o600);
+      fileSystem.createExclusive(world.path('staged.tmp'), 'second');
+      const published = fileSystem.publishExclusive(
+        world.path('staged.tmp'), world.path('answer.json'),
+      );
+      if (published.success) throw new Error('expected the taken name to be refused');
+      expect(published.status).toBe('EEXIST');
+      expect(published.message).toContain(world.path('answer.json'));
+      expect(world.contentsOf('answer.json')).toBe('first');
+    });
+
+    it('keeps the stage after a failure, for the caller to remove', () => {
+      const { fileSystem, world } = makeSubject();
+      world.writeFile('answer.json', 'first', 0o600);
+      fileSystem.createExclusive(world.path('staged.tmp'), 'second');
+      fileSystem.publishExclusive(world.path('staged.tmp'), world.path('answer.json'));
+      expect(world.contentsOf('staged.tmp')).toBe('second');
+    });
+
+    it('lets exactly one of two publishes to one name win', () => {
+      const { fileSystem, world } = makeSubject();
+      fileSystem.createExclusive(world.path('code.tmp'), 'code');
+      fileSystem.createExclusive(world.path('expired.tmp'), 'expired');
+      const first = fileSystem.publishExclusive(world.path('code.tmp'), world.path('answer.json'));
+      const second = fileSystem.publishExclusive(
+        world.path('expired.tmp'), world.path('answer.json'),
+      );
+      expect([first.success, second.success]).toEqual([true, false]);
+      expect(world.contentsOf('answer.json')).toBe('code');
+    });
+
+    it('threat 2: treats a symlink at the final name as taken, never following it', () => {
+      const { fileSystem, world } = makeSubject();
+      world.makeSymlink('answer.json', 'elsewhere.json');
+      fileSystem.createExclusive(world.path('staged.tmp'), 'ours');
+      const published = fileSystem.publishExclusive(
+        world.path('staged.tmp'), world.path('answer.json'),
+      );
+      expect(published.success === false && published.status).toBe('EEXIST');
+      expect(world.hasEntry('elsewhere.json')).toBe(false);
+    });
+
+    it('reports a missing stage rather than throwing', () => {
+      const { fileSystem, world } = makeSubject();
+      const published = fileSystem.publishExclusive(
+        world.path('absent.tmp'), world.path('answer.json'),
+      );
+      expect(published.success === false && published.status).toBe('ENOENT');
+      expect(world.hasEntry('answer.json')).toBe(false);
     });
   });
 }

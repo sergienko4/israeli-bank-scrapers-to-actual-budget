@@ -13,8 +13,8 @@
  */
 
 import {
-  closeSync, constants, fchmodSync, fstatSync, fsyncSync, openSync, readdirSync, readSync,
-  renameSync, unlinkSync, writeFileSync,
+  closeSync, constants, fchmodSync, fstatSync, fsyncSync, linkSync, openSync, readdirSync,
+  readSync, renameSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
 
@@ -292,6 +292,26 @@ function rename(fromPath: string, toPath: string): Procedure<IMoveOutcome> {
 }
 
 /**
+ * Publishes a staged file under a free name, then removes the stage.
+ *
+ * <p>`link(2)` fails with `EEXIST` whatever holds the new name, a symlink
+ * included, and never follows it; the stage removal afterwards is best
+ * effort, as the port allows.
+ * @param stagePath - Finished file made by `createExclusive`.
+ * @param finalPath - Name to publish it under, which must be free.
+ * @returns The final path, or a failure carrying the errno in `status`.
+ */
+function publishExclusive(stagePath: string, finalPath: string): Procedure<IMoveOutcome> {
+  try {
+    linkSync(stagePath, finalPath);
+  } catch (error: unknown) {
+    return failed('publish', finalPath, error);
+  }
+  discardCreated(stagePath);
+  return succeed({ path: finalPath });
+}
+
+/**
  * Removes a path, treating an already-absent path as success.
  *
  * <p>Absence is judged from the unlink itself rather than a preceding
@@ -364,6 +384,7 @@ export default function createNodeFileSystem(): IFileSystem {
     close: closeFile,
     createExclusive,
     rename,
+    publishExclusive,
     listNames,
     remove,
   });
