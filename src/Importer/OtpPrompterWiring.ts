@@ -9,6 +9,7 @@
  * Telegram-specific construction out of the core wiring module.
  */
 import type { ITwoFactorPrompter } from '../Services/ITwoFactorPrompter.js';
+import openDeviceTokenStore from '../Services/Notifications/DeviceTokenStoreWiring.js';
 import ExpoPushNotifier from '../Services/Notifications/ExpoPushNotifier.js';
 import TelegramNotifier from '../Services/Notifications/TelegramNotifier.js';
 import AppOtpPrompter from '../Services/TwoFactor/AppOtpPrompter.js';
@@ -41,7 +42,7 @@ export default class OtpPrompterWiring {
       return telegramPrompter;
     }
     const requestStore = new OtpRequestStore();
-    const pushNotifier = new ExpoPushNotifier();
+    const pushNotifier = new ExpoPushNotifier(openDeviceTokenStore());
     const appPrompter = new AppOtpPrompter(requestStore, pushNotifier);
     return telegramPrompter ? new FallbackOtpPrompter(appPrompter, telegramPrompter) : appPrompter;
   }

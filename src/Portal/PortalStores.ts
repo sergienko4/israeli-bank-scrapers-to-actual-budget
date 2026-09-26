@@ -7,11 +7,15 @@
  * the request arrives.
  */
 
+import type DeviceTokenStore from '../Services/Notifications/DeviceTokenStore.js';
+import openDeviceTokenStore from '../Services/Notifications/DeviceTokenStoreWiring.js';
 import type OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
 import openOtpSettingsStore from '../Services/TwoFactor/OtpSettingsStoreWiring.js';
 
 /** One factory per runtime store the portal reads or writes. */
 export interface IPortalStores {
+  /** Opens the mobile app's device-token store. */
+  readonly devices: () => DeviceTokenStore;
   /** Opens the OTP delivery-channel store. */
   readonly otpSettings: () => OtpSettingsStore;
 }
@@ -21,6 +25,9 @@ export interface IPortalStores {
  * @returns The portal's store factories.
  */
 export default function openPortalStores(): IPortalStores {
-  const stores: IPortalStores = { otpSettings: openOtpSettingsStore };
+  const stores: IPortalStores = {
+    devices: openDeviceTokenStore,
+    otpSettings: openOtpSettingsStore,
+  };
   return stores;
 }

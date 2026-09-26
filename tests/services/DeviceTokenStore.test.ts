@@ -1,10 +1,11 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import DeviceTokenStore from '../../src/Services/Notifications/DeviceTokenStore.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 
 let dir: string;
 let store: DeviceTokenStore;
@@ -20,7 +21,7 @@ function tokenPath(): string {
 describe('DeviceTokenStore', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'devices-'));
-    store = new DeviceTokenStore(tokenPath());
+    store = new DeviceTokenStore(createNodeFileSystem(), tokenPath());
   });
 
   afterEach(() => {
@@ -34,6 +35,11 @@ describe('DeviceTokenStore', () => {
   it('adds and lists a token', () => {
     store.add('ExponentPushToken[abc]');
     expect(store.list()).toEqual(['ExponentPushToken[abc]']);
+  });
+
+  it('writes the device-tokens file owner-only on disk', () => {
+    store.add('ExponentPushToken[abc]');
+    expect(statSync(tokenPath()).mode & 0o777).toBe(0o600);
   });
 
   it('deduplicates repeated tokens', () => {
