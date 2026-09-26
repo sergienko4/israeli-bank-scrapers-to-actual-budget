@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,6 +7,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { encryptConfig } from '../../src/Config/ConfigEncryption.js';
 import readJsonFile from '../../src/Config/Loaders/JsonFileReader.js';
 import { ConfigurationError } from '../../src/Errors/ErrorTypes.js';
+import type { IImporterConfig } from '../../src/Types/Index.js';
+
+/**
+ * Reads a file expected to be present, failing the test when it reads as absent.
+ * @param path - File to read.
+ * @returns The parsed config.
+ */
+function readPresent(path: string): IImporterConfig {
+  const result = readJsonFile(path);
+  if (!result.success) throw new Error(`expected ${path} to be read: ${result.message}`);
+  return result.data;
+}
 
 /**
  * Stores original env vars so tests can clean them up deterministically.
@@ -43,7 +55,7 @@ describe('JsonFileReader.readJsonFile', () => {
       banks: {},
     };
     writeFileSync(path, JSON.stringify(body), 'utf8');
-    const result = readJsonFile(path);
+    const result = readPresent(path);
     expect(result.actual.init.dataDir).toBe('/data');
     expect(result.banks).toEqual({});
   });
@@ -52,7 +64,7 @@ describe('JsonFileReader.readJsonFile', () => {
     const path = join(tmpDir, 'plain.json');
     const body = { delayBetweenBanks: 1234, actual: {}, banks: {} };
     writeFileSync(path, JSON.stringify(body), 'utf8');
-    expect(readJsonFile(path).delayBetweenBanks).toBe(1234);
+    expect(readPresent(path).delayBetweenBanks).toBe(1234);
   });
 
   it('decrypts an encrypted payload when password env var is set', () => {
@@ -68,7 +80,7 @@ describe('JsonFileReader.readJsonFile', () => {
     const path = join(tmpDir, 'enc.json');
     writeFileSync(path, encrypted, 'utf8');
     process.env.CREDENTIALS_ENCRYPTION_PASSWORD = 'test-passphrase';
-    const result = readJsonFile(path);
+    const result = readPresent(path);
     expect(result.delayBetweenBanks).toBe(42);
   });
 
@@ -87,7 +99,7 @@ describe('JsonFileReader.readJsonFile', () => {
     const path = join(tmpDir, 'enc-legacy.json');
     writeFileSync(path, encrypted, 'utf8');
     process.env.CONFIG_PASSWORD = 'legacy-pw';
-    const result = readJsonFile(path);
+    const result = readPresent(path);
     expect(result.delayBetweenBanks).toBe(7);
   });
 
@@ -97,8 +109,16 @@ describe('JsonFileReader.readJsonFile', () => {
     expect(() => readJsonFile(path)).toThrow();
   });
 
-  it('throws when file does not exist', () => {
+  it('fails with ENOENT, without throwing, when the file does not exist', () => {
     const path = join(tmpDir, 'missing.json');
-    expect(() => readJsonFile(path)).toThrow(/ENOENT|no such file/i);
+    const result = readJsonFile(path);
+    expect(result).toMatchObject({ success: false, status: 'ENOENT' });
+  });
+
+  it('throws ConfigurationError naming the file when it is there but unreadable', () => {
+    const path = join(tmpDir, 'config.json');
+    mkdirSync(path);
+    expect(() => readJsonFile(path)).toThrow(ConfigurationError);
+    expect(() => readJsonFile(path)).toThrow(`${path} is not a regular file`);
   });
 });

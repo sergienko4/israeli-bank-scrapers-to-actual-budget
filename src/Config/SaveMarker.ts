@@ -14,7 +14,8 @@ import { randomUUID } from 'node:crypto';
 
 import { ConfigurationError } from '../Errors/ErrorTypes.js';
 import { getLogger } from '../Logger/Index.js';
-import type { IImporterConfig } from '../Types/Index.js';
+import type { IImporterConfig, Procedure } from '../Types/Index.js';
+import { succeed } from '../Types/Index.js';
 import UUID_PATTERN from '../Utils/IdPatterns.js';
 import type { ISplitConfig } from './SecretSplitter.js';
 
@@ -85,16 +86,16 @@ function isOneSave(pair: IConfigPair): boolean {
 /**
  * Reads the pair, and reads it once more when it does not match, since a
  * save may have finished its second rename between the two reads.
- * @param readPair - Reads both files from disk.
- * @returns A pair from one save.
+ * @param readPair - Reads both files from disk; fails when there is no config.json.
+ * @returns A pair from one save, or the failure when there is no config.json.
  * @throws ConfigurationError when the pair still comes from two saves.
  */
-function settledPair(readPair: () => IConfigPair): IConfigPair {
+function settledPair(readPair: () => Procedure<IConfigPair>): Procedure<IConfigPair> {
   const first = readPair();
-  if (isOneSave(first)) return first;
+  if (!first.success || isOneSave(first.data)) return first;
   getLogger().warn('⚠️  config.json and credentials.json do not match; reading both again');
   const second = readPair();
-  if (isOneSave(second)) return second;
+  if (!second.success || isOneSave(second.data)) return second;
   throw new ConfigurationError(MIXED_PAIR_MESSAGE);
 }
 
@@ -114,13 +115,19 @@ function withoutSaveId(file: IImporterConfig): IImporterConfig {
  * Reads config.json and credentials.json as one save, without their save ids.
  * Every failure it throws is a ConfigurationError worded for the operator, and
  * both processes log it before refusing to start.
- * @param readPair - Reads both files from disk; called at most twice.
- * @returns Both files, the id removed from each.
+ * @param readPair - Reads both files from disk, failing when there is no
+ *   config.json; called at most twice.
+ * @returns Both files, the id removed from each, or the failure when there is
+ *   no config.json.
  * @throws ConfigurationError when the two files come from different saves.
  */
-export default function readOneSave(readPair: () => IConfigPair): IConfigPair {
-  const pair = settledPair(readPair);
+export default function readOneSave(
+  readPair: () => Procedure<IConfigPair>,
+): Procedure<IConfigPair> {
+  const read = settledPair(readPair);
+  if (!read.success) return read;
+  const pair = read.data;
   const credentials = pair.credentials ? withoutSaveId(pair.credentials) : undefined;
   const config = withoutSaveId(pair.config);
-  return { config, credentials };
+  return succeed({ config, credentials });
 }

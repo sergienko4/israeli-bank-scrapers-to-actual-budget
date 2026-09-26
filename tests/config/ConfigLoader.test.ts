@@ -8,6 +8,10 @@ import {
 } from '../../src/Types/Index.js';
 
 vi.mock('fs');
+// Config reads open a descriptor; drive them through this suite's fs mock.
+vi.mock('../../src/Config/Loaders/ConfigFileText.js', async () => ({
+  default: (await import('../helpers/configTextFromFsMock.js')).default,
+}));
 
 // UUID is asserted in tests like "expect(result.data.actual.budget.syncId).toBe(VALID_UUID)"
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';

@@ -10,6 +10,10 @@ import {
 import { TEST_CREDENTIAL, TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
 vi.mock('fs');
+// Config reads open a descriptor; drive them through this suite's fs mock.
+vi.mock('../../src/Config/Loaders/ConfigFileText.js', async () => ({
+  default: (await import('../helpers/configTextFromFsMock.js')).default,
+}));
 
 // Used only in runValidateMode inline objects (where exact UUID is needed by readFileSync mock)
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
