@@ -5,6 +5,7 @@ import { AuditLogService } from '../../src/Services/AuditLogService.js';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'fs';
 import { createAuditQuery } from '../../src/Services/Telegram/AuditQuery.js';
 import { buildBatchErrorReply } from '../../src/Services/Telegram/BatchFailureReply.js';
+import type { IBatchResult } from '../../src/Types/Index.js';
 import { fakeBatchResult, fakeImportJobResult, fakeImportSummary } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
@@ -344,6 +345,56 @@ describe('AuditLogService', () => {
       const result = service.getRecent(5);
       expect(result.success).toBe(true);
       if (result.success) expect(result.data).toEqual([{ timestamp: 'x' }, null]);
+    });
+  });
+
+  describe('a later run writes its entry before this batch replies', () => {
+    const batchError = 'INVALID_PASSWORD — Form: Invalid username or code';
+    const laterError = 'ACCOUNT_BLOCKED — Too many login attempts';
+
+    /**
+     * Writes the audit file as the reply finds it: this batch's entry, then
+     * the entry of a later run of the same bank that ended after this batch.
+     * @param batch - The batch whose failure reply is built.
+     */
+    function seedOwnThenLater(batch: IBatchResult): void {
+      const endMs = batch.startedAtMs + batch.totalDurationMs;
+      const entryAt = (ms: number, error: string): object => ({
+        ...fakeImportSummary({ successfulBanks: 0, failedBanks: 1 }),
+        timestamp: new Date(ms).toISOString(),
+        banks: [{ name: 'oneZero', status: 'failure', txns: 0, error }],
+      });
+      const own = entryAt(batch.startedAtMs + 1_000, batchError);
+      writeFileSync(TEST_FILE, JSON.stringify([own, entryAt(endMs + 1_000, laterError)]));
+    }
+
+    it.each([
+      ['one job per bank', 'oneZero'],
+      ['one job for every bank', 'all'],
+    ])('shows this batch\'s error, not the later run\'s, for %s', (_shape, jobLabel) => {
+      const batch = fakeBatchResult({
+        jobs: [fakeImportJobResult(jobLabel, 1)], totalDurationMs: 60_000, failureCount: 1,
+      });
+      seedOwnThenLater(batch);
+      const audit = createAuditQuery(service);
+      const fresh = audit.getFreshEntryFor(batch);
+      const reply = buildBatchErrorReply({
+        batch, entry: fresh.success ? fresh.data : undefined,
+        entries: audit.getFreshEntriesFor(batch), auditLog: service,
+      });
+      expect(reply).toContain(batchError);
+      expect(reply).not.toContain(laterError);
+    });
+
+    it('passes over a malformed entry left earlier in the file', () => {
+      const batch = fakeBatchResult({ totalDurationMs: 60_000 });
+      const own = {
+        ...fakeImportSummary(), timestamp: new Date(batch.startedAtMs + 1_000).toISOString(),
+      };
+      writeFileSync(TEST_FILE, JSON.stringify([null, own]));
+      const audit = createAuditQuery(service);
+      expect(audit.getFreshEntryFor(batch).success).toBe(true);
+      expect(audit.getFreshEntriesFor(batch)).toHaveLength(1);
     });
   });
 });

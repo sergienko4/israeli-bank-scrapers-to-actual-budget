@@ -10,12 +10,16 @@ import { fail, succeed } from '../../Types/Index.js';
 import type { IAuditEntry, IAuditLog } from '../AuditLogService.js';
 import { isFreshEntry } from '../TelegramCommandFormatters.js';
 
+// Asks for every kept entry. The log caps how many it keeps and loads the
+// whole file on each read, so asking for all of them costs no extra I/O.
+const WHOLE_LOG = Number.MAX_SAFE_INTEGER;
+
 /** Read-only audit-log accessor consolidating every read pattern used by the router. */
 export interface IAuditQuery {
   /**
    * Returns the n most-recent audit entries.
    * @param n - Number of most-recent entries to fetch.
-   * @returns Up to n entries (newest first). Empty array on failure.
+   * @returns Up to n entries, oldest first and newest last. Empty array on failure.
    */
   getRecent(n: number): readonly IAuditEntry[];
   /**
@@ -24,7 +28,7 @@ export interface IAuditQuery {
    */
   getLastFailedBanks(): readonly string[];
   /**
-   * Returns the audit entry recorded during the batch window.
+   * Returns the newest audit entry recorded during the batch window.
    * @param batch - Recently completed batch.
    * @returns Procedure carrying the fresh entry, or a `fail` when none.
    */
@@ -132,26 +136,30 @@ function readStreak(
 }
 
 /**
- * Picks the freshest audit entry that falls within the supplied batch window.
+ * Picks the newest audit entry written while the batch ran.
+ *
+ * Searches every kept entry: a later run can write its own entry after this
+ * batch ends but before this batch's reply is built.
  * @param batch - Recently completed batch.
  * @param log - Optional audit log.
- * @returns succeed(entry) when fresh, fail otherwise.
+ * @returns succeed(entry) when one is inside the window, fail otherwise.
  */
 function pickFreshEntry(
   batch: IBatchResult, log?: IAuditLog,
 ): Procedure<IAuditEntry> {
-  const recent = readRecent(1, log);
+  const recent = readRecent(WHOLE_LOG, log);
   if (recent.length === 0) return fail('no-recent-entry');
-  const [entry] = recent;
-  if (!isFreshEntry(entry, batch)) return fail('stale-entry');
+  const entry = recent.filter(e => isFreshEntry(e, batch)).at(-1);
+  if (entry === undefined) return fail('stale-entry');
   return succeed(entry);
 }
 
 /**
- * Picks every audit entry that falls within the supplied batch window.
+ * Picks every audit entry written while the batch ran, oldest first.
  *
- * Reads as many entries as the batch had jobs, because each bank runs in its
- * own child process and records its own entry.
+ * Each bank runs in its own child process and records its own entry. Every
+ * kept entry is searched: a later run can write its own entry after this
+ * batch ends but before this batch's reply is built.
  * @param batch - Recently completed batch.
  * @param log - Optional audit log.
  * @returns Fresh entries for the batch; empty array when none.
@@ -159,7 +167,5 @@ function pickFreshEntry(
 function pickFreshEntries(
   batch: IBatchResult, log?: IAuditLog,
 ): readonly IAuditEntry[] {
-  const limit = Math.max(batch.jobs.length, 1);
-  const recent = readRecent(limit, log);
-  return recent.filter(e => isFreshEntry(e, batch));
+  return readRecent(WHOLE_LOG, log).filter(e => isFreshEntry(e, batch));
 }

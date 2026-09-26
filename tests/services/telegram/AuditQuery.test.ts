@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { IAuditLog } from '../../../src/Services/AuditLogService.js';
+import type { IAuditEntry, IAuditLog } from '../../../src/Services/AuditLogService.js';
 import { createAuditQuery } from '../../../src/Services/Telegram/AuditQuery.js';
 import { fail, succeed } from '../../../src/Types/Index.js';
 import { fakeBatchResult, fakeIAuditEntry, fakeImportJobResult } from '../../helpers/factories.js';
@@ -18,6 +18,16 @@ function stubAuditLog(overrides: Partial<IAuditLog> = {}): IAuditLog {
     getConsecutiveFailures: vi.fn().mockReturnValue(succeed(0)),
     ...overrides,
   };
+}
+
+/**
+ * Builds an audit log over fixed entries that, like the real one, returns the
+ * last n of them, oldest first.
+ * @param entries - The stored entries, oldest first.
+ * @returns IAuditLog fake.
+ */
+function logOf(entries: readonly IAuditEntry[]): IAuditLog {
+  return stubAuditLog({ getRecent: (n: number) => succeed(entries.slice(-n)) });
 }
 
 describe('AuditQuery', () => {
@@ -89,19 +99,29 @@ describe('AuditQuery', () => {
     expect(q.getFreshEntryFor(fakeBatchResult()).success).toBe(false);
   });
 
-  it('getFreshEntriesFor reads one entry per bank job and drops stale ones', () => {
+  it('getFreshEntryFor returns the newest entry inside the batch window', () => {
+    const batch = fakeBatchResult({
+      startedAtMs: Date.parse('2025-01-01T00:00:00.000Z'), totalDurationMs: 10_000,
+    });
+    const older = fakeIAuditEntry({ timestamp: '2025-01-01T00:00:02.000Z' });
+    const newer = fakeIAuditEntry({ timestamp: '2025-01-01T00:00:08.000Z' });
+    const later = fakeIAuditEntry({ timestamp: '2025-01-01T00:00:15.000Z' });
+    const out = createAuditQuery(logOf([older, newer, later])).getFreshEntryFor(batch);
+    expect(out.success).toBe(true);
+    if (out.success) expect(out.data).toBe(newer);
+  });
+
+  it('getFreshEntriesFor keeps only the entries inside the batch window', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-01T00:00:05.000Z'));
     const fresh = fakeIAuditEntry({ timestamp: '2025-01-01T00:00:03.000Z' });
     const stale = fakeIAuditEntry({ timestamp: '2020-01-01T00:00:00.000Z' });
-    const getRecent = vi.fn().mockReturnValue(succeed([stale, fresh]));
-    const q = createAuditQuery(stubAuditLog({ getRecent }));
+    const q = createAuditQuery(logOf([stale, fresh]));
     const batch = fakeBatchResult({
       totalDurationMs: 5000,
       jobs: [fakeImportJobResult('leumi', 0), fakeImportJobResult('paybox', 1)],
     });
     expect(q.getFreshEntriesFor(batch)).toEqual([fresh]);
-    expect(getRecent).toHaveBeenCalledWith(2);
   });
 
   it('getFreshEntriesFor returns an empty array without an audit log', () => {
