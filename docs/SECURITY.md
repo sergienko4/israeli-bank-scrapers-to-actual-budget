@@ -125,7 +125,7 @@ The importer uses these volumes:
 | Volume | Purpose | Sensitivity |
 |--------|---------|-------------|
 | `config.json` | Bank credentials | 🔴 **HIGH** |
-| `data/` | Actual Budget cache | 🟡 **MEDIUM** |
+| `data/` | Actual Budget cache, long-term bank tokens, import history, OTP requests, push device tokens | 🔴 **HIGH** |
 | `cache/` | Scraper cache | 🟡 **MEDIUM** |
 | `chrome-data/` | Browser profile (legacy, unused with Camoufox) | 🟢 **LOW** |
 
@@ -140,6 +140,7 @@ The importer uses these volumes:
 
 - Config file contains plain-text credentials
 - `bank-tokens.json` on the data volume is an owner-only (`0600`) file of long-term tokens that skip the SMS login. With `CREDENTIALS_ENCRYPTION_PASSWORD` set, each token the importer saves is sealed under it; without it, each token it saves is plain text. Delete a plain-text `bank-tokens.json` when you turn the password on
+- Four more files on the data volume are owner-only (`0600`) too: the import history (`audit-log.json`), pending OTP requests (`otp-requests.json`), the OTP channel (`otp-settings.json`) and the push device tokens (`devices.json`). A file an earlier release left readable to others is made owner-only the next time it is read. Each write replaces the file in one atomic step. A damaged file is moved aside (`<name>.quarantined-…`) before the next write, and the importer and the portal remove staged leftovers older than an hour when they start
 - Consider using encrypted filesystem (LUKS, BitLocker, etc.)
 - On VMs, use encrypted EBS/disk volumes
 

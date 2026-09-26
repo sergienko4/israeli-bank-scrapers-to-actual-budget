@@ -478,6 +478,18 @@ via Expo Push. Set **`DEVICE_TOKENS_PATH`** to a shared-volume path (for example
 `/app/config/devices.json`) on both the portal (writer) and the importer
 (reader), and keep `notifications.enabled: true`.
 
+### Upgrade both services together
+
+Run the same release on the importer and the portal, and do not roll back.
+The import history, `devices.json` and `otp-requests.json` are now saved as a
+JSON object (for example `{"entries": […]}`) instead of a bare list. This
+release reads the old lists and converts each file on its next write, but an
+earlier release reads the new files as empty. An older portal that registers a
+device would then rewrite `devices.json` with only that device.
+
+These files are owner-only (`0600`), so both services must run as the same
+user. The shipped image runs both as `node`.
+
 ### Token lifetime and security
 
 - **Short-lived by design.** A bearer token is the portal's stateless,
@@ -516,6 +528,9 @@ Reach your own importer over a **private tunnel** instead:
 - Secrets are masked in the UI and preserved on save unless you change them.
 - Saves are split into `config.json` (settings) + `credentials.json` (secrets);
   credentials are re-encrypted when `CREDENTIALS_ENCRYPTION_PASSWORD` is set.
+- The runtime files the portal shares with the importer (the import history,
+  device tokens and OTP files) are owner-only (`0600`) and replaced atomically;
+  see *Upgrade both services together* above.
 - Session cookies are HMAC-signed with `sessionSecret`; the portal refuses to
   start on a missing/weak secret (under 16 chars or a known placeholder).
 - Sessions are bound to the credentials in force when you signed in: changing the
