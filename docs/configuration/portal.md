@@ -129,9 +129,15 @@ portal:
     # - CREDENTIALS_ENCRYPTION_PASSWORD=your_encryption_password
   volumes:
     - ./config:/app/config:rw                # READ-WRITE — the portal is the only writer
+    - importer-data:/app/data                # the importer's data volume, shared
 ```
 
 - `credentials.json` rides along inside the same directory — no separate mount.
+- `importer-data` is the importer's data volume. The two services pass OTP
+  codes, the OTP channel, push device tokens and the import history through
+  it, so the portal must mount it at the same `/app/data` path. Keep it a
+  Docker volume or a local disk: it needs hard links, which an SMB/CIFS share
+  does not have.
 - `PORTAL_HOST=0.0.0.0` lets the container accept connections; the published
   port (`8080:8080`) is what you reach from your LAN at
   `http://<docker-host>:8080`.
@@ -496,9 +502,12 @@ curl -s http://127.0.0.1:8080/api/status -H "authorization: Bearer $TOKEN"
 ```
 
 The importer writes the audit log and the portal reads it, so both must agree on
-the file. Set **`AUDIT_LOG_PATH`** to a path on a **shared volume** (for example
-`/app/config/audit-log.json`) on both the importer and the portal service; it
-defaults to `/app/data/audit-log.json`. The payload is a redacted summary — no
+the file. It defaults to `/app/data/audit-log.json`, on the data volume both
+services mount at `/app/data` (see
+[Least privilege](#least-privilege-importer-reads-portal-writes)). If you set
+**`AUDIT_LOG_PATH`**, set the same path on both services, on a volume the
+importer can write; `/app/config` does not work, because the importer mounts it
+read-only. The payload is a redacted summary — no
 account numbers, transaction details, or credentials. A stored run or bank row
 whose fields do not match this response, such as one a hand edit left, is left
 out of the list; the file itself is not changed.
@@ -508,9 +517,10 @@ out of the list; the file itself is not changed.
 `POST /api/devices` with `{ "token": "ExponentPushToken[…]" }` registers the
 mobile app for push; `DELETE /api/devices` with the same body unregisters it.
 On each import the importer sends a redacted result to every registered device
-via Expo Push. Set **`DEVICE_TOKENS_PATH`** to a shared-volume path (for example
-`/app/config/devices.json`) on both the portal (writer) and the importer
-(reader), and keep `notifications.enabled: true`.
+via Expo Push. The portal writes the device list and the importer reads it, at
+**`DEVICE_TOKENS_PATH`** (default `/app/data/devices.json`, on the shared data
+volume). If you set it, set the same path on both services. Keep
+`notifications.enabled: true`.
 
 ### Upgrade both services together
 
