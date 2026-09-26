@@ -1,5 +1,5 @@
 /**
- * The portal sweeps the staging leftovers of the three runtime stores it
+ * The portal sweeps the staging leftovers of the four runtime stores it
  * writes when it starts, so a portal killed mid-write does not keep a staged
  * file for ever when no import runs. The audit log is the importer's to
  * sweep: the portal only reads it.
@@ -20,6 +20,7 @@ const STORE_PATHS = {
   OTP_SETTINGS_PATH: 'otp-settings.json',
   DEVICE_TOKENS_PATH: 'device-tokens.json',
   OTP_REQUESTS_PATH: 'otp-requests.json',
+  APP_TOKENS_PATH: 'app-tokens.json',
 } as const;
 
 type StorePathKey = keyof typeof STORE_PATHS;
@@ -62,9 +63,10 @@ describe('portal start', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('sweeps the leftovers of the three stores the portal writes, not the audit log', async () => {
+  it('sweeps the leftovers of the four stores the portal writes, not the audit log', async () => {
     const portalWritten = [
       leaveStaged('OTP_SETTINGS_PATH'), leaveStaged('DEVICE_TOKENS_PATH'), leaveStaged('OTP_REQUESTS_PATH'),
+      leaveStaged('APP_TOKENS_PATH'),
     ];
     const auditLeftover = leaveStaged('AUDIT_LOG_PATH');
     const seed = seedConfigDir();

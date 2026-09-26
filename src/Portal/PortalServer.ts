@@ -19,7 +19,7 @@ import PortalConfigStore from './PortalConfigStore.js';
 import {
   type IPortalRuntime, isLegacyProxyHopCount, isNonLoopbackHost, isRejectedProxyConfig,
 } from './PortalRuntime.js';
-import openPortalStores, { sweepPortalStores } from './PortalStores.js';
+import openPortalStores, { type IPortalStores, sweepPortalStores } from './PortalStores.js';
 import { handlePortalError } from './PortalValidationError.js';
 
 /**
@@ -74,10 +74,11 @@ function limiterKey(req: FastifyRequest): string {
  * Assembles the Fastify app with plugins, routes, and SPA fallback.
  * @param rt - Resolved portal runtime.
  * @param store - Config store backing the API.
+ * @param stores - Runtime stores the routes read and write.
  * @returns Configured Fastify instance.
  */
 export async function buildPortal(
-  rt: IPortalRuntime, store: PortalConfigStore,
+  rt: IPortalRuntime, store: PortalConfigStore, stores: IPortalStores = openPortalStores(),
 ): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: rt.trustProxy });
   await app.register(rateLimit, {
@@ -86,8 +87,7 @@ export async function buildPortal(
   await app.register(cookie, { secret: rt.sessionSecret });
   await app.register(fstatic, { root: publicDir() });
   app.setErrorHandler(handlePortalError);
-  registerAuthRoutes(app, rt, store);
-  const stores = openPortalStores();
+  registerAuthRoutes(app, { boot: rt, config: store, stores });
   registerApiRoutes(app, store, stores);
   app.setNotFoundHandler((req, reply) => (
     isSpaShellRequest(req) ? reply.sendFile('index.html') : reply.code(404).send({ error: 'Not found' })
@@ -148,7 +148,8 @@ function bootWarnings(rt: IPortalRuntime): string[] {
 
 /**
  * Builds and starts the portal server, logging the bind address, then sweeps
- * the staging leftovers of the runtime stores the portal writes.
+ * the staging leftovers of the runtime stores the portal writes. The routes
+ * and the sweep share one store bag.
  * @param rt - Resolved portal runtime.
  * @param configPath - Path to config.json for the store.
  * @returns The listening Fastify instance.
@@ -156,13 +157,14 @@ function bootWarnings(rt: IPortalRuntime): string[] {
 export async function startPortal(
   rt: IPortalRuntime, configPath: string,
 ): Promise<FastifyInstance> {
-  const app = await buildPortal(rt, new PortalConfigStore(configPath));
+  const stores = openPortalStores();
+  const configStore = new PortalConfigStore(configPath);
+  const app = await buildPortal(rt, configStore, stores);
   await app.listen({ host: rt.host, port: rt.port });
   const url = `http://${rt.host}:${String(rt.port)}`;
   getLogger().info(`🖥️  Config portal on ${url} (auth mode: ${rt.authMode})`);
   const warnings = bootWarnings(rt);
   for (const warning of warnings) getLogger().warn(warning);
-  const stores = openPortalStores();
   const logger = getLogger();
   sweepPortalStores(stores, logger);
   return app;

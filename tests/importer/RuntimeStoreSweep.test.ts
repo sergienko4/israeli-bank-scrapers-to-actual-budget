@@ -20,6 +20,7 @@ const STORE_PATHS = {
   OTP_SETTINGS_PATH: 'otp-settings.json',
   DEVICE_TOKENS_PATH: 'device-tokens.json',
   OTP_REQUESTS_PATH: 'otp-requests.json',
+  APP_TOKENS_PATH: 'app-tokens.json',
 } as const;
 
 type StorePathKey = keyof typeof STORE_PATHS;
@@ -83,7 +84,7 @@ describe('sweepImportStores', () => {
 
   it('leaves the leftovers of the stores only the portal writes', () => {
     const portalOnly = KEYS.filter((key) => !IMPORT_WRITES.includes(key));
-    expect(portalOnly).toEqual(['OTP_SETTINGS_PATH', 'DEVICE_TOKENS_PATH']);
+    expect(portalOnly).toEqual(['OTP_SETTINGS_PATH', 'DEVICE_TOKENS_PATH', 'APP_TOKENS_PATH']);
     const staged = portalOnly.map((key) => leaveStaged(key));
     sweepImportStores(spyLogger());
     expect(staged.filter((path) => existsSync(path))).toEqual(staged);

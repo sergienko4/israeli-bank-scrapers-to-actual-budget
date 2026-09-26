@@ -17,9 +17,13 @@ import type OtpRequestStore from '../Services/TwoFactor/OtpRequestStore.js';
 import openOtpRequestStore from '../Services/TwoFactor/OtpRequestStoreWiring.js';
 import type OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
 import openOtpSettingsStore from '../Services/TwoFactor/OtpSettingsStoreWiring.js';
+import type { AppTokenStore } from './AppTokenStore.js';
+import openAppTokenStore from './AppTokenStoreWiring.js';
 
 /** One factory per runtime store the portal reads or writes. */
 export interface IPortalStores {
+  /** Opens the mobile app's refresh-token store. */
+  readonly appTokens: () => AppTokenStore;
   /** Opens the import-run history the status route reads. */
   readonly auditLog: () => AuditLogService;
   /** Opens the mobile app's device-token store. */
@@ -36,6 +40,7 @@ export interface IPortalStores {
  */
 export default function openPortalStores(): IPortalStores {
   const stores: IPortalStores = {
+    appTokens: openAppTokenStore,
     auditLog: openAuditLog,
     devices: openDeviceTokenStore,
     otpRequests: openOtpRequestStore,
@@ -56,5 +61,6 @@ export function sweepPortalStores(stores: IPortalStores, logger: ILogger): numbe
     { label: 'OTP settings', open: stores.otpSettings },
     { label: 'device tokens', open: stores.devices },
     { label: 'OTP requests', open: stores.otpRequests },
+    { label: 'app tokens', open: stores.appTokens },
   ], logger);
 }
