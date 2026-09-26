@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import StorageError from '../../src/Errors/StorageError.js';
 import OtpRequestStore from '../../src/Services/TwoFactor/OtpRequestStore.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
+import seedStaleStaged from '../storage/StaleStaging.js';
 
 /** Path every case reads and writes. */
 const REQUESTS_PATH = '/data/otp-requests.json';
@@ -148,5 +149,13 @@ describe('OtpRequestStore on the secure store', () => {
     fileSystem.forcedFailures.set('openForRead', 'EACCES');
     expect(store.pending(NOW)).toEqual([]);
     expect(store.get('live')).toBeNull();
+  });
+
+  it('sweeps a staged file an earlier run left behind', () => {
+    const { store, fileSystem } = makeStore();
+    const staged = seedStaleStaged(fileSystem, REQUESTS_PATH);
+    const swept = store.sweepStagedLeftovers();
+    expect(swept.success && swept.data.removedCount).toBe(1);
+    expect(fileSystem.hasEntry(staged)).toBe(false);
   });
 });

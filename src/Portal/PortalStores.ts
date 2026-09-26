@@ -7,10 +7,12 @@
  * the request arrives.
  */
 
+import type { ILogger } from '../Logger/ILogger.js';
 import type { AuditLogService } from '../Services/AuditLogService.js';
 import openAuditLog from '../Services/AuditLogWiring.js';
 import type DeviceTokenStore from '../Services/Notifications/DeviceTokenStore.js';
 import openDeviceTokenStore from '../Services/Notifications/DeviceTokenStoreWiring.js';
+import sweepStores from '../Services/StoreSweep.js';
 import type OtpRequestStore from '../Services/TwoFactor/OtpRequestStore.js';
 import openOtpRequestStore from '../Services/TwoFactor/OtpRequestStoreWiring.js';
 import type OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
@@ -40,4 +42,19 @@ export default function openPortalStores(): IPortalStores {
     otpSettings: openOtpSettingsStore,
   };
   return stores;
+}
+
+/**
+ * Sweeps the staging leftovers of the stores the portal writes. The audit log
+ * is left to the importer, which is the only process that writes it.
+ * @param stores - The portal's store factories.
+ * @param logger - Where reports and warnings go.
+ * @returns How many stores were swept without a warning.
+ */
+export function sweepPortalStores(stores: IPortalStores, logger: ILogger): number {
+  return sweepStores([
+    { label: 'OTP settings', open: stores.otpSettings },
+    { label: 'device tokens', open: stores.devices },
+    { label: 'OTP requests', open: stores.otpRequests },
+  ], logger);
 }

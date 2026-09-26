@@ -12,7 +12,7 @@
 import StorageError from '../../Errors/StorageError.js';
 import type { IFileSystem } from '../../Storage/FileSystemPort.js';
 import SecureJsonStore from '../../Storage/SecureJsonStore.js';
-import type { IStoreSnapshot } from '../../Storage/StoreTypes.js';
+import type { IStoreSnapshot,ISweepReport } from '../../Storage/StoreTypes.js';
 import type { Procedure } from '../../Types/Index.js';
 import { succeed } from '../../Types/ProcedureHelpers.js';
 
@@ -93,6 +93,14 @@ export default class DeviceTokenStore {
     const loaded = this.loadForWrite();
     const remaining = loaded.tokens.filter((existing) => existing !== token);
     this.save(remaining, loaded.isIntact);
+  }
+
+  /**
+   * Deletes staged files a killed write left beside the file.
+   * @returns How many were removed, or why the directory could not be read.
+   */
+  public sweepStagedLeftovers(): Procedure<ISweepReport> {
+    return this._store.sweepStagedLeftovers();
   }
 
   /**

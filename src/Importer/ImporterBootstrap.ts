@@ -23,6 +23,7 @@ import type { IProcessLifecycle } from './ProcessLifecycle.js';
 import { buildProcessLifecycle } from './ProcessLifecycle.js';
 import type { IResilienceComponents } from './ResilienceWiring.js';
 import { buildResilienceComponents } from './ResilienceWiring.js';
+import sweepImportStores from './RuntimeStoreSweep.js';
 
 /**
  * Frozen bundle of every primitive bootImporter assembles. Returned by
@@ -111,7 +112,8 @@ async function runImporter(handle: IImporterBootHandle): Promise<never> {
 
 /**
  * Top-level entry: short-circuits on --validate or --cleanup-card-refunds,
- * otherwise assembles everything and runs the importer pipeline to completion.
+ * otherwise assembles everything, sweeps the staging leftovers of the runtime
+ * stores, and runs the importer pipeline to completion.
  *
  * @returns Promise that never resolves on the main path (process
  *   exits before resolution). Only awaits on the CLI-mode
@@ -124,5 +126,7 @@ export async function bootImporter(): Promise<never> {
   await handleCardRefundCleanupMode();
   const handle = buildImporterBootHandle();
   emitStartupBanner(handle.wiring);
+  const logger = getLogger();
+  sweepImportStores(logger);
   return await runImporter(handle);
 }

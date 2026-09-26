@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
+import seedStaleStaged from '../storage/StaleStaging.js';
 import { fakeImportSummary } from '../helpers/factories.js';
 
 /** Path every case reads and writes. */
@@ -132,5 +133,13 @@ describe('AuditLogService on the secure store', () => {
     fileSystem.forcedFailures.set('openForRead', 'EACCES');
     const recent = log.getRecent(5);
     expect(recent.success && recent.data).toEqual([]);
+  });
+
+  it('sweeps a staged file an earlier run left behind', () => {
+    const { log, fileSystem } = makeLog();
+    const staged = seedStaleStaged(fileSystem, AUDIT_PATH);
+    const swept = log.sweepStagedLeftovers();
+    expect(swept.success && swept.data.removedCount).toBe(1);
+    expect(fileSystem.hasEntry(staged)).toBe(false);
   });
 });

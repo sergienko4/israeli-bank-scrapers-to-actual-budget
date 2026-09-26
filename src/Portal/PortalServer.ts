@@ -19,7 +19,7 @@ import PortalConfigStore from './PortalConfigStore.js';
 import {
   type IPortalRuntime, isLegacyProxyHopCount, isNonLoopbackHost, isRejectedProxyConfig,
 } from './PortalRuntime.js';
-import openPortalStores from './PortalStores.js';
+import openPortalStores, { sweepPortalStores } from './PortalStores.js';
 import { handlePortalError } from './PortalValidationError.js';
 
 /**
@@ -147,7 +147,8 @@ function bootWarnings(rt: IPortalRuntime): string[] {
 }
 
 /**
- * Builds and starts the portal server, logging the bind address.
+ * Builds and starts the portal server, logging the bind address, then sweeps
+ * the staging leftovers of the runtime stores the portal writes.
  * @param rt - Resolved portal runtime.
  * @param configPath - Path to config.json for the store.
  * @returns The listening Fastify instance.
@@ -161,5 +162,8 @@ export async function startPortal(
   getLogger().info(`🖥️  Config portal on ${url} (auth mode: ${rt.authMode})`);
   const warnings = bootWarnings(rt);
   for (const warning of warnings) getLogger().warn(warning);
+  const stores = openPortalStores();
+  const logger = getLogger();
+  sweepPortalStores(stores, logger);
   return app;
 }

@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StorageError from '../../src/Errors/StorageError.js';
 import OtpSettingsStore from '../../src/Services/TwoFactor/OtpSettingsStore.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
+import seedStaleStaged from '../storage/StaleStaging.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('../../src/Logger/Index.js', () => ({
@@ -135,5 +136,13 @@ describe('OtpSettingsStore on the secure store', () => {
     const { store } = makeStore();
     expect(store.get()).toEqual({ channel: 'telegram' });
     expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('sweeps a staged file an earlier run left behind', () => {
+    const { store, fileSystem } = makeStore();
+    const staged = seedStaleStaged(fileSystem, SETTINGS_PATH);
+    const swept = store.sweepStagedLeftovers();
+    expect(swept.success && swept.data.removedCount).toBe(1);
+    expect(fileSystem.hasEntry(staged)).toBe(false);
   });
 });

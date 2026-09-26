@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import StorageError from '../../src/Errors/StorageError.js';
 import DeviceTokenStore from '../../src/Services/Notifications/DeviceTokenStore.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
+import seedStaleStaged from '../storage/StaleStaging.js';
 
 /** Path every case reads and writes. */
 const DEVICES_PATH = '/data/devices.json';
@@ -136,5 +137,13 @@ describe('DeviceTokenStore on the secure store', () => {
     const { store, fileSystem } = makeStore(JSON.stringify({ tokens: ['a'] }));
     fileSystem.forcedFailures.set('openForRead', 'EACCES');
     expect(store.list()).toEqual([]);
+  });
+
+  it('sweeps a staged file an earlier run left behind', () => {
+    const { store, fileSystem } = makeStore();
+    const staged = seedStaleStaged(fileSystem, DEVICES_PATH);
+    const swept = store.sweepStagedLeftovers();
+    expect(swept.success && swept.data.removedCount).toBe(1);
+    expect(fileSystem.hasEntry(staged)).toBe(false);
   });
 });

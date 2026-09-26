@@ -60,6 +60,13 @@ vi.mock('../../src/Scraper/BrowserVersion.js', () => ({
   default: mockDescribeBrowserVersion,
 }));
 
+const { mockSweepImportStores } = vi.hoisted(() => ({
+  mockSweepImportStores: vi.fn(() => 4),
+}));
+vi.mock('../../src/Importer/RuntimeStoreSweep.js', () => ({
+  default: mockSweepImportStores,
+}));
+
 import { bootImporter, buildImporterBootHandle } from '../../src/Importer/ImporterBootstrap.js';
 
 interface IFakeWiring {
@@ -157,6 +164,20 @@ describe('ImporterBootstrap', () => {
 
       expect(mockHandleValidateMode).toHaveBeenCalledTimes(1);
       expect(mockExecute).toHaveBeenCalledTimes(1);
+    });
+
+    it('sweeps the runtime stores\' staging leftovers before running the pipeline', async () => {
+      const order: string[] = [];
+      mockSweepImportStores.mockImplementationOnce(() => { order.push('sweep'); return 4; });
+      mockExecute.mockImplementationOnce(async () => {
+        order.push('execute');
+        return succeed({ state: {} });
+      });
+
+      await expect(bootImporter()).rejects.toThrow('__exit:0');
+
+      expect(mockSweepImportStores).toHaveBeenCalledWith(mockLogger);
+      expect(order).toEqual(['sweep', 'execute']);
     });
 
     it('forwards an explicit pipeline exit code to process.exit', async () => {

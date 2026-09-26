@@ -18,7 +18,7 @@ import StorageError from '../Errors/StorageError.js';
 import redactSecrets from '../Logger/SecretRedaction.js';
 import type { IFileSystem } from '../Storage/FileSystemPort.js';
 import SecureJsonStore from '../Storage/SecureJsonStore.js';
-import type { IStoreSnapshot } from '../Storage/StoreTypes.js';
+import type { IStoreSnapshot,ISweepReport } from '../Storage/StoreTypes.js';
 import type { Procedure } from '../Types/Index.js';
 import { fail,succeed } from '../Types/Index.js';
 import type { IBankMetrics,IImportSummary } from './MetricsService.js';
@@ -159,6 +159,14 @@ export class AuditLogService implements IAuditLog {
       else break;
     }
     return succeed(count);
+  }
+
+  /**
+   * Deletes staged files a killed write left beside the file.
+   * @returns How many were removed, or why the directory could not be read.
+   */
+  public sweepStagedLeftovers(): Procedure<ISweepReport> {
+    return this._store.sweepStagedLeftovers();
   }
 
   /**
