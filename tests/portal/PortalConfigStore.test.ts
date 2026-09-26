@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -162,5 +162,18 @@ describe('PortalConfigStore', () => {
     if (isFail(prepared)) return;
     rmSync(dirname(path), { recursive: true, force: true });
     expect(isFail(store.commit(prepared.data))).toBe(true);
+  });
+
+  it('sweeps the writer\'s abandoned staged files, including the old fixed names', () => {
+    const { store, path } = makeStore();
+    const twoHoursAgo = (Date.now() - 2 * 60 * 60 * 1000) / 1000;
+    const leftovers = [`${path}.tmp`, join(dirname(path), 'credentials.json.tmp')];
+    for (const leftover of leftovers) {
+      writeFileSync(leftover, '{}', { mode: 0o600 });
+      utimesSync(leftover, twoHoursAgo, twoHoursAgo);
+    }
+    const swept = store.sweepStagedLeftovers();
+    expect(isSuccess(swept) && swept.data.removedCount).toBe(2);
+    expect(leftovers.filter((leftover) => existsSync(leftover))).toEqual([]);
   });
 });

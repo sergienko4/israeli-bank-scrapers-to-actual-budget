@@ -19,7 +19,9 @@ import { dirname, join } from 'node:path';
 
 import type { IFileSystem } from '../Storage/FileSystemPort.js';
 import { stagingPathFor } from '../Storage/StagingPaths.js';
+import sweepStaged, { sweepLegacyStaging, sweepReportOf } from '../Storage/StagingSweep.js';
 import { checkWholeWrite } from '../Storage/StoreRecords.js';
+import type { ISweepReport } from '../Storage/StoreTypes.js';
 import type { IImporterConfig, IProcedureFailure, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
@@ -162,6 +164,26 @@ export default class ConfigWriter {
   }
 
   /**
+   * Deletes the staged files a save killed mid-way left beside either file,
+   * including the fixed-name `.tmp` files older releases staged at.
+   *
+   * <p>A save removes what it staged when it fails, but not when the process
+   * is killed. Whoever owns the process lifecycle calls this after startup.
+   * @returns How many were removed, or why the directory could not be read.
+   */
+  public sweepStagedLeftovers(): Procedure<ISweepReport> {
+    let removedCount = 0;
+    for (const filePath of this.savedPaths()) {
+      const swept = sweepStaged(this._fileSystem, filePath);
+      if (!swept.success) return swept;
+      const wasLegacyRemoved = sweepLegacyStaging(this._fileSystem, filePath);
+      removedCount += swept.data.removedCount + (wasLegacyRemoved ? 1 : 0);
+    }
+    const report = sweepReportOf(removedCount);
+    return succeed(report);
+  }
+
+  /**
    * Serialises the two files a save writes, credentials first.
    * @param config - The merged importer config to persist.
    * @returns The credentials file, then config.json.
@@ -169,13 +191,22 @@ export default class ConfigWriter {
   private pendingWrites(config: IImporterConfig): readonly IPendingWrite[] {
     registerConfigSecrets(config);
     const { settings, secrets } = splitSecrets(config);
-    const configDir = dirname(this._configPath);
-    const credPath = join(configDir, 'credentials.json');
+    const [credPath, configPath] = this.savedPaths();
     const credJson = maybeEncrypt(secrets);
     const settingsJson = JSON.stringify(settings, null, 2);
     return [
       { path: credPath, json: credJson },
-      { path: this._configPath, json: settingsJson },
+      { path: configPath, json: settingsJson },
     ];
+  }
+
+  /**
+   * Names the two files a save writes, in the order it writes them.
+   * @returns credentials.json beside the config, then config.json.
+   */
+  private savedPaths(): readonly [string, string] {
+    const configDir = dirname(this._configPath);
+    const credPath = join(configDir, 'credentials.json');
+    return [credPath, this._configPath];
   }
 }

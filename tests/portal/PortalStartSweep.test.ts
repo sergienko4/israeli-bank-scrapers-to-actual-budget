@@ -1,8 +1,8 @@
 /**
  * The portal sweeps the staging leftovers of the four runtime stores it
- * writes when it starts, so a portal killed mid-write does not keep a staged
- * file for ever when no import runs. The audit log is the importer's to
- * sweep: the portal only reads it.
+ * writes, and of the config it saves, when it starts, so a portal killed
+ * mid-write does not keep a staged file for ever when no import runs. The
+ * audit log is the importer's to sweep: the portal only reads it.
  */
 
 import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
@@ -75,5 +75,21 @@ describe('portal start', () => {
     rmSync(seed.dir, { recursive: true, force: true });
     expect(portalWritten.filter((path) => existsSync(path))).toEqual([]);
     expect(existsSync(auditLeftover)).toBe(true);
+  });
+
+  it('sweeps the config writer\'s leftovers, including the old fixed-name `.tmp` files', async () => {
+    const seed = seedConfigDir();
+    const leftovers = [
+      `${seed.path}.tmp`, join(seed.dir, 'credentials.json.tmp'), `${seed.path}.${STAGED_UUID}.tmp`,
+    ];
+    for (const leftover of leftovers) {
+      writeFileSync(leftover, '{}', { mode: 0o600 });
+      utimesSync(leftover, TWO_HOURS_AGO, TWO_HOURS_AGO);
+    }
+    const server = await startPortal(fakePortalRuntime({ port: 0 }), seed.path);
+    await server.close();
+    const remaining = leftovers.filter((path) => existsSync(path));
+    rmSync(seed.dir, { recursive: true, force: true });
+    expect(remaining).toEqual([]);
   });
 });

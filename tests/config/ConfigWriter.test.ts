@@ -227,3 +227,94 @@ describe('ConfigWriter on the filesystem port', () => {
     expect(fake.calls).toEqual([]);
   });
 });
+
+/** A valid staging token, so a name matches the staging scheme. */
+const STAGED_UUID = '0f0e0d0c-0b0a-4908-8706-050403020100';
+
+/** Two hours ago, past the one-hour grace period. */
+const TWO_HOURS_AGO_MS = Date.now() - 2 * 60 * 60 * 1000;
+
+/**
+ * Builds a filesystem holding the saved pair inside a listable directory.
+ * @returns The fake, with `/cfg` present.
+ */
+function listablePair(): FakeFileSystem {
+  const fake = seededPair();
+  fake.seedDirectory('/cfg');
+  return fake;
+}
+
+/**
+ * Leaves a regular staged file that was last touched two hours ago.
+ * @param fake - Filesystem to seed.
+ * @param name - The staged file's name.
+ * @returns The name, for assertions.
+ */
+function leaveAbandoned(fake: FakeFileSystem, name: string): string {
+  fake.seedFile(name, '{"secret":"left-behind"}', 0o600);
+  fake.setModifiedAt(name, TWO_HOURS_AGO_MS);
+  return name;
+}
+
+/**
+ * Sweeps through a writer for the seeded pair.
+ * @param fake - Filesystem the writer uses.
+ * @returns How many files the sweep removed.
+ */
+function sweptCount(fake: FakeFileSystem): number {
+  const swept = new ConfigWriter(fake, CONFIG).sweepStagedLeftovers();
+  if (!swept.success) throw new Error(`expected the sweep to run: ${swept.message}`);
+  return swept.data.removedCount;
+}
+
+describe('ConfigWriter.sweepStagedLeftovers', () => {
+  it('removes the abandoned staged files of both saved files', () => {
+    const fake = listablePair();
+    leaveAbandoned(fake, `${CREDS}.${STAGED_UUID}.tmp`);
+    leaveAbandoned(fake, `${CONFIG}.${STAGED_UUID}.tmp`);
+    expect(sweptCount(fake)).toBe(2);
+    expect(fake.names().sort()).toEqual(['/cfg', CONFIG, CREDS]);
+  });
+
+  it('removes the fixed-name `.tmp` files an older release staged, which can hold plaintext secrets', () => {
+    const fake = listablePair();
+    leaveAbandoned(fake, `${CREDS}.tmp`);
+    leaveAbandoned(fake, `${CONFIG}.tmp`);
+    expect(sweptCount(fake)).toBe(2);
+    expect(fake.names().sort()).toEqual(['/cfg', CONFIG, CREDS]);
+  });
+
+  it('keeps a fixed-name `.tmp` touched within the grace period', () => {
+    const fake = listablePair();
+    fake.seedFile(`${CREDS}.tmp`, '{}', 0o600);
+    expect(sweptCount(fake)).toBe(0);
+    expect(fake.hasEntry(`${CREDS}.tmp`)).toBe(true);
+  });
+
+  it('never follows or removes a symlink or a directory at a fixed `.tmp` name', () => {
+    const fake = listablePair();
+    leaveAbandoned(fake, '/elsewhere/victim.json');
+    fake.seedSymlink(`${CREDS}.tmp`, '/elsewhere/victim.json');
+    fake.seedDirectory(`${CONFIG}.tmp`);
+    expect(sweptCount(fake)).toBe(0);
+    expect(fake.hasEntry(`${CREDS}.tmp`)).toBe(true);
+    expect(fake.hasEntry(`${CONFIG}.tmp`)).toBe(true);
+    expect(fake.hasEntry('/elsewhere/victim.json')).toBe(true);
+  });
+
+  it('words its report like every other sweep, free of stored values', () => {
+    const fake = listablePair();
+    leaveAbandoned(fake, `${CREDS}.tmp`);
+    const swept = new ConfigWriter(fake, CONFIG).sweepStagedLeftovers();
+    if (!swept.success) throw new Error(`expected the sweep to run: ${swept.message}`);
+    expect(swept.data.summary).toBe('Removed 1 abandoned staged files');
+  });
+
+  it('reports a directory it cannot list', () => {
+    const fake = listablePair();
+    fake.forcedFailures.set('listNames', 'EACCES');
+    const swept = new ConfigWriter(fake, CONFIG).sweepStagedLeftovers();
+    if (swept.success) throw new Error('expected the listing failure to stop the sweep');
+    expect(swept.status).toBe('EACCES');
+  });
+});

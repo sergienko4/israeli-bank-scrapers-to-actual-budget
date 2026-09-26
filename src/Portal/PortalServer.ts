@@ -148,8 +148,8 @@ function bootWarnings(rt: IPortalRuntime): string[] {
 
 /**
  * Builds and starts the portal server, logging the bind address, then sweeps
- * the staging leftovers of the runtime stores the portal writes. The routes
- * and the sweep share one store bag.
+ * the staging leftovers of the runtime stores the portal writes and of the
+ * config it saves. The routes and the sweep share one store bag.
  * @param rt - Resolved portal runtime.
  * @param configPath - Path to config.json for the store.
  * @returns The listening Fastify instance.
@@ -166,6 +166,6 @@ export async function startPortal(
   const warnings = bootWarnings(rt);
   for (const warning of warnings) getLogger().warn(warning);
   const logger = getLogger();
-  sweepPortalStores(stores, logger);
+  sweepPortalStores(stores, logger, configStore);
   return app;
 }

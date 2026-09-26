@@ -12,7 +12,7 @@ import type { AuditLogService } from '../Services/AuditLogService.js';
 import openAuditLog from '../Services/AuditLogWiring.js';
 import type DeviceTokenStore from '../Services/Notifications/DeviceTokenStore.js';
 import openDeviceTokenStore from '../Services/Notifications/DeviceTokenStoreWiring.js';
-import sweepStores from '../Services/StoreSweep.js';
+import sweepStores, { type ISweepableStore } from '../Services/StoreSweep.js';
 import type OtpRequestStore from '../Services/TwoFactor/OtpRequestStore.js';
 import openOtpRequestStore from '../Services/TwoFactor/OtpRequestStoreWiring.js';
 import type OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
@@ -50,13 +50,17 @@ export default function openPortalStores(): IPortalStores {
 }
 
 /**
- * Sweeps the staging leftovers of the stores the portal writes. The audit log
- * is left to the importer, which is the only process that writes it.
+ * Sweeps the staging leftovers of the stores the portal writes and of the
+ * config it saves. The audit log is left to the importer, which is the only
+ * process that writes it.
  * @param stores - The portal's store factories.
  * @param logger - Where reports and warnings go.
+ * @param config - The config store, whose writer stages both config files.
  * @returns How many stores were swept without a warning.
  */
-export function sweepPortalStores(stores: IPortalStores, logger: ILogger): number {
+export function sweepPortalStores(
+  stores: IPortalStores, logger: ILogger, config: ISweepableStore,
+): number {
   return sweepStores([
     { label: 'OTP settings', open: stores.otpSettings },
     { label: 'device tokens', open: stores.devices },
@@ -68,6 +72,14 @@ export function sweepPortalStores(stores: IPortalStores, logger: ILogger): numbe
        * @returns The app-token store.
        */
       open: () => stores.appTokens(DEFAULT_REFRESH_TTL_DAYS),
+    },
+    {
+      label: 'config',
+      /**
+       * Hands over the config store the portal already loaded.
+       * @returns The config store.
+       */
+      open: () => config,
     },
   ], logger);
 }
