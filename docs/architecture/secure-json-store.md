@@ -114,12 +114,14 @@ still reads a list as damage.
 ## Staging leftovers
 
 A crash between staging and publishing leaves a staged file behind, and it can
-hold a secret. The store never sweeps on its own; the process that owns a store
-asks. An import sweeps the four runtime stores when it starts, and the portal
-sweeps the three it writes (not the import history, which only the importer
-writes). Only staged files older than an hour are removed, so a sweep leaves
-alone a file another process is writing now. A failed sweep is a warning, and
-a missing directory counts as clean.
+hold a secret. The store never sweeps on its own; each process sweeps, when
+it starts, only the stores it writes. An import sweeps the import history and
+the OTP requests. The portal sweeps the OTP channel, the device tokens and the
+OTP requests. A process that only reads a store never sweeps it, because a
+leftover there may belong to a writer that is still running. Only staged files
+older than an hour are removed, so a sweep leaves alone a file another process
+is writing now. A failed sweep is a warning, and a missing directory counts as
+clean.
 
 ## Test layers
 

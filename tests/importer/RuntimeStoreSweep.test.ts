@@ -1,6 +1,8 @@
 /**
- * An import sweeps the staging leftovers of the four runtime stores it can
- * write when it starts, on the real filesystem at the configured paths.
+ * An import sweeps the staging leftovers of the runtime stores it writes when
+ * it starts, on the real filesystem at the configured paths. It leaves the
+ * stores only the portal writes alone, because a leftover there may belong
+ * to a portal that is still running.
  */
 
 import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
@@ -12,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sweepImportStores from '../../src/Importer/RuntimeStoreSweep.js';
 import type { ILogger } from '../../src/Logger/ILogger.js';
 
-/** The path each store an import can write reads from the environment. */
+/** The path each runtime store reads from the environment. */
 const STORE_PATHS = {
   AUDIT_LOG_PATH: 'audit-log.json',
   OTP_SETTINGS_PATH: 'otp-settings.json',
@@ -24,6 +26,9 @@ type StorePathKey = keyof typeof STORE_PATHS;
 
 /** Every key the cases set, so each can be restored. */
 const KEYS = Object.keys(STORE_PATHS) as StorePathKey[];
+
+/** The stores an import writes: runs it records, and codes it asks for. */
+const IMPORT_WRITES: readonly StorePathKey[] = ['AUDIT_LOG_PATH', 'OTP_REQUESTS_PATH'];
 
 /** A valid staging token, so the names match the stores' staging scheme. */
 const STAGED_UUID = '0f0e0d0c-0b0a-4908-8706-050403020100';
@@ -68,11 +73,19 @@ describe('sweepImportStores', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('sweeps the leftovers of the four stores an import writes', () => {
-    const staged = KEYS.map((key) => leaveStaged(key));
+  it('sweeps the leftovers of the stores an import writes', () => {
+    const staged = IMPORT_WRITES.map((key) => leaveStaged(key));
     const logger = spyLogger();
-    expect(sweepImportStores(logger)).toBe(4);
+    expect(sweepImportStores(logger)).toBe(IMPORT_WRITES.length);
     expect(staged.filter((path) => existsSync(path))).toEqual([]);
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('leaves the leftovers of the stores only the portal writes', () => {
+    const portalOnly = KEYS.filter((key) => !IMPORT_WRITES.includes(key));
+    expect(portalOnly).toEqual(['OTP_SETTINGS_PATH', 'DEVICE_TOKENS_PATH']);
+    const staged = portalOnly.map((key) => leaveStaged(key));
+    sweepImportStores(spyLogger());
+    expect(staged.filter((path) => existsSync(path))).toEqual(staged);
   });
 });
