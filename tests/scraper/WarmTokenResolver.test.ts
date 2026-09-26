@@ -334,14 +334,44 @@ describe('resolveWarmToken', () => {
       expect(linesLogged(logger)).toEqual([]);
     });
 
-    it('sends no token and logs nothing when the token file is damaged and none is configured', () => {
+    it.each([undefined, null, '', '   '])(
+      'sends no token, and warns, when the token file is damaged and the configured one is %j',
+      (seed) => {
+        const { store, fileSystem } = makeStore();
+        seedRaw(fileSystem, '{ not json');
+
+        const { bankConfig, logger } = resolveOver(store, { seed });
+
+        expect(bankConfig.otpLongTermToken).toBeUndefined();
+        expect(linesLogged(logger)).toEqual([
+          ['warn', `  ⚠️  The token file is damaged and holds no usable long-term token for ${STORE_KEY}`],
+        ]);
+      },
+    );
+
+    it('warns the same way when only another entry in the file is unusable', () => {
       const { store, fileSystem } = makeStore();
-      seedRaw(fileSystem, '{ not json');
+      seedRecords(fileSystem, { 'pepper:main': { token: fakeToken(), capturedAt: CAPTURED_AT } });
 
       const { bankConfig, logger } = resolveOver(store);
 
       expect(bankConfig.otpLongTermToken).toBeUndefined();
-      expect(linesLogged(logger)).toEqual([]);
+      expect(linesLogged(logger)).toEqual([
+        ['warn', `  ⚠️  The token file is damaged and holds no usable long-term token for ${STORE_KEY}`],
+      ]);
+    });
+
+    it('warns that the file is damaged, then how to fix it, when none is configured and no code can be asked for', () => {
+      const { store, fileSystem } = makeStore();
+      seedRaw(fileSystem, '{ not json');
+
+      const { logger } = resolveOver(store, { canAskForOtp: false });
+
+      expect(linesLogged(logger)).toEqual([
+        ['warn', `  ⚠️  The token file is damaged and holds no usable long-term token for ${STORE_KEY}`],
+        ['warn', `  ⚠️  No usable long-term token for ${STORE_KEY}, and this run cannot ask for an SMS code: `
+          + 'turn on twoFactorAuth for one SMS login, or restore the token file'],
+      ]);
     });
 
     it('sends no token, and warns, when the entry has no login to bind one to', () => {

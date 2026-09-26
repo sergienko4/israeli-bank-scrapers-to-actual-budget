@@ -119,22 +119,40 @@ function fromVouchedSeed(params: Params, view: ITokenView, seed: string): string
 }
 
 /**
+ * Sends no token for an entry that configures none, warning when the file is damaged.
+ *
+ * <p>The damage may have cost the entry its stored token, which would explain
+ * the SMS login that follows. The view cannot say whose entry was damaged, so
+ * the warning does not claim it was this one.
+ * @param params - Attempt parameters carrying the key and logger.
+ * @param view - The account's view of the store.
+ * @returns {@link NO_TOKEN}.
+ */
+function noneConfigured(params: Params, view: ITokenView): string {
+  if (view.isIntact) return NO_TOKEN;
+  return refuse(
+    params, `The token file is damaged and holds no usable long-term token for ${params.storeKey}`,
+  );
+}
+
+/**
  * Sends the configured token when the store holds none for the entry.
  *
  * <p>No configured token, or a blank one (the example config ships `""`), just
- * means no token. A value that is not text is a config mistake, so it warns.
+ * means no token, which warns only when the file is damaged. A value that is
+ * not text is a config mistake, so it warns.
  * @param params - Attempt parameters carrying the key.
  * @param view - The account's view of the store.
  * @param seed - The entry's `otpLongTermToken`, as loaded.
  * @returns The trimmed seed, or {@link NO_TOKEN}.
  */
 function fromSeed(params: Params, view: ITokenView, seed: unknown): string {
-  if (seed === undefined || seed === null) return NO_TOKEN;
+  if (seed === undefined || seed === null) return noneConfigured(params, view);
   if (typeof seed !== 'string') {
     return refuse(params, `The ${configuredTokenOf(params)} is not text, so it is not sent`);
   }
   const trimmed = seed.trim();
-  if (trimmed === NO_TOKEN) return NO_TOKEN;
+  if (trimmed === NO_TOKEN) return noneConfigured(params, view);
   return fromVouchedSeed(params, view, trimmed);
 }
 

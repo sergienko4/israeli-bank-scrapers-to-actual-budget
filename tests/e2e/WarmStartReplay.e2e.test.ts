@@ -102,15 +102,17 @@ const refusals: IRefusal[] = [
   { why: 'an expired', refuse: (bank, bankConfig): void => { bank.expire(bankConfig); } },
 ];
 
-const brokenStores: IBrokenStore[] = [
-  {
-    why: 'is damaged',
-    breakStore: (): void => {
-      rmSync(store.tokensPath);
-      mkdirSync(store.tokensPath);
-    },
-    warning: (storeKey) => `The token file is damaged, so the configured long-term token for ${storeKey} is not sent`,
+const damagedFile: IBrokenStore = {
+  why: 'is damaged',
+  breakStore: (): void => {
+    rmSync(store.tokensPath);
+    mkdirSync(store.tokensPath);
   },
+  warning: (storeKey) => `The token file is damaged, so the configured long-term token for ${storeKey} is not sent`,
+};
+
+const brokenStores: IBrokenStore[] = [
+  damagedFile,
   {
     why: 'cannot be read',
     breakStore: (): void => {
@@ -317,6 +319,20 @@ describe.each(API_DIRECT_BANKS)('E2E: long-term token replay, $name', (row: IApi
     expect(bank.sent[1]).toBeUndefined();
     expect(broken.smsCount).toBe(1);
     expect(said(broken.logger.warn)).toContain(warning(keyOf(FIRST)));
+  });
+
+  it('warns when the token file is damaged and no token is configured, then logs in with an SMS', async () => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    damagedFile.breakStore();
+
+    const broken = await importOnce(FIRST, entry);
+
+    expect(bank.sent[1]).toBeUndefined();
+    expect(broken.smsCount).toBe(1);
+    expect(said(broken.logger.warn)).toContain(
+      `The token file is damaged and holds no usable long-term token for ${keyOf(FIRST)}`,
+    );
   });
 
   it('fails, and says how to fix it, when twoFactorAuth is off and no token is usable', async () => {
