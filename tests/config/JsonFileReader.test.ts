@@ -103,6 +103,15 @@ describe('JsonFileReader.readJsonFile', () => {
     expect(result.delayBetweenBanks).toBe(7);
   });
 
+  it('decrypts with CONFIG_PASSWORD when CREDENTIALS_ENCRYPTION_PASSWORD is empty', () => {
+    const plain = JSON.stringify({ actual: {}, banks: {}, delayBetweenBanks: 9 });
+    const path = join(tmpDir, 'enc-empty-primary.json');
+    writeFileSync(path, encryptConfig(plain, 'legacy-pw'), 'utf8');
+    process.env.CREDENTIALS_ENCRYPTION_PASSWORD = '';
+    process.env.CONFIG_PASSWORD = 'legacy-pw';
+    expect(readPresent(path).delayBetweenBanks).toBe(9);
+  });
+
   it('throws on malformed JSON syntax', () => {
     const path = join(tmpDir, 'broken.json');
     writeFileSync(path, '{ "actual": ', 'utf8');

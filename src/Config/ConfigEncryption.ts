@@ -52,10 +52,15 @@ export function isEncryptedConfig(
 
 /**
  * Reads the encryption password from environment variables.
+ * An empty CREDENTIALS_ENCRYPTION_PASSWORD counts as unset: `VAR=` in an env
+ * file, or `${VAR}` in a compose file when the host has no such variable,
+ * sets it to an empty string, which must not hide CONFIG_PASSWORD.
  * @returns The password string, or empty string if neither env var is set.
  */
 export function getEncryptionPassword(): string {
-  return process.env.CREDENTIALS_ENCRYPTION_PASSWORD ?? process.env.CONFIG_PASSWORD ?? '';
+  const primary = process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
+  if (primary) return primary;
+  return process.env.CONFIG_PASSWORD ?? '';
 }
 
 /**
