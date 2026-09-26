@@ -130,6 +130,12 @@ describe('TokenRecordCipher', () => {
       expect(readable).toEqual([]);
     });
 
+    it('seals under a one-character password, since only an empty one means none', () => {
+      const record = capturedRecord();
+      const written = JSON.stringify(sealAll({ [ONE_ZERO]: record }, TEST_ENCRYPTION_KEY.slice(0, 1)));
+      expect(written).not.toContain(record.token);
+    });
+
     it('seals only the token, capture moment and login of a record', () => {
       const record = capturedRecord();
       const withExtra = { ...record, accountKey: 'personal' } as IBankTokenRecord;
