@@ -12,6 +12,9 @@
  * inline-secret config.json) therefore never lingers in plaintext beside the
  * encrypted credentials.json.
  *
+ * Both files carry one new save id (see SaveMarker), so the loader refuses a
+ * pair left by a save killed between its two renames.
+ *
  * It uses the port rather than SecureJsonStore: the two files are saved as
  * one unit, and config needs no quarantine because the portal refuses to
  * start on a config that does not load.
@@ -30,6 +33,7 @@ import { errorMessage } from '../Utils/Index.js';
 import { encryptConfig, getEncryptionPassword } from './ConfigEncryption.js';
 import registerConfigSecrets from './ConfigSecretValues.js';
 import CredentialsBackup from './CredentialsBackup.js';
+import { markOneSave } from './SaveMarker.js';
 import splitSecrets from './SecretSplitter.js';
 
 /** A pending file write: destination path + serialized JSON payload. */
@@ -221,13 +225,15 @@ export default class ConfigWriter {
   }
 
   /**
-   * Serialises the two files a save writes, credentials first.
+   * Serialises the two files a save writes, credentials first, both carrying
+   * one new save id so the loader can tell a pair from two saves.
    * @param config - The merged importer config to persist.
    * @returns The credentials file and config.json.
    */
   private pendingWrites(config: IImporterConfig): IPair<IPendingWrite> {
     registerConfigSecrets(config);
-    const { settings, secrets } = splitSecrets(config);
+    const split = splitSecrets(config);
+    const { settings, secrets } = markOneSave(split);
     const [credPath, configPath] = this.savedPaths();
     const credJson = maybeEncrypt(secrets);
     const settingsJson = JSON.stringify(settings, null, 2);

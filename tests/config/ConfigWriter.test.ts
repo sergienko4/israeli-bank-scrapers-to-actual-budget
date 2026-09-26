@@ -8,9 +8,12 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { decryptConfig } from '../../src/Config/ConfigEncryption.js';
+import { ConfigLoader } from '../../src/Config/ConfigLoader.js';
 import ConfigWriter from '../../src/Config/ConfigWriter.js';
 import openConfigWriter from '../../src/Config/ConfigWriterWiring.js';
 import { isStagingPath } from '../../src/Storage/StagingPaths.js';
+import UUID_PATTERN from '../../src/Utils/IdPatterns.js';
 import type { IImporterConfig, Procedure } from '../../src/Types/Index.js';
 import { isSuccess } from '../../src/Types/Index.js';
 import { fakeBankConfig, fakeImporterConfig } from '../helpers/factories.js';
@@ -104,6 +107,52 @@ describe('ConfigWriter.write', () => {
     expect(statSync(configPath).mode & 0o777).toBe(0o600);
     expect(statSync(credPath).mode & 0o777).toBe(0o600);
     expect(readdirSync(dir).sort()).toEqual(['config.json', 'credentials.json']);
+  });
+
+  it('marks both files of one save with the same save id', () => {
+    const result = openConfigWriter(configPath).write(fakeImporterConfig());
+    expect(isSuccess(result)).toBe(true);
+    const settings = JSON.parse(readFileSync(configPath, 'utf8'));
+    const creds = JSON.parse(readFileSync(credPath, 'utf8'));
+    expect(settings.saveId).toMatch(UUID_PATTERN);
+    expect(creds.saveId).toBe(settings.saveId);
+  });
+
+  it('gives every save a new save id', () => {
+    const writer = openConfigWriter(configPath);
+    writer.write(fakeImporterConfig());
+    const firstId = JSON.parse(readFileSync(configPath, 'utf8')).saveId;
+    writer.write(fakeImporterConfig());
+    const secondId = JSON.parse(readFileSync(configPath, 'utf8')).saveId;
+    expect(secondId).toMatch(UUID_PATTERN);
+    expect(secondId).not.toBe(firstId);
+  });
+
+  it('keeps the save id inside the encrypted credentials', () => {
+    process.env.CREDENTIALS_ENCRYPTION_PASSWORD = TEST_ENCRYPTION_KEY;
+    openConfigWriter(configPath).write(fakeImporterConfig());
+    const settings = JSON.parse(readFileSync(configPath, 'utf8'));
+    const envelope = readFileSync(credPath, 'utf8');
+    const creds = JSON.parse(decryptConfig(envelope, TEST_ENCRYPTION_KEY));
+    expect(JSON.parse(envelope).saveId).toBeUndefined();
+    expect(settings.saveId).toMatch(UUID_PATTERN);
+    expect(creds.saveId).toBe(settings.saveId);
+  });
+
+  it('leaves the save id out of the config it was given', () => {
+    const config = fakeImporterConfig();
+    openConfigWriter(configPath).write(config);
+    expect(config).not.toHaveProperty('saveId');
+  });
+
+  it('loads back what it saved, without the save id', () => {
+    const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ password: 'round-trip-pw' }) } });
+    openConfigWriter(configPath).write(config);
+    const loaded = new ConfigLoader(configPath).loadWithoutEnvOverrides();
+    expect(isSuccess(loaded)).toBe(true);
+    if (!isSuccess(loaded)) return;
+    expect(loaded.data).not.toHaveProperty('saveId');
+    expect(loaded.data.banks.discount.password).toBe('round-trip-pw');
   });
 });
 

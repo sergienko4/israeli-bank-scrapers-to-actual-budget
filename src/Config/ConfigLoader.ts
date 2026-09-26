@@ -18,6 +18,7 @@ import registerConfigSecrets from './ConfigSecretValues.js';
 import deepMerge from './Loaders/ConfigMerger.js';
 import loadFromEnvironment from './Loaders/EnvLoader.js';
 import readJsonFile from './Loaders/JsonFileReader.js';
+import readOneSave, { type IConfigPair } from './SaveMarker.js';
 import OPTIONAL_SECTION_VALIDATORS from './Validators/OptionalSectionValidators.js';
 
 export interface IConfigLoader {
@@ -115,6 +116,8 @@ export class ConfigLoader implements IConfigLoader {
 
   /**
    * Attempts to load configuration from config.json (and optional credentials.json).
+   * A pair left by an interrupted save, one file from each of two saves, is
+   * refused rather than merged.
    * @returns Procedure containing the parsed IImporterConfig, or failure if absent/unreadable.
    */
   private loadFromFile(): Procedure<IImporterConfig> {
@@ -124,10 +127,9 @@ export class ConfigLoader implements IConfigLoader {
     }
     try {
       getLogger().info('📄 Loading configuration from config.json');
-      const config = readJsonFile(this._configPath);
-      const credResult = this.loadCredentials();
-      const merged = credResult.success
-        ? deepMerge(config, credResult.data) : config;
+      const pair = readOneSave(() => this.readPair());
+      const merged = pair.credentials
+        ? deepMerge(pair.config, pair.credentials) : pair.config;
       return succeed(merged);
     } catch (error: unknown) {
       if (error instanceof ConfigurationError) {
@@ -136,6 +138,17 @@ export class ConfigLoader implements IConfigLoader {
       getLogger().warn(`⚠️  Failed to parse ${this._configPath}`);
       return fail(`Failed to parse ${this._configPath}`, { status: 'parse-error' });
     }
+  }
+
+  /**
+   * Reads config.json and, when there is one, the credentials.json beside it.
+   * @returns Both files as parsed; credentials undefined when there is none.
+   */
+  private readPair(): IConfigPair {
+    const config = readJsonFile(this._configPath);
+    const credResult = this.loadCredentials();
+    const credentials = credResult.success ? credResult.data : undefined;
+    return { config, credentials };
   }
 
   /**
