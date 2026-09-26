@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.43.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.25...v1.43.0) (2026-09-26)
+
+
+### Added
+
+* add BankTokenStore on SecureJsonStore ([#717](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/717)) ([e1c4460](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/e1c44609157353f10feba95eced3afb46e3e8522))
+* add SecureJsonStore on a filesystem port ([#715](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/715)) ([32aa55e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/32aa55eba962ad8e94eae679d75a309685cf25ad)), closes [#714](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/714)
+* capture API-direct long-term tokens ([#721](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/721)) ([4112216](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/4112216d638ac5955bc9503553e5ef6dd29031ce))
+* **tokens:** encrypt tokens, explain SMS refusals ([#726](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/726)) ([12c3e1a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/12c3e1acb6fc0e8553c4f2a19595bb24a7c5ab1e))
+* **tokens:** fingerprint the login behind a token ([#723](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/723)) ([5edd650](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5edd6508425d601b350924eee15d013d9ae369f7))
+* **tokens:** reuse the saved long-term token ([#724](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/724)) ([b205491](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/b205491467b80b4c7bf1eee752c254e7c2efbcb7))
+
+
+### Fixed
+
+* **deps:** refresh 5 runtime and 31 dev lockfile pins ([#719](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/719)) ([d4f17ce](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d4f17cef4f8b96576b1f42c0b1cbfbff30ef0093))
+* **logger:** mask the long-term token in logs and alerts ([#718](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/718)) ([1dfcf29](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/1dfcf29740fedf0407da6cb61d19ee5266319e48))
+* **telegram:** fix provider-failure E2E flake ([#727](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/727)) ([0877d2e](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/0877d2ed479657261db9a6589d42d00d132ac04b))
+
+
+### Testing
+
+* **e2e:** extract the warm-start harness ([#722](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/722)) ([311a9dc](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/311a9dc769847b142c6d98473e25b1d8d5074cd6))
+
 ## [1.42.25](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.42.24...v1.42.25) (2026-09-21)
 
 
