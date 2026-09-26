@@ -54,6 +54,14 @@ type QuarantineOutcome =
   | { readonly wasQuarantined: false }
   | { readonly wasQuarantined: true; readonly path: string };
 
+/** A replacement staged whole and verified, not yet published. */
+interface IStagedRecords {
+  /** Where the replacement was staged. */
+  readonly path: string;
+  /** How many records it holds. */
+  readonly count: number;
+}
+
 /** Reads and writes a JSON record store without trusting what it finds. */
 export default class SecureJsonStore {
   private readonly _fileSystem: IFileSystem;
@@ -109,6 +117,28 @@ export default class SecureJsonStore {
   }
 
   /**
+   * Writes records to a path that must still be free, whole or not at all.
+   *
+   * <p>For a file two processes race to create, where the first must win and
+   * the second must learn that it lost. {@link commit} replaces whatever is
+   * at the path; this refuses a taken name and leaves it as it was. The
+   * records are staged and verified exactly as for a commit, then published
+   * only if the name is free, so no reader ever sees them half-written.
+   * @param records - Records to persist at the free name.
+   * @returns What the commit did, or why it did nothing; `EEXIST` means the
+   *   name was taken.
+   */
+  public commitNew(records: Readonly<Record<string, unknown>>): Procedure<ICommitReport> {
+    const owned = ownRequest({ records, shouldQuarantine: false });
+    if (!owned.success) return owned;
+    const staged = this.stage(owned.data);
+    if (!staged.success) return staged;
+    const published = this._fileSystem.publishExclusive(staged.data.path, this._filePath);
+    if (!published.success) return this.abandon(staged.data.path, published);
+    return this.reportCommit(staged.data.count, false);
+  }
+
+  /**
    * Deletes staged files an earlier run was killed before cleaning up.
    *
    * <p>Only files older than {@link STALE_STAGING_AGE_MS} are touched. A
@@ -137,6 +167,22 @@ export default class SecureJsonStore {
    * @returns What the commit did, or why it did nothing.
    */
   private commitOwned(request: IOwnedRequest): Procedure<ICommitReport> {
+    const staged = this.stage(request);
+    if (!staged.success) return staged;
+    const quarantined = this.quarantineIfAsked(request.shouldQuarantine);
+    if (!quarantined.success) return this.abandon(staged.data.path, quarantined);
+    return this.publish(staged.data.path, staged.data.count, quarantined.data);
+  }
+
+  /**
+   * Stages owned records beside the store and proves the stage is whole.
+   *
+   * <p>Nothing at the canonical path is touched here, so a failure at any
+   * step leaves the store as it was, and no staged copy outlives it.
+   * @param request - A request the store owns outright.
+   * @returns Where the records were staged, or why they were not.
+   */
+  private stage(request: IOwnedRequest): Procedure<IStagedRecords> {
     const serialised = serialiseRecords(request.records);
     if (!serialised.success) return serialised;
     const sized = checkWritableSize(serialised.data.json);
@@ -146,9 +192,7 @@ export default class SecureJsonStore {
     if (!staged.success) return staged;
     const whole = checkWholeWrite(staged.data.bytesWritten, sized.data);
     if (!whole.success) return this.abandon(stagedPath, whole);
-    const quarantined = this.quarantineIfAsked(request.shouldQuarantine);
-    if (!quarantined.success) return this.abandon(stagedPath, quarantined);
-    return this.publish(stagedPath, serialised.data.count, quarantined.data);
+    return succeed({ path: stagedPath, count: serialised.data.count });
   }
 
   /**
