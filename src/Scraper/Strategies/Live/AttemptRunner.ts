@@ -8,7 +8,7 @@ import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import type { IRetryStrategy } from '../../../Resilience/RetryStrategy.js';
 import type { IBankConfig, IRawScrape, Procedure } from '../../../Types/Index.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../../Types/Index.js';
-import { captureResultToken, sweepTokenLeftovers } from '../../Tokens/AuthFlowCapture.js';
+import { captureResultToken, isApiDirectBank, sweepTokenLeftovers } from '../../Tokens/AuthFlowCapture.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
 import { RetryableProviderFailure, throwIfRetryable } from './ProviderFailure.js';
 import {
@@ -56,7 +56,10 @@ function startScrape(deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpt
 }
 
 /**
- * Runs the first attempt and dispatches the OTP-retry path when needed.
+ * Runs the first attempt and handles a rejected OTP code.
+ *
+ * A browser bank gets one more attempt with a new code; an API-direct bank
+ * does not.
  * @param deps - Strategy dependencies captured by the public facade.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @returns Procedure success with one-attempt or retried scrape data.
@@ -66,8 +69,29 @@ async function runWithOtpRetry(
   scrapeOpts: IResolvedLiveOpts,
 ): Promise<Procedure<IRawScrape>> {
   const first = await executeAttempt(deps, scrapeOpts);
-  if (isInvalidOtpFailure(first)) return await handleOtpReject(deps, scrapeOpts);
-  return succeedRawScrape(scrapeOpts, first, 1);
+  if (!isInvalidOtpFailure(first)) return succeedRawScrape(scrapeOpts, first, 1);
+  if (isApiDirectBank(scrapeOpts.companyType)) return await refuseOtpRetry(deps, scrapeOpts, first);
+  return await handleOtpReject(deps, scrapeOpts);
+}
+
+/**
+ * Ends an API-direct bank's run on a rejected code, without asking for another.
+ *
+ * An API-direct bank sends one SMS code per run. A retry would be a new login,
+ * and a new login sends a second SMS.
+ * @param deps - Strategy dependencies exposing the notifier.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @param rejected - The attempt's INVALID_OTP result.
+ * @returns Procedure success wrapping the rejection, with attemptCount 1.
+ */
+async function refuseOtpRetry(
+  deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts, rejected: IScraperScrapingResult,
+): Promise<Procedure<IRawScrape>> {
+  const { bankId } = scrapeOpts;
+  scrapeOpts.logger.warn(`  ⚠️  OTP rejected for ${bankId} — this run asks for no new code`);
+  await deps.notificationService.sendMessage(`⚠️ OTP for <b>${bankId}</b> was rejected. `
+    + 'This run asks for no new code; the next run can ask for a new one.');
+  return succeedRawScrape(scrapeOpts, rejected, 1);
 }
 
 /**
@@ -181,8 +205,8 @@ function restoreProviderResult(error: unknown): IScraperScrapingResult {
  * the try it replaced. A 2FA login owns its OTP cadence. A login that mints a
  * durable token revokes the one before it, so a timed-out try's late callback
  * would store a token the bank no longer honours once a retry had logged in.
- * With one try per attempt, and the INVALID_OTP attempt starting only after
- * the first has returned, tokens reach the store in the order they were minted.
+ * With one try per attempt, and no INVALID_OTP retry for a bank that mints
+ * tokens, tokens reach the store in the order they were minted.
  * @param deps - Strategy dependencies exposing retry policies.
  * @param bankConfig - Bank config whose twoFactorAuth flag is inspected.
  * @param hasTokenCapture - Whether the attempt's login callback stores a token.

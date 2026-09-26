@@ -9,6 +9,8 @@
  *       warm or cold, so the credentials the importer builds are checked;</li>
  *   <li>a cold login costs one SMS code and mints a JWT-shaped token, which
  *       revokes the account's previous one;</li>
+ *   <li>a code a case rejects fails the login with `INVALID_OTP` and mints
+ *       nothing, as upstream reports a code it already submitted;</li>
  *   <li>a warm login is honoured only for the latest token of its account and
  *       only while its `exp` is more than 60 seconds ahead of the bank's clock,
  *       as upstream's `jwtClaims` rule decides; an unreadable token is stale;</li>
@@ -76,6 +78,11 @@ export interface IFakeApiDirectBank {
    * @returns Nothing.
    */
   readonly expire: (bankConfig: IBankConfig) => void;
+  /**
+   * Rejects the SMS code of the next cold login.
+   * @returns Nothing.
+   */
+  readonly rejectNextCode: () => void;
 }
 
 /** A logged-in session: whose account it is, and the token the bank now honours for it. */
@@ -97,7 +104,12 @@ interface IBankState {
   readonly latestOf: Map<string, string>;
   /** The bank's clock, in seconds since the epoch. */
   readonly clock: { now: number };
+  /** How many coming cold logins get their SMS code rejected. */
+  readonly codeRejections: { left: number };
 }
+
+/** What a cold login answers when the bank rejects its SMS code. */
+const CODE_REJECTED = 'code-rejected';
 
 /**
  * Encodes a value as one base64url JWT segment.
@@ -200,19 +212,21 @@ function warmSession(state: IBankState, token: string | undefined): ISession | u
 }
 
 /**
- * Logs in cold: asks for one SMS code, then mints a token.
+ * Logs in cold: asks for one SMS code, then mints a token unless the code is rejected.
  * @param state - The bank's memory.
  * @param credentials - What the importer sent.
  * @param account - The customer the login fields name.
- * @returns The new session, or undefined when the login cannot ask for a code.
+ * @returns The new session, {@link CODE_REJECTED}, or undefined when the login cannot ask for a code.
  */
 async function coldSession(
   state: IBankState, credentials: ScraperCredentials, account: string,
-): Promise<ISession | undefined> {
+): Promise<ISession | typeof CODE_REJECTED | undefined> {
   const retriever = retrieverIn(credentials);
   if (retriever === undefined) return undefined;
   await retriever();
-  return { account, token: mint(state, account) };
+  if (state.codeRejections.left === 0) return { account, token: mint(state, account) };
+  state.codeRejections.left -= 1;
+  return CODE_REJECTED;
 }
 
 /**
@@ -262,6 +276,7 @@ async function scrape(
   if (account === undefined) return refused('INVALID_PASSWORD', 'unknown login');
   const session = warmSession(state, token) ?? await coldSession(state, credentials, account);
   if (session === undefined) return refused('TWO_FACTOR_RETRIEVER_MISSING', 'no SMS code retriever');
+  if (session === CODE_REJECTED) return refused('INVALID_OTP', 'wrong SMS code');
   await options.onAuthFlowComplete?.({ longTermToken: session.token, bearer: `bearer-${fakeUuid()}` });
   return scrapeOf(session);
 }
@@ -348,6 +363,11 @@ function controlsOf(state: IBankState): IFakeApiDirectBank {
       if (exp === undefined) throw new Error('The token has no exp');
       state.clock.now = exp - FRESHNESS_SKEW_SECONDS;
     },
+    /**
+     * Rejects the SMS code of the next cold login.
+     * @returns Nothing.
+     */
+    rejectNextCode: (): void => { state.codeRejections.left += 1; },
   };
 }
 
@@ -360,7 +380,7 @@ function controlsOf(state: IBankState): IFakeApiDirectBank {
 export function openApiDirectBank(createScraper: Mock, bank: IApiDirectBank): IFakeApiDirectBank {
   const state: IBankState = {
     bank, sent: [], minted: [], customers: new Map(), ownerOf: new Map(), latestOf: new Map(),
-    clock: { now: Math.floor(Date.now() / 1000) },
+    clock: { now: Math.floor(Date.now() / 1000) }, codeRejections: { left: 0 },
   };
   createScraper.mockImplementation((options: ScraperOptions) => ({
     /**

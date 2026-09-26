@@ -10,14 +10,15 @@
  *
  * <p>The retry and timeout policies are the shipped classes with the shipped
  * single-attempt settings, minus the shutdown handler, which would attach
- * process signal listeners per case. The notifier is not reached by an
- * API-direct scrape, and there is no 2FA prompter unless a case passes one.
+ * process signal listeners per case. The notifier is a spy whose messages
+ * each run returns, and there is no 2FA prompter unless a case passes one.
  */
 
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { faker } from '@faker-js/faker';
 import type { IScraperScrapingResult, ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
 import type { Mock } from 'vitest';
 import { vi } from 'vitest';
@@ -57,7 +58,18 @@ export interface IRun {
   readonly logger: SpyLogger;
   /** The config entry the run logged in with. */
   readonly bankConfig: IBankConfig;
+  /** Every message the run sent the notifier, in order. */
+  readonly notified: readonly string[];
 }
+
+/** A prompter, and how many SMS codes it has been asked for so far. */
+export interface ICountingPrompter {
+  readonly prompter: ITwoFactorPrompter;
+  readonly smsCount: () => number;
+}
+
+/** The notifier method a run reports through. */
+type SendMessage = Mock<(message: string) => Promise<void>>;
 
 /** What the fake provider mints during login and returns afterwards. */
 export interface IProviderScript {
@@ -143,6 +155,22 @@ export function providerWill(createScraper: Mock, script: IProviderScript): void
 }
 
 /**
+ * Builds a prompter that answers with a fresh SMS code and counts how often it is asked.
+ * @returns The prompter and its count.
+ */
+export function countingPrompter(): ICountingPrompter {
+  const askForCode = vi.fn(() => Promise.resolve(faker.string.numeric(6)));
+  return {
+    prompter: { createOtpRetriever: () => askForCode },
+    /**
+     * Counts the SMS codes asked for so far.
+     * @returns The count.
+     */
+    smsCount: (): number => askForCode.mock.calls.length,
+  };
+}
+
+/**
  * Builds a provider result holding one account with transactions.
  * @returns A successful scrape.
  */
@@ -158,9 +186,10 @@ export function scrapedAccount(): IScraperScrapingResult {
  * one, so no case can wait on a backoff.
  * @param logger - Logger the run reports through.
  * @param setup - The case's retry policy and prompter, where it needs them.
+ * @param sendMessage - Notifier method the run reports through.
  * @returns Inputs with the shipped resilience classes.
  */
-function strategyInputs(logger: ILogger, setup: IImportSetup): IScrapeStrategyInputs {
+function strategyInputs(logger: ILogger, setup: IImportSetup, sendMessage: SendMessage): IScrapeStrategyInputs {
   const singleAttempt = new ExponentialBackoffRetry({ maxAttempts: 1, initialBackoffMs: 0 });
   return {
     config: fakeImporterConfig(),
@@ -168,7 +197,7 @@ function strategyInputs(logger: ILogger, setup: IImportSetup): IScrapeStrategyIn
       retryStrategy: setup.retryStrategy ?? singleAttempt, noRetryStrategy: singleAttempt,
       timeoutWrapper: new TimeoutWrapper(),
     },
-    services: { twoFactorPrompter: setup.prompter ?? null, notificationService: { sendMessage: vi.fn() } },
+    services: { twoFactorPrompter: setup.prompter ?? null, notificationService: { sendMessage } },
     logger,
   } as unknown as IScrapeStrategyInputs;
 }
@@ -187,13 +216,14 @@ export function spyLogger(): SpyLogger {
 /**
  * Runs one import of a config entry through the shipped assembly.
  * @param setup - Entry, config, 2FA flag, prompter, logger and retry policy, where a case needs its own.
- * @returns The legacy result and the logger the run used.
+ * @returns The legacy result, the logger the run used and what it notified.
  */
 export async function runImport(setup: IImportSetup = {}): Promise<IRun> {
   const logger = setup.logger ?? spyLogger();
+  const sendMessage: SendMessage = vi.fn(() => Promise.resolve());
   const scraper = new BankScraper({
     registry: createBankRegistry(),
-    strategy: buildScrapeStrategy(strategyInputs(logger, setup)),
+    strategy: buildScrapeStrategy(strategyInputs(logger, setup, sendMessage)),
     mapper: createScrapeResultMapper(),
     datePolicy: createDateRangePolicy(),
     logger,
@@ -201,7 +231,8 @@ export async function runImport(setup: IImportSetup = {}): Promise<IRun> {
   const bankConfig = setup.bankConfig
     ?? fakeValidBankConfigFor('onezero', { twoFactorAuth: setup.twoFactorAuth ?? true });
   const result = await scraper.scrapeBankWithResilience(setup.entry ?? ENTRY, bankConfig);
-  return { result, logger, bankConfig };
+  const notified = sendMessage.mock.calls.map(([message]) => message);
+  return { result, logger, bankConfig, notified };
 }
 
 /**

@@ -38,7 +38,8 @@ export class LiveScrapeStrategy implements IBankScrapeStrategy {
   constructor(private readonly opts: ILiveScrapeStrategyOpts) {}
 
   /**
-   * Performs a live scrape with one-shot OTP retry on INVALID_OTP failures.
+   * Performs a live scrape. After INVALID_OTP, a browser bank gets one more
+   * attempt with a new code; an API-direct bank does not.
    * @param scrapeOpts - Inputs from the BankScraper coordinator.
    * @returns Procedure success with the raw scrape, including attemptCount.
    */

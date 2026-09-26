@@ -16,11 +16,9 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { faker } from '@faker-js/faker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import loginFingerprint from '../../src/Scraper/Tokens/LoginFingerprint.js';
-import type { ITwoFactorPrompter } from '../../src/Services/ITwoFactorPrompter.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
 import type { IApiDirectBank } from '../helpers/apiDirectBanks.js';
 import { accountOf, API_DIRECT_BANKS } from '../helpers/apiDirectBanks.js';
@@ -28,7 +26,7 @@ import type { IFakeApiDirectBank } from './helpers/fakeApiDirectBank.js';
 import { accountNumberOf, openApiDirectBank } from './helpers/fakeApiDirectBank.js';
 import type { IRun, ITokenStoreDir, SpyLogger } from './helpers/warmStartHarness.js';
 import {
-  closeTokenStore, everythingLogged, openTokenStore, runImport, storedTokens,
+  closeTokenStore, countingPrompter, everythingLogged, openTokenStore, runImport, storedTokens,
 } from './helpers/warmStartHarness.js';
 
 const provider = vi.hoisted(() => ({ createScraper: vi.fn() }));
@@ -40,12 +38,6 @@ vi.mock('@sergienko4/israeli-bank-scrapers', async (importOriginal) => {
 /** One run, and how many SMS codes it asked the operator for. */
 interface IReplayRun extends IRun {
   readonly smsCount: number;
-}
-
-/** A prompter, and how many SMS codes it has been asked for so far. */
-interface ICountingPrompter {
-  readonly prompter: ITwoFactorPrompter;
-  readonly smsCount: () => number;
 }
 
 /** A way the bank stops honouring a token it minted. */
@@ -65,22 +57,6 @@ interface IBrokenStore {
 const NO_RETRIEVER = { success: false, errorType: 'TWO_FACTOR_RETRIEVER_MISSING' };
 
 let store: ITokenStoreDir;
-
-/**
- * Builds a prompter that answers with a fresh SMS code and counts how often it is asked.
- * @returns The prompter and its count.
- */
-function countingPrompter(): ICountingPrompter {
-  const askForCode = vi.fn(() => Promise.resolve(faker.string.numeric(6)));
-  return {
-    prompter: { createOtpRetriever: () => askForCode },
-    /**
-     * Counts the SMS codes asked for so far.
-     * @returns The count.
-     */
-    smsCount: (): number => askForCode.mock.calls.length,
-  };
-}
 
 /**
  * Imports one entry, with a prompter that counts the SMS codes it is asked for.
