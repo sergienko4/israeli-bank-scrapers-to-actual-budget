@@ -5,9 +5,10 @@
 
 import { existsSync, rmSync } from 'node:fs';
 
-import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
+import type { ScraperCredentials, ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
 import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 
+import type { IBankConfig } from '../../../Types/Index.js';
 import { errorMessage } from '../../../Utils/Index.js';
 import buildCredentials from '../../CredentialsBuilder.js';
 import { buildChromeArgs, getChromeDataDir } from '../../ScraperOptionsBuilder.js';
@@ -15,6 +16,9 @@ import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
 import {
   attachAuthFlowCapture, buildTokenStoreKey, isApiDirectBank,
 } from '../../Tokens/AuthFlowCapture.js';
+import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
+import loginFingerprint from '../../Tokens/LoginFingerprint.js';
+import resolveWarmToken from '../../Tokens/WarmTokenResolver.js';
 import { BrowserRegistry } from './BrowserRegistry.js';
 import { resolveOtpRetriever } from './OtpRetriever.js';
 import type {
@@ -37,6 +41,8 @@ type ProviderScraper = ILiveProviderScraper;
  * bank, and the token capture for the API-direct banks, whose logins mint a
  * durable token. The retriever is attached for exactly the banks the token
  * capture skips, since the API-direct ones read it from the credentials.
+ * The capture and the token resolver share one parameter bundle, so the
+ * token an attempt sends is read under the key and login it is stored under.
  * @param deps - Strategy dependencies captured by the public facade.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @returns Configured provider scraper and credentials, and whether its
@@ -45,26 +51,43 @@ type ProviderScraper = ILiveProviderScraper;
 export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLiveScrape {
   const retriever = resolveOtpRetriever(deps, scrapeOpts);
   const options = buildScraperOptions(deps, scrapeOpts, retriever);
-  const hasTokenCapture = attachTokenCapture(deps, scrapeOpts, options);
-  const browsers = new BrowserRegistry();
-  attachBrowserCapture(options, browsers);
+  const captureParams = buildTokenCaptureParams(deps, scrapeOpts);
+  const hasTokenCapture = attachAuthFlowCapture(options, captureParams);
+  const browsers = captureBrowsers(options);
   const scraper = prepareScraper(scrapeOpts, options);
-  const credentials = buildCredentials(scrapeOpts.bankConfig, retriever);
+  const credentials = credentialsFor(captureParams, scrapeOpts.bankConfig, retriever);
   return { scraper, credentials, browsers, hasTokenCapture };
 }
 
 /**
- * Registers the token capture when the bank's login mints a durable token.
- * @param deps - Strategy dependencies exposing the token store.
- * @param scrapeOpts - Resolved scrape options for the current bank.
- * @param options - Provider options that receive the login callback.
- * @returns True when the login callback now stores the minted token.
+ * Starts a browser registry and attaches the hook that fills it.
+ * @param options - Provider options that receive the lifecycle hook.
+ * @returns The registry the provider's browsers are recorded in.
  */
-function attachTokenCapture(
-  deps: LiveDeps, scrapeOpts: LiveOpts, options: ScraperOptions,
-): boolean {
-  const captureParams = buildTokenCaptureParams(deps, scrapeOpts);
-  return attachAuthFlowCapture(options, captureParams);
+function captureBrowsers(options: ScraperOptions): BrowserRegistry {
+  const browsers = new BrowserRegistry();
+  attachBrowserCapture(options, browsers);
+  return browsers;
+}
+
+/**
+ * Builds the credentials one attempt logs in with.
+ *
+ * API-direct entries carry only a long-term token the store vouches for,
+ * read afresh on every attempt. Browser banks never read the store, so
+ * their entry is used as configured.
+ * @param captureParams - Account key, login, store and logger for this attempt.
+ * @param bankConfig - The entry as configured.
+ * @param retriever - The attempt's OTP retriever, when it can ask for an SMS code.
+ * @returns Provider credentials for this attempt.
+ */
+function credentialsFor(
+  captureParams: IAuthFlowCaptureParams, bankConfig: IBankConfig, retriever: OtpRetriever,
+): ScraperCredentials {
+  if (!isApiDirectBank(captureParams.companyType)) return buildCredentials(bankConfig, retriever);
+  const canAskForOtp = retriever !== undefined;
+  const loginConfig = resolveWarmToken(captureParams, { bankConfig, canAskForOtp });
+  return buildCredentials(loginConfig, retriever);
 }
 
 /**
@@ -131,11 +154,22 @@ export function buildScraperOptions(
 }
 
 /**
- * Bundles the account key, token store and logger one capture needs.
+ * Fingerprints the login an attempt logs in with.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @returns The fingerprint, or {@link NO_LOGIN} when the entry has no identity,
+ *          which the store refuses to bind a token to.
+ */
+function attemptLogin(scrapeOpts: LiveOpts): string {
+  const fingerprint = loginFingerprint(scrapeOpts.companyType, scrapeOpts.bankConfig);
+  return fingerprint.success ? fingerprint.data : NO_LOGIN;
+}
+
+/**
+ * Bundles the account key, login, token store and logger one capture needs.
  *
  * Shared by the login callback, the attempt runner's result backstop and the
  * leftover sweep, so the callback and the backstop derive the same key and
- * all three apply the same bank filter.
+ * login, and all three apply the same bank filter.
  * @param deps - Strategy dependencies exposing the token store.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @returns Parameter bundle accepted by the capture helpers.
@@ -145,7 +179,7 @@ export function buildTokenCaptureParams(
 ): IAuthFlowCaptureParams {
   const storeKey = buildTokenStoreKey(scrapeOpts.bankId, scrapeOpts.accountKey);
   return {
-    storeKey, companyType: scrapeOpts.companyType,
+    storeKey, companyType: scrapeOpts.companyType, login: attemptLogin(scrapeOpts),
     store: deps.bankTokens, logger: scrapeOpts.logger,
   };
 }

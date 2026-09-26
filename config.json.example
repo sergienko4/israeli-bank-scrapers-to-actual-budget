@@ -158,7 +158,7 @@
     "reconcile": "false (default). true = auto-adjust balance to match bank",
     "twoFactorAuth": "false (default). true = bot asks for SMS OTP via Telegram",
     "twoFactorTimeout": "Seconds to wait for OTP reply. Default: 300",
-    "otpLongTermToken": "Set after first 2FA login to skip OTP on future runs",
+    "otpLongTermToken": "Optional (OneZero, Pepper, PayBox). The importer saves and reuses the token by itself after an SMS login; set it only to bring one from another install",
     "messageFormat": "summary | compact | ledger | emoji",
     "showTransactions": "new | all | none",
     "listenForCommands": "true = bot listens for /scan, /status, /logs, /help",

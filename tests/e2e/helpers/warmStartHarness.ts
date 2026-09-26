@@ -10,8 +10,8 @@
  *
  * <p>The retry and timeout policies are the shipped classes with the shipped
  * single-attempt settings, minus the shutdown handler, which would attach
- * process signal listeners per case. The 2FA prompter and notifier are not
- * reached by an API-direct scrape.
+ * process signal listeners per case. The notifier is not reached by an
+ * API-direct scrape, and there is no 2FA prompter unless a case passes one.
  */
 
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -32,6 +32,8 @@ import { createDateRangePolicy } from '../../../src/Scraper/Policies/DateRangePo
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import { ExponentialBackoffRetry } from '../../../src/Resilience/RetryStrategy.js';
 import { TimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
+import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
+import type { IBankConfig } from '../../../src/Types/Index.js';
 import {
   fakeBankTransactions, fakeCanonicalAccount, fakeImporterConfig, fakeUuid, fakeValidBankConfigFor,
 } from '../../helpers/factories.js';
@@ -53,6 +55,8 @@ export type SpyLogger = { readonly [K in keyof ILogger]: Mock<ILogger[K]> };
 export interface IRun {
   readonly result: IScraperScrapingResult;
   readonly logger: SpyLogger;
+  /** The config entry the run logged in with. */
+  readonly bankConfig: IBankConfig;
 }
 
 /** What the fake provider mints during login and returns afterwards. */
@@ -70,6 +74,12 @@ export interface IImportSetup {
   readonly twoFactorAuth?: boolean;
   /** Policy for scrapes without 2FA; the single-attempt one unless given. */
   readonly retryStrategy?: IRetryStrategy;
+  /** The entry's config, so runs can share one login; a fresh OneZero entry unless given. */
+  readonly bankConfig?: IBankConfig;
+  /** The 2FA prompter the run asks for SMS codes; none unless given. */
+  readonly prompter?: ITwoFactorPrompter;
+  /** Logger the run reports through, so a case can read it even when the import throws. */
+  readonly logger?: SpyLogger;
 }
 
 /** A temp token file for one case, and the environment it replaced. */
@@ -147,42 +157,51 @@ export function scrapedAccount(): IScraperScrapingResult {
  * Unless a case passes a retrying policy, both ports get the single-attempt
  * one, so no case can wait on a backoff.
  * @param logger - Logger the run reports through.
- * @param retryStrategy - Policy for scrapes without 2FA, when a case needs one.
+ * @param setup - The case's retry policy and prompter, where it needs them.
  * @returns Inputs with the shipped resilience classes.
  */
-function strategyInputs(logger: ILogger, retryStrategy?: IRetryStrategy): IScrapeStrategyInputs {
+function strategyInputs(logger: ILogger, setup: IImportSetup): IScrapeStrategyInputs {
   const singleAttempt = new ExponentialBackoffRetry({ maxAttempts: 1, initialBackoffMs: 0 });
   return {
     config: fakeImporterConfig(),
     resilience: {
-      retryStrategy: retryStrategy ?? singleAttempt, noRetryStrategy: singleAttempt,
+      retryStrategy: setup.retryStrategy ?? singleAttempt, noRetryStrategy: singleAttempt,
       timeoutWrapper: new TimeoutWrapper(),
     },
-    services: { twoFactorPrompter: null, notificationService: { sendMessage: vi.fn() } },
+    services: { twoFactorPrompter: setup.prompter ?? null, notificationService: { sendMessage: vi.fn() } },
     logger,
   } as unknown as IScrapeStrategyInputs;
 }
 
 /**
- * Runs one import of a config entry through the shipped assembly.
- * @param setup - Entry, 2FA flag and retry policy, where a case needs its own.
- * @returns The legacy result and the logger the run used.
+ * Builds a logger whose every call a case can inspect.
+ * @returns A logger of spies.
  */
-export async function runImport(setup: IImportSetup = {}): Promise<IRun> {
-  const logger: SpyLogger = {
+export function spyLogger(): SpyLogger {
+  return {
     debug: vi.fn<ILogger['debug']>(), info: vi.fn<ILogger['info']>(),
     warn: vi.fn<ILogger['warn']>(), error: vi.fn<ILogger['error']>(),
   };
+}
+
+/**
+ * Runs one import of a config entry through the shipped assembly.
+ * @param setup - Entry, config, 2FA flag, prompter, logger and retry policy, where a case needs its own.
+ * @returns The legacy result and the logger the run used.
+ */
+export async function runImport(setup: IImportSetup = {}): Promise<IRun> {
+  const logger = setup.logger ?? spyLogger();
   const scraper = new BankScraper({
     registry: createBankRegistry(),
-    strategy: buildScrapeStrategy(strategyInputs(logger, setup.retryStrategy)),
+    strategy: buildScrapeStrategy(strategyInputs(logger, setup)),
     mapper: createScrapeResultMapper(),
     datePolicy: createDateRangePolicy(),
     logger,
   });
-  const bankConfig = fakeValidBankConfigFor('onezero', { twoFactorAuth: setup.twoFactorAuth ?? true });
+  const bankConfig = setup.bankConfig
+    ?? fakeValidBankConfigFor('onezero', { twoFactorAuth: setup.twoFactorAuth ?? true });
   const result = await scraper.scrapeBankWithResilience(setup.entry ?? ENTRY, bankConfig);
-  return { result, logger };
+  return { result, logger, bankConfig };
 }
 
 /**
@@ -190,8 +209,8 @@ export async function runImport(setup: IImportSetup = {}): Promise<IRun> {
  * @param tokensPath - Path of the case's token file.
  * @returns Stored entries by key.
  */
-export function storedTokens(tokensPath: string): Record<string, { token?: string }> {
-  return JSON.parse(readFileSync(tokensPath, 'utf8')) as Record<string, { token?: string }>;
+export function storedTokens(tokensPath: string): Record<string, { token?: string; login?: string }> {
+  return JSON.parse(readFileSync(tokensPath, 'utf8')) as Record<string, { token?: string; login?: string }>;
 }
 
 /**

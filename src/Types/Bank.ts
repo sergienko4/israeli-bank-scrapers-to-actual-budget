@@ -37,7 +37,7 @@ export interface IBankConfig {
   // OneZero, PayBox, Pepper
   email?: string;
   phoneNumber?: string;
-  otpLongTermToken?: string; // Persisted after first OTP login
+  otpLongTermToken?: string; // Optional seed; the importer stores and reuses tokens itself
 
   // 2FA settings (per bank)
   twoFactorAuth?: boolean;          // Default: false. Set true for banks requiring OTP

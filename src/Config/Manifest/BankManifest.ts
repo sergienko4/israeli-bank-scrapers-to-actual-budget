@@ -40,7 +40,7 @@ const BANK_FIELDS: readonly IManifestField[] = [
   { key: 'phoneNumber', label: 'Phone number', kind: 'secret', help: 'E.g. 9725XXXXXXXX.' },
   {
     key: 'otpLongTermToken', label: 'OTP long-term token', kind: 'secret',
-    help: 'Saved after first 2FA login to skip OTP next time.',
+    help: 'Optional. The importer saves and reuses this token by itself; set it only to bring one from another install.',
   },
   {
     key: 'twoFactorAuth', label: 'Two-factor auth', kind: 'boolean',
