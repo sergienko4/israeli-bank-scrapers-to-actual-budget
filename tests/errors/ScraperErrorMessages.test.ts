@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   SCRAPER_ERROR_ADVICE,
@@ -150,4 +152,46 @@ describe('ScraperErrorMessages', () => {
       expect(advice).not.toContain('error page');
     });
   });
+
+  /**
+   * Scraper 8.7.3 allows one SMS login per scrape. When a run needs a second
+   * one, it fails as GENERIC. Without a signature, the operator is told to look
+   * for a scraper update, but the fix is simply to run the import again.
+   */
+  describe('one SMS login per scrape (scraper 8.7.3)', () => {
+    const BUDGET_ADVICE = 'This run already used its one SMS login and will not send '
+      + 'a second code. Run the import again — the new run may ask for one new code.';
+    const GENERIC_ADVICE = 'Scraping failed unexpectedly. '
+      + 'Bank website may have changed — check for scraper updates.';
+
+    it('says the run used its one SMS login when a second login is refused', () => {
+      const advice = getScraperErrorAdvice('GENERIC this scrape has already spent its one '
+        + 'cold SMS login; the session cannot be re-minted in-run — start a new scrape');
+      expect(advice).toBe(BUDGET_ADVICE);
+    });
+
+    it('keeps the catch-all advice for other SMS login failures', () => {
+      expect(getScraperErrorAdvice('GENERIC cold SMS login timed out')).toBe(GENERIC_ADVICE);
+    });
+
+    it('matches the wording the installed scraper sends', () => {
+      expect(getScraperErrorAdvice(`GENERIC ${providerBudgetMessage()}`)).toBe(BUDGET_ADVICE);
+    });
+  });
 });
+
+/** The provider's ESM bundle, which holds its failure wording. */
+const PROVIDER_BUNDLE = fileURLToPath(new URL(
+  '../../node_modules/@sergienko4/israeli-bank-scrapers/lib/index.mjs', import.meta.url,
+));
+
+/**
+ * Reads the provider's one-SMS-login refusal from the installed bundle. The
+ * provider exports no constant for it, so the drift check reads the source.
+ * @returns The decoded message, or an empty string if the wording is gone.
+ */
+function providerBudgetMessage(): string {
+  const bundle = readFileSync(PROVIDER_BUNDLE, 'utf8');
+  const literal = /"(?<text>[^"\n]*cold SMS login[^"\n]*)"/u.exec(bundle)?.groups?.text ?? '';
+  return JSON.parse(`"${literal}"`) as string;
+}
