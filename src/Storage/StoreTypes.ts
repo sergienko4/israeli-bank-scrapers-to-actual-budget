@@ -35,6 +35,18 @@ export interface IStoreSnapshot {
   readonly summary: string;
 }
 
+/** How a store reads files an older release wrote in another shape. */
+export interface IStoreOptions {
+  /**
+   * Record name a bare JSON list is read under, for a store that was once a list.
+   *
+   * <p>Without it a list is damage (threat 24). With it the list is read as one
+   * healthy record of this name, so the next commit writes the records form and
+   * keeps everything the list held.
+   */
+  readonly legacyList?: string;
+}
+
 /** What a caller wants persisted, and what to do with what is already there. */
 export interface ICommitRequest {
   /** Records to persist, replacing the file's contents entirely. */

@@ -62,19 +62,35 @@ function isKeyedRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Reads a list an older release wrote as one record of the given name.
+ * @param name - Record name the list is read under.
+ * @param list - The list as parsed from the file.
+ * @returns A healthy snapshot holding the list as its only record.
+ */
+function legacyListSnapshot(name: string, list: readonly unknown[]): IStoreSnapshot {
+  const records = Object.create(null) as Record<string, unknown>;
+  records[name] = list;
+  return { state: 'healthy', records, summary: `Loaded the legacy list as ${name}` };
+}
+
+/**
  * Turns file contents into records, treating anything unexpected as damage.
  *
  * <p>The parse error is never included: a truncated JSON error message can
  * quote the surrounding bytes, and those bytes are credentials.
  * @param contents - Raw file contents.
+ * @param legacyList - Record name a bare list is read under; without it a list is damage.
  * @returns A healthy snapshot, or a damaged one explaining why.
  */
-export function parseSnapshot(contents: string): IStoreSnapshot {
+export function parseSnapshot(contents: string, legacyList?: string): IStoreSnapshot {
   let parsed: unknown;
   try {
     parsed = JSON.parse(contents);
   } catch {
     return emptySnapshot('damaged', 'Store is not valid JSON');
+  }
+  if (legacyList !== undefined && Array.isArray(parsed)) {
+    return legacyListSnapshot(legacyList, parsed);
   }
   if (!isKeyedRecord(parsed)) {
     return emptySnapshot('damaged', 'Store is valid JSON but not an object of records');

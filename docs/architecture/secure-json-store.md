@@ -97,6 +97,16 @@ one thing this design exists to avoid. Flushing the *directory entry* after
 the rename is deliberately not done: an unpersisted rename leaves the previous
 store in place, which is already one of the two outcomes `commit` promises.
 
+## Legacy list read
+
+Some stores were written as a bare JSON list before they moved onto this
+primitive. Such a store passes a `legacyList` name to the constructor. A file
+whose root is a list is then read as one healthy record of that name, and the
+next commit writes the records form, so nothing the list held is lost. Nothing
+else changes: any other root that is not an object is still damage, and threat
+24 still refuses a list at the root of anything written. A store that passes no
+name, such as the bank-token store, still reads a list as damage.
+
 ## Test layers
 
 | Layer | Target | Mechanism | Covers |
