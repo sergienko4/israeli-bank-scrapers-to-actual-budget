@@ -1,10 +1,11 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import OtpSettingsStore from '../../src/Services/TwoFactor/OtpSettingsStore.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 
 let dir: string;
 let store: OtpSettingsStore;
@@ -20,7 +21,7 @@ function settingsPath(): string {
 describe('OtpSettingsStore', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'otp-settings-'));
-    store = new OtpSettingsStore(settingsPath());
+    store = new OtpSettingsStore(createNodeFileSystem(), settingsPath());
   });
 
   afterEach(() => {
@@ -34,6 +35,11 @@ describe('OtpSettingsStore', () => {
   it('persists and reads the app channel', () => {
     store.set('app');
     expect(store.get()).toEqual({ channel: 'app' });
+  });
+
+  it('writes the settings file owner-only on disk', () => {
+    store.set('app');
+    expect(statSync(settingsPath()).mode & 0o777).toBe(0o600);
   });
 
   it('persists and reads the telegram channel', () => {

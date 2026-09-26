@@ -19,6 +19,7 @@ import PortalConfigStore from './PortalConfigStore.js';
 import {
   type IPortalRuntime, isLegacyProxyHopCount, isNonLoopbackHost, isRejectedProxyConfig,
 } from './PortalRuntime.js';
+import openPortalStores from './PortalStores.js';
 import { handlePortalError } from './PortalValidationError.js';
 
 /**
@@ -86,7 +87,8 @@ export async function buildPortal(
   await app.register(fstatic, { root: publicDir() });
   app.setErrorHandler(handlePortalError);
   registerAuthRoutes(app, rt, store);
-  registerApiRoutes(app, store);
+  const stores = openPortalStores();
+  registerApiRoutes(app, store, stores);
   app.setNotFoundHandler((req, reply) => (
     isSpaShellRequest(req) ? reply.sendFile('index.html') : reply.code(404).send({ error: 'Not found' })
   ));

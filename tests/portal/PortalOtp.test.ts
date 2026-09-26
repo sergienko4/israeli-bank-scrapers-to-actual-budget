@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -130,6 +130,15 @@ describe('Portal /api/otp', () => {
     expect(put.statusCode).toBe(200);
     const get = await app.inject({ method: 'GET', url: '/api/otp/settings', cookies: { portal_session: cookie } });
     expect(get.json()).toEqual({ channel: 'app' });
+  });
+
+  it('saves the channel owner-only at OTP_SETTINGS_PATH', async () => {
+    const cookie = await loginCookie();
+    await app.inject({
+      method: 'PUT', url: '/api/otp/settings', cookies: { portal_session: cookie }, payload: { channel: 'app' },
+    });
+    expect(JSON.parse(readFileSync(settingsPath, 'utf8'))).toEqual({ channel: 'app' });
+    expect(statSync(settingsPath).mode & 0o777).toBe(0o600);
   });
 
   it('rejects an invalid channel with 400', async () => {

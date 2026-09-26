@@ -15,11 +15,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { IOtpRequest } from '../Services/TwoFactor/OtpRequestStore.js';
 import OtpRequestStore from '../Services/TwoFactor/OtpRequestStore.js';
-import OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
 import { OTP_SUBMIT_MAX, RATE_WINDOW } from './PortalRateLimit.js';
 import {
   OTP_PENDING_SCHEMA, OTP_SETTINGS_READ_SCHEMA, OTP_SETTINGS_WRITE_SCHEMA, OTP_SUBMIT_SCHEMA,
 } from './PortalRouteSchemas.js';
+import type { IPortalStores } from './PortalStores.js';
 
 /** The public view of a pending request (never carries the code). */
 interface IPublicOtpRequest {
@@ -74,27 +74,28 @@ function submitCode(req: FastifyRequest, reply: FastifyReply): FastifyReply {
 
 /**
  * Sends the current OTP delivery channel.
- * @param _req - Fastify request (unused).
+ * @param stores - The portal's store factories.
  * @param reply - Fastify reply.
  * @returns The reply after sending the settings.
  */
-function sendSettings(_req: FastifyRequest, reply: FastifyReply): FastifyReply {
-  const store = new OtpSettingsStore();
-  const settings = store.get();
+function sendSettings(stores: IPortalStores, reply: FastifyReply): FastifyReply {
+  const settings = stores.otpSettings().get();
   return reply.send(settings);
 }
 
 /**
  * Persists the OTP delivery channel. The allowed values are enforced by the
  * route schema, so an unknown channel never reaches here.
+ * @param stores - The portal's store factories.
  * @param req - Request with a JSON `{ channel }` body.
  * @param reply - Fastify reply.
  * @returns The reply after saving.
  */
-function saveSettings(req: FastifyRequest, reply: FastifyReply): FastifyReply {
+function saveSettings(
+  stores: IPortalStores, req: FastifyRequest, reply: FastifyReply,
+): FastifyReply {
   const { channel } = req.body as { channel: 'telegram' | 'app' };
-  const store = new OtpSettingsStore();
-  store.set(channel);
+  stores.otpSettings().set(channel);
   return reply.send({ ok: true });
 }
 
@@ -103,9 +104,12 @@ function saveSettings(req: FastifyRequest, reply: FastifyReply): FastifyReply {
  * per-route rate limit so a compromised session cannot brute-force codes and so
  * the control is visible to static analysis.
  * @param app - Fastify instance.
+ * @param stores - The portal's store factories.
  * @returns Confirmation that the OTP routes are registered.
  */
-export default function registerOtpRoutes(app: FastifyInstance): { registered: true } {
+export default function registerOtpRoutes(
+  app: FastifyInstance, stores: IPortalStores,
+): { registered: true } {
   const submitLimit = {
     config: { rateLimit: { max: OTP_SUBMIT_MAX, timeWindow: RATE_WINDOW }, invalidMessage: 'Invalid OTP code' },
     schema: OTP_SUBMIT_SCHEMA,
@@ -116,7 +120,7 @@ export default function registerOtpRoutes(app: FastifyInstance): { registered: t
   };
   app.get('/api/otp/pending', { schema: OTP_PENDING_SCHEMA }, sendPending);
   app.post('/api/otp/:id', submitLimit, submitCode);
-  app.get('/api/otp/settings', { schema: OTP_SETTINGS_READ_SCHEMA }, sendSettings);
-  app.put('/api/otp/settings', settingsWrite, saveSettings);
+  app.get('/api/otp/settings', { schema: OTP_SETTINGS_READ_SCHEMA }, (_req, reply) => sendSettings(stores, reply));
+  app.put('/api/otp/settings', settingsWrite, (req, reply) => saveSettings(stores, req, reply));
   return { registered: true };
 }

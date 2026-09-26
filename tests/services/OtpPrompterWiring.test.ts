@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import OtpPrompterWiring from '../../src/Importer/OtpPrompterWiring.js';
 import AppOtpPrompter from '../../src/Services/TwoFactor/AppOtpPrompter.js';
 import FallbackOtpPrompter from '../../src/Services/TwoFactor/FallbackOtpPrompter.js';
-import OtpSettingsStore from '../../src/Services/TwoFactor/OtpSettingsStore.js';
+import openOtpSettingsStore from '../../src/Services/TwoFactor/OtpSettingsStoreWiring.js';
 import TwoFactorService from '../../src/Services/TwoFactorService.js';
 import { fakeImporterConfig, fakeTelegramConfig } from '../helpers/factories.js';
 
@@ -43,12 +43,12 @@ describe('new OtpPrompterWiring().resolve', () => {
   });
 
   it('returns the app prompter when the channel is app and telegram is unconfigured', () => {
-    new OtpSettingsStore().set('app');
+    openOtpSettingsStore().set('app');
     expect(new OtpPrompterWiring().resolve(withoutTelegram)).toBeInstanceOf(AppOtpPrompter);
   });
 
   it('wraps app + telegram in a fallback prompter when the channel is app', () => {
-    new OtpSettingsStore().set('app');
+    openOtpSettingsStore().set('app');
     expect(new OtpPrompterWiring().resolve(withTelegram)).toBeInstanceOf(FallbackOtpPrompter);
   });
 });

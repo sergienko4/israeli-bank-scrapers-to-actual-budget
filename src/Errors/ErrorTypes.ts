@@ -7,5 +7,6 @@ export { default as BankScrapingError } from './BankScrapingError.js';
 export { default as ConfigurationError } from './ConfigurationError.js';
 export { default as NetworkError } from './NetworkError.js';
 export { default as ShutdownError } from './ShutdownError.js';
+export { default as StorageError } from './StorageError.js';
 export { default as TimeoutError } from './TimeoutError.js';
 export { default as TwoFactorAuthError } from './TwoFactorAuthError.js';

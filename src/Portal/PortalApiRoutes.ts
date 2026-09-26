@@ -22,6 +22,7 @@ import {
   BANK_ADD_ROUTE, BANK_REMOVE_ROUTE, CONFIG_READ_ROUTE, CONFIG_WRITE_ROUTE,
   DEVICE_ROUTE, STATUS_ROUTE, VALIDATE_ROUTE,
 } from './PortalRouteSchemas.js';
+import type { IPortalStores } from './PortalStores.js';
 
 /** Static manifest payload (sections, supported bank ids, per-bank required keys), built once. */
 const MANIFEST_PAYLOAD = {
@@ -37,10 +38,11 @@ const STATUS_HISTORY = 10;
  * Registers the manifest probe + guarded config API routes.
  * @param app - Fastify instance.
  * @param store - Shared config store.
+ * @param stores - Factories for the runtime stores the routes serve.
  * @returns Confirmation that the API routes are registered.
  */
 export default function registerApiRoutes(
-  app: FastifyInstance, store: PortalConfigStore,
+  app: FastifyInstance, store: PortalConfigStore, stores: IPortalStores,
 ): { registered: true } {
   // The manifest deliberately carries no response schema. Its field shape is
   // recursive, and a recursive schema cannot be inlined at the four places a
@@ -55,7 +57,7 @@ export default function registerApiRoutes(
   registerStatusRoute(app);
   registerDeviceRoutes(app);
   registerValidateRoute(app, store);
-  registerOtpRoutes(app);
+  registerOtpRoutes(app, stores);
   return { registered: true };
 }
 
