@@ -206,6 +206,18 @@ describe('resolveWarmToken', () => {
       expect(bankConfig.otpLongTermToken).toBe(stored);
     });
 
+    it('says only that it uses the stored token when another entry in the file is damaged', () => {
+      const { store, fileSystem } = makeStore();
+      seedRecords(fileSystem, {
+        [STORE_KEY]: { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+        'pepper:main': { token: fakeToken(), capturedAt: CAPTURED_AT },
+      });
+
+      const { logger } = resolveOver(store, { seed: fakeToken() });
+
+      expect(linesLogged(logger)).toEqual([['info', `  🔐 Using the stored long-term token for ${STORE_KEY}`]]);
+    });
+
     it('sends no token when the store binds the stored one to another login', () => {
       const { store, fileSystem } = makeStore();
       seedRecords(fileSystem, { [STORE_KEY]: { token: fakeToken(), capturedAt: CAPTURED_AT, login: OTHER_LOGIN } });
@@ -317,6 +329,16 @@ describe('resolveWarmToken', () => {
       const { store } = makeStore();
 
       const { bankConfig, logger } = resolveOver(store, { seed });
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(linesLogged(logger)).toEqual([]);
+    });
+
+    it('sends no token and logs nothing when the token file is damaged and none is configured', () => {
+      const { store, fileSystem } = makeStore();
+      seedRaw(fileSystem, '{ not json');
+
+      const { bankConfig, logger } = resolveOver(store);
 
       expect(bankConfig.otpLongTermToken).toBeUndefined();
       expect(linesLogged(logger)).toEqual([]);
