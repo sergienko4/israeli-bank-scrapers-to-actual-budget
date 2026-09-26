@@ -9,7 +9,9 @@ import { registerAppRefreshRoutes } from '../../src/Portal/AppRefreshRoutes.js';
 import { AppTokenStore, type TokenGrant } from '../../src/Portal/AppTokenStore.js';
 import { credentialFingerprint, type IPortalRuntime } from '../../src/Portal/PortalRuntime.js';
 import { verifyToken } from '../../src/Portal/PortalTokenAuth.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { fakePortalConfig, fakePortalRuntime } from '../helpers/portalFactories.js';
+import FakeFileSystem from '../storage/FakeFileSystem.js';
 
 const REDIRECT = 'bankimporter://auth';
 
@@ -17,6 +19,7 @@ let app: FastifyInstance;
 let tokens: AppTokenStore;
 let runtime: IPortalRuntime;
 let dir: string;
+let unreadableToken: string;
 
 /**
  * Builds a runtime with app sign-in enabled.
@@ -62,7 +65,7 @@ describe('AppRefreshRoutes', () => {
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), 'app-refresh-'));
     runtime = enabledRuntime();
-    tokens = new AppTokenStore(join(dir, 'app-tokens.json'));
+    tokens = new AppTokenStore(createNodeFileSystem(), join(dir, 'app-tokens.json'));
     app = Fastify({ logger: false });
     registerAppRefreshRoutes(app, { live: () => runtime, tokens });
     await app.ready();
@@ -155,5 +158,38 @@ describe('AppRefreshRoutes', () => {
     const res = await post('/auth/app/revoke', {});
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
+  });
+
+  describe('when the token file cannot be read', () => {
+    const tokensPath = '/data/app-tokens.json';
+
+    beforeEach(async () => {
+      await app.close();
+      const fileSystem = new FakeFileSystem();
+      const seeded = new AppTokenStore(fileSystem, tokensPath);
+      tokens = seeded;
+      unreadableToken = issueToken();
+      fileSystem.forcedFailures.set('openForRead', 'EACCES');
+      app = Fastify({ logger: false });
+      registerAppRefreshRoutes(app, { live: () => runtime, tokens: seeded });
+      await app.ready();
+    });
+
+    it('answers a revoke with 500 instead of claiming the token is gone', async () => {
+      const res = await post('/auth/app/revoke', { refreshToken: unreadableToken });
+      expect(res.statusCode).toBe(500);
+      expect(res.body).not.toContain('"ok":true');
+    });
+
+    it('answers a refresh with 500', async () => {
+      const res = await post('/auth/app/refresh', { refreshToken: unreadableToken });
+      expect(res.statusCode).toBe(500);
+    });
+
+    it('still answers a revoke without a token the same way', async () => {
+      const res = await post('/auth/app/revoke', {});
+      expect(res.statusCode).toBe(200);
+      expect(res.json().ok).toBe(true);
+    });
   });
 });

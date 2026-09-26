@@ -10,6 +10,7 @@ import { AppTokenStore } from '../../src/Portal/AppTokenStore.js';
 import { registerAppTokenRoutes } from '../../src/Portal/AppTokenRoutes.js';
 import { credentialFingerprint, type IPortalRuntime } from '../../src/Portal/PortalRuntime.js';
 import { verifyToken } from '../../src/Portal/PortalTokenAuth.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { fakePortalConfig, fakePortalRuntime } from '../helpers/portalFactories.js';
 
 const REDIRECT = 'bankimporter://auth';
@@ -68,7 +69,7 @@ describe('AppTokenRoutes', () => {
     dir = mkdtempSync(join(tmpdir(), 'app-tokens-'));
     runtime = enabledRuntime();
     codes = new AppAuthCodes();
-    tokens = new AppTokenStore(join(dir, 'app-tokens.json'));
+    tokens = new AppTokenStore(createNodeFileSystem(), join(dir, 'app-tokens.json'));
     app = Fastify({ logger: false });
     registerAppTokenRoutes(app, { live: () => runtime, codes, tokens });
     await app.ready();

@@ -14,6 +14,7 @@ import { AppTokenStore } from '../../src/Portal/AppTokenStore.js';
 import {
   LOGIN_MAX, OAUTH_MAX, RATE_WINDOW, REFRESH_MAX, STATUS_MAX,
 } from '../../src/Portal/PortalRateLimit.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { fail } from '../../src/Types/Index.js';
 import { fakePortalRuntime } from '../helpers/portalFactories.js';
 
@@ -52,7 +53,7 @@ describe('PortalRateLimit app routes', () => {
     const runtime = fakePortalRuntime();
     const live = (): ReturnType<typeof fakePortalRuntime> => runtime;
     const codes = new AppAuthCodes();
-    const tokens = new AppTokenStore(join(dir, 'app-tokens.json'));
+    const tokens = new AppTokenStore(createNodeFileSystem(), join(dir, 'app-tokens.json'));
     app = Fastify({ logger: false });
     await app.register(rateLimit, { global: false });
     registerAppAuthRoutes(app, { live, codes, sessionOf: () => fail('No session') });

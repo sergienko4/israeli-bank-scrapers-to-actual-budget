@@ -12,7 +12,7 @@ import { registerAppAuthRoutes, type SessionResolver } from './AppAuthRoutes.js'
 import { registerAppRefreshRoutes } from './AppRefreshRoutes.js';
 import { registerAppSessionRoutes } from './AppSessionRoutes.js';
 import { registerAppTokenRoutes } from './AppTokenRoutes.js';
-import { AppTokenStore } from './AppTokenStore.js';
+import openAppTokenStore from './AppTokenStoreWiring.js';
 import type { RuntimeAccessor } from './PortalRuntime.js';
 
 /**
@@ -29,7 +29,7 @@ export default function registerAppRoutes(
   sessionOf: SessionResolver,
 ): { registered: true } {
   const codes = new AppAuthCodes();
-  const tokens = new AppTokenStore();
+  const tokens = openAppTokenStore();
   registerAppAuthRoutes(app, { live, codes, sessionOf });
   registerAppTokenRoutes(app, { live, codes, tokens });
   registerAppRefreshRoutes(app, { live, tokens });

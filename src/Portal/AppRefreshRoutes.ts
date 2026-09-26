@@ -141,11 +141,13 @@ function handleRefresh(
  *
  * Unlike the other app routes this one does not refuse when app sign-in is
  * switched off. Turning the feature off leaves issued tokens alive, so an
- * operator still needs a way to destroy them.
+ * operator still needs a way to destroy them. A token file that cannot be read
+ * throws, so the app is told the sign-out failed instead of `ok`.
  * @param req - Incoming request.
  * @param reply - Outgoing reply.
  * @param deps - Injected collaborators.
  * @returns The reply, already sent.
+ * @throws StorageError when the token file cannot be read or saved.
  */
 function handleRevoke(
   req: FastifyRequest,
@@ -153,10 +155,7 @@ function handleRevoke(
   deps: IAppRefreshDeps,
 ): FastifyReply {
   const parsed = parseRefreshBody(req.body);
-  if (!isFail(parsed)) {
-    const record = deps.tokens.findByToken(parsed.data);
-    if (record) deps.tokens.revokeFamily(record.familyId);
-  }
+  if (!isFail(parsed)) deps.tokens.revokeByToken(parsed.data);
   return reply.code(200).send({ ok: true });
 }
 

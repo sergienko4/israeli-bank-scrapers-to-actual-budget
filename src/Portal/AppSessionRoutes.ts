@@ -80,11 +80,14 @@ function handleList(
 }
 
 /**
- * Signs one device out, along with every token it rotated through.
+ * Signs one device out, along with every token it rotated through. A token
+ * file that cannot be read throws, so the caller is told the sign-out failed
+ * instead of that the session does not exist.
  * @param req - Incoming request.
  * @param reply - Outgoing reply.
  * @param deps - Injected collaborators.
  * @returns The reply, already sent.
+ * @throws StorageError when the token file cannot be read or saved.
  */
 function handleRevoke(
   req: FastifyRequest<{ Params: IRevokeParams }>,
@@ -93,10 +96,8 @@ function handleRevoke(
 ): FastifyReply {
   const sessionId = req.params.id;
   if (!SESSION_ID.test(sessionId)) return reply.code(404).send({ error: 'Unknown session' });
-  const records = deps.tokens.list();
-  const match = records.find((record) => record.id === sessionId);
-  if (!match) return reply.code(404).send({ error: 'Unknown session' });
-  deps.tokens.revokeFamily(match.familyId);
+  const isRevoked = deps.tokens.revoke(sessionId);
+  if (!isRevoked) return reply.code(404).send({ error: 'Unknown session' });
   return reply.code(200).send({ ok: true });
 }
 
