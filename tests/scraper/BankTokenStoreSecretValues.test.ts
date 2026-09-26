@@ -11,7 +11,8 @@
 import { describe, expect, it } from 'vitest';
 
 import redactSecrets from '../../src/Logger/SecretRedaction.js';
-import { CAPTURED_AT, fakeToken, makeStore, seedRecords, STORE_PATH } from './BankTokenStoreFixture.js';
+import { NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
+import { ACCOUNT_LOGIN, CAPTURED_AT, fakeToken, makeStore, seedRecords, STORE_PATH } from './BankTokenStoreFixture.js';
 
 /** Text outside the token, which masking must keep. */
 const CANARY = 'token-error-canary';
@@ -30,8 +31,8 @@ describe('BankTokenStore and the value masker', () => {
     const { store, fileSystem } = makeStore();
     const [wanted, other] = [fakeToken(), fakeToken()];
     seedRecords(fileSystem, {
-      'oneZero:main': { token: wanted, capturedAt: CAPTURED_AT },
-      'pepper:main': { token: other, capturedAt: CAPTURED_AT },
+      'oneZero:main': { token: wanted, capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+      'pepper:main': { token: other, capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
     });
     store.read('oneZero:main');
     const masked = redactSecrets(`${echoed(wanted)} ${echoed(other)}`);
@@ -39,10 +40,18 @@ describe('BankTokenStore and the value masker', () => {
     expect(masked).not.toContain(other);
   });
 
+  it('hides a token the store read but could not use, since the file still holds it', () => {
+    const { store, fileSystem } = makeStore();
+    const unbound = fakeToken();
+    seedRecords(fileSystem, { 'oneZero:main': { token: unbound, capturedAt: CAPTURED_AT } });
+    store.read('pepper:main');
+    expect(redactSecrets(echoed(unbound))).not.toContain(unbound);
+  });
+
   it('hides a token as soon as it is written, as the store keeps it', () => {
     const { store } = makeStore();
     const token = fakeToken();
-    store.write('oneZero:main', `  ${token}\n`);
+    store.write('oneZero:main', `  ${token}\n`, ACCOUNT_LOGIN);
     expect(redactSecrets(echoed(token))).toBe(echoed('[REDACTED]'));
   });
 
@@ -50,13 +59,20 @@ describe('BankTokenStore and the value masker', () => {
     const { store, fileSystem } = makeStore();
     fileSystem.seedDirectory(STORE_PATH);
     const token = fakeToken();
-    expect(store.write('oneZero:main', token)).toMatchObject({ success: false });
+    expect(store.write('oneZero:main', token, ACCOUNT_LOGIN)).toMatchObject({ success: false });
+    expect(redactSecrets(echoed(token))).not.toContain(token);
+  });
+
+  it('hides a token it refused for want of a login, before judging the login', () => {
+    const { store } = makeStore();
+    const token = fakeToken();
+    expect(store.write('oneZero:main', token, NO_LOGIN)).toMatchObject({ success: false });
     expect(redactSecrets(echoed(token))).not.toContain(token);
   });
 
   it('keeps the account a token belongs to readable', () => {
     const { store } = makeStore();
-    store.write('oneZero:savings-account', fakeToken());
+    store.write('oneZero:savings-account', fakeToken(), ACCOUNT_LOGIN);
     const text = `no token for oneZero:savings-account ${CANARY}`;
     expect(redactSecrets(text)).toBe(text);
   });

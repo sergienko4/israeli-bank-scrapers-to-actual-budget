@@ -76,7 +76,7 @@ services:
       # a single-file mount) is required so the portal's atomic saves propagate
       # here; see the top-of-file note and docs/configuration/portal.md.
       - ./config:/app/config:ro
-      - importer-data:/app/data             # Actual Budget sync data
+      - importer-data:/app/data             # Sync data + bank tokens; must be writable
       - importer-cache:/app/cache           # App cache
     healthcheck:
       # Verify the scheduler node process is alive (mirrors the image default and

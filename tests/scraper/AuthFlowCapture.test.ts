@@ -24,8 +24,11 @@ import {
 } from '../../src/Scraper/Tokens/AuthFlowCapture.js';
 import type { IBankTokenStore } from '../../src/Scraper/Tokens/BankTokenStore.js';
 import { STALE_STAGING_AGE_MS } from '../../src/Storage/SecureJsonStore.js';
-import { fakeUuid } from '../helpers/factories.js';
-import { fakeToken, makeStore, STORE_PATH, storedRecords } from './BankTokenStoreFixture.js';
+import { NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
+import { fakeLoginFingerprint, fakeUuid } from '../helpers/factories.js';
+import {
+  ACCOUNT_LOGIN, CAPTURED_AT, fakeToken, makeStore, seedRecords, STORE_PATH, storedRecords,
+} from './BankTokenStoreFixture.js';
 
 /** The key a `oneZero` config entry resolves to. */
 const STORE_KEY = 'onezero:oneZero';
@@ -54,7 +57,7 @@ function captureFor(
   store: IBankTokenStore, companyType: string = CompanyTypes.OneZero,
 ): IAuthFlowCaptureParams & { readonly logger: SpyLogger } {
   const logger = spyLogger();
-  return { storeKey: STORE_KEY, companyType, store, logger };
+  return { storeKey: STORE_KEY, companyType, login: ACCOUNT_LOGIN, store, logger };
 }
 
 /**
@@ -135,6 +138,33 @@ describe('attachAuthFlowCapture', () => {
     },
   );
 
+  it('binds the stored token to the login of the attempt', async () => {
+    const { store, fileSystem } = makeStore();
+    const token = fakeToken();
+    await attachedHook(captureFor(store))({ longTermToken: token, bearer: 'b' });
+    expect(storedRecords(fileSystem)).toMatchObject({ [STORE_KEY]: { token, login: ACCOUNT_LOGIN } });
+  });
+
+  it('warns, naming the account, when the file binds the token to another login', async () => {
+    const { store, fileSystem } = makeStore();
+    const token = fakeToken();
+    seedRecords(fileSystem, { 'onezero:other': { token, capturedAt: CAPTURED_AT, login: fakeLoginFingerprint() } });
+    const params = captureFor(store);
+    await attachedHook(params)({ longTermToken: token, bearer: 'b' });
+    expect(String(params.logger.warn.mock.calls[0]?.[0]))
+      .toContain(`Could not store the long-term token for ${STORE_KEY}: the token file binds it to another login`);
+    expect(storedRecords(fileSystem)).not.toHaveProperty(STORE_KEY);
+    expect(everythingLogged(params.logger)).not.toContain(token);
+  });
+
+  it('warns, and stores nothing, when the attempt has no login to bind to', async () => {
+    const { store, fileSystem } = makeStore();
+    const params = { ...captureFor(store), login: NO_LOGIN };
+    await attachedHook(params)({ longTermToken: fakeToken(), bearer: 'b' });
+    expect(String(params.logger.warn.mock.calls[0]?.[0])).toContain('there is no login to bind it to');
+    expect(fileSystem.hasEntry(STORE_PATH)).toBe(false);
+  });
+
   it('leaves browser banks without a callback', () => {
     const { store } = makeStore();
     const target: IAuthFlowHookTarget = {};
@@ -190,7 +220,7 @@ describe('captureResultToken', () => {
     const token = fakeToken();
     const isStored = captureResultToken(resultWith(token, false), captureFor(store));
     expect(isStored).toBe(true);
-    expect(storedRecords(fileSystem)).toMatchObject({ [STORE_KEY]: { token } });
+    expect(storedRecords(fileSystem)).toMatchObject({ [STORE_KEY]: { token, login: ACCOUNT_LOGIN } });
   });
 
   it('does nothing when the result carries no token', () => {

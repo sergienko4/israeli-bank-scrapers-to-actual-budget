@@ -6,18 +6,34 @@
  * 1. OTP not attached to ScraperOptions for credentials-based banks
  * 2. OTP attached to ScraperOptions for OtpHandler banks (beinleumi)
  * 3. Deprecated provider options are never forwarded (scrapers 8.7.0)
+ * 4. Each attempt logs in with the long-term token the store vouches for
  */
 
 import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import buildCredentials from '../../../src/Scraper/CredentialsBuilder.js';
 import {
   attachOtpRetriever,
   buildBaseScraperOptions,
+  buildTokenCaptureParams,
+  initScrape,
 } from '../../../src/Scraper/Strategies/Live/ScraperSetup.js';
 import type {
   ILiveScrapeDependencies,
   IResolvedLiveOpts,
 } from '../../../src/Scraper/Strategies/Live/Types.js';
+import type { IBankTokenStore } from '../../../src/Scraper/Tokens/BankTokenStore.js';
+import loginFingerprint from '../../../src/Scraper/Tokens/LoginFingerprint.js';
+import type { IBankConfig } from '../../../src/Types/Index.js';
+import {
+  fakeImporterConfig, fakeLoginFingerprint, fakeValidBankConfigFor,
+} from '../../helpers/factories.js';
+import { fakeToken, makeStore } from '../BankTokenStoreFixture.js';
+
+vi.mock('@sergienko4/israeli-bank-scrapers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@sergienko4/israeli-bank-scrapers')>();
+  return { ...actual, createScraper: vi.fn(() => ({ scrape: vi.fn() })) };
+});
 
 describe('ScraperSetup', () => {
   describe('attachOtpRetriever (fix for paybox-double-otp)', () => {
@@ -159,6 +175,200 @@ describe('ScraperSetup', () => {
       const options = buildBaseScraperOptions(makeDeps(), opts);
 
       expect(options.defaultTimeout).toBe(60_000);
+    });
+  });
+  describe('buildTokenCaptureParams', () => {
+    /**
+     * Builds the options one OneZero attempt resolves to.
+     * @param bankConfig - The entry the attempt logs in with.
+     * @returns Resolved live options for the entry `oneZero`.
+     */
+    const oneZeroOpts = (bankConfig: IBankConfig): IResolvedLiveOpts =>
+      ({
+        companyType: CompanyTypes.OneZero, bankId: 'onezero', accountKey: 'oneZero', bankConfig,
+      }) as unknown as IResolvedLiveOpts;
+
+    /** Dependencies whose token store the bundle carries. */
+    const deps = { bankTokens: {} } as unknown as ILiveScrapeDependencies;
+
+    it('binds the capture to the fingerprint of the login the entry logs in with', () => {
+      const bankConfig = fakeValidBankConfigFor('onezero');
+      const expected = loginFingerprint(CompanyTypes.OneZero, bankConfig);
+
+      const params = buildTokenCaptureParams(deps, oneZeroOpts(bankConfig));
+
+      expect(expected.success && params.login).toBe(expected.success && expected.data);
+    });
+
+    it('carries no login for an entry with no identity to fingerprint', () => {
+      const bankConfig = fakeValidBankConfigFor('onezero', { email: '' });
+
+      const params = buildTokenCaptureParams(deps, oneZeroOpts(bankConfig));
+
+      expect(params.login).toBe('');
+    });
+  });
+
+  describe('initScrape (the long-term token an attempt sends)', () => {
+    /** One bank entry an attempt logs in with. */
+    interface IEntry {
+      readonly bankId: string;
+      readonly companyType: CompanyTypes;
+      readonly bankConfig: IBankConfig;
+      readonly otpRetriever?: () => Promise<string>;
+    }
+
+    /**
+     * Builds a logger whose every level is a spy.
+     * @returns The spy logger.
+     */
+    const spyLogger = (): IResolvedLiveOpts['logger'] =>
+      ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() });
+
+    /**
+     * Builds the dependencies one attempt reads, over a given token store.
+     * @param store - The token store the attempt reads and writes.
+     * @returns Dependencies with no Telegram prompter.
+     */
+    const liveDeps = (store: IBankTokenStore): ILiveScrapeDependencies =>
+      ({
+        config: fakeImporterConfig(), bankTokens: store, twoFactorPrompter: null,
+      }) as unknown as ILiveScrapeDependencies;
+
+    /** The config entry name every attempt here comes from. */
+    const ACCOUNT_KEY = 'primary';
+
+    /**
+     * Builds the options one attempt resolves to, from the entry {@link ACCOUNT_KEY}.
+     * @param entry - The bank entry, and optionally its OTP retriever.
+     * @returns Resolved live options with a spy logger.
+     */
+    const liveOpts = (entry: IEntry): IResolvedLiveOpts =>
+      ({ ...entry, accountKey: ACCOUNT_KEY, startDate: new Date(), logger: spyLogger() });
+
+    /**
+     * Builds a OneZero entry.
+     * @param overrides - Bank-config fields to pin.
+     * @returns The entry.
+     */
+    const oneZero = (overrides: Partial<IBankConfig> = {}): IEntry => ({
+      bankId: 'onezero', companyType: CompanyTypes.OneZero,
+      bankConfig: fakeValidBankConfigFor('onezero', overrides),
+    });
+
+    /**
+     * Names the store slot an attempt owns, written out rather than built by the
+     * code under test, so a key that dropped the entry name would miss it.
+     * @param opts - The attempt's options.
+     * @returns `bankId:accountKey`.
+     */
+    const ownKey = (opts: IResolvedLiveOpts): string => `${opts.bankId}:${ACCOUNT_KEY}`;
+
+    /**
+     * Fingerprints the login an attempt logs in with, straight from its entry.
+     * @param opts - The attempt's options.
+     * @returns The login fingerprint.
+     */
+    const ownLogin = (opts: IResolvedLiveOpts): string => {
+      const fingerprint = loginFingerprint(opts.companyType, opts.bankConfig);
+      if (!fingerprint.success) throw new Error(`no login for ${opts.bankId}: ${fingerprint.message}`);
+      return fingerprint.data;
+    };
+
+    /**
+     * Stores a fresh token in the attempt's own slot, bound to the login it logs in with.
+     * @param deps - Dependencies carrying the store.
+     * @param opts - The attempt's options.
+     * @returns The stored token.
+     */
+    const storeOwnToken = (deps: ILiveScrapeDependencies, opts: IResolvedLiveOpts): string => {
+      const token = fakeToken();
+      deps.bankTokens.write(ownKey(opts), token, ownLogin(opts));
+      return token;
+    };
+
+    /**
+     * Builds a store stub that records every read.
+     * @returns The stub and its `read` spy.
+     */
+    const readCountingStore = (): { store: IBankTokenStore; read: ReturnType<typeof vi.fn> } => {
+      const read = vi.fn();
+      const store = { read, write: vi.fn(), sweepStagedLeftovers: vi.fn() };
+      return { store: store as unknown as IBankTokenStore, read };
+    };
+
+    it.each([
+      ['onezero', CompanyTypes.OneZero],
+      ['pepper', CompanyTypes.Pepper],
+      ['paybox', CompanyTypes.PayBox],
+    ] as const)('logs %s in with the stored token bound to its login, not the configured one', (bankId, companyType) => {
+      const bankConfig = fakeValidBankConfigFor(bankId, { otpLongTermToken: fakeToken() });
+      const opts = liveOpts({ bankId, companyType, bankConfig });
+      const deps = liveDeps(makeStore().store);
+      const stored = storeOwnToken(deps, opts);
+
+      const { credentials } = initScrape(deps, opts);
+
+      expect(credentials).toHaveProperty('otpLongTermToken', stored);
+    });
+
+    it('sends no token the store binds to another login, even when one is configured', () => {
+      const opts = liveOpts(oneZero({ otpLongTermToken: fakeToken() }));
+      const deps = liveDeps(makeStore().store);
+      deps.bankTokens.write(ownKey(opts), fakeToken(), fakeLoginFingerprint());
+
+      const { credentials } = initScrape(deps, opts);
+
+      expect(credentials).not.toHaveProperty('otpLongTermToken');
+    });
+
+    it('reads the store afresh on every attempt', () => {
+      const opts = liveOpts(oneZero());
+      const deps = liveDeps(makeStore().store);
+      storeOwnToken(deps, opts);
+      initScrape(deps, opts);
+      const renewed = storeOwnToken(deps, opts);
+
+      const { credentials } = initScrape(deps, opts);
+
+      expect(credentials).toHaveProperty('otpLongTermToken', renewed);
+    });
+
+    it('never reads the token store for a browser bank', () => {
+      const { store, read } = readCountingStore();
+      const bankConfig = fakeValidBankConfigFor('discount');
+
+      initScrape(liveDeps(store), liveOpts({ bankId: 'discount', companyType: CompanyTypes.Discount, bankConfig }));
+
+      expect(read).not.toHaveBeenCalled();
+    });
+
+    it('builds a browser bank\'s credentials from its entry as configured, whatever the store holds', () => {
+      const seed = fakeToken();
+      const bankConfig = fakeValidBankConfigFor('discount', { otpLongTermToken: seed });
+      const opts = liveOpts({ bankId: 'discount', companyType: CompanyTypes.Discount, bankConfig });
+      const deps = liveDeps(makeStore().store);
+      deps.bankTokens.write('onezero:oneZero', seed, fakeLoginFingerprint());
+
+      const { credentials } = initScrape(deps, opts);
+
+      expect(credentials).toEqual(buildCredentials(bankConfig));
+    });
+
+    it('warns how to fix an attempt that has no token and cannot ask for an SMS code', () => {
+      const opts = liveOpts(oneZero());
+
+      initScrape(liveDeps(makeStore().store), opts);
+
+      expect(opts.logger.warn).toHaveBeenCalledWith(expect.stringContaining('cannot ask for an SMS code'));
+    });
+
+    it('does not warn about the fix when the attempt can ask for an SMS code', () => {
+      const opts = liveOpts({ ...oneZero(), otpRetriever: async () => '123456' });
+
+      initScrape(liveDeps(makeStore().store), opts);
+
+      expect(opts.logger.warn).not.toHaveBeenCalled();
     });
   });
 });

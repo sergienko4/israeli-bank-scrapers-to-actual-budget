@@ -20,6 +20,7 @@ import type { IScraperScrapingResult, ScraperOptions } from '@sergienko4/israeli
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExponentialBackoffRetry } from '../../src/Resilience/RetryStrategy.js';
+import loginFingerprint from '../../src/Scraper/Tokens/LoginFingerprint.js';
 import { STALE_STAGING_AGE_MS } from '../../src/Storage/SecureJsonStore.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../src/Types/Index.js';
 import { fakeUuid } from '../helpers/factories.js';
@@ -142,6 +143,17 @@ describe('E2E: long-term token capture', () => {
     expect(result.success).toBe(true);
     expect(storedTokens(store.tokensPath)).toMatchObject({ [STORE_KEY]: { token } });
     expect(statSync(store.tokensPath).mode & PERMISSION_BITS).toBe(OWNER_ONLY);
+  });
+
+  it('binds the stored token to the login of the entry that minted it', async () => {
+    const token = `lt-${fakeUuid()}`;
+    providerWill(provider.createScraper, { longTermToken: token, result: scrapedAccount() });
+
+    const { bankConfig } = await runImport();
+
+    const login = loginFingerprint('oneZero', bankConfig);
+    expect(login.success).toBe(true);
+    expect(storedTokens(store.tokensPath)[STORE_KEY]).toMatchObject({ token, login: login.success && login.data });
   });
 
   it('keeps the token minted before the scrape failed', async () => {
