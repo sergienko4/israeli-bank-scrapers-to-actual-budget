@@ -6,9 +6,11 @@
  * re-encrypting credentials.json when CREDENTIALS_ENCRYPTION_PASSWORD is set.
  * Each file is staged under an unpredictable name, created exclusively and
  * owner-only, so a symlink planted beside it is never followed. No plaintext
- * `.bak` copies are kept: the encrypted credentials.json is the only
- * persisted secret artifact, so a previously-unencrypted file (or an
- * inline-secret config.json) can never linger in plaintext beside it.
+ * `.bak` copies are kept: the previous credentials are copied aside only for
+ * the length of a save, so a failed config rename can put them back, and the
+ * copy is removed once the save is done. A previously-unencrypted file (or an
+ * inline-secret config.json) therefore never lingers in plaintext beside the
+ * encrypted credentials.json.
  *
  * It uses the port rather than SecureJsonStore: the two files are saved as
  * one unit, and config needs no quarantine because the portal refuses to
@@ -27,6 +29,7 @@ import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import { encryptConfig, getEncryptionPassword } from './ConfigEncryption.js';
 import registerConfigSecrets from './ConfigSecretValues.js';
+import CredentialsBackup from './CredentialsBackup.js';
 import splitSecrets from './SecretSplitter.js';
 
 /** A pending file write: destination path + serialized JSON payload. */
@@ -76,44 +79,79 @@ function stageOne(fileSystem: IFileSystem, item: IPendingWrite): Procedure<IStag
   return succeed(entry);
 }
 
-/**
- * Stages every file before any rename, so a failed or short stage never
- * leaves config.json secret-stripped while credentials.json lacks the same
- * secrets. Anything already staged is removed on failure.
- * @param fileSystem - Filesystem to stage on.
- * @param items - Files to save together (secrets-superset file first).
- * @returns The staged files, or the failure that stopped staging.
- */
-function stageAll(
-  fileSystem: IFileSystem,
-  items: readonly IPendingWrite[],
-): Procedure<readonly IStagedWrite[]> {
-  const staged: IStagedWrite[] = [];
-  for (const item of items) {
-    const one = stageOne(fileSystem, item);
-    if (!one.success) return abandon(fileSystem, staged, one);
-    staged.push(one.data);
-  }
-  return succeed(staged);
+/** The two files a save writes, credentials first. */
+interface IPair<T> {
+  readonly credentials: T;
+  readonly config: T;
 }
 
 /**
- * Renames each staged file into place, in order. The two renames are not a
- * single atomic transaction: a crash between them can leave one file from
- * this save and the other from the previous one.
- * @param fileSystem - Filesystem the files were staged on.
- * @param staged - Files staged in full.
- * @returns How many files were committed, or the failed rename.
+ * Stages both files before any rename, so a failed or short stage never
+ * leaves config.json secret-stripped while credentials.json lacks the same
+ * secrets. The credentials, already staged, are removed on failure.
+ * @param fileSystem - Filesystem to stage on.
+ * @param pending - The two payloads.
+ * @returns Both staged files, or the failure that stopped staging.
  */
-function publishAll(
+function stagePair(
   fileSystem: IFileSystem,
-  staged: readonly IStagedWrite[],
-): Procedure<{ committed: number }> {
-  for (const entry of staged) {
-    const moved = fileSystem.rename(entry.stagedPath, entry.path);
-    if (!moved.success) return abandon(fileSystem, staged, moved);
+  pending: IPair<IPendingWrite>,
+): Procedure<IPair<IStagedWrite>> {
+  const credentials = stageOne(fileSystem, pending.credentials);
+  if (!credentials.success) return credentials;
+  const config = stageOne(fileSystem, pending.config);
+  if (!config.success) return abandon(fileSystem, [credentials.data], config);
+  return succeed({ credentials: credentials.data, config: config.data });
+}
+
+/**
+ * Renames the credentials, then the config, into place. When the config
+ * rename fails the previous credentials are put back, so the pair on disk
+ * stays the previous save's. A crash between the two renames can still leave
+ * one file from each save: the renames are two steps, not one transaction.
+ * @param fileSystem - Filesystem the files were staged on.
+ * @param staged - Both files, staged in full.
+ * @param backup - The credentials as they stood before the save.
+ * @returns Success, or the failed rename.
+ */
+function publishPair(
+  fileSystem: IFileSystem,
+  staged: IPair<IStagedWrite>,
+  backup: CredentialsBackup,
+): Procedure<{ written: true }> {
+  const both = [staged.credentials, staged.config];
+  const credentials = fileSystem.rename(staged.credentials.stagedPath, staged.credentials.path);
+  if (!credentials.success) {
+    backup.discard();
+    return abandon(fileSystem, both, credentials);
   }
-  return succeed({ committed: staged.length });
+  const config = fileSystem.rename(staged.config.stagedPath, staged.config.path);
+  if (!config.success) {
+    const reported = backup.restoreAfter(config);
+    return abandon(fileSystem, both, reported);
+  }
+  backup.discard();
+  return succeed({ written: true as const });
+}
+
+/**
+ * Stages both files, copies the current credentials aside, then publishes.
+ * @param fileSystem - Filesystem to save on.
+ * @param pending - The two payloads.
+ * @returns Success, or the failure that stopped the save.
+ */
+function commitPair(
+  fileSystem: IFileSystem,
+  pending: IPair<IPendingWrite>,
+): Procedure<{ written: true }> {
+  const staged = stagePair(fileSystem, pending);
+  if (!staged.success) return staged;
+  const backup = CredentialsBackup.take(fileSystem, pending.credentials.path);
+  if (!backup.success) {
+    const both = [staged.data.credentials, staged.data.config];
+    return abandon(fileSystem, both, backup);
+  }
+  return publishPair(fileSystem, staged.data, backup.data);
 }
 
 /**
@@ -152,10 +190,9 @@ export default class ConfigWriter {
    */
   public write(config: IImporterConfig): Procedure<{ written: true }> {
     try {
-      const items = this.pendingWrites(config);
-      const staged = stageAll(this._fileSystem, items);
-      const committed = staged.success ? publishAll(this._fileSystem, staged.data) : staged;
-      if (committed.success) return succeed({ written: true as const });
+      const pending = this.pendingWrites(config);
+      const committed = commitPair(this._fileSystem, pending);
+      if (committed.success) return committed;
       const reason = `Failed to write config: ${committed.message}`;
       return fail(reason, { status: committed.status });
     } catch (error: unknown) {
@@ -186,18 +223,18 @@ export default class ConfigWriter {
   /**
    * Serialises the two files a save writes, credentials first.
    * @param config - The merged importer config to persist.
-   * @returns The credentials file, then config.json.
+   * @returns The credentials file and config.json.
    */
-  private pendingWrites(config: IImporterConfig): readonly IPendingWrite[] {
+  private pendingWrites(config: IImporterConfig): IPair<IPendingWrite> {
     registerConfigSecrets(config);
     const { settings, secrets } = splitSecrets(config);
     const [credPath, configPath] = this.savedPaths();
     const credJson = maybeEncrypt(secrets);
     const settingsJson = JSON.stringify(settings, null, 2);
-    return [
-      { path: credPath, json: credJson },
-      { path: configPath, json: settingsJson },
-    ];
+    return {
+      credentials: { path: credPath, json: credJson },
+      config: { path: configPath, json: settingsJson },
+    };
   }
 
   /**

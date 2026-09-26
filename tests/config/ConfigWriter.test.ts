@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync,
   writeFileSync,
@@ -87,6 +88,16 @@ describe('ConfigWriter.write', () => {
     expect(JSON.parse(readFileSync(credPath, 'utf8')).banks.discount.password).toBe('planted-pw');
   });
 
+  it.skipIf(process.platform === 'win32')('refuses to save over a FIFO at the credentials path', () => {
+    writeFileSync(configPath, '{"old":"config"}', { mode: 0o600 });
+    execFileSync('mkfifo', [credPath]);
+    const result = openConfigWriter(configPath).write(fakeImporterConfig());
+    expect(isSuccess(result)).toBe(false);
+    expect(readFileSync(configPath, 'utf8')).toBe('{"old":"config"}');
+    expect(lstatSync(credPath).isFIFO()).toBe(true);
+    expect(readdirSync(dir).sort()).toEqual(['config.json', 'credentials.json']);
+  });
+
   it('saves both files owner-only and leaves no staged file behind', () => {
     const result = openConfigWriter(configPath).write(fakeImporterConfig());
     expect(isSuccess(result)).toBe(true);
@@ -143,14 +154,15 @@ describe('ConfigWriter on the filesystem port', () => {
     else process.env.CREDENTIALS_ENCRYPTION_PASSWORD = savedEnc;
   });
 
-  it('stages each file under its own unpredictable name, credentials first', () => {
+  it('stages each file, then the credentials copy, under unpredictable names', () => {
     const fake = seededPair();
     expect(isSuccess(saveTo(fake))).toBe(true);
     expect(isSuccess(saveTo(fake))).toBe(true);
-    const [firstCreds, firstConfig, secondCreds] = fake.stagedPaths;
-    expect(fake.stagedPaths).toHaveLength(4);
+    const [firstCreds, firstConfig, backup, secondCreds] = fake.stagedPaths;
+    expect(fake.stagedPaths).toHaveLength(6);
     expect(isStagingPath(CREDS, firstCreds)).toBe(true);
     expect(isStagingPath(CONFIG, firstConfig)).toBe(true);
+    expect(isStagingPath(CREDS, backup)).toBe(true);
     expect(secondCreds).not.toBe(firstCreds);
   });
 
@@ -197,13 +209,100 @@ describe('ConfigWriter on the filesystem port', () => {
     expectPairUnchanged(fake, saveTo(fake));
   });
 
-  it('leaves config.json unchanged and nothing staged when the second rename fails', () => {
+  it('puts the previous credentials back when the config rename fails', () => {
     const fake = seededPair();
     fake.failOnCall('rename', 2, 'EACCES');
     const result = saveTo(fake);
-    expect(isSuccess(result)).toBe(false);
+    if (result.success) throw new Error('expected the config rename to fail the save');
+    expect(result.message).toBe('Failed to write config: forced rename failure');
+    expect(result.status).toBe('EACCES');
+    expectPairUnchanged(fake, result);
+    expect(fake.modeOf(CREDS)).toBe(0o600);
+  });
+
+  it('removes the new credentials when the config rename fails on a first save', () => {
+    const fake = new FakeFileSystem();
+    fake.seedFile(CONFIG, OLD_CONFIG, 0o600);
+    fake.failOnCall('rename', 2, 'EACCES');
+    expect(isSuccess(saveTo(fake))).toBe(false);
+    expect(fake.contentsOf(CONFIG)).toBe(OLD_CONFIG);
+    expect(fake.names()).toEqual([CONFIG]);
+  });
+
+  it('saves a first save without a backup, leaving only the pair', () => {
+    const fake = new FakeFileSystem();
+    fake.seedFile(CONFIG, OLD_CONFIG, 0o600);
+    expect(isSuccess(saveTo(fake))).toBe(true);
+    expect(fake.stagedPaths).toHaveLength(2);
+    expect(fake.names().sort()).toEqual([CONFIG, CREDS]);
+  });
+
+  it('names both errors, and keeps the copy, when the credentials cannot be put back', () => {
+    const fake = seededPair();
+    fake.failOnCall('rename', 2, 'EACCES');
+    fake.failOnCall('rename', 3, 'EIO');
+    const result = saveTo(fake);
+    if (result.success) throw new Error('expected the config rename to fail the save');
+    const backup = fake.stagedPaths[2];
+    expect(result.message).toBe(
+      'Failed to write config: forced rename failure; the previous credentials could not be '
+      + `put back (forced rename failure) and remain at ${backup}`,
+    );
+    expect(result.status).toBe('EACCES');
+    expect(fake.contentsOf(backup)).toBe(OLD_CREDS);
+    expect(fake.contentsOf(CONFIG)).toBe(OLD_CONFIG);
+  });
+
+  it('names both errors when the new credentials cannot be removed on a first save', () => {
+    const fake = new FakeFileSystem();
+    fake.seedFile(CONFIG, OLD_CONFIG, 0o600);
+    fake.failOnCall('rename', 2, 'EACCES');
+    fake.failOnCall('remove', 1, 'EIO');
+    const result = saveTo(fake);
+    if (result.success) throw new Error('expected the config rename to fail the save');
+    expect(result.message).toBe(
+      'Failed to write config: forced rename failure; the new credentials could not be '
+      + 'removed (forced remove failure)',
+    );
+  });
+
+  it.each([
+    ['a failed backup', (fake: FakeFileSystem): void => { fake.failOnCall('createExclusive', 3, 'ENOSPC'); }],
+    ['a short backup', (fake: FakeFileSystem): void => { fake.shortWriteOnCall(3); }],
+    ['an unreadable credentials file', (fake: FakeFileSystem): void => { fake.failOnCall('openForRead', 1, 'EACCES'); }],
+    ['a credentials read that fails', (fake: FakeFileSystem): void => { fake.failOnCall('readAll', 1, 'EIO'); }],
+    ['a credentials file that will not close', (fake: FakeFileSystem): void => { fake.failOnCall('close', 1, 'EIO'); }],
+  ])('%s stops the save before any rename', (_label, arrange) => {
+    const fake = seededPair();
+    arrange(fake);
+    expectPairUnchanged(fake, saveTo(fake));
+    expect(fake.calls).not.toContain('rename');
+  });
+
+  it.each([
+    ['a symlink', (fake: FakeFileSystem): void => { fake.seedSymlink(CREDS, '/elsewhere/victim.json'); }],
+    ['a directory', (fake: FakeFileSystem): void => { fake.seedDirectory(CREDS); }],
+  ])('refuses to save over %s at the credentials path, which is not "nothing there"', (_label, arrange) => {
+    const fake = seededPair();
+    arrange(fake);
+    expect(isSuccess(saveTo(fake))).toBe(false);
+    expect(fake.calls).not.toContain('rename');
     expect(fake.contentsOf(CONFIG)).toBe(OLD_CONFIG);
     expect(fake.names().sort()).toEqual([CONFIG, CREDS]);
+  });
+
+  it('refuses a credentials file too large to copy aside', () => {
+    const fake = seededPair();
+    fake.seedFile(CREDS, 'x'.repeat(8 * 1024 * 1024 + 1), 0o600);
+    expect(isSuccess(saveTo(fake))).toBe(false);
+    expect(fake.calls).not.toContain('rename');
+  });
+
+  it('reports success even when the copy cannot be removed afterwards', () => {
+    const fake = seededPair();
+    fake.failOnCall('remove', 1, 'EIO');
+    expect(isSuccess(saveTo(fake))).toBe(true);
+    expect(JSON.parse(fake.contentsOf(CREDS)).banks.discount.password).toBe('port-pw');
   });
 
   it('keeps the original error when the cleanup fails too', () => {
