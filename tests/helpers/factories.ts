@@ -228,6 +228,19 @@ export function fakeIAuditEntry(overrides: Partial<IAuditEntry> = {}): IAuditEnt
   };
 }
 
+/**
+ * Creates a fake audit-log entry written while the given batch ran, at its
+ * start. Use it when a test needs the entry to count as the batch's own.
+ * @param batch - The batch whose run the entry belongs to.
+ * @param overrides - Fields to override on the default entry.
+ * @returns A merged IAuditEntry object.
+ */
+export function fakeIAuditEntryDuring(
+  batch: IBatchResult, overrides: Partial<IAuditEntry> = {},
+): IAuditEntry {
+  return fakeIAuditEntry({ timestamp: new Date(batch.startedAtMs).toISOString(), ...overrides });
+}
+
 // ── Phase-3 pipeline factories ──────────────────────────────────────────────
 
 /** Permissive IBankFilter used by default in pipeline test contexts. */

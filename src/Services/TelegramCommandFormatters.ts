@@ -57,16 +57,21 @@ function formatQuarantineLine(
 }
 
 /**
- * Checks whether an audit entry was recorded during or after a batch.
+ * Checks whether an audit entry was recorded during a batch.
+ *
+ * <p>The window is closed at both ends. The next batch can start before this
+ * batch's reply is built, so an entry written after this batch ended is not
+ * taken as this batch's.
  * @param entry - The audit log entry to check.
  * @param batch - The IBatchResult whose timing to compare against.
- * @returns True if the entry timestamp is at or after the batch start.
+ * @returns True if the entry timestamp is between the batch start and end, inclusive.
  */
 export function isFreshEntry(
   entry: IAuditEntry,
   batch: IBatchResult
 ): boolean {
-  return new Date(entry.timestamp).getTime() >= batch.startedAtMs;
+  const entryMs = new Date(entry.timestamp).getTime();
+  return entryMs >= batch.startedAtMs && entryMs <= batch.startedAtMs + batch.totalDurationMs;
 }
 
 /**

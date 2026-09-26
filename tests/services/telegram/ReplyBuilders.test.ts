@@ -8,7 +8,7 @@ import {
   buildLogsHeader,
   buildStatusLines,
 } from '../../../src/Services/Telegram/ReplyBuilders.js';
-import { fakeBatchResult, fakeIAuditEntry } from '../../helpers/factories.js';
+import { fakeBatchResult, fakeIAuditEntry, fakeIAuditEntryDuring } from '../../helpers/factories.js';
 
 describe('ReplyBuilders', () => {
   describe('buildHelpLines', () => {
@@ -121,9 +121,10 @@ describe('ReplyBuilders', () => {
     });
 
     it('returns detailed reply with bank list when entry is fresh', () => {
+      const batch = fakeBatchResult({ failureCount: 1, totalDurationMs: 1000 });
       const reply = buildBatchErrorReply({
-        batch: fakeBatchResult({ failureCount: 1, totalDurationMs: 1000 }),
-        entry: fakeIAuditEntry({
+        batch,
+        entry: fakeIAuditEntryDuring(batch, {
           totalBanks: 2, successfulBanks: 1, failedBanks: 1,
           banks: [{ name: 'discount', status: 'failure', error: 'Auth', txns: 0 }],
         }),

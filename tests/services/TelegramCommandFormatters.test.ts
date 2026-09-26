@@ -197,4 +197,12 @@ describe('isFreshEntry', () => {
   it('treats an entry written before the batch started as stale', () => {
     expect(isFreshWhenAskedLate(-1)).toBe(false);
   });
+
+  it('keeps an entry written at the exact batch end fresh', () => {
+    expect(isFreshWhenAskedLate(10)).toBe(true);
+  });
+
+  it('treats an entry written after the batch ended as stale', () => {
+    expect(isFreshWhenAskedLate(11)).toBe(false);
+  });
 });
