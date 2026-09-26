@@ -61,6 +61,10 @@ reads it as damaged.
   account, once, so keep `twoFactorAuth: true` for that run. If the old file
   is still there, the run warns `The token file is damaged …`; either way it
   saves a new token.
+- An encrypted `config.json` or `credentials.json` still needs its own
+  password: a missing or wrong one stops the run at startup, before any token
+  is read. Decrypt the config, or re-encrypt it under the new password, before
+  you turn the password off or change it.
 - When you turn it on, delete `bank-tokens.json` from the data volume: its
   plain-text tokens can no longer be used. Otherwise the file stays as it is
   until the next saved token sets it aside as `bank-tokens.json.quarantined-*`,
