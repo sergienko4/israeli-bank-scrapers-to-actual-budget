@@ -186,11 +186,11 @@ replaced, and since every login revokes the token before it, the abandoned
 try's late callback could store a token the bank no longer honours.
 `pickRetryStrategy` in `src/Scraper/Strategies/Live/AttemptRunner.ts` gives
 these attempts the single-try policy it gives every 2FA bank, so a timeout
-ends the attempt. The INVALID_OTP retry starts a new attempt only after the
-first returned, so within one config entry's scrape, tokens reach the store in
-the order they were minted. A login that finishes after its try timed out is
-then the only login, and storing its token is correct; if the process exits
-first, the token is lost and the next run logs in cold.
+ends the attempt. `runWithOtpRetry` gives them no INVALID_OTP retry either,
+so one config entry's scrape makes a single attempt. A login that finishes
+after its try timed out is then the only login, and storing its token is
+correct; if the process exits first, the token is lost and the next run logs
+in cold.
 
 A failed write is logged as a warning naming the store key and the cause,
 such as `EROFS` or `ENOSPC`; a failed sweep names the directory and the cause.
@@ -201,7 +201,7 @@ nor the session bearer is logged.
 
 Before each attempt of an API-direct scrape, `resolveWarmToken` in
 `src/Scraper/Tokens/WarmTokenResolver.ts` chooses the token the login sends,
-and `credentialsFor` in `ScraperSetup.ts` hands `buildCredentials` a copy of
+and `warmLogin` in `ScraperSetup.ts` hands `buildCredentials` a copy of
 the entry that carries only that token. The store is read on every attempt;
 browser banks never read it. The order is:
 
@@ -219,14 +219,27 @@ browser banks never read it. The order is:
 
 Every doubt fails closed. No login fingerprint, and a store that cannot be read
 or throws, each give a WARN naming the key, and no token. A damaged file warns
-only when it stops a configured token from being sent: with no configured
-token the run logs in with an SMS without a warning, and a stored token the
-store can still read is sent as usual. When
+whenever it leaves the attempt with no token: when it stops a configured token
+from being sent, and when no token is configured and it holds none usable for
+the key. The store's view cannot say whose entry was damaged, so that warning
+does not claim it was this one. A stored token the store can still read is
+sent as usual, with only the INFO line. When
 no token is sent and the attempt has no OTP retriever (`twoFactorAuth` off),
 a WARN names both fixes. Upstream then fails the cold login with
 `TWO_FACTOR_RETRIEVER_MISSING`, which the importer treats as permanent and
-does not retry. The same happens, with no importer warning, when the bank
-refuses a stored token on such a run.
+does not retry.
+
+Upstream reports a refused token only to its own logger, so
+`WarmTokenWatch` in `src/Scraper/Tokens/WarmTokenWatch.ts` watches the two
+signs the importer does see. When an attempt sent a token, its OTP retriever
+warns once before a cold login asks for a code
+(`The long-term token for <key> was not accepted, so this run logs in with an
+SMS code`); upstream asks for a code only on a cold login. With no retriever
+the attempt fails with `TWO_FACTOR_RETRIEVER_MISSING`, and `settleToken` in
+`AttemptRunner.ts` warns with the `twoFactorAuth` fix. The warnings say "not
+accepted" rather than naming the bank, because upstream can also set aside a
+token it judges stale before it asks the bank. Neither warns when no token was
+sent, since the resolver has already said why.
 
 The attempt's login fingerprint is computed once, in
 `buildTokenCaptureParams`, so the resolver and the capture use the same login,

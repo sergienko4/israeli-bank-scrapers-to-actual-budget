@@ -131,14 +131,14 @@ not need to set anything.
 - **Keep `twoFactorAuth: true`.** Each SMS login creates a new token, and the
   bank stops accepting the one before it. When the bank refuses a token, the
   importer logs in with an SMS and saves the new one. With `twoFactorAuth:
-  false` it cannot ask for a code: a run with no usable token fails and logs
-  how to fix it, and a run whose token the bank refuses fails with
-  `TWO_FACTOR_RETRIEVER_MISSING`.
+  false` it cannot ask for a code: a run with no usable token, or whose token
+  the bank refuses, fails with `TWO_FACTOR_RETRIEVER_MISSING` and logs how to
+  fix it.
 - **If the file is damaged or cannot be read**, the configured
   `otpLongTermToken` is not sent, because the file cannot say whose it is.
   Tokens the importer can still read from a damaged file keep working;
-  otherwise the run logs in with an SMS. A damaged file is set aside before
-  the next token is saved.
+  otherwise the run warns and logs in with an SMS. A damaged file is set aside
+  before the next token is saved.
 - **How long a token lasts:** upstream measured one OneZero token valid for
   ten years. That is one observation, not a promise, and Pepper and PayBox
   publish none. The bank can refuse a token at any time.
@@ -159,7 +159,10 @@ the `<bank id>:<entry name>` above):
 | `Stored the long-term token for <key>` | A new token was saved. |
 | `The stored long-term token for <key> belongs to another login` | The email or phone number changed; the run logs in with one SMS. |
 | `The configured long-term token for <key> belongs to another login` | `otpLongTermToken` was not sent. |
+| `The long-term token for <key> was not accepted, so this run logs in with an SMS code` | The token was sent and refused, most often because a newer SMS login replaced it. The run logs in with one SMS and saves the new token. |
+| `The long-term token for <key> was not accepted, and this run cannot ask for an SMS code` | As above, but `twoFactorAuth` is off, so the run fails. Turn it on for one SMS login. |
 | `The token file is damaged, so the configured long-term token for <key> is not sent` | Nothing usable is saved for the entry, and the damaged file cannot say whose `otpLongTermToken` is, so it was not sent. A saved token the importer can still read from a damaged file is sent as usual, without this warning. |
+| `The token file is damaged and holds no usable long-term token for <key>` | No `otpLongTermToken` is configured and nothing usable is saved for the entry, so no token was sent and the run logs in with an SMS. |
 | `Could not read the long-term token for <key>` | The file could not be read, so no token was sent; the warning names the cause. |
 | `No usable long-term token for <key>, and this run cannot ask for an SMS code` | Turn on `twoFactorAuth` for one SMS login, or restore the token file. |
 | `Could not store the long-term token for <key>` | The next run needs an SMS; check that `/app/data` is writable. |

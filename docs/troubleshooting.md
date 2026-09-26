@@ -38,6 +38,7 @@ cap_add:
 
 - `Could not store the long-term token`: the warning names the cause, most often a data volume that is not writable (`EROFS`, `EACCES`). Mount `/app/data` read/write, or point `BANK_TOKENS_PATH` at a writable file.
 - `belongs to another login`: the entry's email or phone number changed. That costs one SMS, then the new token is used.
+- `was not accepted`: the token was sent and refused, most often because a newer SMS login for the same account replaced it. The run logs in with one SMS and saves the new token. With `twoFactorAuth: false` it cannot, so the run fails and the warning says to turn it on.
 - `The token file is damaged`: the importer sets the file aside when it saves the next token, so this costs at most one SMS.
 - `Could not read the long-term token`: the warning names the cause, such as a permission error. Fix it so the importer can read and write the file.
 - Two `banks` entries that log in to the same account: each SMS login makes the bank refuse the other entry's token. Keep one entry per login.
@@ -54,8 +55,31 @@ second prompt arrives before any new SMS does.
 **Fix:** upgrade — the importer now reuses the code you supplied for PayBox's
 second internal request, so one login prompts once. See
 [PayBox](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md).
-If a prompt times out or the bank rejects the code, you are asked again with a
-fresh code — that re-prompt is expected.
+If the bank rejects the code, this run asks for no new code, so a wrong code is
+never re-sent. See the next section.
+
+## "OTP rejected … this run asks for no new code"
+
+**Symptom:** after you enter a code for OneZero, Pepper or PayBox, the log shows
+`OTP rejected for <bank> — this run asks for no new code`, and a notification
+says the code was rejected.
+
+**Cause:** the bank refused the code, for example because of a typo or because
+it expired. For these banks the importer asks for at most one code per run, so
+it does not ask again. Other banks still ask for a fresh code in the same run.
+
+**Fix:** run the import again and enter the new code.
+
+## "This run already used its one SMS login"
+
+**Symptom:** a OneZero, Pepper or PayBox import fails with `This run already
+used its one SMS login and will not send a second code`.
+
+**Cause:** the bank library allows one SMS login per run for these banks. The
+run's SMS login did not give it a working session, and a second login would
+need a second code, so the library stopped.
+
+**Fix:** run the import again. The new run may ask for one new code.
 
 ## One bank failed but the notification says the import failed
 
