@@ -23,20 +23,21 @@ When the channel is `app` and Telegram is also configured, a timed-out app OTP a
 ### Configuration
 
 - Choose the channel from the mobile app (OTP delivery → App). It is stored server-side, outside the config manifest, so the web portal never shows it.
-- The importer and portal coordinate through two files on the shared data volume (defaults shown; override via environment):
-  - `OTP_REQUESTS_PATH` — pending OTP requests (default `/app/data/otp-requests.json`)
+- The importer and portal coordinate through files on the shared data volume (defaults shown; override via environment):
+  - `OTP_REQUESTS_PATH` — where OTP requests are kept (default `/app/data/otp-requests.json`). Each request is its own file beside this path, `otp-requests.<id>.json`, and its answer is `otp-requests.<id>.answer.json`.
   - `OTP_SETTINGS_PATH` — the selected channel (default `/app/data/otp-settings.json`)
-- Both files are owner-only (`0600`) and replaced atomically. Run the same release on the importer and the portal, and do not roll back: an earlier release reads this release's `otp-requests.json` as empty. See [Upgrade both services together](configuration/portal.md#upgrade-both-services-together).
+- Every file is owner-only (`0600`) and appears whole or not at all. A request's answer is written once, by whichever comes first: the portal with your code, or the importer marking the request expired. The OTP files need a data volume with hard links. Local disks and Docker volumes have them; an SMB/CIFS share such as Azure Files does not. There a bank login that asks for an app code fails with the storage error (it does not fall back to Telegram), and the portal answers a submitted code with 500.
+- Run the same release on the importer and the portal, and do not roll back: an earlier release does not see this release's requests. See [Upgrade both services together](configuration/portal.md#upgrade-both-services-together).
 
 ### Portal endpoints (used by the app)
 
 - `GET /api/otp/pending` — list pending OTP requests (never returns codes)
-- `POST /api/otp/:id` — submit a 4–8 digit code for a request
+- `POST /api/otp/:id` — submit a 4–8 digit code for a request. `404` means the request is gone, expired or already answered; `400` means the id or the code is malformed
 - `GET /api/otp/settings` / `PUT /api/otp/settings` — read or set the channel
 
 ### Security
 
-- Codes are written to the shared request file only briefly between submission and use, are single-use, expire with the request (default 5 minutes), and are never logged.
+- A code stays on disk only between submission and use: once the importer takes it, the answer is overwritten with a marker that keeps the request answered. Codes are single-use, expire with the request (default 5 minutes), and are never logged. When either service starts, it removes requests and answers an hour past their deadline, so a code nobody used leaves the disk too.
 - All OTP endpoints sit behind the portal's authentication, and request ids are unguessable UUIDs.
 
 ---

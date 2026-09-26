@@ -59,7 +59,7 @@ const AUDIT_FIXTURE = [
 /** One live, unanswered request, so the populated shape is exercised. */
 const OTP_FIXTURE = [
   {
-    id: 'req-1',
+    id: '0f0e0d0c-0b0a-4908-8706-050403020100',
     bankId: 'hapoalim',
     createdAt: 1_700_000_000_000,
     deadline: Date.now() + 300_000,
@@ -97,7 +97,9 @@ describe('portal payload identity', () => {
     process.env.OTP_REQUESTS_PATH = join(dir, 'otp-requests.json');
     process.env.OTP_SETTINGS_PATH = join(dir, 'otp-settings.json');
     writeFileSync(process.env.AUDIT_LOG_PATH, JSON.stringify(AUDIT_FIXTURE));
-    writeFileSync(process.env.OTP_REQUESTS_PATH, JSON.stringify(OTP_FIXTURE));
+    const [pendingRequest] = OTP_FIXTURE;
+    const requestFile = join(dir, `otp-requests.${pendingRequest.id}.json`);
+    writeFileSync(requestFile, JSON.stringify(pendingRequest), { mode: 0o600 });
     const seed = seedConfigDir();
     app = await buildPortal(fakePortalRuntime(), new PortalConfigStore(seed.path));
     rmSync(seed.dir, { recursive: true, force: true });

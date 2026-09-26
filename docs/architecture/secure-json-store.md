@@ -1,8 +1,9 @@
 # SecureJsonStore threat model
 
 `src/Storage/SecureJsonStore.ts` persists bank authentication tokens, and five
-more files on the data volume: the import history, pending OTP requests, the
-OTP channel, push device tokens and the portal's app sign-ins. A token is a bearer
+more kinds of file on the data volume: the import history, OTP requests and
+their answers (one file each), the OTP channel, push device tokens and the
+portal's app sign-ins. A token is a bearer
 credential: anything that can read it can act as the account holder until it
 expires, and one of them is valid for ten years. The store is therefore
 written defensively, and this page records what each guard is for.
@@ -104,8 +105,8 @@ store in place, which is already one of the two outcomes `commit` promises.
 
 Some stores were written as a bare JSON list before they moved onto this
 primitive. Such a store passes a `legacyList` name to the constructor: the
-import history passes `entries`, the device tokens and the app sign-ins
-(`app-tokens.json`) pass `tokens`, and the OTP requests `requests`. A file whose root is a list is then read as one healthy
+import history passes `entries`, and the device tokens and the app sign-ins
+(`app-tokens.json`) pass `tokens`. A file whose root is a list is then read as one healthy
 record of that name, and the next commit writes the records form, so nothing
 the list held is lost. Nothing else changes: any other root that is not an
 object is still damage, and threat 24 still refuses a list at the root of
@@ -145,6 +146,14 @@ leftover there may belong to a writer that is still running. Only staged files
 older than an hour are removed, so a sweep leaves alone a file another process
 is writing now. A failed sweep is a warning, and a missing directory counts as
 clean.
+
+The OTP sweep goes further, because an OTP request and its answer are finished
+files, not leftovers, and an answer can hold an unused code. Each goes an hour
+after the deadline it carries, or an hour after its last write when no
+deadline can be read. The combined `otp-requests.json` an older release wrote
+goes an hour after its last write too. Nothing else beside the OTP files is
+touched: a name only counts as an OTP file when the id in it is a lower-case
+UUID.
 
 ## Test layers
 

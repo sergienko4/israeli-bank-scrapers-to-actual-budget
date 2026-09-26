@@ -34,7 +34,10 @@ export const PENDING_OTP_BODY = Type.Object({
 
 /** Path parameters for the submit route. */
 export const OTP_SUBMIT_PARAMS = Type.Object({
-  id: Type.String({ minLength: 1, description: 'Id of the request being answered.' }),
+  id: Type.String({
+    pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    description: 'Id of the request being answered: the lower-case UUID the pending list gave.',
+  }),
 });
 
 /** The POST /api/otp/:id request body. */

@@ -515,11 +515,17 @@ via Expo Push. Set **`DEVICE_TOKENS_PATH`** to a shared-volume path (for example
 ### Upgrade both services together
 
 Run the same release on the importer and the portal, and do not roll back.
-The import history, `devices.json` and `otp-requests.json` are now saved as a
-JSON object (for example `{"entries": […]}`) instead of a bare list. This
-release reads the old lists and converts each file on its next write, but an
-earlier release reads the new files as empty. An older portal that registers a
-device would then rewrite `devices.json` with only that device.
+The import history and `devices.json` are now saved as a JSON object (for
+example `{"entries": […]}`) instead of a bare list. This release reads the old
+lists and converts each file on its next write, but an earlier release reads
+the new files as empty. An older portal that registers a device would then
+rewrite `devices.json` with only that device.
+
+App OTP requests now live in one file per request beside `otp-requests.json`,
+and an earlier release does not see them. A request pending during the upgrade
+is not carried over: the bank login waiting for it times out, and the next
+import asks again. The old `otp-requests.json` is removed an hour after its
+last write.
 
 These files are owner-only (`0600`), so both services must run as the same
 user. The shipped image runs both as `node`.

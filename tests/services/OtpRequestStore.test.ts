@@ -1,4 +1,13 @@
-import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+/**
+ * {@link OtpRequestStore} on a real disk, as the portal and the importer use it:
+ * two store instances, one per process, over one directory.
+ *
+ * <p>The in-memory suite proves the protocol. This one proves the names line up
+ * with a real directory listing, the files really are owner-only, and the
+ * exclusive publish really refuses a taken name.
+ */
+
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,101 +16,80 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import OtpRequestStore from '../../src/Services/TwoFactor/OtpRequestStore.js';
 import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 
+/** The code the user submits. */
+const CODE = '123456';
+
 let dir: string;
-let store: OtpRequestStore;
+let importer: OtpRequestStore;
+let portal: OtpRequestStore;
 
 /**
- * Path to the OTP-requests file in the current temp dir.
- * @returns The absolute file path.
+ * Reads every file in the directory as text.
+ * @returns The contents of each file.
  */
-function requestsPath(): string {
-  return join(dir, 'otp-requests.json');
+function allContents(): string[] {
+  return readdirSync(dir).map((name) => readFileSync(join(dir, name), 'utf8'));
 }
 
-describe('OtpRequestStore', () => {
+/**
+ * Reads a file's permission bits.
+ * @param name - File name inside the directory.
+ * @returns The mode's permission bits.
+ */
+function modeOf(name: string): number {
+  return statSync(join(dir, name)).mode & 0o777;
+}
+
+describe('OtpRequestStore on a real filesystem', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'otp-'));
-    store = new OtpRequestStore(createNodeFileSystem(), requestsPath());
+    importer = new OtpRequestStore(createNodeFileSystem(), join(dir, 'otp-requests.json'));
+    portal = new OtpRequestStore(createNodeFileSystem(), join(dir, 'otp-requests.json'));
   });
 
   afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('lists no pending requests when no file exists', () => {
-    expect(store.pending()).toEqual([]);
-    expect(store.get('missing')).toBeNull();
+  it('lists no pending requests in an empty directory', () => {
+    expect(portal.pending()).toEqual([]);
   });
 
-  it('creates a pending request and returns it without a code', () => {
-    const created = store.create('leumi', 60_000, 1_000);
-    expect(created.bankId).toBe('leumi');
-    expect(created.code).toBeUndefined();
-    const pending = store.pending(1_000);
-    expect(pending).toHaveLength(1);
-    expect(pending[0]?.id).toBe(created.id);
+  it('lists no pending requests when the directory does not exist', () => {
+    const missing = new OtpRequestStore(createNodeFileSystem(), join(dir, 'gone', 'otp-requests.json'));
+    expect(missing.pending()).toEqual([]);
   });
 
-  it('writes the requests file owner-only on disk', () => {
-    store.create('leumi', 60_000, 1_000);
-    expect(statSync(requestsPath()).mode & 0o777).toBe(0o600);
+  it('carries a code from the portal to the importer, leaving it nowhere on disk', () => {
+    const created = importer.create('leumi', 60_000);
+    expect(modeOf(`otp-requests.${created.id}.json`)).toBe(0o600);
+    expect(portal.pending().map((request) => request.bankId)).toEqual(['leumi']);
+    expect(portal.submit(created.id, CODE)).toBe(true);
+    expect(modeOf(`otp-requests.${created.id}.answer.json`)).toBe(0o600);
+    expect(portal.pending()).toEqual([]);
+    expect(importer.poll(created)).toEqual({ kind: 'code', code: CODE });
+    expect(readdirSync(dir)).toEqual([`otp-requests.${created.id}.answer.json`]);
+    expect(allContents().filter((text) => text.includes(CODE))).toEqual([]);
+    expect(portal.submit(created.id, '654321')).toBe(false);
   });
 
-  it('reads a created request by id', () => {
-    const created = store.create('hapoalim', 60_000, 1_000);
-    expect(store.get(created.id)?.bankId).toBe('hapoalim');
+  it('refuses a code once the importer has recorded the expiry', () => {
+    const created = importer.create('leumi', 60_000, 1_000);
+    expect(importer.poll(created, 61_000)).toEqual({ kind: 'expired' });
+    writeFileSync(join(dir, `otp-requests.${created.id}.json`), JSON.stringify(created), { mode: 0o600 });
+    expect(portal.submit(created.id, CODE, 2_000)).toBe(false);
+    expect(allContents().filter((text) => text.includes(CODE))).toEqual([]);
   });
 
-  it('submits a code, hides it from pending, and exposes it via get', () => {
-    const created = store.create('leumi', 60_000, 1_000);
-    expect(store.submit(created.id, '123456', 2_000)).toBe(true);
-    expect(store.pending(2_000)).toEqual([]);
-    expect(store.get(created.id)?.code).toBe('123456');
+  it('hands the importer a code the portal published just before the deadline', () => {
+    const created = importer.create('leumi', 60_000, 1_000);
+    expect(portal.submit(created.id, CODE, 60_999)).toBe(true);
+    expect(importer.poll(created, 61_000)).toEqual({ kind: 'code', code: CODE });
   });
 
-  it('rejects a submit for an unknown id', () => {
-    expect(store.submit('nope', '123456')).toBe(false);
-  });
-
-  it('rejects a submit for an expired request', () => {
-    const created = store.create('leumi', 10_000, 1_000);
-    expect(store.submit(created.id, '123456', 999_999)).toBe(false);
-  });
-
-  it('rejects a second submit for an already-submitted request', () => {
-    const created = store.create('leumi', 60_000, 1_000);
-    store.submit(created.id, '111111', 2_000);
-    expect(store.submit(created.id, '222222', 3_000)).toBe(false);
-    expect(store.get(created.id)?.code).toBe('111111');
-  });
-
-  it('removes a request', () => {
-    const created = store.create('leumi', 60_000, 1_000);
-    store.remove(created.id);
-    expect(store.get(created.id)).toBeNull();
-  });
-
-  it('excludes expired requests from pending', () => {
-    store.create('leumi', 10_000, 1_000);
-    expect(store.pending(999_999)).toEqual([]);
-  });
-
-  it('prunes expired requests when a new one is created', () => {
-    const stale = store.create('leumi', 10_000, 1_000);
-    const fresh = store.create('discount', 60_000, 999_999);
-    expect(store.get(stale.id)).toBeNull();
-    expect(store.get(fresh.id)?.bankId).toBe('discount');
-  });
-
-  it('returns empty on a corrupt file', () => {
-    writeFileSync(requestsPath(), 'not-json');
-    expect(store.pending()).toEqual([]);
-  });
-
-  it('ignores malformed entries', () => {
-    writeFileSync(requestsPath(), JSON.stringify([{ id: 'x' }, 42, { id: 'ok', bankId: 'b', createdAt: 1, deadline: 9_999_999_999_999 }]));
-    const pending = store.pending(1_000);
-    expect(pending).toHaveLength(1);
-    expect(pending[0]?.id).toBe('ok');
+  it('ignores the combined file an older release wrote', () => {
+    const legacy = { requests: [{ id: 'old', bankId: 'leumi', createdAt: 1, deadline: 9e15 }] };
+    writeFileSync(join(dir, 'otp-requests.json'), JSON.stringify(legacy), { mode: 0o600 });
+    expect(portal.pending()).toEqual([]);
   });
 });
