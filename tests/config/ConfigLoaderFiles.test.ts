@@ -61,6 +61,16 @@ describe('ConfigLoader on real files', () => {
     expect(mockLogger.info).toHaveBeenCalledWith(CREDENTIALS_LOG);
   });
 
+  it('does not give a bank an inherited value from a __proto__ key in credentials.json', () => {
+    writeFileSync(configPath, '{"banks":{"leumi":{"id":"1"}}}');
+    writeFileSync(credPath, '{"banks":{"leumi":{"__proto__":{"password":"planted"}}}}');
+    const loaded = new ConfigLoader(configPath).loadRaw();
+    if (!isSuccess(loaded)) throw new Error(loaded.message);
+    const bank = loaded.data.banks.leumi;
+    expect(Object.getPrototypeOf(bank)).toBe(Object.prototype);
+    expect('password' in bank).toBe(false);
+  });
+
   it('loads config.json alone when there is no credentials.json', () => {
     writeFileSync(configPath, '{"delayBetweenBanks":3}');
     const loaded = new ConfigLoader(configPath).loadRaw();

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import deepMerge from '../../src/Config/Loaders/ConfigMerger.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import { fakeBankConfig } from '../helpers/factories.js';
 
 /**
  * Builds a minimal valid IImporterConfig for use as a merge baseline.
@@ -144,5 +145,35 @@ describe('ConfigMerger deepMerge', () => {
     });
     expect(merged.banks.discount?.id).toBe('d-id');
     expect(merged.banks.leumi?.username).toBe('l-user');
+  });
+});
+
+describe('ConfigMerger deepMerge with a __proto__ key in the source', () => {
+  it('does not let it become the prototype of the merged config', () => {
+    const source = JSON.parse('{"__proto__": {"password": "planted"}}') as Partial<IImporterConfig>;
+    const merged = deepMerge(baseConfig(), source);
+    expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
+    expect('password' in merged).toBe(false);
+  });
+
+  it('does not let it become the prototype of a bank', () => {
+    const bank = fakeBankConfig();
+    const target: IImporterConfig = { ...baseConfig(), banks: { leumi: bank } };
+    const source = JSON.parse(
+      '{"banks": {"leumi": {"__proto__": {"otpLongTermToken": "planted"}}}}',
+    ) as Partial<IImporterConfig>;
+    const merged = deepMerge(target, source).banks.leumi;
+    expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
+    expect('otpLongTermToken' in merged).toBe(false);
+    expect(merged).toEqual(bank);
+  });
+
+  it('still merges the keys beside it', () => {
+    const target: IImporterConfig = { ...baseConfig(), banks: { leumi: fakeBankConfig() } };
+    const source = JSON.parse(
+      '{"banks": {"leumi": {"__proto__": {"id": "planted"}, "password": "real"}}}',
+    ) as Partial<IImporterConfig>;
+    const merged = deepMerge(target, source).banks.leumi;
+    expect(Object.hasOwn(merged, 'password') && merged.password).toBe('real');
   });
 });
