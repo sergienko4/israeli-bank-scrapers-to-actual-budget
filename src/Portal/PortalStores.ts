@@ -7,6 +7,8 @@
  * the request arrives.
  */
 
+import type { AuditLogService } from '../Services/AuditLogService.js';
+import openAuditLog from '../Services/AuditLogWiring.js';
 import type DeviceTokenStore from '../Services/Notifications/DeviceTokenStore.js';
 import openDeviceTokenStore from '../Services/Notifications/DeviceTokenStoreWiring.js';
 import type OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
@@ -14,6 +16,8 @@ import openOtpSettingsStore from '../Services/TwoFactor/OtpSettingsStoreWiring.j
 
 /** One factory per runtime store the portal reads or writes. */
 export interface IPortalStores {
+  /** Opens the import-run history the status route reads. */
+  readonly auditLog: () => AuditLogService;
   /** Opens the mobile app's device-token store. */
   readonly devices: () => DeviceTokenStore;
   /** Opens the OTP delivery-channel store. */
@@ -26,6 +30,7 @@ export interface IPortalStores {
  */
 export default function openPortalStores(): IPortalStores {
   const stores: IPortalStores = {
+    auditLog: openAuditLog,
     devices: openDeviceTokenStore,
     otpSettings: openOtpSettingsStore,
   };

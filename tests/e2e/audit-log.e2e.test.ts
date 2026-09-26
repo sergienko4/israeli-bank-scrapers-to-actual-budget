@@ -3,13 +3,14 @@ import { existsSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { createTestSummary } from './helpers/testData.js';
 
 const TEST_FILE = join(tmpdir(), `e2e-audit-log-${Date.now()}.json`);
 let service: AuditLogService;
 
 beforeEach(() => {
-  service = new AuditLogService(TEST_FILE, 5);
+  service = new AuditLogService(createNodeFileSystem(), TEST_FILE, 5);
   if (existsSync(TEST_FILE)) unlinkSync(TEST_FILE);
 });
 

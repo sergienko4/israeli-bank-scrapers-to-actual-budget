@@ -3,6 +3,7 @@ import TelegramNotifier from '../../src/Services/Notifications/TelegramNotifier.
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
 import { ImportMediator } from '../../src/Services/ImportMediator.js';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { createLogger } from '../../src/Logger/Index.js';
 import { createTestSummary } from './helpers/testData.js';
 import {
@@ -63,7 +64,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
   it('delivers /status response with audit history', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    auditLog = new AuditLogService(auditFile, 10);
+    auditLog = new AuditLogService(createNodeFileSystem(), auditFile, 10);
     auditLog.record(createTestSummary());
 
     handler = new TelegramCommandHandler({
@@ -204,7 +205,7 @@ describe.runIf(HAS_TELEGRAM)('Telegram Commands E2E', () => {
   it('delivers /retry with failed banks message to Telegram', async () => {
     collector.startCapturing();
     const notifier = new TelegramNotifier(config);
-    auditLog = new AuditLogService(auditFile, 10);
+    auditLog = new AuditLogService(createNodeFileSystem(), auditFile, 10);
     auditLog.record(createTestSummary({
       banks: [
         { bankName: 'discount', startTime: 0, status: 'failure', error: 'INVALID_PASSWORD', transactionsImported: 0, transactionsSkipped: 0, accounts: [] },

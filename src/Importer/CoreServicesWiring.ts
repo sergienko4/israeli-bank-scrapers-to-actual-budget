@@ -15,7 +15,8 @@ import api from '@actual-app/api';
 
 import { createDateRangePolicy } from '../Scraper/Policies/DateRangePolicy.js';
 import { AccountImporter } from '../Services/AccountImporter.js';
-import { AuditLogService } from '../Services/AuditLogService.js';
+import type { AuditLogService } from '../Services/AuditLogService.js';
+import openAuditLog from '../Services/AuditLogWiring.js';
 import { DryRunCollector } from '../Services/DryRunCollector.js';
 import HistoryCategoryResolver from '../Services/HistoryCategoryResolver.js';
 import type { ICategoryResolver } from '../Services/ICategoryResolver.js';
@@ -99,7 +100,7 @@ export function buildCoreServices(config: IImporterConfig): ICoreServices {
     transactionService: new TransactionService(api, categoryResolver),
     reconciliationService: new ReconciliationService(api),
     metrics: new MetricsService(),
-    auditLog: new AuditLogService(),
+    auditLog: openAuditLog(),
     notificationService: new NotificationService(config.notifications),
     twoFactorPrompter,
   };

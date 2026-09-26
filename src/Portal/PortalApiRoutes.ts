@@ -10,7 +10,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { BANK_REQUIREMENTS, CONFIG_MANIFEST } from '../Config/ConfigManifest.js';
 import { getLogger } from '../Logger/Index.js';
 import { DEFAULT_BANK_REGISTRY } from '../Scraper/BankRegistry.js';
-import { AuditLogService } from '../Services/AuditLogService.js';
 import type DeviceTokenStore from '../Services/Notifications/DeviceTokenStore.js';
 import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
@@ -54,7 +53,7 @@ export default function registerApiRoutes(
   app.get('/api/manifest', (_req, reply) => reply.send(MANIFEST_PAYLOAD));
   registerConfigRoutes(app, store);
   registerBankRoutes(app, store);
-  registerStatusRoute(app);
+  registerStatusRoute(app, stores);
   registerDeviceRoutes(app, stores);
   registerValidateRoute(app, store);
   registerOtpRoutes(app, stores);
@@ -64,12 +63,13 @@ export default function registerApiRoutes(
 /**
  * Registers the read-only import-status route (recent redacted run summaries).
  * @param app - Fastify instance.
+ * @param stores - Factories for the runtime stores the routes serve.
  * @returns Confirmation that the status route is registered.
  */
-function registerStatusRoute(app: FastifyInstance): { registered: true } {
+function registerStatusRoute(app: FastifyInstance, stores: IPortalStores): { registered: true } {
   const typed = app.withTypeProvider<TypeBoxTypeProvider>();
   typed.get('/api/status', STATUS_ROUTE, () => {
-    const recent = new AuditLogService().getRecent(STATUS_HISTORY);
+    const recent = stores.auditLog().getRecent(STATUS_HISTORY);
     return { runs: isFail(recent) ? [] : recent.data };
   });
   return { registered: true };

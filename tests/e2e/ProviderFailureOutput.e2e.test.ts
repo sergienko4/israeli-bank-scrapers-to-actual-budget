@@ -46,6 +46,7 @@ import type { INotifier } from '../../src/Services/Notifications/INotifier.js';
 import { formatSummaryMessage } from '../../src/Services/Notifications/TelegramFormatter.js';
 import { formatWebhookSummary } from '../../src/Services/Notifications/Webhook/Index.js';
 import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandler.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
 import { fakeImporterConfig, fakePipelineConfig } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
@@ -236,7 +237,7 @@ async function runFailedImport(directory: string, failure: IProviderFailure): Pr
   const logDir = join(directory, 'logs');
   const logger = createLogger({ logDir });
   const auditPath = join(directory, 'audit-log.json');
-  const auditLog = new AuditLogService(auditPath, 10);
+  const auditLog = new AuditLogService(createNodeFileSystem(), auditPath, 10);
   const metrics = new MetricsService();
   const bankConfig = loadedBankConfig(directory);
   const sent: string[] = [];

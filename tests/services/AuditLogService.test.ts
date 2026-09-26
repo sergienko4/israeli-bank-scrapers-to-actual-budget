@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'fs';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import { createAuditQuery } from '../../src/Services/Telegram/AuditQuery.js';
 import { buildBatchErrorReply } from '../../src/Services/Telegram/BatchFailureReply.js';
 import { buildHistoryLines } from '../../src/Services/Telegram/ReplyBuilders.js';
@@ -67,7 +68,7 @@ describe('AuditLogService', () => {
   beforeEach(() => {
     fixtureCount += 1;
     TEST_FILE = join(TEST_DIR, `audit-${String(fixtureCount)}.json`);
-    service = new AuditLogService(TEST_FILE, 5);
+    service = new AuditLogService(createNodeFileSystem(), TEST_FILE, 5);
   });
 
   afterEach(() => {
@@ -87,24 +88,29 @@ describe('AuditLogService', () => {
 
   it('records entry with correct fields', () => {
     service.record(fakeImportSummary({ totalTransactions: 10, successRate: 75 }));
-    const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+    const { entries } = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries).toHaveLength(1);
     expect(entries[0].totalTransactions).toBe(10);
     expect(entries[0].successRate).toBe(75);
     expect(entries[0].timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it('writes the audit log owner-only on disk', () => {
+    service.record(fakeImportSummary());
+    expect(statSync(TEST_FILE).mode & 0o777).toBe(0o600);
+  });
+
   it('appends multiple entries', () => {
     service.record(fakeImportSummary());
     service.record(fakeImportSummary());
     service.record(fakeImportSummary());
-    const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+    const { entries } = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries).toHaveLength(3);
   });
 
   it('rotates entries when exceeding maxEntries', () => {
     for (let i = 0; i < 7; i++) service.record(fakeImportSummary({ totalTransactions: i }));
-    const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+    const { entries } = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries).toHaveLength(5);
     expect(entries[0].totalTransactions).toBe(2); // oldest kept
     expect(entries[4].totalTransactions).toBe(6); // newest
@@ -130,7 +136,7 @@ describe('AuditLogService', () => {
   it('handles corrupted file gracefully', () => {
     writeFileSync(TEST_FILE, 'not json');
     service.record(fakeImportSummary());
-    const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+    const { entries } = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries).toHaveLength(1);
   });
 
@@ -142,7 +148,7 @@ describe('AuditLogService', () => {
       }]
     });
     service.record(summary);
-    const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+    const { entries } = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries[0].banks[0]).toEqual({ name: 'discount', status: 'success', txns: 5 });
   });
 
@@ -155,7 +161,7 @@ describe('AuditLogService', () => {
       }]
     });
     service.record(summary);
-    const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+    const { entries } = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries[0].banks[0].reconciliationStatus).toBe('created');
     expect(entries[0].banks[0].reconciliationAmount).toBe(1500);
   });
@@ -168,7 +174,7 @@ describe('AuditLogService', () => {
       }]
     });
     service.record(summary);
-    const entries = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+    const { entries } = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
     expect(entries[0].banks[0]).not.toHaveProperty('reconciliationStatus');
     expect(entries[0].banks[0]).not.toHaveProperty('reconciliationAmount');
   });
@@ -264,7 +270,7 @@ describe('AuditLogService', () => {
     const badPath = join(tmpdir(), 'audit-test-dir-' + String(Date.now()));
     mkdirSync(badPath);
     try {
-      const badService = new AuditLogService(badPath, 5);
+      const badService = new AuditLogService(createNodeFileSystem(), badPath, 5);
       const result = badService.record(fakeImportSummary());
       expect(result.success).toBe(false);
       if (!result.success) expect(result.message).toContain('audit write failed');
@@ -275,7 +281,7 @@ describe('AuditLogService', () => {
 
   it('record catch block handles non-Error thrown values', () => {
     const badPath = join(tmpdir(), 'audit-test-nonexist-' + String(Date.now()), 'nested', 'file.json');
-    const badService = new AuditLogService(badPath, 5);
+    const badService = new AuditLogService(createNodeFileSystem(), badPath, 5);
     const result = badService.record(fakeImportSummary());
     expect(result.success).toBe(false);
     if (!result.success) expect(result.message).toContain('audit write failed');
@@ -365,7 +371,7 @@ describe('AuditLogService', () => {
       const unreadable = [{ timestamp: 'x' }, null];
       writeFileSync(TEST_FILE, JSON.stringify(unreadable));
       service.record(fakeImportSummary());
-      const stored: unknown[] = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+      const stored: unknown[] = JSON.parse(readFileSync(TEST_FILE, 'utf8')).entries;
       expect(stored.slice(0, 2)).toEqual(unreadable);
       expect(stored).toHaveLength(3);
     });
