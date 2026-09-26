@@ -36,6 +36,9 @@ const PEPPER = 'pepper:family';
 /** The one message every failed write gives; it names nothing secret. */
 const SEAL_FAILURE = 'the token file could not be sealed';
 
+/** The whole failure a write returns: no cause and no details, so no secret rides along. */
+const SEAL_FAILED_RESULT = { success: false, status: 'error', message: SEAL_FAILURE };
+
 /** A sealed entry as it sits in the file. */
 type Sealed = Record<string, unknown>;
 
@@ -288,7 +291,7 @@ describe('TokenRecordCipher', () => {
         throw new Error(`pbkdf2 refused ${TEST_ENCRYPTION_KEY} for ${record.login}`);
       });
       const sealed = createTokenRecordCipher(TEST_ENCRYPTION_KEY).sealRecords({ [ONE_ZERO]: record });
-      expect(sealed).toMatchObject({ success: false, message: SEAL_FAILURE });
+      expect(sealed).toStrictEqual(SEAL_FAILED_RESULT);
     });
 
     it('returns the fixed failure, and does not throw, when a record cannot be sealed', () => {
@@ -297,7 +300,7 @@ describe('TokenRecordCipher', () => {
         throw new Error(`cipher refused ${record.token} for ${record.login}`);
       });
       const sealed = createTokenRecordCipher(TEST_ENCRYPTION_KEY).sealRecords({ [ONE_ZERO]: record });
-      expect(sealed).toMatchObject({ success: false, message: SEAL_FAILURE });
+      expect(sealed).toStrictEqual(SEAL_FAILED_RESULT);
     });
 
     it('opens nothing, and does not throw, when the key cannot be derived', () => {
