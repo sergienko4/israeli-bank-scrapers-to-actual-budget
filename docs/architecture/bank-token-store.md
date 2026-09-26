@@ -201,7 +201,7 @@ nor the session bearer is logged.
 
 Before each attempt of an API-direct scrape, `resolveWarmToken` in
 `src/Scraper/Tokens/WarmTokenResolver.ts` chooses the token the login sends,
-and `warmLogin` in `ScraperSetup.ts` hands `buildCredentials` a copy of
+and `warmLogin` in `AttemptLogin.ts` hands `buildCredentials` a copy of
 the entry that carries only that token. The store is read on every attempt;
 browser banks never read it. The order is:
 
