@@ -1,12 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { IAuditEntry } from '../../src/Services/AuditLogService.js';
 import { AuditLogService } from '../../src/Services/AuditLogService.js';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'fs';
 import { createAuditQuery } from '../../src/Services/Telegram/AuditQuery.js';
 import { buildBatchErrorReply } from '../../src/Services/Telegram/BatchFailureReply.js';
+import { buildHistoryLines } from '../../src/Services/Telegram/ReplyBuilders.js';
+import { formatAuditEntry } from '../../src/Services/TelegramCommandFormatters.js';
 import type { IBatchResult } from '../../src/Types/Index.js';
-import { fakeBatchResult, fakeImportJobResult, fakeImportSummary } from '../helpers/factories.js';
+import { succeed } from '../../src/Types/Index.js';
+import {
+  fakeBatchResult, fakeIAuditEntryDuring, fakeImportJobResult, fakeImportSummary, malformedAuditFiles,
+} from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
 // A fixed path under the shared C:\tmp loses races against the Windows virus
@@ -38,6 +44,21 @@ function removeQuietly(target: string, recursive = false): void {
     // A fixture that cannot be removed is exactly the transient lock this
     // helper exists to absorb.
   }
+}
+
+/**
+ * Builds the Telegram failure reply for a batch the way the import executor does.
+ * @param batch - The completed batch.
+ * @param log - The audit log to read the batch's entries from.
+ * @returns The reply text.
+ */
+function replyFor(batch: IBatchResult, log: AuditLogService): string {
+  const audit = createAuditQuery(log);
+  const fresh = audit.getFreshEntryFor(batch);
+  return buildBatchErrorReply({
+    batch, entry: fresh.success ? fresh.data : undefined,
+    entries: audit.getFreshEntriesFor(batch), auditLog: log,
+  });
 }
 
 describe('AuditLogService', () => {
@@ -326,7 +347,7 @@ describe('AuditLogService', () => {
     });
 
     it('keeps rows that carry no error text unchanged', () => {
-      const rows = [{ name: 'leumi', status: 'success', txns: 3 }, { name: 'max', status: 'failure', txns: 0, error: 7 }, null];
+      const rows = [{ name: 'leumi', status: 'success', txns: 3 }, { name: 'max', status: 'failure', txns: 0, error: 7 }];
       seedLegacyEntry(rows);
       const result = service.getRecent(1);
       expect(result.success).toBe(true);
@@ -340,11 +361,13 @@ describe('AuditLogService', () => {
       if (result.success) expect(result.data).toEqual([]);
     });
 
-    it('keeps an entry without a bank list instead of dropping the log', () => {
-      writeFileSync(TEST_FILE, JSON.stringify([{ timestamp: 'x' }, null]));
-      const result = service.getRecent(5);
-      expect(result.success).toBe(true);
-      if (result.success) expect(result.data).toEqual([{ timestamp: 'x' }, null]);
+    it('keeps unreadable entries in the file when it records the next run', () => {
+      const unreadable = [{ timestamp: 'x' }, null];
+      writeFileSync(TEST_FILE, JSON.stringify(unreadable));
+      service.record(fakeImportSummary());
+      const stored: unknown[] = JSON.parse(readFileSync(TEST_FILE, 'utf8'));
+      expect(stored.slice(0, 2)).toEqual(unreadable);
+      expect(stored).toHaveLength(3);
     });
   });
 
@@ -376,12 +399,7 @@ describe('AuditLogService', () => {
         jobs: [fakeImportJobResult(jobLabel, 1)], totalDurationMs: 60_000, failureCount: 1,
       });
       seedOwnThenLater(batch);
-      const audit = createAuditQuery(service);
-      const fresh = audit.getFreshEntryFor(batch);
-      const reply = buildBatchErrorReply({
-        batch, entry: fresh.success ? fresh.data : undefined,
-        entries: audit.getFreshEntriesFor(batch), auditLog: service,
-      });
+      const reply = replyFor(batch, service);
       expect(reply).toContain(batchError);
       expect(reply).not.toContain(laterError);
     });
@@ -395,6 +413,43 @@ describe('AuditLogService', () => {
       const audit = createAuditQuery(service);
       expect(audit.getFreshEntryFor(batch).success).toBe(true);
       expect(audit.getFreshEntriesFor(batch)).toHaveLength(1);
+    });
+  });
+
+  describe('malformed entries in the file', () => {
+    const goodError = 'INVALID_PASSWORD — Form: Invalid username or code';
+    const batch = fakeBatchResult({
+      jobs: [fakeImportJobResult('oneZero', 1)], totalDurationMs: 60_000, failureCount: 1,
+    });
+    const good: IAuditEntry = fakeIAuditEntryDuring(batch, {
+      banks: [{ name: 'oneZero', status: 'failure', txns: 0, error: goodError }],
+    });
+    const files = malformedAuditFiles(good);
+
+    it.each(files)('getRecent returns only the readable entry beside %s', (_label, file) => {
+      writeFileSync(TEST_FILE, JSON.stringify(file));
+      expect(service.getRecent(5)).toEqual(succeed([good]));
+    });
+
+    it.each(files)('the failure reply shows the bank\'s error beside %s', (_label, file) => {
+      writeFileSync(TEST_FILE, JSON.stringify(file));
+      expect(replyFor(batch, service)).toContain(goodError);
+    });
+
+    it.each(files)('/status lists only the readable run beside %s', (_label, file) => {
+      writeFileSync(TEST_FILE, JSON.stringify(file));
+      const lines = buildHistoryLines(createAuditQuery(service).getRecent(5));
+      expect(lines).toEqual(['', '<b>Recent imports:</b>', formatAuditEntry(good)]);
+    });
+
+    it.each(files)('the failure streak counts only the readable run beside %s', (_label, file) => {
+      writeFileSync(TEST_FILE, JSON.stringify(file));
+      expect(service.getConsecutiveFailures('oneZero')).toEqual(succeed(1));
+    });
+
+    it.each(files)('/retry uses the newest run only when it is readable, beside %s', (_label, file, newestReadable) => {
+      writeFileSync(TEST_FILE, JSON.stringify(file));
+      expect(service.getLastFailedBanks()).toEqual(succeed(newestReadable ? ['oneZero'] : []));
     });
   });
 });

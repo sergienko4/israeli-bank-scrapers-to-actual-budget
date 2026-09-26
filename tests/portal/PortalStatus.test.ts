@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
+import { fakeIAuditEntry, malformedAuditFiles } from '../helpers/factories.js';
 import { fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 
@@ -96,5 +97,18 @@ describe('Portal /api/status', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('OneZero login failed');
     expect(res.body).not.toContain(TEST_CREDENTIAL);
+  });
+
+  const good = fakeIAuditEntry({ banks: [{ name: 'leumi', status: 'success', txns: 3 }] });
+  it.each(malformedAuditFiles(good))('lists only the readable run beside %s', async (_label, file) => {
+    const auditDir = mkdtempSync(join(tmpdir(), 'audit-'));
+    process.env.AUDIT_LOG_PATH = join(auditDir, 'audit-log.json');
+    writeFileSync(process.env.AUDIT_LOG_PATH, JSON.stringify(file), 'utf8');
+
+    const cookie = await loginCookie();
+    const res = await app.inject({ method: 'GET', url: '/api/status', cookies: { portal_session: cookie } });
+    rmSync(auditDir, { recursive: true, force: true });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ runs: [good] });
   });
 });

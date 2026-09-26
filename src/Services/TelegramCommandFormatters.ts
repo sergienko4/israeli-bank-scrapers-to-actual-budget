@@ -62,8 +62,7 @@ function formatQuarantineLine(
  * <p>The window is closed at both ends. The next batch can start before this
  * batch's reply is built, so an entry written after this batch ended is not
  * taken as this batch's.
- * @param entry - The audit log entry to check; a malformed one read from the
- *   file is never fresh.
+ * @param entry - The audit log entry to check.
  * @param batch - The IBatchResult whose timing to compare against.
  * @returns True if the entry timestamp is between the batch start and end, inclusive.
  */
@@ -71,8 +70,7 @@ export function isFreshEntry(
   entry: IAuditEntry,
   batch: IBatchResult
 ): boolean {
-  const timestamp = (entry as Partial<IAuditEntry> | null)?.timestamp;
-  const entryMs = new Date(timestamp ?? '').getTime();
+  const entryMs = new Date(entry.timestamp).getTime();
   return entryMs >= batch.startedAtMs && entryMs <= batch.startedAtMs + batch.totalDurationMs;
 }
 

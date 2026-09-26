@@ -241,6 +241,25 @@ export function fakeIAuditEntryDuring(
   return fakeIAuditEntry({ timestamp: new Date(batch.startedAtMs).toISOString(), ...overrides });
 }
 
+/**
+ * Lists audit files that hold one readable entry beside something malformed,
+ * as a hand edit or an older release can leave them. The third item of each
+ * case says whether the newest stored entry is the readable one.
+ * @param good - The readable entry.
+ * @returns Cases of [label, file content, newest entry is readable].
+ */
+export function malformedAuditFiles(
+  good: IAuditEntry,
+): readonly (readonly [string, readonly unknown[], boolean])[] {
+  return [
+    ['a null entry', [good, null], false],
+    ['an entry without banks', [good, { ...good, banks: undefined }], false],
+    ['an entry without a timestamp', [good, { ...good, timestamp: undefined }], false],
+    ['a null bank row', [{ ...good, banks: [...good.banks, null] }], true],
+    ['a bank row that is not an object', [{ ...good, banks: [...good.banks, 'leumi'] }], true],
+  ];
+}
+
 // ── Phase-3 pipeline factories ──────────────────────────────────────────────
 
 /** Permissive IBankFilter used by default in pipeline test contexts. */

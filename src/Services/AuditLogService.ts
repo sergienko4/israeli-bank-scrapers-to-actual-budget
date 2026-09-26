@@ -70,14 +70,15 @@ export class AuditLogService implements IAuditLog {
   }
 
   /**
-   * Returns the most recent audit entries up to the requested count.
-   * @param count - Maximum number of entries to return.
+   * Returns the readable entries among the most recent ones stored, up to the
+   * requested count. An unreadable entry still takes its place in the count.
+   * @param count - Maximum number of stored entries to read.
    * @returns Procedure containing an array of IAuditEntry objects, most recent last.
    */
   public getRecent(count: number): Procedure<IAuditEntry[]> {
-    const entries = this.loadEntries();
-    const sliced = entries.slice(-count);
-    return succeed(sliced);
+    const sliced = this.loadEntries().slice(-count);
+    const readable = AuditLogService.readableEntries(sliced);
+    return succeed(readable);
   }
 
   /**
@@ -160,6 +161,42 @@ export class AuditLogService implements IAuditLog {
       return entries.map(entry => AuditLogService.maskEntry(entry));
     }
     catch { return []; }
+  }
+
+  /**
+   * Keeps the entries every reader can use: objects with a string timestamp and
+   * a list of banks. Rows that are not objects are left out. A hand edit or an
+   * older release can leave anything in the file, and one such entry used to
+   * break /status, /retry, the failure reply and the portal. The file itself
+   * is not changed.
+   * @param entries - Entries as parsed from the file, which may be malformed.
+   * @returns The readable entries in stored order.
+   */
+  private static readableEntries(entries: readonly IAuditEntry[]): IAuditEntry[] {
+    const readable = entries.filter(entry => AuditLogService.isReadableEntry(entry));
+    return readable.map(entry => {
+      const banks = entry.banks.filter(bank => AuditLogService.isObject(bank));
+      return { ...entry, banks };
+    });
+  }
+
+  /**
+   * Tells whether a parsed entry has the fields every reader relies on.
+   * @param entry - An entry as parsed from the file, which may be malformed.
+   * @returns True when the entry has a string timestamp and a list of banks.
+   */
+  private static isReadableEntry(entry: IAuditEntry): boolean {
+    const candidate = entry as Partial<IAuditEntry> | null;
+    return typeof candidate?.timestamp === 'string' && Array.isArray(candidate.banks);
+  }
+
+  /**
+   * Tells whether a parsed value is an object a reader can take fields from.
+   * @param value - A value as parsed from the file.
+   * @returns True for any object other than null.
+   */
+  private static isObject(value: unknown): boolean {
+    return typeof value === 'object' && value !== null;
   }
 
   /**

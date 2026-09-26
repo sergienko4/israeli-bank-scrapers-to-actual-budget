@@ -465,7 +465,9 @@ The importer writes the audit log and the portal reads it, so both must agree on
 the file. Set **`AUDIT_LOG_PATH`** to a path on a **shared volume** (for example
 `/app/config/audit-log.json`) on both the importer and the portal service; it
 defaults to `/app/data/audit-log.json`. The payload is a redacted summary — no
-account numbers, transaction details, or credentials.
+account numbers, transaction details, or credentials. A stored run without a
+timestamp or a bank list, such as one a hand edit left, is left out of the list,
+and so is a bank row that is not an object; the file itself is not changed.
 
 ### Register for push notifications
 
