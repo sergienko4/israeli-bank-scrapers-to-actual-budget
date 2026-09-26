@@ -78,8 +78,9 @@ binding never moves.
 ## At rest
 
 With `CREDENTIALS_ENCRYPTION_PASSWORD` (or the legacy `CONFIG_PASSWORD`) set,
-the file holds no token, login or capture time in plain text. Each record is
-sealed on its own, so a damaged record costs only that account:
+every file the store writes holds no token, login or capture time in plain
+text. Each record is sealed on its own, so a damaged record costs only that
+account:
 
 ```json
 {
@@ -124,11 +125,13 @@ fails closed in the same way:
 | None | Plain text | The record |
 
 So turning the password on, turning it off or changing it costs one SMS per
-account, once. Turning it on leaves the old plain-text file behind as
+account, once. The store rewrites the file only when it saves a token, so a
+plain-text file stays at `bank-tokens.json` until then, and after that as
 `bank-tokens.json.quarantined-*`, because a quarantine renames the file rather
-than rewriting it. Delete those files by hand after that run. The store never
-deletes a quarantined file, since after other damage it can hold the only copy
-of a token.
+than rewriting it. Its tokens are unusable under the password either way, so
+delete `bank-tokens.json` when turning the password on, or the quarantined copy
+later. The store never deletes a quarantined file, since after other damage it
+can hold the only copy of a token.
 
 ## Reading
 

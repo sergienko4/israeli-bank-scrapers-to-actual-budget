@@ -58,10 +58,13 @@ record itself; do not run `encrypt-config.js` on that file, or the importer
 reads it as damaged.
 
 - Turning the password on or off, or changing it, costs one SMS login per
-  account, once, so keep `twoFactorAuth: true` for that run. The run warns
-  `The token file is damaged …` and saves a new token.
-- Turning it on leaves the old plain-text file on the data volume as
-  `bank-tokens.json.quarantined-*`. Delete it after that run.
+  account, once, so keep `twoFactorAuth: true` for that run. If the old file
+  is still there, the run warns `The token file is damaged …`; either way it
+  saves a new token.
+- When you turn it on, delete `bank-tokens.json` from the data volume: its
+  plain-text tokens can no longer be used. Otherwise the file stays as it is
+  until the next saved token sets it aside as `bank-tokens.json.quarantined-*`,
+  which you then delete.
 
 The [token store design](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md)
 shows the sealed layout.

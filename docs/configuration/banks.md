@@ -140,11 +140,12 @@ not need to set anything.
   otherwise the run warns and logs in with an SMS. A damaged file is set aside
   before the next token is saved.
 - **With a config password** (`CREDENTIALS_ENCRYPTION_PASSWORD`), each token
-  is sealed in the file under it, so a copy of the file gives no token away.
-  Turning the password on or off, or changing it, makes the saved tokens
-  unreadable: each account logs in with one SMS, then uses its new token.
-  Turning it on leaves the old plain-text file as
-  `bank-tokens.json.quarantined-*`; delete it. See
+  the importer saves is sealed under it, so a copy of the file gives no token
+  away. Turning the password on or off, or changing it, makes the saved tokens
+  unreadable: each account logs in with one SMS, then uses its new token. When
+  you turn it on, delete `bank-tokens.json`: its plain-text tokens can no
+  longer be used, and the importer sets the file aside, as
+  `bank-tokens.json.quarantined-*`, only when it next saves a token. See
   [Encrypted config](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/encrypted-config.md).
 - **How long a token lasts:** upstream measured one OneZero token valid for
   ten years. That is one observation, not a promise, and Pepper and PayBox

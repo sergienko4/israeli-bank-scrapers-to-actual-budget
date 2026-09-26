@@ -39,7 +39,7 @@ cap_add:
 - `Could not store the long-term token`: the warning names the cause, most often a data volume that is not writable (`EROFS`, `EACCES`). Mount `/app/data` read/write, or point `BANK_TOKENS_PATH` at a writable file.
 - `belongs to another login`: the entry's email or phone number changed. That costs one SMS, then the new token is used.
 - `was not accepted`: the token was sent and refused, most often because a newer SMS login for the same account replaced it. The run logs in with one SMS and saves the new token. With `twoFactorAuth: false` it cannot, so the run fails and the warning says to turn it on.
-- `The token file is damaged`: the importer sets the file aside when it saves the next token, so this costs at most one SMS. It also appears once after the config password is turned on, off or changed.
+- `The token file is damaged`: the importer sets the file aside when it saves the next token, so this costs at most one SMS per account. If the old file is kept when the config password is turned on, off or changed, it also appears until the importer saves the first new token; each account then needs at most one SMS.
 - `Could not read the long-term token`: the warning names the cause, such as a permission error. Fix it so the importer can read and write the file.
 - Two `banks` entries that log in to the same account: each SMS login makes the bank refuse the other entry's token. Keep one entry per login.
 
