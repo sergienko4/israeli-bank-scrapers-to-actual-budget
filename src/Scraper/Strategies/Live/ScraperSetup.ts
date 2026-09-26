@@ -5,7 +5,7 @@
 
 import { existsSync, rmSync } from 'node:fs';
 
-import type { ScraperCredentials, ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
+import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
 import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 
 import type { IBankConfig } from '../../../Types/Index.js';
@@ -19,6 +19,8 @@ import {
 import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
 import loginFingerprint from '../../Tokens/LoginFingerprint.js';
 import resolveWarmToken from '../../Tokens/WarmTokenResolver.js';
+import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
+import { watchRetriever } from '../../Tokens/WarmTokenWatch.js';
 import { BrowserRegistry } from './BrowserRegistry.js';
 import { resolveOtpRetriever } from './OtpRetriever.js';
 import type {
@@ -45,8 +47,8 @@ type ProviderScraper = ILiveProviderScraper;
  * token an attempt sends is read under the key and login it is stored under.
  * @param deps - Strategy dependencies captured by the public facade.
  * @param scrapeOpts - Resolved scrape options for the current bank.
- * @returns Configured provider scraper and credentials, and whether its
- *   login callback stores a durable token.
+ * @returns Configured provider scraper and credentials, the watch on the
+ *   token they carry, and whether its login callback stores a durable token.
  */
 export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLiveScrape {
   const retriever = resolveOtpRetriever(deps, scrapeOpts);
@@ -55,8 +57,8 @@ export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLi
   const hasTokenCapture = attachAuthFlowCapture(options, captureParams);
   const browsers = captureBrowsers(options);
   const scraper = prepareScraper(scrapeOpts, options);
-  const credentials = credentialsFor(captureParams, scrapeOpts.bankConfig, retriever);
-  return { scraper, credentials, browsers, hasTokenCapture };
+  const login = credentialsFor(captureParams, scrapeOpts.bankConfig, retriever);
+  return { scraper, ...login, browsers, hasTokenCapture };
 }
 
 /**
@@ -70,24 +72,57 @@ function captureBrowsers(options: ScraperOptions): BrowserRegistry {
   return browsers;
 }
 
+/** The credentials one attempt logs in with, and the watch on the token they carry. */
+type AttemptLogin = Pick<IInitializedLiveScrape, 'credentials' | 'tokenWatch'>;
+
 /**
  * Builds the credentials one attempt logs in with.
  *
- * API-direct entries carry only a long-term token the store vouches for,
- * read afresh on every attempt. Browser banks never read the store, so
- * their entry is used as configured.
+ * API-direct entries go through {@link warmLogin}. Browser banks never read
+ * the store, so their entry is used as configured and sends no token.
  * @param captureParams - Account key, login, store and logger for this attempt.
  * @param bankConfig - The entry as configured.
  * @param retriever - The attempt's OTP retriever, when it can ask for an SMS code.
- * @returns Provider credentials for this attempt.
+ * @returns Provider credentials for this attempt, and whether they carry a token.
  */
 function credentialsFor(
   captureParams: IAuthFlowCaptureParams, bankConfig: IBankConfig, retriever: OtpRetriever,
-): ScraperCredentials {
-  if (!isApiDirectBank(captureParams.companyType)) return buildCredentials(bankConfig, retriever);
+): AttemptLogin {
+  if (isApiDirectBank(captureParams.companyType)) {
+    return warmLogin(captureParams, bankConfig, retriever);
+  }
+  const tokenWatch = watchOf(captureParams, false);
+  return { credentials: buildCredentials(bankConfig, retriever), tokenWatch };
+}
+
+/**
+ * Builds an API-direct attempt's credentials from the token the store vouches for.
+ *
+ * The token is read afresh on every attempt. When one is sent, the retriever
+ * warns before a cold login asks for a code, since that means it was not accepted.
+ * @param captureParams - Account key, login, store and logger for this attempt.
+ * @param bankConfig - The entry as configured.
+ * @param retriever - The attempt's OTP retriever, when it can ask for an SMS code.
+ * @returns Provider credentials for this attempt, and whether they carry a token.
+ */
+function warmLogin(
+  captureParams: IAuthFlowCaptureParams, bankConfig: IBankConfig, retriever: OtpRetriever,
+): AttemptLogin {
   const canAskForOtp = retriever !== undefined;
   const loginConfig = resolveWarmToken(captureParams, { bankConfig, canAskForOtp });
-  return buildCredentials(loginConfig, retriever);
+  const tokenWatch = watchOf(captureParams, loginConfig.otpLongTermToken !== undefined);
+  const watched = watchRetriever(tokenWatch, retriever);
+  return { credentials: buildCredentials(loginConfig, watched), tokenWatch };
+}
+
+/**
+ * Builds the watch on the token one attempt sends.
+ * @param captureParams - Account key and logger for this attempt.
+ * @param sentToken - Whether the attempt's credentials carry a long-term token.
+ * @returns The attempt's token watch.
+ */
+function watchOf(captureParams: IAuthFlowCaptureParams, sentToken: boolean): IWarmTokenWatch {
+  return { storeKey: captureParams.storeKey, logger: captureParams.logger, sentToken };
 }
 
 /**

@@ -88,6 +88,15 @@ function said(spy: SpyLogger['info']): string {
   return JSON.stringify(spy.mock.calls);
 }
 
+/**
+ * Lists the warnings a run gave about a token it sent and the bank did not accept.
+ * @param run - The run.
+ * @returns Each such warning, in order.
+ */
+function notAcceptedWarnings(run: IRun): string[] {
+  return run.logger.warn.mock.calls.map(([line]) => String(line)).filter((line) => line.includes('was not accepted'));
+}
+
 const refusals: IRefusal[] = [
   { why: 'a revoked', refuse: (bank, bankConfig): void => { bank.revoke(bankConfig); } },
   { why: 'an expired', refuse: (bank, bankConfig): void => { bank.expire(bankConfig); } },
@@ -186,6 +195,45 @@ describe.each(API_DIRECT_BANKS)('E2E: long-term token replay, $name', (row: IApi
     expect([refused.smsCount, replaced.smsCount]).toEqual([1, 0]);
     expect(bank.sent).toEqual([undefined, bank.minted[0], bank.minted[1]]);
     expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[1]);
+  });
+
+  it.each(refusals)('warns once that $why token was not accepted, so the run logs in with an SMS', async ({
+    refuse,
+  }) => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    refuse(bank, entry);
+
+    const refused = await importOnce(FIRST, entry);
+
+    expect(notAcceptedWarnings(refused)).toEqual([
+      `  ⚠️  The long-term token for ${keyOf(FIRST)} was not accepted, so this run logs in with an SMS code`,
+    ]);
+  });
+
+  it.each(refusals)('says how to fix it when $why token is not accepted and twoFactorAuth is off', async ({
+    refuse,
+  }) => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    refuse(bank, entry);
+
+    const stuck = await importOnce(FIRST, { ...entry, twoFactorAuth: false });
+
+    expect(notAcceptedWarnings(stuck)).toEqual([
+      `  ⚠️  The long-term token for ${keyOf(FIRST)} was not accepted, and this run cannot ask for an SMS code: `
+      + 'turn on twoFactorAuth for one SMS login',
+    ]);
+  });
+
+  it('gives no such warning when the token is accepted, or when none is sent', async () => {
+    const entry = bank.customer();
+    const cold = await importOnce(FIRST, entry);
+    const warm = await importOnce(FIRST, entry);
+    const moved = await importOnce(FIRST, bank.movedTo(entry));
+
+    expect([cold, warm, moved].map((run) => run.smsCount)).toEqual([1, 0, 1]);
+    expect([cold, warm, moved].flatMap(notAcceptedWarnings)).toEqual([]);
   });
 
   it.each(refusals)('fails with no SMS for $why token when twoFactorAuth is off, keeping the token', async ({

@@ -9,6 +9,8 @@ import type { IRetryStrategy } from '../../../Resilience/RetryStrategy.js';
 import type { IBankConfig, IRawScrape, Procedure } from '../../../Types/Index.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../../Types/Index.js';
 import { captureResultToken, isApiDirectBank, sweepTokenLeftovers } from '../../Tokens/AuthFlowCapture.js';
+import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
+import { warnIfNotAccepted } from '../../Tokens/WarmTokenWatch.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
 import { RetryableProviderFailure, throwIfRetryable } from './ProviderFailure.js';
 import {
@@ -117,12 +119,35 @@ async function handleOtpReject(
 async function executeAttempt(
   deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts,
 ): Promise<IScraperScrapingResult> {
-  const { hasTokenCapture, ...prepared } = initScrape(deps, scrapeOpts);
+  const { hasTokenCapture, tokenWatch, ...prepared } = initScrape(deps, scrapeOpts);
   const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig, hasTokenCapture);
   const label = `Scraping ${scrapeOpts.bankId}`;
   const params = { deps, ...prepared, logger: scrapeOpts.logger, label };
   const result = await runAttemptThenSeal(retryStrategy, params);
-  return keepMintedToken(deps, scrapeOpts, result);
+  return settleToken(deps, scrapeOpts, { result, tokenWatch });
+}
+
+/** An attempt's provider result, and the watch on the token it sent. */
+interface IFinishedAttempt {
+  readonly result: IScraperScrapingResult;
+  readonly tokenWatch: IWarmTokenWatch;
+}
+
+/**
+ * Acts on what an attempt's result says about its token.
+ *
+ * Warns when a sent token did not log in and the run could not ask for a
+ * code, then stores any token the result carried.
+ * @param deps - Strategy dependencies exposing the token store.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @param attempt - The attempt's result and token watch.
+ * @returns The attempt's result, unchanged.
+ */
+function settleToken(
+  deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts, attempt: IFinishedAttempt,
+): IScraperScrapingResult {
+  warnIfNotAccepted(attempt.tokenWatch, attempt.result);
+  return keepMintedToken(deps, scrapeOpts, attempt.result);
 }
 
 /**

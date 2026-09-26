@@ -16,6 +16,7 @@ import type { ITwoFactorPrompter } from '../../../Services/ITwoFactorPrompter.js
 import type NotificationService from '../../../Services/NotificationService.js';
 import type { IBankConfig, IImporterConfig } from '../../../Types/Index.js';
 import type { IBankTokenStore } from '../../Tokens/BankTokenStore.js';
+import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
 import type { BrowserRegistry } from './BrowserRegistry.js';
 
@@ -64,6 +65,8 @@ export interface IInitializedLiveScrape {
   readonly browsers: BrowserRegistry;
   /** True when the login callback stores the durable token each login mints. */
   readonly hasTokenCapture: boolean;
+  /** Whether the credentials carry a long-term token, so a refusal can warn. */
+  readonly tokenWatch: IWarmTokenWatch;
 }
 
 /** Timeout wrapper input bundle for one provider scrape invocation. */
