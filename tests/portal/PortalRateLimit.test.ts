@@ -57,8 +57,9 @@ describe('PortalRateLimit app routes', () => {
     app = Fastify({ logger: false });
     await app.register(rateLimit, { global: false });
     registerAppAuthRoutes(app, { live, codes, sessionOf: () => fail('No session') });
-    registerAppTokenRoutes(app, { live, codes, tokens });
-    registerAppRefreshRoutes(app, { live, tokens });
+    const openTokens = (): AppTokenStore => tokens;
+    registerAppTokenRoutes(app, { live, codes, openTokens });
+    registerAppRefreshRoutes(app, { live, openTokens });
     await app.ready();
   });
   afterEach(async () => {

@@ -39,6 +39,13 @@ export const DEFAULT_REFRESH_TTL_DAYS = 60;
 /** What a new token family inherits from the authorization that created it. */
 export type TokenGrant = Pick<IAppTokenRecord, 'deviceName' | 'email' | 'factors' | 'fingerprint'>;
 
+/**
+ * Opens the refresh-token store with the lifetime the tokens it issues get.
+ * Callers pass the live lifetime per request, so a changed setting applies to
+ * the next token without a restart; tokens already issued keep their expiry.
+ */
+export type AppTokenOpener = (ttlDays: number) => AppTokenStore;
+
 /** A freshly minted refresh token, returned to the client exactly once. */
 export interface IIssuedToken {
   record: IAppTokenRecord;

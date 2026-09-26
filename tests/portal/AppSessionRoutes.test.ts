@@ -68,7 +68,7 @@ describe('AppSessionRoutes', () => {
     runtime = fakePortalRuntime();
     tokens = new AppTokenStore(createNodeFileSystem(), join(dir, 'app-tokens.json'));
     app = Fastify({ logger: false });
-    registerAppSessionRoutes(app, { live: () => runtime, tokens });
+    registerAppSessionRoutes(app, { live: () => runtime, openTokens: () => tokens });
     await app.ready();
   });
   afterEach(async () => {
@@ -169,7 +169,7 @@ describe('AppSessionRoutes', () => {
       heldId = issue().record.id;
       fileSystem.forcedFailures.set('openForRead', 'EACCES');
       app = Fastify({ logger: false });
-      registerAppSessionRoutes(app, { live: () => runtime, tokens });
+      registerAppSessionRoutes(app, { live: () => runtime, openTokens: () => tokens });
       await app.ready();
     });
 

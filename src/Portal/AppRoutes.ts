@@ -1,9 +1,10 @@
 /**
  * Composition point for the app sign-in routes. The authorize, token and
  * refresh families only work together if they share one authorization-code
- * table and one refresh-token store, so both are obtained here once and
- * handed to each family rather than created per route. The token store comes
- * from the portal's store bag, the same one the start sweep uses.
+ * table and one refresh-token file, so the code table and the store opener are
+ * obtained here once and handed to each family. The opener comes from the
+ * portal's store bag, the same one the start sweep uses; each request opens
+ * the store with the live refresh-token lifetime.
  */
 
 import type { FastifyInstance } from 'fastify';
@@ -39,10 +40,10 @@ export default function registerAppRoutes(
 ): { registered: true } {
   const { live, sessionOf } = deps;
   const codes = new AppAuthCodes();
-  const tokens = deps.stores.appTokens();
+  const openTokens = deps.stores.appTokens;
   registerAppAuthRoutes(app, { live, codes, sessionOf });
-  registerAppTokenRoutes(app, { live, codes, tokens });
-  registerAppRefreshRoutes(app, { live, tokens });
-  registerAppSessionRoutes(app, { live, tokens });
+  registerAppTokenRoutes(app, { live, codes, openTokens });
+  registerAppRefreshRoutes(app, { live, openTokens });
+  registerAppSessionRoutes(app, { live, openTokens });
   return { registered: true };
 }

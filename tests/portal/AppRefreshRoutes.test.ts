@@ -14,6 +14,7 @@ import { fakePortalConfig, fakePortalRuntime } from '../helpers/portalFactories.
 import FakeFileSystem from '../storage/FakeFileSystem.js';
 
 const REDIRECT = 'bankimporter://auth';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 let app: FastifyInstance;
 let tokens: AppTokenStore;
@@ -65,9 +66,12 @@ describe('AppRefreshRoutes', () => {
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), 'app-refresh-'));
     runtime = enabledRuntime();
-    tokens = new AppTokenStore(createNodeFileSystem(), join(dir, 'app-tokens.json'));
+    const path = join(dir, 'app-tokens.json');
+    tokens = new AppTokenStore(createNodeFileSystem(), path);
+    const openTokens = (ttlDays: number): AppTokenStore =>
+      new AppTokenStore(createNodeFileSystem(), path, ttlDays);
     app = Fastify({ logger: false });
-    registerAppRefreshRoutes(app, { live: () => runtime, tokens });
+    registerAppRefreshRoutes(app, { live: () => runtime, openTokens });
     await app.ready();
   });
   afterEach(async () => {
@@ -140,6 +144,16 @@ describe('AppRefreshRoutes', () => {
     expect(res.json().error).toBe('invalid_grant');
   });
 
+  it('rotates into a token that lives as long as the live config says', async () => {
+    const app7 = { enabled: true, redirectUris: [REDIRECT], refreshTokenTtlDays: 7 };
+    runtime = fakePortalRuntime({ portal: fakePortalConfig({ authMode: 'password', app: app7 }) });
+    const token = issueToken();
+    const res = await post('/auth/app/refresh', { refreshToken: token });
+    expect(res.statusCode).toBe(200);
+    const [rotated] = tokens.list();
+    expect(rotated.expiresAt - rotated.issuedAt).toBe(7 * DAY_MS);
+  });
+
   it('revokes a refresh token and everything issued alongside it', async () => {
     const token = issueToken();
     const res = await post('/auth/app/revoke', { refreshToken: token });
@@ -171,7 +185,7 @@ describe('AppRefreshRoutes', () => {
       unreadableToken = issueToken();
       fileSystem.forcedFailures.set('openForRead', 'EACCES');
       app = Fastify({ logger: false });
-      registerAppRefreshRoutes(app, { live: () => runtime, tokens: seeded });
+      registerAppRefreshRoutes(app, { live: () => runtime, openTokens: () => seeded });
       await app.ready();
     });
 

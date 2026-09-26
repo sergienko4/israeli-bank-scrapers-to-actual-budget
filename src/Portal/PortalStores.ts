@@ -17,13 +17,13 @@ import type OtpRequestStore from '../Services/TwoFactor/OtpRequestStore.js';
 import openOtpRequestStore from '../Services/TwoFactor/OtpRequestStoreWiring.js';
 import type OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
 import openOtpSettingsStore from '../Services/TwoFactor/OtpSettingsStoreWiring.js';
-import type { AppTokenStore } from './AppTokenStore.js';
+import { type AppTokenOpener, DEFAULT_REFRESH_TTL_DAYS } from './AppTokenStore.js';
 import openAppTokenStore from './AppTokenStoreWiring.js';
 
 /** One factory per runtime store the portal reads or writes. */
 export interface IPortalStores {
-  /** Opens the mobile app's refresh-token store. */
-  readonly appTokens: () => AppTokenStore;
+  /** Opens the mobile app's refresh-token store with the live token lifetime. */
+  readonly appTokens: AppTokenOpener;
   /** Opens the import-run history the status route reads. */
   readonly auditLog: () => AuditLogService;
   /** Opens the mobile app's device-token store. */
@@ -61,6 +61,13 @@ export function sweepPortalStores(stores: IPortalStores, logger: ILogger): numbe
     { label: 'OTP settings', open: stores.otpSettings },
     { label: 'device tokens', open: stores.devices },
     { label: 'OTP requests', open: stores.otpRequests },
-    { label: 'app tokens', open: stores.appTokens },
+    {
+      label: 'app tokens',
+      /**
+       * Opens the store for the sweep, which issues no token, so any lifetime serves.
+       * @returns The app-token store.
+       */
+      open: () => stores.appTokens(DEFAULT_REFRESH_TTL_DAYS),
+    },
   ], logger);
 }

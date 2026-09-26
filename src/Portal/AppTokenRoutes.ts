@@ -12,7 +12,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { getLogger } from '../Logger/Index.js';
 import { fail, isFail, isSuccess, type Procedure,succeed } from '../Types/Index.js';
 import type { AppAuthCodes, IAuthCodeRecord } from './AppAuthCodes.js';
-import type { AppTokenStore, IIssuedToken } from './AppTokenStore.js';
+import type { AppTokenOpener, AppTokenStore, IIssuedToken } from './AppTokenStore.js';
 import { verifyChallenge } from './Pkce.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { LOGIN_MAX, RATE_WINDOW } from './PortalRateLimit.js';
@@ -40,6 +40,13 @@ export const SECONDS_PER_MINUTE = 60;
 /** Collaborators the token endpoint needs, injected to avoid an import cycle. */
 export interface IAppTokenDeps {
   live: RuntimeAccessor;
+  codes: AppAuthCodes;
+  /** Opens the refresh-token store with the lifetime new tokens get. */
+  openTokens: AppTokenOpener;
+}
+
+/** What one exchange works with: the code table and the store opened for it. */
+interface IExchange {
   codes: AppAuthCodes;
   tokens: AppTokenStore;
 }
@@ -130,33 +137,33 @@ function validateGrant(
  * A replay means the code reached someone it should not have, so the tokens it
  * bought are destroyed. That silently ends a device's access, which is worth a
  * line in the log; the code, the verifier and the tokens are not.
- * @param deps - Injected collaborators.
+ * @param exchange - The code table and token store of this exchange.
  * @param code - The code that was presented twice.
  * @returns How many refresh tokens were revoked.
  */
-function revokeReplayedFamily(deps: IAppTokenDeps, code: string): number {
-  const family = deps.codes.familyOf(code);
+function revokeReplayedFamily(exchange: IExchange, code: string): number {
+  const family = exchange.codes.familyOf(code);
   if (!isSuccess(family)) return 0;
-  const revoked = deps.tokens.revokeFamily(family.data);
+  const revoked = exchange.tokens.revokeFamily(family.data);
   getLogger().warn(`Portal: app authorization code replayed; revoked ${String(revoked)} token(s)`);
   return revoked;
 }
 
 /**
  * Redeems the code and re-validates it, treating a replay as a breach.
- * @param deps - Injected collaborators.
+ * @param exchange - The code table and token store of this exchange.
  * @param request - The validated token request.
  * @param runtime - Live portal runtime.
  * @returns Procedure with the record, or a failure naming `invalid_grant`.
  */
 function redeemCode(
-  deps: IAppTokenDeps,
+  exchange: IExchange,
   request: ITokenRequest,
   runtime: IPortalRuntime,
 ): Procedure<IAuthCodeRecord> {
-  const redeemed = deps.codes.redeem(request.code);
+  const redeemed = exchange.codes.redeem(request.code);
   if (isFail(redeemed)) {
-    if (redeemed.status === 'reused') revokeReplayedFamily(deps, request.code);
+    if (redeemed.status === 'reused') revokeReplayedFamily(exchange, request.code);
     return fail(INVALID_GRANT);
   }
   return validateGrant(redeemed.data, request, runtime);
@@ -186,13 +193,13 @@ export function tokenResponse(
 /**
  * Issues the token pair for a validated code.
  * @param record - The redeemed authorization code.
- * @param deps - Injected collaborators.
+ * @param exchange - The code table and token store of this exchange.
  * @param runtime - Live portal runtime.
  * @returns The response body handed to the app.
  */
 function issueTokens(
   record: IAuthCodeRecord,
-  deps: IAppTokenDeps,
+  exchange: IExchange,
   runtime: IPortalRuntime,
 ): IGrantedTokens {
   const minutes = runtime.app.accessTokenTtlMinutes;
@@ -202,8 +209,8 @@ function issueTokens(
     factors: record.factors,
     fingerprint: record.fingerprint,
   };
-  const issued = deps.tokens.issue(grant);
-  deps.codes.bindFamily(record.code, issued.record.familyId);
+  const issued = exchange.tokens.issue(grant);
+  exchange.codes.bindFamily(record.code, issued.record.familyId);
   const claims = { ...sessionOfCode(record), family: issued.record.familyId };
   const ttlMs = minutes * MINUTE_MS;
   const accessToken = createSession(claims, runtime.sessionSecret, ttlMs);
@@ -226,10 +233,12 @@ function handleToken(
   if (!runtime.app.enabled) return reply.code(503).send({ error: APP_UNCONFIGURED });
   const parsed = parseTokenBody(req.body);
   if (isFail(parsed)) return reply.code(400).send({ error: INVALID_REQUEST });
-  const granted = redeemCode(deps, parsed.data, runtime);
+  const tokens = deps.openTokens(runtime.app.refreshTokenTtlDays);
+  const exchange: IExchange = { codes: deps.codes, tokens };
+  const granted = redeemCode(exchange, parsed.data, runtime);
   if (isFail(granted)) return reply.code(400).send({ error: INVALID_GRANT });
-  const tokens = issueTokens(granted.data, deps, runtime);
-  return reply.code(200).send(tokens);
+  const body = issueTokens(granted.data, exchange, runtime);
+  return reply.code(200).send(body);
 }
 
 /**

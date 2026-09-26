@@ -21,7 +21,9 @@ import {
   MINUTE_MS,
   tokenResponse,
 } from './AppTokenRoutes.js';
-import type { AppTokenStore, IAppTokenRecord, IIssuedToken } from './AppTokenStore.js';
+import type {
+  AppTokenOpener, AppTokenStore, IAppTokenRecord, IIssuedToken,
+} from './AppTokenStore.js';
 import { isAuthorized } from './PortalAuthPolicy.js';
 import { LOGIN_MAX, RATE_WINDOW, REFRESH_MAX } from './PortalRateLimit.js';
 import { APP_GRANT_SCHEMA, APP_REVOKE_SCHEMA } from './PortalRouteSchemas.js';
@@ -35,7 +37,8 @@ import { createSession, type ISessionPayload } from './PortalSession.js';
 /** Collaborators the refresh endpoints need, injected to avoid an import cycle. */
 export interface IAppRefreshDeps {
   live: RuntimeAccessor;
-  tokens: AppTokenStore;
+  /** Opens the refresh-token store with the lifetime new tokens get. */
+  openTokens: AppTokenOpener;
 }
 
 /**
@@ -73,13 +76,13 @@ function sessionOfRecord(record: IAppTokenRecord, expires: number): ISessionPayl
  * Re-checks a rotated record against the live configuration, destroying the
  * family when it no longer earns the access it was originally granted.
  * @param issued - The freshly rotated token pair.
- * @param deps - Injected collaborators.
+ * @param tokens - The token store opened for this request.
  * @param runtime - Live portal runtime.
  * @returns Procedure with the pair, or a failure naming `invalid_grant`.
  */
 function validateRotation(
   issued: IIssuedToken,
-  deps: IAppRefreshDeps,
+  tokens: AppTokenStore,
   runtime: IPortalRuntime,
 ): Procedure<IIssuedToken> {
   const { record } = issued;
@@ -87,25 +90,25 @@ function validateRotation(
   const isDrifted = record.fingerprint !== credentialFingerprint(runtime);
   const isStillAllowed = isAuthorized(session, runtime.authMode);
   if (!isDrifted && isStillAllowed) return succeed(issued);
-  deps.tokens.revokeFamily(record.familyId);
+  tokens.revokeFamily(record.familyId);
   return fail(INVALID_GRANT);
 }
 
 /**
  * Rotates a refresh token and mints the access token that goes with it.
  * @param token - The refresh token presented by the app.
- * @param deps - Injected collaborators.
+ * @param tokens - The token store opened for this request.
  * @param runtime - Live portal runtime.
  * @returns Procedure with the response body, or a failure naming `invalid_grant`.
  */
 export function rotateTokens(
   token: string,
-  deps: IAppRefreshDeps,
+  tokens: AppTokenStore,
   runtime: IPortalRuntime,
 ): Procedure<IGrantedTokens> {
-  const rotated = deps.tokens.rotate(token);
+  const rotated = tokens.rotate(token);
   if (isFail(rotated)) return fail(INVALID_GRANT);
-  const checked = validateRotation(rotated.data, deps, runtime);
+  const checked = validateRotation(rotated.data, tokens, runtime);
   if (isFail(checked)) return checked;
   const minutes = runtime.app.accessTokenTtlMinutes;
   const ttlMs = minutes * MINUTE_MS;
@@ -131,7 +134,8 @@ function handleRefresh(
   if (!runtime.app.enabled) return reply.code(503).send({ error: APP_UNCONFIGURED });
   const parsed = parseRefreshBody(req.body);
   if (isFail(parsed)) return reply.code(400).send({ error: INVALID_REQUEST });
-  const granted = rotateTokens(parsed.data, deps, runtime);
+  const tokens = deps.openTokens(runtime.app.refreshTokenTtlDays);
+  const granted = rotateTokens(parsed.data, tokens, runtime);
   if (isFail(granted)) return reply.code(400).send({ error: INVALID_GRANT });
   return reply.code(200).send(granted.data);
 }
@@ -155,7 +159,10 @@ function handleRevoke(
   deps: IAppRefreshDeps,
 ): FastifyReply {
   const parsed = parseRefreshBody(req.body);
-  if (!isFail(parsed)) deps.tokens.revokeByToken(parsed.data);
+  if (isFail(parsed)) return reply.code(200).send({ ok: true });
+  const runtime = deps.live();
+  const tokens = deps.openTokens(runtime.app.refreshTokenTtlDays);
+  tokens.revokeByToken(parsed.data);
   return reply.code(200).send({ ok: true });
 }
 

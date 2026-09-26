@@ -11,7 +11,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { isSuccess } from '../Types/Index.js';
-import type { AppTokenStore, IAppTokenRecord } from './AppTokenStore.js';
+import type { AppTokenOpener, IAppTokenRecord } from './AppTokenStore.js';
 import { RATE_WINDOW, SESSIONS_MAX } from './PortalRateLimit.js';
 import { APP_SESSION_LIST_SCHEMA, APP_SESSION_REVOKE_SCHEMA } from './PortalRouteSchemas.js';
 import type { RuntimeAccessor } from './PortalRuntime.js';
@@ -28,7 +28,8 @@ interface IRevokeParams {
 /** Collaborators the session routes need, injected to avoid an import cycle. */
 export interface IAppSessionDeps {
   live: RuntimeAccessor;
-  tokens: AppTokenStore;
+  /** Opens the refresh-token store with the lifetime new tokens get. */
+  openTokens: AppTokenOpener;
 }
 
 /** One signed-in device, as shown to the user. */
@@ -74,7 +75,8 @@ function handleList(
   const caller = bearerSessionOf(req, runtime);
   // A browser cookie session has no family, so nothing is marked as current.
   const family = isSuccess(caller) ? caller.data.family : undefined;
-  const records = deps.tokens.list();
+  const tokens = deps.openTokens(runtime.app.refreshTokenTtlDays);
+  const records = tokens.list();
   const views = records.map((record) => sessionView(record, family));
   return reply.code(200).send(views);
 }
@@ -96,7 +98,9 @@ function handleRevoke(
 ): FastifyReply {
   const sessionId = req.params.id;
   if (!SESSION_ID.test(sessionId)) return reply.code(404).send({ error: 'Unknown session' });
-  const isRevoked = deps.tokens.revoke(sessionId);
+  const runtime = deps.live();
+  const tokens = deps.openTokens(runtime.app.refreshTokenTtlDays);
+  const isRevoked = tokens.revoke(sessionId);
   if (!isRevoked) return reply.code(404).send({ error: 'Unknown session' });
   return reply.code(200).send({ ok: true });
 }
