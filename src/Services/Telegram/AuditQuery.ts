@@ -149,7 +149,7 @@ function pickFreshEntry(
 ): Procedure<IAuditEntry> {
   const recent = readRecent(WHOLE_LOG, log);
   if (recent.length === 0) return fail('no-recent-entry');
-  const entry = recent.filter(e => isFreshEntry(e, batch)).at(-1);
+  const entry = recent.findLast(e => isFreshEntry(e, batch));
   if (entry === undefined) return fail('stale-entry');
   return succeed(entry);
 }
