@@ -8,7 +8,7 @@
  */
 
 import {
-  existsSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync,
+  existsSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,8 +16,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import BankTokenStore from '../../src/Scraper/Tokens/BankTokenStore.js';
+import createTokenRecordCipher, {
+  type ITokenRecordCipher,
+} from '../../src/Scraper/Tokens/TokenRecordCipher.js';
 import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { STALE_STAGING_AGE_MS } from '../../src/Storage/SecureJsonStore.js';
+import { TEST_ENCRYPTION_KEY } from '../helpers/testCredentials.js';
 import { ACCOUNT_LOGIN, fakeToken } from './BankTokenStoreFixture.js';
 
 /** Temp directories to delete once each case is done with them. */
@@ -44,11 +48,12 @@ function makeDirectory(): string {
 
 /**
  * Builds a store whose file lives in a fresh temp directory.
+ * @param cipher - Cipher for the records; the store's own default unless a case seals them.
  * @returns The store and the path of its file.
  */
-function makeStore(): { store: BankTokenStore; storePath: string } {
+function makeStore(cipher?: ITokenRecordCipher): { store: BankTokenStore; storePath: string } {
   const storePath = join(makeDirectory(), 'bank-tokens.json');
-  return { store: new BankTokenStore(createNodeFileSystem(), storePath), storePath };
+  return { store: new BankTokenStore(createNodeFileSystem(), storePath, cipher), storePath };
 }
 
 afterEach(() => {
@@ -64,6 +69,15 @@ describe('BankTokenStore on a real filesystem', () => {
     const token = fakeToken();
     store.write('oneZero', token, ACCOUNT_LOGIN);
     expect(store.read('oneZero')).toMatchObject({ success: true, data: { record: { token: token } } });
+  });
+
+  it('puts no token or login on the disk under the config password, and reads the token back', () => {
+    const { store, storePath } = makeStore(createTokenRecordCipher(TEST_ENCRYPTION_KEY));
+    const token = fakeToken();
+    store.write('oneZero:personal', token, ACCOUNT_LOGIN);
+    const onDisk = readFileSync(storePath, 'utf8');
+    expect([onDisk.includes(token), onDisk.includes(ACCOUNT_LOGIN)]).toEqual([false, false]);
+    expect(store.read('oneZero:personal')).toMatchObject({ success: true, data: { record: { token } } });
   });
 
   it.skipIf(process.platform === 'win32')('creates the token file owner-only', () => {

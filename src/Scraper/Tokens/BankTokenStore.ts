@@ -27,6 +27,12 @@
  * refused, and a file that does so is read as damaged. A Pepper or PayBox
  * token logs in by itself, so a binding that could move would let one
  * config entry import another's account.
+ *
+ * <p>With the config password set, every record is sealed at rest by an
+ * {@link ITokenRecordCipher}, so a copied file hands over no token. A record
+ * that does not open, because the password changed or the record was edited,
+ * counts as damage: that account logs in with an SMS, and the file is set
+ * aside before the next write.
  */
 
 import { registerSecretValues } from '../../Logger/SecretValues.js';
@@ -39,6 +45,7 @@ import type { IBankTokenRecord } from './BankTokenRecords.js';
 import {
   isLoginFingerprint, NO_LOGIN, NO_RECORD, readTokenRecords, toStoreRecords,
 } from './BankTokenRecords.js';
+import { type ITokenRecordCipher, PLAINTEXT_TOKEN_CIPHER } from './TokenRecordCipher.js';
 
 /** Outcome of a write: whether the file on disk was replaced. */
 export interface IBankTokenWrite {
@@ -206,8 +213,13 @@ export default class BankTokenStore implements IBankTokenStore {
    * Binds the store to one file.
    * @param fileSystem - Filesystem the file lives on.
    * @param filePath - Absolute path of the token file.
+   * @param _cipher - Seals and opens the records; plaintext when no password is set.
    */
-  constructor(fileSystem: IFileSystem, filePath: string) {
+  constructor(
+    fileSystem: IFileSystem,
+    filePath: string,
+    private readonly _cipher: ITokenRecordCipher = PLAINTEXT_TOKEN_CIPHER,
+  ) {
     this._store = new SecureJsonStore(fileSystem, filePath);
   }
 
@@ -292,6 +304,8 @@ export default class BankTokenStore implements IBankTokenStore {
    *
    * <p>A file that is not intact is quarantined first rather than dropped;
    * {@link ILoadedTokens.isIntact} says which parts of a file that covers.
+   * The records are sealed before anything touches the disk, so a failed
+   * seal leaves the file as it was.
    * @param loaded - Tokens read from the file, reused as the merge base.
    * @param storeKey - Opaque key identifying one bank account.
    * @param binding - Non-blank token to store and its login.
@@ -306,7 +320,10 @@ export default class BankTokenStore implements IBankTokenStore {
     const tokens = new Map(loaded.tokens);
     tokens.set(storeKey, { ...binding, capturedAt: now.toISOString() });
     const records = toStoreRecords(tokens);
-    const committed = this._store.commit({ records, shouldQuarantine: !loaded.isIntact });
+    const sealed = this._cipher.sealRecords(records);
+    if (!sealed.success) return tokenNotStored(storeKey, sealed);
+    const request = { records: sealed.data, shouldQuarantine: !loaded.isIntact };
+    const committed = this._store.commit(request);
     if (!committed.success) return tokenNotStored(storeKey, committed);
     return succeed({ written: true });
   }
@@ -320,7 +337,8 @@ export default class BankTokenStore implements IBankTokenStore {
     const snapshot = this._store.read();
     if (!snapshot.success) return snapshot;
     const { state, records } = snapshot.data;
-    const { tokens, droppedCount, seenTokens, contestedTokens } = readTokenRecords(records);
+    const opened = this._cipher.openRecords(records);
+    const { tokens, droppedCount, seenTokens, contestedTokens } = readTokenRecords(opened);
     registerSecretValues(seenTokens);
     const isIntact = state !== 'damaged' && droppedCount === 0;
     const loginOf = loginLookup(tokens);
