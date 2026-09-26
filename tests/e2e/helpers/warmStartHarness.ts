@@ -102,17 +102,22 @@ export interface ITokenStoreDir {
 }
 
 /** Env vars each case rewrites, restored afterwards. */
-const TOUCHED_ENV = ['BANK_TOKENS_PATH', 'E2E_MOCK_SCRAPER_DIR', 'E2E_MOCK_SCRAPER_FILE'] as const;
+const TOUCHED_ENV = [
+  'BANK_TOKENS_PATH', 'E2E_MOCK_SCRAPER_DIR', 'E2E_MOCK_SCRAPER_FILE',
+  'CREDENTIALS_ENCRYPTION_PASSWORD', 'CONFIG_PASSWORD',
+] as const;
 
 /**
  * Points the importer at a fresh temp token file, with no mock-scraper env.
+ *
+ * <p>The config password is cleared too, so the token file stays plaintext
+ * unless a case sets one.
  * @param prefix - Temp directory name prefix, naming the suite.
  * @returns The directory, the token file path and the env to restore.
  */
 export function openTokenStore(prefix: string): ITokenStoreDir {
   const originalEnv = new Map(TOUCHED_ENV.map((name) => [name, process.env[name]]));
-  delete process.env.E2E_MOCK_SCRAPER_DIR;
-  delete process.env.E2E_MOCK_SCRAPER_FILE;
+  for (const name of TOUCHED_ENV) delete process.env[name];
   const directory = mkdtempSync(join(tmpdir(), prefix));
   const tokensPath = join(directory, 'bank-tokens.json');
   process.env.BANK_TOKENS_PATH = tokensPath;
