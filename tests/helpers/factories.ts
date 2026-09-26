@@ -251,12 +251,21 @@ export function fakeIAuditEntryDuring(
 export function malformedAuditFiles(
   good: IAuditEntry,
 ): readonly (readonly [string, readonly unknown[], boolean])[] {
+  const badEntries: readonly (readonly [string, unknown])[] = [
+    ['a null entry', null],
+    ['an entry without banks', { ...good, banks: undefined }],
+    ['an entry without a timestamp', { ...good, timestamp: undefined }],
+    ['an entry whose totals are not numbers', { ...good, totalBanks: '1' }],
+  ];
+  const badRows: readonly (readonly [string, unknown])[] = [
+    ['a null bank row', null],
+    ['a bank row that is not an object', 'leumi'],
+    ['a bank row without a name', { status: 'failure', txns: 0 }],
+    ['a bank row whose error is not text', { name: 'oneZero', status: 'failure', txns: 0, error: 7 }],
+  ];
   return [
-    ['a null entry', [good, null], false],
-    ['an entry without banks', [good, { ...good, banks: undefined }], false],
-    ['an entry without a timestamp', [good, { ...good, timestamp: undefined }], false],
-    ['a null bank row', [{ ...good, banks: [...good.banks, null] }], true],
-    ['a bank row that is not an object', [{ ...good, banks: [...good.banks, 'leumi'] }], true],
+    ...badEntries.map(([label, bad]) => [label, [good, bad], false] as const),
+    ...badRows.map(([label, bad]) => [label, [{ ...good, banks: [...good.banks, bad] }], true] as const),
   ];
 }
 

@@ -5,6 +5,10 @@
 
 import { existsSync,readFileSync, writeFileSync } from 'node:fs';
 
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
+
+import { RUN_BANK, RUN_ENTRY } from '../Contract/Status.js';
 import redactSecrets from '../Logger/SecretRedaction.js';
 import type { Procedure } from '../Types/Index.js';
 import { fail,succeed } from '../Types/Index.js';
@@ -36,6 +40,9 @@ export interface IAuditLog {
 type AuditBank = IAuditEntry['banks'][number];
 
 const DEFAULT_MAX_ENTRIES = 90;
+
+// What /api/status promises for a run, less its bank rows, which are checked one by one.
+const ENTRY_FIELDS = Type.Omit(RUN_ENTRY, ['banks']);
 
 /** Persists import run history to a local JSON file for debugging and /status history. */
 export class AuditLogService implements IAuditLog {
@@ -164,18 +171,18 @@ export class AuditLogService implements IAuditLog {
   }
 
   /**
-   * Keeps the entries every reader can use: objects with a string timestamp and
-   * a list of banks. Rows that are not objects are left out. A hand edit or an
-   * older release can leave anything in the file, and one such entry used to
-   * break /status, /retry, the failure reply and the portal. The file itself
-   * is not changed.
+   * Keeps the entries every reader can use: those whose fields match what
+   * /api/status promises for a run, with a list of banks. Rows that do not
+   * match its bank row are left out. A hand edit or an older release can leave
+   * anything in the file, and one such entry or row used to break /status,
+   * /retry, the failure reply and the portal. The file itself is not changed.
    * @param entries - Entries as parsed from the file, which may be malformed.
    * @returns The readable entries in stored order.
    */
   private static readableEntries(entries: readonly IAuditEntry[]): IAuditEntry[] {
     const readable = entries.filter(entry => AuditLogService.isReadableEntry(entry));
     return readable.map(entry => {
-      const banks = entry.banks.filter(bank => AuditLogService.isObject(bank));
+      const banks = entry.banks.filter(bank => Value.Check(RUN_BANK, bank));
       return { ...entry, banks };
     });
   }
@@ -183,20 +190,10 @@ export class AuditLogService implements IAuditLog {
   /**
    * Tells whether a parsed entry has the fields every reader relies on.
    * @param entry - An entry as parsed from the file, which may be malformed.
-   * @returns True when the entry has a string timestamp and a list of banks.
+   * @returns True when the run's fields match the contract and it has a list of banks.
    */
   private static isReadableEntry(entry: IAuditEntry): boolean {
-    const candidate = entry as Partial<IAuditEntry> | null;
-    return typeof candidate?.timestamp === 'string' && Array.isArray(candidate.banks);
-  }
-
-  /**
-   * Tells whether a parsed value is an object a reader can take fields from.
-   * @param value - A value as parsed from the file.
-   * @returns True for any object other than null.
-   */
-  private static isObject(value: unknown): boolean {
-    return typeof value === 'object' && value !== null;
+    return Value.Check(ENTRY_FIELDS, entry) && Array.isArray(entry.banks);
   }
 
   /**

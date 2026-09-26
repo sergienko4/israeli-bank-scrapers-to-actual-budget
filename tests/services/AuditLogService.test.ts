@@ -346,8 +346,8 @@ describe('AuditLogService', () => {
       expect(readFileSync(TEST_FILE, 'utf8')).not.toContain(TEST_CREDENTIAL);
     });
 
-    it('keeps rows that carry no error text unchanged', () => {
-      const rows = [{ name: 'leumi', status: 'success', txns: 3 }, { name: 'max', status: 'failure', txns: 0, error: 7 }];
+    it('keeps a row that carries no error text unchanged', () => {
+      const rows = [{ name: 'leumi', status: 'success', txns: 3 }];
       seedLegacyEntry(rows);
       const result = service.getRecent(1);
       expect(result.success).toBe(true);
