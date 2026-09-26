@@ -2,17 +2,25 @@
  * Writes the importer configuration back to disk for the config portal.
  *
  * Splits the merged config into settings (config.json) + secrets
- * (credentials.json) and writes each atomically via a temp file + rename,
+ * (credentials.json) and saves both through the {@link IFileSystem} port,
  * re-encrypting credentials.json when CREDENTIALS_ENCRYPTION_PASSWORD is set.
- * No plaintext `.bak` copies are kept: the encrypted credentials.json is the
- * only persisted secret artifact, so a previously-unencrypted file (or an
+ * Each file is staged under an unpredictable name, created exclusively and
+ * owner-only, so a symlink planted beside it is never followed. No plaintext
+ * `.bak` copies are kept: the encrypted credentials.json is the only
+ * persisted secret artifact, so a previously-unencrypted file (or an
  * inline-secret config.json) can never linger in plaintext beside it.
+ *
+ * It uses the port rather than SecureJsonStore: the two files are saved as
+ * one unit, and config needs no quarantine because the portal refuses to
+ * start on a config that does not load.
  */
 
-import { renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import type { IImporterConfig, Procedure } from '../Types/Index.js';
+import type { IFileSystem } from '../Storage/FileSystemPort.js';
+import { stagingPathFor } from '../Storage/StagingPaths.js';
+import { checkWholeWrite } from '../Storage/StoreRecords.js';
+import type { IImporterConfig, IProcedureFailure, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
 import { encryptConfig, getEncryptionPassword } from './ConfigEncryption.js';
@@ -21,77 +29,89 @@ import splitSecrets from './SecretSplitter.js';
 
 /** A pending file write: destination path + serialized JSON payload. */
 interface IPendingWrite {
-  path: string;
-  json: string;
+  readonly path: string;
+  readonly json: string;
+}
+
+/** A payload staged in full, awaiting its rename into place. */
+interface IStagedWrite {
+  readonly path: string;
+  readonly stagedPath: string;
 }
 
 /**
- * Stages a payload to a sibling `.tmp` file (owner-only mode) without touching
- * the real target, which {@link commitWrites} renames into place atomically.
- * No plaintext backup of the prior file is made, so an earlier unencrypted
- * credentials.json or inline-secret config.json is never duplicated on disk.
- * @param item - Destination path and JSON payload to stage.
- * @returns The staged temp path awaiting an atomic rename into place.
+ * Removes staged files best-effort after a failed save, so no partial (and
+ * possibly secret-bearing) file is left behind. A path already renamed into
+ * place is absent by then, and removing it is a no-op.
+ * @param fileSystem - Filesystem the files were staged on.
+ * @param staged - Files this save staged.
+ * @param failure - What stopped the save.
+ * @returns The original failure, never the cleanup's own.
  */
-function stageWrite(item: IPendingWrite): string {
-  const tmp = `${item.path}.tmp`;
-  writeFileSync(tmp, item.json, { encoding: 'utf8', mode: 0o600 });
-  return tmp;
+function abandon(
+  fileSystem: IFileSystem,
+  staged: readonly IStagedWrite[],
+  failure: IProcedureFailure,
+): IProcedureFailure {
+  for (const entry of staged) fileSystem.remove(entry.stagedPath);
+  return failure;
 }
 
 /**
- * Removes one staged temp file best-effort, swallowing any error so the
- * original write failure still propagates to the caller.
- * @param tmp - Temp path to remove; an already-renamed or missing path is a no-op.
- * @returns True when the file was removed, false when the removal was swallowed.
+ * Stages one payload exclusively under a fresh name and checks it is whole.
+ * A failed create removes nothing: the name may belong to someone else.
+ * @param fileSystem - Filesystem to stage on.
+ * @param item - Destination path and JSON payload.
+ * @returns The staged file, or why it could not be staged in full.
  */
-function removeTemp(tmp: string): boolean {
-  try {
-    rmSync(tmp, { force: true });
-    return true;
-  } catch {
-    // Best-effort cleanup: ignore so the original write error still propagates.
-    return false;
+function stageOne(fileSystem: IFileSystem, item: IPendingWrite): Procedure<IStagedWrite> {
+  const entry: IStagedWrite = { path: item.path, stagedPath: stagingPathFor(item.path) };
+  const created = fileSystem.createExclusive(entry.stagedPath, item.json);
+  if (!created.success) return created;
+  const expected = Buffer.byteLength(item.json, 'utf8');
+  const whole = checkWholeWrite(created.data.bytesWritten, expected);
+  if (!whole.success) return abandon(fileSystem, [entry], whole);
+  return succeed(entry);
+}
+
+/**
+ * Stages every file before any rename, so a failed or short stage never
+ * leaves config.json secret-stripped while credentials.json lacks the same
+ * secrets. Anything already staged is removed on failure.
+ * @param fileSystem - Filesystem to stage on.
+ * @param items - Files to save together (secrets-superset file first).
+ * @returns The staged files, or the failure that stopped staging.
+ */
+function stageAll(
+  fileSystem: IFileSystem,
+  items: readonly IPendingWrite[],
+): Procedure<readonly IStagedWrite[]> {
+  const staged: IStagedWrite[] = [];
+  for (const item of items) {
+    const one = stageOne(fileSystem, item);
+    if (!one.success) return abandon(fileSystem, staged, one);
+    staged.push(one.data);
   }
+  return succeed(staged);
 }
 
 /**
- * Deletes staged temp files best-effort after a failed commit so no
- * partially-written (and possibly secret-bearing) artifact is left behind.
- * @param tmps - Temp paths to remove; already-renamed or missing paths are ignored.
- * @returns Status object with the count of temp files removed.
+ * Renames each staged file into place, in order. The two renames are not a
+ * single atomic transaction: a crash between them can leave one file from
+ * this save and the other from the previous one.
+ * @param fileSystem - Filesystem the files were staged on.
+ * @param staged - Files staged in full.
+ * @returns How many files were committed, or the failed rename.
  */
-function cleanupTemps(tmps: readonly string[]): { removed: number } {
-  let removed = 0;
-  for (const tmp of tmps) {
-    if (removeTemp(tmp)) removed += 1;
+function publishAll(
+  fileSystem: IFileSystem,
+  staged: readonly IStagedWrite[],
+): Procedure<{ committed: number }> {
+  for (const entry of staged) {
+    const moved = fileSystem.rename(entry.stagedPath, entry.path);
+    if (!moved.success) return abandon(fileSystem, staged, moved);
   }
-  return { removed };
-}
-
-/**
- * Commits files as one unit: stages every `.tmp` first, then renames each into
- * place. Staging all temps before any rename means a serialization or staging
- * failure never leaves config.json secret-stripped while credentials.json is
- * missing those same secrets; any staged temp is removed on failure. Note the
- * two renames are not a single atomic transaction — a process crash in the
- * narrow window between them can leave one file updated and the other from the
- * prior write; the importer re-validates on its next run and surfaces any
- * resulting mismatch rather than importing blindly.
- * @param items - Files to persist together (secrets-superset file first).
- * @returns Status object with the count of files committed.
- */
-function commitWrites(items: readonly IPendingWrite[]): { committed: number } {
-  const staged: { path: string; tmp: string }[] = [];
-  try {
-    for (const item of items) staged.push({ path: item.path, tmp: stageWrite(item) });
-    for (const { path, tmp } of staged) renameSync(tmp, path);
-    return { committed: staged.length };
-  } catch (error: unknown) {
-    const tmps = staged.map(entry => entry.tmp);
-    cleanupTemps(tmps);
-    throw error;
-  }
+  return succeed({ committed: staged.length });
 }
 
 /**
@@ -107,13 +127,17 @@ function maybeEncrypt(value: object): string {
 
 /** Persists merged config to config.json + credentials.json. */
 export default class ConfigWriter {
+  private readonly _fileSystem: IFileSystem;
+
   private readonly _configPath: string;
 
   /**
    * Creates a writer targeting the same paths the loader reads.
-   * @param configPath - Absolute path to config.json (default /app/config.json).
+   * @param fileSystem - Filesystem the two files are saved on.
+   * @param configPath - Absolute path to config.json.
    */
-  constructor(configPath = '/app/config.json') {
+  constructor(fileSystem: IFileSystem, configPath: string) {
+    this._fileSystem = fileSystem;
     this._configPath = configPath;
   }
 
@@ -126,19 +150,32 @@ export default class ConfigWriter {
    */
   public write(config: IImporterConfig): Procedure<{ written: true }> {
     try {
-      registerConfigSecrets(config);
-      const { settings, secrets } = splitSecrets(config);
-      const configDir = dirname(this._configPath);
-      const credPath = join(configDir, 'credentials.json');
-      const credJson = maybeEncrypt(secrets);
-      const settingsJson = JSON.stringify(settings, null, 2);
-      commitWrites([
-        { path: credPath, json: credJson },
-        { path: this._configPath, json: settingsJson },
-      ]);
-      return succeed({ written: true as const });
+      const items = this.pendingWrites(config);
+      const staged = stageAll(this._fileSystem, items);
+      const committed = staged.success ? publishAll(this._fileSystem, staged.data) : staged;
+      if (committed.success) return succeed({ written: true as const });
+      const reason = `Failed to write config: ${committed.message}`;
+      return fail(reason, { status: committed.status });
     } catch (error: unknown) {
       return fail(`Failed to write config: ${errorMessage(error)}`);
     }
+  }
+
+  /**
+   * Serialises the two files a save writes, credentials first.
+   * @param config - The merged importer config to persist.
+   * @returns The credentials file, then config.json.
+   */
+  private pendingWrites(config: IImporterConfig): readonly IPendingWrite[] {
+    registerConfigSecrets(config);
+    const { settings, secrets } = splitSecrets(config);
+    const configDir = dirname(this._configPath);
+    const credPath = join(configDir, 'credentials.json');
+    const credJson = maybeEncrypt(secrets);
+    const settingsJson = JSON.stringify(settings, null, 2);
+    return [
+      { path: credPath, json: credJson },
+      { path: this._configPath, json: settingsJson },
+    ];
   }
 }

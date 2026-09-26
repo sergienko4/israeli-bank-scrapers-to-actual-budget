@@ -6,7 +6,8 @@
 
 import { ConfigLoader } from '../Config/ConfigLoader.js';
 import { ConfigValidator, type IValidationResult } from '../Config/ConfigValidator.js';
-import ConfigWriter from '../Config/ConfigWriter.js';
+import type ConfigWriter from '../Config/ConfigWriter.js';
+import openConfigWriter from '../Config/ConfigWriterWiring.js';
 import ConfigurationError from '../Errors/ConfigurationError.js';
 import type { IImporterConfig, Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
@@ -106,7 +107,7 @@ export default class PortalConfigStore {
       throw new ConfigurationError(reason);
     }
     this._config = loaded.data;
-    this._writer = new ConfigWriter(configPath);
+    this._writer = openConfigWriter(configPath);
   }
 
   /**

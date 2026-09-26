@@ -75,6 +75,48 @@ export default class FakeFileSystem implements IFileSystem {
    */
   public readonly stagedPaths: string[] = [];
 
+  /** Errnos for single numbered calls, keyed by `<operation>#<call number>`. */
+  private readonly _failuresOnCall = new Map<string, string>();
+
+  /** 1-based `createExclusive` call numbers that stage only half a payload. */
+  private readonly _shortWriteCalls = new Set<number>();
+
+  /**
+   * Fails one numbered call of an operation and no other.
+   *
+   * <p>Needed because a two-file save stages twice and renames twice. Failing
+   * "once" always hits the first call, so the second stage or rename — the
+   * cases that must clean up what the first one left — could not be reached.
+   * @param operation - Operation name, as recorded in {@link calls}.
+   * @param callNumber - Which call fails, counting from 1.
+   * @param errno - Errno the failing call reports.
+   * @returns Nothing.
+   */
+  public failOnCall(operation: string, callNumber: number, errno: string): void {
+    this._failuresOnCall.set(`${operation}#${String(callNumber)}`, errno);
+  }
+
+  /**
+   * Makes one numbered `createExclusive` call stage half its payload.
+   *
+   * <p>A real `write(2)` may commit fewer bytes than asked and still succeed,
+   * which is why the port reports a byte count at all.
+   * @param callNumber - Which create is cut short, counting from 1.
+   * @returns Nothing.
+   */
+  public shortWriteOnCall(callNumber: number): void {
+    this._shortWriteCalls.add(callNumber);
+  }
+
+  /**
+   * Counts how many times an operation has been called so far.
+   * @param operation - Operation name, as recorded in {@link calls}.
+   * @returns The count, including the call in progress.
+   */
+  private callCount(operation: string): number {
+    return this.calls.filter((name) => name === operation).length;
+  }
+
   /**
    * Creates a regular file, replacing any existing name.
    * @param name - Name to create.
@@ -194,6 +236,9 @@ export default class FakeFileSystem implements IFileSystem {
    * @returns A failure when armed, otherwise undefined.
    */
   private forced(operation: string): ReturnType<typeof fail> | undefined {
+    const callKey = `${operation}#${String(this.callCount(operation))}`;
+    const onCall = this._failuresOnCall.get(callKey);
+    if (onCall !== undefined) return fail(`forced ${operation} failure`, { status: onCall });
     const once = this.forcedFailuresOnce.get(operation);
     if (once !== undefined) {
       this.forcedFailuresOnce.delete(operation);
@@ -309,8 +354,10 @@ export default class FakeFileSystem implements IFileSystem {
     if (this._entries.has(filePath)) {
       return fail(`Could not create ${filePath}: EEXIST`, { status: 'EEXIST' });
     }
-    this.seedFile(filePath, contents, OWNER_ONLY);
-    return succeed({ bytesWritten: Buffer.byteLength(contents, 'utf8') });
+    const isShort = this._shortWriteCalls.has(this.callCount('createExclusive'));
+    const written = isShort ? contents.slice(0, Math.floor(contents.length / 2)) : contents;
+    this.seedFile(filePath, written, OWNER_ONLY);
+    return succeed({ bytesWritten: Buffer.byteLength(written, 'utf8') });
   }
 
   /**
