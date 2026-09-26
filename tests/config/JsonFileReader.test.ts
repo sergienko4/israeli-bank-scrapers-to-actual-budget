@@ -8,6 +8,17 @@ import { encryptConfig } from '../../src/Config/ConfigEncryption.js';
 import readJsonFile from '../../src/Config/Loaders/JsonFileReader.js';
 import { ConfigurationError } from '../../src/Errors/ErrorTypes.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import expectNoPollution from '../helpers/PrototypeOracle.js';
+
+/** A config holding a `__proto__` key at the top, in `banks`, in a bank and in a list. */
+const POLLUTED_CONFIG = JSON.stringify({
+  POLLUTED_TOP: { delayBetweenBanks: 1 },
+  banks: {
+    POLLUTED_BANKS: { ghost: {} },
+    leumi: { password: 'pw', POLLUTED_BANK: { otpLongTermToken: 'planted' } },
+  },
+  list: [{ POLLUTED_ITEM: { b: 2 } }],
+}).replaceAll(/"POLLUTED_[A-Z]+"/g, '"__proto__"');
 
 /**
  * Reads a file expected to be present, failing the test when it reads as absent.
@@ -110,6 +121,30 @@ describe('JsonFileReader.readJsonFile', () => {
     process.env.CREDENTIALS_ENCRYPTION_PASSWORD = '';
     process.env.CONFIG_PASSWORD = 'legacy-pw';
     expect(readPresent(path).delayBetweenBanks).toBe(9);
+  });
+
+  it('drops a __proto__ key at every level of a plain file', () => {
+    const path = join(tmpDir, 'config.json');
+    writeFileSync(path, POLLUTED_CONFIG, 'utf8');
+    const result = readPresent(path);
+    expectNoPollution(result);
+    expect(result).toEqual({ banks: { leumi: { password: 'pw' } }, list: [{}] });
+  });
+
+  it('drops a __proto__ key at every level of an encrypted file', () => {
+    const path = join(tmpDir, 'enc.json');
+    writeFileSync(path, encryptConfig(POLLUTED_CONFIG, 'test-passphrase'), 'utf8');
+    process.env.CREDENTIALS_ENCRYPTION_PASSWORD = 'test-passphrase';
+    const result = readPresent(path);
+    expectNoPollution(result);
+    expect(result).toEqual({ banks: { leumi: { password: 'pw' } }, list: [{}] });
+  });
+
+  it('keeps keys that only look like __proto__', () => {
+    const path = join(tmpDir, 'config.json');
+    const body = { __proto__x: 1, __PROTO__: 2, proto: 3, banks: { leumi: { _proto_: 'kept' } } };
+    writeFileSync(path, JSON.stringify(body), 'utf8');
+    expect(readPresent(path)).toEqual(body);
   });
 
   it('throws on malformed JSON syntax', () => {

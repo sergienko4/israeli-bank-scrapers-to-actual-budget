@@ -6,8 +6,11 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigLoader } from '../../src/Config/ConfigLoader.js';
+import splitSecrets from '../../src/Config/SecretSplitter.js';
+import { maskSecrets, restoreMasked } from '../../src/Portal/ConfigMutations.js';
 import type { IProcedureFailure } from '../../src/Types/Index.js';
 import { isFail, isSuccess } from '../../src/Types/Index.js';
+import expectNoPollution from '../helpers/PrototypeOracle.js';
 
 const { mockLogger } = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -69,6 +72,18 @@ describe('ConfigLoader on real files', () => {
     const bank = loaded.data.banks.leumi;
     expect(Object.getPrototypeOf(bank)).toBe(Object.prototype);
     expect('password' in bank).toBe(false);
+  });
+
+  it('gives no copy a planted prototype from a __proto__ key in config.json alone', () => {
+    const planted = '{"banks":{"leumi":{"password":"pw","__proto__":{"password":"planted"}}}}';
+    writeFileSync(configPath, planted);
+    const loaded = new ConfigLoader(configPath).loadRaw();
+    if (!isSuccess(loaded)) throw new Error(loaded.message);
+    expectNoPollution(loaded.data);
+    expectNoPollution(splitSecrets(loaded.data));
+    expectNoPollution(maskSecrets(loaded.data));
+    expectNoPollution(restoreMasked(loaded.data, loaded.data));
+    expect(loaded.data.banks).toEqual({ leumi: { password: 'pw' } });
   });
 
   it('loads config.json alone when there is no credentials.json', () => {

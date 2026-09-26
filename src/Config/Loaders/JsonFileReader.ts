@@ -11,6 +11,7 @@
 
 import { ConfigurationError } from '../../Errors/ErrorTypes.js';
 import { getLogger } from '../../Logger/Index.js';
+import parseProtoFreeJson from '../../Storage/ProtoFreeJson.js';
 import type { IImporterConfig, Procedure } from '../../Types/Index.js';
 import { succeed } from '../../Types/Index.js';
 import {
@@ -47,7 +48,7 @@ function decryptFile(raw: string, filePath: string): IImporterConfig {
   const password = requirePassword(filePath);
   getLogger().info(`🔐 Decrypting ${filePath}...`);
   const decrypted = decryptConfig(raw, password);
-  return JSON.parse(decrypted) as IImporterConfig;
+  return parseProtoFreeJson(decrypted) as IImporterConfig;
 }
 
 /**
@@ -58,7 +59,7 @@ function decryptFile(raw: string, filePath: string): IImporterConfig {
  * @returns The parsed IImporterConfig object.
  */
 function parseConfig(raw: string, filePath: string): IImporterConfig {
-  const parsed = JSON.parse(raw) as Record<string, string | number | boolean>;
+  const parsed = parseProtoFreeJson(raw) as Record<string, string | number | boolean>;
   if (!isEncryptedConfig(parsed)) return parsed as unknown as IImporterConfig;
   return decryptFile(raw, filePath);
 }

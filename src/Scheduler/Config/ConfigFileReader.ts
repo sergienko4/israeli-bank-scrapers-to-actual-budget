@@ -16,6 +16,7 @@ import {
   isEncryptedConfig,
 } from '../../Config/ConfigEncryption.js';
 import readConfigText from '../../Config/Loaders/ConfigFileText.js';
+import parseProtoFreeJson from '../../Storage/ProtoFreeJson.js';
 import type { Procedure } from '../../Types/Index.js';
 import { fail, isFail, succeed } from '../../Types/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
@@ -42,7 +43,7 @@ function readRawFile(filePath: string): Procedure<string> {
  */
 function parseJsonObject(raw: string, filePath: string): Procedure<Record<string, unknown>> {
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = parseProtoFreeJson(raw) as Record<string, unknown>;
     return succeed(parsed);
   } catch (error: unknown) {
     return fail(`Failed to read ${filePath}: ${errorMessage(error)}`);
