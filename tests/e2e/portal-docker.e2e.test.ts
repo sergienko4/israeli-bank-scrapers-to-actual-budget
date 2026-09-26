@@ -4,7 +4,9 @@
  * consume a read-only mount, and the portal needs read-write access to save.
  */
 
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -27,6 +29,8 @@ import {
 const PASSWORD = 'e2e-docker-portal-pass-7731';
 const SESSION_SECRET = 'e2e-docker-portal-session-secret-0123';
 const DISCOUNT_SECRET = 'discount-secret';
+/** Owner read and write only, the mode a portal save leaves on both files. */
+const OWNER_ONLY = 0o600;
 
 /** Directory and file paths seeded for a Docker portal run. */
 interface ISeededDir {
@@ -200,7 +204,8 @@ async function persistsPortalEdit(): Promise<void> {
 }
 
 /**
- * Asserts the read-write portal save reached the host directory correctly.
+ * Asserts the read-write portal save reached the host directory correctly:
+ * secrets split out, both files owner-only, and no staged file left behind.
  * @param seeded - Host directory and file paths created for this test.
  * @returns Nothing.
  */
@@ -210,6 +215,9 @@ function assertPersistedEdit(seeded: ISeededDir): void {
   expect(config.banks?.discount.daysBack).toBe(28);
   expect(config.banks?.discount.password).toBeUndefined();
   expect(credentials.banks?.discount.password).toBe(DISCOUNT_SECRET);
+  expect(statSync(seeded.configPath).mode & 0o777).toBe(OWNER_ONLY);
+  expect(statSync(seeded.credsPath).mode & 0o777).toBe(OWNER_ONLY);
+  expect(readdirSync(seeded.dir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
 }
 
 /**

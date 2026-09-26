@@ -13,7 +13,7 @@
  * followed, because no browser resolves `bankimporter://`.
  */
 
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -52,6 +52,17 @@ import {
 
 /** Where the container keeps refresh tokens, on the mounted config volume. */
 const CONTAINER_TOKENS_PATH = '/app/config/app-tokens.json';
+
+/** Owner read and write only, the mode of every file the store writes. */
+const OWNER_ONLY = 0o600;
+
+/** A SHA-256 digest in lowercase hex: how the store keeps a refresh token. */
+const TOKEN_HASH = /^[0-9a-f]{64}$/;
+
+/** The parts of the refresh-token file this suite reads. */
+interface IStoredTokens {
+  readonly tokens?: readonly { readonly tokenHash?: unknown }[];
+}
 
 /** Two callers the proxy can pretend to be, from the documentation range. */
 const CLIENT_A = '203.0.113.11';
@@ -197,6 +208,22 @@ async function appSignIn(fixture: IDockerFixture, state: string): Promise<IIssue
 }
 
 /**
+ * Checks the refresh-token file the container wrote: owner-only, one `tokens`
+ * record, and only hashes of the tokens it handed out.
+ * @param dir - The host directory mounted as the container's config folder.
+ * @param issued - Refresh tokens the portal returned; none may be on disk.
+ */
+function expectHashedTokenFile(dir: string, issued: readonly string[]): void {
+  const path = join(dir, 'app-tokens.json');
+  const text = readFileSync(path, 'utf8');
+  const stored = JSON.parse(text) as IStoredTokens;
+  expect(statSync(path).mode & 0o777).toBe(OWNER_ONLY);
+  expect(stored.tokens?.length).toBeGreaterThan(0);
+  for (const record of stored.tokens ?? []) expect(record.tokenHash).toMatch(TOKEN_HASH);
+  for (const token of issued) expect(text).not.toContain(token);
+}
+
+/**
  * Posts a deliberately wrong legacy password as a named caller.
  * @param base - Portal base URL (the proxy).
  * @param client - Address the proxy should attribute the call to.
@@ -236,7 +263,8 @@ describe.skipIf(!hasDockerImage())('portal app sign-in inside the container', ()
     expect(refreshed.status).toBe(200);
     expect(String(refreshed.body.refreshToken)).not.toBe(issued.refreshToken);
 
-    expect(existsSync(join(fixture.dir, 'app-tokens.json'))).toBe(true);
+    const rotated = String(refreshed.body.refreshToken);
+    expectHashedTokenFile(fixture.dir, [issued.refreshToken, rotated]);
   }, 180_000);
 
   it('rate limits the forwarded caller, not the proxy', async () => {
