@@ -14,6 +14,8 @@
  *   <li>a warm login is honoured only for the latest token of its account and
  *       only while its `exp` is more than 60 seconds ahead of the bank's clock,
  *       as upstream's `jwtClaims` rule decides; an unreadable token is stale;</li>
+ *   <li>a stale token spends the run's one cold login at once, so when that
+ *       login fails the run ends with upstream's one-login budget failure;</li>
  *   <li>a warm login opens the account the token belongs to, whatever login
  *       sent it, because a Pepper or PayBox token logs in by itself;</li>
  *   <li>like upstream, it reports the token it holds through
@@ -110,6 +112,10 @@ interface IBankState {
 
 /** What a cold login answers when the bank rejects its SMS code. */
 const CODE_REJECTED = 'code-rejected';
+
+/** Upstream's failure when a run needs a second cold login (`BUDGET_SPENT_MESSAGE`). */
+const BUDGET_SPENT_MESSAGE = 'this scrape has already spent its one cold SMS login; '
+  + 'the session cannot be re-minted in-run \u2014 start a new scrape';
 
 /**
  * Encodes a value as one base64url JWT segment.
@@ -230,6 +236,26 @@ async function coldSession(
 }
 
 /**
+ * Reports a failed cold login the way upstream does.
+ *
+ * <p>Upstream refuses a stale token itself and spends the run's one cold login
+ * at once. When that login fails, it tries a second one, which the budget
+ * refuses, so the run ends with the budget's failure instead.
+ * @param state - The bank's memory.
+ * @param token - The long-term token the login sent, if any.
+ * @param failure - How the cold login failed.
+ * @returns The failure upstream reports.
+ */
+function coldFailure(
+  state: IBankState, token: string | undefined, failure: typeof CODE_REJECTED | undefined,
+): IScraperScrapingResult {
+  const isStaleSeed = token !== undefined && token !== '' && !isFresh(state, token);
+  if (isStaleSeed) return refused('GENERIC', BUDGET_SPENT_MESSAGE);
+  if (failure === undefined) return refused('TWO_FACTOR_RETRIEVER_MISSING', 'no SMS code retriever');
+  return refused('INVALID_OTP', 'wrong SMS code');
+}
+
+/**
  * Names the account number the fake bank returns for an account.
  * @param account - The account's email or phone number.
  * @returns Its account number.
@@ -275,8 +301,7 @@ async function scrape(
   const account = customerOf(state, credentials);
   if (account === undefined) return refused('INVALID_PASSWORD', 'unknown login');
   const session = warmSession(state, token) ?? await coldSession(state, credentials, account);
-  if (session === undefined) return refused('TWO_FACTOR_RETRIEVER_MISSING', 'no SMS code retriever');
-  if (session === CODE_REJECTED) return refused('INVALID_OTP', 'wrong SMS code');
+  if (session === undefined || session === CODE_REJECTED) return coldFailure(state, token, session);
   await options.onAuthFlowComplete?.({ longTermToken: session.token, bearer: `bearer-${fakeUuid()}` });
   return scrapeOf(session);
 }

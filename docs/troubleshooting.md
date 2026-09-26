@@ -79,7 +79,11 @@ used its one SMS login and will not send a second code`.
 run's SMS login did not give it a working session, and a second login would
 need a second code, so the library stopped.
 
-**Fix:** run the import again. The new run may ask for one new code.
+It also happens when the saved token has expired and `twoFactorAuth` is off:
+the library sets the expired token aside, and the run cannot ask for a code.
+
+**Fix:** keep `twoFactorAuth: true`, then run the import again. The new run
+may ask for one new code.
 
 ## One bank failed but the notification says the import failed
 

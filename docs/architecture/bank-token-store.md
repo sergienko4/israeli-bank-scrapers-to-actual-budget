@@ -239,7 +239,10 @@ the attempt fails with `TWO_FACTOR_RETRIEVER_MISSING`, and `settleToken` in
 `AttemptRunner.ts` warns with the `twoFactorAuth` fix. The warnings say "not
 accepted" rather than naming the bank, because upstream can also set aside a
 token it judges stale before it asks the bank. Neither warns when no token was
-sent, since the resolver has already said why.
+sent, since the resolver has already said why. A stale token takes neither
+path: upstream spends the run's one cold login at once, and when that login
+fails its second one is refused, so the attempt fails as `GENERIC` with
+`already spent its one cold SMS login`, which the error advice explains.
 
 The attempt's login fingerprint is computed once, in
 `buildTokenCaptureParams`, so the resolver and the capture use the same login,

@@ -44,6 +44,8 @@ interface IReplayRun extends IRun {
 interface IRefusal {
   readonly why: string;
   readonly refuse: (bank: IFakeApiDirectBank, bankConfig: IBankConfig) => void;
+  /** How a run ends when the cold login this refusal leads to fails as `errorType`. */
+  readonly coldFailure: (errorType: string) => Record<string, unknown>;
 }
 
 /** A way the token file can fail, and the warning the run gives for it. */
@@ -55,6 +57,17 @@ interface IBrokenStore {
 
 /** What upstream returns when a cold login is due and the credentials carry no SMS code retriever. */
 const NO_RETRIEVER = { success: false, errorType: 'TWO_FACTOR_RETRIEVER_MISSING' };
+
+/**
+ * How a run ends when the cold login after an expired token fails.
+ *
+ * <p>Upstream rejects an expired token itself and spends the run's one cold
+ * login at once. When that login fails, it tries a second one, which the
+ * one-login budget refuses, so upstream fails as `GENERIC`. The importer
+ * counts that as worth another try, has none left, and throws with
+ * upstream's message.
+ */
+const BUDGET_SPENT = { message: expect.stringContaining('already spent its one cold SMS login') };
 
 let store: ITokenStoreDir;
 
@@ -68,6 +81,19 @@ async function importOnce(entry: string, bankConfig: IBankConfig): Promise<IRepl
   const sms = countingPrompter();
   const run = await runImport({ entry, bankConfig, prompter: sms.prompter });
   return { ...run, smsCount: sms.smsCount() };
+}
+
+/**
+ * Imports one entry that may fail by throwing, counting the SMS codes it asks for.
+ * @param entry - The entry's name.
+ * @param bankConfig - The entry's config.
+ * @returns The run's result or what it threw, and how many SMS codes it asked for.
+ */
+async function importSettled(entry: string, bankConfig: IBankConfig): Promise<{ outcome: unknown; smsCount: number }> {
+  const sms = countingPrompter();
+  const outcome = await runImport({ entry, bankConfig, prompter: sms.prompter })
+    .then((run) => run.result, (error: unknown) => error);
+  return { outcome, smsCount: sms.smsCount() };
 }
 
 /**
@@ -97,9 +123,19 @@ function notAcceptedWarnings(run: IRun): string[] {
   return run.logger.warn.mock.calls.map(([line]) => String(line)).filter((line) => line.includes('was not accepted'));
 }
 
+const revoked: IRefusal = {
+  why: 'a revoked',
+  refuse: (bank, bankConfig): void => { bank.revoke(bankConfig); },
+  coldFailure: (errorType) => ({ success: false, errorType }),
+};
+
 const refusals: IRefusal[] = [
-  { why: 'a revoked', refuse: (bank, bankConfig): void => { bank.revoke(bankConfig); } },
-  { why: 'an expired', refuse: (bank, bankConfig): void => { bank.expire(bankConfig); } },
+  revoked,
+  {
+    why: 'an expired',
+    refuse: (bank, bankConfig): void => { bank.expire(bankConfig); },
+    coldFailure: () => BUDGET_SPENT,
+  },
 ];
 
 const damagedFile: IBrokenStore = {
@@ -213,12 +249,10 @@ describe.each(API_DIRECT_BANKS)('E2E: long-term token replay, $name', (row: IApi
     ]);
   });
 
-  it.each(refusals)('says how to fix it when $why token is not accepted and twoFactorAuth is off', async ({
-    refuse,
-  }) => {
+  it('says how to fix it when a revoked token is not accepted and twoFactorAuth is off', async () => {
     const entry = bank.customer();
     await importOnce(FIRST, entry);
-    refuse(bank, entry);
+    revoked.refuse(bank, entry);
 
     const stuck = await importOnce(FIRST, { ...entry, twoFactorAuth: false });
 
@@ -239,17 +273,33 @@ describe.each(API_DIRECT_BANKS)('E2E: long-term token replay, $name', (row: IApi
   });
 
   it.each(refusals)('fails with no SMS for $why token when twoFactorAuth is off, keeping the token', async ({
-    refuse,
+    refuse, coldFailure,
   }) => {
     const entry = bank.customer();
     await importOnce(FIRST, entry);
     refuse(bank, entry);
 
-    const stuck = await importOnce(FIRST, { ...entry, twoFactorAuth: false });
+    const stuck = await importSettled(FIRST, { ...entry, twoFactorAuth: false });
 
-    expect(stuck.result).toMatchObject(NO_RETRIEVER);
+    expect(stuck.outcome).toMatchObject(coldFailure('TWO_FACTOR_RETRIEVER_MISSING'));
     expect(stuck.smsCount).toBe(0);
     expect(bank.sent).toEqual([undefined, bank.minted[0]]);
+    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[0]);
+  });
+
+  it.each(refusals)('fails after one SMS when the code for $why token is rejected, keeping the token', async ({
+    refuse, coldFailure,
+  }) => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    refuse(bank, entry);
+    bank.rejectNextCode();
+
+    const rejected = await importSettled(FIRST, entry);
+
+    expect(rejected.outcome).toMatchObject(coldFailure('INVALID_OTP'));
+    expect(rejected.smsCount).toBe(1);
+    expect(bank.minted).toHaveLength(1);
     expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[0]);
   });
 
