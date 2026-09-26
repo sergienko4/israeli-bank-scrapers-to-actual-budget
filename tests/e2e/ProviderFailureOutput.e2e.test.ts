@@ -229,9 +229,10 @@ function logFileText(logDir: string): string {
  * Runs one failed import through the shipped assembly and collects every
  * output the operator reads.
  * @param directory - A fresh directory for the run's files.
+ * @param failureCode - The provider's failure code, which the run logs.
  * @returns Each output's text, by name.
  */
-async function runFailedImport(directory: string): Promise<Outputs> {
+async function runFailedImport(directory: string, failureCode: string): Promise<Outputs> {
   const logDir = join(directory, 'logs');
   const logger = createLogger({ logDir });
   const auditPath = join(directory, 'audit-log.json');
@@ -269,7 +270,7 @@ async function runFailedImport(directory: string): Promise<Outputs> {
     getBankNames: () => [ENTRY], notifier: null,
   });
   const handler = new TelegramCommandHandler({ mediator, notifier, auditLog, logDir, getBankNames: () => [ENTRY] });
-  return await collectOutputs({ handler, sent, logDir, auditPath, metrics });
+  return await collectOutputs({ handler, sent, logDir, auditPath, metrics, failureCode });
 }
 
 /** What {@link collectOutputs} reads each output from. */
@@ -279,10 +280,9 @@ interface IRunHandles {
   readonly logDir: string;
   readonly auditPath: string;
   readonly metrics: MetricsService;
+  /** The provider's failure code, which only the run's failure line holds. */
+  readonly failureCode: string;
 }
-
-/** A line the run logs at warn or error level, which it writes once the bank has failed. */
-const FAILURE_LINE = /"level":[45]0/u;
 
 /**
  * Formats the run's summary the way the Telegram and webhook notifiers send it.
@@ -303,9 +303,10 @@ function summaries(metrics: MetricsService): Outputs {
  * Sends each command in turn and reads every output back.
  *
  * <p>The file logger writes through a stream, so the log file is read once
- * the run's failure line has reached it. The summaries are formatted before
- * `/retry` runs the import again.
- * @param run - The run's handler, replies, files and metrics.
+ * the failure code has reached it. The run logs other warnings first, so any
+ * warn-level line is not enough. The summaries are formatted before `/retry`
+ * runs the import again.
+ * @param run - The run's handler, replies, files, metrics and failure code.
  * @returns Each output's text, by name.
  */
 async function collectOutputs(run: IRunHandles): Promise<Outputs> {
@@ -320,7 +321,7 @@ async function collectOutputs(run: IRunHandles): Promise<Outputs> {
     return run.sent.slice(before).join('\n');
   };
   const scanReply = await replyTo(`/scan ${ENTRY}`);
-  await vi.waitFor(() => { expect(logFileText(run.logDir)).toMatch(FAILURE_LINE); });
+  await vi.waitFor(() => { expect(logFileText(run.logDir)).toContain(run.failureCode); });
   const summaryOutputs = summaries(run.metrics);
   return {
     'the log file': logFileText(run.logDir),
@@ -344,7 +345,7 @@ describe.each(FAILURES)('after %s, every output', (_case, failure) => {
     delete process.env.E2E_MOCK_SCRAPER_DIR;
     delete process.env.E2E_MOCK_SCRAPER_FILE;
     providerRejects(failure);
-    outputs = await runFailedImport(directory);
+    outputs = await runFailedImport(directory, failure.errorType);
   });
 
   afterAll(() => {
