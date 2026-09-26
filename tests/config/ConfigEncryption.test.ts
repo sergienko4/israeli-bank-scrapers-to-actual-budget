@@ -1,3 +1,5 @@
+import { createDecipheriv, pbkdf2Sync } from 'node:crypto';
+
 import { describe, it, expect, afterEach } from 'vitest';
 import { encryptConfig, decryptConfig, isEncryptedConfig, getEncryptionPassword } from '../../src/Config/ConfigEncryption.js';
 import { TEST_CREDENTIAL, TEST_ENCRYPTION_KEY } from '../helpers/testCredentials.js';
@@ -65,6 +67,45 @@ describe('ConfigEncryption', () => {
       const encrypted = encryptConfig(hebrew, TEST_ENCRYPTION_KEY);
       const decrypted = decryptConfig(encrypted, TEST_ENCRYPTION_KEY);
       expect(JSON.parse(decrypted)).toEqual(JSON.parse(hebrew));
+    });
+
+    it('still decrypts a config file written by an earlier release', () => {
+      // Fixed bytes from encryptConfig: a credentials.json already on disk must
+      // keep opening however the shared AES-GCM helpers change.
+      const earlierFile = JSON.stringify({
+        encrypted: true,
+        version: 1,
+        salt: 'Bgu6db/fw/iNcqDMqRxmQCvExkDQh6iNlGoNCRAd6JI=',
+        initVector: 'UggJdYtQAq8Cuk+gYftmeQ==',
+        tag: 'y80mXxKqz7OV5MLYtNYNvQ==',
+        ciphertext: 'JynbbhwMYHyi5H0Hc2q+l1L61E5UOqmk70i4Y5nrZgfzObN+3UdULHMRmSEhElGjKac54K4MCv+I',
+      });
+      const decrypted = decryptConfig(earlierFile, TEST_ENCRYPTION_KEY);
+      expect(JSON.parse(decrypted)).toEqual({ actual: { init: { serverURL: 'http://localhost:5006' } } });
+    });
+
+    it('writes a config file that an earlier release can still decrypt', () => {
+      // The earlier decryption, spelled out: no authenticated data, so a
+      // rollback still opens a config file written by this release.
+      const written = JSON.parse(encryptConfig(SAMPLE_CONFIG, TEST_ENCRYPTION_KEY)) as Record<string, unknown>;
+      const bytes = (field: string): Buffer => Buffer.from(String(written[field]), 'base64');
+      const key = pbkdf2Sync(TEST_ENCRYPTION_KEY, bytes('salt'), 100_000, 32, 'sha512');
+      const decipher = createDecipheriv('aes-256-gcm', key, bytes('initVector'), { authTagLength: 16 });
+      decipher.setAuthTag(bytes('tag'));
+      const plaintext = Buffer.concat([decipher.update(bytes('ciphertext')), decipher.final()]);
+      const fieldTypes = Object.entries(written).map(([name, value]) => `${name}:${typeof value}`);
+      expect({
+        fields: fieldTypes.sort(),
+        sizes: [bytes('salt').length, bytes('initVector').length, bytes('tag').length],
+        plaintext: plaintext.toString('utf8'),
+      }).toEqual({
+        fields: [
+          'ciphertext:string', 'encrypted:boolean', 'initVector:string', 'salt:string', 'tag:string',
+          'version:number',
+        ],
+        sizes: [32, 16, 16],
+        plaintext: SAMPLE_CONFIG,
+      });
     });
   });
 
