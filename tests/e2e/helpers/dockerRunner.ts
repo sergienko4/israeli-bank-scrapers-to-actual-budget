@@ -88,6 +88,19 @@ export function hasDockerImage(): boolean {
   } catch { return false; }
 }
 
+/**
+ * Reads a file the importer wrote to the e2e data volume, as the image's own
+ * user. The runtime files are owner-only, and on CI the runner's user is not
+ * the image's, so the host cannot read them directly.
+ * @param name - File name under /app/data.
+ * @returns The file's contents.
+ */
+export function readDataFileAsImageUser(name: string): string {
+  const dataDir = join(FIXTURES_DIR, 'e2e-data');
+  const args = ['run', '--rm', '-v', `${dataDir}:/app/data:ro`, DOCKER_IMAGE, 'cat', `/app/data/${name}`];
+  return execFileSync('docker', args, { encoding: 'utf8', stdio: 'pipe' });
+}
+
 export function findBudgetId(): string | null {
   const dataDir = join(FIXTURES_DIR, 'e2e-data');
   if (!existsSync(dataDir)) return null;

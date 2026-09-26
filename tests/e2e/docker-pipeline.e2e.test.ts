@@ -10,9 +10,12 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import api from '@actual-app/api';
+import { statSync } from 'fs';
 import { join } from 'path';
 import { extractQueryData } from '../../src/Utils/Index.js';
-import { findBudgetId, getFixturesDir, hasDockerImage } from './helpers/dockerRunner.js';
+import {
+  findBudgetId, getFixturesDir, hasDockerImage, readDataFileAsImageUser,
+} from './helpers/dockerRunner.js';
 
 const DATA_DIR = join(getFixturesDir(), 'e2e-data');
 const BUDGET_ID = findBudgetId();
@@ -184,6 +187,19 @@ describe.runIf(hasData)('Docker Pipeline E2E', () => {
 
       const totalSpent = debits.reduce((sum, t) => sum + Math.abs(t.amount), 0);
       expect(totalSpent).toBeGreaterThan(50000);
+    });
+  });
+
+  describe('Import History File', () => {
+    it('writes the audit log owner-only on the data volume', () => {
+      const mode = statSync(join(DATA_DIR, 'audit-log.json')).mode & 0o777;
+      expect(mode).toBe(0o600);
+    });
+
+    it('stores both runs as the entries record', () => {
+      const stored = JSON.parse(readDataFileAsImageUser('audit-log.json')) as { entries: unknown[] };
+      expect(Object.keys(stored)).toEqual(['entries']);
+      expect(stored.entries.length).toBeGreaterThanOrEqual(2);
     });
   });
 });
