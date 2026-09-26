@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TimeoutError from '../../src/Errors/TimeoutError.js';
 import AppOtpPrompter from '../../src/Services/TwoFactor/AppOtpPrompter.js';
 import OtpRequestStore from '../../src/Services/TwoFactor/OtpRequestStore.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 
 let dir: string;
 let store: OtpRequestStore;
@@ -14,7 +15,7 @@ let store: OtpRequestStore;
 describe('AppOtpPrompter', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'otp-prompter-'));
-    store = new OtpRequestStore(join(dir, 'otp-requests.json'));
+    store = new OtpRequestStore(createNodeFileSystem(), join(dir, 'otp-requests.json'));
   });
 
   afterEach(() => {

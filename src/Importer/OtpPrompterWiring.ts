@@ -14,7 +14,7 @@ import ExpoPushNotifier from '../Services/Notifications/ExpoPushNotifier.js';
 import TelegramNotifier from '../Services/Notifications/TelegramNotifier.js';
 import AppOtpPrompter from '../Services/TwoFactor/AppOtpPrompter.js';
 import FallbackOtpPrompter from '../Services/TwoFactor/FallbackOtpPrompter.js';
-import OtpRequestStore from '../Services/TwoFactor/OtpRequestStore.js';
+import openOtpRequestStore from '../Services/TwoFactor/OtpRequestStoreWiring.js';
 import type OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
 import type { OtpChannel } from '../Services/TwoFactor/OtpSettingsStore.js';
 import openOtpSettingsStore from '../Services/TwoFactor/OtpSettingsStoreWiring.js';
@@ -41,7 +41,7 @@ export default class OtpPrompterWiring {
     if (this.readChannel() !== 'app') {
       return telegramPrompter;
     }
-    const requestStore = new OtpRequestStore();
+    const requestStore = openOtpRequestStore();
     const pushNotifier = new ExpoPushNotifier(openDeviceTokenStore());
     const appPrompter = new AppOtpPrompter(requestStore, pushNotifier);
     return telegramPrompter ? new FallbackOtpPrompter(appPrompter, telegramPrompter) : appPrompter;

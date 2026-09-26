@@ -14,7 +14,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { IOtpRequest } from '../Services/TwoFactor/OtpRequestStore.js';
-import OtpRequestStore from '../Services/TwoFactor/OtpRequestStore.js';
 import { OTP_SUBMIT_MAX, RATE_WINDOW } from './PortalRateLimit.js';
 import {
   OTP_PENDING_SCHEMA, OTP_SETTINGS_READ_SCHEMA, OTP_SETTINGS_WRITE_SCHEMA, OTP_SUBMIT_SCHEMA,
@@ -45,28 +44,29 @@ function toPublic(request: IOtpRequest): IPublicOtpRequest {
 
 /**
  * Sends the live pending OTP requests (without codes) to the mobile app.
- * @param _req - Fastify request (unused).
+ * @param stores - The portal's store factories.
  * @param reply - Fastify reply.
  * @returns The reply after sending the pending list.
  */
-function sendPending(_req: FastifyRequest, reply: FastifyReply): FastifyReply {
-  const store = new OtpRequestStore();
-  const requests = store.pending().map(toPublic);
+function sendPending(stores: IPortalStores, reply: FastifyReply): FastifyReply {
+  const requests = stores.otpRequests().pending().map(toPublic);
   return reply.send({ requests });
 }
 
 /**
  * Records the OTP code the user submitted from the app. The 4-8 digit rule is
  * enforced by the route schema, so a malformed code never reaches here.
+ * @param stores - The portal's store factories.
  * @param req - Request with an `:id` param and a JSON `{ code }` body.
  * @param reply - Fastify reply.
  * @returns The reply: 200 on success, 404 when no request is waiting.
  */
-function submitCode(req: FastifyRequest, reply: FastifyReply): FastifyReply {
+function submitCode(
+  stores: IPortalStores, req: FastifyRequest, reply: FastifyReply,
+): FastifyReply {
   const { code } = req.body as { code: string };
   const { id: requestId } = req.params as { id: string };
-  const store = new OtpRequestStore();
-  const wasAccepted = store.submit(requestId, code);
+  const wasAccepted = stores.otpRequests().submit(requestId, code);
   return wasAccepted
     ? reply.send({ ok: true })
     : reply.code(404).send({ error: 'No pending OTP request for this id' });
@@ -118,8 +118,8 @@ export default function registerOtpRoutes(
     schema: OTP_SETTINGS_WRITE_SCHEMA,
     config: { invalidMessage: 'Invalid OTP channel' },
   };
-  app.get('/api/otp/pending', { schema: OTP_PENDING_SCHEMA }, sendPending);
-  app.post('/api/otp/:id', submitLimit, submitCode);
+  app.get('/api/otp/pending', { schema: OTP_PENDING_SCHEMA }, (_req, reply) => sendPending(stores, reply));
+  app.post('/api/otp/:id', submitLimit, (req, reply) => submitCode(stores, req, reply));
   app.get('/api/otp/settings', { schema: OTP_SETTINGS_READ_SCHEMA }, (_req, reply) => sendSettings(stores, reply));
   app.put('/api/otp/settings', settingsWrite, (req, reply) => saveSettings(stores, req, reply));
   return { registered: true };

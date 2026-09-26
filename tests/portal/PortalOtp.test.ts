@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -9,6 +9,7 @@ import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { OTP_SUBMIT_MAX } from '../../src/Portal/PortalRateLimit.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
 import OtpRequestStore from '../../src/Services/TwoFactor/OtpRequestStore.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
 
 let app: FastifyInstance;
@@ -65,7 +66,7 @@ describe('Portal /api/otp', () => {
   });
 
   it('lists pending requests without codes', async () => {
-    new OtpRequestStore(requestsPath).create('leumi', 60_000);
+    new OtpRequestStore(createNodeFileSystem(), requestsPath).create('leumi', 60_000);
     const cookie = await loginCookie();
     const res = await app.inject({ method: 'GET', url: '/api/otp/pending', cookies: { portal_session: cookie } });
     expect(res.statusCode).toBe(200);
@@ -76,7 +77,7 @@ describe('Portal /api/otp', () => {
   });
 
   it('accepts a valid submitted code', async () => {
-    const created = new OtpRequestStore(requestsPath).create('leumi', 60_000);
+    const created = new OtpRequestStore(createNodeFileSystem(), requestsPath).create('leumi', 60_000);
     const cookie = await loginCookie();
     const res = await app.inject({
       method: 'POST', url: `/api/otp/${created.id}`, cookies: { portal_session: cookie }, payload: { code: '123456' },
@@ -85,8 +86,20 @@ describe('Portal /api/otp', () => {
     expect(readFileSync(requestsPath, 'utf8')).toContain('123456');
   });
 
+  it('keeps the requests file owner-only after a submitted code', async () => {
+    const created = new OtpRequestStore(createNodeFileSystem(), requestsPath).create('leumi', 60_000);
+    chmodSync(requestsPath, 0o644);
+    const cookie = await loginCookie();
+    await app.inject({
+      method: 'POST', url: `/api/otp/${created.id}`, cookies: { portal_session: cookie }, payload: { code: '123456' },
+    });
+    expect(statSync(requestsPath).mode & 0o777).toBe(0o600);
+    const stored = JSON.parse(readFileSync(requestsPath, 'utf8')) as { requests: { code?: string }[] };
+    expect(stored.requests[0]?.code).toBe('123456');
+  });
+
   it('rejects a malformed code with 400', async () => {
-    const created = new OtpRequestStore(requestsPath).create('leumi', 60_000);
+    const created = new OtpRequestStore(createNodeFileSystem(), requestsPath).create('leumi', 60_000);
     const cookie = await loginCookie();
     const res = await app.inject({
       method: 'POST', url: `/api/otp/${created.id}`, cookies: { portal_session: cookie }, payload: { code: 'ab' },
