@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import BatchSummaryNotifier from '../../../src/Services/Import/BatchSummaryNotifier.js';
 import type { INotifier } from '../../../src/Services/Notifications/INotifier.js';
 import type { IBatchResult, IImportJobResult } from '../../../src/Types/Index.js';
+import { fakeBatchResult } from '../../helpers/factories.js';
 
 vi.mock('../../../src/Logger/Index.js', () => ({
   getLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -20,14 +21,14 @@ const sampleJob: IImportJobResult = {
   durationMs: 1000,
 };
 
-const baseBatch: IBatchResult = {
+const baseBatch: IBatchResult = fakeBatchResult({
   batchId: 'batch-1',
   source: 'api',
   jobs: [sampleJob, { ...sampleJob, exitCode: 1 }],
   totalDurationMs: 8000,
   successCount: 1,
   failureCount: 1,
-};
+});
 
 describe('BatchSummaryNotifier.send', () => {
   let notifier: { sendMessage: ReturnType<typeof vi.fn> };

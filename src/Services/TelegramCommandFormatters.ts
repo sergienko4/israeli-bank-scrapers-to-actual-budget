@@ -66,8 +66,7 @@ export function isFreshEntry(
   entry: IAuditEntry,
   batch: IBatchResult
 ): boolean {
-  const batchStartMs = Date.now() - batch.totalDurationMs;
-  return new Date(entry.timestamp).getTime() >= batchStartMs;
+  return new Date(entry.timestamp).getTime() >= batch.startedAtMs;
 }
 
 /**

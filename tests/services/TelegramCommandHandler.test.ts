@@ -6,7 +6,7 @@ import type { IAuditEntry, IAuditLog } from '../../src/Services/AuditLogService.
 import type { INotifier } from '../../src/Services/Notifications/INotifier.js';
 import { succeed, fail } from '../../src/Types/Index.js';
 import {
-  assertProcedureSuccess, fakeIAuditEntry, fakeImportJobResult,
+  assertProcedureSuccess, fakeBatchResult, fakeIAuditEntry, fakeImportJobResult,
 } from '../helpers/factories.js';
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
@@ -46,11 +46,11 @@ function createMockMediator(): {
 } {
   return {
     requestImport: vi.fn().mockReturnValue('batch-1'),
-    waitForBatch: vi.fn().mockResolvedValue({
+    waitForBatch: vi.fn().mockResolvedValue(fakeBatchResult({
       batchId: 'batch-1', source: 'telegram',
       jobs: [], totalDurationMs: 5000,
       successCount: 1, failureCount: 0,
-    }),
+    })),
     isImporting: vi.fn().mockReturnValue(false),
     getLastResult: vi.fn().mockReturnValue(null),
     getLastRunTime: vi.fn().mockReturnValue(null),
@@ -460,11 +460,11 @@ describe('TelegramCommandHandler', () => {
    * @param durationMs - Total duration in milliseconds.
    */
   function setupFailedBatch(durationMs = 5000): void {
-    mockMediator.waitForBatch.mockResolvedValue({
+    mockMediator.waitForBatch.mockResolvedValue(fakeBatchResult({
       batchId: 'batch-1', source: 'telegram',
       jobs: [], totalDurationMs: durationMs,
       successCount: 0, failureCount: 1,
-    });
+    }));
   }
 
   /**
@@ -564,7 +564,7 @@ describe('TelegramCommandHandler', () => {
   // ─── Regression: one failed bank must not read as a total failure ───
 
   it('/scan reports a partial run when only one per-bank job failed', async () => {
-    mockMediator.waitForBatch.mockResolvedValue({
+    mockMediator.waitForBatch.mockResolvedValue(fakeBatchResult({
       batchId: 'batch-2', source: 'telegram', totalDurationMs: 4000,
       successCount: 2, failureCount: 1,
       jobs: [
@@ -572,7 +572,7 @@ describe('TelegramCommandHandler', () => {
         fakeImportJobResult('visaCal', 0),
         fakeImportJobResult('oneZero', 1),
       ],
-    });
+    }));
     const mockAuditLog = createMockAuditLog({
       entries: [fakeIAuditEntry({
         totalBanks: 1, successfulBanks: 0, failedBanks: 1,

@@ -15,11 +15,11 @@ import {
   toJobResult,
 } from '../../../src/Services/Import/BatchFactory.js';
 import type {
-  IBatchResult,
   IImportJob,
   IImportJobResult,
   IImportRequestOptions,
 } from '../../../src/Types/Index.js';
+import { fakeBatchResult } from '../../helpers/factories.js';
 
 const baseOpts: IImportRequestOptions = { source: 'api' };
 
@@ -33,20 +33,14 @@ const sampleJob: IImportJob = {
 describe('buildDeferredPromise', () => {
   it('resolves the inner promise when resolve() is called', async () => {
     const deferred = buildDeferredPromise();
-    const result: IBatchResult = {
-      batchId: 'b', source: 'api', jobs: [],
-      totalDurationMs: 0, successCount: 0, failureCount: 0,
-    };
+    const result = fakeBatchResult({ source: 'api' });
     deferred.resolve(result);
     await expect(deferred.promise).resolves.toBe(result);
   });
 
   it('resolve() returns a success Procedure with batch-resolved status', () => {
     const deferred = buildDeferredPromise();
-    const result: IBatchResult = {
-      batchId: 'b', source: 'api', jobs: [],
-      totalDurationMs: 0, successCount: 0, failureCount: 0,
-    };
+    const result = fakeBatchResult({ source: 'api' });
     const procedure = deferred.resolve(result);
     expect(procedure.success).toBe(true);
     if (procedure.success) {
