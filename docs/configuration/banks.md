@@ -159,7 +159,8 @@ the `<bank id>:<entry name>` above):
 | `Stored the long-term token for <key>` | A new token was saved. |
 | `The stored long-term token for <key> belongs to another login` | The email or phone number changed; the run logs in with one SMS. |
 | `The configured long-term token for <key> belongs to another login` | `otpLongTermToken` was not sent. |
-| `The token file is damaged` or `Could not read the long-term token for <key>` | No token was sent; the warning names the cause. |
+| `The token file is damaged, so the configured long-term token for <key> is not sent` | Nothing usable is saved for the entry, and the damaged file cannot say whose `otpLongTermToken` is, so it was not sent. A saved token the importer can still read from a damaged file is sent as usual, without this warning. |
+| `Could not read the long-term token for <key>` | The file could not be read, so no token was sent; the warning names the cause. |
 | `No usable long-term token for <key>, and this run cannot ask for an SMS code` | Turn on `twoFactorAuth` for one SMS login, or restore the token file. |
 | `Could not store the long-term token for <key>` | The next run needs an SMS; check that `/app/data` is writable. |
 
