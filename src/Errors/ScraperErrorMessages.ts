@@ -114,6 +114,17 @@ export const UPSTREAM_FAILURE_SIGNATURES: readonly IFailureSignature[] = [
         + 'It usually clears within minutes, so retry later',
     },
   },
+  {
+    // scraper 8.7.3 allows one SMS login per scrape. When a run needs a second
+    // one (a session repair when its first login produced no session), the
+    // scraper refuses and fails as GENERIC. The fix is a new run, not a
+    // scraper update.
+    pattern: /already spent its one cold SMS login/iu,
+    advice: {
+      message: 'This run already used its one SMS login and will not send a second code',
+      action: 'Run the import again — the new run may ask for one new code',
+    },
+  },
 ];
 
 /**

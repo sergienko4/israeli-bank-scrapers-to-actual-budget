@@ -75,6 +75,64 @@ account.
 **Invariant:** the file binds each token to exactly one login, and that
 binding never moves.
 
+## At rest
+
+With `CREDENTIALS_ENCRYPTION_PASSWORD` (or the legacy `CONFIG_PASSWORD`) set,
+every file the store writes holds no token, login or capture time in plain
+text. Each record is sealed on its own, so a damaged record costs only that
+account:
+
+```json
+{
+  "onezero:oneZero": {
+    "encrypted": true, "version": 1,
+    "salt": "…", "initVector": "…", "tag": "…", "ciphertext": "…"
+  }
+}
+```
+
+- The whole record `{token, capturedAt, login}` is sealed. The login
+  fingerprint is an unsalted hash of a phone number or email, so it would give
+  the login away. The store key stays plain, because it addresses the entry.
+- The cipher is the config file's: AES-256-GCM, with the key from
+  PBKDF2-SHA512 at 100,000 iterations (`src/Config/ConfigEncryption.ts`). The
+  salt is 32 bytes and the IV and tag 16 each; a record with any other size is
+  unusable.
+- The store key is the GCM additional data, so a record copied under another
+  key does not open.
+- Each write seals every record under one fresh salt, each with its own IV.
+  Each read derives at most one key, for the salt of the file's first sealed
+  record.
+  No key is kept between calls.
+
+`src/Scraper/Tokens/TokenRecordCipher.ts` does the sealing. The store opens
+the records before it checks them, and seals them before a write reaches
+`SecureJsonStore`, so every rule on this page applies to the opened record. A
+seal that fails refuses the write and leaves the file as it was.
+
+A record that does not open is an unusable entry, like any other damage: that
+account logs in with one SMS, the file is not intact, and the next write
+quarantines it. That covers a changed password, an edited record and a record
+moved under another key. A record that does not match the password setting
+fails closed in the same way:
+
+| Password | Record on disk | Read as |
+|---|---|---|
+| Set | Sealed under this password | The opened record |
+| Set | Sealed under another password, or edited | Unusable |
+| Set | Plain text | Unusable, so no one who can write the file can plant a Pepper or PayBox token |
+| None | Sealed | Unusable |
+| None | Plain text | The record |
+
+So turning the password on, turning it off or changing it costs one SMS per
+account, once. The store rewrites the file only when it saves a token, so a
+plain-text file stays at `bank-tokens.json` until then, and after that as
+`bank-tokens.json.quarantined-*`, because a quarantine renames the file rather
+than rewriting it. Its tokens are unusable under the password either way, so
+delete `bank-tokens.json` when turning the password on, or the quarantined copy
+later. The store never deletes a quarantined file, since after other damage it
+can hold the only copy of a token.
+
 ## Reading
 
 `read(storeKey)` returns an `ITokenView`:
@@ -99,7 +157,9 @@ The last row is a failure rather than an empty record so the caller can say
 why a run went cold. Swallowing it would make a broken store
 indistinguishable from a first run.
 
-An entry is usable when `token` is an own string that is non-blank once
+With a password set, an entry is usable only if it opens
+([At rest](#at-rest)), and the rules below apply to the opened record. An
+entry is usable when `token` is an own string that is non-blank once
 trimmed and `login` is a fingerprint. A token bound to two different logins
 makes every entry holding it unusable, since none of the bindings can be
 trusted over the others. A missing or non-string `capturedAt` reads as `''`.
@@ -153,9 +213,12 @@ also sweep afterwards. [Wiring](https://github.com/sergienko4/israeli-bank-scrap
 ## Wiring
 
 `buildScrapeStrategy` in `src/Importer/PipelineComposition.ts` builds one
-store per import process and hands it to the live strategy. Building it
-touches no file, so a run that scrapes only browser banks never opens the
-token file; a malformed `BANK_TOKENS_PATH` still fails the run at startup.
+store per import process and hands it to the live strategy.
+`openBankTokenStore` in `src/Importer/BankTokenStoreWiring.ts` reads the
+config password once and gives the store a sealing cipher, or the plain-text
+one when no password is set. Building it touches no file and derives no key,
+so a run that scrapes only browser banks never opens the token file; a
+malformed `BANK_TOKENS_PATH` still fails the run at startup.
 Mock runs (`E2E_MOCK_SCRAPER_DIR` or `E2E_MOCK_SCRAPER_FILE`) build no store.
 
 For each API-direct scrape, `src/Scraper/Tokens/AuthFlowCapture.ts`:
@@ -186,11 +249,11 @@ replaced, and since every login revokes the token before it, the abandoned
 try's late callback could store a token the bank no longer honours.
 `pickRetryStrategy` in `src/Scraper/Strategies/Live/AttemptRunner.ts` gives
 these attempts the single-try policy it gives every 2FA bank, so a timeout
-ends the attempt. The INVALID_OTP retry starts a new attempt only after the
-first returned, so within one config entry's scrape, tokens reach the store in
-the order they were minted. A login that finishes after its try timed out is
-then the only login, and storing its token is correct; if the process exits
-first, the token is lost and the next run logs in cold.
+ends the attempt. `runWithOtpRetry` gives them no INVALID_OTP retry either,
+so one config entry's scrape makes a single attempt. A login that finishes
+after its try timed out is then the only login, and storing its token is
+correct; if the process exits first, the token is lost and the next run logs
+in cold.
 
 A failed write is logged as a warning naming the store key and the cause,
 such as `EROFS` or `ENOSPC`; a failed sweep names the directory and the cause.
@@ -201,7 +264,7 @@ nor the session bearer is logged.
 
 Before each attempt of an API-direct scrape, `resolveWarmToken` in
 `src/Scraper/Tokens/WarmTokenResolver.ts` chooses the token the login sends,
-and `credentialsFor` in `ScraperSetup.ts` hands `buildCredentials` a copy of
+and `warmLogin` in `AttemptLogin.ts` hands `buildCredentials` a copy of
 the entry that carries only that token. The store is read on every attempt;
 browser banks never read it. The order is:
 
@@ -219,14 +282,30 @@ browser banks never read it. The order is:
 
 Every doubt fails closed. No login fingerprint, and a store that cannot be read
 or throws, each give a WARN naming the key, and no token. A damaged file warns
-only when it stops a configured token from being sent: with no configured
-token the run logs in with an SMS without a warning, and a stored token the
-store can still read is sent as usual. When
+whenever it leaves the attempt with no token: when it stops a configured token
+from being sent, and when no token is configured and it holds none usable for
+the key. The store's view cannot say whose entry was damaged, so that warning
+does not claim it was this one. A stored token the store can still read is
+sent as usual, with only the INFO line. When
 no token is sent and the attempt has no OTP retriever (`twoFactorAuth` off),
 a WARN names both fixes. Upstream then fails the cold login with
 `TWO_FACTOR_RETRIEVER_MISSING`, which the importer treats as permanent and
-does not retry. The same happens, with no importer warning, when the bank
-refuses a stored token on such a run.
+does not retry.
+
+Upstream reports a refused token only to its own logger, so
+`WarmTokenWatch` in `src/Scraper/Tokens/WarmTokenWatch.ts` watches the two
+signs the importer does see. When an attempt sent a token, its OTP retriever
+warns once before a cold login asks for a code
+(`The long-term token for <key> was not accepted, so this run logs in with an
+SMS code`); upstream asks for a code only on a cold login. With no retriever
+the attempt fails with `TWO_FACTOR_RETRIEVER_MISSING`, and `settleToken` in
+`AttemptRunner.ts` warns with the `twoFactorAuth` fix. The warnings say "not
+accepted" rather than naming the bank, because upstream can also set aside a
+token it judges stale before it asks the bank. Neither warns when no token was
+sent, since the resolver has already said why. A stale token takes neither
+path: upstream spends the run's one cold login at once, and when that login
+fails its second one is refused, so the attempt fails as `GENERIC` with
+`already spent its one cold SMS login`, which the error advice explains.
 
 The attempt's login fingerprint is computed once, in
 `buildTokenCaptureParams`, so the resolver and the capture use the same login,
@@ -245,6 +324,13 @@ and each is stored under its own key, so a login abandoned by one entry never
 overwrites another entry's token. Two entries that log in to the same account
 are the exception: each login revokes the token the other stored, with or
 without a timeout, so both need an SMS on every run.
+
+Sealing hides the tokens, but it cannot catch every change to the file. GCM
+detects an edited record, not a deleted one, nor an older record of the same
+key put back. Either leads to one cold login, as deleting the file would: the
+store sends that login's older token, which the bank refuses, or none. A read
+derives its key from the first sealed record's salt, so changing that salt to
+another well-formed one makes every record unusable.
 
 The store can vouch only for the tokens it holds now. A configured token it has
 never seen is trusted as the entry's own, which is how a token from another

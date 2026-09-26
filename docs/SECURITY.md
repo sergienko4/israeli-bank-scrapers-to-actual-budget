@@ -139,6 +139,7 @@ The importer uses these volumes:
 ### Data at Rest
 
 - Config file contains plain-text credentials
+- `bank-tokens.json` on the data volume is an owner-only (`0600`) file of long-term tokens that skip the SMS login. With `CREDENTIALS_ENCRYPTION_PASSWORD` set, each token the importer saves is sealed under it; without it, each token it saves is plain text. Delete a plain-text `bank-tokens.json` when you turn the password on
 - Consider using encrypted filesystem (LUKS, BitLocker, etc.)
 - On VMs, use encrypted EBS/disk volumes
 

@@ -18,8 +18,6 @@ import type { ILogger } from '../Logger/ILogger.js';
 import type { IBankScrapeStrategy } from '../Scraper/Strategies/IBankScrapeStrategy.js';
 import { LiveScrapeStrategy } from '../Scraper/Strategies/LiveScrapeStrategy.js';
 import { MockScrapeStrategy } from '../Scraper/Strategies/MockScrapeStrategy.js';
-import resolveBankTokensPath from '../Scraper/Tokens/BankTokenPath.js';
-import BankTokenStore from '../Scraper/Tokens/BankTokenStore.js';
 import { ChainBuilder } from '../Scrapers/Pipeline/Index.js';
 import createEvaluateSpendingWatchStep from '../Scrapers/Pipeline/Steps/EvaluateSpendingWatchStep.js';
 import createFinalizeImportStep from '../Scrapers/Pipeline/Steps/FinalizeImportStep.js';
@@ -28,9 +26,9 @@ import createInitializeCategoryResolverStep from '../Scrapers/Pipeline/Steps/Ini
 import createProcessAllBanksStep from '../Scrapers/Pipeline/Steps/ProcessAllBanksStep.js';
 import type { INamedStep } from '../Scrapers/Pipeline/Types/PipelineStep.js';
 import SpendingWatchService from '../Services/SpendingWatchService.js';
-import createNodeFileSystem from '../Storage/NodeFileSystem.js';
 import type { IImporterConfig, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
+import openBankTokenStore from './BankTokenStoreWiring.js';
 import type { ICoreServices } from './CoreServicesWiring.js';
 import type { IResilienceComponents } from './ResilienceWiring.js';
 
@@ -90,7 +88,7 @@ export function buildScrapeStrategy(inputs: IScrapeStrategyInputs): IBankScrapeS
     timeoutWrapper: resilience.timeoutWrapper,
     twoFactorPrompter: services.twoFactorPrompter,
     notificationService: services.notificationService,
-    bankTokens: new BankTokenStore(createNodeFileSystem(), resolveBankTokensPath()),
+    bankTokens: openBankTokenStore(),
   });
 }
 

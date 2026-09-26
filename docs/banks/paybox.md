@@ -56,8 +56,8 @@ and once to complete the SMS sign-in. Both steps need the same delivered digits,
 so the importer answers the second request with the code you already supplied.
 You are prompted once per login attempt, not twice.
 
-If the bank rejects the code, the next attempt prompts you for a fresh one —
-the replay cache is rebuilt per attempt, so a wrong code is never re-sent.
+If the bank rejects the code, this run asks for no new code, and a wrong code is
+never re-sent. Run the import again for a fresh one.
 
 > The bank is matched on the `CompanyTypes` enum **value**, which is camelCase
 > (`payBox`) rather than PascalCase (`PayBox`). Matching on a hand-written

@@ -1,6 +1,9 @@
 /**
  * Config file encryption/decryption using AES-256-GCM
  * Zero external dependencies — uses Node.js built-in crypto module
+ *
+ * <p>The key derivation and AES-GCM helpers are exported for the bank token
+ * cipher, so both files at rest use one scheme and one password.
  */
 
 import { createCipheriv, createDecipheriv,pbkdf2Sync, randomBytes } from 'node:crypto';
@@ -10,11 +13,17 @@ import { errorMessage } from '../Utils/Index.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
-const IV_LENGTH = 16;
-const SALT_LENGTH = 32;
+/** Bytes of each IV. */
+export const IV_LENGTH = 16;
+/** Bytes of salt behind each derived key. */
+export const SALT_LENGTH = 32;
 const PBKDF2_ITERATIONS = 100_000;
 const PBKDF2_DIGEST = 'sha512';
-const AUTH_TAG_LENGTH = 16;
+/** Bytes of each GCM authentication tag. */
+export const AUTH_TAG_LENGTH = 16;
+
+/** Authenticated data for a payload bound to nothing else, such as a config file. */
+const NO_AAD = Buffer.alloc(0);
 
 export interface IEncryptedConfig {
   encrypted: true;
@@ -25,7 +34,10 @@ export interface IEncryptedConfig {
   ciphertext: string;
 }
 
-interface IEncryptedBuffers { salt: Buffer; initVector: Buffer; tag: Buffer; ciphertext: Buffer }
+/** The raw bytes of an {@link IEncryptedConfig} payload. */
+export interface IEncryptedBuffers {
+  salt: Buffer; initVector: Buffer; tag: Buffer; ciphertext: Buffer;
+}
 
 /**
  * Type guard that checks whether a parsed JSON value is an IEncryptedConfig object.
@@ -52,7 +64,7 @@ export function getEncryptionPassword(): string {
  * @param salt - Random salt buffer used to prevent rainbow-table attacks.
  * @returns A 32-byte derived key buffer.
  */
-function deriveKey(password: string, salt: Buffer): Buffer {
+export function deriveKey(password: string, salt: Buffer): Buffer {
   return pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, KEY_LENGTH, PBKDF2_DIGEST);
 }
 
@@ -65,26 +77,30 @@ function deriveKey(password: string, salt: Buffer): Buffer {
 export function encryptConfig(plainJson: string, password: string): string {
   if (!password) throw new ConfigurationError('Encryption password cannot be empty');
   const salt = randomBytes(SALT_LENGTH);
-  const initVector = randomBytes(IV_LENGTH);
   const derivedKey = deriveKey(password, salt);
-  const { ciphertext, tag } = encryptBuffer(plainJson, derivedKey, initVector);
-  const payload = buildEncryptedPayload({ salt, initVector, tag, ciphertext });
+  const sealed = encryptBuffer(plainJson, derivedKey);
+  const payload = buildEncryptedPayload({ salt, ...sealed });
   return JSON.stringify(payload, null, 2);
 }
 
 /**
- * Encrypts a UTF-8 plaintext string with AES-256-GCM.
+ * Encrypts a UTF-8 plaintext string with AES-256-GCM under a fresh random IV.
+ *
+ * <p>The authenticated data is not stored. Decryption succeeds only when the
+ * same bytes are given again, which binds the ciphertext to what they name.
  * @param plaintext - The string to encrypt.
  * @param key - 32-byte AES key buffer.
- * @param initVector - 16-byte initialisation vector buffer.
- * @returns Object containing the ciphertext and GCM authentication tag.
+ * @param aad - Authenticated data; empty for a config file.
+ * @returns The IV, the ciphertext and the GCM authentication tag.
  */
-function encryptBuffer(
-  plaintext: string, key: Buffer, initVector: Buffer
-): { ciphertext: Buffer; tag: Buffer } {
+export function encryptBuffer(
+  plaintext: string, key: Buffer, aad: Buffer = NO_AAD
+): Omit<IEncryptedBuffers, 'salt'> {
+  const initVector = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, initVector, { authTagLength: AUTH_TAG_LENGTH });
+  cipher.setAAD(aad);
   const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  return { ciphertext, tag: cipher.getAuthTag() };
+  return { initVector, ciphertext, tag: cipher.getAuthTag() };
 }
 
 /**
@@ -92,7 +108,7 @@ function encryptBuffer(
  * @param buffers - Object containing salt, initVector, tag, and ciphertext buffers.
  * @returns Serialisable IEncryptedConfig with all fields base64-encoded.
  */
-function buildEncryptedPayload(buffers: IEncryptedBuffers): IEncryptedConfig {
+export function buildEncryptedPayload(buffers: IEncryptedBuffers): IEncryptedConfig {
   const { salt, initVector, tag, ciphertext } = buffers;
   return {
     encrypted: true, version: 1,
@@ -124,13 +140,16 @@ export function decryptConfig(encryptedJson: string, password: string): string {
  * Decrypts the ciphertext in an IEncryptedConfig using AES-256-GCM.
  * @param data - The parsed IEncryptedConfig object.
  * @param key - 32-byte AES key buffer derived from the user password.
+ * @param aad - The authenticated data given at encryption; empty for a config file.
  * @returns The decrypted UTF-8 string.
+ * @throws ConfigurationError when the payload, key or authenticated data do not match.
  */
-function decryptBuffer(data: IEncryptedConfig, key: Buffer): string {
+export function decryptBuffer(data: IEncryptedConfig, key: Buffer, aad: Buffer = NO_AAD): string {
   const initVector = Buffer.from(data.initVector, 'base64');
   const decipher = createDecipheriv(
     ALGORITHM, key, initVector, { authTagLength: AUTH_TAG_LENGTH }
   );
+  decipher.setAAD(aad);
   const authTag = Buffer.from(data.tag, 'base64');
   decipher.setAuthTag(authTag);
   try {

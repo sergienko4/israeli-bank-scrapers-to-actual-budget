@@ -11,9 +11,9 @@
  * SMS, so both hooks want the SAME digits -- without memoisation the user is
  * prompted twice, back to back, for a code they already supplied.
  *
- * The cache lives on the retriever instance and a fresh retriever is built per
- * scrape attempt in `initScrape`, so the INVALID_OTP retry path still prompts
- * for a genuinely new code.
+ * The cache lives on the retriever instance, and `initScrape` builds a fresh
+ * retriever for every scrape attempt, so no attempt replays another attempt's
+ * code.
  * @internal
  */
 

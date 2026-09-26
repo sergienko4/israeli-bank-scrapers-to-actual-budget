@@ -4,21 +4,24 @@
  * BankScraper.
  */
 
-import { CompanyTypes, createScraper } from '@sergienko4/israeli-bank-scrapers';
+import { faker } from '@faker-js/faker';
+import type { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
+import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 
-import buildCredentials from '../../../src/Scraper/CredentialsBuilder.js';
 import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeStrategy.js';
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
 import type { IBankTokenStore } from '../../../src/Scraper/Tokens/BankTokenStore.js';
-import loginFingerprint from '../../../src/Scraper/Tokens/LoginFingerprint.js';
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
 import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
-import { fakeBankConfig, fakeImporterConfig, fakeValidBankConfigFor } from '../../helpers/factories.js';
+import type { IRawScrape, Procedure } from '../../../src/Types/Index.js';
+import type { IApiDirectBank } from '../../helpers/apiDirectBanks.js';
+import { API_DIRECT_BANKS, apiDirectEntry } from '../../helpers/apiDirectBanks.js';
+import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
-import { fakeToken, makeStore } from '../BankTokenStoreFixture.js';
+import { makeStore } from '../BankTokenStoreFixture.js';
 
 vi.mock('node:fs');
 
@@ -179,29 +182,53 @@ describe('LiveScrapeStrategy', () => {
     if (result.success) expect(result.data.attemptCount).toBe(2);
   });
 
-  it('logs the INVALID_OTP retry in with the token stored since the first attempt began', async () => {
-    const { store } = makeStore();
-    const bankConfig = fakeValidBankConfigFor('onezero');
-    const fingerprint = loginFingerprint(CompanyTypes.OneZero, bankConfig);
-    const login = fingerprint.success ? fingerprint.data : '';
-    const first = fakeToken();
-    const renewed = fakeToken();
-    store.write('onezero:primary', first, login);
+  it('tells a browser bank\'s user that a new code is on its way after INVALID_OTP', async () => {
     mockScraper.scrape
-      .mockImplementationOnce(async () => {
-        store.write('onezero:primary', renewed, login);
-        return { success: false, errorType: 'INVALID_OTP', accounts: [] };
-      })
+      .mockResolvedValueOnce({ success: false, errorType: 'INVALID_OTP', accounts: [] })
       .mockResolvedValueOnce({ success: true, accounts: [] });
+    await makeStrategy().scrape(makeOpts());
+    expect(notificationService.sendMessage.mock.calls).toEqual([[
+      '⚠️ OTP for <b>discount</b> was rejected. A new code will be requested — please check your SMS.',
+    ]]);
+  });
 
-    await makeStrategy(store).scrape({
-      bankId: 'onezero', companyType: CompanyTypes.OneZero, accountKey: 'primary',
-      bankConfig, startDate: new Date(), logger,
+  /**
+   * An API-direct bank sends one SMS code per run, so a rejected code ends
+   * that bank's run instead of starting a second login for a new code.
+   */
+  describe.each(API_DIRECT_BANKS)('INVALID_OTP from $name', (bank: IApiDirectBank) => {
+    /**
+     * Scrapes the bank once with a code the bank rejects on every login.
+     * @returns The strategy's result.
+     */
+    async function scrapeWithRejectedCode(): Promise<Procedure<IRawScrape>> {
+      mockScraper.scrape.mockResolvedValue({ success: false, errorType: 'INVALID_OTP', accounts: [] });
+      return await makeStrategy().scrape({
+        bankId: bank.bankId, companyType: bank.companyType as CompanyTypes, accountKey: 'primary',
+        bankConfig: apiDirectEntry(bank, { twoFactorAuth: true }), startDate: new Date(), logger,
+        otpRetriever: () => Promise.resolve(faker.string.numeric(6)),
+      });
+    }
+
+    it('returns the rejection after one login, without asking for a second code', async () => {
+      const result = await scrapeWithRejectedCode();
+      expect(createScraper).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({ success: true, data: { attemptCount: 1, raw: { errorType: 'INVALID_OTP' } } });
     });
 
-    const sent = vi.mocked(buildCredentials).mock.calls.map(([config]) => config.otpLongTermToken);
-    expect(sent).toEqual([first, renewed]);
-    expect(createScraper).toHaveBeenCalledTimes(2);
+    it('warns once that this run asks for no new code', async () => {
+      await scrapeWithRejectedCode();
+      const otpWarnings = logger.warn.mock.calls.map(([line]) => String(line)).filter((line) => line.includes('OTP'));
+      expect(otpWarnings).toEqual([`  ⚠️  OTP rejected for ${bank.bankId} — this run asks for no new code`]);
+    });
+
+    it('notifies once that this run asks for no new code', async () => {
+      await scrapeWithRejectedCode();
+      expect(notificationService.sendMessage.mock.calls).toEqual([[
+        `⚠️ OTP for <b>${bank.bankId}</b> was rejected. This run asks for no new code; `
+        + 'the next run can ask for a new one.',
+      ]]);
+    });
   });
 
   it('clears bank session when clearSession is set', async () => {

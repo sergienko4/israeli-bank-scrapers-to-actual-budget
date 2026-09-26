@@ -28,6 +28,10 @@ vi.mock('../../src/Services/SpendingWatchService.js', () => ({
 vi.mock('@actual-app/api', () => ({
   default: { kind: 'fake-actual-api' },
 }));
+vi.mock('../../src/Scraper/Tokens/TokenRecordCipher.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof CipherModule>();
+  return { ...actual, default: vi.fn(actual.default) };
+});
 
 import {
   NO_OP_WATCH,
@@ -38,8 +42,17 @@ import {
 } from '../../src/Importer/PipelineComposition.js';
 import ConfigurationError from '../../src/Errors/ConfigurationError.js';
 import BankTokenStore from '../../src/Scraper/Tokens/BankTokenStore.js';
+import createTokenRecordCipher from '../../src/Scraper/Tokens/TokenRecordCipher.js';
+import type * as CipherModule from '../../src/Scraper/Tokens/TokenRecordCipher.js';
 import { isSuccess } from '../../src/Types/ProcedureHelpers.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
+import { TEST_ENCRYPTION_KEY } from '../helpers/testCredentials.js';
+
+/** Env vars a case may rewrite; each is restored after the case. */
+const TOUCHED_ENV = [
+  'E2E_MOCK_SCRAPER_DIR', 'E2E_MOCK_SCRAPER_FILE', 'BANK_TOKENS_PATH',
+  'CREDENTIALS_ENCRYPTION_PASSWORD', 'CONFIG_PASSWORD',
+] as const;
 
 function makeInputs(): IScrapeStrategyInputs {
   return {
@@ -58,27 +71,19 @@ function makeInputs(): IScrapeStrategyInputs {
 }
 
 describe('PipelineComposition', () => {
-  let originalDir: string | undefined;
-  let originalFile: string | undefined;
-  let originalTokensPath: string | undefined;
+  let originalEnv = new Map<string, string | undefined>();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    originalDir = process.env.E2E_MOCK_SCRAPER_DIR;
-    originalFile = process.env.E2E_MOCK_SCRAPER_FILE;
-    originalTokensPath = process.env.BANK_TOKENS_PATH;
-    delete process.env.E2E_MOCK_SCRAPER_DIR;
-    delete process.env.E2E_MOCK_SCRAPER_FILE;
-    delete process.env.BANK_TOKENS_PATH;
+    originalEnv = new Map(TOUCHED_ENV.map((name) => [name, process.env[name]]));
+    for (const name of TOUCHED_ENV) delete process.env[name];
   });
 
   afterEach(() => {
-    if (originalDir === undefined) delete process.env.E2E_MOCK_SCRAPER_DIR;
-    else process.env.E2E_MOCK_SCRAPER_DIR = originalDir;
-    if (originalFile === undefined) delete process.env.E2E_MOCK_SCRAPER_FILE;
-    else process.env.E2E_MOCK_SCRAPER_FILE = originalFile;
-    if (originalTokensPath === undefined) delete process.env.BANK_TOKENS_PATH;
-    else process.env.BANK_TOKENS_PATH = originalTokensPath;
+    for (const [name, value] of originalEnv) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
 
   describe('NO_OP_WATCH', () => {
@@ -137,6 +142,29 @@ describe('PipelineComposition', () => {
       process.env.BANK_TOKENS_PATH = 'data/bank-tokens.json';
 
       expect(() => buildScrapeStrategy(makeInputs())).not.toThrow();
+      expect(createTokenRecordCipher).not.toHaveBeenCalled();
+    });
+
+    it('seals the token store under CREDENTIALS_ENCRYPTION_PASSWORD', () => {
+      process.env.CREDENTIALS_ENCRYPTION_PASSWORD = TEST_ENCRYPTION_KEY;
+
+      buildScrapeStrategy(makeInputs());
+
+      expect(createTokenRecordCipher).toHaveBeenCalledExactlyOnceWith(TEST_ENCRYPTION_KEY);
+    });
+
+    it('seals the token store under CONFIG_PASSWORD when that is the one set', () => {
+      process.env.CONFIG_PASSWORD = TEST_ENCRYPTION_KEY;
+
+      buildScrapeStrategy(makeInputs());
+
+      expect(createTokenRecordCipher).toHaveBeenCalledExactlyOnceWith(TEST_ENCRYPTION_KEY);
+    });
+
+    it('keeps the token store plaintext when no password is set', () => {
+      buildScrapeStrategy(makeInputs());
+
+      expect(createTokenRecordCipher).toHaveBeenCalledExactlyOnceWith('');
     });
   });
 

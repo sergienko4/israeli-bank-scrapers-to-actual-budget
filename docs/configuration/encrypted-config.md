@@ -5,9 +5,9 @@ Protect credentials by encrypting any config file at rest. The importer auto-det
 ## Encryption parameters
 
 - **Algorithm:** AES-256-GCM
-- **Key derivation:** PBKDF2-SHA256 with 200,000 iterations
-- **Salt:** 16 bytes (random per file)
-- **IV (nonce):** 12 bytes (random per file)
+- **Key derivation:** PBKDF2-SHA512 with 100,000 iterations
+- **Salt:** 32 bytes (random per file)
+- **IV (nonce):** 16 bytes (random per file)
 - **Auth tag:** 16 bytes (verified before decrypt)
 
 ## Encrypt
@@ -49,6 +49,29 @@ docker run -e CREDENTIALS_ENCRYPTION_PASSWORD=mypassword ...
 ```
 
 Or via the legacy `CONFIG_PASSWORD` env var (still supported for backward compatibility).
+
+## Long-term bank tokens
+
+The same password seals the long-term tokens that OneZero, Pepper and PayBox
+logins save in `bank-tokens.json` on the data volume. The importer seals each
+record itself; do not run `encrypt-config.js` on that file, or the importer
+reads it as damaged.
+
+- Turning the password on or off, or changing it, costs one SMS login per
+  account, once, so keep `twoFactorAuth: true` for that run. If the old file
+  is still there, the run warns `The token file is damaged …`; either way it
+  saves a new token.
+- An encrypted `config.json` or `credentials.json` still needs its own
+  password: a missing or wrong one stops the run at startup, before any token
+  is read. Decrypt the config, or re-encrypt it under the new password, before
+  you turn the password off or change it.
+- When you turn it on, delete `bank-tokens.json` from the data volume: its
+  plain-text tokens can no longer be used. Otherwise the file stays as it is
+  until the next saved token sets it aside as `bank-tokens.json.quarantined-*`,
+  which you then delete.
+
+The [token store design](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md)
+shows the sealed layout.
 
 ## Split config (recommended)
 

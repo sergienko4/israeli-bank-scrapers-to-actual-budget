@@ -7,6 +7,7 @@
  */
 
 import BankTokenStore from '../../src/Scraper/Tokens/BankTokenStore.js';
+import type { ITokenRecordCipher } from '../../src/Scraper/Tokens/TokenRecordCipher.js';
 import { fakeLoginFingerprint, fakeUuid } from '../helpers/factories.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
 
@@ -37,11 +38,14 @@ export interface IStoreUnderTest {
 /**
  * Builds a store over an in-memory filesystem holding the data volume.
  * @param fileSystem - Filesystem to use; a fresh fake unless a case needs a variant.
+ * @param cipher - Cipher for the records; the store's own default unless a case seals them.
  * @returns The store under test and the filesystem behind it.
  */
-export function makeStore(fileSystem = new FakeFileSystem()): IStoreUnderTest {
+export function makeStore(
+  fileSystem = new FakeFileSystem(), cipher?: ITokenRecordCipher,
+): IStoreUnderTest {
   fileSystem.seedDirectory(DATA_DIRECTORY);
-  return { store: new BankTokenStore(fileSystem, STORE_PATH), fileSystem };
+  return { store: new BankTokenStore(fileSystem, STORE_PATH, cipher), fileSystem };
 }
 
 /**

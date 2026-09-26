@@ -16,11 +16,9 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { faker } from '@faker-js/faker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import loginFingerprint from '../../src/Scraper/Tokens/LoginFingerprint.js';
-import type { ITwoFactorPrompter } from '../../src/Services/ITwoFactorPrompter.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
 import type { IApiDirectBank } from '../helpers/apiDirectBanks.js';
 import { accountOf, API_DIRECT_BANKS } from '../helpers/apiDirectBanks.js';
@@ -28,7 +26,7 @@ import type { IFakeApiDirectBank } from './helpers/fakeApiDirectBank.js';
 import { accountNumberOf, openApiDirectBank } from './helpers/fakeApiDirectBank.js';
 import type { IRun, ITokenStoreDir, SpyLogger } from './helpers/warmStartHarness.js';
 import {
-  closeTokenStore, everythingLogged, openTokenStore, runImport, storedTokens,
+  closeTokenStore, countingPrompter, everythingLogged, openTokenStore, runImport, storedTokens,
 } from './helpers/warmStartHarness.js';
 
 const provider = vi.hoisted(() => ({ createScraper: vi.fn() }));
@@ -42,16 +40,12 @@ interface IReplayRun extends IRun {
   readonly smsCount: number;
 }
 
-/** A prompter, and how many SMS codes it has been asked for so far. */
-interface ICountingPrompter {
-  readonly prompter: ITwoFactorPrompter;
-  readonly smsCount: () => number;
-}
-
 /** A way the bank stops honouring a token it minted. */
 interface IRefusal {
   readonly why: string;
   readonly refuse: (bank: IFakeApiDirectBank, bankConfig: IBankConfig) => void;
+  /** How a run ends when the cold login this refusal leads to fails as `errorType`. */
+  readonly coldFailure: (errorType: string) => Record<string, unknown>;
 }
 
 /** A way the token file can fail, and the warning the run gives for it. */
@@ -64,23 +58,18 @@ interface IBrokenStore {
 /** What upstream returns when a cold login is due and the credentials carry no SMS code retriever. */
 const NO_RETRIEVER = { success: false, errorType: 'TWO_FACTOR_RETRIEVER_MISSING' };
 
-let store: ITokenStoreDir;
-
 /**
- * Builds a prompter that answers with a fresh SMS code and counts how often it is asked.
- * @returns The prompter and its count.
+ * How a run ends when the cold login after an expired token fails.
+ *
+ * <p>Upstream rejects an expired token itself and spends the run's one cold
+ * login at once. When that login fails, it tries a second one, which the
+ * one-login budget refuses, so upstream fails as `GENERIC`. The importer
+ * counts that as worth another try, has none left, and throws with
+ * upstream's message.
  */
-function countingPrompter(): ICountingPrompter {
-  const askForCode = vi.fn(() => Promise.resolve(faker.string.numeric(6)));
-  return {
-    prompter: { createOtpRetriever: () => askForCode },
-    /**
-     * Counts the SMS codes asked for so far.
-     * @returns The count.
-     */
-    smsCount: (): number => askForCode.mock.calls.length,
-  };
-}
+const BUDGET_SPENT = { message: expect.stringContaining('already spent its one cold SMS login') };
+
+let store: ITokenStoreDir;
 
 /**
  * Imports one entry, with a prompter that counts the SMS codes it is asked for.
@@ -92,6 +81,19 @@ async function importOnce(entry: string, bankConfig: IBankConfig): Promise<IRepl
   const sms = countingPrompter();
   const run = await runImport({ entry, bankConfig, prompter: sms.prompter });
   return { ...run, smsCount: sms.smsCount() };
+}
+
+/**
+ * Imports one entry that may fail by throwing, counting the SMS codes it asks for.
+ * @param entry - The entry's name.
+ * @param bankConfig - The entry's config.
+ * @returns The run's result or what it threw, and how many SMS codes it asked for.
+ */
+async function importSettled(entry: string, bankConfig: IBankConfig): Promise<{ outcome: unknown; smsCount: number }> {
+  const sms = countingPrompter();
+  const outcome = await runImport({ entry, bankConfig, prompter: sms.prompter })
+    .then((run) => run.result, (error: unknown) => error);
+  return { outcome, smsCount: sms.smsCount() };
 }
 
 /**
@@ -112,20 +114,41 @@ function said(spy: SpyLogger['info']): string {
   return JSON.stringify(spy.mock.calls);
 }
 
+/**
+ * Lists the warnings a run gave about a token it sent and the bank did not accept.
+ * @param run - The run.
+ * @returns Each such warning, in order.
+ */
+function notAcceptedWarnings(run: IRun): string[] {
+  return run.logger.warn.mock.calls.map(([line]) => String(line)).filter((line) => line.includes('was not accepted'));
+}
+
+const revoked: IRefusal = {
+  why: 'a revoked',
+  refuse: (bank, bankConfig): void => { bank.revoke(bankConfig); },
+  coldFailure: (errorType) => ({ success: false, errorType }),
+};
+
 const refusals: IRefusal[] = [
-  { why: 'a revoked', refuse: (bank, bankConfig): void => { bank.revoke(bankConfig); } },
-  { why: 'an expired', refuse: (bank, bankConfig): void => { bank.expire(bankConfig); } },
+  revoked,
+  {
+    why: 'an expired',
+    refuse: (bank, bankConfig): void => { bank.expire(bankConfig); },
+    coldFailure: () => BUDGET_SPENT,
+  },
 ];
 
-const brokenStores: IBrokenStore[] = [
-  {
-    why: 'is damaged',
-    breakStore: (): void => {
-      rmSync(store.tokensPath);
-      mkdirSync(store.tokensPath);
-    },
-    warning: (storeKey) => `The token file is damaged, so the configured long-term token for ${storeKey} is not sent`,
+const damagedFile: IBrokenStore = {
+  why: 'is damaged',
+  breakStore: (): void => {
+    rmSync(store.tokensPath);
+    mkdirSync(store.tokensPath);
   },
+  warning: (storeKey) => `The token file is damaged, so the configured long-term token for ${storeKey} is not sent`,
+};
+
+const brokenStores: IBrokenStore[] = [
+  damagedFile,
   {
     why: 'cannot be read',
     breakStore: (): void => {
@@ -212,18 +235,71 @@ describe.each(API_DIRECT_BANKS)('E2E: long-term token replay, $name', (row: IApi
     expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[1]);
   });
 
-  it.each(refusals)('fails with no SMS for $why token when twoFactorAuth is off, keeping the token', async ({
+  it.each(refusals)('warns once that $why token was not accepted, so the run logs in with an SMS', async ({
     refuse,
   }) => {
     const entry = bank.customer();
     await importOnce(FIRST, entry);
     refuse(bank, entry);
 
+    const refused = await importOnce(FIRST, entry);
+
+    expect(notAcceptedWarnings(refused)).toEqual([
+      `  ⚠️  The long-term token for ${keyOf(FIRST)} was not accepted, so this run logs in with an SMS code`,
+    ]);
+  });
+
+  it('says how to fix it when a revoked token is not accepted and twoFactorAuth is off', async () => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    revoked.refuse(bank, entry);
+
     const stuck = await importOnce(FIRST, { ...entry, twoFactorAuth: false });
 
-    expect(stuck.result).toMatchObject(NO_RETRIEVER);
+    expect(notAcceptedWarnings(stuck)).toEqual([
+      `  ⚠️  The long-term token for ${keyOf(FIRST)} was not accepted, and this run cannot ask for an SMS code: `
+      + 'turn on twoFactorAuth for one SMS login',
+    ]);
+  });
+
+  it('gives no such warning when the token is accepted, or when none is sent', async () => {
+    const entry = bank.customer();
+    const cold = await importOnce(FIRST, entry);
+    const warm = await importOnce(FIRST, entry);
+    const moved = await importOnce(FIRST, bank.movedTo(entry));
+
+    expect([cold, warm, moved].map((run) => run.smsCount)).toEqual([1, 0, 1]);
+    expect([cold, warm, moved].flatMap(notAcceptedWarnings)).toEqual([]);
+  });
+
+  it.each(refusals)('fails with no SMS for $why token when twoFactorAuth is off, keeping the token', async ({
+    refuse, coldFailure,
+  }) => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    refuse(bank, entry);
+
+    const stuck = await importSettled(FIRST, { ...entry, twoFactorAuth: false });
+
+    expect(stuck.outcome).toMatchObject(coldFailure('TWO_FACTOR_RETRIEVER_MISSING'));
     expect(stuck.smsCount).toBe(0);
     expect(bank.sent).toEqual([undefined, bank.minted[0]]);
+    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[0]);
+  });
+
+  it.each(refusals)('fails after one SMS when the code for $why token is rejected, keeping the token', async ({
+    refuse, coldFailure,
+  }) => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    refuse(bank, entry);
+    bank.rejectNextCode();
+
+    const rejected = await importSettled(FIRST, entry);
+
+    expect(rejected.outcome).toMatchObject(coldFailure('INVALID_OTP'));
+    expect(rejected.smsCount).toBe(1);
+    expect(bank.minted).toHaveLength(1);
     expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[0]);
   });
 
@@ -293,6 +369,20 @@ describe.each(API_DIRECT_BANKS)('E2E: long-term token replay, $name', (row: IApi
     expect(bank.sent[1]).toBeUndefined();
     expect(broken.smsCount).toBe(1);
     expect(said(broken.logger.warn)).toContain(warning(keyOf(FIRST)));
+  });
+
+  it('warns when the token file is damaged and no token is configured, then logs in with an SMS', async () => {
+    const entry = bank.customer();
+    await importOnce(FIRST, entry);
+    damagedFile.breakStore();
+
+    const broken = await importOnce(FIRST, entry);
+
+    expect(bank.sent[1]).toBeUndefined();
+    expect(broken.smsCount).toBe(1);
+    expect(said(broken.logger.warn)).toContain(
+      `The token file is damaged and holds no usable long-term token for ${keyOf(FIRST)}`,
+    );
   });
 
   it('fails, and says how to fix it, when twoFactorAuth is off and no token is usable', async () => {

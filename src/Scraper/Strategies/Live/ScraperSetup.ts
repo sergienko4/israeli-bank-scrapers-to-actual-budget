@@ -5,12 +5,10 @@
 
 import { existsSync, rmSync } from 'node:fs';
 
-import type { ScraperCredentials, ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
+import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
 import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 
-import type { IBankConfig } from '../../../Types/Index.js';
 import { errorMessage } from '../../../Utils/Index.js';
-import buildCredentials from '../../CredentialsBuilder.js';
 import { buildChromeArgs, getChromeDataDir } from '../../ScraperOptionsBuilder.js';
 import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
 import {
@@ -18,7 +16,7 @@ import {
 } from '../../Tokens/AuthFlowCapture.js';
 import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
 import loginFingerprint from '../../Tokens/LoginFingerprint.js';
-import resolveWarmToken from '../../Tokens/WarmTokenResolver.js';
+import credentialsFor from './AttemptLogin.js';
 import { BrowserRegistry } from './BrowserRegistry.js';
 import { resolveOtpRetriever } from './OtpRetriever.js';
 import type {
@@ -45,8 +43,8 @@ type ProviderScraper = ILiveProviderScraper;
  * token an attempt sends is read under the key and login it is stored under.
  * @param deps - Strategy dependencies captured by the public facade.
  * @param scrapeOpts - Resolved scrape options for the current bank.
- * @returns Configured provider scraper and credentials, and whether its
- *   login callback stores a durable token.
+ * @returns Configured provider scraper and credentials, the watch on the
+ *   token they carry, and whether its login callback stores a durable token.
  */
 export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLiveScrape {
   const retriever = resolveOtpRetriever(deps, scrapeOpts);
@@ -55,8 +53,8 @@ export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLi
   const hasTokenCapture = attachAuthFlowCapture(options, captureParams);
   const browsers = captureBrowsers(options);
   const scraper = prepareScraper(scrapeOpts, options);
-  const credentials = credentialsFor(captureParams, scrapeOpts.bankConfig, retriever);
-  return { scraper, credentials, browsers, hasTokenCapture };
+  const login = credentialsFor(captureParams, scrapeOpts.bankConfig, retriever);
+  return { scraper, ...login, browsers, hasTokenCapture };
 }
 
 /**
@@ -68,26 +66,6 @@ function captureBrowsers(options: ScraperOptions): BrowserRegistry {
   const browsers = new BrowserRegistry();
   attachBrowserCapture(options, browsers);
   return browsers;
-}
-
-/**
- * Builds the credentials one attempt logs in with.
- *
- * API-direct entries carry only a long-term token the store vouches for,
- * read afresh on every attempt. Browser banks never read the store, so
- * their entry is used as configured.
- * @param captureParams - Account key, login, store and logger for this attempt.
- * @param bankConfig - The entry as configured.
- * @param retriever - The attempt's OTP retriever, when it can ask for an SMS code.
- * @returns Provider credentials for this attempt.
- */
-function credentialsFor(
-  captureParams: IAuthFlowCaptureParams, bankConfig: IBankConfig, retriever: OtpRetriever,
-): ScraperCredentials {
-  if (!isApiDirectBank(captureParams.companyType)) return buildCredentials(bankConfig, retriever);
-  const canAskForOtp = retriever !== undefined;
-  const loginConfig = resolveWarmToken(captureParams, { bankConfig, canAskForOtp });
-  return buildCredentials(loginConfig, retriever);
 }
 
 /**
