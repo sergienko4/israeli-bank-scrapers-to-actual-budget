@@ -197,5 +197,6 @@ export function buildBatchResult(tracker: IBatchTracker): IBatchResult {
     source: tracker.source,
     jobs: tracker.results,
     totalDurationMs: Date.now() - tracker.startTime,
+    startedAtMs: tracker.startTime,
   };
 }

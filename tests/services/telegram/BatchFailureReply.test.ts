@@ -18,6 +18,7 @@ import {
 import {
   fakeBatchResult,
   fakeIAuditEntry,
+  fakeIAuditEntryDuring,
   fakeImportJobResult,
 } from '../../helpers/factories.js';
 
@@ -145,11 +146,12 @@ describe('BatchFailureReply', () => {
     });
 
     it('falls back to the audit entry for aggregate batches', () => {
+      const batch = fakeBatchResult({
+        jobs: [fakeImportJobResult('all', 1)], failureCount: 1, totalDurationMs: 1000,
+      });
       const reply = buildBatchErrorReply({
-        batch: fakeBatchResult({
-          jobs: [fakeImportJobResult('all', 1)], failureCount: 1, totalDurationMs: 1000,
-        }),
-        entry: fakeIAuditEntry({
+        batch,
+        entry: fakeIAuditEntryDuring(batch, {
           totalBanks: 2, successfulBanks: 1, failedBanks: 1,
           banks: [{ name: 'discount', status: 'failure', error: 'Auth', txns: 0 }],
         }),

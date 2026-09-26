@@ -228,6 +228,47 @@ export function fakeIAuditEntry(overrides: Partial<IAuditEntry> = {}): IAuditEnt
   };
 }
 
+/**
+ * Creates a fake audit-log entry written while the given batch ran, at its
+ * start. Use it when a test needs the entry to count as the batch's own.
+ * @param batch - The batch whose run the entry belongs to.
+ * @param overrides - Fields to override on the default entry.
+ * @returns A merged IAuditEntry object.
+ */
+export function fakeIAuditEntryDuring(
+  batch: IBatchResult, overrides: Partial<IAuditEntry> = {},
+): IAuditEntry {
+  return fakeIAuditEntry({ timestamp: new Date(batch.startedAtMs).toISOString(), ...overrides });
+}
+
+/**
+ * Lists audit files that hold one readable entry beside something malformed,
+ * as a hand edit or an older release can leave them. The third item of each
+ * case says whether the newest stored entry is the readable one.
+ * @param good - The readable entry.
+ * @returns Cases of [label, file content, newest entry is readable].
+ */
+export function malformedAuditFiles(
+  good: IAuditEntry,
+): readonly (readonly [string, readonly unknown[], boolean])[] {
+  const badEntries: readonly (readonly [string, unknown])[] = [
+    ['a null entry', null],
+    ['an entry without banks', { ...good, banks: undefined }],
+    ['an entry without a timestamp', { ...good, timestamp: undefined }],
+    ['an entry whose totals are not numbers', { ...good, totalBanks: '1' }],
+  ];
+  const badRows: readonly (readonly [string, unknown])[] = [
+    ['a null bank row', null],
+    ['a bank row that is not an object', 'leumi'],
+    ['a bank row without a name', { status: 'failure', txns: 0 }],
+    ['a bank row whose error is not text', { name: 'oneZero', status: 'failure', txns: 0, error: 7 }],
+  ];
+  return [
+    ...badEntries.map(([label, bad]) => [label, [good, bad], false] as const),
+    ...badRows.map(([label, bad]) => [label, [{ ...good, banks: [...good.banks, bad] }], true] as const),
+  ];
+}
+
 // ── Phase-3 pipeline factories ──────────────────────────────────────────────
 
 /** Permissive IBankFilter used by default in pipeline test contexts. */
@@ -386,17 +427,20 @@ export function fakeBankResultsState(
 /**
  * Builds a fake IBatchResult fixture (defaults to an empty, zero-count batch).
  * Useful for Telegram router and ReplyBuilders tests.
+ * By default the batch ended now, so it started `totalDurationMs` ago.
  * @param overrides - Pinned overrides applied last (commonly successCount/failureCount/jobs/totalDurationMs).
  * @returns IBatchResult fixture.
  */
 export function fakeBatchResult(
   overrides: Partial<IBatchResult> = {},
 ): IBatchResult {
+  const totalDurationMs = overrides.totalDurationMs ?? faker.number.int({ min: 1000, max: 60000 });
   return {
     batchId: faker.string.uuid(),
     source: 'telegram',
     jobs: [],
-    totalDurationMs: faker.number.int({ min: 1000, max: 60000 }),
+    totalDurationMs,
+    startedAtMs: Date.now() - totalDurationMs,
     successCount: 0,
     failureCount: 0,
     ...overrides,

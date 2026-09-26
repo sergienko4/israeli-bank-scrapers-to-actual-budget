@@ -1,16 +1,18 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { buildBatchResult, createTracker } from '../../src/Services/Import/BatchFactory.js';
 import {
   buildErrorAnnotations,
   formatBankError,
   formatAuditEntry,
   formatPartialSuccess,
+  isFreshEntry,
   truncateForTelegram,
 } from '../../src/Services/TelegramCommandFormatters.js';
 import type { IAuditEntry, IAuditLog } from '../../src/Services/AuditLogService.js';
 import { succeed } from '../../src/Types/ProcedureHelpers.js';
 import type { IBankResultsState } from '../../src/Types/Pipeline/Index.js';
 import {
-  fakeBankQuarantineEntry, fakeBankResult, fakeBankResultsState,
+  fakeBankQuarantineEntry, fakeBankResult, fakeBankResultsState, fakeIAuditEntry,
 } from '../helpers/factories.js';
 
 describe('TelegramCommandFormatters', () => {
@@ -160,5 +162,47 @@ describe('TelegramCommandFormatters', () => {
       const out = formatPartialSuccess(makeState(10), '0.0');
       expect(out).not.toContain('...and');
     });
+  });
+});
+
+describe('isFreshEntry', () => {
+  const batchStart = new Date('2026-09-27T10:00:00.000Z').getTime();
+
+  afterEach(() => { vi.useRealTimers(); });
+
+  /**
+   * Runs a real batch that starts at `batchStart` and ends 10 ms later, then
+   * asks 20 ms after the end whether one audit entry belongs to it.
+   * @param entryOffsetMs - When the entry was written, relative to the batch start.
+   * @returns Whether the entry counts as written during the batch.
+   */
+  function isFreshWhenAskedLate(entryOffsetMs: number): boolean {
+    vi.useFakeTimers({ now: batchStart });
+    const tracker = createTracker('batch-1', { source: 'telegram' }, 1);
+    const entry = fakeIAuditEntry({ timestamp: new Date(batchStart + entryOffsetMs).toISOString() });
+    vi.setSystemTime(batchStart + 10);
+    const batch = buildBatchResult(tracker);
+    vi.setSystemTime(batchStart + 30);
+    return isFreshEntry(entry, batch);
+  }
+
+  it('keeps an entry written during the batch fresh when the reply is built later', () => {
+    expect(isFreshWhenAskedLate(5)).toBe(true);
+  });
+
+  it('keeps an entry written at the exact batch start fresh', () => {
+    expect(isFreshWhenAskedLate(0)).toBe(true);
+  });
+
+  it('treats an entry written before the batch started as stale', () => {
+    expect(isFreshWhenAskedLate(-1)).toBe(false);
+  });
+
+  it('keeps an entry written at the exact batch end fresh', () => {
+    expect(isFreshWhenAskedLate(10)).toBe(true);
+  });
+
+  it('treats an entry written after the batch ended as stale', () => {
+    expect(isFreshWhenAskedLate(11)).toBe(false);
   });
 });

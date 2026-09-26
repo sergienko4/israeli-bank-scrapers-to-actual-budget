@@ -49,6 +49,8 @@ export interface IBatchResult {
   readonly jobs: IImportJobResult[];
   /** Total duration in milliseconds. */
   readonly totalDurationMs: number;
+  /** When the batch started, in epoch milliseconds. */
+  readonly startedAtMs: number;
   /** Number of successful jobs. */
   readonly successCount: number;
   /** Number of failed jobs. */

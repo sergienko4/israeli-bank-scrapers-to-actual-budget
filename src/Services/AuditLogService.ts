@@ -5,6 +5,10 @@
 
 import { existsSync,readFileSync, writeFileSync } from 'node:fs';
 
+import { Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
+
+import { RUN_BANK, RUN_ENTRY } from '../Contract/Status.js';
 import redactSecrets from '../Logger/SecretRedaction.js';
 import type { Procedure } from '../Types/Index.js';
 import { fail,succeed } from '../Types/Index.js';
@@ -36,6 +40,9 @@ export interface IAuditLog {
 type AuditBank = IAuditEntry['banks'][number];
 
 const DEFAULT_MAX_ENTRIES = 90;
+
+// What /api/status promises for a run, less its bank rows, which are checked one by one.
+const ENTRY_FIELDS = Type.Omit(RUN_ENTRY, ['banks']);
 
 /** Persists import run history to a local JSON file for debugging and /status history. */
 export class AuditLogService implements IAuditLog {
@@ -70,14 +77,15 @@ export class AuditLogService implements IAuditLog {
   }
 
   /**
-   * Returns the most recent audit entries up to the requested count.
-   * @param count - Maximum number of entries to return.
+   * Returns the readable entries among the most recent ones stored, up to the
+   * requested count. An unreadable entry still takes its place in the count.
+   * @param count - Maximum number of stored entries to read.
    * @returns Procedure containing an array of IAuditEntry objects, most recent last.
    */
   public getRecent(count: number): Procedure<IAuditEntry[]> {
-    const entries = this.loadEntries();
-    const sliced = entries.slice(-count);
-    return succeed(sliced);
+    const sliced = this.loadEntries().slice(-count);
+    const readable = AuditLogService.readableEntries(sliced);
+    return succeed(readable);
   }
 
   /**
@@ -160,6 +168,32 @@ export class AuditLogService implements IAuditLog {
       return entries.map(entry => AuditLogService.maskEntry(entry));
     }
     catch { return []; }
+  }
+
+  /**
+   * Keeps the entries every reader can use: those whose fields match what
+   * /api/status promises for a run, with a list of banks. Rows that do not
+   * match its bank row are left out. A hand edit or an older release can leave
+   * anything in the file, and one such entry or row used to break /status,
+   * /retry, the failure reply and the portal. The file itself is not changed.
+   * @param entries - Entries as parsed from the file, which may be malformed.
+   * @returns The readable entries in stored order.
+   */
+  private static readableEntries(entries: readonly IAuditEntry[]): IAuditEntry[] {
+    const readable = entries.filter(entry => AuditLogService.isReadableEntry(entry));
+    return readable.map(entry => {
+      const banks = entry.banks.filter(bank => Value.Check(RUN_BANK, bank));
+      return { ...entry, banks };
+    });
+  }
+
+  /**
+   * Tells whether a parsed entry has the fields every reader relies on.
+   * @param entry - An entry as parsed from the file, which may be malformed.
+   * @returns True when the run's fields match the contract and it has a list of banks.
+   */
+  private static isReadableEntry(entry: IAuditEntry): boolean {
+    return Value.Check(ENTRY_FIELDS, entry) && Array.isArray(entry.banks);
   }
 
   /**

@@ -4,9 +4,10 @@ import { TelegramCommandHandler } from '../../src/Services/TelegramCommandHandle
 import type { ImportMediator } from '../../src/Services/ImportMediator.js';
 import type { IAuditEntry, IAuditLog } from '../../src/Services/AuditLogService.js';
 import type { INotifier } from '../../src/Services/Notifications/INotifier.js';
-import { succeed, fail } from '../../src/Types/Index.js';
+import { succeed, fail, type IBatchResult } from '../../src/Types/Index.js';
 import {
-  assertProcedureSuccess, fakeIAuditEntry, fakeImportJobResult,
+  assertProcedureSuccess, fakeBatchResult, fakeIAuditEntry, fakeIAuditEntryDuring,
+  fakeImportJobResult,
 } from '../helpers/factories.js';
 
 const { mockGetRecent } = vi.hoisted(() => ({ mockGetRecent: vi.fn().mockReturnValue([]) }));
@@ -46,11 +47,11 @@ function createMockMediator(): {
 } {
   return {
     requestImport: vi.fn().mockReturnValue('batch-1'),
-    waitForBatch: vi.fn().mockResolvedValue({
+    waitForBatch: vi.fn().mockResolvedValue(fakeBatchResult({
       batchId: 'batch-1', source: 'telegram',
       jobs: [], totalDurationMs: 5000,
       successCount: 1, failureCount: 0,
-    }),
+    })),
     isImporting: vi.fn().mockReturnValue(false),
     getLastResult: vi.fn().mockReturnValue(null),
     getLastRunTime: vi.fn().mockReturnValue(null),
@@ -458,13 +459,16 @@ describe('TelegramCommandHandler', () => {
   /**
    * Sets up a failed batch response on the mock mediator.
    * @param durationMs - Total duration in milliseconds.
+   * @returns The batch the mediator reports.
    */
-  function setupFailedBatch(durationMs = 5000): void {
-    mockMediator.waitForBatch.mockResolvedValue({
+  function setupFailedBatch(durationMs = 5000): IBatchResult {
+    const batch = fakeBatchResult({
       batchId: 'batch-1', source: 'telegram',
       jobs: [], totalDurationMs: durationMs,
       successCount: 0, failureCount: 1,
     });
+    mockMediator.waitForBatch.mockResolvedValue(batch);
+    return batch;
   }
 
   /**
@@ -502,9 +506,9 @@ describe('TelegramCommandHandler', () => {
   // ─── buildBatchErrorReply with auditLog ───
 
   it('/scan failure with fresh audit log builds detailed error reply', async () => {
-    setupFailedBatch();
+    const batch = setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeIAuditEntry({
+      entries: [fakeIAuditEntryDuring(batch, {
         totalBanks: 2, successfulBanks: 1, failedBanks: 1,
         totalTransactions: 3, successRate: 50,
         banks: [{ name: 'discount', status: 'failure', error: 'Auth timeout', txns: 0 }],
@@ -538,9 +542,9 @@ describe('TelegramCommandHandler', () => {
   });
 
   it('/scan failure with fresh audit entry but zero failed banks shows generic error', async () => {
-    setupFailedBatch(3000);
+    const batch = setupFailedBatch(3000);
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeIAuditEntry({
+      entries: [fakeIAuditEntryDuring(batch, {
         successfulBanks: 1, failedBanks: 0,
         totalTransactions: 5, totalDuration: 3000, successRate: 100,
         banks: [{ name: 'discount', status: 'success', txns: 5 }],
@@ -564,7 +568,7 @@ describe('TelegramCommandHandler', () => {
   // ─── Regression: one failed bank must not read as a total failure ───
 
   it('/scan reports a partial run when only one per-bank job failed', async () => {
-    mockMediator.waitForBatch.mockResolvedValue({
+    const batch = fakeBatchResult({
       batchId: 'batch-2', source: 'telegram', totalDurationMs: 4000,
       successCount: 2, failureCount: 1,
       jobs: [
@@ -573,8 +577,9 @@ describe('TelegramCommandHandler', () => {
         fakeImportJobResult('oneZero', 1),
       ],
     });
+    mockMediator.waitForBatch.mockResolvedValue(batch);
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeIAuditEntry({
+      entries: [fakeIAuditEntryDuring(batch, {
         totalBanks: 1, successfulBanks: 0, failedBanks: 1,
         banks: [{ name: 'oneZero', status: 'failure', error: 'Auth timeout', txns: 0 }],
       })],
@@ -885,9 +890,9 @@ describe('TelegramCommandHandler', () => {
   // ─── formatBankError with advice ───
 
   it('error reply includes advice for known scraper error code', async () => {
-    setupFailedBatch();
+    const batch = setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeIAuditEntry({
+      entries: [fakeIAuditEntryDuring(batch, {
         banks: [{ name: 'discount', status: 'failure', error: 'INVALID_PASSWORD', txns: 0 }],
       })],
       lastFailed: ['discount'],
@@ -897,9 +902,9 @@ describe('TelegramCommandHandler', () => {
   });
 
   it('error reply shows no advice for unknown error', async () => {
-    setupFailedBatch();
+    const batch = setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeIAuditEntry({
+      entries: [fakeIAuditEntryDuring(batch, {
         banks: [{ name: 'discount', status: 'failure', error: 'SomeRandomError', txns: 0 }],
       })],
       lastFailed: ['discount'],
@@ -911,9 +916,9 @@ describe('TelegramCommandHandler', () => {
   // ─── consecutive failure warnings ───
 
   it('shows warning when bank failed 3+ times in a row', async () => {
-    setupFailedBatch();
+    const batch = setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeIAuditEntry({
+      entries: [fakeIAuditEntryDuring(batch, {
         banks: [{ name: 'discount', status: 'failure', error: 'Error', txns: 0 }],
       })],
       lastFailed: ['discount'],
@@ -924,9 +929,9 @@ describe('TelegramCommandHandler', () => {
   });
 
   it('no consecutive failure warning when streak below 3', async () => {
-    setupFailedBatch();
+    const batch = setupFailedBatch();
     const mockAuditLog = createMockAuditLog({
-      entries: [fakeIAuditEntry({
+      entries: [fakeIAuditEntryDuring(batch, {
         banks: [{ name: 'discount', status: 'failure', error: 'Error', txns: 0 }],
       })],
       lastFailed: ['discount'],
