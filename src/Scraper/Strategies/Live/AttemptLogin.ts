@@ -50,7 +50,7 @@ function warmLogin(
 /**
  * Builds the credentials one attempt logs in with.
  *
- * API-direct entries go through {@link warmLogin}. Browser banks never read
+ * API-direct entries go through `warmLogin`. Browser banks never read
  * the store, so their entry is used as configured and sends no token.
  * @param captureParams - Account key, login, store and logger for this attempt.
  * @param bankConfig - The entry as configured.

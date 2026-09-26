@@ -25,7 +25,7 @@ import { fail, succeed } from '../../Types/ProcedureHelpers.js';
 import type { IBankTokenRecord } from './BankTokenRecords.js';
 
 /** Entries by store key, as the file holds them. */
-type StoreRecords = Readonly<Record<string, unknown>>;
+export type StoreRecords = Readonly<Record<string, unknown>>;
 
 /** Opens and seals a store's whole record set, binding each entry to its store key. */
 export interface ITokenRecordCipher {

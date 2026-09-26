@@ -24,7 +24,7 @@ export interface IWarmTokenWatch {
 }
 
 /** SMS-code retriever a cold login calls; undefined when the run cannot ask for a code. */
-type Retriever = (() => Promise<string>) | undefined;
+export type Retriever = (() => Promise<string>) | undefined;
 
 /** Whether an attempt's watched retriever has warned yet. */
 interface IWarnedBox {
