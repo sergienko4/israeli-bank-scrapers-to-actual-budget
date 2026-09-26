@@ -9,13 +9,15 @@
  * Telegram-specific construction out of the core wiring module.
  */
 import type { ITwoFactorPrompter } from '../Services/ITwoFactorPrompter.js';
+import openDeviceTokenStore from '../Services/Notifications/DeviceTokenStoreWiring.js';
 import ExpoPushNotifier from '../Services/Notifications/ExpoPushNotifier.js';
 import TelegramNotifier from '../Services/Notifications/TelegramNotifier.js';
 import AppOtpPrompter from '../Services/TwoFactor/AppOtpPrompter.js';
 import FallbackOtpPrompter from '../Services/TwoFactor/FallbackOtpPrompter.js';
-import OtpRequestStore from '../Services/TwoFactor/OtpRequestStore.js';
+import openOtpRequestStore from '../Services/TwoFactor/OtpRequestStoreWiring.js';
+import type OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
 import type { OtpChannel } from '../Services/TwoFactor/OtpSettingsStore.js';
-import OtpSettingsStore from '../Services/TwoFactor/OtpSettingsStore.js';
+import openOtpSettingsStore from '../Services/TwoFactor/OtpSettingsStoreWiring.js';
 import TwoFactorService from '../Services/TwoFactorService.js';
 import type { IImporterConfig } from '../Types/Index.js';
 
@@ -25,7 +27,7 @@ export default class OtpPrompterWiring {
    * Creates the wiring over the OTP settings store.
    * @param settingsStore - The store of the app-only OTP channel setting.
    */
-  constructor(private readonly settingsStore: OtpSettingsStore = new OtpSettingsStore()) {}
+  constructor(private readonly settingsStore: OtpSettingsStore = openOtpSettingsStore()) {}
 
   /**
    * Resolves the OTP prompter from config and the app-only channel setting.
@@ -39,8 +41,8 @@ export default class OtpPrompterWiring {
     if (this.readChannel() !== 'app') {
       return telegramPrompter;
     }
-    const requestStore = new OtpRequestStore();
-    const pushNotifier = new ExpoPushNotifier();
+    const requestStore = openOtpRequestStore();
+    const pushNotifier = new ExpoPushNotifier(openDeviceTokenStore());
     const appPrompter = new AppOtpPrompter(requestStore, pushNotifier);
     return telegramPrompter ? new FallbackOtpPrompter(appPrompter, telegramPrompter) : appPrompter;
   }

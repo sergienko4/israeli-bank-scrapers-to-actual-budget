@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -56,6 +56,15 @@ describe('Portal /api/devices', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(readFileSync(devicesPath, 'utf8')).toContain(TOKEN);
+  });
+
+  it('saves the token owner-only at DEVICE_TOKENS_PATH', async () => {
+    const cookie = await loginCookie();
+    await app.inject({
+      method: 'POST', url: '/api/devices', cookies: { portal_session: cookie }, payload: { token: TOKEN },
+    });
+    expect(JSON.parse(readFileSync(devicesPath, 'utf8'))).toEqual({ tokens: [TOKEN] });
+    expect(statSync(devicesPath).mode & 0o777).toBe(0o600);
   });
 
   it('rejects an invalid token with 400', async () => {

@@ -10,7 +10,7 @@
  * construction details.
  */
 
-import { AuditLogService } from '../../Services/AuditLogService.js';
+import openAuditLog from '../../Services/AuditLogWiring.js';
 import type { ImportMediator } from '../../Services/ImportMediator.js';
 import type TelegramNotifier from '../../Services/Notifications/TelegramNotifier.js';
 import { TelegramCommandHandler } from '../../Services/TelegramCommandHandler.js';
@@ -46,7 +46,7 @@ export function buildCommandHandler(
   const receiptHandlerResult = createReceiptHandler(notifier, options.enableReceipt === true);
   const receiptHandler = receiptHandlerResult || void 0;
   return new TelegramCommandHandler({
-    mediator, notifier, auditLog: new AuditLogService(),
+    mediator, notifier, auditLog: openAuditLog(),
     runValidate: runConfigValidation,
     receiptHandler,
     getBankNames: getConfiguredBankNames,

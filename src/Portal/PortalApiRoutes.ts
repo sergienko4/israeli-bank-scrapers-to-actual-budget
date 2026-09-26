@@ -10,8 +10,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { BANK_REQUIREMENTS, CONFIG_MANIFEST } from '../Config/ConfigManifest.js';
 import { getLogger } from '../Logger/Index.js';
 import { DEFAULT_BANK_REGISTRY } from '../Scraper/BankRegistry.js';
-import { AuditLogService } from '../Services/AuditLogService.js';
-import DeviceTokenStore from '../Services/Notifications/DeviceTokenStore.js';
+import type DeviceTokenStore from '../Services/Notifications/DeviceTokenStore.js';
 import type { IBankConfig, IImporterConfig } from '../Types/Index.js';
 import { isFail } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
@@ -22,6 +21,7 @@ import {
   BANK_ADD_ROUTE, BANK_REMOVE_ROUTE, CONFIG_READ_ROUTE, CONFIG_WRITE_ROUTE,
   DEVICE_ROUTE, STATUS_ROUTE, VALIDATE_ROUTE,
 } from './PortalRouteSchemas.js';
+import type { IPortalStores } from './PortalStores.js';
 
 /** Static manifest payload (sections, supported bank ids, per-bank required keys), built once. */
 const MANIFEST_PAYLOAD = {
@@ -37,10 +37,11 @@ const STATUS_HISTORY = 10;
  * Registers the manifest probe + guarded config API routes.
  * @param app - Fastify instance.
  * @param store - Shared config store.
+ * @param stores - Factories for the runtime stores the routes serve.
  * @returns Confirmation that the API routes are registered.
  */
 export default function registerApiRoutes(
-  app: FastifyInstance, store: PortalConfigStore,
+  app: FastifyInstance, store: PortalConfigStore, stores: IPortalStores,
 ): { registered: true } {
   // The manifest deliberately carries no response schema. Its field shape is
   // recursive, and a recursive schema cannot be inlined at the four places a
@@ -52,22 +53,23 @@ export default function registerApiRoutes(
   app.get('/api/manifest', (_req, reply) => reply.send(MANIFEST_PAYLOAD));
   registerConfigRoutes(app, store);
   registerBankRoutes(app, store);
-  registerStatusRoute(app);
-  registerDeviceRoutes(app);
+  registerStatusRoute(app, stores);
+  registerDeviceRoutes(app, stores);
   registerValidateRoute(app, store);
-  registerOtpRoutes(app);
+  registerOtpRoutes(app, stores);
   return { registered: true };
 }
 
 /**
  * Registers the read-only import-status route (recent redacted run summaries).
  * @param app - Fastify instance.
+ * @param stores - Factories for the runtime stores the routes serve.
  * @returns Confirmation that the status route is registered.
  */
-function registerStatusRoute(app: FastifyInstance): { registered: true } {
+function registerStatusRoute(app: FastifyInstance, stores: IPortalStores): { registered: true } {
   const typed = app.withTypeProvider<TypeBoxTypeProvider>();
   typed.get('/api/status', STATUS_ROUTE, () => {
-    const recent = new AuditLogService().getRecent(STATUS_HISTORY);
+    const recent = stores.auditLog().getRecent(STATUS_HISTORY);
     return { runs: isFail(recent) ? [] : recent.data };
   });
   return { registered: true };
@@ -93,20 +95,26 @@ function registerValidateRoute(
   return { registered: true };
 }
 
+/** One change to the device registry: which store to open, and what to do. */
+interface IDeviceChange {
+  readonly open: () => DeviceTokenStore;
+  readonly action: 'add' | 'remove';
+}
+
 /**
  * Adds or removes an Expo push token for the mobile app. The token's shape is
  * enforced by the route schema, so an unusable token never reaches here.
  * @param req - Request carrying a JSON `{ token }` body.
  * @param reply - Fastify reply.
- * @param action - Whether to register or unregister the token.
+ * @param change - The store to open for this request, and whether to add or remove.
  * @returns The reply after sending the outcome.
  */
 function handleDevice(
-  req: FastifyRequest, reply: FastifyReply, action: 'add' | 'remove',
+  req: FastifyRequest, reply: FastifyReply, change: IDeviceChange,
 ): FastifyReply {
   const { token } = req.body as { token: string };
-  const store = new DeviceTokenStore();
-  if (action === 'add') store.add(token);
+  const store = change.open();
+  if (change.action === 'add') store.add(token);
   else store.remove(token);
   return reply.send({ ok: true });
 }
@@ -114,11 +122,14 @@ function handleDevice(
 /**
  * Registers the mobile-app device-registration routes (POST/DELETE /api/devices).
  * @param app - Fastify instance.
+ * @param stores - Factories for the runtime stores the routes serve.
  * @returns Confirmation that the device routes are registered.
  */
-function registerDeviceRoutes(app: FastifyInstance): { registered: true } {
-  app.post('/api/devices', DEVICE_ROUTE, (req, reply) => handleDevice(req, reply, 'add'));
-  app.delete('/api/devices', DEVICE_ROUTE, (req, reply) => handleDevice(req, reply, 'remove'));
+function registerDeviceRoutes(app: FastifyInstance, stores: IPortalStores): { registered: true } {
+  const add: IDeviceChange = { open: stores.devices, action: 'add' };
+  const remove: IDeviceChange = { open: stores.devices, action: 'remove' };
+  app.post('/api/devices', DEVICE_ROUTE, (req, reply) => handleDevice(req, reply, add));
+  app.delete('/api/devices', DEVICE_ROUTE, (req, reply) => handleDevice(req, reply, remove));
   return { registered: true };
 }
 

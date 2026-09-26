@@ -79,6 +79,23 @@ describe('Portal /api/status', () => {
     expect(body.runs[0].banks[0].name).toBe('leumi');
     rmSync(auditDir, { recursive: true, force: true });
   });
+  it('reads the runs the importer now stores as the entries record', async () => {
+    const auditDir = mkdtempSync(join(tmpdir(), 'audit-'));
+    const auditPath = join(auditDir, 'audit-log.json');
+    const entry = {
+      timestamp: '2026-07-25T00:00:00.000Z', totalBanks: 1, successfulBanks: 1, failedBanks: 0,
+      totalTransactions: 3, totalDuplicates: 0, totalDuration: 1000, successRate: 100,
+      banks: [{ name: 'hapoalim', status: 'success', duration: 900, txns: 3 }],
+    };
+    writeFileSync(auditPath, JSON.stringify({ entries: [entry] }), 'utf8');
+    process.env.AUDIT_LOG_PATH = auditPath;
+
+    const cookie = await loginCookie();
+    const res = await app.inject({ method: 'GET', url: '/api/status', cookies: { portal_session: cookie } });
+    rmSync(auditDir, { recursive: true, force: true });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().runs[0].banks[0].name).toBe('hapoalim');
+  });
   it('hides a token an older release stored in a failure reason', async () => {
     const auditDir = mkdtempSync(join(tmpdir(), 'audit-'));
     const auditPath = join(auditDir, 'audit-log.json');

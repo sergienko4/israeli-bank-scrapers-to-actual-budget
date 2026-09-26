@@ -1,10 +1,11 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import OtpRequestStore from '../../src/Services/TwoFactor/OtpRequestStore.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 
 let dir: string;
 let store: OtpRequestStore;
@@ -20,7 +21,7 @@ function requestsPath(): string {
 describe('OtpRequestStore', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'otp-'));
-    store = new OtpRequestStore(requestsPath());
+    store = new OtpRequestStore(createNodeFileSystem(), requestsPath());
   });
 
   afterEach(() => {
@@ -39,6 +40,11 @@ describe('OtpRequestStore', () => {
     const pending = store.pending(1_000);
     expect(pending).toHaveLength(1);
     expect(pending[0]?.id).toBe(created.id);
+  });
+
+  it('writes the requests file owner-only on disk', () => {
+    store.create('leumi', 60_000, 1_000);
+    expect(statSync(requestsPath()).mode & 0o777).toBe(0o600);
   });
 
   it('reads a created request by id', () => {

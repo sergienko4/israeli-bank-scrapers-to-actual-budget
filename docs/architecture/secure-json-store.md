@@ -1,9 +1,11 @@
 # SecureJsonStore threat model
 
-`src/Storage/SecureJsonStore.ts` persists bank authentication tokens. A token
-is a bearer credential: anything that can read it can act as the account
-holder until it expires, and one of them is valid for ten years. The store is
-therefore written defensively, and this page records what each guard is for.
+`src/Storage/SecureJsonStore.ts` persists bank authentication tokens, and four
+more files on the data volume: the import history, pending OTP requests, the
+OTP channel and push device tokens. A token is a bearer
+credential: anything that can read it can act as the account holder until it
+expires, and one of them is valid for ten years. The store is therefore
+written defensively, and this page records what each guard is for.
 
 Read it before deleting a check. Several of the guards below look redundant
 until you know the attack they answer, and the unit tests are named after the
@@ -96,6 +98,30 @@ filesystem fault injector, and faking it would mean mocking `node:fs` — the
 one thing this design exists to avoid. Flushing the *directory entry* after
 the rename is deliberately not done: an unpersisted rename leaves the previous
 store in place, which is already one of the two outcomes `commit` promises.
+
+## Legacy list read
+
+Some stores were written as a bare JSON list before they moved onto this
+primitive. Such a store passes a `legacyList` name to the constructor: the
+import history passes `entries`, the device tokens `tokens` and the OTP
+requests `requests`. A file whose root is a list is then read as one healthy
+record of that name, and the next commit writes the records form, so nothing
+the list held is lost. Nothing else changes: any other root that is not an
+object is still damage, and threat 24 still refuses a list at the root of
+anything written. A store that passes no name, such as the bank-token store,
+still reads a list as damage.
+
+## Staging leftovers
+
+A crash between staging and publishing leaves a staged file behind, and it can
+hold a secret. The store never sweeps on its own; each process sweeps, when
+it starts, only the stores it writes. An import sweeps the import history and
+the OTP requests. The portal sweeps the OTP channel, the device tokens and the
+OTP requests. A process that only reads a store never sweeps it, because a
+leftover there may belong to a writer that is still running. Only staged files
+older than an hour are removed, so a sweep leaves alone a file another process
+is writing now. A failed sweep is a warning, and a missing directory counts as
+clean.
 
 ## Test layers
 

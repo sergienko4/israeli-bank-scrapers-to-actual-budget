@@ -6,13 +6,18 @@
  * the mobile app. Both clients share the same portal API, so this is UI-level
  * scoping, not a separate authorization boundary. Defaults to `telegram` when
  * unset or unreadable.
+ *
+ * <p>The file sits on {@link SecureJsonStore}: it is owner-only, a write
+ * replaces it whole, and a file holding anything this store would not write
+ * back is moved aside on the next write instead of being overwritten.
  */
-import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-
+import StorageError from '../../Errors/StorageError.js';
 import { getLogger } from '../../Logger/Index.js';
-import { errorMessage } from '../../Utils/Index.js';
-import resolveOtpSettingsPath from './OtpSettingsPath.js';
+import type { IFileSystem } from '../../Storage/FileSystemPort.js';
+import SecureJsonStore from '../../Storage/SecureJsonStore.js';
+import type { IStoreSnapshot,ISweepReport } from '../../Storage/StoreTypes.js';
+import type { Procedure } from '../../Types/Index.js';
+import { succeed } from '../../Types/ProcedureHelpers.js';
 
 /** The OTP delivery channel: Telegram (default) or the mobile app. */
 export type OtpChannel = 'telegram' | 'app';
@@ -22,52 +27,108 @@ export interface IOtpSettings {
   channel: OtpChannel;
 }
 
+/** The settings as read, and whether the file holds only what this store writes. */
+interface ILoadedSettings {
+  readonly settings: IOtpSettings;
+  readonly isIntact: boolean;
+  readonly isDamaged: boolean;
+  readonly summary: string;
+}
+
+/**
+ * Reads a stored channel value, defaulting to Telegram.
+ * @param value - The stored `channel` record.
+ * @returns The channel, or `telegram` when absent or unknown.
+ */
+function toChannel(value: unknown): OtpChannel {
+  return value === 'app' ? 'app' : 'telegram';
+}
+
+/**
+ * Reports whether a snapshot holds exactly what this store writes.
+ *
+ * <p>An absent file is intact: there is nothing to preserve, so the next
+ * write does not look for something to move aside.
+ * @param snapshot - The store's snapshot.
+ * @returns True when the file is absent, or holds only a known channel.
+ */
+function isIntactSnapshot(snapshot: IStoreSnapshot): boolean {
+  if (snapshot.state !== 'healthy') return snapshot.state === 'absent';
+  const { records } = snapshot;
+  const isKnown = records.channel === 'app' || records.channel === 'telegram';
+  return isKnown && Object.keys(records).length === 1;
+}
+
 /** Persists the OTP delivery channel to a JSON file on a shared volume. */
 export default class OtpSettingsStore {
+  private readonly _store: SecureJsonStore;
+
   /**
-   * Creates a store backed by the given file.
-   * @param filePath - Path to the OTP-settings JSON file.
+   * Binds the store to one path on one filesystem.
+   * @param fileSystem - Injected filesystem access.
+   * @param filePath - Absolute path of the OTP-settings JSON file.
    */
-  constructor(private readonly filePath = resolveOtpSettingsPath()) {}
+  constructor(fileSystem: IFileSystem, filePath: string) {
+    this._store = new SecureJsonStore(fileSystem, filePath);
+  }
 
   /**
    * Reads the configured OTP settings.
-   * @returns The settings, defaulting to the Telegram channel when unset.
+   * @returns The settings, defaulting to the Telegram channel when unset or unreadable.
    */
   public get(): IOtpSettings {
-    if (!existsSync(this.filePath)) return { channel: 'telegram' };
-    try {
-      const raw = readFileSync(this.filePath, 'utf8');
-      const parsed = JSON.parse(raw) as unknown;
-      return { channel: OtpSettingsStore.readChannel(parsed) };
-    } catch (error: unknown) {
-      getLogger().warn(`Unreadable OTP settings; defaulting to telegram: ${errorMessage(error)}`);
-      return { channel: 'telegram' };
-    }
+    const loaded = this.load();
+    if (!loaded.success) return OtpSettingsStore.warnDefault(loaded.message);
+    if (loaded.data.isDamaged) return OtpSettingsStore.warnDefault(loaded.data.summary);
+    return loaded.data.settings;
   }
 
   /**
    * Persists the OTP delivery channel atomically.
    * @param channel - The channel to store.
+   * @throws StorageError when the current file cannot be read or the new one saved.
    */
   public set(channel: OtpChannel): void {
-    const serialized = JSON.stringify({ channel }, null, 2);
-    const token = randomUUID();
-    const tempPath = `${this.filePath}.${token}.tmp`;
-    writeFileSync(tempPath, serialized);
-    renameSync(tempPath, this.filePath);
+    const loaded = this.load();
+    if (!loaded.success) {
+      throw new StorageError(`Could not read the OTP settings before saving: ${loaded.message}`);
+    }
+    const request = { records: { channel }, shouldQuarantine: !loaded.data.isIntact };
+    const committed = this._store.commit(request);
+    if (!committed.success) {
+      throw new StorageError(`Could not save the OTP settings: ${committed.message}`);
+    }
   }
 
   /**
-   * Extracts a valid channel from parsed JSON, defaulting to Telegram.
-   * @param parsed - The parsed settings JSON.
-   * @returns The stored channel, or `telegram` when absent/invalid.
+   * Deletes staged files a killed write left beside the file.
+   * @returns How many were removed, or why the directory could not be read.
    */
-  private static readChannel(parsed: unknown): OtpChannel {
-    if (typeof parsed !== 'object' || parsed === null) {
-      return 'telegram';
-    }
-    const channel = (parsed as Record<string, unknown>).channel;
-    return channel === 'app' ? 'app' : 'telegram';
+  public sweepStagedLeftovers(): Procedure<ISweepReport> {
+    return this._store.sweepStagedLeftovers();
+  }
+
+  /**
+   * Reads the file once: the settings, and whether it holds only what this store writes.
+   * @returns The loaded settings, or why the file could not be assessed.
+   */
+  private load(): Procedure<ILoadedSettings> {
+    const snapshot = this._store.read();
+    if (!snapshot.success) return snapshot;
+    const { state, records, summary } = snapshot.data;
+    const settings: IOtpSettings = { channel: toChannel(records.channel) };
+    const isIntact = isIntactSnapshot(snapshot.data);
+    return succeed({ settings, isIntact, isDamaged: state === 'damaged', summary });
+  }
+
+  /**
+   * Warns that the settings could not be used, and falls back to Telegram.
+   * @param reason - Why the settings could not be used.
+   * @returns The default settings.
+   */
+  private static warnDefault(reason: string): IOtpSettings {
+    getLogger().warn(`Unreadable OTP settings; defaulting to telegram: ${reason}`);
+    const settings: IOtpSettings = { channel: 'telegram' };
+    return settings;
   }
 }

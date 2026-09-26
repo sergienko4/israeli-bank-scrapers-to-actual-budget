@@ -7,7 +7,7 @@
 import { getLogger } from '../../Logger/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
 import type { IImportSummary } from '../MetricsService.js';
-import DeviceTokenStore from './DeviceTokenStore.js';
+import type DeviceTokenStore from './DeviceTokenStore.js';
 import type { INotifier } from './INotifier.js';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
@@ -25,9 +25,9 @@ interface IExpoMessage {
 export default class ExpoPushNotifier implements INotifier {
   /**
    * Creates an ExpoPushNotifier over the given token store.
-   * @param store - Registry of Expo push tokens (defaults to the shared file).
+   * @param store - Registry of Expo push tokens.
    */
-  constructor(private readonly store: DeviceTokenStore = new DeviceTokenStore()) {}
+  constructor(private readonly store: DeviceTokenStore) {}
 
   /**
    * Sends a redacted import summary to every registered device.

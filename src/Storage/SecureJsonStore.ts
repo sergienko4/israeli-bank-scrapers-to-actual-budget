@@ -26,7 +26,7 @@ import {
   oversizedSnapshot, parseSnapshot, serialiseRecords,
 } from './StoreRecords.js';
 import type {
-  ICommitReport, ICommitRequest, IOwnedRequest, IStoreSnapshot, ISweepReport,
+  ICommitReport, ICommitRequest, IOwnedRequest, IStoreOptions, IStoreSnapshot, ISweepReport,
 } from './StoreTypes.js';
 
 export { STALE_STAGING_AGE_MS } from './StagingSweep.js';
@@ -60,14 +60,18 @@ export default class SecureJsonStore {
 
   private readonly _filePath: string;
 
+  private readonly _options: IStoreOptions;
+
   /**
    * Binds the store to one path on one filesystem.
    * @param fileSystem - Injected filesystem access.
    * @param filePath - Absolute path of the store.
+   * @param options - How to read a file an older release wrote as a list.
    */
-  constructor(fileSystem: IFileSystem, filePath: string) {
+  constructor(fileSystem: IFileSystem, filePath: string, options: IStoreOptions = {}) {
     this._fileSystem = fileSystem;
     this._filePath = filePath;
+    this._options = options;
   }
 
   /**
@@ -359,7 +363,7 @@ export default class SecureJsonStore {
     }
     const contents = this._fileSystem.readAll(file, MAX_STORE_BYTES);
     if (!contents.success) return this.classifyReadFailure(contents.status);
-    const snapshot = parseSnapshot(contents.data);
+    const snapshot = parseSnapshot(contents.data, this._options.legacyList);
     return succeed(snapshot);
   }
 

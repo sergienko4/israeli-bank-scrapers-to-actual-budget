@@ -26,6 +26,7 @@ When the channel is `app` and Telegram is also configured, a timed-out app OTP a
 - The importer and portal coordinate through two files on the shared data volume (defaults shown; override via environment):
   - `OTP_REQUESTS_PATH` — pending OTP requests (default `/app/data/otp-requests.json`)
   - `OTP_SETTINGS_PATH` — the selected channel (default `/app/data/otp-settings.json`)
+- Both files are owner-only (`0600`) and replaced atomically. Run the same release on the importer and the portal, and do not roll back: an earlier release reads this release's `otp-requests.json` as empty. See [Upgrade both services together](configuration/portal.md#upgrade-both-services-together).
 
 ### Portal endpoints (used by the app)
 

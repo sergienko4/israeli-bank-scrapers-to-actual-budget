@@ -5,7 +5,7 @@
  * the portal), not in config.json, so `applies` consults the store, not config.
  */
 import type { INotificationConfig } from '../../Types/Index.js';
-import DeviceTokenStore from './DeviceTokenStore.js';
+import openDeviceTokenStore from './DeviceTokenStoreWiring.js';
 import ExpoPushNotifier from './ExpoPushNotifier.js';
 import type { INotifier } from './INotifier.js';
 import type { INotifierFactory } from './INotifierFactory.js';
@@ -18,7 +18,7 @@ const EXPO_PUSH_NOTIFIER_FACTORY: INotifierFactory = {
    * @returns True when there is a registered device.
    */
   applies(_config: INotificationConfig): boolean {
-    const store = new DeviceTokenStore();
+    const store = openDeviceTokenStore();
     const tokens = store.list();
     return tokens.length > 0;
   },
@@ -28,7 +28,8 @@ const EXPO_PUSH_NOTIFIER_FACTORY: INotifierFactory = {
    * @returns A new ExpoPushNotifier.
    */
   create(_config: INotificationConfig): INotifier {
-    return new ExpoPushNotifier();
+    const store = openDeviceTokenStore();
+    return new ExpoPushNotifier(store);
   },
   /**
    * Returns the log line printed when this notifier is registered.

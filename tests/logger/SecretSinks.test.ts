@@ -36,6 +36,7 @@ import type { IBankMetrics, IImportSummary } from '../../src/Services/MetricsSer
 import { MetricsService } from '../../src/Services/MetricsService.js';
 import { formatSummaryMessage } from '../../src/Services/Notifications/TelegramFormatter.js';
 import { formatWebhookSummary } from '../../src/Services/Notifications/Webhook/Index.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
 import { fakeBankQuarantineEntry } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
@@ -315,8 +316,8 @@ function recordedErrors(texts: readonly string[]): string[] {
     bankName: `bank${String(index)}`, startTime: 0, status: 'failure',
     transactionsImported: 0, transactionsSkipped: 0, accounts: [], error,
   }));
-  expect(new AuditLogService(path).record(summaryOf(banks)).success).toBe(true);
-  const [entry] = JSON.parse(readFileSync(path, 'utf8')) as IAuditEntry[];
+  expect(new AuditLogService(createNodeFileSystem(), path).record(summaryOf(banks)).success).toBe(true);
+  const [entry] = (JSON.parse(readFileSync(path, 'utf8')) as { entries: IAuditEntry[] }).entries;
   return entry.banks.map(bank => bank.error ?? '');
 }
 
@@ -415,7 +416,7 @@ describe('a secret under any key spelling reaches no output', () => {
   });
 
   it('the import history an older release stored hides it', () => {
-    const result = new AuditLogService(seedAuditFile(TEXTS)).getRecent(1);
+    const result = new AuditLogService(createNodeFileSystem(), seedAuditFile(TEXTS)).getRecent(1);
     expect(result.success).toBe(true);
     const errors = result.success ? result.data[0].banks.map(bank => bank.error ?? '') : [];
     expect(failures(TEXTS, errors)).toEqual([]);
@@ -562,7 +563,7 @@ const FAILURE_SINKS: readonly [string, (texts: readonly string[]) => string[], b
   ['a webhook summary', texts => texts.map(text => formatWebhookSummary('plain', failedRun(new Error(text)))), true],
   ['the import history a new record writes', recordedErrors, true],
   ['the import history an older release stored', texts => {
-    const result = new AuditLogService(seedAuditFile(texts)).getRecent(1);
+    const result = new AuditLogService(createNodeFileSystem(), seedAuditFile(texts)).getRecent(1);
     return result.success ? result.data[0].banks.map(bank => bank.error ?? '') : [];
   }, true],
   ['the /logs replay', texts => new LogFileReader(seedLogDir(texts)).getRecent(texts.length), true],

@@ -6,19 +6,30 @@
  * The import child {@link create}s a request and polls {@link get} until the
  * portal {@link submit}s a code; it then {@link remove}s the entry. Codes live
  * in the file only briefly, between submit and consumption, and are never logged
- * by this module. Corrupt or missing files read as an empty list, mirroring
- * {@link DeviceTokenStore}.
+ * by this module. A missing or unreadable file reads as no requests.
  *
- * Every write replaces the file atomically (temp file + rename) so a concurrent
- * reader never observes a partial file. The importer scrapes banks sequentially,
- * so at most one OTP request is active per importer at a time, and the portal
- * attaches a code only once per request; concurrent read-modify-write conflicts
- * on the shared file therefore do not arise in normal single-importer operation.
+ * <p>The file sits on {@link SecureJsonStore}: it is owner-only, a write
+ * replaces it whole so a concurrent reader never observes a partial file, and
+ * a file holding anything this store would not write back (including a
+ * malformed request it skips) is moved aside on the next write instead of
+ * being overwritten. The requests are stored as one `requests` record; a bare
+ * list an older release wrote is read as that record and written back in the
+ * records form. A write that cannot read the current file, or cannot save the
+ * new one, throws.
+ *
+ * The importer scrapes banks sequentially, so at most one OTP request is active
+ * per importer at a time, and the portal attaches a code only once per request;
+ * concurrent read-modify-write conflicts on the shared file therefore do not
+ * arise in normal single-importer operation.
  */
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
-import resolveOtpRequestsPath from './OtpRequestPath.js';
+import StorageError from '../../Errors/StorageError.js';
+import type { IFileSystem } from '../../Storage/FileSystemPort.js';
+import SecureJsonStore from '../../Storage/SecureJsonStore.js';
+import type { IStoreSnapshot,ISweepReport } from '../../Storage/StoreTypes.js';
+import type { Procedure } from '../../Types/Index.js';
+import { succeed } from '../../Types/ProcedureHelpers.js';
 
 /** A single pending (or code-carrying) OTP request. */
 export interface IOtpRequest {
@@ -34,13 +45,43 @@ export interface IOtpRequest {
   code?: string;
 }
 
+/** The record the requests are stored under. */
+const REQUESTS_RECORD = 'requests';
+
+/** The requests as read, and whether the file holds only what this store writes. */
+interface ILoadedRequests {
+  readonly requests: IOtpRequest[];
+  readonly isIntact: boolean;
+}
+
+/**
+ * Reports whether a snapshot holds exactly what this store writes.
+ *
+ * <p>An absent file is intact: there is nothing to preserve, so the next
+ * write does not look for something to move aside.
+ * @param snapshot - The store's snapshot.
+ * @param requests - The well-formed requests read from it.
+ * @returns True when the file is absent, or holds only well-formed requests.
+ */
+function isIntactSnapshot(snapshot: IStoreSnapshot, requests: readonly IOtpRequest[]): boolean {
+  if (snapshot.state !== 'healthy') return snapshot.state === 'absent';
+  const stored = snapshot.records[REQUESTS_RECORD];
+  const isOnlyRecord = Object.keys(snapshot.records).length === 1;
+  return isOnlyRecord && Array.isArray(stored) && stored.length === requests.length;
+}
+
 /** Persists pending OTP requests to a JSON file on a shared volume. */
 export default class OtpRequestStore {
+  private readonly _store: SecureJsonStore;
+
   /**
-   * Creates a store backed by the given file.
-   * @param filePath - Path to the OTP-requests JSON file.
+   * Binds the store to one path on one filesystem.
+   * @param fileSystem - Injected filesystem access.
+   * @param filePath - Absolute path of the OTP-requests JSON file.
    */
-  constructor(private readonly filePath = resolveOtpRequestsPath()) {}
+  constructor(fileSystem: IFileSystem, filePath: string) {
+    this._store = new SecureJsonStore(fileSystem, filePath, { legacyList: REQUESTS_RECORD });
+  }
 
   /**
    * Creates a new pending OTP request and persists it.
@@ -48,13 +89,15 @@ export default class OtpRequestStore {
    * @param ttlMs - Time-to-live in milliseconds before the request expires.
    * @param now - Current time in epoch ms (defaults to Date.now()).
    * @returns The created request (without a code).
+   * @throws StorageError when the current file cannot be read or the new one saved.
    */
   public create(bankId: string, ttlMs: number, now: number = Date.now()): IOtpRequest {
     const request: IOtpRequest = {
       id: randomUUID(), bankId, createdAt: now, deadline: now + ttlMs,
     };
-    const kept = this.readAll().filter((entry) => entry.deadline > now);
-    this.write([...kept, request]);
+    const loaded = this.loadForWrite();
+    const kept = loaded.requests.filter((entry) => entry.deadline > now);
+    this.save([...kept, request], loaded.isIntact);
     return request;
   }
 
@@ -82,54 +125,86 @@ export default class OtpRequestStore {
    * @param code - The OTP code entered by the user.
    * @param now - Current time in epoch ms (defaults to Date.now()).
    * @returns True when a live pending request was updated, else false.
+   * @throws StorageError when the current file cannot be read or the new one saved.
    */
   public submit(id: string, code: string, now: number = Date.now()): boolean {
-    const all = this.readAll();
-    const target = all.find((entry) => entry.id === id);
+    const loaded = this.loadForWrite();
+    const target = loaded.requests.find((entry) => entry.id === id);
     if (!target || target.code !== undefined || target.deadline <= now) {
       return false;
     }
-    const next = all.map((entry) => (entry.id === id ? { ...entry, code } : entry));
-    this.write(next);
+    const next = loaded.requests.map((entry) => (entry.id === id ? { ...entry, code } : entry));
+    this.save(next, loaded.isIntact);
     return true;
   }
 
   /**
    * Removes a request (used after a code is consumed or the request expires).
    * @param id - The request id to remove.
+   * @throws StorageError when the current file cannot be read or the new one saved.
    */
   public remove(id: string): void {
-    const remaining = this.readAll().filter((entry) => entry.id !== id);
-    this.write(remaining);
+    const loaded = this.loadForWrite();
+    const remaining = loaded.requests.filter((entry) => entry.id !== id);
+    this.save(remaining, loaded.isIntact);
   }
 
   /**
-   * Reads and validates the stored requests.
-   * @returns The stored requests, or an empty array when absent/corrupt.
+   * Deletes staged files a killed write left beside the file.
+   * @returns How many were removed, or why the directory could not be read.
+   */
+  public sweepStagedLeftovers(): Procedure<ISweepReport> {
+    return this._store.sweepStagedLeftovers();
+  }
+
+  /**
+   * Reads the stored requests for a reader.
+   * @returns The well-formed requests, or none when the file cannot be read.
    */
   private readAll(): IOtpRequest[] {
-    if (!existsSync(this.filePath)) return [];
-    try {
-      const raw = readFileSync(this.filePath, 'utf8');
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((entry) => OtpRequestStore.isRequest(entry));
-    } catch {
-      return [];
-    }
+    const loaded = this.load();
+    return loaded.success ? loaded.data.requests : [];
   }
 
   /**
-   * Serialises and atomically replaces the request file (temp file + rename).
-   * @param requests - The full request list to persist.
-   * @returns Nothing; the file is replaced before returning.
+   * Reads the file once: the well-formed requests, and whether it holds only
+   * what this store writes.
+   * @returns The loaded requests, or why the file could not be assessed.
    */
-  private write(requests: IOtpRequest[]): void {
-    const serialized = JSON.stringify(requests, null, 2);
-    const token = randomUUID();
-    const tempPath = `${this.filePath}.${token}.tmp`;
-    writeFileSync(tempPath, serialized);
-    renameSync(tempPath, this.filePath);
+  private load(): Procedure<ILoadedRequests> {
+    const snapshot = this._store.read();
+    if (!snapshot.success) return snapshot;
+    const stored: unknown = snapshot.data.records[REQUESTS_RECORD];
+    const list: unknown[] = Array.isArray(stored) ? stored : [];
+    const requests = list.filter((entry) => OtpRequestStore.isRequest(entry));
+    return succeed({ requests, isIntact: isIntactSnapshot(snapshot.data, requests) });
+  }
+
+  /**
+   * Reads the file before a write, refusing to write over one it cannot read.
+   * @returns The loaded requests.
+   * @throws StorageError when the file cannot be assessed.
+   */
+  private loadForWrite(): ILoadedRequests {
+    const loaded = this.load();
+    if (!loaded.success) {
+      throw new StorageError(`Could not read the OTP requests before saving: ${loaded.message}`);
+    }
+    return loaded.data;
+  }
+
+  /**
+   * Replaces the file with the given requests.
+   * @param requests - The full request list to persist.
+   * @param isIntact - Whether the file being replaced held only what this store writes.
+   * @throws StorageError when the new file cannot be saved.
+   */
+  private save(requests: IOtpRequest[], isIntact: boolean): void {
+    const request = { records: { [REQUESTS_RECORD]: requests }, shouldQuarantine: !isIntact };
+    const committed = this._store.commit(request);
+    if (!committed.success) {
+      throw new StorageError(`Could not save the OTP requests: ${committed.message}`);
+    }
   }
 
   /**
