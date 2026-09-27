@@ -7,12 +7,14 @@
  * socket and the caller's real address survives only in `X-Forwarded-For`. Two
  * things can only break there and nowhere else: the container's own config and
  * environment wiring, and rate limiting collapsing onto the proxy so one phone
- * can lock out every other. This file proves both.
+ * can lock out every other. This file proves both, and that the app can answer
+ * an OTP request the importer leaves in the shared folder.
  *
  * As in the in-process suite, the last authorize hop is fetched rather than
  * followed, because no browser resolves `bankimporter://`.
  */
 
+import { randomUUID } from 'node:crypto';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -53,8 +55,30 @@ import {
 /** Where the container keeps refresh tokens, on the mounted config volume. */
 const CONTAINER_TOKENS_PATH = '/app/config/app-tokens.json';
 
+/** Where the container keeps OTP requests, on the same mounted volume. */
+const CONTAINER_OTP_PATH = '/app/config/otp-requests.json';
+
 /** Owner read and write only, the mode of every file the store writes. */
 const OWNER_ONLY = 0o600;
+
+/** The code the app sends, pinned so the answer file can be checked. */
+const OTP_CODE = '482913';
+
+/** How long the seeded OTP request stays open: well past the test's run. */
+const OTP_TTL_MS = 10 * 60_000;
+
+/** The parts of an OTP answer file this suite reads. */
+interface IStoredAnswer {
+  readonly requestId?: unknown;
+  readonly code?: unknown;
+}
+
+/** One code the app sends for one OTP request. */
+interface IOtpSubmission {
+  readonly id: string;
+  readonly token: string;
+  readonly code: string;
+}
 
 /** A SHA-256 digest in lowercase hex: how the store keeps a refresh token. */
 const TOKEN_HASH = /^[0-9a-f]{64}$/;
@@ -144,6 +168,7 @@ function containerEnv(fake: IFakeGoogle): Record<string, string> {
     // `loopback` covers a host-networked daemon.
     PORTAL_TRUST_PROXY: 'uniquelocal,loopback',
     APP_TOKENS_PATH: CONTAINER_TOKENS_PATH,
+    OTP_REQUESTS_PATH: CONTAINER_OTP_PATH,
     GOOGLE_AUTH_BASE: `http://127.0.0.1:${port}/auth`,
     GOOGLE_TOKEN_URL: `http://host.docker.internal:${port}/token`,
   };
@@ -197,6 +222,15 @@ async function signInToPortal(page: Page): Promise<void> {
 }
 
 /**
+ * Signs in through the portal UI unless an earlier test already did.
+ * @param page - The portal page served through the proxy.
+ */
+async function ensurePortalSession(page: Page): Promise<void> {
+  if (await page.isVisible('#app')) return;
+  await signInToPortal(page);
+}
+
+/**
  * Runs one app sign-in against the containerized portal.
  * @param fixture - The running fixture.
  * @param state - State value to round-trip.
@@ -221,6 +255,46 @@ function expectHashedTokenFile(dir: string, issued: readonly string[]): void {
   expect(stored.tokens?.length).toBeGreaterThan(0);
   for (const record of stored.tokens ?? []) expect(record.tokenHash).toMatch(TOKEN_HASH);
   for (const token of issued) expect(text).not.toContain(token);
+}
+
+/**
+ * Leaves a live OTP request in the shared folder, as the importer would.
+ * @param dir - The host directory mounted as the container's config folder.
+ * @returns The request id.
+ */
+function seedOtpRequest(dir: string): string {
+  const id = randomUUID();
+  const createdAt = Date.now();
+  const request = { id, bankId: 'oneZero', createdAt, deadline: createdAt + OTP_TTL_MS };
+  const path = join(dir, `otp-requests.${id}.json`);
+  writeFileSync(path, JSON.stringify(request), { mode: OWNER_ONLY });
+  return id;
+}
+
+/**
+ * Sends an OTP code the way the app does: bearer token, JSON body.
+ * @param base - Portal base URL (the proxy).
+ * @param submission - The request id, the app's access token and the code.
+ * @returns The response status.
+ */
+async function submitOtp(base: string, submission: IOtpSubmission): Promise<number> {
+  const headers = { authorization: `Bearer ${submission.token}` };
+  const url = `${base}/api/otp/${submission.id}`;
+  const reply = await postJson(url, { code: submission.code }, headers);
+  return reply.status;
+}
+
+/**
+ * Reads the answer file the container wrote, after checking it is owner-only.
+ * @param dir - The host directory mounted as the container's config folder.
+ * @param id - The answered request's id.
+ * @returns The parsed answer.
+ */
+function readOwnerOnlyAnswer(dir: string, id: string): IStoredAnswer {
+  const path = join(dir, `otp-requests.${id}.answer.json`);
+  expect(statSync(path).mode & 0o777).toBe(OWNER_ONLY);
+  const text = readFileSync(path, 'utf8');
+  return JSON.parse(text) as IStoredAnswer;
 }
 
 /**
@@ -265,6 +339,22 @@ describe.skipIf(!hasDockerImage())('portal app sign-in inside the container', ()
 
     const rotated = String(refreshed.body.refreshToken);
     expectHashedTokenFile(fixture.dir, [issued.refreshToken, rotated]);
+  }, 180_000);
+
+  it('answers an OTP request left in the shared folder', async () => {
+    const fixture = fx as IDockerFixture;
+    await ensurePortalSession(fixture.page);
+    const issued = await appSignIn(fixture, 'docker-otp-1');
+    const id = seedOtpRequest(fixture.dir);
+    const base = fixture.proxy.baseUrl;
+
+    const first = await submitOtp(base, { id, token: issued.accessToken, code: OTP_CODE });
+    expect(first).toBe(200);
+    const second = await submitOtp(base, { id, token: issued.accessToken, code: '000000' });
+    expect(second).toBe(404);
+
+    const answer = readOwnerOnlyAnswer(fixture.dir, id);
+    expect(answer).toMatchObject({ requestId: id, code: OTP_CODE });
   }, 180_000);
 
   it('rate limits the forwarded caller, not the proxy', async () => {
