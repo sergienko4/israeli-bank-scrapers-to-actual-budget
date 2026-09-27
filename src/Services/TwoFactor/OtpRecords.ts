@@ -14,6 +14,9 @@ import { OTP_CODE_PATTERN } from '../../Contract/Otp.js';
 /** The only codes an answer may hand the importer. */
 const WELL_FORMED_CODE = new RegExp(OTP_CODE_PATTERN);
 
+/** The fields an answer holding the user's code is written with, and no others. */
+const CODE_ANSWER_FIELDS: ReadonlySet<string> = new Set(['requestId', 'deadline', 'code']);
+
 /** A pending OTP request, as the importer publishes it. */
 export interface IOtpRequest {
   /** Lower-case UUID the app submits its code against; also names the files. */
@@ -78,14 +81,34 @@ export function answerRecords(request: IOtpRequest, outcome: OtpOutcome): Record
 }
 
 /**
+ * Reports whether a field is one a code answer is written with.
+ * @param field - A field name read from an answer.
+ * @returns Whether a code answer carries it.
+ */
+function isCodeAnswerField(field: string): boolean {
+  return CODE_ANSWER_FIELDS.has(field);
+}
+
+/**
+ * Reports whether an answer holds exactly the fields a submitted code is
+ * written with, so one also marked used or expired is not taken for a code.
+ * @param records - The records of a healthy answer file.
+ * @returns Whether its field names are exactly those.
+ */
+function isCodeAnswer(records: StoredRecords): boolean {
+  const fields = Object.keys(records);
+  return fields.length === CODE_ANSWER_FIELDS.size && fields.every(isCodeAnswerField);
+}
+
+/**
  * Reads the user's code out of an answer file's records.
  * @param records - The records of a healthy answer file.
  * @param request - The request the answer must belong to.
- * @returns The code, or false unless the answer is this request's and holds a
- *   well-formed code.
+ * @returns The code, or false unless the answer is this request's, holds
+ *   only the fields a code answer is written with, and holds a well-formed code.
  */
 export function codeIn(records: StoredRecords, request: IOtpRequest): string | false {
   const { code } = records;
-  if (records.requestId !== request.id || typeof code !== 'string') return false;
-  return WELL_FORMED_CODE.test(code) ? code : false;
+  if (!isCodeAnswer(records) || records.requestId !== request.id) return false;
+  return typeof code === 'string' && WELL_FORMED_CODE.test(code) ? code : false;
 }

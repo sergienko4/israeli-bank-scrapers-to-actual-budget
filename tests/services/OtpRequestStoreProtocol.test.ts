@@ -379,6 +379,30 @@ describe('OtpRequestStore: polling for the answer', () => {
     expect(store.poll(created, NOW + 1)).toEqual({ kind: 'waiting' });
   });
 
+  it.each([
+    ['a used-code marker', { consumed: true }],
+    ['an expiry marker', { expired: true }],
+    ['a field this code never writes', { note: 'x' }],
+  ])('keeps waiting while the answer holds a code and %s', (_label, extra) => {
+    // Only an answer shaped exactly as submit writes one may hand over a code.
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    const answer = JSON.stringify({ requestId: created.id, deadline: NOW + TTL, code: CODE, ...extra });
+    fileSystem.seedFile(answerPath(created.id), answer, 0o600);
+    expect(store.poll(created, NOW + 1)).toEqual({ kind: 'waiting' });
+  });
+
+  it.each([
+    ['no deadline', {}],
+    ['a used-code marker in place of its deadline', { consumed: true }],
+  ])('keeps waiting while the answer holds a code but %s', (_label, extra) => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    const answer = JSON.stringify({ requestId: created.id, code: CODE, ...extra });
+    fileSystem.seedFile(answerPath(created.id), answer, 0o600);
+    expect(store.poll(created, NOW + 1)).toEqual({ kind: 'waiting' });
+  });
+
   it.each(['1234', '12345678'])('hands over a %s code at the edge of the allowed length', (code) => {
     const { store, fileSystem } = makeStore();
     const created = store.create('leumi', TTL, NOW);
