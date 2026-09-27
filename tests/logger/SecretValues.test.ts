@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { SecretValues } from '../../src/Logger/SecretValues.js';
+import fastestRunMs from '../helpers/fastestRunMs.js';
 
 /** A credential the bank may quote back. */
 const VALUE = 'Qz7-echoed-Lk9';
@@ -201,5 +202,43 @@ describe('SecretValues with a lone surrogate in a value', () => {
   it('percent-encodes a whole pair as itself', () => {
     const written = encodeURIComponent(PAIRED);
     expect(knowing(PAIRED).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+});
+
+describe('SecretValues with a lone half that pairs with the text beside it', () => {
+  /** An emoji: the high half `\uD83D` and the low half `\uDE00`, one character. */
+  const EMOJI = '😀';
+
+  it.each([
+    ['a low half after a high half in the text', '\uDE00secret', `${EMOJI}secret`],
+    ['a high half before a low half in the text', 'secret\uD83D', `secret${EMOJI}`],
+    ['a short value that starts with a low half', '\uDE00ab', `${EMOJI}ab`],
+    ['a short value that ends with a high half', 'ab\uD83D', `ab${EMOJI}`],
+    ['a value that is one high half', '\uD83D', EMOJI],
+    ['a value that is one low half', '\uDE00', EMOJI],
+    ['a value quoted back in another case', '\uDE00Secret', `${EMOJI}sECRET`],
+  ])('hides the whole character around %s', (_case, value, written) => {
+    expect(knowing(value).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it('hides a short value that holds a lone half inside a longer word too', () => {
+    expect(knowing('\uDE00ab').mask(`${CANARY} ${EMOJI}abNx ${CANARY}`)).toBe(`${CANARY} [REDACTED]Nx ${CANARY}`);
+  });
+
+  it('finds a value that starts inside the character an earlier match ends in', () => {
+    expect(knowing('\uD83D', '\uDE00secret').mask(`${CANARY} ${EMOJI}secret ${CANARY}`))
+      .toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it('hides a value whole when a shorter one starts at the same place', () => {
+    expect(knowing('\uDE00', '\uDE00secret').mask(`${CANARY} ${EMOJI}secret ${CANARY}`))
+      .toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it('masks a long run of paired halves fast', () => {
+    const text = `${EMOJI.repeat(10_000)} ${CANARY}`;
+    const known = knowing('\uDE00');
+    expect(known.mask(text)).toBe(`${MASK.repeat(10_000)} ${CANARY}`);
+    expect(fastestRunMs(() => known.mask(text), FAST_MS)).toBeLessThan(FAST_MS);
   });
 });

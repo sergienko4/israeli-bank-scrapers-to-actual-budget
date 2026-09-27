@@ -47,6 +47,12 @@ const LONE_SURROGATE = /[\uD800-\uDFFF]/gu;
 /** What UTF-8 writes for a lone surrogate, as a file or a URL encoder does. */
 const REPLACEMENT_CHARACTER = '\uFFFD';
 
+/** The code units a pair's first half can be: a high surrogate. */
+const HIGH_HALF = { first: 0xd8_00, last: 0xdb_ff };
+
+/** The code units a pair's second half can be: a low surrogate. */
+const LOW_HALF = { first: 0xdc_00, last: 0xdf_ff };
+
 /**
  * Lists the forms an output can write a value in: as it is, escaped inside a
  * JSON string, as a log line's text is, and percent-encoded in an address.
@@ -105,7 +111,18 @@ function longestFirst(left: string, right: string): number {
 }
 
 /**
- * Builds the pattern that finds any known value.
+ * Tells whether a form holds a lone surrogate. `search` always starts at the
+ * text's start, whatever the global pattern's `lastIndex` is.
+ * @param form - One form of a value.
+ * @returns True when the form holds half of a pair with no other half.
+ */
+function holdsLoneHalf(form: string): boolean {
+  return form.search(LONE_SURROGATE) >= 0;
+}
+
+/**
+ * Builds the pattern that reads the text as whole characters, and finds the
+ * mask or any known form that holds no lone surrogate.
  *
  * <p>The mask is one of the choices, so a mask already in the text is matched,
  * and written back, as a whole: a value that is part of it, such as `DACT`,
@@ -113,17 +130,53 @@ function longestFirst(left: string, right: string): number {
  * value that starts with it, such as `[REDACTED]-x`, is matched whole. Letter
  * case is ignored, since a bank may quote a user name or address back upper-
  * or lower-cased.
- * @param values - Every known form of every value.
- * @returns A global, case-blind pattern matching the mask or any value.
+ * @param forms - Every known form that holds no lone surrogate.
+ * @returns A global, case-blind pattern matching the mask or any of them.
  */
-function buildPattern(values: ReadonlySet<string>): RegExp {
-  const sorted = [MASK, ...values].sort(longestFirst);
+function byCharacter(forms: readonly string[]): RegExp {
+  const sorted = [MASK, ...forms].sort(longestFirst);
   const sources = sorted.map(asSource);
   const source = sources.join('|');
   // Every value is escaped into a literal, so the pattern is an alternation
   // of plain text, some behind a one-character look-around, with no
   // quantifier: it cannot backtrack, and a test pins this.
   return new RegExp(source, 'giu'); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+}
+
+/**
+ * Builds the pattern that reads the text code unit by code unit, and finds
+ * the known forms that hold a lone surrogate.
+ *
+ * <p>Read as whole characters, a pair in the text is one character, so a lone
+ * half at a form's edge never matches the same half inside a pair: `\uDE00x`
+ * inside `😀x`. The whole-word look-arounds need whole characters, so these
+ * forms match anywhere, whatever their length: they can hide a little more
+ * than a whole word, never less.
+ * @param forms - Every known form that holds a lone surrogate.
+ * @returns A global, case-blind pattern matching any of them.
+ */
+function byCodeUnit(forms: readonly string[]): RegExp {
+  const sorted = [...forms].sort(longestFirst);
+  const sources = sorted.map(asPattern);
+  const source = sources.join('|');
+  // The same plain-text alternation as `byCharacter`, with no look-around.
+  return new RegExp(source, 'gi'); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+}
+
+/**
+ * Builds the patterns that find any known value, and any mask already there.
+ * @param values - Every known form of every value.
+ * @returns The whole-character pattern, then the code-unit one when a form
+ *   holds a lone surrogate.
+ */
+function buildPatterns(values: ReadonlySet<string>): RegExp[] {
+  const forms = [...values];
+  const loneHalves = forms.filter(holdsLoneHalf);
+  const whole = forms.filter((form) => !holdsLoneHalf(form));
+  const characters = byCharacter(whole);
+  if (loneHalves.length === 0) return [characters];
+  const codeUnits = byCodeUnit(loneHalves);
+  return [characters, codeUnits];
 }
 
 /**
@@ -142,15 +195,18 @@ function pastFirstCharacter(text: string, match: RegExpExecArray): number {
 }
 
 /**
- * Lists every match of the known values' pattern, however they overlap.
+ * Lists every match of one of the known values' patterns, however they
+ * overlap.
  *
  * <p>Each search starts one character past the last match's start, not at its
  * end, so a value that starts inside an earlier match, as `echoed-Lk9` does in
  * `Qz7-echoed-Lk9`, is found too, and none of its characters is shown. The
- * spans they make are joined where they overlap (see `MaskSpans`). Every
- * match holds at least one character, so the search always moves on.
+ * code-unit pattern steps one code unit instead, so a form that starts at the
+ * second half of the pair an earlier match starts in is found too. The spans
+ * they make are joined where they overlap (see `MaskSpans`). Every match
+ * holds at least one code unit, so the search always moves on.
  * @param text - Any text an output is about to write.
- * @param pattern - The known values' global pattern.
+ * @param pattern - One of the known values' global patterns.
  * @returns The matches, by where they start.
  */
 function everyMatchIn(text: string, pattern: RegExp): RegExpExecArray[] {
@@ -158,26 +214,54 @@ function everyMatchIn(text: string, pattern: RegExp): RegExpExecArray[] {
   pattern.lastIndex = 0;
   for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
     matches.push(match);
-    pattern.lastIndex = pastFirstCharacter(text, match);
+    pattern.lastIndex = pattern.unicode ? pastFirstCharacter(text, match) : match.index + 1;
   }
   return matches;
 }
 
 /**
- * Turns one match of a known value into the span that masks it.
- * @param match - A match of the known values' pattern.
+ * Tells whether a code unit is within a range of surrogates.
+ * @param unit - A code unit, or `NaN` past either end of the text.
+ * @param range - The high or the low surrogates.
+ * @returns True when the unit is in the range.
+ */
+function isIn(unit: number, range: typeof HIGH_HALF): boolean {
+  return unit >= range.first && unit <= range.last;
+}
+
+/**
+ * Tells whether an index falls between the two halves of a pair, where a
+ * code-unit match can start or end.
+ * @param text - The text being masked.
+ * @param index - A place between two code units.
+ * @returns True when a high half stands before it and a low half after it.
+ */
+function splitsPair(text: string, index: number): boolean {
+  const before = text.charCodeAt(index - 1);
+  const after = text.charCodeAt(index);
+  return isIn(before, HIGH_HALF) && isIn(after, LOW_HALF);
+}
+
+/**
+ * Turns one match of a known value into the span that masks it. A span that
+ * would split a pair takes the whole pair, so the mask never leaves half of
+ * a character behind.
+ * @param text - The text the match was found in.
+ * @param match - A match of one of the known values' patterns.
  * @returns The stretch it covers, written as the mask.
  */
-function toMaskSpan(match: RegExpExecArray): IMaskSpan {
-  const start = match.index;
-  return { start, end: start + match[0].length, text: MASK };
+function toMaskSpan(text: string, match: RegExpExecArray): IMaskSpan {
+  const matchEnd = match.index + match[0].length;
+  const start = splitsPair(text, match.index) ? match.index - 1 : match.index;
+  const end = splitsPair(text, matchEnd) ? matchEnd + 1 : matchEnd;
+  return { start, end, text: MASK };
 }
 
 /** A growing list of secret values, and the text masker they make. */
 export class SecretValues {
   private readonly _values = new Set<string>();
 
-  private _pattern = buildPattern(this._values);
+  private _patterns = buildPatterns(this._values);
 
   /**
    * Adds values to the list, in every form an output can write them.
@@ -187,7 +271,7 @@ export class SecretValues {
   public register(values: readonly string[]): number {
     const before = this._values.size;
     for (const spelling of values.flatMap(spellings)) this._values.add(spelling);
-    if (this._values.size !== before) this._pattern = buildPattern(this._values);
+    if (this._values.size !== before) this._patterns = buildPatterns(this._values);
     return this._values.size;
   }
 
@@ -199,8 +283,8 @@ export class SecretValues {
    */
   public find(text: string): IMaskSpan[] {
     if (this._values.size === 0) return [];
-    const matches = everyMatchIn(text, this._pattern);
-    return matches.map(toMaskSpan);
+    const matches = this._patterns.flatMap((pattern) => everyMatchIn(text, pattern));
+    return matches.map((match) => toMaskSpan(text, match));
   }
 
   /**
