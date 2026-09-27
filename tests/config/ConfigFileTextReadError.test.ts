@@ -15,6 +15,19 @@ vi.mock('node:fs', async (importOriginal) => {
 let dir: string;
 let path: string;
 
+/**
+ * Makes the next close release the descriptor, then report a failure.
+ * @param error - What the close throws.
+ * @returns Nothing; the mock is armed for one call.
+ */
+async function refuseNextClose(error: Error): Promise<void> {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  vi.mocked(fs.closeSync).mockImplementationOnce((descriptor) => {
+    actual.closeSync(descriptor);
+    throw error;
+  });
+}
+
 describe('readConfigText when the read fails after the open', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'cfgtext-err-'));
@@ -35,6 +48,24 @@ describe('readConfigText when the read fails after the open', () => {
       success: false, status: 'EIO', message: `Could not read ${path}: EIO`,
     });
     expect(fs.closeSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a refused close by its errno instead of throwing', async () => {
+    const ioError = Object.assign(new Error('input/output error'), { code: 'EIO' });
+    await refuseNextClose(ioError);
+    const read = readConfigText(path);
+    expect(read).toMatchObject({
+      success: false, status: 'EIO', message: `Could not read ${path}: EIO`,
+    });
+  });
+
+  it('keeps the read failure when the close is refused as well', async () => {
+    const readError = Object.assign(new Error('input/output error'), { code: 'EIO' });
+    const closeError = Object.assign(new Error('bad file descriptor'), { code: 'EBADF' });
+    vi.mocked(fs.readSync).mockImplementationOnce(() => { throw readError; });
+    await refuseNextClose(closeError);
+    const read = readConfigText(path);
+    expect(read).toMatchObject({ success: false, status: 'EIO' });
   });
 
   it('reports EUNKNOWN, never the thrown text, when the error has no errno', () => {
