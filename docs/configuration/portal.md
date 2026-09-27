@@ -88,8 +88,9 @@ Both the importer and the portal read config from a **directory** mounted at
 `/app/config` (holding `config.json` and the optional `credentials.json`), not
 from individual single-file bind mounts. This is required, not cosmetic:
 
-- The portal saves **atomically** — it writes a temp file, then renames it over
-  the target. A rename swaps the file's *inode*.
+- The portal saves **atomically** — it writes the new file under a random name,
+  created exclusively and owner-only, then renames it over the target. A rename
+  swaps the file's *inode*.
 - With a **single-file** bind mount, the importer container is pinned to the
   original inode, so it would **never see the portal's edits**, and the portal's
   rename can fail with `EBUSY` (you cannot rename over a mountpoint).
@@ -143,6 +144,39 @@ portal:
 > mounts above plus `CONFIG_PATH`/`PORTAL_CONFIG_PATH`. The code still defaults
 > to `/app/config.json`, so an existing single-file importer-only deployment
 > keeps working — but the portal's saves only propagate with a directory mount.
+
+### If a save fails or is interrupted
+
+A save writes `credentials.json` first, then `config.json`, and gives both the
+same `saveId`. A failed save answers `Failed to persist configuration`, and the
+portal log names the cause:
+
+- If `credentials.json` is a symlink, a directory or a FIFO, the save stops
+  before either file is replaced. Put a regular file there.
+- If `config.json` cannot be replaced, the portal puts the previous
+  credentials back, so the two files still belong together. If even that
+  fails, the log says where the previous credentials remain.
+
+A portal killed between the two renames leaves the new `credentials.json`
+beside the previous `config.json`. Both the importer and the portal then refuse
+to start with:
+
+```text
+config.json and credentials.json come from different saves (a save was
+interrupted). Check both files, then remove `saveId` from both to accept them.
+```
+
+The previous credentials are still beside them, in an owner-only
+`credentials.json.<random>.tmp` file (encrypted if your credentials are). The
+portal removes such files only when it starts, so this one survives. Either:
+
+- **Go back to the previous save:** move that file over `credentials.json`. If
+  there is no such file, the save was the first to split out the secrets:
+  delete the new `credentials.json`, since the previous `config.json` still
+  holds them.
+- **Keep the new credentials:** remove `saveId` from both files, then delete
+  the `.tmp` file. Decrypt an encrypted `credentials.json` first (see
+  [Encrypted config](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/encrypted-config.md)).
 
 ## Expose over HTTPS
 
@@ -490,6 +524,15 @@ device would then rewrite `devices.json` with only that device.
 These files are owner-only (`0600`), so both services must run as the same
 user. The shipped image runs both as `node`.
 
+The portal's app sign-ins (`app-tokens.json`) are saved as `{"tokens": […]}`
+too, and are owner-only. This release reads the old list, so the upgrade signs
+no phone out. A rollback signs every phone out: an earlier release reads the new
+file as holding no sign-ins, and each phone must sign in again.
+
+Run one portal process per `app-tokens.json`. Two portals writing the same file
+can undo each other's latest change: a phone can be signed out, or a sign-in
+you revoked can come back.
+
 ### Token lifetime and security
 
 - **Short-lived by design.** A bearer token is the portal's stateless,
@@ -531,6 +574,12 @@ Reach your own importer over a **private tunnel** instead:
 - The runtime files the portal shares with the importer (the import history,
   device tokens and OTP files) are owner-only (`0600`) and replaced atomically;
   see *Upgrade both services together* above.
+- `app-tokens.json` keeps only a SHA-256 hash of each app refresh token. If the
+  portal cannot read it, an app sign-in or refresh fails with a server error
+  instead of treating the file as empty and signing every phone out.
+- A server error never carries its cause: it answers a fixed message such as
+  `Internal server error` or `Failed to persist configuration`, and the cause
+  (a file path, an error code) goes to the portal log.
 - Session cookies are HMAC-signed with `sessionSecret`; the portal refuses to
   start on a missing/weak secret (under 16 chars or a known placeholder).
 - Sessions are bound to the credentials in force when you signed in: changing the

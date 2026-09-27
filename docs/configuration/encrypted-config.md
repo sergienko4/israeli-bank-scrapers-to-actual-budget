@@ -49,6 +49,10 @@ docker run -e CREDENTIALS_ENCRYPTION_PASSWORD=mypassword ...
 ```
 
 Or via the legacy `CONFIG_PASSWORD` env var (still supported for backward compatibility).
+An empty `CREDENTIALS_ENCRYPTION_PASSWORD` counts as unset, so `CONFIG_PASSWORD`
+is used when it is set. `CREDENTIALS_ENCRYPTION_PASSWORD=` in an env file, or
+`${CREDENTIALS_ENCRYPTION_PASSWORD}` in a compose file on a host without that
+variable, sets it to an empty string.
 
 ## Long-term bank tokens
 
