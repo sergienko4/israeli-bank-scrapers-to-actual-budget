@@ -91,7 +91,8 @@ export interface ISweepReport {
 declare const OWNERSHIP: unique symbol;
 
 /**
- * Records the store has copied and now owns: frozen, prototype-less, plain.
+ * Records the store has copied and now owns: frozen, prototype-less and
+ * plain at every depth.
  *
  * <p>Only `ownRequest` can produce one. The brand is declared, never
  * assigned, so it exists for the compiler and not at runtime: no caller can

@@ -153,17 +153,17 @@ function keyDifferences(
  * to run in both directions against a key set captured beforehand.
  *
  * <p>Ownership now makes that cheap. What arrives is a frozen, prototype-less
- * copy the store took itself, so nothing here can run code or change between
- * reads. The remaining live case is a *nested* value whose own `toJSON`
- * returns `undefined`, which is ordinary JSON semantics and quietly drops
- * the record.
+ * copy the store took itself, at every depth, so nothing here can run code or
+ * change between reads. The remaining live case is a record whose value is
+ * `undefined`, which JSON leaves out of the text.
  *
  * <p>The unexpected-key half therefore has no way to fire today. It is kept
  * because it costs one comparison and it is the check that would notice if
  * serialisation were ever pointed back at a caller's object.
  *
- * <p>Value fidelity at depth is still not promised: a nested `Date` is meant
- * to serialise as a string. The caller owns values; this owns the set.
+ * <p>Values below the top level stay the caller's: an `undefined` field or a
+ * number JSON cannot write keeps the meaning JSON gives it. The copy owns the
+ * shape at every depth; this owns the set.
  * @param expected - Keys read before serialisation.
  * @param json - Text `JSON.stringify` produced for them.
  * @returns The text and its record count, or a failure naming no values.
@@ -227,6 +227,8 @@ function stringifyAndVerify(records: Record<string, unknown>): Procedure<ISerial
   try {
     json = JSON.stringify(records, undefined, 2);
   } catch {
+    // An owned copy holds no cycle, bigint or code, so what is left to throw
+    // here is a text longer than one string can hold.
     return fail('Records could not be serialised as JSON', { status: 'EINVAL' });
   }
   return confirmExactRoundTrip(expected, json);

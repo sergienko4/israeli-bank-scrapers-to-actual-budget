@@ -16,7 +16,8 @@
  *
  * <p>So this module reads everything exactly once and hands back a value the
  * store owns outright: keys and values lifted straight out of property
- * descriptors, copied into a frozen object with no prototype. Nothing
+ * descriptors, copied into a frozen object with no prototype, and every
+ * object and list inside them rebuilt the same way by `OwnedValues`. Nothing
  * downstream ever touches the caller's object again, and
  * {@link IOwnedRecords} is a type only this module can produce, so the
  * compiler enforces that rather than a convention.
@@ -26,8 +27,9 @@
  * <ul>
  * <li>Values cannot change after validation — there is no second read.</li>
  * <li>No accessor can run during serialisation — none survived the copy.</li>
- * <li>No inherited `toJSON` can intercept `JSON.stringify` — the copy has no
- * prototype to inherit one from, even if `Object.prototype` is polluted.</li>
+ * <li>No inherited `toJSON` can intercept `JSON.stringify` — no object or
+ * list in the copy has a prototype to inherit one from, at any depth, even if
+ * `Object.prototype` or `Array.prototype` is polluted.</li>
  * <li>A request that refuses to be read fails instead of throwing, and fails
  * before anything is staged.</li>
  * </ul>
@@ -36,6 +38,7 @@
 
 import type { Procedure } from '../Types/Procedure.js';
 import { fail, succeed } from '../Types/ProcedureHelpers.js';
+import ownRecordValue from './OwnedValues.js';
 import { POLLUTING_KEY } from './StoreRecords.js';
 import type { ICommitRequest, IOwnedRecords, IOwnedRequest } from './StoreTypes.js';
 
@@ -116,7 +119,9 @@ function ownEveryRecord(source: object, keys: readonly string[]): Procedure<IOwn
     }
     const owned = ownOneRecord(key, descriptor);
     if (!owned.success) return owned;
-    values[key] = owned.data;
+    const value = ownRecordValue(key, owned.data);
+    if (!value.success) return value;
+    values[key] = value.data;
   }
   Object.freeze(values);
   return succeed({ values } as IOwnedRecords);
