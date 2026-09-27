@@ -389,6 +389,16 @@ describe('OtpRequestStore: polling for the answer', () => {
     expect(filesIn(fileSystem).filter((name) => fileSystem.contentsOf(name).includes(CODE))).toEqual([]);
   });
 
+  it('removes the staged copy left by a submit whose stage could not be removed', () => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    fileSystem.forcedFailuresOnce.set('remove', 'EBUSY');
+    expect(store.submit(created.id, CODE, NOW + 1)).toBe(true);
+    expect(filesIn(fileSystem).filter((name) => name.endsWith('.tmp'))).toHaveLength(1);
+    expect(store.poll(created, NOW + 2)).toEqual({ kind: 'code', code: CODE });
+    expect(filesIn(fileSystem).filter((name) => fileSystem.contentsOf(name).includes(CODE))).toEqual([]);
+  });
+
   it('removes a staged copy of the answer when the request expires', () => {
     const { store, fileSystem } = makeStore();
     const created = store.create('leumi', TTL, NOW);

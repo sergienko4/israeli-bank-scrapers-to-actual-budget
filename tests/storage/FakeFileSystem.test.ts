@@ -73,6 +73,16 @@ describe('FakeFileSystem failure injection', () => {
     expect(third.success).toBe(true);
   });
 
+  it('keeps the stage as a second name when a publish cannot remove it, as a real link does', () => {
+    const fake = new FakeFileSystem();
+    fake.createExclusive('stage.tmp', '{"a":1}');
+    fake.forcedFailures.set('remove', 'EBUSY');
+    const published = fake.publishExclusive('stage.tmp', 'final.json');
+    expect(published.success).toBe(true);
+    expect(fake.contentsOf('final.json')).toBe('{"a":1}');
+    expect(fake.contentsOf('stage.tmp')).toBe('{"a":1}');
+  });
+
   it('can stage only part of a payload and report the short count, as a real write may', () => {
     const fake = new FakeFileSystem();
     fake.shortWriteOnCall(2);
