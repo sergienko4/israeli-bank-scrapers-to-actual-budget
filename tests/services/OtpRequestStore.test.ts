@@ -9,7 +9,8 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  linkSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
+  linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,6 +22,9 @@ import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 
 /** The code the user submits. */
 const CODE = '123456';
+
+/** Windows needs extra rights to make a symlink, so those cases skip there. */
+const IS_WINDOWS = process.platform === 'win32';
 
 let dir: string;
 let importer: OtpRequestStore;
@@ -113,6 +117,22 @@ describe('OtpRequestStore on a real filesystem', () => {
     const request = join(dir, `otp-requests.${created.id}.json`);
     linkSync(request, `${request}.${randomUUID()}.tmp`);
     expect(portal.submit(created.id, CODE, 2_000)).toBe(true);
+  });
+
+  it.skipIf(IS_WINDOWS)('writes requests where it lists them, through a symlink and ..', () => {
+    mkdirSync(join(dir, 'real', 'sub'), { recursive: true });
+    symlinkSync(join(dir, 'real', 'sub'), join(dir, 'link'));
+    const basePath = `${dir}/link/../otp-requests.json`;
+    const linkedImporter = new OtpRequestStore(createNodeFileSystem(), basePath);
+    const linkedPortal = new OtpRequestStore(createNodeFileSystem(), basePath);
+    const created = linkedImporter.create('leumi', 60_000);
+    expect(linkedPortal.pending().map((request) => request.id)).toEqual([created.id]);
+    expect(linkedPortal.submit(created.id, CODE)).toBe(true);
+    expect(linkedImporter.poll(created)).toEqual({ kind: 'code', code: CODE });
+    expect(readdirSync(join(dir, 'real')).sort()).toEqual([
+      `otp-requests.${created.id}.answer.json`, 'sub',
+    ]);
+    expect(readdirSync(dir).sort()).toEqual(['link', 'real']);
   });
 
   it('ignores the combined file an older release wrote', () => {
