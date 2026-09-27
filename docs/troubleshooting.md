@@ -121,10 +121,14 @@ covering several banks read `All 3 banks failed — …` with each bank listed.
   cannot read it.
 
 **Fix:** put a regular UTF-8 JSON file at the path, readable by the container
-user. A symlink to such a file is fine; a symlink to a missing file is not. Only
-a `config.json` with nothing at its path counts as "no config" (the importer
-then runs from environment variables), so a broken mount is never mistaken for
-an empty config.
+user. A symlink to such a file is fine; a symlink to a missing file is not.
+
+Only a `config.json` with nothing at its path counts as "no config": the
+importer logs `config.json not found, using environment variables` and runs
+from them. A broken mount that leaves one of the errors above stops the run.
+A mount that leaves nothing at the path, such as a missing volume entry or a
+volume without the file, reads as "no config" instead. If that log line
+appears when you expected a file, check the mount.
 
 ## "config.json and credentials.json come from different saves"
 
