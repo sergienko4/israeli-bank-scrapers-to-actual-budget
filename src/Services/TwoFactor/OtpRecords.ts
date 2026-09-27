@@ -4,12 +4,14 @@
  * <p>Both are read without trusting them. Anything that is not exactly what
  * this code writes reads as absent, so a damaged or foreign file can neither
  * surface as a request nor hand the importer a code. That includes a time
- * JSON can spell but a clock never reaches, such as `1e999`, and a code the
- * portal's own route would have refused.
+ * JSON can spell but a clock never reaches, such as `1e999`, a code the
+ * portal's own route would have refused, and a file that held a `__proto__`
+ * key the parser left out.
  * @module
  */
 
 import { OTP_CODE_PATTERN } from '../../Contract/Otp.js';
+import type { IStoreSnapshot } from '../../Storage/StoreTypes.js';
 
 /** The only codes an answer may hand the importer. */
 const WELL_FORMED_CODE = new RegExp(OTP_CODE_PATTERN);
@@ -43,6 +45,22 @@ export type OtpPoll =
   | { readonly kind: 'waiting' }
   | { readonly kind: 'code'; readonly code: string }
   | { readonly kind: 'expired' };
+
+/** What a file that cannot be trusted holds. */
+const NO_RECORDS: StoredRecords = Object.freeze({});
+
+/**
+ * Picks the records an OTP file can be read for.
+ *
+ * <p>Only a healthy file holds what this code writes. A damaged one has no
+ * records, and a stripped one held a `__proto__` key, which this code never
+ * writes, so it reads as absent too.
+ * @param snapshot - What the store read from the file.
+ * @returns Its records when it is healthy, otherwise none.
+ */
+export function trustedRecords(snapshot: IStoreSnapshot): StoredRecords {
+  return snapshot.state === 'healthy' ? snapshot.records : NO_RECORDS;
+}
 
 /**
  * Reports whether a stored value is a time a clock can reach.

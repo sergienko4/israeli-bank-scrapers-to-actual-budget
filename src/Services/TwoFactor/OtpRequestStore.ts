@@ -33,7 +33,9 @@ import { succeed } from '../../Types/ProcedureHelpers.js';
 import UUID_PATTERN from '../../Utils/IdPatterns.js';
 import OtpFileNames from './OtpFileNames.js';
 import sweepOtpFiles from './OtpFileSweep.js';
-import { answerRecords, codeIn, type IOtpRequest, type OtpPoll, requestIn } from './OtpRecords.js';
+import {
+  answerRecords, codeIn, type IOtpRequest, type OtpPoll, requestIn, trustedRecords,
+} from './OtpRecords.js';
 
 export type { IOtpRequest, OtpPoll } from './OtpRecords.js';
 
@@ -167,7 +169,7 @@ export default class OtpRequestStore {
   /**
    * Reads a request file.
    *
-   * <p>An absent or damaged file reads as having no records, so it holds no
+   * <p>An absent, damaged or stripped file yields no records, so it holds no
    * well-formed request either.
    * @param id - The request id, known to be a UUID.
    * @returns The request, false when it is absent or not well formed, or why
@@ -176,7 +178,8 @@ export default class OtpRequestStore {
   private readRequest(id: string): Procedure<IOtpRequest | false> {
     const snapshot = this.requestStore(id).read();
     if (!snapshot.success) return snapshot;
-    const request = requestIn(snapshot.data.records, id);
+    const records = trustedRecords(snapshot.data);
+    const request = requestIn(records, id);
     return succeed(request);
   }
 
@@ -255,7 +258,7 @@ export default class OtpRequestStore {
   /**
    * Reads the user's code from a request's answer.
    *
-   * <p>An absent or damaged answer reads as having no records, so no code.
+   * <p>An absent, damaged or stripped answer yields no records, so no code.
    * @param request - The request being polled.
    * @returns The code, false when there is none this request can use, or why
    *   the answer could not be read.
@@ -263,7 +266,8 @@ export default class OtpRequestStore {
   private readCode(request: IOtpRequest): Procedure<string | false> {
     const snapshot = this.answerStore(request.id).read();
     if (!snapshot.success) return snapshot;
-    const code = codeIn(snapshot.data.records, request);
+    const records = trustedRecords(snapshot.data);
+    const code = codeIn(records, request);
     return succeed(code);
   }
 

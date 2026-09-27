@@ -3,11 +3,12 @@
  *
  * <p>A request or an answer is dead an hour after its own deadline: by then
  * the importer has stopped polling and the portal refuses a code, so an orphan
- * code leaves the disk too. One whose deadline cannot be read is aged by its
- * last write instead; files are published whole, so an unreadable one is
- * damage, not a write in progress. Staged copies, and the combined file an
- * older release wrote, go an hour after their last write, as every store's
- * leftovers do. Everything else in the directory is left alone.
+ * code leaves the disk too. One whose deadline cannot be read, or that held a
+ * `__proto__` key and so reads as absent, is aged by its last write instead;
+ * files are published whole, so an unreadable one is damage, not a write in
+ * progress. Staged copies, and the combined file an older release wrote, go
+ * an hour after their last write, as every store's leftovers do. Everything
+ * else in the directory is left alone.
  * @module
  */
 
@@ -19,6 +20,7 @@ import type { Procedure } from '../../Types/Index.js';
 import { succeed } from '../../Types/ProcedureHelpers.js';
 import type OtpFileNames from './OtpFileNames.js';
 import type { OtpFileKind } from './OtpFileNames.js';
+import { trustedRecords } from './OtpRecords.js';
 
 /** Decides whether one entry goes, removing it if so. */
 type Sweeper = (fileSystem: IFileSystem, path: string) => boolean;
@@ -27,13 +29,14 @@ type Sweeper = (fileSystem: IFileSystem, path: string) => boolean;
  * Reads the deadline a request or an answer carries.
  * @param fileSystem - Injected filesystem access.
  * @param file - Descriptor for a regular file.
- * @returns The deadline, or the last write when no finite deadline can be read.
+ * @returns The deadline, or the last write when the file is not healthy or
+ *   holds no finite deadline.
  */
 function deadlineOrLastWrite(fileSystem: IFileSystem, file: IOpenFile): number {
   const contents = fileSystem.readAll(file, MAX_STORE_BYTES);
   if (!contents.success) return file.modifiedAtMs;
   const snapshot = parseSnapshot(contents.data);
-  const { deadline } = snapshot.records;
+  const { deadline } = trustedRecords(snapshot);
   return typeof deadline === 'number' && Number.isFinite(deadline) ? deadline : file.modifiedAtMs;
 }
 

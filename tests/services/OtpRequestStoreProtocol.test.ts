@@ -206,6 +206,17 @@ describe('OtpRequestStore: listing pending requests', () => {
     fileSystem.forcedFailures.set('openForRead', 'EACCES');
     expect(store.pending(NOW + 1)).toEqual([]);
   });
+
+  it('hides, and refuses a code for, a request file that held a __proto__ key', () => {
+    // The parser leaves the key out, so the rest looks well formed; but no
+    // file this code writes holds one, so the file reads as absent.
+    const { store, fileSystem } = makeStore();
+    const fields = JSON.stringify({ id: UNKNOWN_ID, bankId: 'leumi', createdAt: NOW, deadline: NOW + TTL });
+    fileSystem.seedFile(requestPath(UNKNOWN_ID), `${fields.slice(0, -1)},"__proto__":{}}`, 0o600);
+    expect(store.pending(NOW + 1)).toEqual([]);
+    expect(store.submit(UNKNOWN_ID, CODE, NOW + 1)).toBe(false);
+    expect(fileSystem.hasEntry(answerPath(UNKNOWN_ID))).toBe(false);
+  });
 });
 
 describe('OtpRequestStore: submitting a code', () => {
@@ -340,6 +351,15 @@ describe('OtpRequestStore: polling for the answer', () => {
     expect(fileSystem.hasEntry(requestPath(created.id))).toBe(false);
     seedRequest(fileSystem, created);
     expect(store.submit(created.id, CODE, NOW + 1)).toBe(false);
+  });
+
+  it('hands over no code from an answer that held a __proto__ key', () => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    const fields = JSON.stringify({ requestId: created.id, deadline: NOW + TTL, code: CODE });
+    fileSystem.seedFile(answerPath(created.id), `${fields.slice(0, -1)},"__proto__":{}}`, 0o600);
+    expect(store.poll(created, NOW + 1)).toEqual({ kind: 'waiting' });
+    expect(store.poll(created, NOW + TTL)).toEqual({ kind: 'expired' });
   });
 
   it('reports the expiry, and removes the request, when the taken answer holds no code', () => {

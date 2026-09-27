@@ -89,6 +89,7 @@ describe('OtpRequestStore sweep', () => {
     ['a deadline that is not a number', JSON.stringify({ deadline: '0' })],
     ['a deadline JSON reads as infinite', '{"deadline":1e999}'],
     ['a root that is not an object', '7'],
+    ['a deadline beside a __proto__ key', '{"deadline":0,"__proto__":{}}'],
   ])('ages a file holding %s by when it was last written', (_label, contents) => {
     const { store, fileSystem } = makeStore();
     seedAged(fileSystem, `/data/otp-requests.${FIRST_ID}.answer.json`, contents, PAST_GRACE());
