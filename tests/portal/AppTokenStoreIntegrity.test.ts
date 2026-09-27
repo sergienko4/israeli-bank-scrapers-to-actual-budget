@@ -150,6 +150,8 @@ describe('AppTokenStore on the secure store', () => {
       JSON.stringify({ tokens: [{ ...storedRecord(), refreshToken: 'plain' }] })],
     ['factors with a field the store does not write',
       JSON.stringify({ tokens: [storedRecord({ factors: { google: true, password: true, admin: true } })] })],
+    ['a top-level __proto__ key',
+      `{"__proto__":{"refreshToken":"plain"},"tokens":[${JSON.stringify(storedRecord())}]}`],
   ])('moves aside a file holding %s on the next write', (_label, contents) => {
     const { store, fileSystem } = makeStore(contents);
     const issued = store.issue(GRANT, NOW);
@@ -195,6 +197,13 @@ describe('AppTokenStore on the secure store', () => {
     const issued = store.issue(GRANT, NOW);
     expect(storedJson(fileSystem)).toEqual({ tokens: [issued.record] });
     expect(quarantinedNames(fileSystem)).toEqual([]);
+  });
+
+  it('keeps the records of a file that held a top-level __proto__ key', () => {
+    const contents = `{"__proto__":{"refreshToken":"plain"},"tokens":[${JSON.stringify(storedRecord())}]}`;
+    const { store, fileSystem } = makeStore(contents);
+    store.issue(GRANT, NOW);
+    expect(storedJson(fileSystem).tokens.map((record) => record.id)).toContain('AAAAAAAAAAAAAAAAAAAAAA');
   });
 
   it('overwrites an intact file without moving it aside', () => {

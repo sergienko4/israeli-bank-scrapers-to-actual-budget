@@ -137,7 +137,8 @@ function dropCollisions(records: readonly IAppTokenRecord[]): IAppTokenRecord[] 
  *
  * <p>An absent file is intact: there is nothing to preserve, so the next
  * write does not look for something to move aside. Expired records count as
- * well formed: dropping them is ordinary pruning, not damage.
+ * well formed: dropping them is ordinary pruning, not damage. A file the read
+ * stripped of a `__proto__` key is not `healthy`, so it is not intact either.
  * @param snapshot - The store's snapshot.
  * @param kept - The records kept from it.
  * @returns True when the file is absent, or holds only unique well-formed records.

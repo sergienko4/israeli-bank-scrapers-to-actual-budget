@@ -11,19 +11,24 @@
  * <p>`absent` and `damaged` are deliberately distinct. Collapsing them is how
  * a corrupt file silently becomes "no tokens yet": the run then logs in cold,
  * overwrites the evidence, and nobody learns the file was broken.
+ *
+ * <p>`stripped` is a readable file that held a top-level `__proto__` key. The
+ * read leaves the key out and returns every other record, but the file holds
+ * something no write puts back, so a caller treats it as not intact and moves
+ * it aside before replacing it.
  */
-export type StoreState = 'absent' | 'healthy' | 'damaged';
+export type StoreState = 'absent' | 'healthy' | 'stripped' | 'damaged';
 
 /** The outcome of reading a store. */
 export interface IStoreSnapshot {
-  /** Whether the store was missing, readable, or unusable. */
+  /** Whether the store was missing, readable, readable without one key, or unusable. */
   readonly state: StoreState;
 
   /**
    * Records keyed by the caller's identifier.
    *
    * <p>Always a null-prototype object, and always empty unless the state is
-   * `healthy`.
+   * `healthy` or `stripped`.
    */
   readonly records: Readonly<Record<string, unknown>>;
 

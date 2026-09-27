@@ -42,7 +42,7 @@ disclosure, **D**enial of service, **E**levation of privilege.
 | 7 | World-readable store | I | Secrets readable by any local user | Exclusive create with mode `0600`; `fchmod` on read, and a refusal withholds the records | both |
 | 8 | Oversized file | D | Multi-GB file exhausts memory on read | Reject above 8 MiB, size taken from `fstat` | unit (fake) |
 | 9 | Malformed JSON | D | Parse failure aborts the run | Classified as damage: quarantine, then a cold login | unit (fake) |
-| 10 | Prototype pollution | T | `__proto__` or `constructor` keys in the file | Null-prototype parse target; non-plain records refused | unit (fake) |
+| 10 | Prototype pollution | T | `__proto__` or `constructor` keys in the file | Null-prototype parse target; non-plain records refused. A top-level `__proto__` is left out and the file reads as `stripped`, so every store moves it aside before its next write instead of dropping that part silently | unit (fake) |
 | 11 | Secret in error text or logs | I | Token surfaces in a log line or a typed error | Errors carry path and errno only, never values; asserted | unit (fake) |
 | 12 | Quarantine name collision | T | Two failures in the same millisecond, the second clobbering the first salvage | Timestamp plus a random UUID | unit (fake) |
 | 13 | Crash between quarantine and commit | T | Canonical path left absent, siblings stranded | Stage first, quarantine second, then rename. Partial: a *failure* between the two renames rolls the predecessor back (threat 16); a `SIGKILL` between them cannot be undone and leaves a cold start with the damaged bytes preserved under the quarantine name | unit (fake) |

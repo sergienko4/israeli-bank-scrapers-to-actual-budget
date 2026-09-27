@@ -106,6 +106,14 @@ describe('AuditLogService on the secure store', () => {
     expect(storedJson(fileSystem).entries.slice(0, 2)).toEqual(UNREADABLE_RUNS);
   });
 
+  it('moves aside a file that held a top-level __proto__ key, keeping its runs', () => {
+    const contents = `{"__proto__":{"totalBanks":1},"entries":${JSON.stringify(UNREADABLE_RUNS)}}`;
+    const { log, fileSystem } = makeLog(contents);
+    expect(log.record(fakeImportSummary()).success).toBe(true);
+    expect(quarantinedNames(fileSystem)).toHaveLength(1);
+    expect(storedJson(fileSystem).entries.slice(0, 2)).toEqual(UNREADABLE_RUNS);
+  });
+
   it('saves onto no file without looking for one to move aside', () => {
     const { log, fileSystem } = makeLog();
     log.record(fakeImportSummary());

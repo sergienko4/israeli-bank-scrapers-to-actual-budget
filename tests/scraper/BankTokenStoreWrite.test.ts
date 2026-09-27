@@ -293,6 +293,25 @@ describe('BankTokenStore write', () => {
       expect(storedRecords(fileSystem).pepper).toEqual(pepper);
     });
 
+    it('sets aside a store that held a top-level __proto__ key, keeping its accounts', () => {
+      const { store, fileSystem } = makeStore();
+      const pepper = { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN };
+      seedRaw(fileSystem, `{"__proto__":{"token":"lt-hidden"},"pepper":${JSON.stringify(pepper)}}`);
+      store.write('oneZero', fakeToken(), ACCOUNT_LOGIN);
+      expect({ kept: quarantinedNames(fileSystem).length, pepper: storedRecords(fileSystem).pepper })
+        .toEqual({ kept: 1, pepper });
+    });
+
+    it('rewrites an unchanged token to set aside a store that held a top-level __proto__ key', () => {
+      const { store, fileSystem } = makeStore();
+      const token = fakeToken();
+      const oneZero = { token, capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN };
+      seedRaw(fileSystem, `{"__proto__":{"token":"lt-hidden"},"oneZero":${JSON.stringify(oneZero)}}`);
+      const result = store.write('oneZero', token, ACCOUNT_LOGIN);
+      expect({ result, kept: quarantinedNames(fileSystem).length })
+        .toMatchObject({ result: { success: true, data: { written: true } }, kept: 1 });
+    });
+
     it('fails the write when a directory occupies the store path', () => {
       const { store, fileSystem } = makeStore();
       fileSystem.seedDirectory(STORE_PATH);
