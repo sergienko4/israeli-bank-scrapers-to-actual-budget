@@ -113,15 +113,18 @@ covering several banks read `All 3 banks failed — …` with each bank listed.
 - `<path> is not a regular file`: a directory, FIFO or device sits at the path.
   Docker creates a directory there when a single-file bind mount starts before
   the file exists on the host.
+- `<path> is a symlink to a missing file`: the link's target is gone, for
+  example on a volume that was not mounted.
 - `<path> is larger than 8 MiB`
 - `<path> is not valid UTF-8`: the file was saved in another encoding.
 - `Could not read <path>: <code>`, for example `EACCES` when the container user
   cannot read it.
 
 **Fix:** put a regular UTF-8 JSON file at the path, readable by the container
-user. A symlink to such a file is fine. Only a missing `config.json` counts as
-"no config" (the importer then runs from environment variables), so a broken
-mount is never mistaken for an empty config.
+user. A symlink to such a file is fine; a symlink to a missing file is not. Only
+a `config.json` with nothing at its path counts as "no config" (the importer
+then runs from environment variables), so a broken mount is never mistaken for
+an empty config.
 
 ## "config.json and credentials.json come from different saves"
 

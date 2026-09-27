@@ -108,6 +108,21 @@ describe('ConfigLoader on real files', () => {
     expect(failure.message).toBe(`${credPath} is not a regular file`);
   });
 
+  it('refuses a config.json that is a symlink to a missing file, instead of using the environment', () => {
+    symlinkSync(join(dir, 'gone.json'), configPath);
+    const failure = loadFailure();
+    expect(failure.status).toBe('config-error');
+    expect(failure.message).toBe(`${configPath} is a symlink to a missing file`);
+  });
+
+  it('refuses a credentials.json that is a symlink to a missing file, instead of loading without it', () => {
+    writeFileSync(configPath, '{}');
+    symlinkSync(join(dir, 'gone.json'), credPath);
+    const failure = loadFailure();
+    expect(failure.status).toBe('config-error');
+    expect(failure.message).toBe(`${credPath} is a symlink to a missing file`);
+  });
+
   it.skipIf(IS_WINDOWS || IS_ROOT)('refuses a config.json it cannot reach, instead of using the environment', () => {
     writeFileSync(configPath, '{}');
     chmodSync(dir, 0o000);

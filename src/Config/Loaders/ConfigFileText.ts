@@ -7,13 +7,15 @@
  * This read opens the path once and refuses anything that is not a regular
  * file, is over 8 MiB, or is not valid UTF-8. Only a missing file (ENOENT)
  * counts as absent, so a config that exists but cannot be read is reported
- * rather than mistaken for no config at all.
+ * rather than mistaken for no config at all. A symlink whose target is
+ * missing also opens with ENOENT, so it is told apart and refused: a link
+ * means a file was meant to be there, as with a mount that did not start.
  *
  * <p>It follows a symlink, because mounted configs are often links; that is
  * why it does not use the storage port, which refuses them by design.
  */
 
-import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from 'node:fs';
 
 import type { IProcedureFailure, Procedure } from '../../Types/Index.js';
 import { fail, succeed } from '../../Types/Index.js';
@@ -162,13 +164,29 @@ function openConfig(filePath: string): Procedure<number> {
 }
 
 /**
+ * Tells a missing file from a symlink to one, as both fail to open with ENOENT.
+ * @param filePath - The path that did not open.
+ * @param missing - The open's ENOENT failure.
+ * @returns The same failure when nothing is at the path, or one refusing the broken link.
+ */
+function missingOrBrokenLink(filePath: string, missing: IProcedureFailure): IProcedureFailure {
+  try {
+    if (!lstatSync(filePath).isSymbolicLink()) return missing;
+  } catch {
+    return missing;
+  }
+  return fail(`${filePath} is a symlink to a missing file`, { status: 'EINVAL' });
+}
+
+/**
  * Reads a config file as UTF-8 text.
  * @param filePath - Absolute path to the file.
  * @returns The text, or a failure naming the file (never its contents) with
- *   the errno in `status`; `ENOENT` means the file is absent.
+ *   the errno in `status`; `ENOENT` means nothing is at the path.
  */
 export default function readConfigText(filePath: string): Procedure<string> {
   const opened = openConfig(filePath);
+  if (!opened.success && opened.status === 'ENOENT') return missingOrBrokenLink(filePath, opened);
   if (!opened.success) return opened;
   return readThenClose(opened.data, filePath);
 }

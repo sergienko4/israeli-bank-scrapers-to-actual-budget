@@ -71,14 +71,18 @@ files cannot be read without it. To stay unencrypted, remove `CONFIG_PASSWORD`.
 ### A config file that cannot be read stops the start
 
 **Affects:** deployments whose `config.json` or `credentials.json` is not a
-regular UTF-8 file of at most 8 MiB.
+regular UTF-8 file of at most 8 MiB, or is a symlink whose target is missing.
 
 Up to 1.42.25 a file in another encoding loaded with its unreadable characters
 replaced, which could silently change a stored password. The importer and the
-portal now refuse it and name the file. Only a missing `config.json` still means
-"run from environment variables".
+portal now refuse it and name the file. A symlink whose target was missing
+counted as no file, so the importer ran from environment variables, or without
+`credentials.json`. It now stops the start with
+`<path> is a symlink to a missing file`. Only a `config.json` with nothing at
+its path still means "run from environment variables".
 
-**Migration:** save the file as UTF-8. The other errors are listed in
+**Migration:** save the file as UTF-8, and point a broken symlink at its file
+or remove it. The other errors are listed in
 [Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md#the-importer-or-portal-stops-at-startup-on-a-config-read-error).
 
 ---
