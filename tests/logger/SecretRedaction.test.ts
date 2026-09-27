@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import redactSecrets, { isSecretKey } from '../../src/Logger/SecretRedaction.js';
 import { registerSecretValues } from '../../src/Logger/SecretValues.js';
+import fastestRunMs from '../helpers/fastestRunMs.js';
 import { TEST_CREDENTIAL, TEST_CREDENTIAL_SHORT } from '../helpers/testCredentials.js';
 
 /** The provider's failure codes that end in a secret word. */
@@ -20,23 +21,6 @@ const LETTERS_VALUE = TEST_CREDENTIAL.replaceAll('-', '');
 
 /** The time a linear scan of a 100k-repeat text stays well within. */
 const LINEAR_LIMIT_MS = 250;
-
-/**
- * Times a scan, trying up to three times until one finishes within the
- * limit. Other work on the machine can only slow a run, so one slow run is
- * noise, while a quadratic scan is slow every time.
- * @param scan - The scan to time.
- * @returns The fastest run's time, in milliseconds.
- */
-function fastestRunMs(scan: () => unknown): number {
-  let fastest = Number.POSITIVE_INFINITY;
-  for (let attempt = 0; attempt < 3 && fastest >= LINEAR_LIMIT_MS; attempt++) {
-    const started = performance.now();
-    scan();
-    fastest = Math.min(fastest, performance.now() - started);
-  }
-  return fastest;
-}
 
 describe('redactSecrets', () => {
   it.each([
@@ -406,47 +390,47 @@ describe('redactSecrets', () => {
 
   it.each(['_', 'a_', 'a-', 'token="\\', 'token: ', 'token:\n', 'token: a: ', 'phone_', 'aphone-', 'phonenumber', 'token:\u200e ', 'token=\u200e', 'token=a:\u200e'])('scans a long run of %j in linear time', (unit) => {
     const text = unit.repeat(100_000);
-    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+    expect(fastestRunMs(() => redactSecrets(text), LINEAR_LIMIT_MS)).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each(['1 ', '(+1', '1-', '1\u00a0', '- ', '1x ', '\u200e1 ', '(\u2066'])('scans a long phone value of %j in linear time', (unit) => {
     const text = `phoneNumber=${unit.repeat(100_000)}x tail`;
-    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+    expect(fastestRunMs(() => redactSecrets(text), LINEAR_LIMIT_MS)).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each(['\n ', ' ', '\u200e', '\ufeff', '\n\u200e x', '\u200e x', 'x\u200e'])('scans a long gap of %j after an auth scheme in linear time', (unit) => {
     const text = `authorization=a${unit.repeat(100_000)}`;
-    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+    expect(fastestRunMs(() => redactSecrets(text), LINEAR_LIMIT_MS)).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it('scans a long run of invisible marks after a key in linear time', () => {
     const text = `token=${'\u200e'.repeat(20_000)} `;
-    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+    expect(fastestRunMs(() => redactSecrets(text), LINEAR_LIMIT_MS)).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each(['token="', String.raw`token=\"`])('scans a long run of backslashes after %j in linear time', (opening) => {
     const text = `${opening}${'\\'.repeat(100_000)} tail`;
-    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+    expect(fastestRunMs(() => redactSecrets(text), LINEAR_LIMIT_MS)).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each(['toke\u200e', '\u200eauth', 'phone-\u200e', 'idTok\u200een ', 'token"\u200e ', '"auth\u200e"\u200e: '])('scans a long run of %j, with marks in or after a key, in linear time', (unit) => {
     const text = unit.repeat(100_000);
-    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+    expect(fastestRunMs(() => redactSecrets(text), LINEAR_LIMIT_MS)).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each(['phone', 'phone_', 'tok', 'auth', 'authorization: A'])('scans a long run of invisible marks after %j in linear time', (start) => {
     const text = `${start}${'\u200e'.repeat(20_000)}x`;
-    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+    expect(fastestRunMs(() => redactSecrets(text), LINEAR_LIMIT_MS)).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each(['A\u200e\u200e', 'A\ufeff\ufeff', 'Bea\u200e', 'Di\u200e', 'x\u200e ', 'A\ufeff ', 'A \n\t', 'A\u200e\n ', 'Credential\r\n\t', '!\u200e\u200e', '4\u200e'])('scans a long auth value of %j, with marks in its scheme, in linear time', (unit) => {
     const text = `authorization: ${unit.repeat(100_000)}`;
-    expect(fastestRunMs(() => redactSecrets(text))).toBeLessThan(LINEAR_LIMIT_MS);
+    expect(fastestRunMs(() => redactSecrets(text), LINEAR_LIMIT_MS)).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each(['phone\u200e', 'auth\u200e', 't\u200e'])('reads a long field name of %j in linear time', (unit) => {
     const name = unit.repeat(100_000);
-    expect(fastestRunMs(() => isSecretKey(name))).toBeLessThan(LINEAR_LIMIT_MS);
+    expect(fastestRunMs(() => isSecretKey(name), LINEAR_LIMIT_MS)).toBeLessThan(LINEAR_LIMIT_MS);
   });
 
   it.each([

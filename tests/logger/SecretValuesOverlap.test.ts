@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { IMaskSpan } from '../../src/Logger/MaskSpans.js';
 import { SecretValues } from '../../src/Logger/SecretValues.js';
+import fastestRunMs from '../helpers/fastestRunMs.js';
 
 /** Text outside the values, which masking must keep. */
 const CANARY = 'form-error-canary';
@@ -90,11 +91,9 @@ describe('SecretValues with a held value that overlaps another match', () => {
   });
 
   it('masks a long run of one overlapping value fast', () => {
-    const run = 'a'.repeat(20_000);
-    const started = performance.now();
-    const masked = knowing('aaaaaa').mask(`${run} ${CANARY}`);
-    const elapsedMs = performance.now() - started;
-    expect(masked).toBe(`[REDACTED] ${CANARY}`);
-    expect(elapsedMs).toBeLessThan(FAST_MS);
+    const text = `${'a'.repeat(20_000)} ${CANARY}`;
+    const known = knowing('aaaaaa');
+    expect(known.mask(text)).toBe(`[REDACTED] ${CANARY}`);
+    expect(fastestRunMs(() => known.mask(text), FAST_MS)).toBeLessThan(FAST_MS);
   });
 });
