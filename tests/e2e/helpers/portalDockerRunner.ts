@@ -28,6 +28,8 @@ interface IStartPortalContainerOptions {
   env?: Record<string, string>;
   /** Maps `host.docker.internal` to the host, so the container can call back out. */
   hostGateway?: boolean;
+  /** Host folder mounted read-write at `/app/data`, the shipped data volume. */
+  dataDir?: string;
 }
 
 /**
@@ -59,10 +61,11 @@ function hostUserArgs(): string[] {
 function dockerArgs(opts: IStartPortalContainerOptions): string[] {
   const portSpec = '127.0.0.1::8080';
   const volumeSpec = `${opts.dir}:/app/config:${opts.mode}`;
+  const data = opts.dataDir === undefined ? [] : ['-v', `${opts.dataDir}:/app/data:rw`];
   const gateway = opts.hostGateway === true ? ['--add-host', 'host.docker.internal:host-gateway'] : [];
   const extra = Object.entries(opts.env ?? {}).flatMap(([key, value]) => ['-e', `${key}=${value}`]);
   return [
-    'run', '-d', ...hostUserArgs(), ...gateway, '-p', portSpec, '-v', volumeSpec,
+    'run', '-d', ...hostUserArgs(), ...gateway, '-p', portSpec, '-v', volumeSpec, ...data,
     '-e', 'PORTAL_ENABLED=true', '-e', 'PORTAL_HOST=0.0.0.0',
     '-e', `PORTAL_CONFIG_PATH=${CONTAINER_CONFIG_PATH}`,
     '-e', `CONFIG_PATH=${CONTAINER_CONFIG_PATH}`,

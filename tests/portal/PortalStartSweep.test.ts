@@ -77,6 +77,17 @@ describe('portal start', () => {
     expect(existsSync(auditLeftover)).toBe(true);
   });
 
+  it('removes an OTP answer an hour past its deadline, code and all', async () => {
+    const answer = join(dir, `otp-requests.${STAGED_UUID}.answer.json`);
+    const expired = { requestId: STAGED_UUID, deadline: TWO_HOURS_AGO * 1000, code: '123456' };
+    writeFileSync(answer, JSON.stringify(expired), { mode: 0o600 });
+    const seed = seedConfigDir();
+    const server = await startPortal(fakePortalRuntime({ port: 0 }), seed.path);
+    await server.close();
+    rmSync(seed.dir, { recursive: true, force: true });
+    expect(existsSync(answer)).toBe(false);
+  });
+
   it('sweeps the config writer\'s leftovers, including the old fixed-name `.tmp` files', async () => {
     const seed = seedConfigDir();
     const leftovers = [

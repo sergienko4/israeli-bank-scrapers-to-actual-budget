@@ -82,6 +82,16 @@ describe('sweepImportStores', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it('removes an OTP answer an hour past its deadline, code and all', () => {
+    const answer = join(dir, `otp-requests.${STAGED_UUID}.answer.json`);
+    const expired = { requestId: STAGED_UUID, deadline: TWO_HOURS_AGO * 1000, code: '123456' };
+    writeFileSync(answer, JSON.stringify(expired), { mode: 0o600 });
+    const logger = spyLogger();
+    sweepImportStores(logger);
+    expect(existsSync(answer)).toBe(false);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it('leaves the leftovers of the stores only the portal writes', () => {
     const portalOnly = KEYS.filter((key) => !IMPORT_WRITES.includes(key));
     expect(portalOnly).toEqual(['OTP_SETTINGS_PATH', 'DEVICE_TOKENS_PATH', 'APP_TOKENS_PATH']);

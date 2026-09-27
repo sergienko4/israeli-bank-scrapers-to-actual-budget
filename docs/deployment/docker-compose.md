@@ -65,7 +65,7 @@ volumes:
   - ./cache:/app/cache
 ```
 
-`:ro` is correct for the **importer** — it never writes its config. If you enable the optional config portal (see `docs/configuration/portal.md`), the portal service must mount the **same `./config` directory read-write** (`./config:/app/config:rw`): the portal saves atomically (write a temp file, then rename), which a read-only — or single-file — mount breaks. Always bind-mount the **directory**, never a single `config.json` file.
+`:ro` is correct for the **importer** — it never writes its config. If you enable the optional config portal (see `docs/configuration/portal.md`), the portal service must mount the **same `./config` directory read-write** (`./config:/app/config:rw`): the portal saves atomically (write a temp file, then rename), which a read-only — or single-file — mount breaks. Always bind-mount the **directory**, never a single `config.json` file. The portal must also mount the importer's data directory at the same `/app/data` path (`./data:/app/data` here): the two services pass OTP codes, device tokens and the import history through it. Keep it on a local disk or a Docker volume, since it needs hard links, which an SMB/CIFS share does not have.
 
 ## Memory limits
 

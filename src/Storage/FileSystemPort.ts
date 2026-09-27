@@ -105,9 +105,12 @@ export interface IFileSystem {
   /**
    * Restricts an open file to owner-only access.
    *
-   * <p>Implementations must refuse when the inode carries more than one name.
-   * Permissions belong to the inode, not the name, so re-permissioning a
-   * hard-linked file would silently change a file the caller does not own.
+   * <p>Implementations must refuse when the inode carries more than one name,
+   * unless it is already owner-only and owned by this process. Permissions
+   * belong to the inode, not the name, so re-permissioning a hard-linked file
+   * would silently change a file the caller does not own. A private file
+   * needs no change, and {@link IFileSystem.publishExclusive} leaves one with
+   * two names until it removes the stage — for good if that removal fails.
    * @param file - Descriptor previously returned by `openForRead`.
    * @returns The mode now in effect, or a failure explaining why it stands.
    */
@@ -141,6 +144,29 @@ export interface IFileSystem {
    * @returns The destination path, or a failure carrying the errno.
    */
   rename(fromPath: string, toPath: string): Procedure<IMoveOutcome>;
+
+  /**
+   * Gives a staged file a final name only if that name is free, then removes
+   * the stage.
+   *
+   * <p>Unlike {@link IFileSystem.rename}, which replaces the destination, this
+   * never touches a taken name, so of two writers racing for one name exactly
+   * one wins and the other gets `EEXIST`. The final name is a second name for
+   * the finished file, so it appears with the whole contents or not at all,
+   * and a symlink already at the final name counts as taken rather than being
+   * followed. It needs a filesystem with hard links.
+   *
+   * <p>On failure the stage is left for the caller to remove. On success the
+   * stage is removed; if that removal fails, the file is still published and
+   * the stage is a leftover for the caller's sweep. Until then the file has
+   * two names, which {@link IFileSystem.restrictToOwner} accepts because both
+   * are owner-only and this process's own.
+   * @param stagePath - Finished file made by {@link IFileSystem.createExclusive}.
+   * @param finalPath - Name to publish it under, which must be free.
+   * @returns The final path, or a failure carrying the errno; `EEXIST` means
+   *   the name was taken.
+   */
+  publishExclusive(stagePath: string, finalPath: string): Procedure<IMoveOutcome>;
 
   /**
    * Lists the full paths of everything directly inside a directory.

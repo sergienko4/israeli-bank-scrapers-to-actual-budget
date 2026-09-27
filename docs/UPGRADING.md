@@ -31,6 +31,28 @@ with only that device.
 See
 [Upgrade both services together](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md#upgrade-both-services-together).
 
+### The portal shares the data volume, which needs hard links
+
+**Affects:** deployments that run the portal, and deployments that use the app
+OTP channel.
+
+The importer and the portal pass OTP codes, the OTP channel, push device tokens
+and the import history through the data volume, so the portal must mount it at
+`/app/data`. The least-privilege compose example before this release did not.
+
+App OTP requests now live in one file per request, and each file is published
+with a hard link, so two writers never replace each other's file. Local disks
+and Docker volumes have hard links; an SMB/CIFS share such as Azure Files does
+not. There a bank login that asks for an app code fails with a storage error
+(it does not fall back to Telegram), and the portal answers a submitted code
+with 500. A request pending during the upgrade is not carried over: the bank
+login waiting for it times out, and the next import asks again.
+
+**Migration:** add the importer's data volume to the portal service, at the same
+path (`importer-data:/app/data` in `docker-compose.yml`), and keep it off
+SMB/CIFS. See
+[Least privilege](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md#least-privilege-importer-reads-portal-writes).
+
 ### An empty `CREDENTIALS_ENCRYPTION_PASSWORD` no longer hides `CONFIG_PASSWORD`
 
 **Affects:** deployments that set `CREDENTIALS_ENCRYPTION_PASSWORD` to an empty

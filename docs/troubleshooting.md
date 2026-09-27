@@ -52,8 +52,9 @@ Better still: [auto-forward OTP codes from your phone](https://github.com/sergie
 **Symptom:** a single PayBox login shows two back-to-back OTP prompts, and the
 second prompt arrives before any new SMS does.
 
-**Fix:** upgrade — the importer now reuses the code you supplied for PayBox's
-second internal request, so one login prompts once. See
+**Fix:** upgrade. Since scraper 8.6.5 the scraper keeps the code for the whole
+login, and the importer also remembers the code you supplied for that attempt,
+so one login prompts once. See
 [PayBox](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md).
 If the bank rejects the code, this run asks for no new code, so a wrong code is
 never re-sent. See the next section.

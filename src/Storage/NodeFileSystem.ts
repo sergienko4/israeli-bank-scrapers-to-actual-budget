@@ -13,8 +13,8 @@
  */
 
 import {
-  closeSync, constants, fchmodSync, fstatSync, fsyncSync, openSync, readdirSync, readSync,
-  renameSync, unlinkSync, writeFileSync,
+  closeSync, constants, fchmodSync, fstatSync, fsyncSync, linkSync, openSync, readdirSync,
+  readSync, renameSync, type Stats, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
 
@@ -27,6 +27,12 @@ import type {
 
 /** Owner read/write only. Anything wider exposes a stored credential. */
 const OWNER_ONLY = 0o600;
+
+/** The permission bits of a mode, without the file-type bits `fstat` adds. */
+const PERMISSION_BITS = 0o777;
+
+/** Stands in for the uid of a platform without them; no file is owned by it. */
+const NO_USER_ID = -1;
 
 /**
  * Read flags that refuse a final symlink and never block on a pipe.
@@ -188,11 +194,28 @@ function readAll(file: IOpenFile, maxBytes: number): Procedure<string> {
 }
 
 /**
+ * Reports whether a file is already owner-only and owned by this process.
+ *
+ * <p>Such a file needs no change, so a second name for it is harmless.
+ * @param facts - Mode and owner from `fstat`.
+ * @param processUid - Effective uid of this process.
+ * @returns Whether nobody else can read or write the file.
+ */
+export function isPrivateToProcess(facts: Pick<Stats, 'mode' | 'uid'>, processUid: number): boolean {
+  return facts.uid === processUid && (facts.mode & PERMISSION_BITS) === OWNER_ONLY;
+}
+
+/**
  * Restricts an open file to owner-only access, refusing shared inodes.
  *
  * <p>Permissions live on the inode, so changing them through one name changes
  * every name. When another name exists the file is left exactly as found
  * rather than re-permissioning something this process does not own.
+ *
+ * <p>A shared inode that is already private to this process is accepted as
+ * it is. That is what `publishExclusive` leaves until it removes the staging
+ * name, and for good if that removal fails; refusing it would lose a file
+ * that was published whole.
  * @param file - Descriptor previously returned by `openForRead`.
  * @returns The mode now in effect, or a failure explaining why it stands.
  */
@@ -200,10 +223,11 @@ function restrictToOwner(file: IOpenFile): Procedure<IHardenOutcome> {
   const subject = `descriptor ${String(file.descriptor)}`;
   try {
     const current = fstatSync(file.descriptor);
-    if (current.nlink > 1) {
+    const isShared = current.nlink > 1;
+    if (isShared && !isPrivateToProcess(current, process.geteuid?.() ?? NO_USER_ID)) {
       return fail('Refusing to change permissions on a hard-linked file', { status: 'EMLINK' });
     }
-    fchmodSync(file.descriptor, OWNER_ONLY);
+    if (!isShared) fchmodSync(file.descriptor, OWNER_ONLY);
     return succeed({ mode: OWNER_ONLY });
   } catch (error: unknown) {
     return failed('harden', subject, error);
@@ -292,6 +316,26 @@ function rename(fromPath: string, toPath: string): Procedure<IMoveOutcome> {
 }
 
 /**
+ * Publishes a staged file under a free name, then removes the stage.
+ *
+ * <p>`link(2)` fails with `EEXIST` whatever holds the new name, a symlink
+ * included, and never follows it; the stage removal afterwards is best
+ * effort, as the port allows.
+ * @param stagePath - Finished file made by `createExclusive`.
+ * @param finalPath - Name to publish it under, which must be free.
+ * @returns The final path, or a failure carrying the errno in `status`.
+ */
+function publishExclusive(stagePath: string, finalPath: string): Procedure<IMoveOutcome> {
+  try {
+    linkSync(stagePath, finalPath);
+  } catch (error: unknown) {
+    return failed('publish', finalPath, error);
+  }
+  discardCreated(stagePath);
+  return succeed({ path: finalPath });
+}
+
+/**
  * Removes a path, treating an already-absent path as success.
  *
  * <p>Absence is judged from the unlink itself rather than a preceding
@@ -364,6 +408,7 @@ export default function createNodeFileSystem(): IFileSystem {
     close: closeFile,
     createExclusive,
     rename,
+    publishExclusive,
     listNames,
     remove,
   });

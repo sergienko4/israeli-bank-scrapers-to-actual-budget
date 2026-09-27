@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import createNodeFileSystem, { READ_FLAGS } from '../../src/Storage/NodeFileSystem.js';
+import createNodeFileSystem, { isPrivateToProcess, READ_FLAGS } from '../../src/Storage/NodeFileSystem.js';
 import { describeFileSystemContract, type IContractWorld } from './FileSystemContract.js';
 
 /** Windows has neither `mkfifo` nor the link semantics these cases assert. */
@@ -62,6 +62,23 @@ describeFileSystemContract('NodeFileSystem', () => ({
   fileSystem: createNodeFileSystem(),
   world: makeRealWorld(),
 }));
+
+/** A uid this suite pretends to run as, so a stranger's file can be described. */
+const OWN_UID = 1000;
+
+describe('isPrivateToProcess', () => {
+  it('treats an owner-only file this process owns as private', () => {
+    expect(isPrivateToProcess({ mode: 0o100600, uid: OWN_UID }, OWN_UID)).toBe(true);
+  });
+
+  it("never treats another user's owner-only file as private", () => {
+    expect(isPrivateToProcess({ mode: 0o100600, uid: OWN_UID + 1 }, OWN_UID)).toBe(false);
+  });
+
+  it('never treats a file readable by the group as private', () => {
+    expect(isPrivateToProcess({ mode: 0o100640, uid: OWN_UID }, OWN_UID)).toBe(false);
+  });
+});
 
 describe('NodeFileSystem syscall fidelity', () => {
   it.skipIf(IS_WINDOWS)('threat 5: opens a FIFO with flags that cannot stall the process', () => {

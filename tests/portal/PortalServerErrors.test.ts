@@ -35,6 +35,12 @@ const { default: FakeFileSystem } = await import('../storage/FakeFileSystem.js')
 /** The one body every server-side failure answers with. */
 const GENERIC_500 = { error: 'Internal server error' };
 
+/** A route whose path parameter and body are both checked. */
+const ITEM_SCHEMA = {
+  params: { type: 'object', properties: { id: { type: 'string', pattern: '^[0-9]+$' } } },
+  body: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } },
+};
+
 /** A file path that must never reach a client. */
 const TOKENS_PATH = '/data/app-tokens.json';
 
@@ -148,6 +154,9 @@ describe('handlePortalError', () => {
     app.get('/teapot', () => {
       throw Object.assign(new Error('Short and stout'), { statusCode: 418 });
     });
+    app.post('/items/:id', { schema: ITEM_SCHEMA, config: { invalidMessage: 'Invalid item' } }, () => ({ ok: true }));
+    const namedConfig = { invalidMessage: 'Invalid item', invalidParamsMessage: 'Invalid item id' };
+    app.post('/named/:id', { schema: ITEM_SCHEMA, config: namedConfig }, () => ({ ok: true }));
     await app.ready();
   });
 
@@ -172,6 +181,21 @@ describe('handlePortalError', () => {
     expect(res.statusCode).toBe(418);
     expect(res.json().message).toBe('Short and stout');
     expect(loggedErrors()).toEqual([]);
+  });
+
+  it('names a refused path parameter apart from a refused body when the route says how', async () => {
+    const badId = await app.inject({ method: 'POST', url: '/named/abc', payload: { name: 'a' } });
+    expect(badId.statusCode).toBe(400);
+    expect(badId.json()).toEqual({ error: 'Invalid item id' });
+    const badBody = await app.inject({ method: 'POST', url: '/named/1', payload: {} });
+    expect(badBody.statusCode).toBe(400);
+    expect(badBody.json()).toEqual({ error: 'Invalid item' });
+  });
+
+  it('answers a refused path parameter with the route\'s one wording when it declares no other', async () => {
+    const res = await app.inject({ method: 'POST', url: '/items/abc', payload: { name: 'a' } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'Invalid item' });
   });
 });
 

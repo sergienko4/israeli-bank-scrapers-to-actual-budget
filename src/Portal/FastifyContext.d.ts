@@ -10,8 +10,13 @@
 
 declare module 'fastify' {
   interface FastifyContextConfig {
-    /** Sentence sent as `error` when this route rejects a body, param or query. */
+    /**
+     * Sentence sent as `error` when this route rejects a body, param or query,
+     * unless a more specific one below applies.
+     */
     invalidMessage?: string;
+    /** Sentence sent as `error` when this route rejects a path parameter; `invalidMessage` otherwise. */
+    invalidParamsMessage?: string;
   }
 }
 

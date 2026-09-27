@@ -18,25 +18,26 @@ You open the app and enter the code (it also polls for pending requests)
 App submits the code to the importer, which continues the login
 ```
 
-When the channel is `app` and Telegram is also configured, a timed-out app OTP automatically falls back to Telegram.
+When the channel is `app` and Telegram is also configured, a timed-out app OTP automatically falls back to Telegram. A storage failure does not: when the importer cannot record the expiry and your code has not arrived, or cannot read an answer that may hold your code, the login fails with the storage error.
 
 ### Configuration
 
 - Choose the channel from the mobile app (OTP delivery → App). It is stored server-side, outside the config manifest, so the web portal never shows it.
-- The importer and portal coordinate through two files on the shared data volume (defaults shown; override via environment):
-  - `OTP_REQUESTS_PATH` — pending OTP requests (default `/app/data/otp-requests.json`)
+- The importer and portal coordinate through files on the data volume both mount at `/app/data` (`importer-data` in the shipped `docker-compose.yml`). Defaults are shown; if you override one, set the same path on both services:
+  - `OTP_REQUESTS_PATH` — where OTP requests are kept (default `/app/data/otp-requests.json`). Each request is its own file beside this path, `otp-requests.<id>.json`, and its answer is `otp-requests.<id>.answer.json`.
   - `OTP_SETTINGS_PATH` — the selected channel (default `/app/data/otp-settings.json`)
-- Both files are owner-only (`0600`) and replaced atomically. Run the same release on the importer and the portal, and do not roll back: an earlier release reads this release's `otp-requests.json` as empty. See [Upgrade both services together](configuration/portal.md#upgrade-both-services-together).
+- Every file is owner-only (`0600`) and appears whole or not at all. A request's answer is written once, by whichever comes first: the portal with your code, or the importer marking the request expired. The OTP files need a data volume with hard links. Local disks and Docker volumes have them; an SMB/CIFS share such as Azure Files does not. There a bank login that asks for an app code fails with the storage error (it does not fall back to Telegram), and the portal answers a submitted code with 500.
+- Run the same release on the importer and the portal, and do not roll back: an earlier release does not see this release's requests. See [Upgrade both services together](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md#upgrade-both-services-together).
 
 ### Portal endpoints (used by the app)
 
 - `GET /api/otp/pending` — list pending OTP requests (never returns codes)
-- `POST /api/otp/:id` — submit a 4–8 digit code for a request
+- `POST /api/otp/:id` — submit a 4–8 digit code for a request. `404` means the request is gone, expired or already answered; `400` means the id is malformed (`Invalid OTP request id`) or the code is (`Invalid OTP code`). A code sent at the moment the importer finishes with that request can get `500` instead of `404`; it was too late either way. When the importer cannot write to the data volume, a code sent as it gives the request up gets `404` and is removed; rarely, so does a code it did use
 - `GET /api/otp/settings` / `PUT /api/otp/settings` — read or set the channel
 
 ### Security
 
-- Codes are written to the shared request file only briefly between submission and use, are single-use, expire with the request (default 5 minutes), and are never logged.
+- A code stays on disk only between submission and use: once the importer takes it, the answer is overwritten with a marker that keeps the request answered, and any copy that saving the answer left behind is removed. A code sent after the importer has given the request up is removed at once. Codes are single-use, expire with the request (default 5 minutes), and are never logged. When either service starts, it removes requests and answers an hour past their deadline, and leftover copies an hour after they were written, so a code nobody used, or a copy that could not be removed, leaves the disk too.
 - All OTP endpoints sit behind the portal's authentication, and request ids are unguessable UUIDs.
 
 ---

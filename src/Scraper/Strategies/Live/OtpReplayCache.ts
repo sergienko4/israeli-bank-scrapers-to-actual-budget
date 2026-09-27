@@ -4,12 +4,16 @@
  *
  * PayBox's api-direct login runs three steps and two of them
  * (`identity.pinValidation`, then `identity.loginBySms`) carry a
- * `preHook: { awaitCredsField: 'otpCodeRetriever' }`. Each hook AES-encrypts
- * the digits into the request body at `/pin` under a different IV and then
- * scrubs the plaintext from the flow carry, so the provider cannot reuse the
- * value and calls our retriever a second time. The bank only ever sends one
- * SMS, so both hooks want the SAME digits -- without memoisation the user is
- * prompted twice, back to back, for a code they already supplied.
+ * `preHook: { awaitCredsField: 'otpCodeRetriever' }`. The bank only ever
+ * sends one SMS, so both hooks want the SAME digits. Up to 8.6.4 the provider
+ * called our retriever once per hook, so the user was asked twice, back to
+ * back, for a code they had already given.
+ *
+ * Since 8.6.5 the provider memoises a hook's value for the whole login
+ * (`reuse` defaults to `per-flow`, and PayBox's hooks do not override it), so
+ * it asks once per SMS and this cache normally sees a single call. It stays as
+ * a guard: if a later release, or a hook set to `per-step`, calls the retriever
+ * again, the user is still asked only once.
  *
  * The cache lives on the retriever instance, and `initScrape` builds a fresh
  * retriever for every scrape attempt, so no attempt replays another attempt's

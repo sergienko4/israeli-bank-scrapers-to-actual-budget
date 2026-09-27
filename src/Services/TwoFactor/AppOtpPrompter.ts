@@ -5,7 +5,8 @@
  * When a bank login needs an OTP, it records a pending request in the shared
  * {@link OtpRequestStore}, pushes a prompt to the registered device(s), then
  * polls the store until the app submits the code (via the portal) or the
- * deadline passes. The code is returned to the scraper and the request removed.
+ * deadline passes. The store settles the request either way: a code is
+ * returned to the scraper, and an expiry refuses any code that comes later.
  * Runs in the import child process; the portal writes the code from another
  * process, so coordination is via the shared file store, never in-memory state.
  */
@@ -74,41 +75,26 @@ export default class AppOtpPrompter implements ITwoFactorPrompter {
   }
 
   /**
-   * Polls the store until the request carries a code or the deadline expires.
+   * Polls the store until the request is answered or expires.
    * @param bankName - Bank id, for logging.
    * @param request - The pending request (id + deadline).
    * @param ttlMs - Configured timeout, for the TimeoutError message.
    * @returns The submitted OTP code.
    * @throws TimeoutError when the deadline passes without a submitted code.
+   * @throws StorageError when the store cannot record the expiry and no code
+   *   has arrived.
    */
   private async waitForCode(
     bankName: string, request: IOtpRequest, ttlMs: number,
   ): Promise<string> {
-    while (Date.now() < request.deadline) {
-      const code = this.consumeCode(request.id);
-      if (code !== false) {
-        getLogger().info(`  ✅ App OTP received for ${bankName}`);
-        return code;
-      }
+    let polled = this.store.poll(request);
+    while (polled.kind === 'waiting') {
       await AppOtpPrompter.sleep(this._pollIntervalMs);
+      polled = this.store.poll(request);
     }
-    this.store.remove(request.id);
-    throw new TimeoutError('App OTP wait', ttlMs);
-  }
-
-  /**
-   * Reads a submitted code for the request and removes the request when present.
-   * @param id - The pending request id.
-   * @returns The submitted code, or false when none has arrived yet.
-   */
-  private consumeCode(id: string): string | false {
-    const current = this.store.get(id);
-    if (current?.code === undefined) {
-      return false;
-    }
-    const { code } = current;
-    this.store.remove(id);
-    return code;
+    if (polled.kind === 'expired') throw new TimeoutError('App OTP wait', ttlMs);
+    getLogger().info(`  ✅ App OTP received for ${bankName}`);
+    return polled.code;
   }
 
   /**

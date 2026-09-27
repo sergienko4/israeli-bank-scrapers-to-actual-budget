@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
+import { INTERNAL_ERROR } from '../../src/Portal/PortalValidationError.js';
 import { OTP_SUBMIT_MAX } from '../../src/Portal/PortalRateLimit.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
 import OtpRequestStore from '../../src/Services/TwoFactor/OtpRequestStore.js';
@@ -18,6 +19,21 @@ let requestsPath: string;
 let settingsPath: string;
 const originalRequestsPath = process.env.OTP_REQUESTS_PATH;
 const originalSettingsPath = process.env.OTP_SETTINGS_PATH;
+
+/** A well-formed request id no request was created under. */
+const UNKNOWN_ID = '0f0e0d0c-0b0a-4908-8706-050403020100';
+
+/** Windows has no POSIX permission bits; root writes whatever the mode. */
+const CANNOT_DENY_WRITES = process.platform === 'win32' || process.getuid?.() === 0;
+
+/**
+ * Names the answer file a request's code is published to.
+ * @param id - The request id.
+ * @returns The answer file path.
+ */
+function answerPathOf(id: string): string {
+  return join(dir, `otp-requests.${id}.answer.json`);
+}
 
 /**
  * Logs in with the seeded portal password and returns the session cookie value.
@@ -42,6 +58,7 @@ describe('Portal /api/otp', () => {
 
   afterEach(async () => {
     await app.close();
+    chmodSync(dir, 0o700);
     rmSync(dir, { recursive: true, force: true });
     restoreEnv('OTP_REQUESTS_PATH', originalRequestsPath);
     restoreEnv('OTP_SETTINGS_PATH', originalSettingsPath);
@@ -83,19 +100,31 @@ describe('Portal /api/otp', () => {
       method: 'POST', url: `/api/otp/${created.id}`, cookies: { portal_session: cookie }, payload: { code: '123456' },
     });
     expect(res.statusCode).toBe(200);
-    expect(readFileSync(requestsPath, 'utf8')).toContain('123456');
+    expect(JSON.parse(readFileSync(answerPathOf(created.id), 'utf8'))).toMatchObject({ code: '123456' });
   });
 
-  it('keeps the requests file owner-only after a submitted code', async () => {
+  it('publishes the code owner-only as the request\'s answer, and refuses a second one', async () => {
     const created = new OtpRequestStore(createNodeFileSystem(), requestsPath).create('leumi', 60_000);
-    chmodSync(requestsPath, 0o644);
     const cookie = await loginCookie();
-    await app.inject({
+    const submit = async (code: string): Promise<number> => (await app.inject({
+      method: 'POST', url: `/api/otp/${created.id}`, cookies: { portal_session: cookie }, payload: { code },
+    })).statusCode;
+    expect(await submit('123456')).toBe(200);
+    expect(statSync(answerPathOf(created.id)).mode & 0o777).toBe(0o600);
+    expect(await submit('654321')).toBe(404);
+    expect(readFileSync(answerPathOf(created.id), 'utf8')).toContain('123456');
+  });
+
+  it.skipIf(CANNOT_DENY_WRITES)('answers 500 with the generic body when the code cannot be saved', async () => {
+    const created = new OtpRequestStore(createNodeFileSystem(), requestsPath).create('leumi', 60_000);
+    const cookie = await loginCookie();
+    chmodSync(dir, 0o500);
+    const res = await app.inject({
       method: 'POST', url: `/api/otp/${created.id}`, cookies: { portal_session: cookie }, payload: { code: '123456' },
     });
-    expect(statSync(requestsPath).mode & 0o777).toBe(0o600);
-    const stored = JSON.parse(readFileSync(requestsPath, 'utf8')) as { requests: { code?: string }[] };
-    expect(stored.requests[0]?.code).toBe('123456');
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({ error: INTERNAL_ERROR });
+    expect(res.body).not.toContain('123456');
   });
 
   it('rejects a malformed code with 400', async () => {
@@ -110,16 +139,29 @@ describe('Portal /api/otp', () => {
   it('returns 404 for an unknown request id', async () => {
     const cookie = await loginCookie();
     const res = await app.inject({
-      method: 'POST', url: '/api/otp/missing', cookies: { portal_session: cookie }, payload: { code: '123456' },
+      method: 'POST', url: `/api/otp/${UNKNOWN_ID}`, cookies: { portal_session: cookie }, payload: { code: '123456' },
     });
     expect(res.statusCode).toBe(404);
+  });
+
+  it.each([
+    ['a word', 'missing'],
+    ['an upper-case UUID', UNKNOWN_ID.toUpperCase()],
+    ['an encoded path', `..%2F${UNKNOWN_ID}`],
+  ])('rejects %s as a request id with 400', async (_label, id) => {
+    const cookie = await loginCookie();
+    const res = await app.inject({
+      method: 'POST', url: `/api/otp/${id}`, cookies: { portal_session: cookie }, payload: { code: '123456' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'Invalid OTP request id' });
   });
 
   it('rate-limits repeated OTP submissions once the per-route maximum is exceeded', async () => {
     const cookie = await loginCookie();
     const attempts = Array.from({ length: OTP_SUBMIT_MAX + 5 }, () => (
       app.inject({
-        method: 'POST', url: '/api/otp/missing', cookies: { portal_session: cookie }, payload: { code: '123456' },
+        method: 'POST', url: `/api/otp/${UNKNOWN_ID}`, cookies: { portal_session: cookie }, payload: { code: '123456' },
       })
     ));
     const codes = (await Promise.all(attempts)).map((res) => res.statusCode);

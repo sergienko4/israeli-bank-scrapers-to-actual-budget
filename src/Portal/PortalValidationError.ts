@@ -8,8 +8,11 @@
  * rejection ("Invalid OTP code") with the useless word "Bad Request".
  *
  * Each route declares its own wording through `config.invalidMessage`, so the
- * message stays next to the rule that produces it. Any other client error
- * (4xx) is handed straight back to Fastify's default handling.
+ * message stays next to the rule that produces it. A route whose path
+ * parameters can be refused apart from its body may name that case through
+ * `config.invalidParamsMessage`, so a bad id is not reported as a bad body.
+ * Any other client error (4xx) is handed straight back to Fastify's default
+ * handling.
  *
  * A server error, one with a 5xx status or none at all, answers one generic
  * body. Its message can hold a file path or an errno, which help an attacker
@@ -32,12 +35,16 @@ const CLIENT_ERROR_MIN = 400;
 const CLIENT_ERROR_MAX = 499;
 
 /**
- * Reads the wording a route declared for its validation failures.
+ * Reads the wording a route declared for the part of the request it refused.
+ * @param error - The validation error, naming the refused part.
  * @param req - The request whose route config is being read.
- * @returns The route's message, or the generic fallback.
+ * @returns The route's message for that part, its general message, or the
+ *   generic fallback.
  */
-function messageFor(req: FastifyRequest): string {
-  return req.routeOptions.config.invalidMessage ?? INVALID_REQUEST;
+function messageFor(error: FastifyError, req: FastifyRequest): string {
+  const { invalidMessage, invalidParamsMessage } = req.routeOptions.config;
+  const specific = error.validationContext === 'params' ? invalidParamsMessage : undefined;
+  return specific ?? invalidMessage ?? INVALID_REQUEST;
 }
 
 /**
@@ -77,7 +84,8 @@ function answerServerError(
 export function handlePortalError(
   error: FastifyError, req: FastifyRequest, reply: FastifyReply,
 ): FastifyReply {
-  if (error.validation !== undefined) return reply.code(400).send({ error: messageFor(req) });
+  const isRefused = error.validation !== undefined;
+  if (isRefused) return reply.code(400).send({ error: messageFor(error, req) });
   if (isClientError(error)) return reply.send(error);
   return answerServerError(error, req, reply);
 }

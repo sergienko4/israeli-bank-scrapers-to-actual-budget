@@ -217,6 +217,16 @@ export default class FakeFileSystem implements IFileSystem {
   }
 
   /**
+   * Reports whether an inode has another name and is not owner-only.
+   * @param entry - Entry whose inode is checked.
+   * @returns Whether changing its mode would change a file someone else sees.
+   */
+  private isSharedWithOthers(entry: IEntry): boolean {
+    const permissions = (entry.inode?.mode ?? 0) & 0o777;
+    return this.linkCountOf(entry) > 1 && permissions !== OWNER_ONLY;
+  }
+
+  /**
    * Counts the names sharing one entry's inode.
    * @param entry - Entry whose inode is counted.
    * @returns The number of names pointing at that inode.
@@ -307,13 +317,16 @@ export default class FakeFileSystem implements IFileSystem {
 
   /**
    * Restricts an open file to owner-only access, refusing shared inodes.
+   *
+   * <p>A shared inode that is already owner-only is accepted as it is. The
+   * fake has no users, so every file counts as this process's own.
    * @param file - Descriptor previously returned by `openForRead`.
    * @returns The mode now in effect, or a failure explaining why it stands.
    */
   public restrictToOwner(file: IOpenFile): Procedure<IHardenOutcome> {
     this.calls.push('restrictToOwner');
     const current = this._open.get(file.descriptor);
-    if (current && this.linkCountOf(current) > 1) {
+    if (current && this.isSharedWithOthers(current)) {
       return fail('Refusing to change permissions on a hard-linked file', { status: 'EMLINK' });
     }
     const forced = this.forced('restrictToOwner');
@@ -378,6 +391,30 @@ export default class FakeFileSystem implements IFileSystem {
     this._entries.set(toPath, entry);
     this._entries.delete(fromPath);
     return succeed({ path: toPath });
+  }
+
+  /**
+   * Publishes a staged name under a free one, then removes the stage.
+   *
+   * <p>As the real adapter's `link(2)` does, the final name is added beside
+   * the stage, whose removal is best-effort: a forced `remove` failure leaves
+   * the file with both names.
+   * @param stagePath - Staged name to publish.
+   * @param finalPath - Name to publish it under, which must be free.
+   * @returns The final path, or a failure carrying the errno.
+   */
+  public publishExclusive(stagePath: string, finalPath: string): Procedure<IMoveOutcome> {
+    this.calls.push('publishExclusive');
+    const forced = this.forced('publishExclusive');
+    if (forced) return forced;
+    const entry = this._entries.get(stagePath);
+    if (!entry) return fail(`Could not publish ${finalPath}: ENOENT`, { status: 'ENOENT' });
+    if (this._entries.has(finalPath)) {
+      return fail(`Could not publish ${finalPath}: EEXIST`, { status: 'EEXIST' });
+    }
+    this._entries.set(finalPath, entry);
+    this.remove(stagePath);
+    return succeed({ path: finalPath });
   }
 
   /**
