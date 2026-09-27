@@ -19,6 +19,9 @@ const WELL_FORMED_CODE = new RegExp(OTP_CODE_PATTERN);
 /** The fields an answer holding the user's code is written with, and no others. */
 const CODE_ANSWER_FIELDS: ReadonlySet<string> = new Set(['requestId', 'deadline', 'code']);
 
+/** The fields the importer writes a request with, and no others. */
+const REQUEST_FIELDS: ReadonlySet<string> = new Set(['id', 'bankId', 'createdAt', 'deadline']);
+
 /** A pending OTP request, as the importer publishes it. */
 export interface IOtpRequest {
   /** Lower-case UUID the app submits its code against; also names the files. */
@@ -63,6 +66,22 @@ export function trustedRecords(snapshot: IStoreSnapshot): StoredRecords {
 }
 
 /**
+ * Reports whether records hold no field beyond the given ones.
+ *
+ * <p>Each caller checks every one of those fields' values, so together they
+ * require exactly those fields: an answer also marked used or expired is not
+ * taken for a code, and a request with a field the importer never writes is
+ * not read.
+ * @param records - The records of a healthy OTP file.
+ * @param fields - The fields such a file is written with.
+ * @returns Whether every field name is one of those.
+ */
+function holdsOnly(records: StoredRecords, fields: ReadonlySet<string>): boolean {
+  const names = Object.keys(records);
+  return names.every((name) => fields.has(name));
+}
+
+/**
  * Reports whether a stored value is a time a clock can reach.
  * @param value - The stored value.
  * @returns Whether it is a finite number.
@@ -75,11 +94,12 @@ function isInstant(value: unknown): value is number {
  * Reads a request out of a request file's records.
  * @param records - The records of a healthy request file.
  * @param id - The id the file is named under.
- * @returns The request's public fields, or false unless they are well formed
- *   and stored under the id the file is named for.
+ * @returns The request's public fields, or false unless they are well formed,
+ *   the only fields, and stored under the id the file is named for.
  */
 export function requestIn(records: StoredRecords, id: string): IOtpRequest | false {
   const { bankId, createdAt, deadline } = records;
+  if (!holdsOnly(records, REQUEST_FIELDS)) return false;
   if (records.id !== id || typeof bankId !== 'string') return false;
   if (!isInstant(createdAt) || !isInstant(deadline)) return false;
   return { id, bankId, createdAt, deadline };
@@ -99,29 +119,6 @@ export function answerRecords(request: IOtpRequest, outcome: OtpOutcome): Record
 }
 
 /**
- * Reports whether a field is one a code answer is written with.
- * @param field - A field name read from an answer.
- * @returns Whether a code answer carries it.
- */
-function isCodeAnswerField(field: string): boolean {
-  return CODE_ANSWER_FIELDS.has(field);
-}
-
-/**
- * Reports whether an answer holds no field a submitted code is not written
- * with, so one also marked used or expired is not taken for a code.
- *
- * <p>{@link codeIn} checks each of those fields' values, so together they
- * require exactly those fields.
- * @param records - The records of a healthy answer file.
- * @returns Whether every field name is one of those.
- */
-function isCodeAnswer(records: StoredRecords): boolean {
-  const fields = Object.keys(records);
-  return fields.every(isCodeAnswerField);
-}
-
-/**
  * Reads the user's code out of an answer file's records.
  * @param records - The records of a healthy answer file.
  * @param request - The request the answer must belong to.
@@ -131,7 +128,7 @@ function isCodeAnswer(records: StoredRecords): boolean {
  */
 export function codeIn(records: StoredRecords, request: IOtpRequest): string | false {
   const { code } = records;
-  if (!isCodeAnswer(records) || records.requestId !== request.id) return false;
+  if (!holdsOnly(records, CODE_ANSWER_FIELDS) || records.requestId !== request.id) return false;
   if (records.deadline !== request.deadline) return false;
   return typeof code === 'string' && WELL_FORMED_CODE.test(code) ? code : false;
 }

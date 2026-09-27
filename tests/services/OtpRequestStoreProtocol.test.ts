@@ -224,6 +224,15 @@ describe('OtpRequestStore: listing pending requests', () => {
     expect(store.pending(NOW + 1)).toEqual([]);
   });
 
+  it('hides, and refuses a code for, a request file with a field the importer never writes', () => {
+    const { store, fileSystem } = makeStore();
+    const fields = { id: UNKNOWN_ID, bankId: 'leumi', createdAt: NOW, deadline: NOW + TTL, role: 'admin' };
+    fileSystem.seedFile(requestPath(UNKNOWN_ID), JSON.stringify(fields), 0o600);
+    expect(store.pending(NOW + 1)).toEqual([]);
+    expect(store.submit(UNKNOWN_ID, CODE, NOW + 1)).toBe(false);
+    expect(fileSystem.hasEntry(answerPath(UNKNOWN_ID))).toBe(false);
+  });
+
   it('hides, and refuses a code for, a request file that held a __proto__ key', () => {
     // The parser leaves the key out, so the rest looks well formed; but no
     // file this code writes holds one, so the file reads as absent.
