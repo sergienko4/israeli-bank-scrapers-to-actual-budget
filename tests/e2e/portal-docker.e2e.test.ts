@@ -31,6 +31,8 @@ const SESSION_SECRET = 'e2e-docker-portal-session-secret-0123';
 const DISCOUNT_SECRET = 'discount-secret';
 /** Owner read and write only, the mode a portal save leaves on both files. */
 const OWNER_ONLY = 0o600;
+/** A lower-case UUID: the shape of the id one save writes into both files. */
+const SAVE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** Directory and file paths seeded for a Docker portal run. */
 interface ISeededDir {
@@ -42,6 +44,8 @@ interface ISeededDir {
 /** Minimal typed view of the split config/credentials files on disk. */
 interface ISplitFile {
   banks?: Record<string, { daysBack?: number; password?: string }>;
+  /** The id one save writes into both files. */
+  saveId?: unknown;
 }
 
 let browser: Browser;
@@ -205,7 +209,8 @@ async function persistsPortalEdit(): Promise<void> {
 
 /**
  * Asserts the read-write portal save reached the host directory correctly:
- * secrets split out, both files owner-only, and no staged file left behind.
+ * secrets split out, both files marked with one save id, both owner-only,
+ * and no staged file left behind.
  * @param seeded - Host directory and file paths created for this test.
  * @returns Nothing.
  */
@@ -215,6 +220,8 @@ function assertPersistedEdit(seeded: ISeededDir): void {
   expect(config.banks?.discount.daysBack).toBe(28);
   expect(config.banks?.discount.password).toBeUndefined();
   expect(credentials.banks?.discount.password).toBe(DISCOUNT_SECRET);
+  expect(config.saveId).toMatch(SAVE_ID);
+  expect(credentials.saveId).toBe(config.saveId);
   expect(statSync(seeded.configPath).mode & 0o777).toBe(OWNER_ONLY);
   expect(statSync(seeded.credsPath).mode & 0o777).toBe(OWNER_ONLY);
   expect(readdirSync(seeded.dir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
