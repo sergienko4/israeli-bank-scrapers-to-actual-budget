@@ -3,9 +3,11 @@
  *
  * <p>Every field is checked against the shape {@link AppTokenStore} writes, so
  * a hand-edited or truncated file degrades to "no session" instead of
- * crashing the portal. Records that share an `id` or a `tokenHash` are all
- * dropped: keeping one of them would let a revoke hit one copy and miss the
- * other, and dropping them signs those phones out, which fails closed.
+ * crashing the portal. An entry carrying a field the store never writes is
+ * dropped too: it would otherwise be written back on every save. Records
+ * that share an `id` or a `tokenHash` are all dropped: keeping one of them
+ * would let a revoke hit one copy and miss the other, and dropping them signs
+ * those phones out, which fails closed.
  */
 
 import type { IStoreSnapshot } from '../Storage/StoreTypes.js';
@@ -42,6 +44,25 @@ const RECORD_ID = /^[\w-]{22}$/;
 
 /** A token hash: a lowercase hex SHA-256 digest. */
 const TOKEN_HASH = /^[0-9a-f]{64}$/;
+
+/** Every field a stored record may carry; typed so a new field must be listed. */
+const RECORD_FIELDS: Readonly<Record<keyof IAppTokenRecord, true>> = {
+  id: true, familyId: true, tokenHash: true, deviceName: true, factors: true, email: true,
+  fingerprint: true, issuedAt: true, lastUsedAt: true, expiresAt: true, revokedAt: true,
+};
+
+/** Every field a stored record's factors carry. */
+const FACTOR_FIELDS: Readonly<Record<keyof IAuthFactors, true>> = { google: true, password: true };
+
+/**
+ * Whether a parsed object carries no field outside a set.
+ * @param value - Parsed object indexed as unknown values.
+ * @param allowed - The fields the store writes there.
+ * @returns True when every key is one the store writes.
+ */
+function hasOnlyFields(value: object, allowed: Readonly<Record<string, true>>): boolean {
+  return Object.keys(value).every((key) => Object.hasOwn(allowed, key));
+}
 
 /**
  * Whether a value is a string matching a pattern.
@@ -83,7 +104,8 @@ function hasTimestamps(record: Record<string, unknown>): boolean {
 function isTokenRecord(value: unknown): value is IAppTokenRecord {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Record<string, unknown>;
-  return hasIdentity(record) && hasTimestamps(record) && isAuthFactors(record.factors)
+  return hasOnlyFields(record, RECORD_FIELDS) && hasIdentity(record) && hasTimestamps(record)
+    && isAuthFactors(record.factors) && hasOnlyFields(record.factors, FACTOR_FIELDS)
     && (record.email === undefined || typeof record.email === 'string');
 }
 

@@ -146,6 +146,10 @@ describe('AppTokenStore on the secure store', () => {
     ['two records sharing a token hash',
       JSON.stringify({ tokens: [storedRecord(), storedRecord({ id: 'BBBBBBBBBBBBBBBBBBBBBB' })] })],
     ['an older list with a malformed entry', JSON.stringify([storedRecord(), 12])],
+    ['an entry with a field the store does not write',
+      JSON.stringify({ tokens: [{ ...storedRecord(), refreshToken: 'plain' }] })],
+    ['factors with a field the store does not write',
+      JSON.stringify({ tokens: [storedRecord({ factors: { google: true, password: true, admin: true } })] })],
   ])('moves aside a file holding %s on the next write', (_label, contents) => {
     const { store, fileSystem } = makeStore(contents);
     const issued = store.issue(GRANT, NOW);
@@ -158,6 +162,25 @@ describe('AppTokenStore on the secure store', () => {
     const other = storedRecord({ id: 'CCCCCCCCCCCCCCCCCCCCCC', tokenHash: 'c'.repeat(64) });
     const { store } = makeStore(JSON.stringify({ tokens: [storedRecord(), clash, other] }));
     expect(store.list(NOW).map((record) => record.id)).toEqual(['CCCCCCCCCCCCCCCCCCCCCC']);
+  });
+
+  it.each([
+    ['on the entry', { ...storedRecord(), refreshToken: 'PLAINTEXT-TOKEN' }],
+    ['in its factors', storedRecord({ factors: { google: true, password: true, note: 'PLAINTEXT-TOKEN' } })],
+    ['named like an inherited property', { ...storedRecord(), toString: 'PLAINTEXT-TOKEN' }],
+  ])('drops an entry with a field the store does not write %s, and never writes it back', (_label, entry) => {
+    const { store, fileSystem } = makeStore(JSON.stringify({ tokens: [entry] }));
+    expect(store.list(NOW)).toEqual([]);
+    store.issue(GRANT, NOW);
+    expect(fileSystem.contentsOf(TOKENS_PATH)).not.toContain('PLAINTEXT-TOKEN');
+  });
+
+  it('keeps an entry holding the optional fields the store writes', () => {
+    const entry = storedRecord({ email: 'a@example.com', revokedAt: NOW, expiresAt: NOW + DAY_MS });
+    const { store, fileSystem } = makeStore(JSON.stringify({ tokens: [entry] }));
+    store.issue(GRANT, NOW);
+    expect(storedJson(fileSystem).tokens).toContainEqual(entry);
+    expect(quarantinedNames(fileSystem)).toEqual([]);
   });
 
   it('drops every record that shares a token hash with another', () => {
