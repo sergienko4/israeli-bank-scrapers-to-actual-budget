@@ -99,6 +99,17 @@ export default class OtpFileNames {
   }
 
   /**
+   * Picks the staged copies of one request's answer out of a directory listing.
+   * @param id - The request id, already known to be a UUID.
+   * @param paths - Every path listed in the directory.
+   * @returns The paths named `<answer name>.<uuid>.tmp` for that request.
+   */
+  public answerStagesOf(id: string, paths: readonly string[]): string[] {
+    const answerPath = this.answerPath(id);
+    return paths.filter((path) => isStagingPath(answerPath, path));
+  }
+
+  /**
    * Classifies an entry in the directory by its name.
    * @param path - A path listed in the directory.
    * @returns What the entry is.

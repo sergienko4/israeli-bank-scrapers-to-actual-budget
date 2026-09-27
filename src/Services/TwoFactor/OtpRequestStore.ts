@@ -129,10 +129,12 @@ export default class OtpRequestStore {
    * deadline is reached.
    *
    * <p>A code ends the request: it is returned, the request file removed and
-   * the code replaced by a tombstone, both best-effort, so a code that has
-   * arrived is never withheld. At the deadline the importer races the portal
-   * for the answer: winning records the expiry, and losing means the portal
-   * published a code in time, which is returned.
+   * the code replaced by a tombstone, all best-effort, so a code that has
+   * arrived is never withheld. Settling, with a code or an expiry, also
+   * removes any staged copy of the answer a publish left behind. At the
+   * deadline the importer races the portal for the answer: winning records
+   * the expiry, and losing means the portal published a code in time, which
+   * is returned.
    * @param request - The request {@link create} returned.
    * @param now - Current time in epoch ms (defaults to Date.now()).
    * @returns Whether to keep waiting, the code, or that the request expired.
@@ -142,7 +144,7 @@ export default class OtpRequestStore {
    */
   public poll(request: IOtpRequest, now: number = Date.now()): OtpPoll {
     const polled = now < request.deadline ? this.awaitCode(request) : this.expire(request);
-    if (polled.kind !== 'waiting') this.removeRequest(request);
+    if (polled.kind !== 'waiting') this.retire(request);
     return polled;
   }
 
@@ -283,6 +285,35 @@ export default class OtpRequestStore {
   private leaveTombstone(request: IOtpRequest): void {
     const records = answerRecords(request, { consumed: true });
     this.answerStore(request.id).commit({ records, shouldQuarantine: false });
+  }
+
+  /**
+   * Removes what a settled request leaves on disk besides its answer.
+   *
+   * <p>The request file goes first, so the portal stops accepting a code for
+   * it before any staged copy is removed.
+   * @param request - The settled request.
+   */
+  private retire(request: IOtpRequest): void {
+    this.removeRequest(request);
+    this.removeAnswerStages(request);
+  }
+
+  /**
+   * Removes every staged copy of a settled request's answer, best-effort.
+   *
+   * <p>A publish links its stage to the answer's name, then unlinks the stage;
+   * if the unlink fails, the stage keeps the answer's contents under a second
+   * name, so a tombstone would not take the code off the disk. A copy that
+   * cannot be removed, or a listing that fails, leaves it for the startup
+   * sweep, an hour after its last write.
+   * @param request - The settled request.
+   */
+  private removeAnswerStages(request: IOtpRequest): void {
+    const listed = this._fileSystem.listNames(this._names.directory);
+    if (!listed.success) return;
+    const stages = this._names.answerStagesOf(request.id, listed.data);
+    for (const stage of stages) this._fileSystem.remove(stage);
   }
 
   /**

@@ -29,6 +29,9 @@ const CODE = '123456';
 /** A UUID no request was created under. */
 const UNKNOWN_ID = '0f0e0d0c-0b0a-4908-8706-050403020100';
 
+/** The random token in a staged copy's name. */
+const STAGE_TOKEN = '11111111-2222-4333-8444-555555555555';
+
 /**
  * Builds a store over a fresh in-memory filesystem holding the data directory.
  * @returns The store under test and the filesystem behind it.
@@ -56,6 +59,20 @@ function requestPath(id: string): string {
  */
 function answerPath(id: string): string {
   return `/data/otp-requests.${id}.answer.json`;
+}
+
+/**
+ * Seeds a staged copy of a request's answer holding the user's code, as a
+ * publish whose stage could not be unlinked leaves one.
+ * @param fileSystem - Filesystem to seed.
+ * @param id - The request id.
+ * @returns The staged copy's path.
+ */
+function seedAnswerStage(fileSystem: FakeFileSystem, id: string): string {
+  const stage = `${answerPath(id)}.${STAGE_TOKEN}.tmp`;
+  const answer = JSON.stringify({ requestId: id, deadline: NOW + TTL, code: CODE });
+  fileSystem.seedFile(stage, answer, 0o600);
+  return stage;
 }
 
 /**
@@ -351,6 +368,46 @@ describe('OtpRequestStore: polling for the answer', () => {
     expect(fileSystem.hasEntry(requestPath(created.id))).toBe(false);
     seedRequest(fileSystem, created);
     expect(store.submit(created.id, CODE, NOW + 1)).toBe(false);
+  });
+
+  it('removes a staged copy of the used answer, so the code leaves the disk', () => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    store.submit(created.id, CODE, NOW + 1);
+    const stage = seedAnswerStage(fileSystem, created.id);
+    expect(store.poll(created, NOW + 2)).toEqual({ kind: 'code', code: CODE });
+    expect(fileSystem.hasEntry(stage)).toBe(false);
+    expect(filesIn(fileSystem).filter((name) => fileSystem.contentsOf(name).includes(CODE))).toEqual([]);
+  });
+
+  it('removes a staged copy of the answer when the request expires', () => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    const stage = seedAnswerStage(fileSystem, created.id);
+    expect(store.poll(created, NOW + TTL)).toEqual({ kind: 'expired' });
+    expect(fileSystem.hasEntry(stage)).toBe(false);
+  });
+
+  it('leaves a staged answer alone while waiting, and another request\'s after settling', () => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    const other = store.create('leumi', TTL, NOW);
+    const ownStage = seedAnswerStage(fileSystem, created.id);
+    const otherStage = seedAnswerStage(fileSystem, other.id);
+    expect(store.poll(created, NOW + 1)).toEqual({ kind: 'waiting' });
+    expect(fileSystem.hasEntry(ownStage)).toBe(true);
+    store.submit(created.id, CODE, NOW + 1);
+    expect(store.poll(created, NOW + 2)).toEqual({ kind: 'code', code: CODE });
+    expect(fileSystem.hasEntry(otherStage)).toBe(true);
+  });
+
+  it.each(['listNames', 'remove'])('still hands over the code when %s fails', (operation) => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    store.submit(created.id, CODE, NOW + 1);
+    seedAnswerStage(fileSystem, created.id);
+    fileSystem.forcedFailures.set(operation, 'EACCES');
+    expect(store.poll(created, NOW + 2)).toEqual({ kind: 'code', code: CODE });
   });
 
   it('hands over no code from an answer that held a __proto__ key', () => {

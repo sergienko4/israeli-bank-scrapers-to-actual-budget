@@ -32,12 +32,12 @@ When the channel is `app` and Telegram is also configured, a timed-out app OTP a
 ### Portal endpoints (used by the app)
 
 - `GET /api/otp/pending` — list pending OTP requests (never returns codes)
-- `POST /api/otp/:id` — submit a 4–8 digit code for a request. `404` means the request is gone, expired or already answered; `400` means the id is malformed (`Invalid OTP request id`) or the code is (`Invalid OTP code`)
+- `POST /api/otp/:id` — submit a 4–8 digit code for a request. `404` means the request is gone, expired or already answered; `400` means the id is malformed (`Invalid OTP request id`) or the code is (`Invalid OTP code`). A code sent at the moment the importer finishes with that request can get `500` instead of `404`; it was too late either way
 - `GET /api/otp/settings` / `PUT /api/otp/settings` — read or set the channel
 
 ### Security
 
-- A code stays on disk only between submission and use: once the importer takes it, the answer is overwritten with a marker that keeps the request answered. Codes are single-use, expire with the request (default 5 minutes), and are never logged. When either service starts, it removes requests and answers an hour past their deadline, so a code nobody used leaves the disk too.
+- A code stays on disk only between submission and use: once the importer takes it, the answer is overwritten with a marker that keeps the request answered, and any copy that saving the answer left behind is removed. Codes are single-use, expire with the request (default 5 minutes), and are never logged. When either service starts, it removes requests and answers an hour past their deadline, and leftover copies an hour after they were written, so a code nobody used, or a copy that could not be removed, leaves the disk too.
 - All OTP endpoints sit behind the portal's authentication, and request ids are unguessable UUIDs.
 
 ---

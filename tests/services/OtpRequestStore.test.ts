@@ -98,6 +98,16 @@ describe('OtpRequestStore on a real filesystem', () => {
     expect(importer.poll(created, 61_000)).toEqual({ kind: 'code', code: CODE });
   });
 
+  it('leaves the code nowhere on disk when the answer\'s staging name outlived its publish', () => {
+    const created = importer.create('leumi', 60_000);
+    expect(portal.submit(created.id, CODE)).toBe(true);
+    const answer = join(dir, `otp-requests.${created.id}.answer.json`);
+    linkSync(answer, `${answer}.${randomUUID()}.tmp`);
+    expect(importer.poll(created)).toEqual({ kind: 'code', code: CODE });
+    expect(readdirSync(dir)).toEqual([`otp-requests.${created.id}.answer.json`]);
+    expect(allContents().filter((text) => text.includes(CODE))).toEqual([]);
+  });
+
   it('accepts a code for a request that still has its staging name', () => {
     const created = importer.create('leumi', 60_000, 1_000);
     const request = join(dir, `otp-requests.${created.id}.json`);
