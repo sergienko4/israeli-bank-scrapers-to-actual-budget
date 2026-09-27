@@ -103,19 +103,48 @@ function readChecked(descriptor: number, filePath: string): Procedure<string> {
 }
 
 /**
+ * Reads an open descriptor, turning a thrown read into a failure.
+ * @param descriptor - Descriptor opened with {@link CONFIG_READ_FLAGS}.
+ * @param filePath - The file, for failure messages.
+ * @returns The text, or a failure naming the file.
+ */
+function readGuarded(descriptor: number, filePath: string): Procedure<string> {
+  try {
+    return readChecked(descriptor, filePath);
+  } catch (error: unknown) {
+    return unreadable(filePath, error);
+  }
+}
+
+/**
+ * Closes a descriptor, reporting a refused close by its errno.
+ * @param descriptor - Descriptor opened with {@link CONFIG_READ_FLAGS}.
+ * @param filePath - The file, for the failure message.
+ * @returns Success, or a failure carrying the errno.
+ */
+function closeConfig(descriptor: number, filePath: string): Procedure<true> {
+  try {
+    closeSync(descriptor);
+    return succeed(true);
+  } catch (error: unknown) {
+    return unreadable(filePath, error);
+  }
+}
+
+/**
  * Reads an open descriptor and always closes it.
+ *
+ * <p>A refused close fails the read, as it does in the storage port, but an
+ * earlier failure stays the one reported: it is the reason the read stopped.
  * @param descriptor - Descriptor opened with {@link CONFIG_READ_FLAGS}.
  * @param filePath - The file, for failure messages.
  * @returns The text, or a failure naming the file.
  */
 function readThenClose(descriptor: number, filePath: string): Procedure<string> {
-  try {
-    return readChecked(descriptor, filePath);
-  } catch (error: unknown) {
-    return unreadable(filePath, error);
-  } finally {
-    closeSync(descriptor);
-  }
+  const text = readGuarded(descriptor, filePath);
+  const closed = closeConfig(descriptor, filePath);
+  if (!text.success || closed.success) return text;
+  return closed;
 }
 
 /**
