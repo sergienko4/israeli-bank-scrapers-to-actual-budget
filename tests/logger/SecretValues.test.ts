@@ -234,6 +234,20 @@ describe('SecretValues with a lone half that pairs with the text beside it', () 
     expect(knowing(value).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
   });
 
+  it.each([
+    ['a low half that the first high half pairs with', '\uDC00', '\uD800\uDC00'],
+    ['a low half that the last high half pairs with', '\uDFFF', '\uDBFF\uDFFF'],
+    ['a high half that pairs with the first low half', '\uD800', '\uD800\uDC00'],
+    ['a high half that pairs with the last low half', '\uDBFF', '\uDBFF\uDFFF'],
+  ])('hides the whole character around %s', (_case, value, written) => {
+    expect(knowing(value).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it('hides a value whole when one as long, with fewer characters, starts at the same place', () => {
+    expect(knowing(`${EMOJI}abcd`, '\uDE00abcde').mask(`${CANARY} ${EMOJI}abcde ${CANARY}`))
+      .toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
   it('hides a short value that holds a lone half inside a longer word too', () => {
     expect(knowing('\uDE00ab').mask(`${CANARY} ${EMOJI}abNx ${CANARY}`)).toBe(`${CANARY} [REDACTED]Nx ${CANARY}`);
   });
