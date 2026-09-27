@@ -182,15 +182,16 @@ It refuses, with a failure naming the key and never the token, when:
 - the file could not be read — replacing what cannot be read would destroy
   every other account's token.
 
-If `SecureJsonStore` reported the file damaged, or an entry it returned is not
-a usable token, the file is quarantined before it is replaced, so that copy of
-a credential is never overwritten. The usable entries are carried into the new
-file.
+If `SecureJsonStore` reported the file damaged, or stripped of a top-level
+`__proto__` key, or an entry it returned is not a usable token, the file is
+quarantined before it is replaced, so that copy of a credential is never
+overwritten. The usable entries are carried into the new file. A stripped
+file also cannot vouch for a configured token: the key it held could hide a
+token bound to another login, so the configured token is not sent.
 
-Two things are removed before this store sees the records, so they do not
-trigger a quarantine and are not carried over: a `__proto__` key, which
-`SecureJsonStore` strips on read, and an earlier duplicate of a key, which
-`JSON.parse` discards in favour of the last. This store never writes either.
+An earlier duplicate of a key never reaches this store, because `JSON.parse`
+discards it in favour of the last, so it does not trigger a quarantine and is
+not carried over. This store never writes one.
 
 Every record handed to `SecureJsonStore` has no prototype. The store strips
 the prototype from the record set, but not from the entries inside it, and an

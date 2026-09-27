@@ -61,7 +61,7 @@ export interface IBankTokenWrite {
 export interface ITokenView {
   /** This key's record, or {@link NO_RECORD} when the file holds none for it. */
   readonly record: IBankTokenRecord;
-  /** False when the file was damaged or held any entry that could not be used. */
+  /** False when the file was damaged, held a `__proto__` key, or held any entry that could not be used. */
   readonly isIntact: boolean;
   /**
    * Names the login the file binds a token to, under any key.
@@ -108,11 +108,13 @@ export interface IBankTokenStore {
  * Tokens read from the store, and whether the file held nothing else.
  *
  * <p>`isIntact` is false when {@link SecureJsonStore} reported the file damaged
- * or an entry it returned could not be used as a token. The write path
- * quarantines such a file before replacing it, because the replacement would
- * otherwise erase the only copy. Two things never reach this layer, so they are
- * not counted: a `__proto__` key, which the store strips on read, and an earlier
- * duplicate of a key, which `JSON.parse` discards. This store writes neither.
+ * or stripped of a `__proto__` key, or an entry it returned could not be used
+ * as a token. The write path quarantines such a file before replacing it,
+ * because the replacement would otherwise erase the only copy. A stripped key
+ * could also hide a token bound to another login, so the file cannot vouch
+ * for a configured one. An earlier duplicate of a key never reaches this
+ * layer, because `JSON.parse` discards it, so it is not counted; this store
+ * never writes one.
  */
 interface ILoadedTokens {
   readonly tokens: ReadonlyMap<string, IBankTokenRecord>;
@@ -340,7 +342,7 @@ export default class BankTokenStore implements IBankTokenStore {
     const opened = this._cipher.openRecords(records);
     const { tokens, droppedCount, seenTokens, contestedTokens } = readTokenRecords(opened);
     registerSecretValues(seenTokens);
-    const isIntact = state !== 'damaged' && droppedCount === 0;
+    const isIntact = (state === 'healthy' || state === 'absent') && droppedCount === 0;
     const loginOf = loginLookup(tokens);
     return succeed({ tokens, isIntact, loginOf, contestedTokens });
   }

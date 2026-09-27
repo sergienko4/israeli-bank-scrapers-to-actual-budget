@@ -161,6 +161,8 @@ describe('BankTokenStore read', () => {
         'pepper:a': { token: 'lt-a', capturedAt: CAPTURED_AT, login: 'a'.repeat(64) },
         'pepper:b': { token: 'lt-a', capturedAt: CAPTURED_AT, login: 'b'.repeat(64) },
       })],
+      ['held a top-level __proto__ key, which could hide a token bound to another login',
+        `{"__proto__":{"token":"lt-a","capturedAt":"${CAPTURED_AT}","login":"${'b'.repeat(64)}"}}`],
     ])('reads a store that %s as not intact', (_label: string, contents: string) => {
       const { store, fileSystem } = makeStore();
       seedRaw(fileSystem, contents);
