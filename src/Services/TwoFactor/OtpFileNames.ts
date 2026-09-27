@@ -13,8 +13,9 @@
  * @module
  */
 
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname } from 'node:path';
 
+import entryPath from '../../Storage/EntryPath.js';
 import { isStagingPath } from '../../Storage/StagingPaths.js';
 import UUID_PATTERN from '../../Utils/IdPatterns.js';
 
@@ -51,11 +52,14 @@ export default class OtpFileNames {
 
   /**
    * Names a request's own file.
+   *
+   * <p>Built on the directory as given, like every listed path, so a `..`
+   * after a symlink names the directory `pending` lists (see `EntryPath`).
    * @param id - The request id, already known to be a UUID.
    * @returns The request file path.
    */
   public requestPath(id: string): string {
-    return join(this.directory, `${this._prefix}${id}${JSON_SUFFIX}`);
+    return entryPath(this.directory, `${this._prefix}${id}${JSON_SUFFIX}`);
   }
 
   /**
@@ -64,7 +68,7 @@ export default class OtpFileNames {
    * @returns The answer file path.
    */
   public answerPath(id: string): string {
-    return join(this.directory, `${this._prefix}${id}${ANSWER_SUFFIX}`);
+    return entryPath(this.directory, `${this._prefix}${id}${ANSWER_SUFFIX}`);
   }
 
   /**

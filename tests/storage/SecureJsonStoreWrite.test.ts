@@ -432,6 +432,17 @@ describe('SecureJsonStore write path', () => {
     expect(fileSystem.names()).toHaveLength(0);
   });
 
+  it('fails, writing nothing, when the text is too long for one string', () => {
+    const { store, fileSystem } = makeStore();
+    vi.spyOn(JSON, 'stringify').mockImplementationOnce(() => {
+      throw new RangeError('Invalid string length');
+    });
+    const committed = store.commit({ records: { token: SECRET }, shouldQuarantine: false });
+    if (committed.success) throw new Error('expected an unserialisable commit to fail');
+    expect(committed.message).toBe('Records could not be serialised as JSON');
+    expect(fileSystem.names()).toHaveLength(0);
+  });
+
   it('reports where the records landed so the outcome can be logged', () => {
     const { store } = makeStore();
     const committed = store.commit({ records: { a: 'b' }, shouldQuarantine: false });

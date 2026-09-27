@@ -64,14 +64,13 @@ export function directoryOf(filePath: string): string {
  * <p>The suffix still matters independently: a quarantined file shares the
  * prefix but is the only copy of salvaged data, and must never be swept.
  *
- * <p>Both sides are reduced to their file name first. The candidates come
- * from a directory listing, which joins and so normalises, while the store
- * path arrives however the operator configured it: a store at
- * `./data/tokens.json` compared as a whole string would match none of its own
- * staged files and sweep nothing, leaving live tokens on disk forever.
- * Normalising the store path instead would be wrong — collapsing `..`
- * lexically can point at a different file when a symlink precedes it — and
- * the candidate is known to sit in the listed directory already.
+ * <p>Both sides are reduced to their file name first. A candidate came from
+ * listing the store's directory, so its name is all that identifies it, and
+ * comparing whole strings would tie the match to how each caller spelled
+ * that directory; the OTP store passes bare names. Normalising either side
+ * would be wrong: collapsing `..` lexically can point at a different
+ * directory when a symlink precedes it, which is also why the listing keeps
+ * the directory exactly as given (see `EntryPath`).
  * @param filePath - Absolute path of the store.
  * @param candidate - Path found alongside it.
  * @returns True when the candidate is this store's staging file.

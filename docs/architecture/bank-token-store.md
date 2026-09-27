@@ -24,14 +24,22 @@ path in `BANK_TOKENS_PATH`. These overrides are refused at startup with a
   for the same reason: it follows the current drive;
 - on Windows, a `\\?\` or `\\.\` device prefix. After `\\?\` Windows passes
   `.` and empty segments to the disk as literal names, while path joining
-  collapses them, so the store would stage and sweep in different places;
+  collapses them, so the path means one place to the OS and another to any
+  code that tidies it;
 - a path with a `..` segment. Behind a symlink the OS resolves `..` from the
-  link's target, while path joining drops the link lexically, so the store
-  would write in one directory and sweep leftover staged tokens in another;
+  link's target, while path joining drops the link lexically, so the path
+  names two directories depending on who resolves it;
 - a path that can only name a directory: one ending in a separator (`/`, or
   `\` on Windows), a root (including a Windows share root such as
   `\\server\share`), or a final `.` segment. Such a store could never be
   written.
+
+The store does not depend on the first two refusals. It builds its staged
+copy, its quarantine name and the paths its sweep lists by appending to the
+path as given, never tidying it, so all of them name what the OS names. The
+refusals are an independent layer on top of that: a path whose meaning depends
+on how it is resolved never reaches the store, so no later code that joins
+paths can split a write from its sweep again.
 
 An accepted override is used as written. With the cases above refused,
 repeated separators and `.` segments resolve the same lexically and on disk,

@@ -16,10 +16,10 @@ import {
   closeSync, constants, fchmodSync, fstatSync, fsyncSync, linkSync, openSync, readdirSync,
   readSync, renameSync, type Stats, unlinkSync, writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
 
 import type { IProcedureFailure, Procedure } from '../Types/Procedure.js';
 import { fail, succeed } from '../Types/ProcedureHelpers.js';
+import entryPath from './EntryPath.js';
 import type {
   ICloseOutcome, IFileSystem, IHardenOutcome, IMoveOutcome, IOpenFile, IRemoveOutcome,
   IWriteOutcome,
@@ -374,13 +374,16 @@ function discardCreated(filePath: string): boolean {
 
 /**
  * Lists the full paths of everything directly inside a directory.
+ *
+ * <p>Each path keeps the directory as given, so it names the entry the
+ * listing read even when a symlink comes before a `..` (see `EntryPath`).
  * @param directoryPath - Directory to list.
  * @returns The paths, or a failure carrying the errno in `status`.
  */
 function listNames(directoryPath: string): Procedure<readonly string[]> {
   try {
     const names = readdirSync(directoryPath);
-    const paths = names.map((name) => join(directoryPath, name));
+    const paths = names.map((name) => entryPath(directoryPath, name));
     return succeed(paths);
   } catch (error: unknown) {
     return failed('list', directoryPath, error);
