@@ -96,6 +96,23 @@ describe('AppOtpPrompter', () => {
     expect(failing.pending()).toEqual([]);
   });
 
+  it('reports an answer it cannot read at the deadline as a storage failure, not a timeout', async () => {
+    // A timeout would make FallbackOtpPrompter reroute the OTP to Telegram,
+    // although the unreadable answer may hold the code the user submitted.
+    const fileSystem = new FakeFileSystem();
+    fileSystem.seedDirectory('/data');
+    const failing = new OtpRequestStore(fileSystem, '/data/otp-requests.json');
+    const answerThenLockOut = {
+      sendOtpRequest: async (_bankId: string, requestId: string): Promise<void> => {
+        failing.submit(requestId, '123456');
+        fileSystem.forcedFailures.set('openForRead', 'EACCES');
+      },
+    };
+    const prompter = new AppOtpPrompter(failing, answerThenLockOut, { pollIntervalMs: 5 });
+
+    await expect(prompter.createOtpRetriever('leumi', 0.02)()).rejects.toBeInstanceOf(StorageError);
+  });
+
   it('never pushes a prompt for a request it could not save', async () => {
     const fileSystem = new FakeFileSystem();
     fileSystem.seedDirectory('/data');

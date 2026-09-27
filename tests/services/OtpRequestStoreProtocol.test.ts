@@ -395,6 +395,27 @@ describe('OtpRequestStore: polling for the answer', () => {
     expect(store.poll(created, NOW + 2)).toEqual({ kind: 'waiting' });
   });
 
+  it('throws at the deadline when the taken answer cannot be read, after removing the request', () => {
+    // An answer that exists but cannot be read may hold the user's code, so
+    // reporting an expiry here would reroute the bank OTP to another channel.
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    store.submit(created.id, CODE, NOW + 1);
+    fileSystem.forcedFailures.set('openForRead', 'EACCES');
+    expect(() => store.poll(created, NOW + TTL)).toThrow(StorageError);
+    expect(fileSystem.hasEntry(requestPath(created.id))).toBe(false);
+    expect(fileSystem.hasEntry(answerPath(created.id))).toBe(true);
+  });
+
+  it('names the errno, and never the code, when the taken answer cannot be read', () => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    store.submit(created.id, CODE, NOW + 1);
+    fileSystem.forcedFailures.set('openForRead', 'EACCES');
+    expect(() => store.poll(created, NOW + TTL)).toThrow(/read the OTP answer.*EACCES/);
+    expect(() => store.poll(created, NOW + TTL)).not.toThrow(new RegExp(CODE));
+  });
+
   it('throws when the expiry cannot be recorded, after removing the request', () => {
     const { store, fileSystem } = makeStore();
     const created = store.create('leumi', TTL, NOW);

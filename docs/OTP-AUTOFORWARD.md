@@ -18,7 +18,7 @@ You open the app and enter the code (it also polls for pending requests)
 App submits the code to the importer, which continues the login
 ```
 
-When the channel is `app` and Telegram is also configured, a timed-out app OTP automatically falls back to Telegram.
+When the channel is `app` and Telegram is also configured, a timed-out app OTP automatically falls back to Telegram. A storage failure does not: when the importer cannot record the expiry, or cannot read an answer that may hold your code, the login fails with the storage error.
 
 ### Configuration
 

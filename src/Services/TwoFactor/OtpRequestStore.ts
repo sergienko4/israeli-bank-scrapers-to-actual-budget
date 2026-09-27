@@ -134,11 +134,12 @@ export default class OtpRequestStore {
    * @param request - The request {@link create} returned.
    * @param now - Current time in epoch ms (defaults to Date.now()).
    * @returns Whether to keep waiting, the code, or that the request expired.
-   * @throws StorageError when the expiry cannot be recorded; the request file
-   *   is removed first, so the portal stops offering it.
+   * @throws StorageError when the expiry cannot be recorded, or the answer
+   *   that beat it cannot be read; the request file is removed first, so the
+   *   portal stops offering it.
    */
   public poll(request: IOtpRequest, now: number = Date.now()): OtpPoll {
-    const polled = now < request.deadline ? this.codeOr(request, WAITING) : this.expire(request);
+    const polled = now < request.deadline ? this.awaitCode(request) : this.expire(request);
     if (polled.kind !== 'waiting') this.removeRequest(request);
     return polled;
   }
@@ -180,32 +181,75 @@ export default class OtpRequestStore {
   }
 
   /**
+   * Takes the code if one has arrived before the deadline.
+   *
+   * <p>An answer that cannot be read is tried again on the next poll; at the
+   * deadline {@link expire} reports it rather than calling it an expiry.
+   * @param request - The request being polled.
+   * @returns The code, or that the importer should keep waiting.
+   */
+  private awaitCode(request: IOtpRequest): OtpPoll {
+    const code = this.readCode(request);
+    if (!code.success) return WAITING;
+    return this.settle(request, code.data, WAITING);
+  }
+
+  /**
    * Records the expiry as the answer, unless the portal published a code first.
    * @param request - The request whose deadline was reached.
    * @returns The code the portal published in time, or the expiry.
-   * @throws StorageError when the expiry cannot be recorded, after removing
-   *   the request file.
+   * @throws StorageError when the expiry cannot be recorded, or the answer
+   *   that beat it cannot be read, after removing the request file.
    */
   private expire(request: IOtpRequest): OtpPoll {
     const answer = answerRecords(request, { expired: true });
     const expiry = this.answerStore(request.id).commitNew(answer);
     if (expiry.success) return EXPIRED;
-    if (expiry.status === 'EEXIST') return this.codeOr(request, EXPIRED);
-    this.removeRequest(request);
-    throw storageError('Could not record the OTP expiry', expiry);
+    if (expiry.status === 'EEXIST') return this.takeWinningAnswer(request);
+    throw this.abandon(request, 'Could not record the OTP expiry', expiry);
   }
 
   /**
-   * Takes the code the answer holds, leaving a tombstone; or returns the fallback.
+   * Reads the answer that was published before the expiry could be.
+   *
+   * <p>An answer that exists but cannot be read may hold the user's code, so
+   * it is reported as a storage failure: an expiry would let the caller fall
+   * back to another OTP channel.
+   * @param request - The request whose deadline was reached.
+   * @returns The code the answer holds, or the expiry when it holds none.
+   * @throws StorageError when the answer cannot be read, after removing the
+   *   request file.
+   */
+  private takeWinningAnswer(request: IOtpRequest): OtpPoll {
+    const code = this.readCode(request);
+    if (!code.success) throw this.abandon(request, 'Could not read the OTP answer', code);
+    return this.settle(request, code.data, EXPIRED);
+  }
+
+  /**
+   * Takes a code, leaving a tombstone; or returns the fallback when there is none.
    * @param request - The request being polled.
+   * @param code - The code the answer holds, or false.
    * @param fallback - What to return when the answer holds no usable code.
    * @returns The code, or the fallback.
    */
-  private codeOr(request: IOtpRequest, fallback: OtpPoll): OtpPoll {
-    const code = this.readCode(request);
+  private settle(request: IOtpRequest, code: string | false, fallback: OtpPoll): OtpPoll {
     if (code === false) return fallback;
     this.leaveTombstone(request);
     return { kind: 'code', code };
+  }
+
+  /**
+   * Removes the request file, so the portal stops offering it, and builds the
+   * error the poll then throws.
+   * @param request - The request that cannot be settled.
+   * @param action - What could not be done.
+   * @param failure - Why.
+   * @returns The error to throw.
+   */
+  private abandon(request: IOtpRequest, action: string, failure: IProcedureFailure): StorageError {
+    this.removeRequest(request);
+    return storageError(action, failure);
   }
 
   /**
@@ -213,11 +257,14 @@ export default class OtpRequestStore {
    *
    * <p>An absent or damaged answer reads as having no records, so no code.
    * @param request - The request being polled.
-   * @returns The code, or false when there is none this request can use.
+   * @returns The code, false when there is none this request can use, or why
+   *   the answer could not be read.
    */
-  private readCode(request: IOtpRequest): string | false {
+  private readCode(request: IOtpRequest): Procedure<string | false> {
     const snapshot = this.answerStore(request.id).read();
-    return snapshot.success && codeIn(snapshot.data.records, request);
+    if (!snapshot.success) return snapshot;
+    const code = codeIn(snapshot.data.records, request);
+    return succeed(code);
   }
 
   /**
