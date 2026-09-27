@@ -129,13 +129,16 @@ function holdsLoneHalf(form: string): boolean {
  * can never split it. It takes its place in the longest-first order, so a
  * value that starts with it, such as `[REDACTED]-x`, is matched whole. Letter
  * case is ignored, since a bank may quote a user name or address back upper-
- * or lower-cased.
+ * or lower-cased. A form of a value that holds a lone surrogate, such as the
+ * one with U+FFFD in its place, matches anywhere, whatever its length, as the
+ * value's other forms do (see `byCodeUnit`).
  * @param forms - Every known form that holds no lone surrogate.
+ * @param anywhere - The forms that match anywhere, whatever their length.
  * @returns A global, case-blind pattern matching the mask or any of them.
  */
-function byCharacter(forms: readonly string[]): RegExp {
+function byCharacter(forms: readonly string[], anywhere: ReadonlySet<string>): RegExp {
   const sorted = [MASK, ...forms].sort(longestFirst);
-  const sources = sorted.map(asSource);
+  const sources = sorted.map((form) => (anywhere.has(form) ? asPattern(form) : asSource(form)));
   const source = sources.join('|');
   // Every value is escaped into a literal, so the pattern is an alternation
   // of plain text, some behind a one-character look-around, with no
@@ -166,14 +169,16 @@ function byCodeUnit(forms: readonly string[]): RegExp {
 /**
  * Builds the patterns that find any known value, and any mask already there.
  * @param values - Every known form of every value.
+ * @param anywhere - The forms that match anywhere, whatever their length:
+ *   every form of a value that holds a lone surrogate.
  * @returns The whole-character pattern, then the code-unit one when a form
  *   holds a lone surrogate.
  */
-function buildPatterns(values: ReadonlySet<string>): RegExp[] {
+function buildPatterns(values: ReadonlySet<string>, anywhere: ReadonlySet<string>): RegExp[] {
   const forms = [...values];
   const loneHalves = forms.filter(holdsLoneHalf);
   const whole = forms.filter((form) => !holdsLoneHalf(form));
-  const characters = byCharacter(whole);
+  const characters = byCharacter(whole, anywhere);
   if (loneHalves.length === 0) return [characters];
   const codeUnits = byCodeUnit(loneHalves);
   return [characters, codeUnits];
@@ -261,7 +266,10 @@ function toMaskSpan(text: string, match: RegExpExecArray): IMaskSpan {
 export class SecretValues {
   private readonly _values = new Set<string>();
 
-  private _patterns = buildPatterns(this._values);
+  /** Every form of a value that holds a lone surrogate: they match anywhere. */
+  private readonly _anywhere = new Set<string>();
+
+  private _patterns = buildPatterns(this._values, this._anywhere);
 
   /**
    * Adds values to the list, in every form an output can write them.
@@ -271,7 +279,11 @@ export class SecretValues {
   public register(values: readonly string[]): number {
     const before = this._values.size;
     for (const spelling of values.flatMap(spellings)) this._values.add(spelling);
-    if (this._values.size !== before) this._patterns = buildPatterns(this._values);
+    const loneForms = values.filter(holdsLoneHalf).flatMap(spellings);
+    for (const spelling of loneForms) this._anywhere.add(spelling);
+    // A new value with a lone surrogate always adds its own text, which no
+    // other value spells, so the list grows whenever `_anywhere` does.
+    if (this._values.size !== before) this._patterns = buildPatterns(this._values, this._anywhere);
     return this._values.size;
   }
 

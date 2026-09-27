@@ -203,6 +203,19 @@ describe('SecretValues with a lone surrogate in a value', () => {
     const written = encodeURIComponent(PAIRED);
     expect(knowing(PAIRED).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
   });
+
+  it.each([
+    ['that starts with a lone half, as it is', '\uD800a', '\uD800a'],
+    ['that starts with a lone half, as a UTF-8 file writes it', '\uD800a', '\uFFFDa'],
+    ['that starts with a lone half, escaped inside a JSON string', '\uD800a', String.raw`\ud800a`],
+    ['that starts with a lone half, percent-encoded', '\uD800a', '%EF%BF%BDa'],
+    ['that ends with a lone half, as it is', 'ab\uDC00', 'ab\uDC00'],
+    ['that ends with a lone half, as a UTF-8 file writes it', 'ab\uDC00', 'ab\uFFFD'],
+    ['that ends with a lone half, escaped inside a JSON string', 'ab\uDC00', String.raw`ab\udc00`],
+    ['that ends with a lone half, percent-encoded', 'ab\uDC00', 'ab%EF%BF%BD'],
+  ])('hides a short value %s, inside a longer word', (_form, value, written) => {
+    expect(knowing(value).mask(`${CANARY}${written}${CANARY}`)).toBe(`${CANARY}[REDACTED]${CANARY}`);
+  });
 });
 
 describe('SecretValues with a lone half that pairs with the text beside it', () => {
