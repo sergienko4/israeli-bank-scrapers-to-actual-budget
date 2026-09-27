@@ -52,9 +52,12 @@ function isNotFullyQualified(filePath: string): boolean {
  * Tells whether a Windows path carries a device prefix.
  *
  * <p>After `\\?\` Windows skips its usual path cleanup, so `.` and empty
- * segments reach the disk as literal names while `join` collapses them, and
- * the store would stage and sweep in different places. `\\.\` addresses
- * devices rather than files. On POSIX `?` and `.` are ordinary names.
+ * segments reach the disk as literal names while `join` and `normalize`
+ * collapse them: the same string names one place to the OS and another to
+ * any code that tidies it. As with `..`, the store builds its paths without
+ * tidying them, so this refusal is an independent layer that keeps such a
+ * path out of the store altogether. `\\.\` addresses devices rather than
+ * files. On POSIX `?` and `.` are ordinary names.
  * @param filePath - Absolute override to inspect.
  * @returns True when the path starts with a Windows device prefix.
  */
@@ -66,10 +69,14 @@ function hasDevicePrefix(filePath: string): boolean {
  * Tells whether any segment of a path is `..`.
  *
  * <p>Behind a symlink the OS resolves `..` from the link's target, while
- * `join` and `normalize` drop the link lexically. The store would then write
- * in one directory and sweep another, so abandoned staged tokens would never
- * be removed. Windows accepts `/` as a separator as well as `\`, so a path is
- * split on both; on POSIX the second split is on `/` again and changes nothing.
+ * `join` and `normalize` drop the link lexically, so the same string names two
+ * directories depending on who resolves it. The store itself never tidies a
+ * path: it stages, quarantines and lists by appending to the path as given
+ * (see `EntryPath`). This refusal is an independent layer on top of that, so
+ * no such path reaches the store, where a later `join` could split a write
+ * from its sweep again. Windows accepts `/` as a separator as well as `\`, so
+ * a path is split on both; on POSIX the second split is on `/` again and
+ * changes nothing.
  * @param filePath - Absolute path to inspect.
  * @returns True when a segment is exactly `..`.
  */
