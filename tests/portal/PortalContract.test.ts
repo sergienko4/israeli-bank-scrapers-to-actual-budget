@@ -199,6 +199,10 @@ describe('portal contract conformance', () => {
     expect(code.statusCode).toBe(400);
     expect(JSON.parse(code.body)).toEqual({ error: 'Invalid OTP code' });
 
+    const id = await postJson('/api/otp/req-1', { code: '123456' });
+    expect(id.statusCode).toBe(400);
+    expect(JSON.parse(id.body)).toEqual({ error: 'Invalid OTP request id' });
+
     const device = await postJson('/api/devices', { token: 'ExponentPushToken[a\nb]' });
     expect(device.statusCode).toBe(400);
     expect(JSON.parse(device.body)).toEqual({ error: 'Invalid Expo push token' });

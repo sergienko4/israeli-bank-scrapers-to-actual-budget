@@ -32,7 +32,7 @@ When the channel is `app` and Telegram is also configured, a timed-out app OTP a
 ### Portal endpoints (used by the app)
 
 - `GET /api/otp/pending` — list pending OTP requests (never returns codes)
-- `POST /api/otp/:id` — submit a 4–8 digit code for a request. `404` means the request is gone, expired or already answered; `400` means the id or the code is malformed
+- `POST /api/otp/:id` — submit a 4–8 digit code for a request. `404` means the request is gone, expired or already answered; `400` means the id is malformed (`Invalid OTP request id`) or the code is (`Invalid OTP code`)
 - `GET /api/otp/settings` / `PUT /api/otp/settings` — read or set the channel
 
 ### Security

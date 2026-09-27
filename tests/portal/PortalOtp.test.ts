@@ -154,7 +154,7 @@ describe('Portal /api/otp', () => {
       method: 'POST', url: `/api/otp/${id}`, cookies: { portal_session: cookie }, payload: { code: '123456' },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json()).toEqual({ error: 'Invalid OTP code' });
+    expect(res.json()).toEqual({ error: 'Invalid OTP request id' });
   });
 
   it('rate-limits repeated OTP submissions once the per-route maximum is exceeded', async () => {
