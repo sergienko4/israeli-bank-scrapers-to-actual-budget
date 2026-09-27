@@ -33,7 +33,7 @@ export type OtpOutcome =
   | { readonly consumed: true };
 
 /** The records a healthy OTP file holds, as the store read them. */
-type StoredRecords = Readonly<Record<string, unknown>>;
+export type StoredRecords = Readonly<Record<string, unknown>>;
 
 /** What the importer learns when it looks for the answer. */
 export type OtpPoll =
