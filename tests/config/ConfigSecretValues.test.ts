@@ -142,6 +142,19 @@ describe('each place a config enters the process', () => {
     expect(redactSecrets(echoed(value))).not.toContain(value);
   });
 
+  it('load accepts a value holding a lone surrogate, and registers it', () => {
+    const value = 'Lone\uD800-Ec3-value';
+    new ConfigLoader(writeConfigWith(value)).load();
+    expect(redactSecrets(echoed(value))).not.toContain('Ec3-value');
+  });
+
+  it('ConfigWriter.write accepts a value holding a lone surrogate, and registers it', () => {
+    const value = 'Lone\uDC00-Ec4-value';
+    const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ username: value }) } });
+    openConfigWriter(configPath).write(config);
+    expect(redactSecrets(echoed(value))).not.toContain('Ec4-value');
+  });
+
   it('ConfigWriter.write registers the values it saves', () => {
     const value = 'Write-Ec2-value';
     const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ username: value }) } });

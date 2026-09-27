@@ -233,7 +233,9 @@ value hidden: with `secret` held, `client_secret=...` is written as
 `client_[REDACTED]=[REDACTED]`. Every copy of a held value is found, even one
 that overlaps another held value or a `[REDACTED]` already in the text: with
 `Qz7-echoed` and `echoed-Lk9` held, `Qz7-echoed-Lk9` is written as
-`[REDACTED]`.
+`[REDACTED]`. A value that holds half of a character pair (a lone surrogate,
+as a JSON `\ud800` escape decodes to) is also matched with `U+FFFD` in its
+place, the way UTF-8 files and address encoders write it.
 
 Structured log fields follow the same keys, in any letter case and at any
 depth: a field named `authToken` or `Authorization` is written as

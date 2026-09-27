@@ -177,3 +177,29 @@ describe('SecretValues with a value under six characters', () => {
     expect(known.mask(`abc ${CANARY}`)).toBe(`abc ${CANARY}`);
   });
 });
+
+describe('SecretValues with a lone surrogate in a value', () => {
+  /** Half of a surrogate pair with no other half, as a JSON `\ud800` escape decodes. */
+  const LONE = 'Qz7\uD800echoed';
+
+  /** A whole pair, an emoji, which must be encoded as itself. */
+  const PAIRED = 'Qz7😀echoed';
+
+  it('registers the value without throwing', () => {
+    expect(() => knowing(LONE)).not.toThrow();
+  });
+
+  it.each([
+    ['as it is', LONE],
+    ['as a UTF-8 file writes it', 'Qz7\uFFFDechoed'],
+    ['escaped inside a JSON string', JSON.stringify(LONE).slice(1, -1)],
+    ['percent-encoded by a URL encoder', new URLSearchParams({ u: LONE }).toString().slice(2)],
+  ])('hides it %s', (_form, written) => {
+    expect(knowing(LONE).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it('percent-encodes a whole pair as itself', () => {
+    const written = encodeURIComponent(PAIRED);
+    expect(knowing(PAIRED).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+});

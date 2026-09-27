@@ -39,16 +39,31 @@ const NO_WORD_AFTER = String.raw`(?![\p{L}\p{N}])`;
 const REGEX_SYNTAX = /[\\^$.*+?()[\]{}|/]/g;
 
 /**
+ * A lone surrogate: one half of a pair, with no other half beside it. Under
+ * the `u` flag a whole pair is one character, so only a lone half matches.
+ */
+const LONE_SURROGATE = /[\uD800-\uDFFF]/gu;
+
+/** What UTF-8 writes for a lone surrogate, as a file or a URL encoder does. */
+const REPLACEMENT_CHARACTER = '\uFFFD';
+
+/**
  * Lists the forms an output can write a value in: as it is, escaped inside a
  * JSON string, as a log line's text is, and percent-encoded in an address.
+ *
+ * <p>A value can hold a lone surrogate, as a JSON `\ud800` escape decodes to.
+ * UTF-8 cannot hold one, so a file or a URL encoder writes U+FFFD in its
+ * place, and that form is listed too. It is the one percent-encoded, as
+ * `encodeURIComponent` throws on a lone surrogate.
  * @param value - One secret value.
  * @returns Its forms, or none for an empty value.
  */
 function spellings(value: string): string[] {
   if (value.length === 0) return [];
   const json = JSON.stringify(value).slice(1, -1);
-  const encoded = encodeURIComponent(value);
-  return [value, json, encoded];
+  const wellFormed = value.replaceAll(LONE_SURROGATE, REPLACEMENT_CHARACTER);
+  const encoded = encodeURIComponent(wellFormed);
+  return [value, wellFormed, json, encoded];
 }
 
 /**
