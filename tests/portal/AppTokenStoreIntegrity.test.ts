@@ -204,6 +204,17 @@ describe('AppTokenStore on the secure store', () => {
     expect(quarantinedNames(fileSystem)).toEqual([]);
   });
 
+  it('revokes a replayed family from the read that caught the replay', () => {
+    const { store, fileSystem } = makeStore();
+    const first = store.issue(GRANT, NOW);
+    store.rotate(first.token, NOW + 1000);
+    const readsSoFar = fileSystem.calls.filter((name) => name === 'openForRead').length;
+    fileSystem.failOnCall('openForRead', readsSoFar + 2, 'EIO');
+    const replay = store.rotate(first.token, NOW + 2000);
+    expect(replay).toMatchObject({ success: false, status: 'reused' });
+    expect(store.list(NOW + 2000)).toEqual([]);
+  });
+
   it('keeps the old file and throws when the new one cannot be staged', () => {
     const contents = JSON.stringify({ tokens: [storedRecord()] });
     const { store, fileSystem } = makeStore(contents);

@@ -11,7 +11,7 @@ the new image.
 
 ## 1.43.0 — Portal files, config reads and the encryption password
 
-**Affects:** deployments that run the [config portal](configuration/portal.md),
+**Affects:** deployments that run the [config portal](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md),
 deployments that set `CREDENTIALS_ENCRYPTION_PASSWORD` to an empty value beside
 `CONFIG_PASSWORD`, and deployments whose config file is not plain UTF-8. Each
 section below names who it affects.
@@ -29,7 +29,7 @@ with only that device.
 
 **Migration:** pull the same release for both services, and do not roll back.
 See
-[Upgrade both services together](configuration/portal.md#upgrade-both-services-together).
+[Upgrade both services together](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md#upgrade-both-services-together).
 
 ### The portal shares the data volume, which needs hard links
 
@@ -79,7 +79,7 @@ portal now refuse it and name the file. Only a missing `config.json` still means
 "run from environment variables".
 
 **Migration:** save the file as UTF-8. The other errors are listed in
-[Troubleshooting](troubleshooting.md#the-importer-or-portal-stops-at-startup-on-a-config-read-error).
+[Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md#the-importer-or-portal-stops-at-startup-on-a-config-read-error).
 
 ---
 
