@@ -14,7 +14,7 @@
  */
 
 import type { IMaskSpan } from './MaskSpans.js';
-import writeSpans, { matchesIn } from './MaskSpans.js';
+import writeSpans from './MaskSpans.js';
 
 /** What a masked value becomes: the same mark the key rule writes. */
 const MASK = '[REDACTED]';
@@ -92,22 +92,60 @@ function longestFirst(left: string, right: string): number {
 /**
  * Builds the pattern that finds any known value.
  *
- * <p>The mask comes first, so a mask already in the text is matched, and
- * written back, as a whole: a value that is part of it, such as `DACT`, can
- * never split it, and masking a masked text again changes nothing. Letter
+ * <p>The mask is one of the choices, so a mask already in the text is matched,
+ * and written back, as a whole: a value that is part of it, such as `DACT`,
+ * can never split it. It takes its place in the longest-first order, so a
+ * value that starts with it, such as `[REDACTED]-x`, is matched whole. Letter
  * case is ignored, since a bank may quote a user name or address back upper-
  * or lower-cased.
  * @param values - Every known form of every value.
  * @returns A global, case-blind pattern matching the mask or any value.
  */
 function buildPattern(values: ReadonlySet<string>): RegExp {
-  const sorted = [...values].sort(longestFirst);
-  const sources = [MASK, ...sorted].map(asSource);
+  const sorted = [MASK, ...values].sort(longestFirst);
+  const sources = sorted.map(asSource);
   const source = sources.join('|');
   // Every value is escaped into a literal, so the pattern is an alternation
   // of plain text, some behind a one-character look-around, with no
   // quantifier: it cannot backtrack, and a test pins this.
   return new RegExp(source, 'giu'); // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
+}
+
+/**
+ * Finds where the search goes on after a match: one character past its start.
+ * A character outside the Basic Multilingual Plane, such as an emoji, is two
+ * code units, and is stepped over whole: a Unicode pattern moved into the
+ * middle of one starts again at its first half, so it would find the same
+ * match for ever.
+ * @param text - The text being searched.
+ * @param match - A match in it.
+ * @returns The index just past the match's first character.
+ */
+function pastFirstCharacter(text: string, match: RegExpExecArray): number {
+  const first = text.codePointAt(match.index) ?? 0;
+  return match.index + String.fromCodePoint(first).length;
+}
+
+/**
+ * Lists every match of the known values' pattern, however they overlap.
+ *
+ * <p>Each search starts one character past the last match's start, not at its
+ * end, so a value that starts inside an earlier match, as `echoed-Lk9` does in
+ * `Qz7-echoed-Lk9`, is found too, and none of its characters is shown. The
+ * spans they make are joined where they overlap (see `MaskSpans`). Every
+ * match holds at least one character, so the search always moves on.
+ * @param text - Any text an output is about to write.
+ * @param pattern - The known values' global pattern.
+ * @returns The matches, by where they start.
+ */
+function everyMatchIn(text: string, pattern: RegExp): RegExpExecArray[] {
+  const matches: RegExpExecArray[] = [];
+  pattern.lastIndex = 0;
+  for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
+    matches.push(match);
+    pattern.lastIndex = pastFirstCharacter(text, match);
+  }
+  return matches;
 }
 
 /**
@@ -141,11 +179,12 @@ export class SecretValues {
   /**
    * Finds every known value in a text, and any mask already there.
    * @param text - Any text an output is about to write.
-   * @returns A span for each, which writes the mask.
+   * @returns A span for each, which writes the mask. Spans can overlap, and
+   *   `writeSpans` joins those that do.
    */
   public find(text: string): IMaskSpan[] {
     if (this._values.size === 0) return [];
-    const matches = matchesIn(text, this._pattern);
+    const matches = everyMatchIn(text, this._pattern);
     return matches.map(toMaskSpan);
   }
 

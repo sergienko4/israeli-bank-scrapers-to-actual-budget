@@ -230,7 +230,10 @@ wherever that word appears. With the user code
 `/status`, `/scan` and `/retry` replies, which read the masked history, add no
 advice for it. A held value that is part of a secret key still leaves the key's
 value hidden: with `secret` held, `client_secret=...` is written as
-`client_[REDACTED]=[REDACTED]`.
+`client_[REDACTED]=[REDACTED]`. Every copy of a held value is found, even one
+that overlaps another held value or a `[REDACTED]` already in the text: with
+`Qz7-echoed` and `echoed-Lk9` held, `Qz7-echoed-Lk9` is written as
+`[REDACTED]`.
 
 Structured log fields follow the same keys, in any letter case and at any
 depth: a field named `authToken` or `Authorization` is written as
