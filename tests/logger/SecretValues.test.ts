@@ -248,6 +248,23 @@ describe('SecretValues with a lone half that pairs with the text beside it', () 
       .toBe(`${CANARY} [REDACTED] ${CANARY}`);
   });
 
+  it.each([
+    ['a high half at its start, after another high half', '\uD83Da', '\uD83D\uD83Da', '\uD83D[REDACTED]'],
+    ['a high half at its start, after a whole pair', '\uD83Da', `${EMOJI}\uD83Da`, `${EMOJI}[REDACTED]`],
+    ['a low half at its end, before another low half', 'a\uDE00', 'a\uDE00\uDE00', '[REDACTED]\uDE00'],
+    ['a low half at its end, before a whole pair', 'a\uDE00', `a\uDE00${EMOJI}`, `[REDACTED]${EMOJI}`],
+  ])('hides a value with %s, which the text cannot pair', (_case, value, written, masked) => {
+    expect(knowing(value).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} ${masked} ${CANARY}`);
+  });
+
+  it.each([
+    ['a high half at its start', '\uD83Da', `${EMOJI}a`],
+    ['a low half at its end', 'a\uDE00', `a${EMOJI}`],
+  ])('leaves a pair that holds a value with %s but not the value itself', (_case, value, written) => {
+    expect(written.includes(value)).toBe(false);
+    expect(knowing(value).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} ${written} ${CANARY}`);
+  });
+
   it('hides a short value that holds a lone half inside a longer word too', () => {
     expect(knowing('\uDE00ab').mask(`${CANARY} ${EMOJI}abNx ${CANARY}`)).toBe(`${CANARY} [REDACTED]Nx ${CANARY}`);
   });

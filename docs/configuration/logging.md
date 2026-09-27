@@ -237,9 +237,11 @@ that overlaps another held value or a `[REDACTED]` already in the text: with
 as a JSON `\ud800` escape decodes to) is also matched with `U+FFFD` in its
 place, the way UTF-8 files and address encoders write it. Such a value is
 matched anywhere in each of these forms, whatever its length, and also where
-its lone half is one half of a pair in the text: the whole character is
-hidden, in any letter case, so with `\ude00secret` held, `😀secret` and
-`😀SECRET` are written as `[REDACTED]`.
+the text pairs a lone half at its edge, a low half at its start or a high
+half at its end: the whole character is hidden, in any letter case, so with
+`\ude00secret` held, `😀secret` and `😀SECRET` are written as `[REDACTED]`.
+A high half at its start, or a low half at its end, stands beside the value's
+own text, which cannot pair it, so it stays lone wherever the value appears.
 
 Structured log fields follow the same keys, in any letter case and at any
 depth: a field named `authToken` or `Authorization` is written as

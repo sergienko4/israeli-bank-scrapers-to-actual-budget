@@ -219,8 +219,11 @@ function endHalfSource(form: string): string {
  * starts or ends between its halves: a low half at a form's start, alone,
  * never matches inside `😀x`, and a high half at its end never matches inside
  * `x😀`. So such a half is matched alone or as any pair that holds it, and the
- * whole pair is masked. A lone half anywhere else in a form has the form's
- * own code units on both sides, so the text cannot pair it.
+ * whole pair is masked. Any other lone half has the form's own code units on
+ * the side a pair would need: a high half pairs only with the unit after it,
+ * and a low half only with the one before it. So a high half at the start, or
+ * a low half at the end, is lone wherever the text holds the form, and `😀a`
+ * does not hold `\uD83Da`.
  * @param form - One form of a value that holds a lone surrogate.
  * @returns Its escaped text, with a group for each lone half at its edge.
  */
