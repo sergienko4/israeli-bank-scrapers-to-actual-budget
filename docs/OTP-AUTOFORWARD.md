@@ -27,7 +27,7 @@ When the channel is `app` and Telegram is also configured, a timed-out app OTP a
   - `OTP_REQUESTS_PATH` — where OTP requests are kept (default `/app/data/otp-requests.json`). Each request is its own file beside this path, `otp-requests.<id>.json`, and its answer is `otp-requests.<id>.answer.json`.
   - `OTP_SETTINGS_PATH` — the selected channel (default `/app/data/otp-settings.json`)
 - Every file is owner-only (`0600`) and appears whole or not at all. A request's answer is written once, by whichever comes first: the portal with your code, or the importer marking the request expired. The OTP files need a data volume with hard links. Local disks and Docker volumes have them; an SMB/CIFS share such as Azure Files does not. There a bank login that asks for an app code fails with the storage error (it does not fall back to Telegram), and the portal answers a submitted code with 500.
-- Run the same release on the importer and the portal, and do not roll back: an earlier release does not see this release's requests. See [Upgrade both services together](configuration/portal.md#upgrade-both-services-together).
+- Run the same release on the importer and the portal, and do not roll back: an earlier release does not see this release's requests. See [Upgrade both services together](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md#upgrade-both-services-together).
 
 ### Portal endpoints (used by the app)
 

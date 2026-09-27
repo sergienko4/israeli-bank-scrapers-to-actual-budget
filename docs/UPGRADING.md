@@ -51,7 +51,7 @@ login waiting for it times out, and the next import asks again.
 **Migration:** add the importer's data volume to the portal service, at the same
 path (`importer-data:/app/data` in `docker-compose.yml`), and keep it off
 SMB/CIFS. See
-[Least privilege](configuration/portal.md#least-privilege-importer-reads-portal-writes).
+[Least privilege](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md#least-privilege-importer-reads-portal-writes).
 
 ### An empty `CREDENTIALS_ENCRYPTION_PASSWORD` no longer hides `CONFIG_PASSWORD`
 
