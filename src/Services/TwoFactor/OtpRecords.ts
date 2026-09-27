@@ -3,9 +3,16 @@
  *
  * <p>Both are read without trusting them. Anything that is not exactly what
  * this code writes reads as absent, so a damaged or foreign file can neither
- * surface as a request nor hand the importer a code.
+ * surface as a request nor hand the importer a code. That includes a time
+ * JSON can spell but a clock never reaches, such as `1e999`, and a code the
+ * portal's own route would have refused.
  * @module
  */
+
+import { OTP_CODE_PATTERN } from '../../Contract/Otp.js';
+
+/** The only codes an answer may hand the importer. */
+const WELL_FORMED_CODE = new RegExp(OTP_CODE_PATTERN);
 
 /** A pending OTP request, as the importer publishes it. */
 export interface IOtpRequest {
@@ -35,6 +42,15 @@ export type OtpPoll =
   | { readonly kind: 'expired' };
 
 /**
+ * Reports whether a stored value is a time a clock can reach.
+ * @param value - The stored value.
+ * @returns Whether it is a finite number.
+ */
+function isInstant(value: unknown): value is number {
+  return Number.isFinite(value);
+}
+
+/**
  * Reads a request out of a request file's records.
  * @param records - The records of a healthy request file.
  * @param id - The id the file is named under.
@@ -44,7 +60,7 @@ export type OtpPoll =
 export function requestIn(records: StoredRecords, id: string): IOtpRequest | false {
   const { bankId, createdAt, deadline } = records;
   if (records.id !== id || typeof bankId !== 'string') return false;
-  if (typeof createdAt !== 'number' || typeof deadline !== 'number') return false;
+  if (!isInstant(createdAt) || !isInstant(deadline)) return false;
   return { id, bankId, createdAt, deadline };
 }
 
@@ -65,10 +81,11 @@ export function answerRecords(request: IOtpRequest, outcome: OtpOutcome): Record
  * Reads the user's code out of an answer file's records.
  * @param records - The records of a healthy answer file.
  * @param request - The request the answer must belong to.
- * @returns The code, or false unless the answer is this request's and holds text.
+ * @returns The code, or false unless the answer is this request's and holds a
+ *   well-formed code.
  */
 export function codeIn(records: StoredRecords, request: IOtpRequest): string | false {
   const { code } = records;
   if (records.requestId !== request.id || typeof code !== 'string') return false;
-  return code;
+  return WELL_FORMED_CODE.test(code) ? code : false;
 }

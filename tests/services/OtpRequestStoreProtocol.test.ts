@@ -185,6 +185,8 @@ describe('OtpRequestStore: listing pending requests', () => {
     ['a deadline that is not a number', JSON.stringify({ id: UNKNOWN_ID, bankId: 'b', createdAt: NOW, deadline: 'soon' })],
     ['a creation time that is not a number', JSON.stringify({ id: UNKNOWN_ID, bankId: 'b', createdAt: 'now', deadline: NOW + TTL })],
     ['an id that is not a string', JSON.stringify({ id: 7, bankId: 'b', createdAt: NOW, deadline: NOW + TTL })],
+    ['a deadline that never comes', `{"id":"${UNKNOWN_ID}","bankId":"b","createdAt":${String(NOW)},"deadline":1e999}`],
+    ['a creation time that is not finite', `{"id":"${UNKNOWN_ID}","bankId":"b","createdAt":-1e999,"deadline":${String(NOW + TTL)}}`],
   ])('skips a request file holding %s', (_label, contents) => {
     const { store, fileSystem } = makeStore();
     fileSystem.seedFile(requestPath(UNKNOWN_ID), contents, 0o600);
@@ -362,6 +364,27 @@ describe('OtpRequestStore: polling for the answer', () => {
     const numeric = JSON.stringify({ requestId: created.id, deadline: NOW + TTL, code: 123_456 });
     fileSystem.seedFile(answerPath(created.id), numeric, 0o600);
     expect(store.poll(created, NOW + 1)).toEqual({ kind: 'waiting' });
+  });
+
+  it.each([
+    ['empty', ''],
+    ['led by letters', 'ab123456'],
+    ['too short', '123'],
+    ['too long', '123456789'],
+  ])('keeps waiting while the answer\'s code is %s', (_label, code) => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    const answer = JSON.stringify({ requestId: created.id, deadline: NOW + TTL, code });
+    fileSystem.seedFile(answerPath(created.id), answer, 0o600);
+    expect(store.poll(created, NOW + 1)).toEqual({ kind: 'waiting' });
+  });
+
+  it.each(['1234', '12345678'])('hands over a %s code at the edge of the allowed length', (code) => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    const answer = JSON.stringify({ requestId: created.id, deadline: NOW + TTL, code });
+    fileSystem.seedFile(answerPath(created.id), answer, 0o600);
+    expect(store.poll(created, NOW + 1)).toEqual({ kind: 'code', code });
   });
 
   it('keeps waiting while the answer cannot be read', () => {

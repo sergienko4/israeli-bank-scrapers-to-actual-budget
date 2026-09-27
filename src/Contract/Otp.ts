@@ -40,10 +40,13 @@ export const OTP_SUBMIT_PARAMS = Type.Object({
   }),
 });
 
+/** A one-time code: 4-8 digits, nothing else. The importer reads by it too. */
+export const OTP_CODE_PATTERN = String.raw`^\d{4,8}$`;
+
 /** The POST /api/otp/:id request body. */
 export const OTP_SUBMIT_BODY = Type.Object({
   code: Type.String({
-    pattern: String.raw`^\d{4,8}$`,
+    pattern: OTP_CODE_PATTERN,
     description: 'The 4-8 digit code the user entered. Never logged.',
   }),
 });
