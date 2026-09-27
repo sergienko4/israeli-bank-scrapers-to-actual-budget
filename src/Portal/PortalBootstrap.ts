@@ -20,7 +20,10 @@ import { startPortal } from './PortalServer.js';
 export default async function bootPortal(): Promise<boolean> {
   const configPath = process.env.PORTAL_CONFIG_PATH?.trim() || resolveConfigPath();
   const loaded = new ConfigLoader(configPath).loadRaw();
-  if (isFail(loaded)) { getLogger().error('Portal: cannot load config'); return false; }
+  if (isFail(loaded)) {
+    getLogger().error(`Portal: cannot load config: ${loaded.message}`);
+    return false;
+  }
   if (!isPortalEnabled(loaded.data)) { getLogger().info('🖥️  Config portal disabled'); return false; }
   try {
     const runtime = resolvePortalRuntime(loaded.data);

@@ -8,7 +8,7 @@
  * the syscalls are real and the strings have to line up.
  */
 
-import { mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -85,5 +85,17 @@ describe('SecureJsonStore on a real filesystem', () => {
     if (!swept.success) throw new Error(`sweep failed: ${swept.message}`);
     expect(swept.data.removedCount).toBe(0);
     expect(statSync(join(directory, 'tokens.json')).isFile()).toBe(true);
+  });
+
+  it('lets exactly one of two exclusive commits claim a name, owner-only and whole', () => {
+    const directory = makeDirectory();
+    const answerPath = join(directory, 'answer.json');
+    const first = new SecureJsonStore(createNodeFileSystem(), answerPath).commitNew({ code: '111111' });
+    const second = new SecureJsonStore(createNodeFileSystem(), answerPath).commitNew({ expired: true });
+    expect(first.success).toBe(true);
+    expect(second.success ? 'published' : second.status).toBe('EEXIST');
+    expect(JSON.parse(readFileSync(answerPath, 'utf8'))).toEqual({ code: '111111' });
+    expect(statSync(answerPath).mode & 0o777).toBe(0o600);
+    expect(readdirSync(directory)).toEqual(['answer.json']);
   });
 });

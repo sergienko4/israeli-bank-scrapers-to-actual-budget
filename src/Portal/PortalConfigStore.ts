@@ -6,8 +6,10 @@
 
 import { ConfigLoader } from '../Config/ConfigLoader.js';
 import { ConfigValidator, type IValidationResult } from '../Config/ConfigValidator.js';
-import ConfigWriter from '../Config/ConfigWriter.js';
+import type ConfigWriter from '../Config/ConfigWriter.js';
+import openConfigWriter from '../Config/ConfigWriterWiring.js';
 import ConfigurationError from '../Errors/ConfigurationError.js';
+import type { ISweepReport } from '../Storage/StoreTypes.js';
 import type { IImporterConfig, Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
@@ -106,7 +108,7 @@ export default class PortalConfigStore {
       throw new ConfigurationError(reason);
     }
     this._config = loaded.data;
-    this._writer = new ConfigWriter(configPath);
+    this._writer = openConfigWriter(configPath);
   }
 
   /**
@@ -173,5 +175,13 @@ export default class PortalConfigStore {
     if (isFail(written)) return written;
     this._config = merged;
     return succeed({ saved: true as const });
+  }
+
+  /**
+   * Deletes the staged files a save killed mid-way left beside the config.
+   * @returns How many were removed, or why the directory could not be read.
+   */
+  public sweepStagedLeftovers(): Procedure<ISweepReport> {
+    return this._writer.sweepStagedLeftovers();
   }
 }

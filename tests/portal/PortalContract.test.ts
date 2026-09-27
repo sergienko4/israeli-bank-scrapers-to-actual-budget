@@ -24,10 +24,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { CONFIG_BODY } from '../../src/Contract/Config.js';
 import { DEVICE_BODY } from '../../src/Contract/Devices.js';
 import { MANIFEST_BODY } from '../../src/Contract/Manifest.js';
-import { OTP_SETTINGS, OTP_SUBMIT_BODY, PENDING_OTP_BODY } from '../../src/Contract/Otp.js';
+import { OTP_SETTINGS, OTP_SUBMIT_BODY, OTP_SUBMIT_PARAMS, PENDING_OTP_BODY } from '../../src/Contract/Otp.js';
 import { STATUS_BODY, type RunEntry } from '../../src/Contract/Status.js';
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { buildPortal } from '../../src/Portal/PortalServer.js';
+import UUID_PATTERN from '../../src/Utils/IdPatterns.js';
 import { fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
 
 let app: FastifyInstance;
@@ -171,6 +172,14 @@ describe('portal contract conformance', () => {
     expect(Value.Check(STATUS_BODY, negative)).toBe(false);
   });
 
+  it('accepts as a request id exactly what the OTP store names its files by', () => {
+    // The contract may import only TypeBox, so it spells the UUID grammar out
+    // again. This pins that copy to the one the store builds file names from.
+    expect(OTP_SUBMIT_PARAMS.properties.id.pattern).toBe(UUID_PATTERN.source);
+    expect(Value.Check(OTP_SUBMIT_PARAMS, { id: '0f0e0d0c-0b0a-4908-8706-050403020100' })).toBe(true);
+    expect(Value.Check(OTP_SUBMIT_PARAMS, { id: 'req-1' })).toBe(false);
+  });
+
   it('keeps line breaks out of a code and a push token', () => {
     // `$` in a JavaScript pattern is already end-of-input, so a trailing
     // newline is refused; the character classes are what stop one appearing in
@@ -186,9 +195,13 @@ describe('portal contract conformance', () => {
     // The schema check above proves the pattern. It says nothing about whether
     // the route is wired to it, or whether the refusal reaches the client as
     // the portal's own `{ error }` body rather than Fastify's "Bad Request".
-    const code = await postJson('/api/otp/req-1', { code: '123456\n' });
+    const code = await postJson('/api/otp/0f0e0d0c-0b0a-4908-8706-050403020100', { code: '123456\n' });
     expect(code.statusCode).toBe(400);
     expect(JSON.parse(code.body)).toEqual({ error: 'Invalid OTP code' });
+
+    const id = await postJson('/api/otp/req-1', { code: '123456' });
+    expect(id.statusCode).toBe(400);
+    expect(JSON.parse(id.body)).toEqual({ error: 'Invalid OTP request id' });
 
     const device = await postJson('/api/devices', { token: 'ExponentPushToken[a\nb]' });
     expect(device.statusCode).toBe(400);

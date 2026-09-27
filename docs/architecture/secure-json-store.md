@@ -1,8 +1,9 @@
 # SecureJsonStore threat model
 
-`src/Storage/SecureJsonStore.ts` persists bank authentication tokens, and four
-more files on the data volume: the import history, pending OTP requests, the
-OTP channel and push device tokens. A token is a bearer
+`src/Storage/SecureJsonStore.ts` persists bank authentication tokens, and five
+more kinds of file on the data volume: the import history, OTP requests and
+their answers (one file each), the OTP channel, push device tokens and the
+portal's app sign-ins. A token is a bearer
 credential: anything that can read it can act as the account holder until it
 expires, and one of them is valid for ten years. The store is therefore
 written defensively, and this page records what each guard is for.
@@ -37,11 +38,11 @@ disclosure, **D**enial of service, **E**levation of privilege.
 | 3 | Path swapped between check and use | S, T | `lstat`-then-`open` lets a different file be parsed | One lookup only: absence is learned from the open's errno | unit (fake) |
 | 4 | Non-regular file at path | S, D | Directory or device served as JSON | `fstat` and `isFile()` on the descriptor | unit + integration |
 | 5 | FIFO at store path | D | Blocking `open` hangs the whole process | `O_NONBLOCK` | integration (child process) |
-| 6 | Hard link to a victim file | E | `fchmod` re-permissions a file we do not own | Skip the chmod when `nlink > 1`, and withhold the records | integration |
+| 6 | Hard link to a victim file | E | `fchmod` re-permissions a file we do not own | Skip the chmod when `nlink > 1`, and withhold the records — unless the inode is already `0600` and owned by this process, which needs no change. `commitNew` leaves exactly that until it removes its stage, and for good if the removal fails; refusing it would turn a published OTP answer into an expiry | unit (fake) + integration |
 | 7 | World-readable store | I | Secrets readable by any local user | Exclusive create with mode `0600`; `fchmod` on read, and a refusal withholds the records | both |
 | 8 | Oversized file | D | Multi-GB file exhausts memory on read | Reject above 8 MiB, size taken from `fstat` | unit (fake) |
 | 9 | Malformed JSON | D | Parse failure aborts the run | Classified as damage: quarantine, then a cold login | unit (fake) |
-| 10 | Prototype pollution | T | `__proto__` or `constructor` keys in the file | Null-prototype parse target; non-plain records refused | unit (fake) |
+| 10 | Prototype pollution | T | `__proto__` or `constructor` keys in the file | Null-prototype parse target; non-plain records refused. A top-level `__proto__` is left out and the file reads as `stripped`, so every store moves it aside before its next write instead of dropping that part silently. The per-request OTP files are never rewritten, so a stripped one reads as absent: it is not listed, takes no code and hands none over | unit (fake) |
 | 11 | Secret in error text or logs | I | Token surfaces in a log line or a typed error | Errors carry path and errno only, never values; asserted | unit (fake) |
 | 12 | Quarantine name collision | T | Two failures in the same millisecond, the second clobbering the first salvage | Timestamp plus a random UUID | unit (fake) |
 | 13 | Crash between quarantine and commit | T | Canonical path left absent, siblings stranded | Stage first, quarantine second, then rename. Partial: a *failure* between the two renames rolls the predecessor back (threat 16); a `SIGKILL` between them cannot be undone and leaves a cold start with the damaged bytes preserved under the quarantine name | unit (fake) |
@@ -60,8 +61,10 @@ disclosure, **D**enial of service, **E**levation of privilege.
 | 26 | Input re-read after it was checked | T, D | Validating the caller's object and then reading it again to copy it leaves a gap a proxy can drive through: the checked read returned `CLEAN`, the copying read returned `EVIL`, and the store wrote the second. The same applies to the request itself — `shouldQuarantine` was read *after* a credential had been staged, so a getter throwing there left that credential on disk with nothing left running to remove it | Read everything exactly once, up front, into a value the store owns. Values are lifted out of property descriptors rather than fetched again, so there is no second read to disagree with the first | unit (fake) |
 | 27 | `toJSON` inherited rather than owned | T, D | Refusing an own `toJSON` does nothing about one inherited from `Object.prototype`. Any prototype pollution elsewhere in the process rewrites every commit: a store of real credentials serialises as `{"hijacked":true}` and reports success | Copy into a `null`-prototype object. There is no prototype left to inherit from, so the question cannot arise rather than being checked for | unit (fake) |
 | 28 | Sibling property edits the records after handover | T, D | Reading `records` and then `shouldQuarantine` takes a reference to the caller's object and *then* runs caller code. A getter on `shouldQuarantine` can delete every key of the object `records` just handed over and add its own, so the set copied afterwards is not the set supplied — a commit of `{token}` wrote `{injected}` and reported success | Copy the records before reading the second property. Nothing the caller controls runs between the reference being taken and the copy being made; `shouldQuarantine` is still read before the filesystem is touched, so a getter that throws there still cannot orphan a staged credential | unit (fake) |
-| 29 | Quarantine preserves a world-readable mode | I | Threat 7's `fchmod` runs on `read`, but `commit` is public and does not require a `read` first. `commit({ shouldQuarantine: true })` against a `0644` predecessor moved it aside with its mode intact, and nothing ever revisits a quarantined file: a secret-bearing copy readable by every local user, kept indefinitely under a name nobody checks | Harden the opened descriptor before the rename, and abort the commit when it cannot be made owner-only — including a hard-linked predecessor, which `read` refuses for the same reason. The file then stays at the canonical path, where the next run looks at it again. `read` refuses such a store at any size, so it never reports as `damaged` — advice to quarantine — a file the quarantine would refuse. A symlink is still quarantined without following it, so its target's mode is never touched | unit (fake) |
+| 29 | Quarantine preserves a world-readable mode | I | Threat 7's `fchmod` runs on `read`, but `commit` is public and does not require a `read` first. `commit({ shouldQuarantine: true })` against a `0644` predecessor moved it aside with its mode intact, and nothing ever revisits a quarantined file: a secret-bearing copy readable by every local user, kept indefinitely under a name nobody checks | Harden the opened descriptor before the rename, and abort the commit when it cannot be made owner-only — including a hard-linked predecessor that others can read, which `read` refuses for the same reason. The file then stays at the canonical path, where the next run looks at it again. `read` refuses such a store at any size, so it never reports as `damaged` — advice to quarantine — a file the quarantine would refuse. A symlink is still quarantined without following it, so its target's mode is never touched | unit (fake) |
 | 30 | Refused close reported as success | D, R | The port reports whether a descriptor actually closed, and all three places the store opened one — read, quarantine screen, sweep — discarded the answer. `read` returned a clean snapshot after the platform said the descriptor would not close, so the one signal that could explain descriptor exhaustion never reached anyone | One helper, `closeAfter`, owns every descriptor: it releases it even if inspection throws, and a refused close fails the inspection it belonged to, keeping an earlier failure as the one reported. It does not retry — Linux frees the descriptor before reporting the error, so a retry could close one since handed to other code. The sweep leaves such a file for the next pass, as it already does for any file it cannot inspect | unit (fake) |
+| 31 | Two writers race for one name | T | A file that two processes may both create, such as the answer to an OTP request, loses the first writer's data when the second publishes with a rename, which replaces whatever holds the name: an accepted code silently becomes an expiry | `commitNew` stages and verifies the records exactly as `commit` does, then publishes with `link(2)`, which fails with `EEXIST` on a taken name (a symlink there included) and makes the file appear whole or not at all. The loser learns that it lost, and its staged copy is removed. The winner's stage is unlinked best-effort; if that fails, a second name keeps the contents, so the OTP store removes a settled request's staged answers and the sweep takes any that survive an hour after their last write. It needs a filesystem with hard links | unit (fake) + integration |
+| 32 | A writer gives up while the name is free | T | When the importer cannot record an OTP expiry, the answer's name stays free, so a submit already past its check of the request can publish after the importer has given up: the portal reports the code accepted and nothing uses it. Checking the request again before publishing would still race | A handshake, one flag each: the importer removes the request file, then looks at the answer once more and takes any code there; the portal, having published, reads the request again and, when it is gone and the answer is not the importer's tombstone, removes its code and answers `404`. At least one side sees the other, so a code is used or refused. It needs the importer to be able to remove the request file; a code the importer took just as its tombstone failed can still get `404` | unit (fake) |
 
 Threats 18 through 28 are one bug wearing eleven masks, and the fix for the
 eleventh is what should have been the fix for the first. The store kept
@@ -98,30 +101,64 @@ filesystem fault injector, and faking it would mean mocking `node:fs` — the
 one thing this design exists to avoid. Flushing the *directory entry* after
 the rename is deliberately not done: an unpersisted rename leaves the previous
 store in place, which is already one of the two outcomes `commit` promises.
+For `commitNew` an unpersisted link frees the name again rather than
+restoring an earlier file, because there was none. That is acceptable for
+the OTP files it publishes: the importer waiting on them runs on the same
+host and dies with the same power loss, so nothing is left to read them.
 
 ## Legacy list read
 
 Some stores were written as a bare JSON list before they moved onto this
 primitive. Such a store passes a `legacyList` name to the constructor: the
-import history passes `entries`, the device tokens `tokens` and the OTP
-requests `requests`. A file whose root is a list is then read as one healthy
+import history passes `entries`, and the device tokens and the app sign-ins
+(`app-tokens.json`) pass `tokens`. A file whose root is a list is then read as one healthy
 record of that name, and the next commit writes the records form, so nothing
 the list held is lost. Nothing else changes: any other root that is not an
 object is still damage, and threat 24 still refuses a list at the root of
 anything written. A store that passes no name, such as the bank-token store,
 still reads a list as damage.
 
+## Config saves use the port, not the store
+
+The portal's `ConfigWriter` saves `config.json` and `credentials.json` through
+the same `IFileSystem` port, with the same staging: a random name, created
+exclusively and owner-only, flushed, then renamed into place. It does not use
+`SecureJsonStore`, because the store's guarantees are for one file and a
+config save is two:
+
+- **Two files are one save.** Both carry one `saveId`, and the loader refuses
+  a pair whose ids differ, so a save killed between its renames is refused
+  rather than loaded half-new.
+- **The two renames are still two steps.** Node has no call that renames two
+  files at once. When the second rename fails, the writer puts the previous
+  credentials back from a copy it took for that save. A `SIGKILL` between the
+  renames cannot be rolled back; the `saveId` check is what catches it, and the
+  copy is left as a staged file for the operator.
+- **No quarantine.** A config that does not load stops the portal at startup,
+  so a damaged config is never overwritten by a save.
+- **Nothing but a regular file is copied.** A symlink, directory or FIFO at
+  `credentials.json` stops the save before either rename.
+
 ## Staging leftovers
 
 A crash between staging and publishing leaves a staged file behind, and it can
 hold a secret. The store never sweeps on its own; each process sweeps, when
 it starts, only the stores it writes. An import sweeps the import history and
-the OTP requests. The portal sweeps the OTP channel, the device tokens and the
-OTP requests. A process that only reads a store never sweeps it, because a
+the OTP requests. The portal sweeps the OTP channel, the device tokens, the OTP
+requests, the app sign-ins, and the staged copies of `config.json` and
+`credentials.json` it saves. A process that only reads a store never sweeps it, because a
 leftover there may belong to a writer that is still running. Only staged files
 older than an hour are removed, so a sweep leaves alone a file another process
 is writing now. A failed sweep is a warning, and a missing directory counts as
 clean.
+
+The OTP sweep goes further, because an OTP request and its answer are finished
+files, not leftovers, and an answer can hold an unused code. Each goes an hour
+after the deadline it carries, or an hour after its last write when no
+deadline can be read. The combined `otp-requests.json` an older release wrote
+goes an hour after its last write too. Nothing else beside the OTP files is
+touched: a name only counts as an OTP file when the id in it is a lower-case
+UUID.
 
 ## Test layers
 

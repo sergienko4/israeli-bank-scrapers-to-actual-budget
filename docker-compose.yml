@@ -125,6 +125,11 @@ services:
   #     # Same ./config DIRECTORY as the importer, but READ-WRITE (the portal is
   #     # the only writer). credentials.json rides along inside the directory.
   #     - ./config:/app/config:rw
+  #     # Same data volume as the importer: the two services pass OTP codes,
+  #     # the OTP channel, push device tokens and the import history through it.
+  #     # It needs hard links, so keep it a Docker volume or a local disk, not
+  #     # an SMB/CIFS share.
+  #     - importer-data:/app/data
 
 # Named volumes for data persistence (survive container recreation)
 volumes:

@@ -4,12 +4,17 @@ import { fail, succeed } from '../../src/Types/Index.js';
 import { hashPassword } from '../../src/Portal/PortalPassword.js';
 import { fakeImporterConfig } from '../helpers/factories.js';
 
-const { loadRaw, startPortal } = vi.hoisted(() => ({ loadRaw: vi.fn(), startPortal: vi.fn() }));
+const { loadRaw, startPortal, mockLogger } = vi.hoisted(() => ({
+  loadRaw: vi.fn(),
+  startPortal: vi.fn(),
+  mockLogger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
 
 vi.mock('../../src/Config/ConfigLoader.js', () => ({
   ConfigLoader: class { public loadRaw = loadRaw; },
 }));
 vi.mock('../../src/Portal/PortalServer.js', () => ({ startPortal }));
+vi.mock('../../src/Logger/Index.js', () => ({ getLogger: () => mockLogger }));
 
 const { default: bootPortal } = await import('../../src/Portal/PortalBootstrap.js');
 
@@ -25,6 +30,14 @@ describe('bootPortal', () => {
   it('returns false when config cannot be loaded', async () => {
     loadRaw.mockReturnValue(fail('boom'));
     expect(await bootPortal()).toBe(false);
+  });
+
+  it('logs why the config could not be loaded, so the operator can recover', async () => {
+    loadRaw.mockReturnValue(fail('config.json and credentials.json come from different saves'));
+    await bootPortal();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Portal: cannot load config: config.json and credentials.json come from different saves',
+    );
   });
 
   it('returns false when the portal is disabled', async () => {

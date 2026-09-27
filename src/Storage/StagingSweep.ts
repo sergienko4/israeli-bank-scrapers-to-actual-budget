@@ -53,17 +53,25 @@ function deleteStaged(fileSystem: IFileSystem, stagedPath: string): boolean {
 }
 
 /**
- * Decides from an open descriptor whether a staged file was abandoned.
+ * The moment a file's age is counted from, read from its open descriptor.
+ *
+ * <p>Called only for a regular file, so an implementation may read it.
+ */
+export type AgeReference = (file: IOpenFile) => number;
+
+/**
+ * Decides from an open descriptor whether a file has outlived the grace period.
  * @param file - Descriptor for the candidate.
+ * @param ageFrom - The moment its age is counted from.
  * @returns Whether it is a regular file older than the grace period.
  */
-function isAbandoned(file: IOpenFile): Procedure<boolean> {
-  const isStale = Date.now() - file.modifiedAtMs > STALE_STAGING_AGE_MS;
-  return succeed(file.isRegularFile && isStale);
+function isStale(file: IOpenFile, ageFrom: AgeReference): Procedure<boolean> {
+  const isOld = file.isRegularFile && Date.now() - ageFrom(file) > STALE_STAGING_AGE_MS;
+  return succeed(isOld);
 }
 
 /**
- * Removes one staged file if it is a stale regular file.
+ * Removes one file if it is a regular file older than the grace period.
  *
  * <p>Anything that will not open — a symlink refused by `O_NOFOLLOW`, a
  * file another process holds exclusively — is left alone, because its age
@@ -71,15 +79,30 @@ function isAbandoned(file: IOpenFile): Procedure<boolean> {
  * whose descriptor would not close is left alone for the same reason: the
  * inspection did not finish cleanly, and the next sweep will try again.
  * @param fileSystem - Injected filesystem access.
+ * @param path - Candidate found alongside the store.
+ * @param ageFrom - The moment its age is counted from.
+ * @returns Whether the file was deleted.
+ */
+export function removeWhenStale(
+  fileSystem: IFileSystem,
+  path: string,
+  ageFrom: AgeReference,
+): boolean {
+  const opened = fileSystem.openForRead(path);
+  if (!opened.success) return false;
+  const stale = closeAfter(fileSystem, opened.data, (file) => isStale(file, ageFrom));
+  if (!stale.success || !stale.data) return false;
+  return deleteStaged(fileSystem, path);
+}
+
+/**
+ * Removes one staged file if it went untouched for the grace period.
+ * @param fileSystem - Injected filesystem access.
  * @param stagedPath - Candidate found alongside the store.
  * @returns Whether the file was deleted.
  */
-function removeIfAbandoned(fileSystem: IFileSystem, stagedPath: string): boolean {
-  const opened = fileSystem.openForRead(stagedPath);
-  if (!opened.success) return false;
-  const abandoned = closeAfter(fileSystem, opened.data, isAbandoned);
-  if (!abandoned.success || !abandoned.data) return false;
-  return deleteStaged(fileSystem, stagedPath);
+export function removeIfAbandoned(fileSystem: IFileSystem, stagedPath: string): boolean {
+  return removeWhenStale(fileSystem, stagedPath, (file) => file.modifiedAtMs);
 }
 
 /**
@@ -100,9 +123,32 @@ export default function sweepStaged(
   for (const name of abandoned) {
     if (removeIfAbandoned(fileSystem, name)) removedCount += 1;
   }
-  const report: ISweepReport = {
-    removedCount,
-    summary: `Removed ${String(removedCount)} abandoned staged files`,
-  };
+  const report = sweepReportOf(removedCount);
   return succeed(report);
+}
+
+/**
+ * Builds the report a sweep returns, so every sweep words it the same way.
+ * @param removedCount - How many staged files the sweep deleted.
+ * @returns The report, free of stored values.
+ */
+export function sweepReportOf(removedCount: number): ISweepReport {
+  return { removedCount, summary: `Removed ${String(removedCount)} abandoned staged files` };
+}
+
+/**
+ * Deletes the fixed-name `<store>.tmp` an older release staged at, if it
+ * was abandoned.
+ *
+ * <p>Older releases staged at that one predictable name, which the UUID
+ * grammar of {@link isStagingPath} never matches, so without this a file
+ * killed mid-save would keep its plaintext secrets for ever. The rule is the
+ * same as for current staged files: only a regular file untouched for the
+ * grace period goes, and a symlink or directory there is left alone.
+ * @param fileSystem - Injected filesystem access.
+ * @param storePath - Canonical path of the file the old name staged for.
+ * @returns Whether the old staged file was deleted.
+ */
+export function sweepLegacyStaging(fileSystem: IFileSystem, storePath: string): boolean {
+  return removeIfAbandoned(fileSystem, `${storePath}.tmp`);
 }

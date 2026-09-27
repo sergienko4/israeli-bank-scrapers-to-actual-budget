@@ -3,7 +3,6 @@
  * Follows Single Responsibility Principle: Only handles configuration loading
  */
 
-import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { ConfigurationError } from '../Errors/ErrorTypes.js';
@@ -18,6 +17,7 @@ import registerConfigSecrets from './ConfigSecretValues.js';
 import deepMerge from './Loaders/ConfigMerger.js';
 import loadFromEnvironment from './Loaders/EnvLoader.js';
 import readJsonFile from './Loaders/JsonFileReader.js';
+import readOneSave, { type IConfigPair } from './SaveMarker.js';
 import OPTIONAL_SECTION_VALIDATORS from './Validators/OptionalSectionValidators.js';
 
 export interface IConfigLoader {
@@ -115,19 +115,17 @@ export class ConfigLoader implements IConfigLoader {
 
   /**
    * Attempts to load configuration from config.json (and optional credentials.json).
+   * A pair left by an interrupted save, one file from each of two saves, is
+   * refused rather than merged.
    * @returns Procedure containing the parsed IImporterConfig, or failure if absent/unreadable.
    */
   private loadFromFile(): Procedure<IImporterConfig> {
-    if (!existsSync(this._configPath)) {
-      getLogger().info('📄 config.json not found, using environment variables');
-      return fail('config.json not found', { status: 'not-found' });
-    }
     try {
-      getLogger().info('📄 Loading configuration from config.json');
-      const config = readJsonFile(this._configPath);
-      const credResult = this.loadCredentials();
-      const merged = credResult.success
-        ? deepMerge(config, credResult.data) : config;
+      const read = readOneSave(() => this.readPair());
+      if (!read.success) return ConfigLoader.configNotFound();
+      const pair = read.data;
+      const merged = pair.credentials
+        ? deepMerge(pair.config, pair.credentials) : pair.config;
       return succeed(merged);
     } catch (error: unknown) {
       if (error instanceof ConfigurationError) {
@@ -139,18 +137,38 @@ export class ConfigLoader implements IConfigLoader {
   }
 
   /**
+   * Reports that there is no config.json, so the environment is used instead.
+   * @returns The not-found failure the caller falls back on.
+   */
+  private static configNotFound(): Procedure<IImporterConfig> {
+    getLogger().info('📄 config.json not found, using environment variables');
+    return fail('config.json not found', { status: 'not-found' });
+  }
+
+  /**
+   * Reads config.json and, when there is one, the credentials.json beside it.
+   * Only a missing file counts as absent; any other read failure throws.
+   * @returns Both files as parsed, or a failure when there is no config.json.
+   */
+  private readPair(): Procedure<IConfigPair> {
+    const config = readJsonFile(this._configPath);
+    if (!config.success) return config;
+    getLogger().info('📄 Loading configuration from config.json');
+    const credResult = this.loadCredentials();
+    const credentials = credResult.success ? credResult.data : undefined;
+    return succeed({ config: config.data, credentials });
+  }
+
+  /**
    * Loads a separate credentials.json from the same directory as config.json.
-   * @returns Procedure containing the parsed credentials config, or failure if not found.
+   * @returns The parsed credentials, or a failure when there is no such file.
    */
   private loadCredentials(): Procedure<IImporterConfig> {
     const configDir = dirname(this._configPath);
     const credPath = join(configDir, 'credentials.json');
-    if (!existsSync(credPath)) {
-      return fail('credentials.json not found');
-    }
-    getLogger().info('🔑 Loading credentials from credentials.json');
     const credentials = readJsonFile(credPath);
-    return succeed(credentials);
+    if (credentials.success) getLogger().info('🔑 Loading credentials from credentials.json');
+    return credentials;
   }
 
   // ─── Validation ───

@@ -34,13 +34,19 @@ export const PENDING_OTP_BODY = Type.Object({
 
 /** Path parameters for the submit route. */
 export const OTP_SUBMIT_PARAMS = Type.Object({
-  id: Type.String({ minLength: 1, description: 'Id of the request being answered.' }),
+  id: Type.String({
+    pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    description: 'Id of the request being answered: the lower-case UUID the pending list gave.',
+  }),
 });
+
+/** A one-time code: 4-8 digits, nothing else. The importer reads by it too. */
+export const OTP_CODE_PATTERN = String.raw`^\d{4,8}$`;
 
 /** The POST /api/otp/:id request body. */
 export const OTP_SUBMIT_BODY = Type.Object({
   code: Type.String({
-    pattern: String.raw`^\d{4,8}$`,
+    pattern: OTP_CODE_PATTERN,
     description: 'The 4-8 digit code the user entered. Never logged.',
   }),
 });

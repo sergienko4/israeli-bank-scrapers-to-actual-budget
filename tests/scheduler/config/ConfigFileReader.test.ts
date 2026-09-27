@@ -1,13 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { isFail, isSuccess } from '../../../src/Types/ProcedureHelpers.js';
+import { fail, isFail, isSuccess, succeed } from '../../../src/Types/ProcedureHelpers.js';
 
-vi.mock('node:fs', () => ({
-  existsSync: vi.fn(),
-  readFileSync: vi.fn(),
-}));
-
-const { mockIsEncrypted, mockGetPassword, mockDecrypt } = vi.hoisted(() => ({
+const { mockReadText, mockIsEncrypted, mockGetPassword, mockDecrypt } = vi.hoisted(() => ({
+  mockReadText: vi.fn(),
   mockIsEncrypted: vi.fn(),
   mockGetPassword: vi.fn(),
   mockDecrypt: vi.fn(),
@@ -18,7 +14,7 @@ vi.mock('../../../src/Config/ConfigEncryption.js', () => ({
   decryptConfig: mockDecrypt,
 }));
 
-import * as fs from 'node:fs';
+vi.mock('../../../src/Config/Loaders/ConfigFileText.js', () => ({ default: mockReadText }));
 
 import readJsonOrEncrypted from '../../../src/Scheduler/Config/ConfigFileReader.js';
 
@@ -28,19 +24,21 @@ describe('ConfigFileReader.readJsonOrEncrypted', () => {
     mockIsEncrypted.mockReset();
     mockGetPassword.mockReset();
     mockDecrypt.mockReset();
+    mockReadText.mockReset();
   });
 
   it('returns a failure when the file is absent', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(false);
+    mockReadText.mockReturnValue(
+      fail('Could not read /app/config.json: ENOENT', { status: 'ENOENT' }),
+    );
     const result = readJsonOrEncrypted('/app/config.json');
     expect(result.success).toBe(false);
     if (!isFail(result)) return;
-    expect(result.message).toContain('File not found');
+    expect(result.message).toBe('File not found: /app/config.json');
   });
 
   it('parses plain JSON when the payload is not encrypted', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ foo: 'bar' }));
+    mockReadText.mockReturnValue(succeed(JSON.stringify({ foo: 'bar' })));
     mockIsEncrypted.mockReturnValue(false);
     const result = readJsonOrEncrypted('/app/config.json');
     expect(result.success).toBe(true);
@@ -50,8 +48,7 @@ describe('ConfigFileReader.readJsonOrEncrypted', () => {
 
   it('decrypts and returns the inner JSON when the payload is encrypted', () => {
     const encryptedRaw = JSON.stringify({ alg: 'aes-256-gcm', payload: 'opaque' });
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(encryptedRaw);
+    mockReadText.mockReturnValue(succeed(encryptedRaw));
     mockIsEncrypted.mockReturnValue(true);
     mockGetPassword.mockReturnValue('secret');
     mockDecrypt.mockReturnValue(JSON.stringify({ banks: { leumi: {} } }));
@@ -63,8 +60,7 @@ describe('ConfigFileReader.readJsonOrEncrypted', () => {
   });
 
   it('fails when the encrypted payload has no available password', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ alg: 'aes' }));
+    mockReadText.mockReturnValue(succeed(JSON.stringify({ alg: 'aes' })));
     mockIsEncrypted.mockReturnValue(true);
     mockGetPassword.mockReturnValue(undefined);
     const result = readJsonOrEncrypted('/app/config.json');
@@ -73,15 +69,10 @@ describe('ConfigFileReader.readJsonOrEncrypted', () => {
     expect(result.message).toContain('Encryption password required');
   });
 
-  it('wraps unexpected read errors in a failure procedure', () => {
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockImplementation(() => {
-      throw new Error('disk burned down');
-    });
+  it('forwards any other read failure unchanged', () => {
+    const unreadable = fail('Could not read /app/config.json: EACCES', { status: 'EACCES' });
+    mockReadText.mockReturnValue(unreadable);
     const result = readJsonOrEncrypted('/app/config.json');
-    expect(result.success).toBe(false);
-    if (!isFail(result)) return;
-    expect(result.message).toContain('Failed to read /app/config.json');
-    expect(result.message).toContain('disk burned down');
+    expect(result).toBe(unreadable);
   });
 });

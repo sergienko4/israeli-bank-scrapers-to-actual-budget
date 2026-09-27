@@ -75,6 +75,48 @@ export default class FakeFileSystem implements IFileSystem {
    */
   public readonly stagedPaths: string[] = [];
 
+  /** Errnos for single numbered calls, keyed by `<operation>#<call number>`. */
+  private readonly _failuresOnCall = new Map<string, string>();
+
+  /** 1-based `createExclusive` call numbers that stage only half a payload. */
+  private readonly _shortWriteCalls = new Set<number>();
+
+  /**
+   * Fails one numbered call of an operation and no other.
+   *
+   * <p>Needed because a two-file save stages twice and renames twice. Failing
+   * "once" always hits the first call, so the second stage or rename — the
+   * cases that must clean up what the first one left — could not be reached.
+   * @param operation - Operation name, as recorded in {@link calls}.
+   * @param callNumber - Which call fails, counting from 1.
+   * @param errno - Errno the failing call reports.
+   * @returns Nothing.
+   */
+  public failOnCall(operation: string, callNumber: number, errno: string): void {
+    this._failuresOnCall.set(`${operation}#${String(callNumber)}`, errno);
+  }
+
+  /**
+   * Makes one numbered `createExclusive` call stage half its payload.
+   *
+   * <p>A real `write(2)` may commit fewer bytes than asked and still succeed,
+   * which is why the port reports a byte count at all.
+   * @param callNumber - Which create is cut short, counting from 1.
+   * @returns Nothing.
+   */
+  public shortWriteOnCall(callNumber: number): void {
+    this._shortWriteCalls.add(callNumber);
+  }
+
+  /**
+   * Counts how many times an operation has been called so far.
+   * @param operation - Operation name, as recorded in {@link calls}.
+   * @returns The count, including the call in progress.
+   */
+  private callCount(operation: string): number {
+    return this.calls.filter((name) => name === operation).length;
+  }
+
   /**
    * Creates a regular file, replacing any existing name.
    * @param name - Name to create.
@@ -175,6 +217,16 @@ export default class FakeFileSystem implements IFileSystem {
   }
 
   /**
+   * Reports whether an inode has another name and is not owner-only.
+   * @param entry - Entry whose inode is checked.
+   * @returns Whether changing its mode would change a file someone else sees.
+   */
+  private isSharedWithOthers(entry: IEntry): boolean {
+    const permissions = (entry.inode?.mode ?? 0) & 0o777;
+    return this.linkCountOf(entry) > 1 && permissions !== OWNER_ONLY;
+  }
+
+  /**
    * Counts the names sharing one entry's inode.
    * @param entry - Entry whose inode is counted.
    * @returns The number of names pointing at that inode.
@@ -194,6 +246,9 @@ export default class FakeFileSystem implements IFileSystem {
    * @returns A failure when armed, otherwise undefined.
    */
   private forced(operation: string): ReturnType<typeof fail> | undefined {
+    const callKey = `${operation}#${String(this.callCount(operation))}`;
+    const onCall = this._failuresOnCall.get(callKey);
+    if (onCall !== undefined) return fail(`forced ${operation} failure`, { status: onCall });
     const once = this.forcedFailuresOnce.get(operation);
     if (once !== undefined) {
       this.forcedFailuresOnce.delete(operation);
@@ -262,13 +317,16 @@ export default class FakeFileSystem implements IFileSystem {
 
   /**
    * Restricts an open file to owner-only access, refusing shared inodes.
+   *
+   * <p>A shared inode that is already owner-only is accepted as it is. The
+   * fake has no users, so every file counts as this process's own.
    * @param file - Descriptor previously returned by `openForRead`.
    * @returns The mode now in effect, or a failure explaining why it stands.
    */
   public restrictToOwner(file: IOpenFile): Procedure<IHardenOutcome> {
     this.calls.push('restrictToOwner');
     const current = this._open.get(file.descriptor);
-    if (current && this.linkCountOf(current) > 1) {
+    if (current && this.isSharedWithOthers(current)) {
       return fail('Refusing to change permissions on a hard-linked file', { status: 'EMLINK' });
     }
     const forced = this.forced('restrictToOwner');
@@ -309,8 +367,10 @@ export default class FakeFileSystem implements IFileSystem {
     if (this._entries.has(filePath)) {
       return fail(`Could not create ${filePath}: EEXIST`, { status: 'EEXIST' });
     }
-    this.seedFile(filePath, contents, OWNER_ONLY);
-    return succeed({ bytesWritten: Buffer.byteLength(contents, 'utf8') });
+    const isShort = this._shortWriteCalls.has(this.callCount('createExclusive'));
+    const written = isShort ? contents.slice(0, Math.floor(contents.length / 2)) : contents;
+    this.seedFile(filePath, written, OWNER_ONLY);
+    return succeed({ bytesWritten: Buffer.byteLength(written, 'utf8') });
   }
 
   /**
@@ -331,6 +391,30 @@ export default class FakeFileSystem implements IFileSystem {
     this._entries.set(toPath, entry);
     this._entries.delete(fromPath);
     return succeed({ path: toPath });
+  }
+
+  /**
+   * Publishes a staged name under a free one, then removes the stage.
+   *
+   * <p>As the real adapter's `link(2)` does, the final name is added beside
+   * the stage, whose removal is best-effort: a forced `remove` failure leaves
+   * the file with both names.
+   * @param stagePath - Staged name to publish.
+   * @param finalPath - Name to publish it under, which must be free.
+   * @returns The final path, or a failure carrying the errno.
+   */
+  public publishExclusive(stagePath: string, finalPath: string): Procedure<IMoveOutcome> {
+    this.calls.push('publishExclusive');
+    const forced = this.forced('publishExclusive');
+    if (forced) return forced;
+    const entry = this._entries.get(stagePath);
+    if (!entry) return fail(`Could not publish ${finalPath}: ENOENT`, { status: 'ENOENT' });
+    if (this._entries.has(finalPath)) {
+      return fail(`Could not publish ${finalPath}: EEXIST`, { status: 'EEXIST' });
+    }
+    this._entries.set(finalPath, entry);
+    this.remove(stagePath);
+    return succeed({ path: finalPath });
   }
 
   /**

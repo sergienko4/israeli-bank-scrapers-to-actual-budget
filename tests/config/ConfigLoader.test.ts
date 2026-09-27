@@ -8,6 +8,10 @@ import {
 } from '../../src/Types/Index.js';
 
 vi.mock('fs');
+// Config reads open a descriptor; drive them through this suite's fs mock.
+vi.mock('../../src/Config/Loaders/ConfigFileText.js', async () => ({
+  default: (await import('../helpers/configTextFromFsMock.js')).default,
+}));
 
 // UUID is asserted in tests like "expect(result.data.actual.budget.syncId).toBe(VALID_UUID)"
 const VALID_UUID = '12345678-1234-1234-1234-123456789abc';
@@ -663,6 +667,129 @@ describe('ConfigLoader', () => {
     it('rejects a bank missing a required credential', () => {
       const config = makeValidConfig({ banks: { discount: { num: 'AB12CD', targets: [DEFAULT_TARGET] } as IBankConfig } });
       expect(isFail(ConfigLoader.validateBootable(config))).toBe(true);
+    });
+  });
+
+  describe('a config pair from two saves', () => {
+    const SAVE_A = '0f0e0d0c-0b0a-4908-8706-050403020100';
+    const SAVE_B = '1f1e1d1c-1b1a-4918-8716-151413121110';
+    const MIXED_PAIR = 'config.json and credentials.json come from different saves '
+      + '(a save was interrupted). Check both files, then remove `saveId` from both to accept them.';
+
+    /**
+     * Tags a parsed file with a save id, or leaves it unmarked.
+     *
+     * @param file - The file's parsed contents.
+     * @param saveId - The id to add; undefined leaves the file unmarked.
+     * @returns The file as JSON.
+     */
+    function marked(file: object, saveId: unknown): string {
+      return JSON.stringify(saveId === undefined ? file : { ...file, saveId });
+    }
+
+    /**
+     * Mocks a split pair whose files carry the given ids, one per read; the
+     * last id of each list repeats for any later read. The credentials of
+     * read n carry `num: READn`, so a test can tell which read was loaded.
+     *
+     * @param configIds - The ids config.json carries, read by read.
+     * @param credIds - The ids credentials.json carries, read by read.
+     */
+    function mockPair(configIds: readonly unknown[], credIds: readonly unknown[]): void {
+      const settings = makeValidConfig();
+      const reads = { config: 0, credentials: 0 };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((p) => {
+        if (!String(p).includes('credentials')) {
+          return marked(settings, configIds[Math.min(reads.config++, configIds.length - 1)]);
+        }
+        const credId = credIds[Math.min(reads.credentials++, credIds.length - 1)];
+        const credentials = { banks: { discount: { password: TEST_CREDENTIAL, num: `READ${reads.credentials}` } } };
+        return marked(credentials, credId);
+      });
+    }
+
+    it.each([
+      ['a marked credentials file beside an unmarked config', [undefined], [SAVE_A]],
+      ['a marked config beside unmarked credentials', [SAVE_A], [undefined]],
+      ['two different save ids', [SAVE_A], [SAVE_B]],
+      ['one id that is not a UUID', ['not-a-uuid'], ['not-a-uuid']],
+      ['one id that is not a string', [42], [42]],
+    ])('refuses %s', (_label, configIds, credIds) => {
+      mockPair(configIds, credIds);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(isFail(result)).toBe(true);
+      if (!isFail(result)) return;
+      expect(result.message).toBe(MIXED_PAIR);
+      expect(result.status).toBe('config-error');
+    });
+
+    it.each([
+      ['load', (loader: ConfigLoader) => loader.load()],
+      ['loadRaw', (loader: ConfigLoader) => loader.loadRaw()],
+      ['loadWithoutEnvOverrides', (loader: ConfigLoader) => loader.loadWithoutEnvOverrides()],
+    ])('refuses a mixed pair through %s too', (_label, loadWith) => {
+      mockPair([SAVE_A], [SAVE_B]);
+      const result = loadWith(new ConfigLoader('/test/config.json'));
+      expect(isFail(result)).toBe(true);
+    });
+
+    it('loads an unmarked pair as before', () => {
+      mockPair([undefined], [undefined]);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(isSuccess(result)).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data.banks.discount.password).toBe(TEST_CREDENTIAL);
+    });
+
+    it('loads a pair from one save, without the save id', () => {
+      mockPair([SAVE_A], [SAVE_A]);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(isSuccess(result)).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data).not.toHaveProperty('saveId');
+      expect(result.data.banks.discount.password).toBe(TEST_CREDENTIAL);
+    });
+
+    it('does not check, but still strips, a marked config with no credentials file', () => {
+      mockPair([SAVE_A], [SAVE_B]);
+      vi.mocked(fs.existsSync).mockImplementation((p) => !String(p).includes('credentials'));
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(isSuccess(result)).toBe(true);
+      if (!isSuccess(result)) return;
+      expect(result.data).not.toHaveProperty('saveId');
+    });
+
+    it('reads both files once more, and loads the pair that has settled', () => {
+      mockPair([SAVE_A, SAVE_B], [SAVE_B]);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(isSuccess(result)).toBe(true);
+      expect(vi.mocked(fs.readFileSync)).toHaveBeenCalledTimes(4);
+      if (!isSuccess(result)) return;
+      expect(result.data.banks.discount.num).toBe('READ2');
+    });
+
+    it('reads both files only once more before refusing', () => {
+      mockPair([SAVE_A], [SAVE_B]);
+      const result = new ConfigLoader('/test/config.json').load();
+      expect(isFail(result)).toBe(true);
+      expect(vi.mocked(fs.readFileSync)).toHaveBeenCalledTimes(4);
+    });
+
+    it('leaves a config.json that holds no object to the checks that follow', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((p) => (String(p).includes('credentials')
+        ? JSON.stringify({ banks: {}, saveId: SAVE_A }) : '5'));
+      const result = new ConfigLoader('/test/config.json').loadRaw();
+      expect(isFail(result)).toBe(true);
+      if (!isFail(result)) return;
+      expect(result.message).toBe(MIXED_PAIR);
+    });
+
+    it('reads a matching pair only once', () => {
+      mockPair([SAVE_A], [SAVE_A]);
+      new ConfigLoader('/test/config.json').load();
+      expect(vi.mocked(fs.readFileSync)).toHaveBeenCalledTimes(2);
     });
   });
 

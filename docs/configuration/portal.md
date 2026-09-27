@@ -88,8 +88,9 @@ Both the importer and the portal read config from a **directory** mounted at
 `/app/config` (holding `config.json` and the optional `credentials.json`), not
 from individual single-file bind mounts. This is required, not cosmetic:
 
-- The portal saves **atomically** — it writes a temp file, then renames it over
-  the target. A rename swaps the file's *inode*.
+- The portal saves **atomically** — it writes the new file under a random name,
+  created exclusively and owner-only, then renames it over the target. A rename
+  swaps the file's *inode*.
 - With a **single-file** bind mount, the importer container is pinned to the
   original inode, so it would **never see the portal's edits**, and the portal's
   rename can fail with `EBUSY` (you cannot rename over a mountpoint).
@@ -128,9 +129,15 @@ portal:
     # - CREDENTIALS_ENCRYPTION_PASSWORD=your_encryption_password
   volumes:
     - ./config:/app/config:rw                # READ-WRITE — the portal is the only writer
+    - importer-data:/app/data                # the importer's data volume, shared
 ```
 
 - `credentials.json` rides along inside the same directory — no separate mount.
+- `importer-data` is the importer's data volume. The two services pass OTP
+  codes, the OTP channel, push device tokens and the import history through
+  it, so the portal must mount it at the same `/app/data` path. Keep it a
+  Docker volume or a local disk: it needs hard links, which an SMB/CIFS share
+  does not have.
 - `PORTAL_HOST=0.0.0.0` lets the container accept connections; the published
   port (`8080:8080`) is what you reach from your LAN at
   `http://<docker-host>:8080`.
@@ -143,6 +150,39 @@ portal:
 > mounts above plus `CONFIG_PATH`/`PORTAL_CONFIG_PATH`. The code still defaults
 > to `/app/config.json`, so an existing single-file importer-only deployment
 > keeps working — but the portal's saves only propagate with a directory mount.
+
+### If a save fails or is interrupted
+
+A save writes `credentials.json` first, then `config.json`, and gives both the
+same `saveId`. A failed save answers `Failed to persist configuration`, and the
+portal log names the cause:
+
+- If `credentials.json` is a symlink, a directory or a FIFO, the save stops
+  before either file is replaced. Put a regular file there.
+- If `config.json` cannot be replaced, the portal puts the previous
+  credentials back, so the two files still belong together. If even that
+  fails, the log says where the previous credentials remain.
+
+A portal killed between the two renames leaves the new `credentials.json`
+beside the previous `config.json`. Both the importer and the portal then refuse
+to start with:
+
+```text
+config.json and credentials.json come from different saves (a save was
+interrupted). Check both files, then remove `saveId` from both to accept them.
+```
+
+The previous credentials are still beside them, in an owner-only
+`credentials.json.<random>.tmp` file (encrypted if your credentials are). The
+portal removes such files only when it starts, so this one survives. Either:
+
+- **Go back to the previous save:** move that file over `credentials.json`. If
+  there is no such file, the save was the first to split out the secrets:
+  delete the new `credentials.json`, since the previous `config.json` still
+  holds them.
+- **Keep the new credentials:** remove `saveId` from both files, then delete
+  the `.tmp` file. Decrypt an encrypted `credentials.json` first (see
+  [Encrypted config](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/encrypted-config.md)).
 
 ## Expose over HTTPS
 
@@ -462,9 +502,12 @@ curl -s http://127.0.0.1:8080/api/status -H "authorization: Bearer $TOKEN"
 ```
 
 The importer writes the audit log and the portal reads it, so both must agree on
-the file. Set **`AUDIT_LOG_PATH`** to a path on a **shared volume** (for example
-`/app/config/audit-log.json`) on both the importer and the portal service; it
-defaults to `/app/data/audit-log.json`. The payload is a redacted summary — no
+the file. It defaults to `/app/data/audit-log.json`, on the data volume both
+services mount at `/app/data` (see
+[Least privilege](#least-privilege-importer-reads-portal-writes)). If you set
+**`AUDIT_LOG_PATH`**, set the same path on both services, on a volume the
+importer can write; `/app/config` does not work, because the importer mounts it
+read-only. The payload is a redacted summary — no
 account numbers, transaction details, or credentials. A stored run or bank row
 whose fields do not match this response, such as one a hand edit left, is left
 out of the list; the file itself is not changed.
@@ -474,21 +517,37 @@ out of the list; the file itself is not changed.
 `POST /api/devices` with `{ "token": "ExponentPushToken[…]" }` registers the
 mobile app for push; `DELETE /api/devices` with the same body unregisters it.
 On each import the importer sends a redacted result to every registered device
-via Expo Push. Set **`DEVICE_TOKENS_PATH`** to a shared-volume path (for example
-`/app/config/devices.json`) on both the portal (writer) and the importer
-(reader), and keep `notifications.enabled: true`.
+via Expo Push. The portal writes the device list and the importer reads it, at
+**`DEVICE_TOKENS_PATH`** (default `/app/data/devices.json`, on the shared data
+volume). If you set it, set the same path on both services. Keep
+`notifications.enabled: true`.
 
 ### Upgrade both services together
 
 Run the same release on the importer and the portal, and do not roll back.
-The import history, `devices.json` and `otp-requests.json` are now saved as a
-JSON object (for example `{"entries": […]}`) instead of a bare list. This
-release reads the old lists and converts each file on its next write, but an
-earlier release reads the new files as empty. An older portal that registers a
-device would then rewrite `devices.json` with only that device.
+The import history and `devices.json` are now saved as a JSON object (for
+example `{"entries": […]}`) instead of a bare list. This release reads the old
+lists and converts each file on its next write, but an earlier release reads
+the new files as empty. An older portal that registers a device would then
+rewrite `devices.json` with only that device.
+
+App OTP requests now live in one file per request beside `otp-requests.json`,
+and an earlier release does not see them. A request pending during the upgrade
+is not carried over: the bank login waiting for it times out, and the next
+import asks again. The old `otp-requests.json` is removed an hour after its
+last write.
 
 These files are owner-only (`0600`), so both services must run as the same
 user. The shipped image runs both as `node`.
+
+The portal's app sign-ins (`app-tokens.json`) are saved as `{"tokens": […]}`
+too, and are owner-only. This release reads the old list, so the upgrade signs
+no phone out. A rollback signs every phone out: an earlier release reads the new
+file as holding no sign-ins, and each phone must sign in again.
+
+Run one portal process per `app-tokens.json`. Two portals writing the same file
+can undo each other's latest change: a phone can be signed out, or a sign-in
+you revoked can come back.
 
 ### Token lifetime and security
 
@@ -527,10 +586,17 @@ Reach your own importer over a **private tunnel** instead:
   only do so behind auth + HTTPS.
 - Secrets are masked in the UI and preserved on save unless you change them.
 - Saves are split into `config.json` (settings) + `credentials.json` (secrets);
-  credentials are re-encrypted when `CREDENTIALS_ENCRYPTION_PASSWORD` is set.
+  credentials are re-encrypted when `CREDENTIALS_ENCRYPTION_PASSWORD` (or the
+  legacy `CONFIG_PASSWORD`) is set.
 - The runtime files the portal shares with the importer (the import history,
   device tokens and OTP files) are owner-only (`0600`) and replaced atomically;
   see *Upgrade both services together* above.
+- `app-tokens.json` keeps only a SHA-256 hash of each app refresh token. If the
+  portal cannot read it, an app sign-in or refresh fails with a server error
+  instead of treating the file as empty and signing every phone out.
+- A server error never carries its cause: it answers a fixed message such as
+  `Internal server error` or `Failed to persist configuration`, and the cause
+  (a file path, an error code) goes to the portal log.
 - Session cookies are HMAC-signed with `sessionSecret`; the portal refuses to
   start on a missing/weak secret (under 16 chars or a known placeholder).
 - Sessions are bound to the credentials in force when you signed in: changing the

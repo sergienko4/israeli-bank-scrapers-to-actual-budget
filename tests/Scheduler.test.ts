@@ -18,6 +18,10 @@ vi.mock('../src/Logger/Index.js', () => ({
 
 // ── fs mock ──────────────────────────────────────────────────────────────────
 vi.mock('node:fs');
+// Config reads open a descriptor; drive them through this suite's fs mock.
+vi.mock('../src/Config/Loaders/ConfigFileText.js', async () => ({
+  default: (await import('./helpers/configTextFromFsMock.js')).default,
+}));
 
 // ── child_process mock ───────────────────────────────────────────────────────
 vi.mock('node:child_process');

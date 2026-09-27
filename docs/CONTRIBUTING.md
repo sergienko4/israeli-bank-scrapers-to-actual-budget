@@ -47,7 +47,7 @@ After each release, the docs are automatically published to GitHub Pages:
 
 All contributors must follow [GUIDELINES.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/GUIDELINES.md). Key rules:
 
-- **Max 10 lines per method** — extract helpers
+- **Aim for 10 lines per method** — extract helpers; ESLint enforces 20 (10 in some folders)
 - **Zero `: any` types** — CI enforces this
 - **OCP maps over if/else** — use `Record<string, ...>` dispatch
 - **SOLID principles** — single responsibility, open/closed

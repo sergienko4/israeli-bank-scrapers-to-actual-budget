@@ -1,224 +1,382 @@
 /**
- * File-backed registry of pending app-OTP requests, shared across the process
- * boundary between the import child (which needs an OTP during a 2FA bank login)
- * and the portal (which receives the code the user enters in the mobile app).
+ * File-backed registry of app-OTP requests, shared across the process boundary
+ * between the import child (which needs an OTP during a 2FA bank login) and the
+ * portal (which receives the code the user enters in the mobile app).
  *
- * The import child {@link create}s a request and polls {@link get} until the
- * portal {@link submit}s a code; it then {@link remove}s the entry. Codes live
- * in the file only briefly, between submit and consumption, and are never logged
- * by this module. A missing or unreadable file reads as no requests.
+ * <p>Every request is its own file, and every request has at most one answer.
+ * The importer {@link create}s a request, publishing it whole under a name no
+ * other request can take, and never rewrites it. The answer is published
+ * exclusively too, by whichever side is first: the portal {@link submit}s the
+ * user's code, or the importer, {@link poll}ing at the deadline, records the
+ * expiry. The loser learns that it lost, so a code is either used or refused,
+ * never accepted and then dropped. If the importer cannot record the expiry,
+ * it gives the request up: it removes the request file, then looks at the
+ * answer once more and takes any code there. The portal, having published a
+ * code, reads the request again, and withdraws the code when the request is
+ * gone and the importer has not used it. A used code is replaced by a tombstone:
+ * the code leaves the disk but the answer's name stays taken, so no second
+ * code is accepted for the same request.
  *
- * <p>The file sits on {@link SecureJsonStore}: it is owner-only, a write
- * replaces it whole so a concurrent reader never observes a partial file, and
- * a file holding anything this store would not write back (including a
- * malformed request it skips) is moved aside on the next write instead of
- * being overwritten. The requests are stored as one `requests` record; a bare
- * list an older release wrote is read as that record and written back in the
- * records form. A write that cannot read the current file, or cannot save the
- * new one, throws.
+ * <p>Two importers, or an importer and the portal, therefore never write the
+ * same file, and no read-modify-write of shared state remains to race. Every
+ * file is owner-only and read without trusting it. Codes are never logged by
+ * this module, and no error it raises carries one.
  *
- * The importer scrapes banks sequentially, so at most one OTP request is active
- * per importer at a time, and the portal attaches a code only once per request;
- * concurrent read-modify-write conflicts on the shared file therefore do not
- * arise in normal single-importer operation.
+ * <p>Publishing to a free name needs hard links, so the data volume must
+ * support them; on one that does not, create and submit fail rather than
+ * racing.
  */
 import { randomUUID } from 'node:crypto';
 
 import StorageError from '../../Errors/StorageError.js';
 import type { IFileSystem } from '../../Storage/FileSystemPort.js';
 import SecureJsonStore from '../../Storage/SecureJsonStore.js';
-import type { IStoreSnapshot,ISweepReport } from '../../Storage/StoreTypes.js';
-import type { Procedure } from '../../Types/Index.js';
+import type { ISweepReport } from '../../Storage/StoreTypes.js';
+import type { IProcedureFailure, Procedure } from '../../Types/Index.js';
 import { succeed } from '../../Types/ProcedureHelpers.js';
+import UUID_PATTERN from '../../Utils/IdPatterns.js';
+import OtpFileNames from './OtpFileNames.js';
+import OtpFileRemoval from './OtpFileRemoval.js';
+import sweepOtpFiles from './OtpFileSweep.js';
+import {
+  answerRecords, codeIn, type IOtpRequest, isConsumedIn, type OtpPoll, requestIn, trustedRecords,
+} from './OtpRecords.js';
 
-/** A single pending (or code-carrying) OTP request. */
-export interface IOtpRequest {
-  /** Opaque request id the app submits its code against. */
-  id: string;
-  /** Bank id the OTP is for (shown to the user). */
-  bankId: string;
-  /** Creation time, epoch ms. */
-  createdAt: number;
-  /** Expiry time, epoch ms; the request is dead once now exceeds it. */
-  deadline: number;
-  /** The submitted OTP code, present only after the app submits it. */
-  code?: string;
-}
+export type { IOtpRequest, OtpPoll } from './OtpRecords.js';
 
-/** The record the requests are stored under. */
-const REQUESTS_RECORD = 'requests';
+/** The poll result while no answer has arrived. */
+const WAITING: OtpPoll = { kind: 'waiting' };
 
-/** The requests as read, and whether the file holds only what this store writes. */
-interface ILoadedRequests {
-  readonly requests: IOtpRequest[];
-  readonly isIntact: boolean;
-}
+/** The poll result once the request expired unanswered. */
+const EXPIRED: OtpPoll = { kind: 'expired' };
 
 /**
- * Reports whether a snapshot holds exactly what this store writes.
+ * Builds the error a failed read or write raises, naming its errno.
  *
- * <p>An absent file is intact: there is nothing to preserve, so the next
- * write does not look for something to move aside.
- * @param snapshot - The store's snapshot.
- * @param requests - The well-formed requests read from it.
- * @returns True when the file is absent, or holds only well-formed requests.
+ * <p>The failure's message carries paths and errnos only; no code reaches it.
+ * @param action - What could not be done.
+ * @param failure - Why.
+ * @returns The error to throw.
  */
-function isIntactSnapshot(snapshot: IStoreSnapshot, requests: readonly IOtpRequest[]): boolean {
-  if (snapshot.state !== 'healthy') return snapshot.state === 'absent';
-  const stored = snapshot.records[REQUESTS_RECORD];
-  const isOnlyRecord = Object.keys(snapshot.records).length === 1;
-  return isOnlyRecord && Array.isArray(stored) && stored.length === requests.length;
+function storageError(action: string, failure: IProcedureFailure): StorageError {
+  return new StorageError(`${action} (${failure.status}): ${failure.message}`);
 }
 
-/** Persists pending OTP requests to a JSON file on a shared volume. */
+/** Persists app-OTP requests and their answers as files on a shared volume. */
 export default class OtpRequestStore {
-  private readonly _store: SecureJsonStore;
+  private readonly _fileSystem: IFileSystem;
+
+  private readonly _names: OtpFileNames;
+
+  private readonly _removal: OtpFileRemoval;
 
   /**
-   * Binds the store to one path on one filesystem.
+   * Binds the store to one directory on one filesystem.
    * @param fileSystem - Injected filesystem access.
-   * @param filePath - Absolute path of the OTP-requests JSON file.
+   * @param basePath - Absolute `OTP_REQUESTS_PATH`; every file name derives from it.
    */
-  constructor(fileSystem: IFileSystem, filePath: string) {
-    this._store = new SecureJsonStore(fileSystem, filePath, { legacyList: REQUESTS_RECORD });
+  constructor(fileSystem: IFileSystem, basePath: string) {
+    this._fileSystem = fileSystem;
+    this._names = new OtpFileNames(basePath);
+    this._removal = new OtpFileRemoval(fileSystem, this._names);
   }
 
   /**
-   * Creates a new pending OTP request and persists it.
+   * Publishes a new request as its own file.
    * @param bankId - The bank the OTP is for.
    * @param ttlMs - Time-to-live in milliseconds before the request expires.
    * @param now - Current time in epoch ms (defaults to Date.now()).
-   * @returns The created request (without a code).
-   * @throws StorageError when the current file cannot be read or the new one saved.
+   * @returns The created request.
+   * @throws StorageError when the request cannot be published.
    */
   public create(bankId: string, ttlMs: number, now: number = Date.now()): IOtpRequest {
-    const request: IOtpRequest = {
-      id: randomUUID(), bankId, createdAt: now, deadline: now + ttlMs,
-    };
-    const loaded = this.loadForWrite();
-    const kept = loaded.requests.filter((entry) => entry.deadline > now);
-    this.save([...kept, request], loaded.isIntact);
+    const id = randomUUID();
+    const request: IOtpRequest = { id, bankId, createdAt: now, deadline: now + ttlMs };
+    const committed = this.requestStore(id).commitNew({ ...request });
+    if (!committed.success) throw storageError('Could not save the OTP request', committed);
     return request;
   }
 
   /**
-   * Lists the pending requests that have not expired and have no code yet.
+   * Lists the live requests that have no answer yet, oldest first.
    * @param now - Current time in epoch ms (defaults to Date.now()).
-   * @returns The live pending requests (codes are never populated here).
+   * @returns The pending requests; none when the directory cannot be read.
    */
   public pending(now: number = Date.now()): IOtpRequest[] {
-    return this.readAll().filter((entry) => entry.code === undefined && entry.deadline > now);
+    const listed = this._fileSystem.listNames(this._names.directory);
+    if (!listed.success) return [];
+    const ids = this._names.unansweredIds(listed.data);
+    const live = ids.map((id) => this.liveRequest(id, now));
+    const requests = live.filter((request): request is IOtpRequest => request !== false);
+    return requests.sort((first, second) => first.createdAt - second.createdAt);
   }
 
   /**
-   * Reads a single request by id.
-   * @param id - The request id.
-   * @returns The request, or null when it is absent.
-   */
-  public get(id: string): IOtpRequest | null {
-    return this.readAll().find((entry) => entry.id === id) ?? null;
-  }
-
-  /**
-   * Attaches a submitted code to a live pending request.
+   * Publishes the user's code as a live request's answer.
+   *
+   * <p>Once the code is published, the request is read again: an importer
+   * that gives the request up removes the request file before its last look
+   * at the answer, so a missing request means that look may be over. The
+   * code is then withdrawn, unless the importer has already used it.
    * @param id - The request id to submit against.
    * @param code - The OTP code entered by the user.
    * @param now - Current time in epoch ms (defaults to Date.now()).
-   * @returns True when a live pending request was updated, else false.
-   * @throws StorageError when the current file cannot be read or the new one saved.
+   * @returns True when the code was accepted; false when there is no such live
+   *   request, it already has an answer, or the importer gave it up while the
+   *   code was being published.
+   * @throws StorageError when the request cannot be read or the answer saved,
+   *   or, after withdrawing the code, when the request cannot be read again.
    */
   public submit(id: string, code: string, now: number = Date.now()): boolean {
-    const loaded = this.loadForWrite();
-    const target = loaded.requests.find((entry) => entry.id === id);
-    if (!target || target.code !== undefined || target.deadline <= now) {
-      return false;
-    }
-    const next = loaded.requests.map((entry) => (entry.id === id ? { ...entry, code } : entry));
-    this.save(next, loaded.isIntact);
-    return true;
+    if (!UUID_PATTERN.test(id)) return false;
+    const read = this.readRequest(id);
+    if (!read.success) throw storageError('Could not read the OTP request', read);
+    if (read.data === false || read.data.deadline <= now) return false;
+    const answer = answerRecords(read.data, { code });
+    const published = this.answerStore(id).commitNew(answer);
+    if (published.success) return this.confirm(read.data);
+    if (published.status === 'EEXIST') return false;
+    throw storageError('Could not save the OTP code', published);
   }
 
   /**
-   * Removes a request (used after a code is consumed or the request expires).
-   * @param id - The request id to remove.
-   * @throws StorageError when the current file cannot be read or the new one saved.
+   * Looks for the answer to a request, settling it once there is one or the
+   * deadline is reached.
+   *
+   * <p>A code ends the request: it is returned, the request file removed and
+   * the code replaced by a tombstone, all best-effort, so a code that has
+   * arrived is never withheld. Settling, with a code or an expiry, also
+   * removes any staged copy of the answer a publish left behind. At the
+   * deadline the importer races the portal for the answer: winning records
+   * the expiry, and losing means the portal published a code in time, which
+   * is returned. If the expiry cannot be recorded, the importer gives the
+   * request up, still taking a code that has arrived.
+   * @param request - The request {@link create} returned.
+   * @param now - Current time in epoch ms (defaults to Date.now()).
+   * @returns Whether to keep waiting, the code, or that the request expired.
+   * @throws StorageError when the expiry cannot be recorded and no code has
+   *   arrived, or the answer that beat it cannot be read; the request file is
+   *   removed first, so the portal stops offering it.
    */
-  public remove(id: string): void {
-    const loaded = this.loadForWrite();
-    const remaining = loaded.requests.filter((entry) => entry.id !== id);
-    this.save(remaining, loaded.isIntact);
+  public poll(request: IOtpRequest, now: number = Date.now()): OtpPoll {
+    const polled = now < request.deadline ? this.awaitCode(request) : this.expire(request);
+    if (polled.kind !== 'waiting') this._removal.retire(request.id);
+    return polled;
   }
 
   /**
-   * Deletes staged files a killed write left beside the file.
+   * Removes the OTP files nothing will read again.
    * @returns How many were removed, or why the directory could not be read.
    */
   public sweepStagedLeftovers(): Procedure<ISweepReport> {
-    return this._store.sweepStagedLeftovers();
+    return sweepOtpFiles(this._fileSystem, this._names);
   }
 
   /**
-   * Reads the stored requests for a reader.
-   * @returns The well-formed requests, or none when the file cannot be read.
+   * Reads a request that is still live.
+   * @param id - The request id.
+   * @param now - Current time in epoch ms.
+   * @returns The request, or false when it cannot be read, is not well formed, or is dead.
    */
-  private readAll(): IOtpRequest[] {
-    const loaded = this.load();
-    return loaded.success ? loaded.data.requests : [];
+  private liveRequest(id: string, now: number): IOtpRequest | false {
+    const read = this.readRequest(id);
+    if (!read.success || read.data === false) return false;
+    return read.data.deadline > now && read.data;
   }
 
   /**
-   * Reads the file once: the well-formed requests, and whether it holds only
-   * what this store writes.
-   * @returns The loaded requests, or why the file could not be assessed.
+   * Reads a request file.
+   *
+   * <p>An absent, damaged or stripped file yields no records, so it holds no
+   * well-formed request either.
+   * @param id - The request id, known to be a UUID.
+   * @returns The request, false when it is absent or not well formed, or why
+   *   the file could not be read.
    */
-  private load(): Procedure<ILoadedRequests> {
-    const snapshot = this._store.read();
+  private readRequest(id: string): Procedure<IOtpRequest | false> {
+    const snapshot = this.requestStore(id).read();
     if (!snapshot.success) return snapshot;
-    const stored: unknown = snapshot.data.records[REQUESTS_RECORD];
-    const list: unknown[] = Array.isArray(stored) ? stored : [];
-    const requests = list.filter((entry) => OtpRequestStore.isRequest(entry));
-    return succeed({ requests, isIntact: isIntactSnapshot(snapshot.data, requests) });
+    const records = trustedRecords(snapshot.data);
+    const request = requestIn(records, id);
+    return succeed(request);
   }
 
   /**
-   * Reads the file before a write, refusing to write over one it cannot read.
-   * @returns The loaded requests.
-   * @throws StorageError when the file cannot be assessed.
+   * Takes the code if one has arrived before the deadline.
+   *
+   * <p>An answer that cannot be read is tried again on the next poll; at the
+   * deadline {@link expire} reports it rather than calling it an expiry.
+   * @param request - The request being polled.
+   * @returns The code, or that the importer should keep waiting.
    */
-  private loadForWrite(): ILoadedRequests {
-    const loaded = this.load();
-    if (!loaded.success) {
-      throw new StorageError(`Could not read the OTP requests before saving: ${loaded.message}`);
+  private awaitCode(request: IOtpRequest): OtpPoll {
+    const code = this.readCode(request);
+    if (!code.success) return WAITING;
+    return this.settle(request, code.data, WAITING);
+  }
+
+  /**
+   * Records the expiry as the answer, unless the portal published a code first.
+   * @param request - The request whose deadline was reached.
+   * @returns The code the portal published in time, or the expiry.
+   * @throws StorageError when the expiry cannot be recorded and no code has
+   *   arrived, or the answer that beat it cannot be read, after removing the
+   *   request file.
+   */
+  private expire(request: IOtpRequest): OtpPoll {
+    const answer = answerRecords(request, { expired: true });
+    const expiry = this.answerStore(request.id).commitNew(answer);
+    if (expiry.success) return EXPIRED;
+    if (expiry.status === 'EEXIST') return this.takeWinningAnswer(request);
+    return this.giveUp(request, expiry);
+  }
+
+  /**
+   * Gives up a request whose expiry could not be recorded, still taking a
+   * code that has arrived.
+   *
+   * <p>The request file goes before the last look at the answer. A submit
+   * that publishes after that look therefore finds the request gone, and
+   * withdraws its code, so no code is accepted that the importer will not use.
+   * @param request - The request whose deadline was reached.
+   * @param failure - Why the expiry could not be recorded.
+   * @returns The code the answer holds.
+   * @throws StorageError naming the expiry failure when the answer holds no
+   *   code, or cannot be read.
+   */
+  private giveUp(request: IOtpRequest, failure: IProcedureFailure): OtpPoll {
+    this._removal.removeRequest(request.id);
+    const code = this.readCode(request);
+    if (!code.success || code.data === false) {
+      throw storageError('Could not record the OTP expiry', failure);
     }
-    return loaded.data;
+    return this.settle(request, code.data, EXPIRED);
   }
 
   /**
-   * Replaces the file with the given requests.
-   * @param requests - The full request list to persist.
-   * @param isIntact - Whether the file being replaced held only what this store writes.
-   * @throws StorageError when the new file cannot be saved.
+   * Reads the answer that was published before the expiry could be.
+   *
+   * <p>An answer that exists but cannot be read may hold the user's code, so
+   * it is reported as a storage failure: an expiry would let the caller fall
+   * back to another OTP channel.
+   * @param request - The request whose deadline was reached.
+   * @returns The code the answer holds, or the expiry when it holds none.
+   * @throws StorageError when the answer cannot be read, after removing the
+   *   request file.
    */
-  private save(requests: IOtpRequest[], isIntact: boolean): void {
-    const request = { records: { [REQUESTS_RECORD]: requests }, shouldQuarantine: !isIntact };
-    const committed = this._store.commit(request);
-    if (!committed.success) {
-      throw new StorageError(`Could not save the OTP requests: ${committed.message}`);
-    }
+  private takeWinningAnswer(request: IOtpRequest): OtpPoll {
+    const code = this.readCode(request);
+    if (!code.success) throw this.abandon(request, 'Could not read the OTP answer', code);
+    return this.settle(request, code.data, EXPIRED);
   }
 
   /**
-   * Type guard for a well-formed persisted request.
-   * @param value - A parsed array entry.
-   * @returns True when the entry has the required request shape.
+   * Takes a code, leaving a tombstone; or returns the fallback when there is none.
+   * @param request - The request being polled.
+   * @param code - The code the answer holds, or false.
+   * @param fallback - What to return when the answer holds no usable code.
+   * @returns The code, or the fallback.
    */
-  private static isRequest(value: unknown): value is IOtpRequest {
-    if (typeof value !== 'object' || value === null) return false;
-    const entry = value as Record<string, unknown>;
-    return typeof entry.id === 'string'
-      && typeof entry.bankId === 'string'
-      && typeof entry.createdAt === 'number'
-      && typeof entry.deadline === 'number'
-      && (entry.code === undefined || typeof entry.code === 'string');
+  private settle(request: IOtpRequest, code: string | false, fallback: OtpPoll): OtpPoll {
+    if (code === false) return fallback;
+    this.leaveTombstone(request);
+    return { kind: 'code', code };
+  }
+
+  /**
+   * Removes the request file, so the portal stops offering it, and builds the
+   * error the poll then throws.
+   * @param request - The request that cannot be settled.
+   * @param action - What could not be done.
+   * @param failure - Why.
+   * @returns The error to throw.
+   */
+  private abandon(request: IOtpRequest, action: string, failure: IProcedureFailure): StorageError {
+    this._removal.removeRequest(request.id);
+    return storageError(action, failure);
+  }
+
+  /**
+   * Keeps a just-published code only if the importer will see it, or has.
+   *
+   * <p>A request file still there means the importer's last look at the
+   * answer is still to come. A missing one, or one that cannot be read,
+   * means that look may be over, so the code is withdrawn unless the
+   * importer has already replaced it with its tombstone.
+   * @param request - The request the code was published for.
+   * @returns True when the importer will take the code, or took it; false
+   *   when the request was given up and the code withdrawn.
+   * @throws StorageError when the request cannot be read, after withdrawing the code.
+   */
+  private confirm(request: IOtpRequest): boolean {
+    const reread = this.readRequest(request.id);
+    if (reread.success && reread.data !== false) return true;
+    if (this.isConsumed(request)) return true;
+    this._removal.withdraw(request.id);
+    if (!reread.success) throw storageError('Could not read the OTP request', reread);
+    return false;
+  }
+
+  /**
+   * Reports whether the importer has replaced a request's code with its tombstone.
+   * @param request - The request the code was published for.
+   * @returns Whether the answer is that request's tombstone; false when it
+   *   cannot be read.
+   */
+  private isConsumed(request: IOtpRequest): boolean {
+    const snapshot = this.answerStore(request.id).read();
+    if (!snapshot.success) return false;
+    const records = trustedRecords(snapshot.data);
+    return isConsumedIn(records, request);
+  }
+
+  /**
+   * Reads the user's code from a request's answer.
+   *
+   * <p>An absent, damaged or stripped answer yields no records, so no code.
+   * @param request - The request being polled.
+   * @returns The code, false when there is none this request can use, or why
+   *   the answer could not be read.
+   */
+  private readCode(request: IOtpRequest): Procedure<string | false> {
+    const snapshot = this.answerStore(request.id).read();
+    if (!snapshot.success) return snapshot;
+    const records = trustedRecords(snapshot.data);
+    const code = codeIn(records, request);
+    return succeed(code);
+  }
+
+  /**
+   * Replaces a used code with a tombstone, best-effort, keeping the answer's
+   * name taken.
+   *
+   * <p>If the replacement fails the code stays until the sweep removes the
+   * answer, an hour past the deadline; the request is gone by then, so the
+   * portal no longer accepts or lists anything for it.
+   * @param request - The request whose code was used.
+   */
+  private leaveTombstone(request: IOtpRequest): void {
+    const records = answerRecords(request, { consumed: true });
+    this.answerStore(request.id).commit({ records, shouldQuarantine: false });
+  }
+
+  /**
+   * Opens a request's own file.
+   * @param id - The request id, known to be a UUID.
+   * @returns A store over the request file.
+   */
+  private requestStore(id: string): SecureJsonStore {
+    const requestPath = this._names.requestPath(id);
+    return new SecureJsonStore(this._fileSystem, requestPath);
+  }
+
+  /**
+   * Opens a request's answer file.
+   * @param id - The request id, known to be a UUID.
+   * @returns A store over the answer file.
+   */
+  private answerStore(id: string): SecureJsonStore {
+    const answerPath = this._names.answerPath(id);
+    return new SecureJsonStore(this._fileSystem, answerPath);
   }
 }

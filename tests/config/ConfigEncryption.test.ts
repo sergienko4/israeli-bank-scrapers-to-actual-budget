@@ -1,6 +1,6 @@
 import { createDecipheriv, pbkdf2Sync } from 'node:crypto';
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { encryptConfig, decryptConfig, isEncryptedConfig, getEncryptionPassword } from '../../src/Config/ConfigEncryption.js';
 import { TEST_CREDENTIAL, TEST_ENCRYPTION_KEY } from '../helpers/testCredentials.js';
 
@@ -110,9 +110,16 @@ describe('ConfigEncryption', () => {
   });
 
   describe('getEncryptionPassword', () => {
+    const PASSWORD_VARS = ['CREDENTIALS_ENCRYPTION_PASSWORD', 'CONFIG_PASSWORD'] as const;
+    const saved: Partial<Record<(typeof PASSWORD_VARS)[number], string>> = {};
+    beforeEach(() => {
+      for (const name of PASSWORD_VARS) saved[name] = process.env[name];
+    });
     afterEach(() => {
-      delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
-      delete process.env.CONFIG_PASSWORD;
+      for (const name of PASSWORD_VARS) {
+        if (saved[name] === undefined) delete process.env[name];
+        else process.env[name] = saved[name];
+      }
     });
 
     it('returns CREDENTIALS_ENCRYPTION_PASSWORD when set', () => {
@@ -130,6 +137,24 @@ describe('ConfigEncryption', () => {
       delete process.env.CREDENTIALS_ENCRYPTION_PASSWORD;
       delete process.env.CONFIG_PASSWORD;
       expect(getEncryptionPassword()).toBe('');
+    });
+
+    it('treats an empty CREDENTIALS_ENCRYPTION_PASSWORD as unset', () => {
+      process.env.CREDENTIALS_ENCRYPTION_PASSWORD = '';
+      process.env.CONFIG_PASSWORD = 'fallback-pass';
+      expect(getEncryptionPassword()).toBe('fallback-pass');
+    });
+
+    it('returns empty string when both env vars are empty', () => {
+      process.env.CREDENTIALS_ENCRYPTION_PASSWORD = '';
+      process.env.CONFIG_PASSWORD = '';
+      expect(getEncryptionPassword()).toBe('');
+    });
+
+    it('returns a non-empty CREDENTIALS_ENCRYPTION_PASSWORD as is, over CONFIG_PASSWORD', () => {
+      process.env.CREDENTIALS_ENCRYPTION_PASSWORD = ' spaced pass ';
+      process.env.CONFIG_PASSWORD = 'fallback-pass';
+      expect(getEncryptionPassword()).toBe(' spaced pass ');
     });
   });
 

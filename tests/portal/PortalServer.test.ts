@@ -3,10 +3,13 @@ import { rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 
+import { AppTokenStore } from '../../src/Portal/AppTokenStore.js';
 import PortalConfigStore from '../../src/Portal/PortalConfigStore.js';
 import { buildPortal, startPortal } from '../../src/Portal/PortalServer.js';
+import openPortalStores from '../../src/Portal/PortalStores.js';
 import { fakeBankConfig, fakeValidBankConfigFor } from '../helpers/factories.js';
 import { fakePortalConfig, fakePortalRuntime, PORTAL_TEST_PASSWORD, seedConfigDir } from '../helpers/portalFactories.js';
+import FakeFileSystem from '../storage/FakeFileSystem.js';
 
 let app: FastifyInstance;
 let dir: string;
@@ -338,3 +341,20 @@ describe('PortalServer rate-limit keying', () => {
   });
 });
 
+describe('PortalServer store wiring', () => {
+  it('signs a phone out of the app-token store in the bag it was given', async () => {
+    const seed = seedConfigDir();
+    const tokens = new AppTokenStore(new FakeFileSystem(), '/data/app-tokens.json');
+    const grant = { deviceName: 'Pixel', factors: { google: false, password: true }, fingerprint: 'fp' };
+    const issued = tokens.issue(grant);
+    const stores = { ...openPortalStores(), appTokens: (): AppTokenStore => tokens };
+    const portal = await buildPortal(fakePortalRuntime(), new PortalConfigStore(seed.path), stores);
+    const res = await portal.inject({
+      method: 'POST', url: '/auth/app/revoke', payload: { refreshToken: issued.token },
+    });
+    await portal.close();
+    rmSync(seed.dir, { recursive: true, force: true });
+    expect(res.statusCode).toBe(200);
+    expect(tokens.list()).toEqual([]);
+  });
+});

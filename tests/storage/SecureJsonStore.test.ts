@@ -149,6 +149,33 @@ describe('SecureJsonStore read path', () => {
     expect(snapshot.data.records['real']).toBe('t');
   });
 
+  it('threat 10: reports a file that held a __proto__ key as stripped, so it is moved aside', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, `{"__proto__":{"k":"${SECRET}"},"real":"t"}`, OWNER_ONLY);
+    const snapshot = store.read();
+    if (!snapshot.success) throw new Error('expected the read to succeed');
+    expect(snapshot.data.state).toBe('stripped');
+    expect(snapshot.data.records['real']).toBe('t');
+    expect(snapshot.data.summary).toBe('Loaded 1 records; left out a __proto__ key');
+  });
+
+  it('threat 10: reports a file holding only a __proto__ key as stripped, with no records', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, '{"__proto__":{"polluted":true}}', OWNER_ONLY);
+    const snapshot = store.read();
+    expect(snapshot.success && snapshot.data.state).toBe('stripped');
+    expect(snapshot.success && Object.keys(snapshot.data.records)).toEqual([]);
+  });
+
+  it('threat 10: leaves a nested __proto__ key to the caller, as an own key of a healthy file', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, '{"real":{"__proto__":{"polluted":true}}}', OWNER_ONLY);
+    const snapshot = store.read();
+    if (!snapshot.success) throw new Error('expected the read to succeed');
+    expect(snapshot.data.state).toBe('healthy');
+    expect(Object.keys(snapshot.data.records['real'] as object)).toEqual(['__proto__']);
+  });
+
   it('threat 10: leaves Object.prototype unpolluted after reading a hostile file', () => {
     const { store, fileSystem } = makeStore();
     fileSystem.seedFile(STORE_PATH, '{"__proto__":{"polluted":true}}', OWNER_ONLY);
@@ -196,12 +223,20 @@ describe('SecureJsonStore read path', () => {
     expect(fileSystem.calls).not.toContain('readAll');
   });
 
-  it('threat 7: withholds the records when the store is hard-linked', () => {
+  it('threat 7: withholds the records when a hard-linked store is readable by others', () => {
     const { store, fileSystem } = makeStore();
-    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', 0o644);
     fileSystem.seedHardLink(STORE_PATH, '/data/someone-elses-name');
     const snapshot = store.read();
-    expect(snapshot.success).toBe(false);
+    expect(!snapshot.success && snapshot.status).toBe('EMLINK');
+  });
+
+  it('reads an owner-only store that still has its staging name', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.seedHardLink(STORE_PATH, `${STORE_PATH}.staged.tmp`);
+    const snapshot = store.read();
+    expect(snapshot.success && snapshot.data.records).toEqual({ a: 'b' });
   });
 
   it('threat 7: hardens an oversized store it is about to reject', () => {
@@ -287,7 +322,7 @@ describe('SecureJsonStore read path', () => {
 
   it('threat 30: keeps the original failure when the close is refused as well', () => {
     const { store, fileSystem } = makeStore();
-    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', 0o644);
     fileSystem.seedHardLink(STORE_PATH, '/data/someone-elses-name');
     fileSystem.forcedFailures.set('close', 'EIO');
     const snapshot = store.read();

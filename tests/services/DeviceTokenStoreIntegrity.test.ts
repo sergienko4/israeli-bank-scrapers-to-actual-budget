@@ -96,6 +96,13 @@ describe('DeviceTokenStore on the secure store', () => {
     expect(storedJson(fileSystem)).toEqual({ tokens: ['a', 'z'] });
   });
 
+  it('moves aside a file that held a top-level __proto__ key, keeping its tokens', () => {
+    const { store, fileSystem } = makeStore('{"__proto__":{"tokens":["x"]},"tokens":["a"]}');
+    store.add('z');
+    expect(quarantinedNames(fileSystem)).toHaveLength(1);
+    expect(storedJson(fileSystem)).toEqual({ tokens: ['a', 'z'] });
+  });
+
   it('overwrites an intact file without moving it aside', () => {
     const { store, fileSystem } = makeStore(JSON.stringify({ tokens: ['a'] }));
     store.remove('a');

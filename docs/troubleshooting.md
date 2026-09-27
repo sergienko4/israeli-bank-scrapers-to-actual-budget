@@ -52,8 +52,9 @@ Better still: [auto-forward OTP codes from your phone](https://github.com/sergie
 **Symptom:** a single PayBox login shows two back-to-back OTP prompts, and the
 second prompt arrives before any new SMS does.
 
-**Fix:** upgrade — the importer now reuses the code you supplied for PayBox's
-second internal request, so one login prompts once. See
+**Fix:** upgrade. Since scraper 8.6.5 the scraper keeps the code for the whole
+login, and the importer also remembers the code you supplied for that attempt,
+so one login prompts once. See
 [PayBox](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md).
 If the bank rejects the code, this run asks for no new code, so a wrong code is
 never re-sent. See the next section.
@@ -103,6 +104,40 @@ used to satisfy the internal "all banks failed" condition and send that token
 verbatim. The message now names the bank and the reason, for example
 `Import failed for visacal: Hard-model scrape resolved zero accounts`. Runs
 covering several banks read `All 3 banks failed — …` with each bank listed.
+
+## The importer or portal stops at startup on a config read error
+
+**Symptom:** the container exits at startup with one of these, naming
+`config.json` or `credentials.json`:
+
+- `<path> is not a regular file`: a directory, FIFO or device sits at the path.
+  Docker creates a directory there when a single-file bind mount starts before
+  the file exists on the host.
+- `<path> is a symlink to a missing file`: the link's target is gone, for
+  example on a volume that was not mounted.
+- `<path> is larger than 8 MiB`
+- `<path> is not valid UTF-8`: the file was saved in another encoding.
+- `Could not read <path>: <code>`, for example `EACCES` when the container user
+  cannot read it.
+
+**Fix:** put a regular UTF-8 JSON file at the path, readable by the container
+user. A symlink to such a file is fine; a symlink to a missing file is not.
+
+Only a `config.json` with nothing at its path counts as "no config": the
+importer logs `config.json not found, using environment variables` and runs
+from them. A broken mount that leaves one of the errors above stops the run.
+A mount that leaves nothing at the path, such as a missing volume entry or a
+volume without the file, reads as "no config" instead. If that log line
+appears when you expected a file, check the mount.
+
+## "config.json and credentials.json come from different saves"
+
+**Symptom:** the importer and the portal refuse to start after the portal was
+stopped or crashed during a save.
+
+**Fix:** see
+[If a save fails or is interrupted](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md#if-a-save-fails-or-is-interrupted),
+which shows how to go back to the previous save or keep the new one.
 
 ## Windows volume mounts don't work
 

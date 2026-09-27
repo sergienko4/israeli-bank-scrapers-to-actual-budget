@@ -101,6 +101,19 @@ describe('OtpSettingsStore on the secure store', () => {
     expect(store.get()).toEqual({ channel: 'app' });
   });
 
+  it('keeps the channel of a file that held a top-level __proto__ key, and warns about nothing', () => {
+    const { store } = makeStore('{"__proto__":{"channel":"telegram"},"channel":"app"}');
+    expect(store.get()).toEqual({ channel: 'app' });
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('moves aside a file that held a top-level __proto__ key on the next write', () => {
+    const { store, fileSystem } = makeStore('{"__proto__":{"channel":"telegram"},"channel":"app"}');
+    store.set('telegram');
+    expect(quarantinedNames(fileSystem)).toHaveLength(1);
+    expect(JSON.parse(fileSystem.contentsOf(SETTINGS_PATH))).toEqual({ channel: 'telegram' });
+  });
+
   it('keeps the old file and throws when the new one cannot be staged', () => {
     const { store, fileSystem } = makeStore(JSON.stringify({ channel: 'app' }));
     fileSystem.forcedFailures.set('createExclusive', 'ENOSPC');

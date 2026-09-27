@@ -6,6 +6,7 @@
  * <p>Only the writer sweeps. The OTP channel and the device tokens are
  * written by the portal alone, which sweeps them when it starts; the import
  * only reads them, and a leftover there may belong to a portal still running.
+ * The app refresh tokens are the portal's alone: the import never opens them.
  */
 
 import type { ILogger } from '../Logger/ILogger.js';

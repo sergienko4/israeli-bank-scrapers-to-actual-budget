@@ -117,9 +117,10 @@ describe('BankTokenStore read', () => {
     expect(store.read('oneZero')).toMatchObject({ success: false, status: 'EACCES' });
   });
 
-  it('reports a hard-linked store as a failure rather than trusting it', () => {
+  it('reports a hard-linked store readable by others as a failure rather than trusting it', () => {
     const { store, fileSystem } = makeStore();
-    seedRecords(fileSystem, { oneZero: { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN } });
+    const records = { oneZero: { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN } };
+    seedRecords(fileSystem, records, WORLD_READABLE);
     fileSystem.seedHardLink(STORE_PATH, '/home/victim/notes.json');
     expect(store.read('oneZero')).toMatchObject({ success: false, status: 'EMLINK' });
   });
@@ -161,6 +162,8 @@ describe('BankTokenStore read', () => {
         'pepper:a': { token: 'lt-a', capturedAt: CAPTURED_AT, login: 'a'.repeat(64) },
         'pepper:b': { token: 'lt-a', capturedAt: CAPTURED_AT, login: 'b'.repeat(64) },
       })],
+      ['held a top-level __proto__ key, which could hide a token bound to another login',
+        `{"__proto__":{"token":"lt-a","capturedAt":"${CAPTURED_AT}","login":"${'b'.repeat(64)}"}}`],
     ])('reads a store that %s as not intact', (_label: string, contents: string) => {
       const { store, fileSystem } = makeStore();
       seedRaw(fileSystem, contents);

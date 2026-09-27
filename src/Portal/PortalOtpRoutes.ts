@@ -20,6 +20,9 @@ import {
 } from './PortalRouteSchemas.js';
 import type { IPortalStores } from './PortalStores.js';
 
+/** What the submit route answers for a refused request id, and for a refused code. */
+const SUBMIT_WORDING = { invalidParamsMessage: 'Invalid OTP request id', invalidMessage: 'Invalid OTP code' };
+
 /** The public view of a pending request (never carries the code). */
 interface IPublicOtpRequest {
   id: string;
@@ -111,7 +114,7 @@ export default function registerOtpRoutes(
   app: FastifyInstance, stores: IPortalStores,
 ): { registered: true } {
   const submitLimit = {
-    config: { rateLimit: { max: OTP_SUBMIT_MAX, timeWindow: RATE_WINDOW }, invalidMessage: 'Invalid OTP code' },
+    config: { rateLimit: { max: OTP_SUBMIT_MAX, timeWindow: RATE_WINDOW }, ...SUBMIT_WORDING },
     schema: OTP_SUBMIT_SCHEMA,
   };
   const settingsWrite = {

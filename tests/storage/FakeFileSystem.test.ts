@@ -59,4 +59,39 @@ describe('FakeFileSystem failure injection', () => {
     expect(created.status).toBe('ENOSPC');
     expect(fake.hasEntry('staged.tmp')).toBe(false);
   });
+
+  it('can fail only the Nth call of an operation, so a second stage can fail alone', () => {
+    const fake = new FakeFileSystem();
+    fake.failOnCall('createExclusive', 2, 'ENOSPC');
+    const first = fake.createExclusive('first.tmp', '{}');
+    const second = fake.createExclusive('second.tmp', '{}');
+    const third = fake.createExclusive('third.tmp', '{}');
+    expect(first.success).toBe(true);
+    if (second.success) throw new Error('expected the second call to fail');
+    expect(second.status).toBe('ENOSPC');
+    expect(fake.hasEntry('second.tmp')).toBe(false);
+    expect(third.success).toBe(true);
+  });
+
+  it('keeps the stage as a second name when a publish cannot remove it, as a real link does', () => {
+    const fake = new FakeFileSystem();
+    fake.createExclusive('stage.tmp', '{"a":1}');
+    fake.forcedFailures.set('remove', 'EBUSY');
+    const published = fake.publishExclusive('stage.tmp', 'final.json');
+    expect(published.success).toBe(true);
+    expect(fake.contentsOf('final.json')).toBe('{"a":1}');
+    expect(fake.contentsOf('stage.tmp')).toBe('{"a":1}');
+  });
+
+  it('can stage only part of a payload and report the short count, as a real write may', () => {
+    const fake = new FakeFileSystem();
+    fake.shortWriteOnCall(2);
+    const whole = fake.createExclusive('whole.tmp', '{"a":1}');
+    const short = fake.createExclusive('short.tmp', '{"a":1}');
+    if (!whole.success || !short.success) throw new Error('expected both stages to succeed');
+    expect(whole.data.bytesWritten).toBe(7);
+    expect(short.data.bytesWritten).toBeLessThan(7);
+    expect(fake.contentsOf('short.tmp')).toHaveLength(short.data.bytesWritten);
+    expect(fake.modeOf('short.tmp')).toBe(0o600);
+  });
 });

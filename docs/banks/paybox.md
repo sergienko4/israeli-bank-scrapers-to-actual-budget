@@ -52,9 +52,10 @@ token. Changing the phone number or renaming the `banks` entry costs one SMS. Se
 For automated SMS forwarding, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 PayBox's login consumes the SMS code **twice** — once to validate the PIN step
-and once to complete the SMS sign-in. Both steps need the same delivered digits,
-so the importer answers the second request with the code you already supplied.
-You are prompted once per login attempt, not twice.
+and once to complete the SMS sign-in. Both steps need the same delivered digits.
+Since scraper 8.6.5 the scraper keeps the code for the whole login and asks for
+it once; the importer also remembers the code for that login attempt, so even a
+scraper that asked again would not prompt you twice.
 
 If the bank rejects the code, this run asks for no new code, and a wrong code is
 never re-sent. Run the import again for a fresh one.
