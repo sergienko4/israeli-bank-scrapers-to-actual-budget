@@ -63,9 +63,24 @@ npm run test:e2e:real
 
 The suite is **interactive**: when a bank needs an OTP, the test prompts
 on stdin with `[<bank>] Enter OTP code from SMS:`. You forward the SMS
-manually within the 10-minute test timeout. After the first successful
-login, copy the `otpLongTermToken` printed by the upstream scraper into
-your env file so subsequent runs use the warm-start path (no OTP).
+manually within the 10-minute test timeout.
+
+The suite neither prints nor saves a long-term token, and the upstream
+scraper masks it in its logs. To test the warm-start path (no OTP), copy a
+token the importer saved: after one importer run with the same login, take
+the `token` field of that entry's record in `bank-tokens.json`, keyed
+`<bank id>:<entry name>` such as `onezero:oneZero` (see
+[Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token))
+and put it in the matching `*_OTP_LONG_TERM` variable. This needs a
+plain-text token file, which the importer writes only when no config
+password is set: neither `CREDENTIALS_ENCRYPTION_PASSWORD` nor the legacy
+`CONFIG_PASSWORD`, which the importer uses when the first is unset or
+empty. With a config password,
+each record is sealed, so its `token` field is not a token: leave
+`*_OTP_LONG_TERM` empty, and the suite logs in by SMS instead, so the
+warm-start path is not tested. Each SMS login creates a new
+token and the bank stops accepting the one before it, so an SMS login in
+the suite or in the importer invalidates the other's token.
 
 ## NOT in CI
 

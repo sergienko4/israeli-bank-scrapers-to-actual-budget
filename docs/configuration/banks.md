@@ -139,11 +139,12 @@ not need to set anything.
   Tokens the importer can still read from a damaged file keep working;
   otherwise the run warns and logs in with an SMS. A damaged file is set aside
   before the next token is saved.
-- **With a config password** (`CREDENTIALS_ENCRYPTION_PASSWORD`), each token
-  the importer saves is sealed under it, so a copy of the file gives no token
-  away. Turning the password on or off, or changing it, makes the saved tokens
-  unreadable: each account logs in with one SMS, then uses its new token. An
-  encrypted config needs its own password first, or the run stops at startup.
+- **With a config password** (`CREDENTIALS_ENCRYPTION_PASSWORD`, or the
+  legacy `CONFIG_PASSWORD`), each token the importer saves is sealed under it,
+  so a copy of the file gives no token away. Turning the password on or off,
+  or changing it, makes the saved tokens unreadable: each account logs in with
+  one SMS, then uses its new token. An encrypted config needs its own password
+  first, or the run stops at startup.
   When you turn it on, delete `bank-tokens.json`: its plain-text tokens can no
   longer be used, and the importer sets the file aside, as
   `bank-tokens.json.quarantined-*`, only when it next saves a token. See

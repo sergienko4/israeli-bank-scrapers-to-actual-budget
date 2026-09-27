@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { SecretValues } from '../../src/Logger/SecretValues.js';
+import fastestRunMs from '../helpers/fastestRunMs.js';
 
 /** A credential the bank may quote back. */
 const VALUE = 'Qz7-echoed-Lk9';
@@ -175,5 +176,113 @@ describe('SecretValues with a value under six characters', () => {
     const known = new SecretValues();
     expect(known.register([''])).toBe(0);
     expect(known.mask(`abc ${CANARY}`)).toBe(`abc ${CANARY}`);
+  });
+});
+
+describe('SecretValues with a lone surrogate in a value', () => {
+  /** Half of a surrogate pair with no other half, as a JSON `\ud800` escape decodes. */
+  const LONE = 'Qz7\uD800echoed';
+
+  /** A whole pair, an emoji, which must be encoded as itself. */
+  const PAIRED = 'Qz7😀echoed';
+
+  it('registers the value without throwing', () => {
+    expect(() => knowing(LONE)).not.toThrow();
+  });
+
+  it.each([
+    ['as it is', LONE],
+    ['as a UTF-8 file writes it', 'Qz7\uFFFDechoed'],
+    ['escaped inside a JSON string', JSON.stringify(LONE).slice(1, -1)],
+    ['percent-encoded by a URL encoder', new URLSearchParams({ u: LONE }).toString().slice(2)],
+  ])('hides it %s', (_form, written) => {
+    expect(knowing(LONE).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it('percent-encodes a whole pair as itself', () => {
+    const written = encodeURIComponent(PAIRED);
+    expect(knowing(PAIRED).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it.each([
+    ['that starts with a lone half, as it is', '\uD800a', '\uD800a'],
+    ['that starts with a lone half, as a UTF-8 file writes it', '\uD800a', '\uFFFDa'],
+    ['that starts with a lone half, escaped inside a JSON string', '\uD800a', String.raw`\ud800a`],
+    ['that starts with a lone half, percent-encoded', '\uD800a', '%EF%BF%BDa'],
+    ['that ends with a lone half, as it is', 'ab\uDC00', 'ab\uDC00'],
+    ['that ends with a lone half, as a UTF-8 file writes it', 'ab\uDC00', 'ab\uFFFD'],
+    ['that ends with a lone half, escaped inside a JSON string', 'ab\uDC00', String.raw`ab\udc00`],
+    ['that ends with a lone half, percent-encoded', 'ab\uDC00', 'ab%EF%BF%BD'],
+  ])('hides a short value %s, inside a longer word', (_form, value, written) => {
+    expect(knowing(value).mask(`${CANARY}${written}${CANARY}`)).toBe(`${CANARY}[REDACTED]${CANARY}`);
+  });
+});
+
+describe('SecretValues with a lone half that pairs with the text beside it', () => {
+  /** An emoji: the high half `\uD83D` and the low half `\uDE00`, one character. */
+  const EMOJI = '😀';
+
+  it.each([
+    ['a low half after a high half in the text', '\uDE00secret', `${EMOJI}secret`],
+    ['a high half before a low half in the text', 'secret\uD83D', `secret${EMOJI}`],
+    ['a short value that starts with a low half', '\uDE00ab', `${EMOJI}ab`],
+    ['a short value that ends with a high half', 'ab\uD83D', `ab${EMOJI}`],
+    ['a value that is one high half', '\uD83D', EMOJI],
+    ['a value that is one low half', '\uDE00', EMOJI],
+    ['a value quoted back in another case', '\uDE00Secret', `${EMOJI}sECRET`],
+  ])('hides the whole character around %s', (_case, value, written) => {
+    expect(knowing(value).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it.each([
+    ['a low half that the first high half pairs with', '\uDC00', '\uD800\uDC00'],
+    ['a low half that the last high half pairs with', '\uDFFF', '\uDBFF\uDFFF'],
+    ['a high half that pairs with the first low half', '\uD800', '\uD800\uDC00'],
+    ['a high half that pairs with the last low half', '\uDBFF', '\uDBFF\uDFFF'],
+  ])('hides the whole character around %s', (_case, value, written) => {
+    expect(knowing(value).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it('hides a value whole when one as long, with fewer characters, starts at the same place', () => {
+    expect(knowing(`${EMOJI}abcd`, '\uDE00abcde').mask(`${CANARY} ${EMOJI}abcde ${CANARY}`))
+      .toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it.each([
+    ['a high half at its start, after another high half', '\uD83Da', '\uD83D\uD83Da', '\uD83D[REDACTED]'],
+    ['a high half at its start, after a whole pair', '\uD83Da', `${EMOJI}\uD83Da`, `${EMOJI}[REDACTED]`],
+    ['a low half at its end, before another low half', 'a\uDE00', 'a\uDE00\uDE00', '[REDACTED]\uDE00'],
+    ['a low half at its end, before a whole pair', 'a\uDE00', `a\uDE00${EMOJI}`, `[REDACTED]${EMOJI}`],
+  ])('hides a value with %s, which the text cannot pair', (_case, value, written, masked) => {
+    expect(knowing(value).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} ${masked} ${CANARY}`);
+  });
+
+  it.each([
+    ['a high half at its start', '\uD83Da', `${EMOJI}a`],
+    ['a low half at its end', 'a\uDE00', `a${EMOJI}`],
+  ])('leaves a pair that holds a value with %s but not the value itself', (_case, value, written) => {
+    expect(written.includes(value)).toBe(false);
+    expect(knowing(value).mask(`${CANARY} ${written} ${CANARY}`)).toBe(`${CANARY} ${written} ${CANARY}`);
+  });
+
+  it('hides a short value that holds a lone half inside a longer word too', () => {
+    expect(knowing('\uDE00ab').mask(`${CANARY} ${EMOJI}abNx ${CANARY}`)).toBe(`${CANARY} [REDACTED]Nx ${CANARY}`);
+  });
+
+  it('finds a value that starts inside the character an earlier match ends in', () => {
+    expect(knowing('\uD83D', '\uDE00secret').mask(`${CANARY} ${EMOJI}secret ${CANARY}`))
+      .toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it('hides a value whole when a shorter one starts at the same place', () => {
+    expect(knowing('\uDE00', '\uDE00secret').mask(`${CANARY} ${EMOJI}secret ${CANARY}`))
+      .toBe(`${CANARY} [REDACTED] ${CANARY}`);
+  });
+
+  it('masks a long run of paired halves fast', () => {
+    const text = `${EMOJI.repeat(10_000)} ${CANARY}`;
+    const known = knowing('\uDE00');
+    expect(known.mask(text)).toBe(`${MASK.repeat(10_000)} ${CANARY}`);
+    expect(fastestRunMs(() => known.mask(text), FAST_MS)).toBeLessThan(FAST_MS);
   });
 });
