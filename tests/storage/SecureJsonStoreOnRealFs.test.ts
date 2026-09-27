@@ -1,14 +1,19 @@
 /**
  * {@link SecureJsonStore} driven through {@link createNodeFileSystem} on a real disk.
  *
- * <p>Every other store test runs against {@link FakeFileSystem}, which stores
- * paths exactly as it is given them. A real directory listing does not: it
- * joins, and joining normalises. Nothing that only ever talks to the fake can
- * notice the difference, so the paths the store builds are proved here, where
- * the syscalls are real and the strings have to line up.
+ * <p>Every other store test runs against {@link FakeFileSystem}, which keeps
+ * paths exactly as it is given them and resolves no symlink. A real disk
+ * resolves every path it is handed, and a `..` after a symlink is resolved
+ * from the link's target, so a string that looks like one directory can name
+ * another. Nothing that only ever talks to the fake can notice the difference,
+ * so the paths the store builds are proved here, where the syscalls are real
+ * and the strings have to name what the OS opens.
  */
 
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -16,6 +21,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import SecureJsonStore, { STALE_STAGING_AGE_MS } from '../../src/Storage/SecureJsonStore.js';
+
+/** Windows needs extra rights to create a symlink, which these cases rely on. */
+const IS_WINDOWS = process.platform === 'win32';
 
 /** Temp directories to delete once the suite is done with them. */
 const directories: string[] = [];
@@ -41,6 +49,18 @@ function ageBeyondStale(filePath: string): void {
   const staleMs = Date.now() - STALE_STAGING_AGE_MS * 2;
   const staleSeconds = staleMs / 1000;
   utimesSync(filePath, staleSeconds, staleSeconds);
+}
+
+/**
+ * Makes a store whose path runs through a symlink and then `..`, so the OS
+ * and lexical path joining resolve it to different directories.
+ * @returns The temp directory, and a store path the OS opens in its `real`.
+ */
+function makeLinkedStore(): { directory: string; storePath: string } {
+  const directory = makeDirectory();
+  mkdirSync(join(directory, 'real', 'sub'), { recursive: true });
+  symlinkSync(join(directory, 'real', 'sub'), join(directory, 'link'));
+  return { directory, storePath: `${directory}/link/../tokens.json` };
 }
 
 afterEach(() => {
@@ -85,6 +105,29 @@ describe('SecureJsonStore on a real filesystem', () => {
     if (!swept.success) throw new Error(`sweep failed: ${swept.message}`);
     expect(swept.data.removedCount).toBe(0);
     expect(statSync(join(directory, 'tokens.json')).isFile()).toBe(true);
+  });
+
+  it.skipIf(IS_WINDOWS)('threat 22: sweeps where the OS resolves a ".." after a symlink', () => {
+    const { directory, storePath } = makeLinkedStore();
+    const abandoned = join(directory, 'real', `tokens.json.${STAGED_TOKEN}.tmp`);
+    writeFileSync(abandoned, '{"onezero":"LEAKED"}', { encoding: 'utf8', mode: 0o600 });
+    ageBeyondStale(abandoned);
+    const swept = new SecureJsonStore(createNodeFileSystem(), storePath).sweepStagedLeftovers();
+    if (!swept.success) throw new Error(`sweep failed: ${swept.message}`);
+    expect(swept.data.removedCount).toBe(1);
+    expect(() => statSync(abandoned)).toThrow();
+  });
+
+  it.skipIf(IS_WINDOWS)('threat 22: never deletes in the directory a ".." names lexically', () => {
+    const { directory, storePath } = makeLinkedStore();
+    const name = `tokens.json.${STAGED_TOKEN}.tmp`;
+    const stranger = join(directory, name);
+    for (const path of [join(directory, 'real', name), stranger]) {
+      writeFileSync(path, '{}', { encoding: 'utf8', mode: 0o600 });
+      ageBeyondStale(path);
+    }
+    new SecureJsonStore(createNodeFileSystem(), storePath).sweepStagedLeftovers();
+    expect(statSync(stranger).isFile()).toBe(true);
   });
 
   it('lets exactly one of two exclusive commits claim a name, owner-only and whole', () => {

@@ -120,6 +120,18 @@ describe('NodeFileSystem syscall fidelity', () => {
     expect(lstatSync(world.path('victim.txt')).mode & 0o777).toBe(0o644);
   });
 
+  it.skipIf(IS_WINDOWS)('threat 22: lists paths that open what it read, through a symlink and ..', () => {
+    const world = makeRealWorld();
+    world.makeDir('real');
+    world.makeDir('real/sub');
+    world.makeSymlink('link', 'real/sub');
+    world.writeFile('real/entry.txt', 'listed', 0o600);
+    const listed = createNodeFileSystem().listNames(`${world.directory()}/link/..`);
+    if (!listed.success) throw new Error(`expected the listing to succeed: ${listed.message}`);
+    const entry = listed.data.find((path) => path.endsWith('entry.txt')) ?? 'not listed';
+    expect(readFileSync(entry, 'utf8')).toBe('listed');
+  });
+
   it('reports ENOTDIR when a parent component is a regular file', () => {
     const world = makeRealWorld();
     world.writeFile('notadir', 'x', 0o600);
