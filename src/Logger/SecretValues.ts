@@ -107,33 +107,13 @@ function asSource(spelling: string): string {
 }
 
 /**
- * Tells whether a code unit is within a range of surrogates.
- * @param unit - A code unit, or `NaN` outside an empty form.
+ * Tells whether a code point is within a range of surrogates.
+ * @param point - A code point.
  * @param range - The high or the low surrogates.
- * @returns True when the unit is in the range.
+ * @returns True when the point is in the range.
  */
-function isIn(unit: number, range: typeof HIGH_HALF): boolean {
-  return unit >= range.first && unit <= range.last;
-}
-
-/**
- * Tells whether a form starts with a low half: one a pair in the text can end.
- * @param form - One form of a value, or the mask.
- * @returns True when its first code unit is a low surrogate.
- */
-function startsWithLowHalf(form: string): boolean {
-  const first = form.charCodeAt(0);
-  return isIn(first, LOW_HALF);
-}
-
-/**
- * Tells whether a form ends with a high half: one a pair in the text can start.
- * @param form - One form of a value, or the mask.
- * @returns True when its last code unit is a high surrogate.
- */
-function endsWithHighHalf(form: string): boolean {
-  const last = form.charCodeAt(form.length - 1);
-  return isIn(last, HIGH_HALF);
+function isIn(point: number, range: typeof HIGH_HALF): boolean {
+  return point >= range.first && point <= range.last;
 }
 
 /**
@@ -207,6 +187,30 @@ function orPairsStartingWith(high: number): string {
 }
 
 /**
+ * Builds the pattern source for the low half a form starts with, if any: one
+ * a high half before it in the text can pair. `codePointAt` reads a lone half
+ * as itself, and a pair as a point outside both ranges.
+ * @param form - One form of a value that holds a lone surrogate.
+ * @returns The half's group, or nothing when the form starts otherwise.
+ */
+function startHalfSource(form: string): string {
+  const first = form.codePointAt(0) ?? 0;
+  return isIn(first, LOW_HALF) ? orPairsEndingIn(first) : '';
+}
+
+/**
+ * Builds the pattern source for the high half a form ends with, if any: one a
+ * low half after it in the text can pair. At the second half of a pair,
+ * `codePointAt` reads that low half alone.
+ * @param form - One form of a value that holds a lone surrogate.
+ * @returns The half's group, or nothing when the form ends otherwise.
+ */
+function endHalfSource(form: string): string {
+  const last = form.codePointAt(form.length - 1) ?? 0;
+  return isIn(last, HIGH_HALF) ? orPairsStartingWith(last) : '';
+}
+
+/**
  * Builds the pattern source for a form that holds a lone surrogate. It matches
  * anywhere, whatever its length, and ignores letter case as every other form
  * does.
@@ -221,10 +225,8 @@ function orPairsStartingWith(high: number): string {
  * @returns Its escaped text, with a group for each lone half at its edge.
  */
 function asLoneSource(form: string): string {
-  const first = form.charCodeAt(0);
-  const last = form.charCodeAt(form.length - 1);
-  const before = startsWithLowHalf(form) ? orPairsEndingIn(first) : '';
-  const after = endsWithHighHalf(form) ? orPairsStartingWith(last) : '';
+  const before = startHalfSource(form);
+  const after = endHalfSource(form);
   const middle = form.slice(before === '' ? 0 : 1, after === '' ? form.length : -1);
   return `${before}${asPattern(middle)}${after}`;
 }
