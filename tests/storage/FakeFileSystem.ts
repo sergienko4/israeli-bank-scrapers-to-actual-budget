@@ -217,6 +217,16 @@ export default class FakeFileSystem implements IFileSystem {
   }
 
   /**
+   * Reports whether an inode has another name and is not owner-only.
+   * @param entry - Entry whose inode is checked.
+   * @returns Whether changing its mode would change a file someone else sees.
+   */
+  private isSharedWithOthers(entry: IEntry): boolean {
+    const permissions = (entry.inode?.mode ?? 0) & 0o777;
+    return this.linkCountOf(entry) > 1 && permissions !== OWNER_ONLY;
+  }
+
+  /**
    * Counts the names sharing one entry's inode.
    * @param entry - Entry whose inode is counted.
    * @returns The number of names pointing at that inode.
@@ -307,13 +317,16 @@ export default class FakeFileSystem implements IFileSystem {
 
   /**
    * Restricts an open file to owner-only access, refusing shared inodes.
+   *
+   * <p>A shared inode that is already owner-only is accepted as it is. The
+   * fake has no users, so every file counts as this process's own.
    * @param file - Descriptor previously returned by `openForRead`.
    * @returns The mode now in effect, or a failure explaining why it stands.
    */
   public restrictToOwner(file: IOpenFile): Procedure<IHardenOutcome> {
     this.calls.push('restrictToOwner');
     const current = this._open.get(file.descriptor);
-    if (current && this.linkCountOf(current) > 1) {
+    if (current && this.isSharedWithOthers(current)) {
       return fail('Refusing to change permissions on a hard-linked file', { status: 'EMLINK' });
     }
     const forced = this.forced('restrictToOwner');

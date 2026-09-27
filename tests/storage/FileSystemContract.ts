@@ -302,6 +302,30 @@ function describeRestrictToOwner(makeSubject: () => IContractSubject): void {
       expect(hardened.success).toBe(false);
       expect(world.modeOf('victim.txt') & 0o777).toBe(0o644);
     });
+
+    it('accepts an owner-only file of its own that still has its staging name', () => {
+      const { fileSystem, world } = makeSubject();
+      world.writeFile('store.json', '{"a":"b"}', 0o600);
+      world.makeHardLink('store.json', 'store.json.staged.tmp');
+      const opened = fileSystem.openForRead(world.path('store.json'));
+      if (!opened.success) throw new Error('expected the open to succeed');
+      const hardened = fileSystem.restrictToOwner(opened.data);
+      fileSystem.close(opened.data);
+      expect(hardened.success && hardened.data.mode).toBe(0o600);
+      expect(world.modeOf('store.json.staged.tmp') & 0o777).toBe(0o600);
+    });
+
+    it('threat 6: refuses a group-readable file with a second name, leaving it as found', () => {
+      const { fileSystem, world } = makeSubject();
+      world.writeFile('store.json', '{"a":"b"}', 0o640);
+      world.makeHardLink('store.json', 'store.json.staged.tmp');
+      const opened = fileSystem.openForRead(world.path('store.json'));
+      if (!opened.success) throw new Error('expected the open to succeed');
+      const hardened = fileSystem.restrictToOwner(opened.data);
+      fileSystem.close(opened.data);
+      expect(!hardened.success && hardened.status).toBe('EMLINK');
+      expect(world.modeOf('store.json') & 0o777).toBe(0o640);
+    });
   });
 }
 

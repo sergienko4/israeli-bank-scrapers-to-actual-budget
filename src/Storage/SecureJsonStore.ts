@@ -314,8 +314,9 @@ export default class SecureJsonStore {
    * replaced it, readable by every local user under a name nobody checks.
    *
    * <p>So a predecessor that cannot be made owner-only — including one with
-   * a second hard link, which `read` refuses for the same reason — aborts the
-   * commit and stays where the next run will look at it again.
+   * a second hard link that others can read, which `read` refuses for the
+   * same reason — aborts the commit and stays where the next run will look at
+   * it again.
    * @param file - Descriptor for whatever sits at the store path.
    * @returns Whether it may be moved, or why it must stay.
    */

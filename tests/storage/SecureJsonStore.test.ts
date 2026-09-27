@@ -196,12 +196,20 @@ describe('SecureJsonStore read path', () => {
     expect(fileSystem.calls).not.toContain('readAll');
   });
 
-  it('threat 7: withholds the records when the store is hard-linked', () => {
+  it('threat 7: withholds the records when a hard-linked store is readable by others', () => {
     const { store, fileSystem } = makeStore();
-    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', 0o644);
     fileSystem.seedHardLink(STORE_PATH, '/data/someone-elses-name');
     const snapshot = store.read();
-    expect(snapshot.success).toBe(false);
+    expect(!snapshot.success && snapshot.status).toBe('EMLINK');
+  });
+
+  it('reads an owner-only store that still has its staging name', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.seedHardLink(STORE_PATH, `${STORE_PATH}.staged.tmp`);
+    const snapshot = store.read();
+    expect(snapshot.success && snapshot.data.records).toEqual({ a: 'b' });
   });
 
   it('threat 7: hardens an oversized store it is about to reject', () => {
@@ -287,7 +295,7 @@ describe('SecureJsonStore read path', () => {
 
   it('threat 30: keeps the original failure when the close is refused as well', () => {
     const { store, fileSystem } = makeStore();
-    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', OWNER_ONLY);
+    fileSystem.seedFile(STORE_PATH, '{"a":"b"}', 0o644);
     fileSystem.seedHardLink(STORE_PATH, '/data/someone-elses-name');
     fileSystem.forcedFailures.set('close', 'EIO');
     const snapshot = store.read();

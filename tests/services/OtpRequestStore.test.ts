@@ -7,7 +7,10 @@
  * exclusive publish really refuses a taken name.
  */
 
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import {
+  linkSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -85,6 +88,21 @@ describe('OtpRequestStore on a real filesystem', () => {
     const created = importer.create('leumi', 60_000, 1_000);
     expect(portal.submit(created.id, CODE, 60_999)).toBe(true);
     expect(importer.poll(created, 61_000)).toEqual({ kind: 'code', code: CODE });
+  });
+
+  it('hands over a code whose answer still has its staging name at the deadline', () => {
+    const created = importer.create('leumi', 60_000, 1_000);
+    expect(portal.submit(created.id, CODE, 2_000)).toBe(true);
+    const answer = join(dir, `otp-requests.${created.id}.answer.json`);
+    linkSync(answer, `${answer}.${randomUUID()}.tmp`);
+    expect(importer.poll(created, 61_000)).toEqual({ kind: 'code', code: CODE });
+  });
+
+  it('accepts a code for a request that still has its staging name', () => {
+    const created = importer.create('leumi', 60_000, 1_000);
+    const request = join(dir, `otp-requests.${created.id}.json`);
+    linkSync(request, `${request}.${randomUUID()}.tmp`);
+    expect(portal.submit(created.id, CODE, 2_000)).toBe(true);
   });
 
   it('ignores the combined file an older release wrote', () => {

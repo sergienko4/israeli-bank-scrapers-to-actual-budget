@@ -151,7 +151,7 @@ another account's token can only be asked about, never listed.
 | No entry for the key | success, empty record |
 | An unusable entry anywhere in the file | success, that entry reads as empty, **not intact** |
 | Damaged file (bad JSON, wrong shape, symlink, oversized) | success, empty record, **not intact** |
-| A file that could not be read (permission, refused close, hard link) | **failure** |
+| A file that could not be read (permission, refused close, hard link others can read) | **failure** |
 
 The last row is a failure rather than an empty record so the caller can say
 why a run went cold. Swallowing it would make a broken store

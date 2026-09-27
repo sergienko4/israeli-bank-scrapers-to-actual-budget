@@ -117,9 +117,10 @@ describe('BankTokenStore read', () => {
     expect(store.read('oneZero')).toMatchObject({ success: false, status: 'EACCES' });
   });
 
-  it('reports a hard-linked store as a failure rather than trusting it', () => {
+  it('reports a hard-linked store readable by others as a failure rather than trusting it', () => {
     const { store, fileSystem } = makeStore();
-    seedRecords(fileSystem, { oneZero: { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN } });
+    const records = { oneZero: { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN } };
+    seedRecords(fileSystem, records, WORLD_READABLE);
     fileSystem.seedHardLink(STORE_PATH, '/home/victim/notes.json');
     expect(store.read('oneZero')).toMatchObject({ success: false, status: 'EMLINK' });
   });
