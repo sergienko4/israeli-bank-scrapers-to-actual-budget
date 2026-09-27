@@ -73,7 +73,9 @@ the `token` field of that entry's record in `bank-tokens.json`, keyed
 [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token))
 and put it in the matching `*_OTP_LONG_TERM` variable. This needs a
 plain-text token file, which the importer writes only when no config
-password (`CREDENTIALS_ENCRYPTION_PASSWORD`) is set. With a config password,
+password is set: neither `CREDENTIALS_ENCRYPTION_PASSWORD` nor the legacy
+`CONFIG_PASSWORD`, which the importer uses when the first is unset or
+empty. With a config password,
 each record is sealed, so its `token` field is not a token: leave
 `*_OTP_LONG_TERM` empty, and the suite logs in by SMS instead, so the
 warm-start path is not tested. Each SMS login creates a new

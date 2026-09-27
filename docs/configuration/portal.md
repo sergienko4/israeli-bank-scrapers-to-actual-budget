@@ -586,7 +586,8 @@ Reach your own importer over a **private tunnel** instead:
   only do so behind auth + HTTPS.
 - Secrets are masked in the UI and preserved on save unless you change them.
 - Saves are split into `config.json` (settings) + `credentials.json` (secrets);
-  credentials are re-encrypted when `CREDENTIALS_ENCRYPTION_PASSWORD` is set.
+  credentials are re-encrypted when `CREDENTIALS_ENCRYPTION_PASSWORD` (or the
+  legacy `CONFIG_PASSWORD`) is set.
 - The runtime files the portal shares with the importer (the import history,
   device tokens and OTP files) are owner-only (`0600`) and replaced atomically;
   see *Upgrade both services together* above.
