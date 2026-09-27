@@ -81,7 +81,8 @@ export default class AppOtpPrompter implements ITwoFactorPrompter {
    * @param ttlMs - Configured timeout, for the TimeoutError message.
    * @returns The submitted OTP code.
    * @throws TimeoutError when the deadline passes without a submitted code.
-   * @throws StorageError when the store cannot record the expiry.
+   * @throws StorageError when the store cannot record the expiry and no code
+   *   has arrived.
    */
   private async waitForCode(
     bankName: string, request: IOtpRequest, ttlMs: number,

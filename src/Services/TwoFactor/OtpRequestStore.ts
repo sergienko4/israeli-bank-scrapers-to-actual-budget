@@ -9,7 +9,11 @@
  * exclusively too, by whichever side is first: the portal {@link submit}s the
  * user's code, or the importer, {@link poll}ing at the deadline, records the
  * expiry. The loser learns that it lost, so a code is either used or refused,
- * never accepted and then dropped. A used code is replaced by a tombstone:
+ * never accepted and then dropped. If the importer cannot record the expiry,
+ * it gives the request up: it removes the request file, then looks at the
+ * answer once more and takes any code there. The portal, having published a
+ * code, reads the request again, and withdraws the code when the request is
+ * gone and the importer has not used it. A used code is replaced by a tombstone:
  * the code leaves the disk but the answer's name stays taken, so no second
  * code is accepted for the same request.
  *
@@ -34,7 +38,7 @@ import UUID_PATTERN from '../../Utils/IdPatterns.js';
 import OtpFileNames from './OtpFileNames.js';
 import sweepOtpFiles from './OtpFileSweep.js';
 import {
-  answerRecords, codeIn, type IOtpRequest, type OtpPoll, requestIn, trustedRecords,
+  answerRecords, codeIn, type IOtpRequest, isConsumedIn, type OtpPoll, requestIn, trustedRecords,
 } from './OtpRecords.js';
 
 export type { IOtpRequest, OtpPoll } from './OtpRecords.js';
@@ -105,12 +109,19 @@ export default class OtpRequestStore {
 
   /**
    * Publishes the user's code as a live request's answer.
+   *
+   * <p>Once the code is published, the request is read again: an importer
+   * that gives the request up removes the request file before its last look
+   * at the answer, so a missing request means that look may be over. The
+   * code is then withdrawn, unless the importer has already used it.
    * @param id - The request id to submit against.
    * @param code - The OTP code entered by the user.
    * @param now - Current time in epoch ms (defaults to Date.now()).
    * @returns True when the code was accepted; false when there is no such live
-   *   request, or it already has an answer.
-   * @throws StorageError when the request cannot be read or the answer saved.
+   *   request, it already has an answer, or the importer gave it up while the
+   *   code was being published.
+   * @throws StorageError when the request cannot be read or the answer saved,
+   *   or, after withdrawing the code, when the request cannot be read again.
    */
   public submit(id: string, code: string, now: number = Date.now()): boolean {
     if (!UUID_PATTERN.test(id)) return false;
@@ -119,7 +130,7 @@ export default class OtpRequestStore {
     if (read.data === false || read.data.deadline <= now) return false;
     const answer = answerRecords(read.data, { code });
     const published = this.answerStore(id).commitNew(answer);
-    if (published.success) return true;
+    if (published.success) return this.confirm(read.data);
     if (published.status === 'EEXIST') return false;
     throw storageError('Could not save the OTP code', published);
   }
@@ -134,13 +145,14 @@ export default class OtpRequestStore {
    * removes any staged copy of the answer a publish left behind. At the
    * deadline the importer races the portal for the answer: winning records
    * the expiry, and losing means the portal published a code in time, which
-   * is returned.
+   * is returned. If the expiry cannot be recorded, the importer gives the
+   * request up, still taking a code that has arrived.
    * @param request - The request {@link create} returned.
    * @param now - Current time in epoch ms (defaults to Date.now()).
    * @returns Whether to keep waiting, the code, or that the request expired.
-   * @throws StorageError when the expiry cannot be recorded, or the answer
-   *   that beat it cannot be read; the request file is removed first, so the
-   *   portal stops offering it.
+   * @throws StorageError when the expiry cannot be recorded and no code has
+   *   arrived, or the answer that beat it cannot be read; the request file is
+   *   removed first, so the portal stops offering it.
    */
   public poll(request: IOtpRequest, now: number = Date.now()): OtpPoll {
     const polled = now < request.deadline ? this.awaitCode(request) : this.expire(request);
@@ -203,15 +215,38 @@ export default class OtpRequestStore {
    * Records the expiry as the answer, unless the portal published a code first.
    * @param request - The request whose deadline was reached.
    * @returns The code the portal published in time, or the expiry.
-   * @throws StorageError when the expiry cannot be recorded, or the answer
-   *   that beat it cannot be read, after removing the request file.
+   * @throws StorageError when the expiry cannot be recorded and no code has
+   *   arrived, or the answer that beat it cannot be read, after removing the
+   *   request file.
    */
   private expire(request: IOtpRequest): OtpPoll {
     const answer = answerRecords(request, { expired: true });
     const expiry = this.answerStore(request.id).commitNew(answer);
     if (expiry.success) return EXPIRED;
     if (expiry.status === 'EEXIST') return this.takeWinningAnswer(request);
-    throw this.abandon(request, 'Could not record the OTP expiry', expiry);
+    return this.giveUp(request, expiry);
+  }
+
+  /**
+   * Gives up a request whose expiry could not be recorded, still taking a
+   * code that has arrived.
+   *
+   * <p>The request file goes before the last look at the answer. A submit
+   * that publishes after that look therefore finds the request gone, and
+   * withdraws its code, so no code is accepted that the importer will not use.
+   * @param request - The request whose deadline was reached.
+   * @param failure - Why the expiry could not be recorded.
+   * @returns The code the answer holds.
+   * @throws StorageError naming the expiry failure when the answer holds no
+   *   code, or cannot be read.
+   */
+  private giveUp(request: IOtpRequest, failure: IProcedureFailure): OtpPoll {
+    this.removeRequest(request);
+    const code = this.readCode(request);
+    if (!code.success || code.data === false) {
+      throw storageError('Could not record the OTP expiry', failure);
+    }
+    return this.settle(request, code.data, EXPIRED);
   }
 
   /**
@@ -255,6 +290,51 @@ export default class OtpRequestStore {
   private abandon(request: IOtpRequest, action: string, failure: IProcedureFailure): StorageError {
     this.removeRequest(request);
     return storageError(action, failure);
+  }
+
+  /**
+   * Keeps a just-published code only if the importer will see it, or has.
+   *
+   * <p>A request file still there means the importer's last look at the
+   * answer is still to come. A missing one, or one that cannot be read,
+   * means that look may be over, so the code is withdrawn unless the
+   * importer has already replaced it with its tombstone.
+   * @param request - The request the code was published for.
+   * @returns True when the importer will take the code, or took it; false
+   *   when the request was given up and the code withdrawn.
+   * @throws StorageError when the request cannot be read, after withdrawing the code.
+   */
+  private confirm(request: IOtpRequest): boolean {
+    const reread = this.readRequest(request.id);
+    if (reread.success && reread.data !== false) return true;
+    if (this.isConsumed(request)) return true;
+    this.withdraw(request);
+    if (!reread.success) throw storageError('Could not read the OTP request', reread);
+    return false;
+  }
+
+  /**
+   * Reports whether the importer has replaced a request's code with its tombstone.
+   * @param request - The request the code was published for.
+   * @returns Whether the answer is that request's tombstone; false when it
+   *   cannot be read.
+   */
+  private isConsumed(request: IOtpRequest): boolean {
+    const snapshot = this.answerStore(request.id).read();
+    if (!snapshot.success) return false;
+    const records = trustedRecords(snapshot.data);
+    return isConsumedIn(records, request);
+  }
+
+  /**
+   * Removes a published code no importer will take, and any staged copy of
+   * it, best-effort; the sweep collects a survivor.
+   * @param request - The request the code was published for.
+   */
+  private withdraw(request: IOtpRequest): void {
+    const answerPath = this._names.answerPath(request.id);
+    this._fileSystem.remove(answerPath);
+    this.removeAnswerStages(request);
   }
 
   /**

@@ -12,7 +12,85 @@ import { describe, expect, it } from 'vitest';
 
 import StorageError from '../../src/Errors/StorageError.js';
 import OtpRequestStore, { type IOtpRequest } from '../../src/Services/TwoFactor/OtpRequestStore.js';
+import type {
+  IMoveOutcome, IOpenFile, IRemoveOutcome, IWriteOutcome,
+} from '../../src/Storage/FileSystemPort.js';
+import type { Procedure } from '../../src/Types/Procedure.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
+
+/** The operations another process's step can be run just before. */
+type InterleavePoint = 'createExclusive' | 'publishExclusive' | 'openForRead' | 'remove';
+
+/**
+ * A filesystem that runs another process's step just before one of its
+ * operations, as when the importer and the portal act on one request at
+ * the same moment.
+ */
+class InterleavingFileSystem extends FakeFileSystem {
+  private _armed: { point: InterleavePoint; step: () => void } | undefined = undefined;
+
+  /**
+   * Arms a step to run once, just before the next call of an operation.
+   * @param point - The operation to run it before.
+   * @param step - What the other process does.
+   */
+  public runBefore(point: InterleavePoint, step: () => void): void {
+    this._armed = { point, step };
+  }
+
+  /**
+   * Runs the armed step when it is armed for this operation, disarming it first.
+   * @param point - The operation about to run.
+   */
+  private runArmed(point: InterleavePoint): void {
+    const armed = this._armed;
+    if (armed?.point !== point) return;
+    this._armed = undefined;
+    armed.step();
+  }
+
+  /**
+   * Runs an armed step, then creates the file as the fake always does.
+   * @param filePath - Name to create.
+   * @param contents - Payload to write.
+   * @returns The bytes written, or a failure carrying the errno in `status`.
+   */
+  public override createExclusive(filePath: string, contents: string): Procedure<IWriteOutcome> {
+    this.runArmed('createExclusive');
+    return super.createExclusive(filePath, contents);
+  }
+
+  /**
+   * Runs an armed step, then publishes as the fake always does.
+   * @param stagePath - Staged name to publish.
+   * @param finalPath - Name to publish it under.
+   * @returns The final path, or a failure carrying the errno.
+   */
+  public override publishExclusive(stagePath: string, finalPath: string): Procedure<IMoveOutcome> {
+    this.runArmed('publishExclusive');
+    return super.publishExclusive(stagePath, finalPath);
+  }
+
+  /**
+   * Runs an armed step, then opens as the fake always does.
+   * @param filePath - Name to open.
+   * @returns The open file, or a failure carrying the errno in `status`.
+   */
+  public override openForRead(filePath: string): Procedure<IOpenFile> {
+    this.runArmed('openForRead');
+    return super.openForRead(filePath);
+  }
+
+  /**
+   * Runs an armed step, then removes as the fake always does.
+   * @param filePath - Name to remove.
+   * @returns Whether it was present, or a failure carrying the errno.
+   */
+  public override remove(filePath: string): Procedure<IRemoveOutcome> {
+    this.runArmed('remove');
+    return super.remove(filePath);
+  }
+}
 
 /** The configured `OTP_REQUESTS_PATH` every name derives from. */
 const BASE_PATH = '/data/otp-requests.json';
@@ -38,6 +116,17 @@ const STAGE_TOKEN = '11111111-2222-4333-8444-555555555555';
  */
 function makeStore(): { store: OtpRequestStore; fileSystem: FakeFileSystem } {
   const fileSystem = new FakeFileSystem();
+  fileSystem.seedDirectory('/data');
+  const store = new OtpRequestStore(fileSystem, BASE_PATH);
+  return { store, fileSystem };
+}
+
+/**
+ * Builds a store over a fresh interleaving filesystem holding the data directory.
+ * @returns The store under test and the filesystem behind it.
+ */
+function makeInterleavedStore(): { store: OtpRequestStore; fileSystem: InterleavingFileSystem } {
+  const fileSystem = new InterleavingFileSystem();
   fileSystem.seedDirectory('/data');
   const store = new OtpRequestStore(fileSystem, BASE_PATH);
   return { store, fileSystem };
@@ -111,6 +200,22 @@ function pendingIds(store: OtpRequestStore, now: number): string[] {
  */
 function seedRequest(fileSystem: FakeFileSystem, request: IOtpRequest): void {
   fileSystem.seedFile(requestPath(request.id), JSON.stringify(request), 0o600);
+}
+
+/**
+ * Polls once at the deadline, as the importer's last poll does.
+ * @param store - Store to poll.
+ * @param request - The request being polled.
+ * @returns True when the poll hands over the user's code; false when it
+ *   reports the expiry or throws.
+ */
+function usesCodeAtDeadline(store: OtpRequestStore, request: IOtpRequest): boolean {
+  try {
+    const polled = store.poll(request, NOW + TTL);
+    return polled.kind === 'code' && polled.code === CODE;
+  } catch {
+    return false;
+  }
 }
 
 describe('OtpRequestStore: creating a request', () => {
@@ -574,5 +679,122 @@ describe('OtpRequestStore: polling for the answer', () => {
     store.submit(created.id, CODE, NOW + 1);
     fileSystem.forcedFailures.set('remove', 'EACCES');
     expect(store.poll(created, NOW + 2)).toEqual({ kind: 'code', code: CODE });
+  });
+});
+
+describe('OtpRequestStore: giving a request up while a code is sent', () => {
+  it.each(['createExclusive', 'publishExclusive'])(
+    'never accepts a code the importer will not use when its expiry fails at %s',
+    (operation) => {
+      // A submit read the live request just before the deadline; the
+      // importer, failing to record the expiry, gives the request up before
+      // that submit stages its answer.
+      const { store, fileSystem } = makeInterleavedStore();
+      const created = store.create('leumi', TTL, NOW);
+      let isCodeUsed = false;
+      fileSystem.runBefore('createExclusive', () => {
+        fileSystem.forcedFailuresOnce.set(operation, 'EIO');
+        isCodeUsed = usesCodeAtDeadline(store, created);
+      });
+      const isAccepted = store.submit(created.id, CODE, NOW + TTL - 1);
+      expect({ isAccepted, isCodeUsed }).not.toEqual({ isAccepted: true, isCodeUsed: false });
+    },
+  );
+
+  it('never accepts a code the importer will not use when it lands as the request is removed', () => {
+    // The whole submit runs just before the importer, giving the request up,
+    // removes the request file; the importer's last look at the answer comes
+    // after that removal.
+    const { store, fileSystem } = makeInterleavedStore();
+    const created = store.create('leumi', TTL, NOW);
+    let isAccepted = false;
+    fileSystem.forcedFailuresOnce.set('createExclusive', 'EIO');
+    fileSystem.runBefore('remove', () => {
+      isAccepted = store.submit(created.id, CODE, NOW + TTL - 1);
+    });
+    const isCodeUsed = usesCodeAtDeadline(store, created);
+    expect({ isAccepted, isCodeUsed }).not.toEqual({ isAccepted: true, isCodeUsed: false });
+  });
+
+  it('uses a code published in time even when the importer can stage nothing', () => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    store.submit(created.id, CODE, NOW + TTL - 1);
+    fileSystem.forcedFailures.set('createExclusive', 'EMFILE');
+    expect(store.poll(created, NOW + TTL)).toEqual({ kind: 'code', code: CODE });
+  });
+
+  it('throws the expiry failure when the answer cannot be read for a last look', () => {
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    fileSystem.forcedFailures.set('publishExclusive', 'EPERM');
+    fileSystem.forcedFailures.set('openForRead', 'EACCES');
+    expect(() => store.poll(created, NOW + TTL)).toThrow(/record the OTP expiry.*EPERM/);
+  });
+
+  it('keeps a code the importer took between the publish and the portal\'s second look', () => {
+    const { store, fileSystem } = makeInterleavedStore();
+    const created = store.create('leumi', TTL, NOW);
+    let polled: unknown;
+    fileSystem.runBefore('publishExclusive', () => {
+      fileSystem.runBefore('openForRead', () => {
+        polled = store.poll(created, NOW + 2);
+      });
+    });
+    expect(store.submit(created.id, CODE, NOW + 1)).toBe(true);
+    expect(polled).toEqual({ kind: 'code', code: CODE });
+  });
+
+  it('withdraws its code, and any staged copy, when the request was given up as it published', () => {
+    const { store, fileSystem } = makeInterleavedStore();
+    const created = store.create('leumi', TTL, NOW);
+    fileSystem.runBefore('createExclusive', () => {
+      fileSystem.forcedFailuresOnce.set('publishExclusive', 'EIO');
+      usesCodeAtDeadline(store, created);
+      fileSystem.forcedFailuresOnce.set('remove', 'EBUSY');
+    });
+    expect(store.submit(created.id, CODE, NOW + TTL - 1)).toBe(false);
+    expect(filesIn(fileSystem)).toEqual([]);
+  });
+
+  it('withdraws its code, then throws, when the request cannot be read again', () => {
+    const { store, fileSystem } = makeInterleavedStore();
+    const created = store.create('leumi', TTL, NOW);
+    fileSystem.runBefore('publishExclusive', () => {
+      fileSystem.forcedFailuresOnce.set('openForRead', 'EIO');
+    });
+    expect(() => store.submit(created.id, CODE, NOW + 1)).toThrow(/read the OTP request.*EIO/);
+    expect(fileSystem.hasEntry(answerPath(created.id))).toBe(false);
+  });
+
+  it.each([
+    ['names another request', (_id: string) => JSON.stringify({ requestId: UNKNOWN_ID, deadline: NOW + TTL, consumed: true })],
+    ['carries another deadline', (id: string) => JSON.stringify({ requestId: id, deadline: NOW + TTL + 1, consumed: true })],
+    ['is not marked used', (id: string) => JSON.stringify({ requestId: id, deadline: NOW + TTL, consumed: 'yes' })],
+    ['also holds a code', (id: string) => JSON.stringify({ requestId: id, deadline: NOW + TTL, consumed: true, code: CODE })],
+    ['held a __proto__ key', (id: string) => `{"__proto__":{},"requestId":"${id}","deadline":${String(NOW + TTL)},"consumed":true}`],
+  ])('withdraws its code when the request is gone and the answer %s', (_label, answerFor) => {
+    const { store, fileSystem } = makeInterleavedStore();
+    const created = store.create('leumi', TTL, NOW);
+    fileSystem.runBefore('publishExclusive', () => {
+      fileSystem.runBefore('openForRead', () => {
+        fileSystem.remove(requestPath(created.id));
+        fileSystem.seedFile(answerPath(created.id), answerFor(created.id), 0o600);
+      });
+    });
+    expect(store.submit(created.id, CODE, NOW + 1)).toBe(false);
+  });
+
+  it('withdraws its code when the request is gone and the answer cannot be read', () => {
+    const { store, fileSystem } = makeInterleavedStore();
+    const created = store.create('leumi', TTL, NOW);
+    fileSystem.runBefore('publishExclusive', () => {
+      fileSystem.runBefore('openForRead', () => {
+        fileSystem.remove(requestPath(created.id));
+        fileSystem.forcedFailuresOnce.set('readAll', 'EIO');
+      });
+    });
+    expect(store.submit(created.id, CODE, NOW + 1)).toBe(false);
+    expect(fileSystem.hasEntry(answerPath(created.id))).toBe(false);
   });
 });

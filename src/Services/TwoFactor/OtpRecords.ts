@@ -19,6 +19,9 @@ const WELL_FORMED_CODE = new RegExp(OTP_CODE_PATTERN);
 /** The fields an answer holding the user's code is written with, and no others. */
 const CODE_ANSWER_FIELDS: ReadonlySet<string> = new Set(['requestId', 'deadline', 'code']);
 
+/** The fields a used code's tombstone is written with, and no others. */
+const TOMBSTONE_FIELDS: ReadonlySet<string> = new Set(['requestId', 'deadline', 'consumed']);
+
 /** The fields the importer writes a request with, and no others. */
 const REQUEST_FIELDS: ReadonlySet<string> = new Set(['id', 'bankId', 'createdAt', 'deadline']);
 
@@ -131,4 +134,17 @@ export function codeIn(records: StoredRecords, request: IOtpRequest): string | f
   if (!holdsOnly(records, CODE_ANSWER_FIELDS) || records.requestId !== request.id) return false;
   if (records.deadline !== request.deadline) return false;
   return typeof code === 'string' && WELL_FORMED_CODE.test(code) ? code : false;
+}
+
+/**
+ * Reports whether an answer file's records are the tombstone the importer
+ * leaves once it has used this request's code.
+ * @param records - The records of a healthy answer file.
+ * @param request - The request the answer must belong to.
+ * @returns Whether they are this request's tombstone: its id and deadline,
+ *   marked used, and no other field.
+ */
+export function isConsumedIn(records: StoredRecords, request: IOtpRequest): boolean {
+  if (!holdsOnly(records, TOMBSTONE_FIELDS) || records.requestId !== request.id) return false;
+  return records.deadline === request.deadline && records.consumed === true;
 }
