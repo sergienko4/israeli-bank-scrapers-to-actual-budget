@@ -36,6 +36,7 @@ import type { IProcedureFailure, Procedure } from '../../Types/Index.js';
 import { succeed } from '../../Types/ProcedureHelpers.js';
 import UUID_PATTERN from '../../Utils/IdPatterns.js';
 import OtpFileNames from './OtpFileNames.js';
+import OtpFileRemoval from './OtpFileRemoval.js';
 import sweepOtpFiles from './OtpFileSweep.js';
 import {
   answerRecords, codeIn, type IOtpRequest, isConsumedIn, type OtpPoll, requestIn, trustedRecords,
@@ -67,6 +68,8 @@ export default class OtpRequestStore {
 
   private readonly _names: OtpFileNames;
 
+  private readonly _removal: OtpFileRemoval;
+
   /**
    * Binds the store to one directory on one filesystem.
    * @param fileSystem - Injected filesystem access.
@@ -75,6 +78,7 @@ export default class OtpRequestStore {
   constructor(fileSystem: IFileSystem, basePath: string) {
     this._fileSystem = fileSystem;
     this._names = new OtpFileNames(basePath);
+    this._removal = new OtpFileRemoval(fileSystem, this._names);
   }
 
   /**
@@ -156,7 +160,7 @@ export default class OtpRequestStore {
    */
   public poll(request: IOtpRequest, now: number = Date.now()): OtpPoll {
     const polled = now < request.deadline ? this.awaitCode(request) : this.expire(request);
-    if (polled.kind !== 'waiting') this.retire(request);
+    if (polled.kind !== 'waiting') this._removal.retire(request.id);
     return polled;
   }
 
@@ -241,7 +245,7 @@ export default class OtpRequestStore {
    *   code, or cannot be read.
    */
   private giveUp(request: IOtpRequest, failure: IProcedureFailure): OtpPoll {
-    this.removeRequest(request);
+    this._removal.removeRequest(request.id);
     const code = this.readCode(request);
     if (!code.success || code.data === false) {
       throw storageError('Could not record the OTP expiry', failure);
@@ -288,7 +292,7 @@ export default class OtpRequestStore {
    * @returns The error to throw.
    */
   private abandon(request: IOtpRequest, action: string, failure: IProcedureFailure): StorageError {
-    this.removeRequest(request);
+    this._removal.removeRequest(request.id);
     return storageError(action, failure);
   }
 
@@ -308,7 +312,7 @@ export default class OtpRequestStore {
     const reread = this.readRequest(request.id);
     if (reread.success && reread.data !== false) return true;
     if (this.isConsumed(request)) return true;
-    this.withdraw(request);
+    this._removal.withdraw(request.id);
     if (!reread.success) throw storageError('Could not read the OTP request', reread);
     return false;
   }
@@ -324,17 +328,6 @@ export default class OtpRequestStore {
     if (!snapshot.success) return false;
     const records = trustedRecords(snapshot.data);
     return isConsumedIn(records, request);
-  }
-
-  /**
-   * Removes a published code no importer will take, and any staged copy of
-   * it, best-effort; the sweep collects a survivor.
-   * @param request - The request the code was published for.
-   */
-  private withdraw(request: IOtpRequest): void {
-    const answerPath = this._names.answerPath(request.id);
-    this._fileSystem.remove(answerPath);
-    this.removeAnswerStages(request);
   }
 
   /**
@@ -365,44 +358,6 @@ export default class OtpRequestStore {
   private leaveTombstone(request: IOtpRequest): void {
     const records = answerRecords(request, { consumed: true });
     this.answerStore(request.id).commit({ records, shouldQuarantine: false });
-  }
-
-  /**
-   * Removes what a settled request leaves on disk besides its answer.
-   *
-   * <p>The request file goes first, so the portal stops accepting a code for
-   * it before any staged copy is removed.
-   * @param request - The settled request.
-   */
-  private retire(request: IOtpRequest): void {
-    this.removeRequest(request);
-    this.removeAnswerStages(request);
-  }
-
-  /**
-   * Removes every staged copy of a settled request's answer, best-effort.
-   *
-   * <p>A publish links its stage to the answer's name, then unlinks the stage;
-   * if the unlink fails, the stage keeps the answer's contents under a second
-   * name, so a tombstone would not take the code off the disk. A copy that
-   * cannot be removed, or a listing that fails, leaves it for the startup
-   * sweep, an hour after its last write.
-   * @param request - The settled request.
-   */
-  private removeAnswerStages(request: IOtpRequest): void {
-    const listed = this._fileSystem.listNames(this._names.directory);
-    if (!listed.success) return;
-    const stages = this._names.answerStagesOf(request.id, listed.data);
-    for (const stage of stages) this._fileSystem.remove(stage);
-  }
-
-  /**
-   * Removes a settled request's file, best-effort; the sweep collects a survivor.
-   * @param request - The settled request.
-   */
-  private removeRequest(request: IOtpRequest): void {
-    const requestPath = this._names.requestPath(request.id);
-    this._fileSystem.remove(requestPath);
   }
 
   /**
