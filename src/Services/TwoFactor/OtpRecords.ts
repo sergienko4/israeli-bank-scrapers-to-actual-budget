@@ -108,25 +108,30 @@ function isCodeAnswerField(field: string): boolean {
 }
 
 /**
- * Reports whether an answer holds exactly the fields a submitted code is
- * written with, so one also marked used or expired is not taken for a code.
+ * Reports whether an answer holds no field a submitted code is not written
+ * with, so one also marked used or expired is not taken for a code.
+ *
+ * <p>{@link codeIn} checks each of those fields' values, so together they
+ * require exactly those fields.
  * @param records - The records of a healthy answer file.
- * @returns Whether its field names are exactly those.
+ * @returns Whether every field name is one of those.
  */
 function isCodeAnswer(records: StoredRecords): boolean {
   const fields = Object.keys(records);
-  return fields.length === CODE_ANSWER_FIELDS.size && fields.every(isCodeAnswerField);
+  return fields.every(isCodeAnswerField);
 }
 
 /**
  * Reads the user's code out of an answer file's records.
  * @param records - The records of a healthy answer file.
  * @param request - The request the answer must belong to.
- * @returns The code, or false unless the answer is this request's, holds
- *   only the fields a code answer is written with, and holds a well-formed code.
+ * @returns The code, or false unless the answer is this request's, carries
+ *   its deadline, holds only the fields a code answer is written with, and
+ *   holds a well-formed code.
  */
 export function codeIn(records: StoredRecords, request: IOtpRequest): string | false {
   const { code } = records;
   if (!isCodeAnswer(records) || records.requestId !== request.id) return false;
+  if (records.deadline !== request.deadline) return false;
   return typeof code === 'string' && WELL_FORMED_CODE.test(code) ? code : false;
 }

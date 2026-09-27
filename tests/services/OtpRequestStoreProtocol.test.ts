@@ -480,6 +480,20 @@ describe('OtpRequestStore: polling for the answer', () => {
     expect(store.poll(created, NOW + 1)).toEqual({ kind: 'waiting' });
   });
 
+  it.each([
+    ['another deadline', String(NOW + TTL + 1)],
+    ['a deadline in text', `"${String(NOW + TTL)}"`],
+    ['a deadline JSON reads as infinite', '1e999'],
+  ])('hands over no code from an answer holding %s', (_label, deadline) => {
+    // answerRecords always writes the request's own deadline.
+    const { store, fileSystem } = makeStore();
+    const created = store.create('leumi', TTL, NOW);
+    const answer = `{"requestId":"${created.id}","deadline":${deadline},"code":"${CODE}"}`;
+    fileSystem.seedFile(answerPath(created.id), answer, 0o600);
+    expect(store.poll(created, NOW + 1)).toEqual({ kind: 'waiting' });
+    expect(store.poll(created, NOW + TTL)).toEqual({ kind: 'expired' });
+  });
+
   it.each(['1234', '12345678'])('hands over a %s code at the edge of the allowed length', (code) => {
     const { store, fileSystem } = makeStore();
     const created = store.create('leumi', TTL, NOW);
