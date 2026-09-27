@@ -155,7 +155,7 @@ export class AppTokenStore {
     const hash = hashToken(token);
     const record = records.find((entry) => entry.tokenHash === hash);
     if (!record) return fail('Unknown refresh token');
-    if (record.revokedAt !== undefined) return this.reuseDetected(record, now);
+    if (record.revokedAt !== undefined) return this.reuseDetected(loaded, record, now);
     record.revokedAt = now;
     record.lastUsedAt = now;
     const issued = this.build(record.familyId, record, now);
@@ -256,13 +256,17 @@ export class AppTokenStore {
   }
 
   /**
-   * Handles a replayed refresh token by revoking its family.
+   * Handles a replayed refresh token by revoking its family, within the read
+   * that caught the replay.
+   * @param loaded - The records as read for this rotation.
    * @param record - The already-revoked record that was presented.
    * @param now - Current epoch milliseconds.
    * @returns A failure carrying the record id and revoked count for the caller's WARN.
    */
-  private reuseDetected(record: IAppTokenRecord, now: number): Procedure<IIssuedToken> {
-    const revoked = this.revokeFamily(record.familyId, now);
+  private reuseDetected(
+    loaded: ILoadedTokens, record: IAppTokenRecord, now: number,
+  ): Procedure<IIssuedToken> {
+    const revoked = this.revokeIn(loaded, record.familyId, now);
     return fail('Refresh token reuse detected', {
       status: 'reused', details: [`id=${record.id}`, `revoked=${String(revoked)}`],
     });
