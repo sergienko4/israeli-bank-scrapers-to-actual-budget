@@ -22,6 +22,7 @@ import type { ISessionPayload } from './PortalSession.js';
 import {
   ACCESS_TTL_MS, COOKIE_TTL_MS, createSession,
 } from './PortalSession.js';
+import type { IPortalStores } from './PortalStores.js';
 import { bearerSessionOf, verifyToken } from './PortalTokenAuth.js';
 
 const COOKIE = 'portal_session';
@@ -283,6 +284,16 @@ function registerGuardHook(app: FastifyInstance, live: RuntimeAccessor): { regis
   return { registered: true };
 }
 
+/** What the auth routes need. */
+export interface IAuthRouteDeps {
+  /** Boot-time portal runtime (source of pinned host/port/secret). */
+  readonly boot: IPortalRuntime;
+  /** Shared config store providing the live config per request. */
+  readonly config: PortalConfigStore;
+  /** The portal's runtime stores, the same bag its start sweep uses. */
+  readonly stores: IPortalStores;
+}
+
 /**
  * Registers the auth-status + password-login + logout + guard routes. Each route
  * derives a live runtime from the boot runtime + the current config in the store
@@ -290,20 +301,19 @@ function registerGuardHook(app: FastifyInstance, live: RuntimeAccessor): { regis
  * UI applies on the next request without a restart. Host/port/session secret stay
  * boot-pinned (a live server cannot rebind or rotate its cookie key).
  * @param app - Fastify instance.
- * @param boot - Boot-time portal runtime (source of pinned host/port/secret).
- * @param store - Shared config store providing the live config per request.
+ * @param deps - The boot runtime, the config store and the runtime stores.
  * @returns Confirmation that the auth routes are registered.
  */
 export function registerAuthRoutes(
-  app: FastifyInstance, boot: IPortalRuntime, store: PortalConfigStore,
+  app: FastifyInstance, deps: IAuthRouteDeps,
 ): { registered: true } {
-  const live = liveAccessor(boot, store);
+  const live = liveAccessor(deps.boot, deps.config);
   registerStatusRoute(app, live);
   registerLoginRoute(app, live);
   registerTokenRoute(app, live);
   app.post('/auth/logout', (_req, reply) => reply.clearCookie(COOKIE, { path: '/' }).send({ ok: true }));
   registerGoogleRoutes(app, live, grant);
-  registerAppRoutes(app, live, sessionOf);
+  registerAppRoutes(app, { live, sessionOf, stores: deps.stores });
   registerGuardHook(app, live);
   return { registered: true };
 }

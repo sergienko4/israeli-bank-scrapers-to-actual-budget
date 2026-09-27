@@ -1,38 +1,37 @@
 /**
  * File reader for optionally-encrypted JSON config files.
  *
- * Isolated from {@link ConfigBootstrap} to keep `node:fs` and encryption
- * helpers off the bootstrap module's cross-layer dependency footprint.
+ * Isolated from {@link ConfigBootstrap} to keep file reading and encryption
+ * helpers off the bootstrap module's cross-layer dependency footprint. The
+ * text is read through {@link readConfigText}, so a FIFO, a directory, an
+ * oversized file or bad UTF-8 is refused by name.
  *
  * Each helper performs ONE responsibility (read / parse / decrypt) so the
  * top-level orchestrator stays ≤10 LoC per the project's SRP convention.
  */
-
-import { existsSync, readFileSync } from 'node:fs';
 
 import {
   decryptConfig,
   getEncryptionPassword,
   isEncryptedConfig,
 } from '../../Config/ConfigEncryption.js';
+import readConfigText from '../../Config/Loaders/ConfigFileText.js';
+import parseProtoFreeJson from '../../Storage/ProtoFreeJson.js';
 import type { Procedure } from '../../Types/Index.js';
 import { fail, isFail, succeed } from '../../Types/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
 
 /**
- * Reads UTF-8 file contents, or fails if absent / unreadable.
+ * Reads UTF-8 file contents, or fails if absent / unreadable. Only a missing
+ * file reads as "File not found"; any other failure names its cause.
  *
  * @param filePath - Absolute path of the file to read.
  * @returns Procedure with raw UTF-8 contents, or failure.
  */
 function readRawFile(filePath: string): Procedure<string> {
-  if (!existsSync(filePath)) return fail(`File not found: ${filePath}`);
-  try {
-    const contents = readFileSync(filePath, 'utf8');
-    return succeed(contents);
-  } catch (error: unknown) {
-    return fail(`Failed to read ${filePath}: ${errorMessage(error)}`);
-  }
+  const text = readConfigText(filePath);
+  if (!text.success && text.status === 'ENOENT') return fail(`File not found: ${filePath}`);
+  return text;
 }
 
 /**
@@ -44,7 +43,7 @@ function readRawFile(filePath: string): Procedure<string> {
  */
 function parseJsonObject(raw: string, filePath: string): Procedure<Record<string, unknown>> {
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = parseProtoFreeJson(raw) as Record<string, unknown>;
     return succeed(parsed);
   } catch (error: unknown) {
     return fail(`Failed to read ${filePath}: ${errorMessage(error)}`);

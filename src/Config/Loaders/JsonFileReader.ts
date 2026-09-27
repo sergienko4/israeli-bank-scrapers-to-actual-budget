@@ -4,17 +4,20 @@
  * Reads a config.json (or credentials.json) from disk and returns it
  * as a parsed IImporterConfig. If the file payload matches the
  * IEncryptedConfig shape, it is decrypted in-flight using the
- * CREDENTIALS_ENCRYPTION_PASSWORD environment variable.
+ * CREDENTIALS_ENCRYPTION_PASSWORD environment variable. The text is read
+ * through {@link readConfigText}, so a FIFO, a directory, an oversized file
+ * or bad UTF-8 is refused by name.
  */
-
-import { readFileSync } from 'node:fs';
 
 import { ConfigurationError } from '../../Errors/ErrorTypes.js';
 import { getLogger } from '../../Logger/Index.js';
-import type { IImporterConfig } from '../../Types/Index.js';
+import parseProtoFreeJson from '../../Storage/ProtoFreeJson.js';
+import type { IImporterConfig, Procedure } from '../../Types/Index.js';
+import { succeed } from '../../Types/Index.js';
 import {
   decryptConfig, getEncryptionPassword, isEncryptedConfig,
 } from '../ConfigEncryption.js';
+import readConfigText from './ConfigFileText.js';
 
 /**
  * Resolves the config encryption password or throws when it is missing.
@@ -45,19 +48,35 @@ function decryptFile(raw: string, filePath: string): IImporterConfig {
   const password = requirePassword(filePath);
   getLogger().info(`🔐 Decrypting ${filePath}...`);
   const decrypted = decryptConfig(raw, password);
-  return JSON.parse(decrypted) as IImporterConfig;
+  return parseProtoFreeJson(decrypted) as IImporterConfig;
+}
+
+/**
+ * Parses config text, decrypting it first if needed.
+ *
+ * @param raw - The file's text.
+ * @param filePath - File path used in log and error messages.
+ * @returns The parsed IImporterConfig object.
+ */
+function parseConfig(raw: string, filePath: string): IImporterConfig {
+  const parsed = parseProtoFreeJson(raw) as Record<string, string | number | boolean>;
+  if (!isEncryptedConfig(parsed)) return parsed as unknown as IImporterConfig;
+  return decryptFile(raw, filePath);
 }
 
 /**
  * Reads and parses a JSON config file, decrypting it first if needed.
+ * Only a missing file is a failure; a file that is there but unusable throws.
  *
  * @param filePath - Absolute path to the JSON file to read.
- * @returns The parsed IImporterConfig object.
- * @throws ConfigurationError when the file is encrypted but no password is set.
+ * @returns The parsed config, or a failure with status ENOENT when there is no file.
+ * @throws ConfigurationError when the file cannot be read, or is encrypted
+ *   but no password is set.
  */
-export default function readJsonFile(filePath: string): IImporterConfig {
-  const raw = readFileSync(filePath, 'utf8');
-  const parsed = JSON.parse(raw) as Record<string, string | number | boolean>;
-  if (!isEncryptedConfig(parsed)) return parsed as unknown as IImporterConfig;
-  return decryptFile(raw, filePath);
+export default function readJsonFile(filePath: string): Procedure<IImporterConfig> {
+  const text = readConfigText(filePath);
+  if (!text.success && text.status === 'ENOENT') return text;
+  if (!text.success) throw new ConfigurationError(text.message);
+  const config = parseConfig(text.data, filePath);
+  return succeed(config);
 }

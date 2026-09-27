@@ -10,11 +10,13 @@ import { AppTokenStore } from '../../src/Portal/AppTokenStore.js';
 import { registerAppTokenRoutes } from '../../src/Portal/AppTokenRoutes.js';
 import { credentialFingerprint, type IPortalRuntime } from '../../src/Portal/PortalRuntime.js';
 import { verifyToken } from '../../src/Portal/PortalTokenAuth.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { fakePortalConfig, fakePortalRuntime } from '../helpers/portalFactories.js';
 
 const REDIRECT = 'bankimporter://auth';
 const VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
 const CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 let app: FastifyInstance;
 let codes: AppAuthCodes;
@@ -32,6 +34,17 @@ function enabledRuntime(authMode: IPortalRuntime['authMode'] = 'password'): IPor
     authMode,
     app: { enabled: true, redirectUris: [REDIRECT] },
   });
+  return fakePortalRuntime({ portal });
+}
+
+/**
+ * Builds an app-enabled runtime whose refresh tokens live a given number of days.
+ * @param days - The configured refresh-token lifetime.
+ * @returns Portal runtime fixture.
+ */
+function runtimeWithLifetime(days: number): IPortalRuntime {
+  const app = { enabled: true, redirectUris: [REDIRECT], refreshTokenTtlDays: days };
+  const portal = fakePortalConfig({ authMode: 'password', app });
   return fakePortalRuntime({ portal });
 }
 
@@ -68,9 +81,12 @@ describe('AppTokenRoutes', () => {
     dir = mkdtempSync(join(tmpdir(), 'app-tokens-'));
     runtime = enabledRuntime();
     codes = new AppAuthCodes();
-    tokens = new AppTokenStore(join(dir, 'app-tokens.json'));
+    const path = join(dir, 'app-tokens.json');
+    tokens = new AppTokenStore(createNodeFileSystem(), path);
+    const openTokens = (ttlDays: number): AppTokenStore =>
+      new AppTokenStore(createNodeFileSystem(), path, ttlDays);
     app = Fastify({ logger: false });
-    registerAppTokenRoutes(app, { live: () => runtime, codes, tokens });
+    registerAppTokenRoutes(app, { live: () => runtime, codes, openTokens });
     await app.ready();
   });
   afterEach(async () => {
@@ -163,5 +179,24 @@ describe('AppTokenRoutes', () => {
     await post({ code, code_verifier: VERIFIER, redirect_uri: REDIRECT });
     const found = tokens.findByToken(refreshToken);
     expect(found?.revokedAt).toBeGreaterThan(0);
+  });
+
+  describe('the refresh-token lifetime', () => {
+    it('issues a token that lives as long as the live config says', async () => {
+      runtime = runtimeWithLifetime(7);
+      const res = await post({ code: mintCode(), code_verifier: VERIFIER, redirect_uri: REDIRECT });
+      expect(res.statusCode).toBe(200);
+      const [record] = tokens.list();
+      expect(record.expiresAt - record.issuedAt).toBe(7 * DAY_MS);
+    });
+
+    it('gives the next token a lifetime changed after start, and keeps the old one', async () => {
+      runtime = runtimeWithLifetime(7);
+      await post({ code: mintCode(), code_verifier: VERIFIER, redirect_uri: REDIRECT });
+      runtime = runtimeWithLifetime(30);
+      await post({ code: mintCode(), code_verifier: VERIFIER, redirect_uri: REDIRECT });
+      const lifetimes = tokens.list().map((record) => record.expiresAt - record.issuedAt);
+      expect(lifetimes).toEqual([7 * DAY_MS, 30 * DAY_MS]);
+    });
   });
 });

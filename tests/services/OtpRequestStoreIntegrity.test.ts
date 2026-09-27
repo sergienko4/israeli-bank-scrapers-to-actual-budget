@@ -106,6 +106,14 @@ describe('OtpRequestStore on the secure store', () => {
     expect(storedJson(fileSystem).requests).toHaveLength(2);
   });
 
+  it('moves aside a file that held a top-level __proto__ key, keeping its requests', () => {
+    const contents = `{"__proto__":{"code":"123456"},"requests":[${JSON.stringify(LIVE)}]}`;
+    const { store, fileSystem } = makeStore(contents);
+    store.create('discount', 60_000, NOW);
+    expect(quarantinedNames(fileSystem)).toHaveLength(1);
+    expect(storedJson(fileSystem).requests.map((request) => request.id)).toContain('live');
+  });
+
   it('prunes an expired request without moving the file aside', () => {
     const expired = { ...LIVE, id: 'old', deadline: NOW - 1 };
     const { store, fileSystem } = makeStore(JSON.stringify({ requests: [expired] }));

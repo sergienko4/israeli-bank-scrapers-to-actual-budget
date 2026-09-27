@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ConfigLoader } from '../../src/Config/ConfigLoader.js';
 import registerConfigSecrets from '../../src/Config/ConfigSecretValues.js';
-import ConfigWriter from '../../src/Config/ConfigWriter.js';
+import openConfigWriter from '../../src/Config/ConfigWriterWiring.js';
 import SECRET_KEYS from '../../src/Config/SecretKeys.js';
 import redactSecrets from '../../src/Logger/SecretRedaction.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
@@ -145,7 +145,7 @@ describe('each place a config enters the process', () => {
   it('ConfigWriter.write registers the values it saves', () => {
     const value = 'Write-Ec2-value';
     const config = fakeImporterConfig({ banks: { discount: fakeBankConfig({ username: value }) } });
-    new ConfigWriter(configPath).write(config);
+    openConfigWriter(configPath).write(config);
     expect(redactSecrets(echoed(value))).not.toContain(value);
   });
 });

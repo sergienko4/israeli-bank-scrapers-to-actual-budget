@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TokenGrant } from '../../src/Portal/AppTokenStore.js';
 import { AppTokenStore, DEFAULT_REFRESH_TTL_DAYS, resolveAppTokensPath } from '../../src/Portal/AppTokenStore.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { isFail, isSuccess } from '../../src/Types/Index.js';
 
 const NOW = 1_700_000_000_000;
@@ -26,7 +27,7 @@ describe('AppTokenStore', () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'app-tokens-'));
     file = join(dir, 'app-tokens.json');
-    store = new AppTokenStore(file);
+    store = new AppTokenStore(createNodeFileSystem(), file);
   });
 
   afterEach(() => {
@@ -63,7 +64,7 @@ describe('AppTokenStore', () => {
     });
 
     it('honours a shorter configured lifetime', () => {
-      const short = new AppTokenStore(file, 7);
+      const short = new AppTokenStore(createNodeFileSystem(), file, 7);
       expect(short.issue(GRANT, NOW).record.expiresAt).toBe(NOW + 7 * DAY_MS);
     });
 
@@ -173,6 +174,34 @@ describe('AppTokenStore', () => {
       expect(store.revoke('nope', NOW)).toBe(false);
     });
 
+    it('reports a record that was already revoked as unknown', () => {
+      const first = store.issue(GRANT, NOW);
+      store.rotate(first.token, NOW + 1000);
+      expect(store.revoke(first.record.id, NOW + 2000)).toBe(false);
+      expect(store.list(NOW + 2000)).toHaveLength(1);
+    });
+
+    it('revokes a family by one of its refresh tokens', () => {
+      const first = store.issue(GRANT, NOW);
+      const other = store.issue({ ...GRANT, deviceName: 'iPhone' }, NOW);
+      const second = store.rotate(first.token, NOW + 1000);
+      if (!isSuccess(second)) throw new Error('expected rotation to succeed');
+      expect(store.revokeByToken(first.token, NOW + 2000)).toBe(true);
+      expect(store.list(NOW + 2000).map((record) => record.id)).toEqual([other.record.id]);
+    });
+
+    it('reports a refresh token it does not hold', () => {
+      store.issue(GRANT, NOW);
+      expect(store.revokeByToken('never-issued', NOW)).toBe(false);
+      expect(store.list(NOW)).toHaveLength(1);
+    });
+
+    it('does not revoke by an expired refresh token', () => {
+      const issued = store.issue(GRANT, NOW);
+      const later = NOW + 61 * 24 * 60 * 60 * 1000;
+      expect(store.revokeByToken(issued.token, later)).toBe(false);
+    });
+
     it('counts only the records it actually revoked', () => {
       const issued = store.issue(GRANT, NOW);
       expect(store.revokeFamily(issued.record.familyId, NOW)).toBe(1);
@@ -194,7 +223,7 @@ describe('AppTokenStore', () => {
   describe('persistence', () => {
     it('survives a restart', () => {
       const issued = store.issue(GRANT, NOW);
-      const reopened = new AppTokenStore(file);
+      const reopened = new AppTokenStore(createNodeFileSystem(), file);
       expect(reopened.findByToken(issued.token, NOW)?.id).toBe(issued.record.id);
     });
 
@@ -212,7 +241,7 @@ describe('AppTokenStore', () => {
     it('prunes expired records from the file', () => {
       store.issue(GRANT, NOW);
       store.prune(NOW + DEFAULT_REFRESH_TTL_DAYS * DAY_MS + 1);
-      expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([]);
+      expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ tokens: [] });
     });
 
     it('leaves the file alone when nothing expired', () => {

@@ -1,8 +1,8 @@
 # SecureJsonStore threat model
 
-`src/Storage/SecureJsonStore.ts` persists bank authentication tokens, and four
+`src/Storage/SecureJsonStore.ts` persists bank authentication tokens, and five
 more files on the data volume: the import history, pending OTP requests, the
-OTP channel and push device tokens. A token is a bearer
+OTP channel, push device tokens and the portal's app sign-ins. A token is a bearer
 credential: anything that can read it can act as the account holder until it
 expires, and one of them is valid for ten years. The store is therefore
 written defensively, and this page records what each guard is for.
@@ -41,7 +41,7 @@ disclosure, **D**enial of service, **E**levation of privilege.
 | 7 | World-readable store | I | Secrets readable by any local user | Exclusive create with mode `0600`; `fchmod` on read, and a refusal withholds the records | both |
 | 8 | Oversized file | D | Multi-GB file exhausts memory on read | Reject above 8 MiB, size taken from `fstat` | unit (fake) |
 | 9 | Malformed JSON | D | Parse failure aborts the run | Classified as damage: quarantine, then a cold login | unit (fake) |
-| 10 | Prototype pollution | T | `__proto__` or `constructor` keys in the file | Null-prototype parse target; non-plain records refused | unit (fake) |
+| 10 | Prototype pollution | T | `__proto__` or `constructor` keys in the file | Null-prototype parse target; non-plain records refused. A top-level `__proto__` is left out and the file reads as `stripped`, so every store moves it aside before its next write instead of dropping that part silently | unit (fake) |
 | 11 | Secret in error text or logs | I | Token surfaces in a log line or a typed error | Errors carry path and errno only, never values; asserted | unit (fake) |
 | 12 | Quarantine name collision | T | Two failures in the same millisecond, the second clobbering the first salvage | Timestamp plus a random UUID | unit (fake) |
 | 13 | Crash between quarantine and commit | T | Canonical path left absent, siblings stranded | Stage first, quarantine second, then rename. Partial: a *failure* between the two renames rolls the predecessor back (threat 16); a `SIGKILL` between them cannot be undone and leaves a cold start with the damaged bytes preserved under the quarantine name | unit (fake) |
@@ -103,21 +103,43 @@ store in place, which is already one of the two outcomes `commit` promises.
 
 Some stores were written as a bare JSON list before they moved onto this
 primitive. Such a store passes a `legacyList` name to the constructor: the
-import history passes `entries`, the device tokens `tokens` and the OTP
-requests `requests`. A file whose root is a list is then read as one healthy
+import history passes `entries`, the device tokens and the app sign-ins
+(`app-tokens.json`) pass `tokens`, and the OTP requests `requests`. A file whose root is a list is then read as one healthy
 record of that name, and the next commit writes the records form, so nothing
 the list held is lost. Nothing else changes: any other root that is not an
 object is still damage, and threat 24 still refuses a list at the root of
 anything written. A store that passes no name, such as the bank-token store,
 still reads a list as damage.
 
+## Config saves use the port, not the store
+
+The portal's `ConfigWriter` saves `config.json` and `credentials.json` through
+the same `IFileSystem` port, with the same staging: a random name, created
+exclusively and owner-only, flushed, then renamed into place. It does not use
+`SecureJsonStore`, because the store's guarantees are for one file and a
+config save is two:
+
+- **Two files are one save.** Both carry one `saveId`, and the loader refuses
+  a pair whose ids differ, so a save killed between its renames is refused
+  rather than loaded half-new.
+- **The two renames are still two steps.** Node has no call that renames two
+  files at once. When the second rename fails, the writer puts the previous
+  credentials back from a copy it took for that save. A `SIGKILL` between the
+  renames cannot be rolled back; the `saveId` check is what catches it, and the
+  copy is left as a staged file for the operator.
+- **No quarantine.** A config that does not load stops the portal at startup,
+  so a damaged config is never overwritten by a save.
+- **Nothing but a regular file is copied.** A symlink, directory or FIFO at
+  `credentials.json` stops the save before either rename.
+
 ## Staging leftovers
 
 A crash between staging and publishing leaves a staged file behind, and it can
 hold a secret. The store never sweeps on its own; each process sweeps, when
 it starts, only the stores it writes. An import sweeps the import history and
-the OTP requests. The portal sweeps the OTP channel, the device tokens and the
-OTP requests. A process that only reads a store never sweeps it, because a
+the OTP requests. The portal sweeps the OTP channel, the device tokens, the OTP
+requests, the app sign-ins, and the staged copies of `config.json` and
+`credentials.json` it saves. A process that only reads a store never sweeps it, because a
 leftover there may belong to a writer that is still running. Only staged files
 older than an hour are removed, so a sweep leaves alone a file another process
 is writing now. A failed sweep is a warning, and a missing directory counts as

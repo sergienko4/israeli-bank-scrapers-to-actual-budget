@@ -100,9 +100,32 @@ export default function sweepStaged(
   for (const name of abandoned) {
     if (removeIfAbandoned(fileSystem, name)) removedCount += 1;
   }
-  const report: ISweepReport = {
-    removedCount,
-    summary: `Removed ${String(removedCount)} abandoned staged files`,
-  };
+  const report = sweepReportOf(removedCount);
   return succeed(report);
+}
+
+/**
+ * Builds the report a sweep returns, so every sweep words it the same way.
+ * @param removedCount - How many staged files the sweep deleted.
+ * @returns The report, free of stored values.
+ */
+export function sweepReportOf(removedCount: number): ISweepReport {
+  return { removedCount, summary: `Removed ${String(removedCount)} abandoned staged files` };
+}
+
+/**
+ * Deletes the fixed-name `<store>.tmp` an older release staged at, if it
+ * was abandoned.
+ *
+ * <p>Older releases staged at that one predictable name, which the UUID
+ * grammar of {@link isStagingPath} never matches, so without this a file
+ * killed mid-save would keep its plaintext secrets for ever. The rule is the
+ * same as for current staged files: only a regular file untouched for the
+ * grace period goes, and a symlink or directory there is left alone.
+ * @param fileSystem - Injected filesystem access.
+ * @param storePath - Canonical path of the file the old name staged for.
+ * @returns Whether the old staged file was deleted.
+ */
+export function sweepLegacyStaging(fileSystem: IFileSystem, storePath: string): boolean {
+  return removeIfAbandoned(fileSystem, `${storePath}.tmp`);
 }

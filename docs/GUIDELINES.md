@@ -30,10 +30,10 @@ Rules for contributing to this project. All contributors (including AI assistant
 12. **Document risks** - Explain why not (tradeoffs, risks, downsides)
 13. **Clean code** - Follow clean code principles at all times
 14. **SOLID principles** - Follow Open/Closed principle and other SOLID principles
-15. **Max 10 lines per method** - Extract longer methods into single-purpose functions
+15. **Aim for 10 lines per method** - Extract longer methods into single-purpose functions. ESLint enforces 20 (blank and comment lines not counted), and 10 in some folders
 16. **No `any` types** - CI enforces zero `: any` in source (ratchet = 0)
 17. **OCP maps over if/else chains** - Use lookup maps for extensible dispatch patterns
-18. **ESLint enforced** - `npm run lint` must pass: max-lines (300), max-lines-per-function (20), max-params (3), max-len (100), no-unused, no-unsafe-function-type. Tests exempt from line limits. No warnings allowed (warn=error policy).
+18. **ESLint enforced** - `npm run lint` must pass: max-lines (200), max-lines-per-function (20), with per-folder overrides in `eslint.config.mjs` (most of them tighter), max-params (3), max-len (100), no-unused, no-unsafe-function-type. Tests exempt from line limits. No warnings allowed (warn=error policy).
 18a. **Config file location** - Tool config files (vitest, markdownlint, lychee, release-please) live in `config/`. Adding one at root fails `lint:config-structure` in `validate:all`. Only `eslint.config.mjs`, `tsconfig.json`, `package.json`, `.gitignore`, `.dockerignore`, and `.husky/` stay at root (tool constraints).
 
 ---

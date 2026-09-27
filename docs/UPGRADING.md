@@ -9,6 +9,62 @@ the new image.
 
 ---
 
+## 1.43.0 — Portal files, config reads and the encryption password
+
+**Affects:** deployments that run the [config portal](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md),
+deployments that set `CREDENTIALS_ENCRYPTION_PASSWORD` to an empty value beside
+`CONFIG_PASSWORD`, and deployments whose config file is not plain UTF-8. Each
+section below names who it affects.
+
+### Upgrade the importer and the portal together
+
+**Affects:** deployments that run the portal.
+
+The import history, `devices.json` and the portal's app sign-ins
+(`app-tokens.json`) are now saved as a JSON object instead of a bare list. This
+release reads the old lists, so the upgrade loses nothing. A rollback does: an
+earlier release reads the new files as empty, so every phone is signed out of
+the app, and an older portal that registers a device rewrites `devices.json`
+with only that device.
+
+**Migration:** pull the same release for both services, and do not roll back.
+See
+[Upgrade both services together](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md#upgrade-both-services-together).
+
+### An empty `CREDENTIALS_ENCRYPTION_PASSWORD` no longer hides `CONFIG_PASSWORD`
+
+**Affects:** deployments that set `CREDENTIALS_ENCRYPTION_PASSWORD` to an empty
+string and `CONFIG_PASSWORD` to a password. `CREDENTIALS_ENCRYPTION_PASSWORD=`
+in an env file does this, and so does `${CREDENTIALS_ENCRYPTION_PASSWORD}` in a
+compose file on a host without that variable.
+
+Up to 1.42.25 the empty value won, so nothing was encrypted. It now counts as
+unset, and `CONFIG_PASSWORD` is used. For such a deployment encryption turns on:
+the next portal save encrypts `credentials.json`, and the long-term bank tokens
+this release saves are sealed under the password.
+
+**Migration:** none if you want encryption; keep the password safe, because the
+files cannot be read without it. To stay unencrypted, remove `CONFIG_PASSWORD`.
+
+### A config file that cannot be read stops the start
+
+**Affects:** deployments whose `config.json` or `credentials.json` is not a
+regular UTF-8 file of at most 8 MiB, or is a symlink whose target is missing.
+
+Up to 1.42.25 a file in another encoding loaded with its unreadable characters
+replaced, which could silently change a stored password. The importer and the
+portal now refuse it and name the file. A symlink whose target was missing
+counted as no file, so the importer ran from environment variables, or without
+`credentials.json`. It now stops the start with
+`<path> is a symlink to a missing file`. Only a `config.json` with nothing at
+its path still means "run from environment variables".
+
+**Migration:** save the file as UTF-8, and point a broken symlink at its file
+or remove it. The other errors are listed in
+[Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md#the-importer-or-portal-stops-at-startup-on-a-config-read-error).
+
+---
+
 ## 1.42.19 — Hapoalim charges import as outflows (scraper 8.6.10)
 
 **Affects:** deployments that import **Bank Hapoalim**. No other institution is

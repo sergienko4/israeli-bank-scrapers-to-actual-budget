@@ -5,15 +5,30 @@
  * this file cannot be replayed against the portal. Every successful refresh
  * rotates the token; presenting an already-rotated one is treated as theft and
  * revokes the whole family, which is what makes a leaked token self-limiting.
+ *
+ * <p>The file sits on {@link SecureJsonStore}: it is owner-only, a write
+ * replaces it whole, and a file holding anything this store would not write
+ * back (see {@link loadTokens}) is moved aside on the next write instead of
+ * being overwritten. The tokens are stored as one `tokens` record; a bare list
+ * an older release wrote is read as that record and written back in the
+ * records form. The readers ({@link AppTokenStore.findByToken},
+ * {@link AppTokenStore.list}) treat an unreadable file as holding no tokens;
+ * every writer throws instead, so an unreadable file is never replaced by one
+ * that signs every other phone out.
  */
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
+import StorageError from '../Errors/StorageError.js';
+import type { IFileSystem } from '../Storage/FileSystemPort.js';
+import SecureJsonStore from '../Storage/SecureJsonStore.js';
+import type { ISweepReport } from '../Storage/StoreTypes.js';
 import type { Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
-import type { IAuthFactors } from './AppAuthCodes.js';
-import { isAuthFactors } from './AppAuthCodes.js';
+import type { IAppTokenRecord, ILoadedTokens } from './AppTokenRecords.js';
+import loadTokens, { TOKENS_RECORD } from './AppTokenRecords.js';
+
+export type { IAppTokenRecord } from './AppTokenRecords.js';
 
 const DEFAULT_APP_TOKENS_PATH = '/app/data/app-tokens.json';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -21,23 +36,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Default refresh-token lifetime in days. */
 export const DEFAULT_REFRESH_TTL_DAYS = 60;
 
-/** A persisted refresh token. The token itself is never part of this record. */
-export interface IAppTokenRecord {
-  id: string;
-  familyId: string;
-  tokenHash: string;
-  deviceName: string;
-  factors: IAuthFactors;
-  email?: string;
-  fingerprint: string;
-  issuedAt: number;
-  lastUsedAt: number;
-  expiresAt: number;
-  revokedAt?: number;
-}
-
 /** What a new token family inherits from the authorization that created it. */
 export type TokenGrant = Pick<IAppTokenRecord, 'deviceName' | 'email' | 'factors' | 'fingerprint'>;
+
+/**
+ * Opens the refresh-token store with the lifetime the tokens it issues get.
+ * Callers pass the live lifetime per request, so a changed setting applies to
+ * the next token without a restart; tokens already issued keep their expiry.
+ */
+export type AppTokenOpener = (ttlDays: number) => AppTokenStore;
 
 /** A freshly minted refresh token, returned to the client exactly once. */
 export interface IIssuedToken {
@@ -65,69 +72,65 @@ function hashToken(token: string): string {
 }
 
 /**
- * Whether a parsed entry carries every required string field.
- * @param record - Parsed entry indexed as unknown values.
- * @returns True when all identity fields are strings.
+ * Drops expired records. Expired records are pruned on every load so the
+ * file cannot grow without bound.
+ * @param records - Records as read.
+ * @param now - Current epoch milliseconds.
+ * @returns The records that have not expired.
  */
-function hasStrings(record: Record<string, unknown>): boolean {
-  return typeof record.id === 'string' && typeof record.familyId === 'string'
-    && typeof record.tokenHash === 'string' && typeof record.deviceName === 'string'
-    && typeof record.fingerprint === 'string';
+function unexpired(records: readonly IAppTokenRecord[], now: number): IAppTokenRecord[] {
+  return records.filter((record) => record.expiresAt > now);
 }
 
 /**
- * Whether a parsed entry carries every required timestamp.
- * @param record - Parsed entry indexed as unknown values.
- * @returns True when all timestamps are numbers and `revokedAt` is absent or numeric.
+ * Keeps the records that can still be refreshed: unexpired and not revoked.
+ * @param records - Records as read.
+ * @param now - Current epoch milliseconds.
+ * @returns The live records, in file order.
  */
-function hasTimestamps(record: Record<string, unknown>): boolean {
-  return typeof record.issuedAt === 'number' && typeof record.lastUsedAt === 'number'
-    && typeof record.expiresAt === 'number'
-    && (record.revokedAt === undefined || typeof record.revokedAt === 'number');
-}
-
-/**
- * Narrows an untrusted parsed entry to a well-formed token record, so a
- * hand-edited or truncated file degrades to "no session" instead of crashing
- * the portal on boot.
- * @param value - One parsed array entry of unknown shape.
- * @returns True when the entry has the full record shape.
- */
-function isTokenRecord(value: unknown): value is IAppTokenRecord {
-  if (typeof value !== 'object' || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return hasStrings(record) && hasTimestamps(record) && isAuthFactors(record.factors)
-    && (record.email === undefined || typeof record.email === 'string');
+function liveRecords(records: readonly IAppTokenRecord[], now: number): IAppTokenRecord[] {
+  return unexpired(records, now).filter((record) => record.revokedAt === undefined);
 }
 
 /** Persists app refresh tokens as hashes in a JSON file on the data volume. */
 export class AppTokenStore {
+  private readonly _store: SecureJsonStore;
+
   /**
-   * Creates a store backed by the given file.
-   * @param filePath - Path to the app-tokens JSON file.
+   * Binds the store to one path on one filesystem.
+   * @param fileSystem - Injected filesystem access.
+   * @param filePath - Absolute path of the app-tokens JSON file.
    * @param ttlDays - Refresh-token lifetime in days.
    */
   constructor(
-    private readonly filePath = resolveAppTokensPath(),
+    fileSystem: IFileSystem,
+    filePath: string,
     private readonly ttlDays = DEFAULT_REFRESH_TTL_DAYS,
-  ) {}
+  ) {
+    this._store = new SecureJsonStore(fileSystem, filePath, { legacyList: TOKENS_RECORD });
+  }
 
   /**
    * Issues the first refresh token of a new family.
    * @param grant - Device, factors and fingerprint captured at authorization.
    * @param now - Current epoch milliseconds, injectable for tests.
    * @returns The new record together with its one-time plaintext token.
+   * @throws StorageError when the current file cannot be read or the new one saved.
    */
   public issue(grant: TokenGrant, now: number = Date.now()): IIssuedToken {
+    const loaded = this.loadForWrite();
     const familyId = randomUUID();
-    return this.append(familyId, grant, now);
+    const issued = this.build(familyId, grant, now);
+    const kept = unexpired(loaded.records, now);
+    this.save([...kept, issued.record], loaded.isIntact);
+    return issued;
   }
 
   /**
    * Looks up a record by the plaintext token the client presented.
    * @param token - The plaintext refresh token.
    * @param now - Current epoch milliseconds, injectable for tests.
-   * @returns The matching record, or undefined when unknown or already pruned.
+   * @returns The matching record, or undefined when unknown, pruned, or unreadable.
    */
   public findByToken(token: string, now: number = Date.now()): IAppTokenRecord | undefined {
     const hash = hashToken(token);
@@ -144,31 +147,54 @@ export class AppTokenStore {
    * @param token - The plaintext refresh token presented by the client.
    * @param now - Current epoch milliseconds, injectable for tests.
    * @returns Procedure with the replacement token, or a failure naming the reason.
+   * @throws StorageError when the current file cannot be read or the new one saved.
    */
   public rotate(token: string, now: number = Date.now()): Procedure<IIssuedToken> {
-    const records = this.readAll(now);
+    const loaded = this.loadForWrite();
+    const records = unexpired(loaded.records, now);
     const hash = hashToken(token);
     const record = records.find((entry) => entry.tokenHash === hash);
     if (!record) return fail('Unknown refresh token');
-    if (record.revokedAt !== undefined) return this.reuseDetected(record, now);
+    if (record.revokedAt !== undefined) return this.reuseDetected(loaded, record, now);
     record.revokedAt = now;
     record.lastUsedAt = now;
     const issued = this.build(record.familyId, record, now);
-    this.write([...records, issued.record]);
+    this.save([...records, issued.record], loaded.isIntact);
     return succeed(issued);
   }
 
   /**
-   * Revokes the family a record belongs to, so signing a device out kills its
-   * replacements too.
+   * Revokes the family a live record belongs to, so signing a device out kills
+   * its replacements too. It reads the file as a write does, so an unreadable
+   * file throws rather than reading as "no such session".
    * @param id - Public record id, as shown in the sessions list.
    * @param now - Current epoch milliseconds, injectable for tests.
-   * @returns True when a matching record existed.
+   * @returns True when a live record with that id existed.
+   * @throws StorageError when the current file cannot be read or the new one saved.
    */
   public revoke(id: string, now: number = Date.now()): boolean {
-    const record = this.readAll(now).find((entry) => entry.id === id);
+    const loaded = this.loadForWrite();
+    const record = liveRecords(loaded.records, now).find((entry) => entry.id === id);
     if (!record) return false;
-    this.revokeFamily(record.familyId, now);
+    this.revokeIn(loaded, record.familyId, now);
+    return true;
+  }
+
+  /**
+   * Revokes the family of the record a refresh token belongs to, whether or
+   * not that record was already rotated. It reads the file as a write does, so
+   * an unreadable file throws rather than reading as "no such token".
+   * @param token - The plaintext refresh token.
+   * @param now - Current epoch milliseconds, injectable for tests.
+   * @returns True when an unexpired record held that token.
+   * @throws StorageError when the current file cannot be read or the new one saved.
+   */
+  public revokeByToken(token: string, now: number = Date.now()): boolean {
+    const loaded = this.loadForWrite();
+    const hash = hashToken(token);
+    const record = unexpired(loaded.records, now).find((entry) => entry.tokenHash === hash);
+    if (!record) return false;
+    this.revokeIn(loaded, record.familyId, now);
     return true;
   }
 
@@ -177,43 +203,70 @@ export class AppTokenStore {
    * @param familyId - The family to kill.
    * @param now - Current epoch milliseconds, injectable for tests.
    * @returns How many records were revoked by this call.
+   * @throws StorageError when the current file cannot be read or the new one saved.
    */
   public revokeFamily(familyId: string, now: number = Date.now()): number {
-    const records = this.readAll(now);
-    const doomed = records.filter((r) => r.familyId === familyId && r.revokedAt === undefined);
-    for (const record of doomed) record.revokedAt = now;
-    if (doomed.length > 0) this.write(records);
-    return doomed.length;
+    const loaded = this.loadForWrite();
+    return this.revokeIn(loaded, familyId, now);
   }
 
   /**
    * Lists the records that can still be refreshed.
    * @param now - Current epoch milliseconds, injectable for tests.
-   * @returns Live records, newest last.
+   * @returns Live records, newest last; none when the file cannot be read.
    */
   public list(now: number = Date.now()): IAppTokenRecord[] {
-    return this.readAll(now).filter((r) => r.revokedAt === undefined && r.expiresAt > now);
+    const records = this.readAll(now);
+    return liveRecords(records, now);
   }
 
   /**
    * Drops expired records from the file.
    * @param now - Current epoch milliseconds, injectable for tests.
    * @returns Nothing; the file is rewritten only when something was dropped.
+   * @throws StorageError when the current file cannot be read or the new one saved.
    */
   public prune(now: number = Date.now()): void {
-    if (!existsSync(this.filePath)) return;
-    const kept = this.readAll(now);
-    if (kept.length !== this.parse().length) this.write(kept);
+    const loaded = this.loadForWrite();
+    const kept = unexpired(loaded.records, now);
+    if (kept.length !== loaded.records.length) this.save(kept, loaded.isIntact);
   }
 
   /**
-   * Handles a replayed refresh token by revoking its family.
+   * Deletes staged files a killed write left beside the file.
+   * @returns How many were removed, or why the directory could not be read.
+   */
+  public sweepStagedLeftovers(): Procedure<ISweepReport> {
+    return this._store.sweepStagedLeftovers();
+  }
+
+  /**
+   * Revokes every live record of a family within records already read.
+   * @param loaded - The records as read for this write.
+   * @param familyId - The family to kill.
+   * @param now - Current epoch milliseconds.
+   * @returns How many records were revoked.
+   */
+  private revokeIn(loaded: ILoadedTokens, familyId: string, now: number): number {
+    const records = unexpired(loaded.records, now);
+    const doomed = records.filter((r) => r.familyId === familyId && r.revokedAt === undefined);
+    for (const record of doomed) record.revokedAt = now;
+    if (doomed.length > 0) this.save(records, loaded.isIntact);
+    return doomed.length;
+  }
+
+  /**
+   * Handles a replayed refresh token by revoking its family, within the read
+   * that caught the replay.
+   * @param loaded - The records as read for this rotation.
    * @param record - The already-revoked record that was presented.
    * @param now - Current epoch milliseconds.
    * @returns A failure carrying the record id and revoked count for the caller's WARN.
    */
-  private reuseDetected(record: IAppTokenRecord, now: number): Procedure<IIssuedToken> {
-    const revoked = this.revokeFamily(record.familyId, now);
+  private reuseDetected(
+    loaded: ILoadedTokens, record: IAppTokenRecord, now: number,
+  ): Procedure<IIssuedToken> {
+    const revoked = this.revokeIn(loaded, record.familyId, now);
     return fail('Refresh token reuse detected', {
       status: 'reused', details: [`id=${record.id}`, `revoked=${String(revoked)}`],
     });
@@ -240,53 +293,50 @@ export class AppTokenStore {
   }
 
   /**
-   * Appends a freshly built record to the file.
-   * @param familyId - Family the new record joins.
-   * @param grant - Device, factors and fingerprint to carry forward.
+   * Reads the unexpired records for a reader.
    * @param now - Current epoch milliseconds.
-   * @returns The saved record and its plaintext token.
-   */
-  private append(familyId: string, grant: TokenGrant, now: number): IIssuedToken {
-    const issued = this.build(familyId, grant, now);
-    this.write([...this.readAll(now), issued.record]);
-    return issued;
-  }
-
-  /**
-   * Reads the file, dropping malformed and expired entries. Expired records are
-   * pruned on every load so the file cannot grow without bound.
-   * @param now - Current epoch milliseconds.
-   * @returns The still-relevant records.
+   * @returns The unexpired records, or none when the file cannot be read.
    */
   private readAll(now: number): IAppTokenRecord[] {
-    return this.parse().filter((record) => record.expiresAt > now);
+    const loaded = this.load();
+    return loaded.success ? unexpired(loaded.data.records, now) : [];
   }
 
   /**
-   * Parses the file without applying the expiry filter.
-   * @returns Every well-formed record on disk, or an empty list when absent/corrupt.
+   * Reads the file once: the records, and whether it holds only what this store writes.
+   * @returns The loaded records, or why the file could not be assessed.
    */
-  private parse(): IAppTokenRecord[] {
-    if (!existsSync(this.filePath)) return [];
-    try {
-      const raw = readFileSync(this.filePath, 'utf8');
-      const parsed = JSON.parse(raw) as unknown;
-      return Array.isArray(parsed) ? parsed.filter((entry) => isTokenRecord(entry)) : [];
-    } catch {
-      return [];
+  private load(): Procedure<ILoadedTokens> {
+    const snapshot = this._store.read();
+    if (!snapshot.success) return snapshot;
+    const loaded = loadTokens(snapshot.data);
+    return succeed(loaded);
+  }
+
+  /**
+   * Reads the file before a write, refusing to write over one it cannot read.
+   * @returns The loaded records.
+   * @throws StorageError when the file cannot be assessed.
+   */
+  private loadForWrite(): ILoadedTokens {
+    const loaded = this.load();
+    if (!loaded.success) {
+      throw new StorageError(`Could not read the app tokens before saving: ${loaded.message}`);
     }
+    return loaded.data;
   }
 
   /**
-   * Atomically replaces the token file, owner-readable only.
+   * Replaces the file with the given records.
    * @param records - The full record list to persist.
-   * @returns Nothing; the file is replaced before returning.
+   * @param isIntact - Whether the file being replaced held only what this store writes.
+   * @throws StorageError when the new file cannot be saved.
    */
-  private write(records: IAppTokenRecord[]): void {
-    const serialized = JSON.stringify(records, null, 2);
-    const token = randomUUID();
-    const tempPath = `${this.filePath}.${token}.tmp`;
-    writeFileSync(tempPath, serialized, { encoding: 'utf8', mode: 0o600 });
-    renameSync(tempPath, this.filePath);
+  private save(records: IAppTokenRecord[], isIntact: boolean): void {
+    const request = { records: { [TOKENS_RECORD]: records }, shouldQuarantine: !isIntact };
+    const committed = this._store.commit(request);
+    if (!committed.success) {
+      throw new StorageError(`Could not save the app tokens: ${committed.message}`);
+    }
   }
 }

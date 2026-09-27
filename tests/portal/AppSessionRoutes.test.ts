@@ -9,7 +9,9 @@ import { registerAppSessionRoutes } from '../../src/Portal/AppSessionRoutes.js';
 import { AppTokenStore, type IIssuedToken, type TokenGrant } from '../../src/Portal/AppTokenStore.js';
 import { credentialFingerprint, type IPortalRuntime } from '../../src/Portal/PortalRuntime.js';
 import { createSession } from '../../src/Portal/PortalSession.js';
+import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { fakePortalRuntime } from '../helpers/portalFactories.js';
+import FakeFileSystem from '../storage/FakeFileSystem.js';
 
 const TTL_MS = 15 * 60 * 1000;
 
@@ -64,9 +66,9 @@ describe('AppSessionRoutes', () => {
   beforeEach(async () => {
     dir = mkdtempSync(join(tmpdir(), 'app-sessions-'));
     runtime = fakePortalRuntime();
-    tokens = new AppTokenStore(join(dir, 'app-tokens.json'));
+    tokens = new AppTokenStore(createNodeFileSystem(), join(dir, 'app-tokens.json'));
     app = Fastify({ logger: false });
-    registerAppSessionRoutes(app, { live: () => runtime, tokens });
+    registerAppSessionRoutes(app, { live: () => runtime, openTokens: () => tokens });
     await app.ready();
   });
   afterEach(async () => {
@@ -143,5 +145,42 @@ describe('AppSessionRoutes', () => {
   it('reports 404 for an id that is not shaped like one', async () => {
     const res = await app.inject({ method: 'DELETE', url: '/api/app/sessions/nope' });
     expect(res.statusCode).toBe(404);
+  });
+
+  it('reports 404 for a session that was already signed out', async () => {
+    const issued = issue();
+    const rotated = tokens.rotate(issued.token);
+    if (!rotated.success) throw new Error('rotation failed');
+    const res = await app.inject({
+      method: 'DELETE', url: `/api/app/sessions/${issued.record.id}`,
+    });
+    expect(res.statusCode).toBe(404);
+    expect(tokens.list()).toHaveLength(1);
+  });
+
+  describe('when the token file cannot be read', () => {
+    let fileSystem: FakeFileSystem;
+    let heldId: string;
+
+    beforeEach(async () => {
+      await app.close();
+      fileSystem = new FakeFileSystem();
+      tokens = new AppTokenStore(fileSystem, '/data/app-tokens.json');
+      heldId = issue().record.id;
+      fileSystem.forcedFailures.set('openForRead', 'EACCES');
+      app = Fastify({ logger: false });
+      registerAppSessionRoutes(app, { live: () => runtime, openTokens: () => tokens });
+      await app.ready();
+    });
+
+    it('answers a sign-out with 500 instead of 404', async () => {
+      const res = await app.inject({ method: 'DELETE', url: `/api/app/sessions/${heldId}` });
+      expect(res.statusCode).toBe(500);
+    });
+
+    it('still refuses an id that is not shaped like one with 404', async () => {
+      const res = await app.inject({ method: 'DELETE', url: '/api/app/sessions/nope' });
+      expect(res.statusCode).toBe(404);
+    });
   });
 });

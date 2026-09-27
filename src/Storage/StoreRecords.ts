@@ -74,13 +74,33 @@ function legacyListSnapshot(name: string, list: readonly unknown[]): IStoreSnaps
 }
 
 /**
+ * Reads an object of records, reporting whether the file held a `__proto__` key.
+ *
+ * <p>The key is left out either way, so no caller can copy it into a
+ * prototype. A file that held one is `stripped` rather than `healthy`: it
+ * holds something no write puts back, so a caller moves it aside before
+ * replacing it instead of losing that part without a trace.
+ * @param parsed - Object produced by `JSON.parse`.
+ * @returns A healthy snapshot, or a stripped one holding every other record.
+ */
+function keyedSnapshot(parsed: Record<string, unknown>): IStoreSnapshot {
+  const records = toSafeRecords(parsed);
+  const count = String(Object.keys(records).length);
+  if (!Object.hasOwn(parsed, POLLUTING_KEY)) {
+    return { state: 'healthy', records, summary: `Loaded ${count} records` };
+  }
+  const summary = `Loaded ${count} records; left out a ${POLLUTING_KEY} key`;
+  return { state: 'stripped', records, summary };
+}
+
+/**
  * Turns file contents into records, treating anything unexpected as damage.
  *
  * <p>The parse error is never included: a truncated JSON error message can
  * quote the surrounding bytes, and those bytes are credentials.
  * @param contents - Raw file contents.
  * @param legacyList - Record name a bare list is read under; without it a list is damage.
- * @returns A healthy snapshot, or a damaged one explaining why.
+ * @returns A healthy or stripped snapshot, or a damaged one explaining why.
  */
 export function parseSnapshot(contents: string, legacyList?: string): IStoreSnapshot {
   let parsed: unknown;
@@ -95,9 +115,7 @@ export function parseSnapshot(contents: string, legacyList?: string): IStoreSnap
   if (!isKeyedRecord(parsed)) {
     return emptySnapshot('damaged', 'Store is valid JSON but not an object of records');
   }
-  const records = toSafeRecords(parsed);
-  const count = String(Object.keys(records).length);
-  return { state: 'healthy', records, summary: `Loaded ${count} records` };
+  return keyedSnapshot(parsed);
 }
 
 /**

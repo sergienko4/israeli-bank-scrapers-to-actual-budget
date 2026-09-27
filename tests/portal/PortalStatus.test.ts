@@ -14,6 +14,18 @@ import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
 let app: FastifyInstance;
 let dir: string;
 const originalAuditPath = process.env.AUDIT_LOG_PATH;
+/** Audit dirs this test made; afterEach removes them even when an assertion fails. */
+const auditDirs: string[] = [];
+
+/**
+ * Makes a temp dir for one test's audit log and registers it for cleanup.
+ * @returns The new directory.
+ */
+function makeAuditDir(): string {
+  const auditDir = mkdtempSync(join(tmpdir(), 'audit-'));
+  auditDirs.push(auditDir);
+  return auditDir;
+}
 
 /**
  * Logs in with the seeded portal password and returns the session cookie value.
@@ -35,6 +47,7 @@ describe('Portal /api/status', () => {
   afterEach(async () => {
     await app.close();
     rmSync(dir, { recursive: true, force: true });
+    for (const auditDir of auditDirs.splice(0)) rmSync(auditDir, { recursive: true, force: true });
     if (originalAuditPath === undefined) {
       delete process.env.AUDIT_LOG_PATH;
     } else {
@@ -55,7 +68,7 @@ describe('Portal /api/status', () => {
   });
 
   it('returns recent runs from the configured audit log', async () => {
-    const auditDir = mkdtempSync(join(tmpdir(), 'audit-'));
+    const auditDir = makeAuditDir();
     const auditPath = join(auditDir, 'audit-log.json');
     const entry = {
       timestamp: '2026-07-25T00:00:00.000Z',
@@ -77,10 +90,9 @@ describe('Portal /api/status', () => {
     const body = res.json();
     expect(body.runs).toHaveLength(1);
     expect(body.runs[0].banks[0].name).toBe('leumi');
-    rmSync(auditDir, { recursive: true, force: true });
   });
   it('reads the runs the importer now stores as the entries record', async () => {
-    const auditDir = mkdtempSync(join(tmpdir(), 'audit-'));
+    const auditDir = makeAuditDir();
     const auditPath = join(auditDir, 'audit-log.json');
     const entry = {
       timestamp: '2026-07-25T00:00:00.000Z', totalBanks: 1, successfulBanks: 1, failedBanks: 0,
@@ -92,12 +104,11 @@ describe('Portal /api/status', () => {
 
     const cookie = await loginCookie();
     const res = await app.inject({ method: 'GET', url: '/api/status', cookies: { portal_session: cookie } });
-    rmSync(auditDir, { recursive: true, force: true });
     expect(res.statusCode).toBe(200);
     expect(res.json().runs[0].banks[0].name).toBe('hapoalim');
   });
   it('hides a token an older release stored in a failure reason', async () => {
-    const auditDir = mkdtempSync(join(tmpdir(), 'audit-'));
+    const auditDir = makeAuditDir();
     const auditPath = join(auditDir, 'audit-log.json');
     const error = `OneZero login failed: idToken=${TEST_CREDENTIAL}`;
     const entry = {
@@ -110,7 +121,6 @@ describe('Portal /api/status', () => {
 
     const cookie = await loginCookie();
     const res = await app.inject({ method: 'GET', url: '/api/status', cookies: { portal_session: cookie } });
-    rmSync(auditDir, { recursive: true, force: true });
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('OneZero login failed');
     expect(res.body).not.toContain(TEST_CREDENTIAL);
@@ -118,13 +128,12 @@ describe('Portal /api/status', () => {
 
   const good = fakeIAuditEntry({ banks: [{ name: 'leumi', status: 'success', txns: 3 }] });
   it.each(malformedAuditFiles(good))('lists only the readable run beside %s', async (_label, file) => {
-    const auditDir = mkdtempSync(join(tmpdir(), 'audit-'));
+    const auditDir = makeAuditDir();
     process.env.AUDIT_LOG_PATH = join(auditDir, 'audit-log.json');
     writeFileSync(process.env.AUDIT_LOG_PATH, JSON.stringify(file), 'utf8');
 
     const cookie = await loginCookie();
     const res = await app.inject({ method: 'GET', url: '/api/status', cookies: { portal_session: cookie } });
-    rmSync(auditDir, { recursive: true, force: true });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ runs: [good] });
   });
