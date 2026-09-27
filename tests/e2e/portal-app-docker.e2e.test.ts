@@ -55,9 +55,6 @@ import {
 /** Where the container keeps refresh tokens, on the mounted config volume. */
 const CONTAINER_TOKENS_PATH = '/app/config/app-tokens.json';
 
-/** Where the container keeps OTP requests, on the same mounted volume. */
-const CONTAINER_OTP_PATH = '/app/config/otp-requests.json';
-
 /** Owner read and write only, the mode of every file the store writes. */
 const OWNER_ONLY = 0o600;
 
@@ -95,6 +92,8 @@ const CLIENT_B = '203.0.113.12';
 /** Everything one Dockerized run owns and has to tear down. */
 interface IDockerFixture {
   dir: string;
+  /** Host folder mounted at `/app/data`, where OTP requests live by default. */
+  dataDir: string;
   fake: IFakeGoogle;
   proxy: IForwardingProxy;
   container: IPortalContainer;
@@ -168,7 +167,6 @@ function containerEnv(fake: IFakeGoogle): Record<string, string> {
     // `loopback` covers a host-networked daemon.
     PORTAL_TRUST_PROXY: 'uniquelocal,loopback',
     APP_TOKENS_PATH: CONTAINER_TOKENS_PATH,
-    OTP_REQUESTS_PATH: CONTAINER_OTP_PATH,
     GOOGLE_AUTH_BASE: `http://127.0.0.1:${port}/auth`,
     GOOGLE_TOKEN_URL: `http://host.docker.internal:${port}/token`,
   };
@@ -183,15 +181,16 @@ async function startFixture(): Promise<IDockerFixture> {
   let upstream = '';
   const proxy = await startForwardingProxy(() => upstream);
   const dir = seedDir(`${proxy.baseUrl}/auth/google/callback`);
+  const dataDir = mkdtempSync(join(tmpdir(), 'portal-app-data-'));
   const container = startPortalContainer({
-    dir, mode: 'rw', hostGateway: true, env: containerEnv(fake),
+    dir, dataDir, mode: 'rw', hostGateway: true, env: containerEnv(fake),
   });
   upstream = container.baseUrl;
   await waitForPortal(container);
   const context = await browser.newContext({ viewport: null });
   const page = await context.newPage();
   await page.goto(proxy.baseUrl);
-  return { dir, fake, proxy, container, context, page };
+  return { dir, dataDir, fake, proxy, container, context, page };
 }
 
 /**
@@ -205,6 +204,7 @@ async function stopFixture(fixture: IDockerFixture | undefined): Promise<void> {
   await fixture.proxy.close();
   await fixture.fake.close();
   rmSync(fixture.dir, { recursive: true, force: true });
+  rmSync(fixture.dataDir, { recursive: true, force: true });
 }
 
 /**
@@ -258,8 +258,8 @@ function expectHashedTokenFile(dir: string, issued: readonly string[]): void {
 }
 
 /**
- * Leaves a live OTP request in the shared folder, as the importer would.
- * @param dir - The host directory mounted as the container's config folder.
+ * Leaves a live OTP request in the data volume, as the importer would.
+ * @param dir - The host directory mounted as the container's `/app/data`.
  * @returns The request id.
  */
 function seedOtpRequest(dir: string): string {
@@ -286,7 +286,7 @@ async function submitOtp(base: string, submission: IOtpSubmission): Promise<numb
 
 /**
  * Reads the answer file the container wrote, after checking it is owner-only.
- * @param dir - The host directory mounted as the container's config folder.
+ * @param dir - The host directory mounted as the container's `/app/data`.
  * @param id - The answered request's id.
  * @returns The parsed answer.
  */
@@ -341,11 +341,11 @@ describe.skipIf(!hasDockerImage())('portal app sign-in inside the container', ()
     expectHashedTokenFile(fixture.dir, [issued.refreshToken, rotated]);
   }, 180_000);
 
-  it('answers an OTP request left in the shared folder', async () => {
+  it('answers an OTP request left in the default data volume', async () => {
     const fixture = fx as IDockerFixture;
     await ensurePortalSession(fixture.page);
     const issued = await appSignIn(fixture, 'docker-otp-1');
-    const id = seedOtpRequest(fixture.dir);
+    const id = seedOtpRequest(fixture.dataDir);
     const base = fixture.proxy.baseUrl;
 
     const first = await submitOtp(base, { id, token: issued.accessToken, code: OTP_CODE });
@@ -353,7 +353,7 @@ describe.skipIf(!hasDockerImage())('portal app sign-in inside the container', ()
     const second = await submitOtp(base, { id, token: issued.accessToken, code: '000000' });
     expect(second).toBe(404);
 
-    const answer = readOwnerOnlyAnswer(fixture.dir, id);
+    const answer = readOwnerOnlyAnswer(fixture.dataDir, id);
     expect(answer).toMatchObject({ requestId: id, code: OTP_CODE });
   }, 180_000);
 
