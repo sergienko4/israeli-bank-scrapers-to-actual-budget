@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -65,6 +65,12 @@ describe('readJsonOrEncrypted on real files', () => {
   it('reports a missing file as not found', () => {
     const read = readJsonOrEncrypted(configPath);
     expect(isFail(read) && read.message).toBe(`File not found: ${configPath}`);
+  });
+
+  it('refuses a symlink to a missing file, rather than reporting it as not found', () => {
+    symlinkSync(join(dir, 'gone.json'), configPath);
+    const read = readJsonOrEncrypted(configPath);
+    expect(isFail(read) && read.message).toBe(`${configPath} is a symlink to a missing file`);
   });
 
   it('refuses a directory, naming it', () => {

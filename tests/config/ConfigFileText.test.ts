@@ -58,9 +58,25 @@ describe('readConfigText', () => {
     expect(failure.status).toBe('ENOENT');
   });
 
-  it('reports a symlink to nothing as missing, as the old existence check did', () => {
-    symlinkSync(join(dir, 'gone.json'), join(dir, 'config.json'));
-    expect(failureOf(join(dir, 'config.json')).status).toBe('ENOENT');
+  it('refuses a symlink to a missing file, rather than reading it as absent', () => {
+    const path = join(dir, 'config.json');
+    symlinkSync(join(dir, 'gone.json'), path);
+    expect(failureOf(path)).toMatchObject({
+      status: 'EINVAL', message: `${path} is a symlink to a missing file`,
+    });
+  });
+
+  it('refuses a chain of symlinks that ends at a missing file', () => {
+    symlinkSync(join(dir, 'gone.json'), join(dir, 'middle.json'));
+    symlinkSync(join(dir, 'middle.json'), join(dir, 'config.json'));
+    expect(failureOf(join(dir, 'config.json')).status).toBe('EINVAL');
+  });
+
+  it('reports a symlink loop by its errno, not as a link to a missing file', () => {
+    const path = join(dir, 'config.json');
+    symlinkSync(join(dir, 'other.json'), path);
+    symlinkSync(path, join(dir, 'other.json'));
+    expect(failureOf(path)).toMatchObject({ status: 'ELOOP', message: `Could not read ${path}: ELOOP` });
   });
 
   it.skipIf(IS_WINDOWS)('opens with flags that cannot stall on a FIFO', () => {
