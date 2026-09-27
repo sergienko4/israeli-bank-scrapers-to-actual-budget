@@ -71,8 +71,12 @@ token the importer saved: after one importer run with the same login, take
 the `token` field of that entry's record in `bank-tokens.json`, keyed
 `<bank id>:<entry name>` such as `onezero:oneZero` (see
 [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token))
-and put it in the matching `*_OTP_LONG_TERM` variable. The token is plain
-text only when no config password is set. Each SMS login creates a new
+and put it in the matching `*_OTP_LONG_TERM` variable. This needs a
+plain-text token file, which the importer writes only when no config
+password (`CREDENTIALS_ENCRYPTION_PASSWORD`) is set. With a config password,
+each record is sealed, so its `token` field is not a token: leave
+`*_OTP_LONG_TERM` empty, and the suite logs in by SMS instead, so the
+warm-start path is not tested. Each SMS login creates a new
 token and the bank stops accepting the one before it, so an SMS login in
 the suite or in the importer invalidates the other's token.
 
