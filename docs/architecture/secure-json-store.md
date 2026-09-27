@@ -100,6 +100,10 @@ filesystem fault injector, and faking it would mean mocking `node:fs` — the
 one thing this design exists to avoid. Flushing the *directory entry* after
 the rename is deliberately not done: an unpersisted rename leaves the previous
 store in place, which is already one of the two outcomes `commit` promises.
+For `commitNew` an unpersisted link frees the name again rather than
+restoring an earlier file, because there was none. That is acceptable for
+the OTP files it publishes: the importer waiting on them runs on the same
+host and dies with the same power loss, so nothing is left to read them.
 
 ## Legacy list read
 
