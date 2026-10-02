@@ -109,28 +109,13 @@ function liveRecords(records: readonly IAppTokenRecord[], now: number): IAppToke
 }
 
 /**
- * When a token minted to replace `predecessor` is issued: now, unless that
- * would not come after the predecessor's own issue, as when two rotations
- * share a millisecond or the clock stepped back. Issue times so strictly
- * increase down every chain of a family.
- * @param predecessor - The record the new token replaces.
- * @param now - Current epoch milliseconds.
- * @returns Epoch milliseconds later than the predecessor's issue.
- */
-function successorIssuedAt(predecessor: IAppTokenRecord, now: number): number {
-  return Math.max(now, predecessor.issuedAt + 1);
-}
-
-/**
  * Finds the never-presented successor a spent token may still replace.
  *
- * A rotation stamps the spent record's `lastUsedAt` with its successor's
- * `issuedAt`, which {@link successorIssuedAt} keeps later than the spent
- * token's own, and every later token in the chain later still. So the live
- * record of the family issued at that moment is the successor and no
- * descendant of it, and a spent token that was never rotated, whose
- * `lastUsedAt` is its own issue, has none. Revocation by sign-out leaves the
- * family no live record, so nothing is found.
+ * A rotation records on the spent record the id of the token that replaced
+ * it, and a re-grant moves that to the token it issues, so the successor is
+ * unused exactly while that record is live. A token never rotated has no
+ * successor, and neither has one an earlier release spent, which recorded
+ * none: both fail closed, as does a family that was signed out.
  * @param records - The unexpired records as read for this rotation.
  * @param spent - The already-revoked record that was presented.
  * @param now - Current epoch milliseconds.
@@ -142,8 +127,8 @@ function overlapSuccessor(
 ): Procedure<IAppTokenRecord> {
   const retiredAt = spent.revokedAt ?? Number.NEGATIVE_INFINITY;
   if (now - retiredAt > ROTATION_OVERLAP_MS) return fail('Rotation overlap has passed');
-  const successor = liveRecords(records, now).find((entry) => entry.familyId === spent.familyId
-    && entry.issuedAt === spent.lastUsedAt && entry.issuedAt > spent.issuedAt);
+  const successor = liveRecords(records, now).find((entry) => entry.id === spent.successorId
+    && entry.familyId === spent.familyId);
   if (!successor) return fail('No unused successor');
   return succeed(successor);
 }
@@ -213,10 +198,10 @@ export class AppTokenStore {
     const record = records.find((entry) => entry.tokenHash === hash);
     if (!record) return fail('Unknown refresh token');
     if (record.revokedAt !== undefined) return this.rotateSpent(loaded, record, now);
-    const issuedAt = successorIssuedAt(record, now);
-    const issued = this.build(record.familyId, record, issuedAt);
+    const issued = this.build(record.familyId, record, now);
     record.revokedAt = now;
-    record.lastUsedAt = issuedAt;
+    record.lastUsedAt = now;
+    record.successorId = issued.record.id;
     this.save([...records, issued.record], loaded.isIntact);
     return succeed(issued);
   }
@@ -328,10 +313,10 @@ export class AppTokenStore {
     const records = unexpired(loaded.records, now);
     const successor = overlapSuccessor(records, spent, now);
     if (!successor.success) return this.reuseDetected(loaded, spent, now);
-    const issuedAt = successorIssuedAt(spent, now);
-    const issued = this.build(spent.familyId, spent, issuedAt);
+    const issued = this.build(spent.familyId, spent, now);
     successor.data.revokedAt = now;
-    spent.lastUsedAt = issuedAt;
+    spent.lastUsedAt = now;
+    spent.successorId = issued.record.id;
     this.save([...records, issued.record], loaded.isIntact);
     return succeed(issued);
   }
@@ -357,10 +342,10 @@ export class AppTokenStore {
    * Builds a record plus its one-time token without touching the file.
    * @param familyId - Family the new record joins.
    * @param grant - Device, factors and fingerprint to carry forward.
-   * @param issuedAt - Epoch milliseconds the token is issued at.
+   * @param now - Current epoch milliseconds.
    * @returns The unsaved record and its plaintext token.
    */
-  private build(familyId: string, grant: TokenGrant, issuedAt: number): IIssuedToken {
+  private build(familyId: string, grant: TokenGrant, now: number): IIssuedToken {
     const token = randomBytes(32).toString('base64url');
     const record: IAppTokenRecord = {
       id: randomBytes(16).toString('base64url'),
@@ -368,7 +353,7 @@ export class AppTokenStore {
       deviceName: grant.deviceName, factors: { ...grant.factors },
       ...(grant.email === undefined ? {} : { email: grant.email }),
       fingerprint: grant.fingerprint,
-      issuedAt, lastUsedAt: issuedAt, expiresAt: issuedAt + this.ttlDays * DAY_MS,
+      issuedAt: now, lastUsedAt: now, expiresAt: now + this.ttlDays * DAY_MS,
     };
     return { record, token };
   }

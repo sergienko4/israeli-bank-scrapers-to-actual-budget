@@ -141,6 +141,10 @@ describe('AppTokenStore on the secure store', () => {
     ['a lastUsedAt that is not finite', withNonFinite('lastUsedAt')],
     ['an expiresAt that is not finite', withNonFinite('expiresAt')],
     ['a revokedAt that is not finite', withNonFinite('revokedAt')],
+    ['a successor id that is not 22 base64url characters',
+      JSON.stringify({ tokens: [storedRecord({ revokedAt: NOW, successorId: 'x' })] })],
+    ['a successor id that is not a string',
+      JSON.stringify({ tokens: [storedRecord({ revokedAt: NOW, successorId: 12 })] })],
     ['two records sharing an id',
       JSON.stringify({ tokens: [storedRecord(), storedRecord({ tokenHash: 'b'.repeat(64) })] })],
     ['two records sharing a token hash',
@@ -178,7 +182,9 @@ describe('AppTokenStore on the secure store', () => {
   });
 
   it('keeps an entry holding the optional fields the store writes', () => {
-    const entry = storedRecord({ email: 'a@example.com', revokedAt: NOW, expiresAt: NOW + DAY_MS });
+    const entry = storedRecord({
+      email: 'a@example.com', revokedAt: NOW, expiresAt: NOW + DAY_MS, successorId: 'BBBBBBBBBBBBBBBBBBBBBB',
+    });
     const { store, fileSystem } = makeStore(JSON.stringify({ tokens: [entry] }));
     store.issue(GRANT, NOW);
     expect(storedJson(fileSystem).tokens).toContainEqual(entry);

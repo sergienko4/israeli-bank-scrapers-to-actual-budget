@@ -493,6 +493,13 @@ its rotation, or one from a sign-in that was revoked still revokes everything.
 If someone else redeemed the spent token in those two minutes, the phone's own
 token is the one replaced, and its next refresh revokes the sign-in for both.
 
+The portal accepts a spent token again only if the spent token names its
+successor, a detail this release added. A token spent by an earlier release
+names none, so a reply lost in the two minutes around the upgrade still signs
+that phone out. Rolling back to the previous release keeps every phone signed
+in, but that release discards the tokens this one spent, so presenting one of
+them is refused as unknown rather than revoking the sign-in.
+
 ### Use the token
 
 Send it as an `Authorization: Bearer` header on any `/api/*` request:

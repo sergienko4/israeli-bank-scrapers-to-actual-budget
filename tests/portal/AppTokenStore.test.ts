@@ -1,10 +1,11 @@
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TokenGrant } from '../../src/Portal/AppTokenStore.js';
+import type { IAppTokenRecord, TokenGrant } from '../../src/Portal/AppTokenStore.js';
 import {
   AppTokenStore, DEFAULT_REFRESH_TTL_DAYS, resolveAppTokensPath, ROTATION_OVERLAP_MS,
 } from '../../src/Portal/AppTokenStore.js';
@@ -171,6 +172,25 @@ describe('AppTokenStore', () => {
       return { spent: first.token, successor: second.data.token };
     }
 
+    /**
+     * A record as the file holds it, for a token whose plaintext is its name.
+     * @param name - The plaintext token, also the start of the record id.
+     * @param issuedAt - When the token was issued.
+     * @param fields - What a rotation or another sign-in changes.
+     * @returns The stored record.
+     */
+    function storedToken(
+      name: string, issuedAt: number, fields: Partial<IAppTokenRecord> = {},
+    ): IAppTokenRecord {
+      return {
+        id: name.padEnd(22, 'A'), familyId: '0f0e0d0c-0b0a-4908-8706-050403020100',
+        tokenHash: createHash('sha256').update(name).digest('hex'),
+        deviceName: 'Pixel 8', factors: { ...GRANT.factors }, fingerprint: 'fp',
+        issuedAt, lastUsedAt: fields.revokedAt ?? issuedAt, expiresAt: issuedAt + DAY_MS,
+        ...fields,
+      };
+    }
+
     it('re-grants a spent token presented again within the overlap', () => {
       const { spent, successor } = rotatedOnce();
       const again = store.rotate(spent, NOW + 1000 + ROTATION_OVERLAP_MS);
@@ -268,13 +288,49 @@ describe('AppTokenStore', () => {
       expect(store.list(NOW + 1000)).toHaveLength(0);
     });
 
-    it('never takes another sign-in\'s token for the successor', () => {
-      const { spent, successor } = rotatedOnce();
-      const otherPhone = store.issue(GRANT, NOW + 1000);
-      store.rotate(successor, NOW + 2000);
-      const replay = store.rotate(spent, NOW + 3000);
+    it('records the successor on the spent token only, so a rollback keeps live sign-ins', () => {
+      const first = store.issue(GRANT, NOW);
+      const second = store.rotate(first.token, NOW + 1000);
+      if (!isSuccess(second)) throw new Error('expected rotation to succeed');
+      const stored = JSON.parse(readFileSync(file, 'utf8')) as { tokens: IAppTokenRecord[] };
+      expect(stored.tokens.map((record) => record.successorId)).toEqual([second.data.record.id, undefined]);
+    });
+
+    it('never re-grants into another sign-in, even when the file names its token', () => {
+      writeFileSync(file, JSON.stringify({
+        tokens: [
+          storedToken('spent', NOW, { revokedAt: NOW + 1000, successorId: 'other'.padEnd(22, 'A') }),
+          storedToken('other', NOW + 1000, { familyId: '1f1e1d1c-1b1a-4918-8716-151413121110' }),
+        ],
+      }));
+      const replay = store.rotate('spent', NOW + 2000);
       expect(isFail(replay) && replay.status).toBe('reused');
-      expect(store.list(NOW + 3000).map((record) => record.id)).toEqual([otherPhone.record.id]);
+      expect(store.list(NOW + 2000).map((record) => record.id)).toEqual(['other'.padEnd(22, 'A')]);
+    });
+
+    it('fails closed on a chain an earlier release wrote within one millisecond', () => {
+      writeFileSync(file, JSON.stringify({
+        tokens: [
+          storedToken('first', NOW, { revokedAt: NOW + 1000 }),
+          storedToken('second', NOW + 1000, { revokedAt: NOW + 1000 }),
+          storedToken('third', NOW + 1000),
+        ],
+      }));
+      const replay = store.rotate('first', NOW + 2000);
+      expect(isFail(replay) && replay.status).toBe('reused');
+      expect(store.list(NOW + 2000)).toHaveLength(0);
+    });
+
+    it('never re-grants a token an earlier release spent, which named no successor', () => {
+      writeFileSync(file, JSON.stringify({
+        tokens: [
+          storedToken('first', NOW, { revokedAt: NOW + 1000 }),
+          storedToken('second', NOW + 1000),
+        ],
+      }));
+      const replay = store.rotate('first', NOW + 2000);
+      expect(isFail(replay) && replay.status).toBe('reused');
+      expect(store.list(NOW + 2000)).toHaveLength(0);
     });
 
     it('keeps the device name and factors on the re-granted token', () => {

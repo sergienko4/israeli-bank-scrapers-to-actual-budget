@@ -28,6 +28,8 @@ export interface IAppTokenRecord {
   lastUsedAt: number;
   expiresAt: number;
   revokedAt?: number;
+  /** The token that replaced this one, recorded when it is rotated. */
+  successorId?: string;
 }
 
 /** The records as read, and whether the file holds only what the store writes. */
@@ -49,6 +51,7 @@ const TOKEN_HASH = /^[0-9a-f]{64}$/;
 const RECORD_FIELDS: Readonly<Record<keyof IAppTokenRecord, true>> = {
   id: true, familyId: true, tokenHash: true, deviceName: true, factors: true, email: true,
   fingerprint: true, issuedAt: true, lastUsedAt: true, expiresAt: true, revokedAt: true,
+  successorId: true,
 };
 
 /** Every field a stored record's factors carry. */
@@ -77,12 +80,14 @@ function matches(value: unknown, pattern: RegExp): boolean {
 /**
  * Whether a parsed entry carries every identity field in the shape the store mints.
  * @param record - Parsed entry indexed as unknown values.
- * @returns True when the ids and hash have their minted shapes and the names are strings.
+ * @returns True when the ids and hash have their minted shapes, the names are
+ *   strings, and a recorded successor is a record id.
  */
 function hasIdentity(record: Record<string, unknown>): boolean {
   return matches(record.id, RECORD_ID) && matches(record.familyId, UUID_PATTERN)
     && matches(record.tokenHash, TOKEN_HASH) && typeof record.deviceName === 'string'
-    && typeof record.fingerprint === 'string';
+    && typeof record.fingerprint === 'string'
+    && (record.successorId === undefined || matches(record.successorId, RECORD_ID));
 }
 
 /**
