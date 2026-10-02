@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import StorageError from '../../src/Errors/StorageError.js';
 import type { IAppTokenRecord, TokenGrant } from '../../src/Portal/AppTokenStore.js';
-import { AppTokenStore } from '../../src/Portal/AppTokenStore.js';
+import { AppTokenStore, ROTATION_OVERLAP_MS } from '../../src/Portal/AppTokenStore.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
 import seedStaleStaged from '../storage/StaleStaging.js';
 
@@ -219,9 +219,10 @@ describe('AppTokenStore on the secure store', () => {
     store.rotate(first.token, NOW + 1000);
     const readsSoFar = fileSystem.calls.filter((name) => name === 'openForRead').length;
     fileSystem.failOnCall('openForRead', readsSoFar + 2, 'EIO');
-    const replay = store.rotate(first.token, NOW + 2000);
+    const late = NOW + 1000 + ROTATION_OVERLAP_MS + 1;
+    const replay = store.rotate(first.token, late);
     expect(replay).toMatchObject({ success: false, status: 'reused' });
-    expect(store.list(NOW + 2000)).toEqual([]);
+    expect(store.list(late)).toEqual([]);
   });
 
   it('keeps the old file and throws when the new one cannot be staged', () => {

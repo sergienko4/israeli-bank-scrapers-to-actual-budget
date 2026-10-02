@@ -327,15 +327,29 @@ describe('portal app sign-in (both mode)', () => {
     const rolled = await callApi(fx.server.baseUrl, '/api/status', nextAccess);
     expect(rolled.status).toBe(200);
 
-    // Presenting the spent token is evidence of a copy, so the family dies.
-    const replayed = await postJson(`${fx.server.baseUrl}/auth/app/refresh`, { refreshToken });
-    expect(replayed.status).toBe(400);
-    expect(replayed.body.error).toBe('invalid_grant');
+    // A phone whose reply was lost presents the spent token again: within the
+    // overlap it buys a pair that replaces the successor nobody has used.
+    const regranted = await postJson(`${fx.server.baseUrl}/auth/app/refresh`, { refreshToken });
+    expect(regranted.status).toBe(200);
+    const regrantedRefresh = String(regranted.body.refreshToken);
+    expect(regrantedRefresh).not.toBe(nextRefresh);
+    const regrantedStatus = await callApi(
+      fx.server.baseUrl, '/api/status', String(regranted.body.accessToken),
+    );
+    expect(regrantedStatus.status).toBe(200);
+
+    // The replaced successor is now spent, so presenting it is a copy and the
+    // family dies, taking the re-granted token with it.
     const orphaned = await postJson(`${fx.server.baseUrl}/auth/app/refresh`, {
       refreshToken: nextRefresh,
     });
     expect(orphaned.status).toBe(400);
     expect(orphaned.body.error).toBe('invalid_grant');
+    const revoked = await postJson(`${fx.server.baseUrl}/auth/app/refresh`, {
+      refreshToken: regrantedRefresh,
+    });
+    expect(revoked.status).toBe(400);
+    expect(revoked.body.error).toBe('invalid_grant');
   }, 120_000);
 
   it('refuses a code redeemed with the wrong verifier', async () => {

@@ -5,12 +5,17 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { TokenGrant } from '../../src/Portal/AppTokenStore.js';
-import { AppTokenStore, DEFAULT_REFRESH_TTL_DAYS, resolveAppTokensPath } from '../../src/Portal/AppTokenStore.js';
+import {
+  AppTokenStore, DEFAULT_REFRESH_TTL_DAYS, resolveAppTokensPath, ROTATION_OVERLAP_MS,
+} from '../../src/Portal/AppTokenStore.js';
 import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import { isFail, isSuccess } from '../../src/Types/Index.js';
+import FakeFileSystem from '../storage/FakeFileSystem.js';
 
 const NOW = 1_700_000_000_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** A moment after the overlap of a rotation made at `NOW + 1000`. */
+const PAST_OVERLAP = NOW + 1000 + ROTATION_OVERLAP_MS + 1;
 
 const GRANT: TokenGrant = {
   deviceName: 'Pixel 8',
@@ -137,20 +142,227 @@ describe('AppTokenStore', () => {
       const first = store.issue(GRANT, NOW);
       const second = store.rotate(first.token, NOW + 1000);
       if (!isSuccess(second)) throw new Error('expected rotation to succeed');
-      const replay = store.rotate(first.token, NOW + 2000);
+      const replay = store.rotate(first.token, PAST_OVERLAP);
       expect(isFail(replay)).toBe(true);
       if (!isFail(replay)) return;
       expect(replay.status).toBe('reused');
       expect(replay.details).toContain(`id=${first.record.id}`);
-      expect(store.list(NOW + 2000)).toHaveLength(0);
+      expect(store.list(PAST_OVERLAP)).toHaveLength(0);
     });
 
     it('locks out the thief and the victim alike after a replay', () => {
       const first = store.issue(GRANT, NOW);
       const second = store.rotate(first.token, NOW + 1000);
       if (!isSuccess(second)) throw new Error('expected rotation to succeed');
-      store.rotate(first.token, NOW + 2000);
+      store.rotate(first.token, PAST_OVERLAP);
+      expect(isFail(store.rotate(second.data.token, PAST_OVERLAP + 1))).toBe(true);
+    });
+  });
+
+  describe('rotation overlap', () => {
+    /**
+     * Issues a token and rotates it once, as a phone whose reply was lost would.
+     * @returns The spent token and the successor it bought.
+     */
+    function rotatedOnce(): { spent: string; successor: string } {
+      const first = store.issue(GRANT, NOW);
+      const second = store.rotate(first.token, NOW + 1000);
+      if (!isSuccess(second)) throw new Error('expected rotation to succeed');
+      return { spent: first.token, successor: second.data.token };
+    }
+
+    it('re-grants a spent token presented again within the overlap', () => {
+      const { spent, successor } = rotatedOnce();
+      const again = store.rotate(spent, NOW + 1000 + ROTATION_OVERLAP_MS);
+      if (!isSuccess(again)) throw new Error('expected a re-grant');
+      expect(again.data.token).not.toBe(spent);
+      expect(again.data.token).not.toBe(successor);
+      expect(store.list(NOW + 1000 + ROTATION_OVERLAP_MS)).toHaveLength(1);
+    });
+
+    it('revokes the family once the overlap has passed', () => {
+      const { spent } = rotatedOnce();
+      const late = store.rotate(spent, NOW + 1000 + ROTATION_OVERLAP_MS + 1);
+      expect(isFail(late) && late.status).toBe('reused');
+      expect(store.list(NOW + 1000 + ROTATION_OVERLAP_MS + 1)).toHaveLength(0);
+    });
+
+    it('retires the successor it replaced, so presenting that one is a replay', () => {
+      const { spent, successor } = rotatedOnce();
+      const again = store.rotate(spent, NOW + 2000);
+      if (!isSuccess(again)) throw new Error('expected a re-grant');
+      const stale = store.rotate(successor, NOW + 3000);
+      expect(isFail(stale) && stale.status).toBe('reused');
+      expect(isFail(store.rotate(again.data.token, NOW + 4000))).toBe(true);
+    });
+
+    it('re-grants again within the same overlap, which never extends', () => {
+      const { spent } = rotatedOnce();
+      const second = store.rotate(spent, NOW + 2000);
+      const third = store.rotate(spent, NOW + 1000 + ROTATION_OVERLAP_MS);
+      if (!isSuccess(second) || !isSuccess(third)) throw new Error('expected re-grants');
+      expect(third.data.token).not.toBe(second.data.token);
       expect(isFail(store.rotate(second.data.token, NOW + 3000))).toBe(true);
+    });
+
+    it('anchors the overlap at the first rotation, not at the last re-grant', () => {
+      const { spent } = rotatedOnce();
+      store.rotate(spent, NOW + 1000 + ROTATION_OVERLAP_MS);
+      const late = store.rotate(spent, NOW + 1000 + ROTATION_OVERLAP_MS + 1);
+      expect(isFail(late) && late.status).toBe('reused');
+    });
+
+    it('treats a spent token whose successor was already used as a replay', () => {
+      const { spent, successor } = rotatedOnce();
+      const third = store.rotate(successor, NOW + 2000);
+      if (!isSuccess(third)) throw new Error('expected rotation to succeed');
+      const replay = store.rotate(spent, NOW + 3000);
+      expect(isFail(replay) && replay.status).toBe('reused');
+      expect(store.list(NOW + 3000)).toHaveLength(0);
+    });
+
+    it('treats the second-to-last token as a replay within the overlap', () => {
+      const first = store.issue(GRANT, NOW);
+      const second = store.rotate(first.token, NOW + 1000);
+      if (!isSuccess(second)) throw new Error('expected rotation to succeed');
+      store.rotate(second.data.token, NOW + 2000);
+      const replay = store.rotate(first.token, NOW + 3000);
+      expect(isFail(replay) && replay.status).toBe('reused');
+    });
+
+    it('cannot bring back a family that was signed out', () => {
+      const { spent, successor } = rotatedOnce();
+      store.revokeByToken(successor, NOW + 2000);
+      const again = store.rotate(spent, NOW + 3000);
+      expect(isFail(again) && again.status).toBe('reused');
+      expect(store.list(NOW + 3000)).toHaveLength(0);
+    });
+
+    it('never takes the replaced successor for a predecessor, even within one millisecond', () => {
+      const first = store.issue(GRANT, NOW);
+      const second = store.rotate(first.token, NOW + 1000);
+      if (!isSuccess(second)) throw new Error('expected rotation to succeed');
+      const again = store.rotate(first.token, NOW + 1000);
+      if (!isSuccess(again)) throw new Error('expected a re-grant');
+      const stale = store.rotate(second.data.token, NOW + 1000);
+      expect(isFail(stale) && stale.status).toBe('reused');
+    });
+
+    it('treats a spent token as a replay when its successor was used in the same millisecond', () => {
+      const first = store.issue(GRANT, NOW);
+      const second = store.rotate(first.token, NOW + 1000);
+      if (!isSuccess(second)) throw new Error('expected rotation to succeed');
+      store.rotate(second.data.token, NOW + 1000);
+      const replay = store.rotate(first.token, NOW + 1000);
+      expect(isFail(replay) && replay.status).toBe('reused');
+      expect(store.list(NOW + 1000)).toHaveLength(0);
+    });
+
+    it('treats a re-granted spent token as a replay once its new successor was used', () => {
+      const { spent } = rotatedOnce();
+      const again = store.rotate(spent, NOW + 1000);
+      if (!isSuccess(again)) throw new Error('expected a re-grant');
+      store.rotate(again.data.token, NOW + 1000);
+      const replay = store.rotate(spent, NOW + 1000);
+      expect(isFail(replay) && replay.status).toBe('reused');
+      expect(store.list(NOW + 1000)).toHaveLength(0);
+    });
+
+    it('keeps the device name and factors on the re-granted token', () => {
+      const { spent } = rotatedOnce();
+      const again = store.rotate(spent, NOW + 2000);
+      if (!isSuccess(again)) throw new Error('expected a re-grant');
+      expect(again.data.record).toMatchObject({
+        deviceName: 'Pixel 8', factors: GRANT.factors, fingerprint: 'fp', issuedAt: NOW + 2000,
+      });
+    });
+  });
+
+  describe('rotation overlap against a reference model', () => {
+    /** A token as the model sees it: who replaced it, never when. */
+    interface IModelToken {
+      token: string;
+      live: boolean;
+      successor?: IModelToken;
+    }
+
+    type Outcome = 'rotated' | 'regranted' | 'reused';
+
+    /**
+     * What presenting a token must do within the overlap, decided only from
+     * which token replaced which.
+     * @param presented - The token presented.
+     * @returns The outcome the overlap rule requires.
+     */
+    function expectedOutcome(presented: IModelToken): Outcome {
+      if (presented.live) return 'rotated';
+      if (presented.successor?.live === true) return 'regranted';
+      return 'reused';
+    }
+
+    /**
+     * Every way to present tokens `length` times, where step `n` picks one
+     * of at most `n + 1` tokens issued so far.
+     * @param length - How many presentations each sequence makes.
+     * @returns The picks of every sequence.
+     */
+    function pickSequences(length: number): number[][] {
+      let sequences: number[][] = [[]];
+      for (let step = 0; step < length; step += 1) {
+        sequences = sequences.flatMap(
+          (picks) => Array.from({ length: step + 1 }, (_unused, pick) => [...picks, pick]),
+        );
+      }
+      return sequences;
+    }
+
+    /**
+     * Plays one sequence against a fresh store and the model side by side.
+     * The store sits on the in-memory filesystem, so hundreds of sequences
+     * stay fast.
+     * @param picks - Which issued token each step presents.
+     * @param clock - The time each step presents its token at.
+     * @returns The first step where the store and the model disagree, or none.
+     */
+    function firstDisagreement(
+      picks: readonly number[], clock: (step: number) => number,
+    ): string | undefined {
+      const subject = new AppTokenStore(new FakeFileSystem(), '/data/app-tokens.json');
+      const tokens: IModelToken[] = [{ token: subject.issue(GRANT, NOW).token, live: true }];
+      for (const [step, pick] of picks.entries()) {
+        const presented = tokens[pick % tokens.length];
+        const expected = expectedOutcome(presented);
+        const actual = subject.rotate(presented.token, clock(step));
+        const outcome = isSuccess(actual) ? 'granted' : actual.status;
+        if (outcome !== (expected === 'reused' ? 'reused' : 'granted')) {
+          return `picks ${picks.join(',')}: step ${String(step)} expected ${expected}`;
+        }
+        if (isSuccess(actual)) {
+          const issued: IModelToken = { token: actual.data.token, live: true };
+          if (expected === 'regranted' && presented.successor) presented.successor.live = false;
+          presented.live = false;
+          presented.successor = issued;
+          tokens.push(issued);
+        } else {
+          for (const token of tokens) token.live = false;
+        }
+        const live = tokens.filter((token) => token.live).length;
+        if (subject.list(clock(step)).length !== live) {
+          return `picks ${picks.join(',')}: step ${String(step)} live count`;
+        }
+      }
+      return undefined;
+    }
+
+    it.each([
+      ['all in one millisecond', (): number => NOW + 1000],
+      ['a millisecond apart', (step: number): number => NOW + 1000 + step],
+      ['stepping back and forth', (step: number): number => NOW + 1000 + (step % 2 === 0 ? 1 : 0)],
+    ])('re-grants exactly when the successor was never presented, %s', (_label, clock) => {
+      const disagreements = pickSequences(5)
+        .map((picks) => firstDisagreement(picks, clock))
+        .filter((found): found is string => found !== undefined);
+      expect(disagreements).toEqual([]);
     });
   });
 

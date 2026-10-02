@@ -479,6 +479,20 @@ else. This narrows the window rather than closing it: a person who approves
 anyway has approved. Closing it entirely needs a verified HTTPS redirect target,
 which is not available when the address belongs to the operator.
 
+### A lost refresh reply does not sign the phone out
+
+Each `/auth/app/refresh` spends the refresh token it is given and returns a new
+one. Presenting a spent token again normally means a copy exists, so the portal
+revokes every token of that sign-in and the phone has to sign in again.
+
+A phone whose refresh reply never arrived holds only the spent token, so for
+two minutes after a rotation that token is still accepted: each time, it
+replaces the successor nobody has used with a new one. A spent token whose
+successor has already been presented, one presented more than two minutes after
+its rotation, or one from a sign-in that was revoked still revokes everything.
+If someone else redeemed the spent token in those two minutes, the phone's own
+token is the one replaced, and its next refresh revokes the sign-in for both.
+
 ### Use the token
 
 Send it as an `Authorization: Bearer` header on any `/api/*` request:

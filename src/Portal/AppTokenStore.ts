@@ -5,6 +5,9 @@
  * this file cannot be replayed against the portal. Every successful refresh
  * rotates the token; presenting an already-rotated one is treated as theft and
  * revokes the whole family, which is what makes a leaked token self-limiting.
+ * The one exception is {@link ROTATION_OVERLAP_MS}: a phone whose reply was
+ * lost still holds only the token it spent, so for a short while after a
+ * rotation that token buys a replacement for its unused successor instead.
  *
  * <p>The file sits on {@link SecureJsonStore}: it is owner-only, a write
  * replaces it whole, and a file holding anything this store would not write
@@ -35,6 +38,19 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Default refresh-token lifetime in days. */
 export const DEFAULT_REFRESH_TTL_DAYS = 60;
+
+/**
+ * How long after a rotation the token it retired may be presented again.
+ *
+ * A refresh whose reply never reached the phone leaves it holding only the
+ * spent token, and its retry would otherwise read as theft and sign it out.
+ * Within this window the spent token replaces its successor, as long as that
+ * successor was never presented, so a family still has one live token and the
+ * holder of the replaced one revokes the family when it presents it. The
+ * window is counted from the first rotation and is not extended by a re-grant.
+ * The app holds a late reply for up to 60 s, so this leaves room for its retry.
+ */
+export const ROTATION_OVERLAP_MS = 120_000;
 
 /** What a new token family inherits from the authorization that created it. */
 export type TokenGrant = Pick<IAppTokenRecord, 'deviceName' | 'email' | 'factors' | 'fingerprint'>;
@@ -92,6 +108,46 @@ function liveRecords(records: readonly IAppTokenRecord[], now: number): IAppToke
   return unexpired(records, now).filter((record) => record.revokedAt === undefined);
 }
 
+/**
+ * When a token minted to replace `predecessor` is issued: now, unless that
+ * would not come after the predecessor's own issue, as when two rotations
+ * share a millisecond or the clock stepped back. Issue times so strictly
+ * increase down every chain of a family.
+ * @param predecessor - The record the new token replaces.
+ * @param now - Current epoch milliseconds.
+ * @returns Epoch milliseconds later than the predecessor's issue.
+ */
+function successorIssuedAt(predecessor: IAppTokenRecord, now: number): number {
+  return Math.max(now, predecessor.issuedAt + 1);
+}
+
+/**
+ * Finds the never-presented successor a spent token may still replace.
+ *
+ * A rotation stamps the spent record's `lastUsedAt` with its successor's
+ * `issuedAt`, which {@link successorIssuedAt} keeps later than the spent
+ * token's own, and every later token in the chain later still. So the live
+ * record of the family issued at that moment is the successor and no
+ * descendant of it, and a spent token that was never rotated, whose
+ * `lastUsedAt` is its own issue, has none. Revocation by sign-out leaves the
+ * family no live record, so nothing is found.
+ * @param records - The unexpired records as read for this rotation.
+ * @param spent - The already-revoked record that was presented.
+ * @param now - Current epoch milliseconds.
+ * @returns Procedure with the successor, or a failure when the overlap has
+ *   passed or there is none.
+ */
+function overlapSuccessor(
+  records: readonly IAppTokenRecord[], spent: IAppTokenRecord, now: number,
+): Procedure<IAppTokenRecord> {
+  const retiredAt = spent.revokedAt ?? Number.NEGATIVE_INFINITY;
+  if (now - retiredAt > ROTATION_OVERLAP_MS) return fail('Rotation overlap has passed');
+  const successor = liveRecords(records, now).find((entry) => entry.familyId === spent.familyId
+    && entry.issuedAt === spent.lastUsedAt && entry.issuedAt > spent.issuedAt);
+  if (!successor) return fail('No unused successor');
+  return succeed(successor);
+}
+
 /** Persists app refresh tokens as hashes in a JSON file on the data volume. */
 export class AppTokenStore {
   private readonly _store: SecureJsonStore;
@@ -140,7 +196,8 @@ export class AppTokenStore {
   /**
    * Rotates a refresh token: the presented record is revoked and a replacement
    * joins the same family. Presenting an already-revoked token means the client
-   * or an attacker replayed it, so the whole family is revoked instead.
+   * or an attacker replayed it, so the whole family is revoked instead, unless
+   * it falls within {@link ROTATION_OVERLAP_MS} of its rotation.
    *
    * An expired token reads as unknown, because the load that feeds this drops
    * expired records before anything looks at them.
@@ -155,10 +212,11 @@ export class AppTokenStore {
     const hash = hashToken(token);
     const record = records.find((entry) => entry.tokenHash === hash);
     if (!record) return fail('Unknown refresh token');
-    if (record.revokedAt !== undefined) return this.reuseDetected(loaded, record, now);
+    if (record.revokedAt !== undefined) return this.rotateSpent(loaded, record, now);
+    const issuedAt = successorIssuedAt(record, now);
+    const issued = this.build(record.familyId, record, issuedAt);
     record.revokedAt = now;
-    record.lastUsedAt = now;
-    const issued = this.build(record.familyId, record, now);
+    record.lastUsedAt = issuedAt;
     this.save([...records, issued.record], loaded.isIntact);
     return succeed(issued);
   }
@@ -256,6 +314,29 @@ export class AppTokenStore {
   }
 
   /**
+   * Answers a spent token: within the overlap it replaces the unused successor
+   * with a new one, and otherwise it is a replay.
+   * @param loaded - The records as read for this rotation.
+   * @param spent - The already-revoked record that was presented.
+   * @param now - Current epoch milliseconds.
+   * @returns Procedure with the replacement token, or the replay failure.
+   * @throws StorageError when the new file cannot be saved.
+   */
+  private rotateSpent(
+    loaded: ILoadedTokens, spent: IAppTokenRecord, now: number,
+  ): Procedure<IIssuedToken> {
+    const records = unexpired(loaded.records, now);
+    const successor = overlapSuccessor(records, spent, now);
+    if (!successor.success) return this.reuseDetected(loaded, spent, now);
+    const issuedAt = successorIssuedAt(spent, now);
+    const issued = this.build(spent.familyId, spent, issuedAt);
+    successor.data.revokedAt = now;
+    spent.lastUsedAt = issuedAt;
+    this.save([...records, issued.record], loaded.isIntact);
+    return succeed(issued);
+  }
+
+  /**
    * Handles a replayed refresh token by revoking its family, within the read
    * that caught the replay.
    * @param loaded - The records as read for this rotation.
@@ -276,10 +357,10 @@ export class AppTokenStore {
    * Builds a record plus its one-time token without touching the file.
    * @param familyId - Family the new record joins.
    * @param grant - Device, factors and fingerprint to carry forward.
-   * @param now - Current epoch milliseconds.
+   * @param issuedAt - Epoch milliseconds the token is issued at.
    * @returns The unsaved record and its plaintext token.
    */
-  private build(familyId: string, grant: TokenGrant, now: number): IIssuedToken {
+  private build(familyId: string, grant: TokenGrant, issuedAt: number): IIssuedToken {
     const token = randomBytes(32).toString('base64url');
     const record: IAppTokenRecord = {
       id: randomBytes(16).toString('base64url'),
@@ -287,7 +368,7 @@ export class AppTokenStore {
       deviceName: grant.deviceName, factors: { ...grant.factors },
       ...(grant.email === undefined ? {} : { email: grant.email }),
       fingerprint: grant.fingerprint,
-      issuedAt: now, lastUsedAt: now, expiresAt: now + this.ttlDays * DAY_MS,
+      issuedAt, lastUsedAt: issuedAt, expiresAt: issuedAt + this.ttlDays * DAY_MS,
     };
     return { record, token };
   }
