@@ -81,13 +81,14 @@ function matches(value: unknown, pattern: RegExp): boolean {
  * Whether a parsed entry carries every identity field in the shape the store mints.
  * @param record - Parsed entry indexed as unknown values.
  * @returns True when the ids and hash have their minted shapes, the names are
- *   strings, and a recorded successor is a record id.
+ *   strings, and a recorded successor is a record id on a spent token.
  */
 function hasIdentity(record: Record<string, unknown>): boolean {
   return matches(record.id, RECORD_ID) && matches(record.familyId, UUID_PATTERN)
     && matches(record.tokenHash, TOKEN_HASH) && typeof record.deviceName === 'string'
     && typeof record.fingerprint === 'string'
-    && (record.successorId === undefined || matches(record.successorId, RECORD_ID));
+    && (record.successorId === undefined
+      || (record.revokedAt !== undefined && matches(record.successorId, RECORD_ID)));
 }
 
 /**
@@ -120,7 +121,9 @@ function isTokenRecord(value: unknown): value is IAppTokenRecord {
  * @param field - The field to count.
  * @returns Occurrences per value.
  */
-function countBy(records: readonly IAppTokenRecord[], field: 'id' | 'tokenHash'): Map<string, number> {
+function countBy(
+  records: readonly IAppTokenRecord[], field: 'id' | 'tokenHash' | 'familyId',
+): Map<string, number> {
   const counts = new Map<string, number>();
   for (const record of records) counts.set(record[field], (counts.get(record[field]) ?? 0) + 1);
   return counts;
@@ -138,6 +141,19 @@ function dropCollisions(records: readonly IAppTokenRecord[]): IAppTokenRecord[] 
 }
 
 /**
+ * Keeps only the families holding at most one unspent token, as every rotation
+ * leaves them; the rotation overlap relies on it. A family holding more is
+ * dropped whole, its spent tokens included, so none of them can be refreshed.
+ * @param records - Well-formed records outside any collision.
+ * @returns The records of every family in the shape the store writes.
+ */
+function dropForkedFamilies(records: readonly IAppTokenRecord[]): IAppTokenRecord[] {
+  const unspentRecords = records.filter((record) => record.revokedAt === undefined);
+  const unspent = countBy(unspentRecords, 'familyId');
+  return records.filter((record) => (unspent.get(record.familyId) ?? 0) <= 1);
+}
+
+/**
  * Reports whether a snapshot holds exactly what the store writes.
  *
  * <p>An absent file is intact: there is nothing to preserve, so the next
@@ -146,7 +162,8 @@ function dropCollisions(records: readonly IAppTokenRecord[]): IAppTokenRecord[] 
  * stripped of a `__proto__` key is not `healthy`, so it is not intact either.
  * @param snapshot - The store's snapshot.
  * @param kept - The records kept from it.
- * @returns True when the file is absent, or holds only unique well-formed records.
+ * @returns True when the file is absent, or holds only unique well-formed
+ *   records with at most one unspent token per sign-in.
  */
 function isIntactSnapshot(snapshot: IStoreSnapshot, kept: readonly IAppTokenRecord[]): boolean {
   if (snapshot.state !== 'healthy') return snapshot.state === 'absent';
@@ -158,12 +175,14 @@ function isIntactSnapshot(snapshot: IStoreSnapshot, kept: readonly IAppTokenReco
 /**
  * Reads the records out of a snapshot and judges the file.
  * @param snapshot - The store's snapshot.
- * @returns The unique well-formed records, expired ones included, and whether the file is intact.
+ * @returns The unique well-formed records of every sign-in holding at most one
+ *   unspent token, expired ones included, and whether the file is intact.
  */
 export default function loadTokens(snapshot: IStoreSnapshot): ILoadedTokens {
   const stored: unknown = snapshot.records[TOKENS_RECORD];
   const list: unknown[] = Array.isArray(stored) ? stored : [];
   const wellFormed = list.filter((entry) => isTokenRecord(entry));
-  const records = dropCollisions(wellFormed);
+  const unique = dropCollisions(wellFormed);
+  const records = dropForkedFamilies(unique);
   return { records, isIntact: isIntactSnapshot(snapshot, records) };
 }

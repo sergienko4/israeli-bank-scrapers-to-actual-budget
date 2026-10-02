@@ -145,6 +145,10 @@ describe('AppTokenStore on the secure store', () => {
       JSON.stringify({ tokens: [storedRecord({ revokedAt: NOW, successorId: 'x' })] })],
     ['a successor id that is not a string',
       JSON.stringify({ tokens: [storedRecord({ revokedAt: NOW, successorId: 12 })] })],
+    ['a successor id on a token never spent',
+      JSON.stringify({ tokens: [storedRecord({ successorId: 'BBBBBBBBBBBBBBBBBBBBBB' })] })],
+    ['two unspent tokens in one sign-in',
+      JSON.stringify({ tokens: [storedRecord(), storedRecord({ id: 'BBBBBBBBBBBBBBBBBBBBBB', tokenHash: 'b'.repeat(64) })] })],
     ['two records sharing an id',
       JSON.stringify({ tokens: [storedRecord(), storedRecord({ tokenHash: 'b'.repeat(64) })] })],
     ['two records sharing a token hash',
@@ -168,6 +172,18 @@ describe('AppTokenStore on the secure store', () => {
     const other = storedRecord({ id: 'CCCCCCCCCCCCCCCCCCCCCC', tokenHash: 'c'.repeat(64) });
     const { store } = makeStore(JSON.stringify({ tokens: [storedRecord(), clash, other] }));
     expect(store.list(NOW).map((record) => record.id)).toEqual(['CCCCCCCCCCCCCCCCCCCCCC']);
+  });
+
+  it('drops every record of a sign-in holding two unspent tokens, spent ones included', () => {
+    const spent = storedRecord({ revokedAt: NOW, successorId: 'BBBBBBBBBBBBBBBBBBBBBB' });
+    const successor = storedRecord({ id: 'BBBBBBBBBBBBBBBBBBBBBB', tokenHash: 'b'.repeat(64) });
+    const sibling = storedRecord({ id: 'CCCCCCCCCCCCCCCCCCCCCC', tokenHash: 'c'.repeat(64) });
+    const other = storedRecord({
+      id: 'DDDDDDDDDDDDDDDDDDDDDD', tokenHash: 'd'.repeat(64), familyId: '1f1e1d1c-1b1a-4918-8716-151413121110',
+    });
+    const { store, fileSystem } = makeStore(JSON.stringify({ tokens: [spent, successor, sibling, other] }));
+    const issued = store.issue(GRANT, NOW);
+    expect(storedJson(fileSystem).tokens).toEqual([other, issued.record]);
   });
 
   it.each([

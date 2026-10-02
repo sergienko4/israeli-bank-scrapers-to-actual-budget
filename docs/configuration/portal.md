@@ -498,9 +498,9 @@ token is the one replaced, and its next refresh revokes the sign-in for both.
 The portal accepts a spent token again only if the spent token names its
 successor, a detail this release added. A token spent by an earlier release
 names none, so a reply lost in the two minutes around the upgrade still signs
-that phone out. Rolling back to the previous release keeps every phone signed
-in, but that release discards the tokens this one spent, so presenting one of
-them is refused as unknown rather than revoking the sign-in.
+that phone out. Rolling back to a release from 1.43.0 on keeps every phone
+signed in, but such a release discards the tokens this one spent, so presenting
+one of them is refused as unknown rather than revoking the sign-in.
 
 ### Use the token
 
@@ -565,8 +565,8 @@ user. The shipped image runs both as `node`.
 
 The portal's app sign-ins (`app-tokens.json`) are saved as `{"tokens": […]}`
 too, and are owner-only. This release reads the old list, so the upgrade signs
-no phone out. A rollback signs every phone out: an earlier release reads the new
-file as holding no sign-ins, and each phone must sign in again.
+no phone out. A rollback to a release before 1.43.0 signs every phone out: it
+reads the new file as holding no sign-ins, and each phone must sign in again.
 
 Run one portal process per `app-tokens.json`. Two portals writing the same file
 can undo each other's latest change: a phone can be signed out, or a sign-in

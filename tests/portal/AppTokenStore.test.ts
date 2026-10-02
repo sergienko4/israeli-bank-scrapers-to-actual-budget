@@ -341,13 +341,29 @@ describe('AppTokenStore', () => {
       expect(store.list(NOW + 2000)).toHaveLength(0);
     });
 
-    it('keeps the device name and factors on the re-granted token', () => {
+    it('keeps the device name, email and factors on the re-granted token', () => {
       const { spent } = rotatedOnce();
       const again = store.rotate(spent, NOW + 2000);
       if (!isSuccess(again)) throw new Error('expected a re-grant');
       expect(again.data.record).toMatchObject({
-        deviceName: 'Pixel 8', factors: GRANT.factors, fingerprint: 'fp', issuedAt: NOW + 2000,
+        deviceName: 'Pixel 8', email: 'operator@example.com', factors: GRANT.factors,
+        fingerprint: 'fp', issuedAt: NOW + 2000,
       });
+    });
+
+    it('lasts the two minutes the docs promise', () => {
+      expect(ROTATION_OVERLAP_MS).toBe(120_000);
+    });
+
+    it('refuses every token of a sign-in the file shows holding two unused tokens', () => {
+      writeFileSync(file, JSON.stringify({
+        tokens: [storedToken('stolen', NOW), storedToken('phone', NOW)],
+      }));
+      const attacker = store.rotate('stolen', NOW + 1000);
+      const retry = store.rotate('stolen', NOW + 1001);
+      const phone = store.rotate('phone', NOW + 1002);
+      expect([attacker, retry, phone].map((result) => result.success)).toEqual([false, false, false]);
+      expect(store.list(NOW + 1002)).toHaveLength(0);
     });
   });
 
