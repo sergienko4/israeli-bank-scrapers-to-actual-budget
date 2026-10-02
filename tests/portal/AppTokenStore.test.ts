@@ -268,6 +268,15 @@ describe('AppTokenStore', () => {
       expect(store.list(NOW + 1000)).toHaveLength(0);
     });
 
+    it('never takes another sign-in\'s token for the successor', () => {
+      const { spent, successor } = rotatedOnce();
+      const otherPhone = store.issue(GRANT, NOW + 1000);
+      store.rotate(successor, NOW + 2000);
+      const replay = store.rotate(spent, NOW + 3000);
+      expect(isFail(replay) && replay.status).toBe('reused');
+      expect(store.list(NOW + 3000).map((record) => record.id)).toEqual([otherPhone.record.id]);
+    });
+
     it('keeps the device name and factors on the re-granted token', () => {
       const { spent } = rotatedOnce();
       const again = store.rotate(spent, NOW + 2000);
