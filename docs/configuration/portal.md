@@ -489,7 +489,9 @@ A phone whose refresh reply never arrived holds only the spent token, so for
 two minutes after a rotation that token is still accepted: each time, it
 replaces the successor nobody has used with a new one. A spent token whose
 successor has already been presented, one presented more than two minutes after
-its rotation, or one from a sign-in that was revoked still revokes everything.
+its rotation, one presented at a time the portal's clock puts before its
+rotation (as after the clock is set back), or one from a sign-in that was
+revoked still revokes everything.
 If someone else redeemed the spent token in those two minutes, the phone's own
 token is the one replaced, and its next refresh revokes the sign-in for both.
 

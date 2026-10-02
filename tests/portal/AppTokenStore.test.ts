@@ -207,6 +207,14 @@ describe('AppTokenStore', () => {
       expect(store.list(NOW + 1000 + ROTATION_OVERLAP_MS + 1)).toHaveLength(0);
     });
 
+    it('never stretches the overlap when the clock is set back an hour', () => {
+      const { spent } = rotatedOnce();
+      const hourBack = NOW + 1000 - 60 * 60 * 1000;
+      const replay = store.rotate(spent, hourBack);
+      expect(isFail(replay) && replay.status).toBe('reused');
+      expect(store.list(hourBack)).toHaveLength(0);
+    });
+
     it('retires the successor it replaced, so presenting that one is a replay', () => {
       const { spent, successor } = rotatedOnce();
       const again = store.rotate(spent, NOW + 2000);
@@ -344,24 +352,28 @@ describe('AppTokenStore', () => {
   });
 
   describe('rotation overlap against a reference model', () => {
-    /** A token as the model sees it: who replaced it, never when. */
+    /** A token as the model sees it: who replaced it, and when it was first spent. */
     interface IModelToken {
       token: string;
       live: boolean;
       successor?: IModelToken;
+      spentAt?: number;
     }
 
     type Outcome = 'rotated' | 'regranted' | 'reused';
 
     /**
-     * What presenting a token must do within the overlap, decided only from
-     * which token replaced which.
+     * What presenting a token must do, decided from which token replaced
+     * which and how long ago, by the store's clock, it was first spent.
      * @param presented - The token presented.
+     * @param now - The time it is presented at.
      * @returns The outcome the overlap rule requires.
      */
-    function expectedOutcome(presented: IModelToken): Outcome {
+    function expectedOutcome(presented: IModelToken, now: number): Outcome {
       if (presented.live) return 'rotated';
-      if (presented.successor?.live === true) return 'regranted';
+      const elapsed = now - (presented.spentAt ?? Number.NEGATIVE_INFINITY);
+      const inOverlap = elapsed >= 0 && elapsed <= ROTATION_OVERLAP_MS;
+      if (inOverlap && presented.successor?.live === true) return 'regranted';
       return 'reused';
     }
 
@@ -396,8 +408,9 @@ describe('AppTokenStore', () => {
       const tokens: IModelToken[] = [{ token: subject.issue(GRANT, NOW).token, live: true }];
       for (const [step, pick] of picks.entries()) {
         const presented = tokens[pick % tokens.length];
-        const expected = expectedOutcome(presented);
-        const actual = subject.rotate(presented.token, clock(step));
+        const now = clock(step);
+        const expected = expectedOutcome(presented, now);
+        const actual = subject.rotate(presented.token, now);
         const outcome = isSuccess(actual) ? 'granted' : actual.status;
         if (outcome !== (expected === 'reused' ? 'reused' : 'granted')) {
           return `picks ${picks.join(',')}: step ${String(step)} expected ${expected}`;
@@ -406,13 +419,14 @@ describe('AppTokenStore', () => {
           const issued: IModelToken = { token: actual.data.token, live: true };
           if (expected === 'regranted' && presented.successor) presented.successor.live = false;
           presented.live = false;
+          presented.spentAt ??= now;
           presented.successor = issued;
           tokens.push(issued);
         } else {
           for (const token of tokens) token.live = false;
         }
         const live = tokens.filter((token) => token.live).length;
-        if (subject.list(clock(step)).length !== live) {
+        if (subject.list(now).length !== live) {
           return `picks ${picks.join(',')}: step ${String(step)} live count`;
         }
       }

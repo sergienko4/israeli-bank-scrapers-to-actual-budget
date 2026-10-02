@@ -48,6 +48,8 @@ export const DEFAULT_REFRESH_TTL_DAYS = 60;
  * successor was never presented, so a family still has one live token and the
  * holder of the replaced one revokes the family when it presents it. The
  * window is counted from the first rotation and is not extended by a re-grant.
+ * A time before the rotation is outside it, so a clock set back cannot
+ * stretch it.
  * The app holds a late reply for up to 60 s, so this leaves room for its retry.
  */
 export const ROTATION_OVERLAP_MS = 120_000;
@@ -119,14 +121,14 @@ function liveRecords(records: readonly IAppTokenRecord[], now: number): IAppToke
  * @param records - The unexpired records as read for this rotation.
  * @param spent - The already-revoked record that was presented.
  * @param now - Current epoch milliseconds.
- * @returns Procedure with the successor, or a failure when the overlap has
- *   passed or there is none.
+ * @returns Procedure with the successor, or a failure when `now` is outside
+ *   the overlap, which it is before the rotation too, or there is none.
  */
 function overlapSuccessor(
   records: readonly IAppTokenRecord[], spent: IAppTokenRecord, now: number,
 ): Procedure<IAppTokenRecord> {
-  const retiredAt = spent.revokedAt ?? Number.NEGATIVE_INFINITY;
-  if (now - retiredAt > ROTATION_OVERLAP_MS) return fail('Rotation overlap has passed');
+  const elapsed = now - (spent.revokedAt ?? Number.NEGATIVE_INFINITY);
+  if (elapsed < 0 || elapsed > ROTATION_OVERLAP_MS) return fail('Outside the rotation overlap');
   const successor = liveRecords(records, now).find((entry) => entry.id === spent.successorId
     && entry.familyId === spent.familyId);
   if (!successor) return fail('No unused successor');
