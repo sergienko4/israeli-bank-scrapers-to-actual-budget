@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import StorageError from '../../src/Errors/StorageError.js';
 import type { IAppTokenRecord, TokenGrant } from '../../src/Portal/AppTokenStore.js';
-import { AppTokenStore } from '../../src/Portal/AppTokenStore.js';
+import { AppTokenStore, ROTATION_OVERLAP_MS } from '../../src/Portal/AppTokenStore.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
 import seedStaleStaged from '../storage/StaleStaging.js';
 
@@ -141,6 +141,22 @@ describe('AppTokenStore on the secure store', () => {
     ['a lastUsedAt that is not finite', withNonFinite('lastUsedAt')],
     ['an expiresAt that is not finite', withNonFinite('expiresAt')],
     ['a revokedAt that is not finite', withNonFinite('revokedAt')],
+    ['a successor id that is not 22 base64url characters',
+      JSON.stringify({ tokens: [storedRecord({ revokedAt: NOW, successorId: 'x' })] })],
+    ['a successor id that is not a string',
+      JSON.stringify({ tokens: [storedRecord({ revokedAt: NOW, successorId: 12 })] })],
+    ['a successor id on a token never spent',
+      JSON.stringify({ tokens: [storedRecord({ successorId: 'BBBBBBBBBBBBBBBBBBBBBB' })] })],
+    ['two unspent tokens in one sign-in',
+      JSON.stringify({ tokens: [storedRecord(), storedRecord({ id: 'BBBBBBBBBBBBBBBBBBBBBB', tokenHash: 'b'.repeat(64) })] })],
+    ['two spent tokens naming one successor',
+      JSON.stringify({ tokens: [
+        storedRecord({ revokedAt: NOW, successorId: 'CCCCCCCCCCCCCCCCCCCCCC' }),
+        storedRecord({
+          id: 'BBBBBBBBBBBBBBBBBBBBBB', tokenHash: 'b'.repeat(64), revokedAt: NOW, successorId: 'CCCCCCCCCCCCCCCCCCCCCC',
+        }),
+        storedRecord({ id: 'CCCCCCCCCCCCCCCCCCCCCC', tokenHash: 'c'.repeat(64) }),
+      ] })],
     ['two records sharing an id',
       JSON.stringify({ tokens: [storedRecord(), storedRecord({ tokenHash: 'b'.repeat(64) })] })],
     ['two records sharing a token hash',
@@ -166,6 +182,32 @@ describe('AppTokenStore on the secure store', () => {
     expect(store.list(NOW).map((record) => record.id)).toEqual(['CCCCCCCCCCCCCCCCCCCCCC']);
   });
 
+  it('drops every record of a sign-in holding two unspent tokens, spent ones included', () => {
+    const spent = storedRecord({ revokedAt: NOW, successorId: 'BBBBBBBBBBBBBBBBBBBBBB' });
+    const successor = storedRecord({ id: 'BBBBBBBBBBBBBBBBBBBBBB', tokenHash: 'b'.repeat(64) });
+    const sibling = storedRecord({ id: 'CCCCCCCCCCCCCCCCCCCCCC', tokenHash: 'c'.repeat(64) });
+    const other = storedRecord({
+      id: 'DDDDDDDDDDDDDDDDDDDDDD', tokenHash: 'd'.repeat(64), familyId: '1f1e1d1c-1b1a-4918-8716-151413121110',
+    });
+    const { store, fileSystem } = makeStore(JSON.stringify({ tokens: [spent, successor, sibling, other] }));
+    const issued = store.issue(GRANT, NOW);
+    expect(storedJson(fileSystem).tokens).toEqual([other, issued.record]);
+  });
+
+  it('drops every record of a sign-in where two spent tokens name one successor', () => {
+    const first = storedRecord({ revokedAt: NOW, successorId: 'CCCCCCCCCCCCCCCCCCCCCC' });
+    const second = storedRecord({
+      id: 'BBBBBBBBBBBBBBBBBBBBBB', tokenHash: 'b'.repeat(64), revokedAt: NOW, successorId: 'CCCCCCCCCCCCCCCCCCCCCC',
+    });
+    const current = storedRecord({ id: 'CCCCCCCCCCCCCCCCCCCCCC', tokenHash: 'c'.repeat(64) });
+    const other = storedRecord({
+      id: 'DDDDDDDDDDDDDDDDDDDDDD', tokenHash: 'd'.repeat(64), familyId: '1f1e1d1c-1b1a-4918-8716-151413121110',
+    });
+    const { store, fileSystem } = makeStore(JSON.stringify({ tokens: [first, second, current, other] }));
+    const issued = store.issue(GRANT, NOW);
+    expect(storedJson(fileSystem).tokens).toEqual([other, issued.record]);
+  });
+
   it.each([
     ['on the entry', { ...storedRecord(), refreshToken: 'PLAINTEXT-TOKEN' }],
     ['in its factors', storedRecord({ factors: { google: true, password: true, note: 'PLAINTEXT-TOKEN' } })],
@@ -178,7 +220,9 @@ describe('AppTokenStore on the secure store', () => {
   });
 
   it('keeps an entry holding the optional fields the store writes', () => {
-    const entry = storedRecord({ email: 'a@example.com', revokedAt: NOW, expiresAt: NOW + DAY_MS });
+    const entry = storedRecord({
+      email: 'a@example.com', revokedAt: NOW, expiresAt: NOW + DAY_MS, successorId: 'BBBBBBBBBBBBBBBBBBBBBB',
+    });
     const { store, fileSystem } = makeStore(JSON.stringify({ tokens: [entry] }));
     store.issue(GRANT, NOW);
     expect(storedJson(fileSystem).tokens).toContainEqual(entry);
@@ -219,9 +263,10 @@ describe('AppTokenStore on the secure store', () => {
     store.rotate(first.token, NOW + 1000);
     const readsSoFar = fileSystem.calls.filter((name) => name === 'openForRead').length;
     fileSystem.failOnCall('openForRead', readsSoFar + 2, 'EIO');
-    const replay = store.rotate(first.token, NOW + 2000);
+    const late = NOW + 1000 + ROTATION_OVERLAP_MS + 1;
+    const replay = store.rotate(first.token, late);
     expect(replay).toMatchObject({ success: false, status: 'reused' });
-    expect(store.list(NOW + 2000)).toEqual([]);
+    expect(store.list(late)).toEqual([]);
   });
 
   it('keeps the old file and throws when the new one cannot be staged', () => {

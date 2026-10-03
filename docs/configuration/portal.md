@@ -479,6 +479,31 @@ else. This narrows the window rather than closing it: a person who approves
 anyway has approved. Closing it entirely needs a verified HTTPS redirect target,
 which is not available when the address belongs to the operator.
 
+### A lost refresh reply does not sign the phone out
+
+Each `/auth/app/refresh` spends the refresh token it is given and returns a new
+one. Presenting a spent token again normally means a copy exists, so the portal
+revokes every token of that sign-in and the phone has to sign in again.
+
+A phone whose refresh reply never arrived holds only the spent token, so for
+two minutes after a rotation that token is still accepted, even when it would
+have expired sooner: each time, it replaces the successor nobody has used with
+a new one. A spent token whose successor has already been presented, one
+presented more than two minutes after its rotation, one presented at a time
+the portal's clock puts before its rotation (as after the clock is set back),
+or one from a sign-in that was revoked still revokes everything. Once both
+those two minutes and its own lifetime have passed, a spent token is refused as
+unknown, like any expired token, and revokes nothing.
+If someone else redeemed the spent token in those two minutes, the phone's own
+token is the one replaced, and its next refresh revokes the sign-in for both.
+
+The portal accepts a spent token again only if the spent token names its
+successor, a detail this release added. A token spent by an earlier release
+names none, so a reply lost in the two minutes around the upgrade still signs
+that phone out. Rolling back to a release from 1.43.0 on keeps every phone
+signed in, but such a release discards the tokens this one spent, so presenting
+one of them is refused as unknown rather than revoking the sign-in.
+
 ### Use the token
 
 Send it as an `Authorization: Bearer` header on any `/api/*` request:
@@ -542,8 +567,8 @@ user. The shipped image runs both as `node`.
 
 The portal's app sign-ins (`app-tokens.json`) are saved as `{"tokens": […]}`
 too, and are owner-only. This release reads the old list, so the upgrade signs
-no phone out. A rollback signs every phone out: an earlier release reads the new
-file as holding no sign-ins, and each phone must sign in again.
+no phone out. A rollback to a release before 1.43.0 signs every phone out: it
+reads the new file as holding no sign-ins, and each phone must sign in again.
 
 Run one portal process per `app-tokens.json`. Two portals writing the same file
 can undo each other's latest change: a phone can be signed out, or a sign-in

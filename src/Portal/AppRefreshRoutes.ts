@@ -4,7 +4,9 @@
  * A refresh token is single-use: presenting one always replaces it. That makes
  * a second presentation of the same token evidence that a copy exists, and the
  * whole family it belongs to is destroyed rather than guessing which holder
- * was the real app.
+ * was the real app. A presentation shortly after the rotation, before its
+ * successor was ever used, is taken for a lost reply instead (see
+ * `ROTATION_OVERLAP_MS` in `AppTokenStore`).
  *
  * Revocation answers the same way whether or not the token existed, so the
  * endpoint cannot be used to test tokens.

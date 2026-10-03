@@ -3,10 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import Fastify, { type FastifyInstance, type LightMyRequestResponse } from 'fastify';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registerAppRefreshRoutes } from '../../src/Portal/AppRefreshRoutes.js';
-import { AppTokenStore, type TokenGrant } from '../../src/Portal/AppTokenStore.js';
+import {
+  AppTokenStore, ROTATION_OVERLAP_MS, type TokenGrant,
+} from '../../src/Portal/AppTokenStore.js';
 import { credentialFingerprint, type IPortalRuntime } from '../../src/Portal/PortalRuntime.js';
 import { verifyToken } from '../../src/Portal/PortalTokenAuth.js';
 import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
@@ -53,6 +55,15 @@ function issueToken(overrides: Partial<TokenGrant> = {}): string {
 }
 
 /**
+ * Moves the clock past the overlap a rotation made just now leaves open.
+ * Only `Date` is faked, so Fastify's own timers keep running.
+ */
+function passOverlap(): void {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Date.now() + ROTATION_OVERLAP_MS + 1);
+}
+
+/**
  * Posts to one of the refresh endpoints.
  * @param url - Route to post to.
  * @param body - Request body to send.
@@ -75,6 +86,7 @@ describe('AppRefreshRoutes', () => {
     await app.ready();
   });
   afterEach(async () => {
+    vi.useRealTimers();
     await app.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -109,10 +121,11 @@ describe('AppRefreshRoutes', () => {
     expect(verified.success).toBe(true);
   });
 
-  it('refuses the old token once it has been rotated', async () => {
+  it('refuses the old token once the overlap after its rotation has passed', async () => {
     const token = issueToken();
     const first = await post('/auth/app/refresh', { refreshToken: token });
     expect(first.statusCode).toBe(200);
+    passOverlap();
     const second = await post('/auth/app/refresh', { refreshToken: token });
     expect(second.statusCode).toBe(400);
     expect(second.json().error).toBe('invalid_grant');
@@ -122,9 +135,34 @@ describe('AppRefreshRoutes', () => {
     const token = issueToken();
     const first = await post('/auth/app/refresh', { refreshToken: token });
     const rotated = first.json().refreshToken;
+    passOverlap();
     await post('/auth/app/refresh', { refreshToken: token });
     const res = await post('/auth/app/refresh', { refreshToken: rotated });
     expect(res.statusCode).toBe(400);
+    expect(tokens.list()).toHaveLength(0);
+  });
+
+  it('re-grants a rotated token presented again within the overlap', async () => {
+    const token = issueToken();
+    const first = await post('/auth/app/refresh', { refreshToken: token });
+    const lost = first.json().refreshToken;
+    const again = await post('/auth/app/refresh', { refreshToken: token });
+    expect(again.statusCode).toBe(200);
+    const body = again.json();
+    expect(body.refreshToken).not.toBe(lost);
+    expect(verifyToken(body.accessToken, runtime, 'access').success).toBe(true);
+    const stale = await post('/auth/app/refresh', { refreshToken: lost });
+    expect(stale.statusCode).toBe(400);
+    expect(tokens.list()).toHaveLength(0);
+  });
+
+  it('still revokes a re-grant whose factors no longer satisfy the live auth mode', async () => {
+    const token = issueToken();
+    await post('/auth/app/refresh', { refreshToken: token });
+    runtime = enabledRuntime('both');
+    const again = await post('/auth/app/refresh', { refreshToken: token });
+    expect(again.statusCode).toBe(400);
+    expect(again.json().error).toBe('invalid_grant');
     expect(tokens.list()).toHaveLength(0);
   });
 
