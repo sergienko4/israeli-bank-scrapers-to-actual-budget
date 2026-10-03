@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.43.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.2...v1.43.3) (2026-10-03)
+
+
+### Fixed
+
+* **portal:** mark Enter-key login as fire-and-forget (Sonar S9383) ([#750](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/750)) ([299d92c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/299d92c521f8cff15fd6ef0c170de9ce47b477a4))
+
 ## [1.43.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.1...v1.43.2) (2026-10-03)
 
 
