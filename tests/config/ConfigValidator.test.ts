@@ -705,6 +705,34 @@ describe('ConfigValidator', () => {
         .toContain('not found');
     });
 
+    it('reports the exact found message with the first 8 syncId characters', async () => {
+      const cfg = makeConfig();
+      cfg.actual.budget.syncId = '3f2a9c71-5b8e-4d02-9a6f-1c7e8b4d2a90';
+      setupOnlineMocks(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
+      expect(results.find(r => r.check === 'actual.budget')).toEqual({
+        check: 'actual.budget',
+        status: 'pass',
+        message: 'Budget 3f2a9c71… found on server',
+      });
+    });
+
+    it('reports the exact not-found message naming the full syncId', async () => {
+      const cfg = makeConfig();
+      cfg.actual.budget.syncId = '3f2a9c71-5b8e-4d02-9a6f-1c7e8b4d2a90';
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetNotFoundMocks()[0])
+        .mockResolvedValueOnce(budgetNotFoundMocks()[1]);
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await ConfigValidator.validateOnline(cfg);
+      expect(results.find(r => r.check === 'actual.budget')).toEqual({
+        check: 'actual.budget',
+        status: 'fail',
+        message: 'Budget "3f2a9c71-5b8e-4d02-9a6f-1c7e8b4d2a90" not found — check syncId in Settings → Advanced',
+      });
+    });
+
     it('reports cannot-verify (not "not found") when list-user-files is non-ok', async () => {
       const cfg = makeConfig();
       const fetchMock = vi.fn()
