@@ -15,7 +15,9 @@
 
 import { TimeoutError } from '../../Errors/ErrorTypes.js';
 import { getLogger } from '../../Logger/Index.js';
-import { errorMessage } from '../../Utils/Index.js';
+import type { Procedure } from '../../Types/Index.js';
+import { succeed } from '../../Types/Index.js';
+import { errorMessage, repeatWhile } from '../../Utils/Index.js';
 import type TelegramApiClient from './TelegramApiClient.js';
 import type { IPollResult } from './TelegramApiClient.js';
 import { looksLikeOtp } from './TelegramHtml.js';
@@ -23,6 +25,7 @@ import { looksLikeOtp } from './TelegramHtml.js';
 const POLL_TIMEOUT_SEC = 5;
 const POLL_BACKOFF_MS = 2000;
 const OTP_HINT_MESSAGE = '⚠️ Please send the numeric OTP code from your SMS (4–8 digits).';
+const BACKED_OFF = succeed({ status: 'backed-off' });
 
 interface IPollState {
   offset: number;
@@ -60,14 +63,25 @@ export default async function waitForOtpReply(
 async function pollUntilReply(
   client: TelegramApiClient, state: IPollState
 ): Promise<string> {
-  while (Date.now() < state.deadline) {
-    const result = await processOneReplyPoll(client, state);
-    if (result !== false) return result;
-    await new Promise<void>((resolve) => {
-      globalThis.setTimeout(resolve, POLL_BACKOFF_MS);
-    });
+  const replies = repeatWhile(
+    () => Date.now() < state.deadline, () => processOneReplyPoll(client, state)
+  );
+  for await (const reply of replies) {
+    if (reply !== false) return reply;
+    await waitBeforeNextPoll();
   }
   throw new TimeoutError('2FA reply wait', 0);
+}
+
+/**
+ * Waits out the backoff between two reply polls.
+ *
+ * @returns A Procedure that resolves after POLL_BACKOFF_MS.
+ */
+function waitBeforeNextPoll(): Promise<Procedure<{ status: string }>> {
+  return new Promise((resolve) => {
+    globalThis.setTimeout(() => { resolve(BACKED_OFF); }, POLL_BACKOFF_MS);
+  });
 }
 
 /**
