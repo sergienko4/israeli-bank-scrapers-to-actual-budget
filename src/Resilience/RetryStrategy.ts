@@ -7,7 +7,7 @@ import { ShutdownError } from '../Errors/ErrorTypes.js';
 import { getLogger } from '../Logger/Index.js';
 import type { Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
-import { errorMessage } from '../Utils/Index.js';
+import { errorMessage, repeatWhile } from '../Utils/Index.js';
 
 export interface IRetryStrategy {
   execute<T>(fn: () => Promise<T>, operationName: string): Promise<T>;
@@ -48,39 +48,40 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
    * @returns The resolved value from fn on success.
    */
   public async execute<T>(fn: () => Promise<T>, operationName: string): Promise<T> {
-    return await this.executeAttempt(fn, operationName, 1);
-  }
-
-  /**
-   * Iteratively attempts to execute the function, retrying on failure.
-   * @param fn - Async function to execute.
-   * @param operationName - Human-readable label for logs.
-   * @param startAttempt - Initial attempt number (1-based).
-   * @returns The resolved value from fn on success.
-   */
-  private async executeAttempt<T>(
-    fn: () => Promise<T>, operationName: string, startAttempt: number
-  ): Promise<T> {
-    for (let attempt = startAttempt; ; attempt++) {
-      const result = await this.tryOneAttempt(fn, operationName, attempt);
-      if (result.success) return result.data;
-      this.ensureNotExhausted(attempt, operationName, result.error);
-    }
-  }
-
-  /**
-   * Throws a ShutdownError when the retry budget has been fully consumed.
-   * @param attempt - Current attempt number (1-based).
-   * @param operationName - Label for the error message.
-   * @param error - The error from the most recent failed attempt.
-   * @returns Nothing; returns normally only while attempts remain.
-   */
-  private ensureNotExhausted(attempt: number, operationName: string, error: Error): void {
-    if (attempt < this.options.maxAttempts) return;
+    /**
+     * Runs one attempt of fn.
+     * @param attempt - The 1-based attempt number.
+     * @returns The attempt's outcome.
+     */
+    const attemptOnce = (attempt: number): Promise<AttemptResult<T>> =>
+      this.tryOneAttempt(fn, operationName, attempt);
+    const outcome = await this.attemptUntilSettled(attemptOnce);
+    if (outcome.success) return outcome.data;
     throw new ShutdownError(
       `${operationName} failed after ${String(this.options.maxAttempts)} attempts. ` +
-      `Last error: ${error.message}`
+      `Last error: ${outcome.error.message}`
     );
+  }
+
+  /**
+   * Runs the first attempt, then retries one attempt at a time while the
+   * latest one failed and the attempt budget is not yet used up.
+   * @param attemptOnce - Runs one attempt with the given 1-based number.
+   * @returns The successful outcome, or the last failure once attempts run out.
+   */
+  private async attemptUntilSettled<T>(
+    attemptOnce: (attempt: number) => Promise<AttemptResult<T>>
+  ): Promise<AttemptResult<T>> {
+    let attempt = 1;
+    let outcome = await attemptOnce(attempt);
+    /**
+     * Reports whether another attempt should start.
+     * @returns True while the latest attempt failed and attempts remain.
+     */
+    const mayRetry = (): boolean => !outcome.success && attempt < this.options.maxAttempts;
+    const retries = repeatWhile(mayRetry, () => attemptOnce(++attempt));
+    for await (const next of retries) outcome = next;
+    return outcome;
   }
 
   /**
