@@ -680,6 +680,9 @@ export default tseslint.config(
       // DefaultParameters canaries stay alive.
       'sonarjs/no-selector-parameter': 'error',
       'unicorn/prefer-default-parameters': 'error',
+      // Mirrors the src/ guardrail, which no src file is exempt from, so the
+      // AwaitInLoop canary stays alive.
+      'no-await-in-loop': 'error',
     },
   },
 
@@ -741,26 +744,6 @@ export default tseslint.config(
     rules: {
       'check-file/filename-naming-convention': 'off',
       'import-x/max-dependencies': 'off',
-      'no-await-in-loop': 'off',
-    },
-  },
-
-  // 9. SEQUENTIAL PROCESSING EXEMPTIONS (iterative await-in-loop is intentional)
-  {
-    files: [
-      'src/Services/TelegramPoller.ts',
-      'src/Services/TelegramUpdateDispatcher.ts',
-      'src/Services/Notifications/TelegramNotifier.ts',
-      'src/Services/Notifications/TelegramOtpPoller.ts',
-      'src/Services/TwoFactor/AppOtpPrompter.ts',
-      'src/Resilience/GracefulShutdown.ts',
-      'src/Resilience/RetryStrategy.ts',
-      'src/Services/AccountImporter.ts',
-      'src/Services/ImportQueue.ts',
-      'src/Services/TransactionService.ts',
-    ],
-    rules: {
-      'no-await-in-loop': 'off',
     },
   },
 
