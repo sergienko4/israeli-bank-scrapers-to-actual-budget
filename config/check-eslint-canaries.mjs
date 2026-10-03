@@ -217,6 +217,12 @@ const CANARIES = {
     description:
       'unicorn/prefer-default-parameters (SonarCloud S7760): declare a default parameter instead of reassigning a fallback',
   },
+  'tests/eslint-canaries/AwaitInLoop.canary.ts': {
+    minErrors: 1,
+    ruleIds: ['no-await-in-loop'],
+    description:
+      'no-await-in-loop with no src exemptions: ordered async work goes through AsyncSequence and `for await`',
+  },
   'tests/eslint-canaries/portal/TopLevelAwait.canary.js': {
     minErrors: 1,
     ruleIds: ['no-restricted-syntax'],
