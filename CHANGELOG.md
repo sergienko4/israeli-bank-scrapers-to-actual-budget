@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.43.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.1...v1.43.2) (2026-10-03)
+
+
+### Fixed
+
+* **deps:** bump @actual-app/api from 26.9.0 to 26.10.0 ([#747](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/747)) ([6efd756](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/6efd75694fa3b53c47a18ad0023f27a690d6b2b1))
+* **deps:** bump @sergienko4/israeli-bank-scrapers from 8.7.3 to 8.7.4 ([#746](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/746)) ([7079d6a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7079d6aba9bec65053b8933363eeff153c98da4d))
+* **deps:** bump pino ([#745](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/745)) ([fb3155b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fb3155b799b0d0d521932122e6909eb763f69a9d))
+* **deps:** refresh 8 runtime and 57 dev lockfile pins ([#740](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/740)) ([d437f53](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d437f53473763b3f00f5a956d7875f155a408a46))
+* **deps:** unblock audit gate for braces and adm-zip ([#748](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/748)) ([282cc58](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/282cc58fcf72cf0f01130c06cb77885dc8c54ded))
+* **portal:** re-grant a spent token briefly ([#743](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/743)) ([3b30464](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/3b304649602ee4af541d8ab85d33b086388e0935))
+
 ## [1.43.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.0...v1.43.1) (2026-09-29)
 
 
