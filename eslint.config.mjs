@@ -10,6 +10,8 @@ import globals from 'globals';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import jsdoc from 'eslint-plugin-jsdoc';
 import regexpPlugin from 'eslint-plugin-regexp';
+import sonarjs from 'eslint-plugin-sonarjs';
+import unicorn from 'eslint-plugin-unicorn';
 
 /**
  * Bans a call passed straight into another call. Named so the Contract layer,
@@ -178,6 +180,8 @@ export default tseslint.config(
       'simple-import-sort': simpleImportSort,
       regexp: regexpPlugin,
       jsdoc,
+      sonarjs,
+      unicorn,
     },
     languageOptions: {
       ecmaVersion: 2022,
@@ -237,6 +241,12 @@ export default tseslint.config(
       'no-nested-ternary': 'error',
       // `x ? x : y` is a redundant ternary — use `x || y` (SonarCloud S6644).
       'no-unneeded-ternary': ['error', { defaultAssignment: false }],
+      // A boolean parameter that picks between two behaviours hides two
+      // functions behind one name — split them (SonarCloud S2301).
+      'sonarjs/no-selector-parameter': 'error',
+      // Reassigning a parameter to supply a fallback is a default parameter
+      // in disguise — declare the default (SonarCloud S7760).
+      'unicorn/prefer-default-parameters': 'error',
       'class-methods-use-this': 'error',
       'arrow-body-style': 'off',
       'no-shadow': 'off',
@@ -650,6 +660,7 @@ export default tseslint.config(
   // 7. CANARY TEST FILES (applies guardrail rules so canary checks work)
   {
     files: ['tests/eslint-canaries/**/*.ts'],
+    plugins: { sonarjs, unicorn },
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -665,6 +676,13 @@ export default tseslint.config(
       'no-console': 'error',
       // Mirrors the src/ guardrail so the UnneededTernary canary stays alive.
       'no-unneeded-ternary': ['error', { defaultAssignment: false }],
+      // Mirror the src/ guardrails so the SelectorParameter and
+      // DefaultParameters canaries stay alive.
+      'sonarjs/no-selector-parameter': 'error',
+      'unicorn/prefer-default-parameters': 'error',
+      // Mirrors the src/ guardrail, which no src file is exempt from, so the
+      // AwaitInLoop canary stays alive.
+      'no-await-in-loop': 'error',
     },
   },
 
@@ -726,26 +744,6 @@ export default tseslint.config(
     rules: {
       'check-file/filename-naming-convention': 'off',
       'import-x/max-dependencies': 'off',
-      'no-await-in-loop': 'off',
-    },
-  },
-
-  // 9. SEQUENTIAL PROCESSING EXEMPTIONS (iterative await-in-loop is intentional)
-  {
-    files: [
-      'src/Services/TelegramPoller.ts',
-      'src/Services/TelegramUpdateDispatcher.ts',
-      'src/Services/Notifications/TelegramNotifier.ts',
-      'src/Services/Notifications/TelegramOtpPoller.ts',
-      'src/Services/TwoFactor/AppOtpPrompter.ts',
-      'src/Resilience/GracefulShutdown.ts',
-      'src/Resilience/RetryStrategy.ts',
-      'src/Services/AccountImporter.ts',
-      'src/Services/ImportQueue.ts',
-      'src/Services/TransactionService.ts',
-    ],
-    rules: {
-      'no-await-in-loop': 'off',
     },
   },
 

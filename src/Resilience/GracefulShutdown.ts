@@ -5,8 +5,8 @@
 
 import { getLogger } from '../Logger/Index.js';
 import type { Procedure } from '../Types/Index.js';
-import { isFail, succeed } from '../Types/Index.js';
-import { errorMessage } from '../Utils/Index.js';
+import { fail, isFail, succeed } from '../Types/Index.js';
+import { errorMessage, mapInOrder } from '../Utils/Index.js';
 
 /** Callback function type for shutdown handlers. */
 export type ShutdownCallback = () =>
@@ -70,27 +70,33 @@ export class GracefulShutdownHandler implements IShutdownHandler {
   }
 
   /**
-   * Runs each registered shutdown callback sequentially, logging errors without aborting.
+   * Runs each registered shutdown callback sequentially, logging failures without aborting.
    * @returns Procedure indicating all callbacks have been executed.
    */
   private async executeCallbacks(): Promise<Procedure<{ status: string }>> {
-    for (const callback of this._callbacks) {
-      await GracefulShutdownHandler.runCallback(callback);
+    const outcomes = mapInOrder(
+      this._callbacks, callback => GracefulShutdownHandler.settleCallback(callback)
+    );
+    for await (const outcome of outcomes) {
+      if (isFail(outcome)) getLogger().error(outcome.message);
     }
     return succeed({ status: 'callbacks-complete' });
   }
 
   /**
-   * Executes one shutdown callback, logging a failed Procedure or thrown error.
+   * Executes one shutdown callback, turning a failed Procedure or a thrown error
+   * into a failure whose message is ready to log.
    * @param callback - The registered shutdown callback to run.
-   * @returns A promise that resolves once the callback settles.
+   * @returns The callback's result, or a failure describing what went wrong.
    */
-  private static async runCallback(callback: ShutdownCallback): Promise<void> {
+  private static async settleCallback(
+    callback: ShutdownCallback
+  ): Promise<Procedure<{ status: string }>> {
     try {
       const result = await callback();
-      if (isFail(result)) getLogger().error(`Shutdown callback failed: ${result.message}`);
+      return isFail(result) ? fail(`Shutdown callback failed: ${result.message}`) : result;
     } catch (error: unknown) {
-      getLogger().error(`Error during shutdown callback: ${errorMessage(error)}`);
+      return fail(`Error during shutdown callback: ${errorMessage(error)}`);
     }
   }
 }

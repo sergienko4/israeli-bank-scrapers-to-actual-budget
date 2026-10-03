@@ -77,6 +77,31 @@ describe('AppOtpPrompter', () => {
     expect(store.submit(push.pushed[0].requestId, '123456')).toBe(false);
   });
 
+  it('re-polls the store once per interval until the code arrives', async () => {
+    vi.useFakeTimers();
+    try {
+      const push = recordingPush();
+      const prompter = new AppOtpPrompter(store, push, { defaultTimeoutSeconds: 300, pollIntervalMs: 1000 });
+      const pollSpy = vi.spyOn(store, 'poll');
+
+      const codePromise = prompter.createOtpRetriever('leumi', 60)();
+      await vi.advanceTimersByTimeAsync(0);
+      const pollsAtStart = pollSpy.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(999);
+      const pollsBeforeInterval = pollSpy.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(1);
+      const pollsAfterInterval = pollSpy.mock.calls.length;
+      expect(store.submit(push.pushed[0].requestId, '246810')).toBe(true);
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(codePromise).resolves.toBe('246810');
+      expect({ pollsAtStart, pollsBeforeInterval, pollsAfterInterval, total: pollSpy.mock.calls.length })
+        .toEqual({ pollsAtStart: 1, pollsBeforeInterval: 1, pollsAfterInterval: 2, total: 3 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('passes the bank id to the push sender', async () => {
     const push = recordingPush();
     const prompter = new AppOtpPrompter(store, push, { defaultTimeoutSeconds: 300, pollIntervalMs: 5 });

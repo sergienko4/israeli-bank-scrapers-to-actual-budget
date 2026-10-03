@@ -101,6 +101,94 @@ describe('TelegramPoller', () => {
     expect(secondCallUrl).toContain('offset=101');
   });
 
+  it('runs one poll cycle at a time until stop() ends the loop', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+    const finishPolls: (() => void)[] = [];
+    fetchMock.mockImplementationOnce(emptyResponse).mockImplementation(
+      () => new Promise((resolve) => { finishPolls.push(() => { resolve(emptyResponse()); }); })
+    );
+
+    const run = poller.start();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    finishPolls[0]();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    poller.stop();
+    finishPolls[1]();
+    const result = await run;
+
+    expect(result).toMatchObject({ success: true, data: { status: 'stopped' } });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('ends a superseded run after its in-flight cycle without polling again', async () => {
+    const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+    const finishPolls: (() => void)[] = [];
+    /** @returns A poll response that settles when the test finishes it. */
+    const heldPoll = (): Promise<unknown> =>
+      new Promise((resolve) => { finishPolls.push(() => { resolve(emptyResponse()); }); });
+    fetchMock.mockImplementationOnce(emptyResponse).mockImplementationOnce(heldPoll)
+      .mockImplementationOnce(emptyResponse).mockImplementation(heldPoll);
+    let firstRunEnded = false;
+
+    const firstRun = poller.start().then((result) => { firstRunEnded = true; return result; });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const secondRun = poller.start();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    finishPolls[0]();
+    await vi.waitFor(() => expect(firstRunEnded).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(await firstRun).toMatchObject({ success: true, data: { status: 'stopped' } });
+    poller.stop();
+    finishPolls[1]();
+    await secondRun;
+  });
+
+  it('waits the retry backoff after a failed cycle before polling again', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        if (callCount === 2) return Promise.resolve({ ok: false, status: 500 });
+        poller.stop();
+        return emptyResponse();
+      });
+      const run = poller.start();
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      await run;
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('skips the retry backoff when stop() arrives during the failing cycle', async () => {
+    vi.useFakeTimers();
+    try {
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      let callCount = 0;
+      fetchMock.mockImplementation(() => {
+        callCount++;
+        if (callCount <= 1) return emptyResponse();
+        poller.stop();
+        return Promise.resolve({ ok: false, status: 500 });
+      });
+      let runEnded = false;
+      const run = poller.start().then((result) => { runEnded = true; return result; });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(runEnded).toBe(true);
+      await run;
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('stops when stop() is called', async () => {
     const poller = new TelegramPoller('123:ABC', '999', vi.fn());
 

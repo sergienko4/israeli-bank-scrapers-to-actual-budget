@@ -377,6 +377,38 @@ describe('ConfigValidator', () => {
       expectCheck(results, 'bank.discount.target[0]', 'fail');
     });
 
+    it.each([
+      { scenario: 'an empty string', target: { actualAccountId: '', reconcile: true, accounts: 'all' } },
+      { scenario: 'an omitted key', target: { reconcile: true, accounts: 'all' } },
+    ])('labels the actualAccountId "(empty)" when it is $scenario', ({ target }) => {
+      const cfg = makeConfig({
+        banks: { discount: { id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7, targets: [target] } },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expect(results.find(r => r.check === 'bank.discount.target[0]')).toEqual({
+        check: 'bank.discount.target[0]',
+        status: 'fail',
+        message: 'discount target[0]: invalid actualAccountId "(empty)" — expected UUID',
+      });
+    });
+
+    it('echoes a malformed actualAccountId verbatim in the failure message', () => {
+      const cfg = makeConfig({
+        banks: {
+          discount: {
+            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
+            targets: [{ actualAccountId: '1234567', reconcile: true, accounts: 'all' }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expect(results.find(r => r.check === 'bank.discount.target[0]')).toEqual({
+        check: 'bank.discount.target[0]',
+        status: 'fail',
+        message: 'discount target[0]: invalid actualAccountId "1234567" — expected UUID',
+      });
+    });
+
     it('passes on valid target', () => {
       const results = ConfigValidator.validateOffline(makeConfig());
       expectCheck(results, 'bank.discount.target[0]', 'pass');
@@ -703,6 +735,34 @@ describe('ConfigValidator', () => {
       expectCheck(results, 'actual.budget', 'fail');
       expect(fail(results).find(r => r.check === 'actual.budget')?.message)
         .toContain('not found');
+    });
+
+    it('reports the exact found message with the first 8 syncId characters', async () => {
+      const cfg = makeConfig();
+      cfg.actual.budget.syncId = '3f2a9c71-5b8e-4d02-9a6f-1c7e8b4d2a90';
+      setupOnlineMocks(cfg);
+      const results = await ConfigValidator.validateOnline(cfg);
+      expect(results.find(r => r.check === 'actual.budget')).toEqual({
+        check: 'actual.budget',
+        status: 'pass',
+        message: 'Budget 3f2a9c71… found on server',
+      });
+    });
+
+    it('reports the exact not-found message naming the full syncId', async () => {
+      const cfg = makeConfig();
+      cfg.actual.budget.syncId = '3f2a9c71-5b8e-4d02-9a6f-1c7e8b4d2a90';
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
+        .mockResolvedValueOnce(budgetNotFoundMocks()[0])
+        .mockResolvedValueOnce(budgetNotFoundMocks()[1]);
+      vi.stubGlobal('fetch', fetchMock);
+      const results = await ConfigValidator.validateOnline(cfg);
+      expect(results.find(r => r.check === 'actual.budget')).toEqual({
+        check: 'actual.budget',
+        status: 'fail',
+        message: 'Budget "3f2a9c71-5b8e-4d02-9a6f-1c7e8b4d2a90" not found — check syncId in Settings → Advanced',
+      });
     });
 
     it('reports cannot-verify (not "not found") when list-user-files is non-ok', async () => {

@@ -8,6 +8,7 @@ import type {
   IBankConfig, IBankTransaction, ICanonicalScrapeResult,
 } from '../Types/Index.js';
 import { isFail, isSuccess } from '../Types/Index.js';
+import { repeatWhile } from '../Utils/Index.js';
 import { AccountLogPresenter } from './Account/AccountLogPresenter.js';
 import { toMutableAccount } from './Account/AccountMutator.js';
 import { AccountReconciler } from './Account/AccountReconciler.js';
@@ -76,7 +77,8 @@ export class AccountImporter {
   }
 
   /**
-   * Recursively processes accounts from the array starting at the given index.
+   * Processes accounts in order from the given index, one at a time, and stops
+   * before the next account once a shutdown has been requested.
    * @param ctx - Context with bank name, config, accounts array, and running totals.
    * @param ctx.bankName - The bank name for context.
    * @param ctx.bankConfig - The bank configuration.
@@ -91,20 +93,28 @@ export class AccountImporter {
     accounts: { accountNumber: string; balance?: number; txns: IBankTransaction[] }[];
     index: number; imported: number; skipped: number;
   }): Promise<{ imported: number; skipped: number }> {
-    let imported = ctx.imported;
-    let skipped = ctx.skipped;
-    for (let i = ctx.index; i < ctx.accounts.length; i++) {
-      if (this.opts.shutdownHandler.isShuttingDown()) {
-        getLogger().warn('  ⚠️  Shutdown requested, stopping import...');
-        return { imported, skipped };
-      }
-      const counts = await this.processSingleAccount(
-        ctx.bankName, ctx.bankConfig, ctx.accounts[i]
-      );
-      imported += counts.imported;
-      skipped += counts.skipped;
+    const totals = { imported: ctx.imported, skipped: ctx.skipped };
+    let next = ctx.index;
+    const results = repeatWhile(
+      () => next < ctx.accounts.length && this.importMayContinue(),
+      () => this.processSingleAccount(ctx.bankName, ctx.bankConfig, ctx.accounts[next]),
+    );
+    for await (const counts of results) {
+      totals.imported += counts.imported;
+      totals.skipped += counts.skipped;
+      next += 1;
     }
-    return { imported, skipped };
+    return totals;
+  }
+
+  /**
+   * Reports whether another account may start, logging the stop when it may not.
+   * @returns False once a shutdown has been requested.
+   */
+  private importMayContinue(): boolean {
+    if (!this.opts.shutdownHandler.isShuttingDown()) return true;
+    getLogger().warn('  ⚠️  Shutdown requested, stopping import...');
+    return false;
   }
 
   /**

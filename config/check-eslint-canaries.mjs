@@ -205,6 +205,24 @@ const CANARIES = {
     description:
       'PR 492 — RegExp-from-template must use String.raw (SonarCloud S7780): no doubled backslashes',
   },
+  'tests/eslint-canaries/SelectorParameter.canary.ts': {
+    minErrors: 1,
+    ruleIds: ['sonarjs/no-selector-parameter'],
+    description:
+      'sonarjs/no-selector-parameter (SonarCloud S2301): a boolean parameter must not select between two behaviours',
+  },
+  'tests/eslint-canaries/DefaultParameters.canary.ts': {
+    minErrors: 1,
+    ruleIds: ['unicorn/prefer-default-parameters'],
+    description:
+      'unicorn/prefer-default-parameters (SonarCloud S7760): declare a default parameter instead of reassigning a fallback',
+  },
+  'tests/eslint-canaries/AwaitInLoop.canary.ts': {
+    minErrors: 1,
+    ruleIds: ['no-await-in-loop'],
+    description:
+      'no-await-in-loop with no src exemptions: ordered async work goes through AsyncSequence and `for await`',
+  },
   'tests/eslint-canaries/portal/TopLevelAwait.canary.js': {
     minErrors: 1,
     ruleIds: ['no-restricted-syntax'],
