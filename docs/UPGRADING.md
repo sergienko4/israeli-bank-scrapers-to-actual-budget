@@ -9,6 +9,26 @@ the new image.
 
 ---
 
+## 1.43.2 — Actual Budget API 26.10: do not roll back below this release
+
+**Affects:** deployments that run 1.43.2 and then roll back to 1.43.1 or
+earlier on the same data directory.
+
+This release moves the Actual Budget API from 26.9 to 26.10. The first run
+converts the budget copy in the data directory to the newer format, and an
+earlier release cannot open it.
+
+**Symptom if you roll back:** starting the importer and downloading the budget
+report no error, then the import fails with `No budget file is open`. The
+container log shows `Database is out of sync with migrations` and
+`out-of-sync-migrations`.
+
+**Migration:** none for the upgrade. Do not roll back; if you must, follow
+[the troubleshooting entry](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md#out-of-sync-migrations-from-actual-budget).
+It deletes the one budget folder, never the whole data directory. If the
+budget on your server was uploaded by an Actual Budget 26.10 client, a release
+before 1.43.2 cannot open it even after that.
+
 ## 1.43.0 — Portal files, config reads and the encryption password
 
 **Affects:** deployments that run the [config portal](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md),

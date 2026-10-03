@@ -21,14 +21,31 @@ cap_add:
 
 ## "out-of-sync-migrations" from Actual Budget
 
-**Symptom:** Actual Budget client returns `out-of-sync-migrations`.
+**Symptom:** the container log shows `Database is out of sync with migrations`
+or `out-of-sync-migrations`, and the import fails with `No budget file is open`.
+Starting the importer and downloading the budget report no error first.
 
-**Fix:**
+**Cause:** the copy of the budget in the data directory was written by a newer
+Actual Budget version than the image is running. Rolling the importer back
+causes this, for example below
+[1.43.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/UPGRADING.md#1432--actual-budget-api-2610-do-not-roll-back-below-this-release).
 
-1. Confirm your Actual Budget server is **v26.2.0 or newer**.
-2. Stop the importer.
-3. Delete the `./data` directory contents.
-4. Restart the importer — it will re-sync from scratch.
+**Fix:** upgrade the importer to the latest release. If the error started
+after a rollback and you must stay on the older release:
+
+1. Stop the importer.
+2. In the data directory (`actual.init.dataDir`, `/app/data` in Docker), find
+   the budget folder whose `metadata.json` has a `groupId` equal to your
+   `syncId`.
+3. Delete that one folder.
+4. Start the importer. It downloads the budget from your Actual server again.
+
+If the budget on your server was uploaded by a newer Actual Budget client,
+deleting the folder does not help.
+
+Never empty the whole data directory. It also holds the bank tokens
+(`bank-tokens.json`; each lost token costs an SMS), paired phones, app sign-ins
+and the import history.
 
 ## 2FA / OTP requested every run
 
