@@ -98,6 +98,13 @@ export interface IBankTokenStore {
   write: (storeKey: string, token: string, login: string) => Procedure<IBankTokenWrite>;
 
   /**
+   * Deletes one bank account's entry, keeping every other entry as it was.
+   * @param storeKey - Opaque key identifying one bank account.
+   * @returns Whether the file was replaced, or why it was not.
+   */
+  remove: (storeKey: string) => Procedure<IBankTokenWrite>;
+
+  /**
    * Deletes staged token files an earlier run was killed before cleaning up.
    * @returns How many were removed, or why the directory could not be read.
    */
@@ -196,14 +203,20 @@ function isBoundElsewhere(loaded: ILoadedTokens, binding: ITokenBinding): boolea
   return bound !== NO_LOGIN && bound !== binding.login;
 }
 
+/** What a failed change was trying to do to an account's token. */
+type TokenChange = 'store' | 'remove';
+
 /**
- * Explains a write that did not happen, naming the account but not the token.
+ * Explains a change that did not happen, naming the account but not the token.
+ * @param change - What was being done to the token.
  * @param storeKey - Opaque key identifying one bank account.
  * @param failure - Why the store refused.
  * @returns The same failure, with the account it cost.
  */
-function tokenNotStored(storeKey: string, failure: IProcedureFailure): IProcedureFailure {
-  const message = `Could not store the long-term token for ${storeKey}: ${failure.message}`;
+function tokenNotChanged(
+  change: TokenChange, storeKey: string, failure: IProcedureFailure,
+): IProcedureFailure {
+  const message = `Could not ${change} the long-term token for ${storeKey}: ${failure.message}`;
   return fail(message, { status: failure.status, details: failure.details });
 }
 
@@ -263,10 +276,32 @@ export default class BankTokenStore implements IBankTokenStore {
     const trimmed = token.trim();
     if (trimmed.length === 0) return succeed({ written: false });
     registerSecretValues([trimmed]);
-    if (!isLoginFingerprint(login)) return tokenNotStored(storeKey, NO_LOGIN_TO_BIND);
+    if (!isLoginFingerprint(login)) return tokenNotChanged('store', storeKey, NO_LOGIN_TO_BIND);
     const loaded = this.load();
-    if (!loaded.success) return tokenNotStored(storeKey, loaded);
+    if (!loaded.success) return tokenNotChanged('store', storeKey, loaded);
     return this.merge(loaded.data, storeKey, { token: trimmed, login });
+  }
+
+  /**
+   * Deletes one account's entry, keeping every other entry as it was.
+   *
+   * <p>It reads the file afresh and replaces it whole, exactly as a write
+   * does, so a damaged file is quarantined first and a file that could not be
+   * read is never replaced. A key the file holds no usable entry under writes
+   * nothing: there is nothing this account could send, and the next write
+   * sets any damage aside.
+   * @param storeKey - Opaque key identifying one bank account.
+   * @returns Whether the file was replaced, or why it was not.
+   */
+  public remove(storeKey: string): Procedure<IBankTokenWrite> {
+    const loaded = this.load();
+    if (!loaded.success) return tokenNotChanged('remove', storeKey, loaded);
+    if (!loaded.data.tokens.has(storeKey)) return succeed({ written: false });
+    const tokens = new Map(loaded.data.tokens);
+    tokens.delete(storeKey);
+    const committed = this.commitTokens(tokens, loaded.data.isIntact);
+    if (!committed.success) return tokenNotChanged('remove', storeKey, committed);
+    return committed;
   }
 
   /**
@@ -296,18 +331,15 @@ export default class BankTokenStore implements IBankTokenStore {
     storeKey: string,
     binding: ITokenBinding,
   ): Procedure<IBankTokenWrite> {
-    if (isBoundElsewhere(loaded, binding)) return tokenNotStored(storeKey, BOUND_ELSEWHERE);
+    if (isBoundElsewhere(loaded, binding)) {
+      return tokenNotChanged('store', storeKey, BOUND_ELSEWHERE);
+    }
     if (isAlreadyStored(loaded, storeKey, binding.token)) return succeed({ written: false });
     return this.replace(loaded, storeKey, binding);
   }
 
   /**
    * Replaces the file with one account's token merged in.
-   *
-   * <p>A file that is not intact is quarantined first rather than dropped;
-   * {@link ILoadedTokens.isIntact} says which parts of a file that covers.
-   * The records are sealed before anything touches the disk, so a failed
-   * seal leaves the file as it was.
    * @param loaded - Tokens read from the file, reused as the merge base.
    * @param storeKey - Opaque key identifying one bank account.
    * @param binding - Non-blank token to store and its login.
@@ -321,12 +353,32 @@ export default class BankTokenStore implements IBankTokenStore {
     const now = new Date();
     const tokens = new Map(loaded.tokens);
     tokens.set(storeKey, { ...binding, capturedAt: now.toISOString() });
+    const committed = this.commitTokens(tokens, loaded.isIntact);
+    if (!committed.success) return tokenNotChanged('store', storeKey, committed);
+    return committed;
+  }
+
+  /**
+   * Replaces the file with exactly these tokens.
+   *
+   * <p>A file that is not intact is quarantined first rather than dropped;
+   * {@link ILoadedTokens.isIntact} says which parts of a file that covers.
+   * The records are sealed before anything touches the disk, so a failed
+   * seal leaves the file as it was.
+   * @param tokens - Every usable record the file is to hold, by store key.
+   * @param isIntact - Whether the file being replaced was intact.
+   * @returns Confirmation of the write, or why it did not happen.
+   */
+  private commitTokens(
+    tokens: ReadonlyMap<string, IBankTokenRecord>,
+    isIntact: boolean,
+  ): Procedure<IBankTokenWrite> {
     const records = toStoreRecords(tokens);
     const sealed = this._cipher.sealRecords(records);
-    if (!sealed.success) return tokenNotStored(storeKey, sealed);
-    const request = { records: sealed.data, shouldQuarantine: !loaded.isIntact };
+    if (!sealed.success) return sealed;
+    const request = { records: sealed.data, shouldQuarantine: !isIntact };
     const committed = this._store.commit(request);
-    if (!committed.success) return tokenNotStored(storeKey, committed);
+    if (!committed.success) return committed;
     return succeed({ written: true });
   }
 

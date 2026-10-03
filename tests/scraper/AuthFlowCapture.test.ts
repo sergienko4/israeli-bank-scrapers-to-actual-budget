@@ -87,7 +87,7 @@ function throwingStore(): IBankTokenStore {
   const explode = (): never => {
     throw new Error('EIO: i/o error');
   };
-  return { read: explode, write: explode, sweepStagedLeftovers: explode };
+  return { read: explode, write: explode, remove: explode, sweepStagedLeftovers: explode };
 }
 
 /**

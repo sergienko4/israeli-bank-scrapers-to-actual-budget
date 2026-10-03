@@ -293,7 +293,7 @@ describe('ScraperSetup', () => {
      */
     const readCountingStore = (): { store: IBankTokenStore; read: ReturnType<typeof vi.fn> } => {
       const read = vi.fn();
-      const store = { read, write: vi.fn(), sweepStagedLeftovers: vi.fn() };
+      const store = { read, write: vi.fn(), remove: vi.fn(), sweepStagedLeftovers: vi.fn() };
       return { store: store as unknown as IBankTokenStore, read };
     };
 
