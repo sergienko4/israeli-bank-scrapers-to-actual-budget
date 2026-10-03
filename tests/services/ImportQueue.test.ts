@@ -119,6 +119,47 @@ describe('ImportQueue', () => {
     expect(process).toHaveBeenCalledTimes(2);
   });
 
+  it('runs one job at a time and drains jobs enqueued mid-drain in the same drain', async () => {
+    const finishers: Record<string, () => void> = {};
+    const process = vi.fn().mockImplementation(
+      (job: string) => new Promise<string>((r) => { finishers[job] = (): void => r(job); })
+    );
+    const onJobComplete = vi.fn();
+    const onQueueEmpty = vi.fn();
+    const queue = new ImportQueue({ process, onJobComplete, onQueueEmpty });
+
+    queue.enqueue('a');
+    await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(1));
+    queue.enqueueAll(['b', 'c']);
+    expect(process).toHaveBeenCalledTimes(1);
+    finishers.a();
+    await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(2));
+    expect(queue.size()).toBe(1);
+    finishers.b();
+    await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(3));
+    expect(onQueueEmpty).not.toHaveBeenCalled();
+    finishers.c();
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalled());
+
+    expect(process.mock.calls.map((call) => call[0])).toEqual(['a', 'b', 'c']);
+    expect(onJobComplete.mock.calls).toEqual([['a', 'a'], ['b', 'b'], ['c', 'c']]);
+    expect(onQueueEmpty).toHaveBeenCalledTimes(1);
+    expect(queue.isBusy()).toBe(false);
+  });
+
+  it('starts a fresh drain for a job enqueued after the queue went idle', async () => {
+    const process = vi.fn().mockResolvedValue('ok');
+    const onQueueEmpty = vi.fn();
+    const queue = new ImportQueue({ process, onJobComplete: vi.fn(), onQueueEmpty });
+
+    queue.enqueue('first');
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalledTimes(1));
+    queue.enqueue('second');
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalledTimes(2));
+
+    expect(process.mock.calls.map((call) => call[0])).toEqual(['first', 'second']);
+  });
+
   it('works with all required callbacks', async () => {
     const process = vi.fn().mockResolvedValue('ok');
     const onJobComplete = vi.fn();
