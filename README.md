@@ -241,7 +241,7 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 - **Vitest** ^5.0.0 (v8 coverage)
 - **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.7.3
 - **Browser** Camoufox (Firefox + C++-level fingerprint masking)
-- **Actual Budget API** `@actual-app/api` ^26.9.0
+- **Actual Budget API** `@actual-app/api` ^26.10.0
 <!-- meta:tech-stack:end -->
 
 </details>
