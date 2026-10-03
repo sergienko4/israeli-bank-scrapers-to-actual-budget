@@ -54,21 +54,22 @@ export const ACCEPTED_ADVISORIES = [
     expires: '2027-01-01',
     reason:
       'Dev-only: three devDependencies reach braces through micromatch '
-      + '4.0.8 (eslint-plugin-check-file; markdownlint-cli2 via globby and '
-      + 'fast-glob; patch-package via find-yarn-workspace-root). It is absent '
-      + 'from the production tree and npm prune --omit=dev deletes it from '
-      + 'the image node_modules, so nothing at runtime loads it. micromatch '
-      + 'calls braces only from parse, braces and braceExpand, and '
-      + 'micromatch.braces skips it unless the pattern contains a brace; '
-      + 'check-file and find-yarn-workspace-root match through picomatch '
-      + 'alone, and only fast-glob expands brace patterns. Every pattern that '
-      + 'can get there is a glob written in this repository, never outside '
-      + 'input, and a full eslint src run and npm run lint:docs make zero '
-      + 'braces calls. No fix is available: braces 3.0.3 and each package on '
-      + 'these paths is already its newest release, and the upstream fix is '
-      + 'open but unreleased (braces issue 70, PR 72). At expiry either '
-      + 'braces has shipped and we take the bump, or these paths are '
-      + 're-checked before renewing.',
+      + '4.0.8 (eslint-plugin-check-file; markdownlint-cli2 directly and '
+      + 'through globby, which also uses fast-glob; patch-package via '
+      + 'find-yarn-workspace-root). It is absent from the production tree and '
+      + 'npm prune --omit=dev deletes it from the image node_modules, so '
+      + 'nothing at runtime loads it. micromatch calls braces only from '
+      + 'parse, braces and braceExpand, and micromatch.braces skips it unless '
+      + 'the pattern contains a brace. check-file, markdownlint-cli2, globby '
+      + 'and find-yarn-workspace-root match through picomatch alone; only '
+      + 'fast-glob expands brace patterns. Every pattern that can get there '
+      + 'is a glob written in this repository, never outside input, and a '
+      + 'full eslint src run and npm run lint:docs make zero braces calls. '
+      + 'No fix is available: braces 3.0.3 and each package on these paths '
+      + 'is already its newest release, and the upstream fix is open but '
+      + 'unreleased (braces issue 70, PR 72). At expiry either braces has '
+      + 'shipped and we take the bump, or these paths are re-checked before '
+      + 'renewing.',
   },
 ];
 
