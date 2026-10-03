@@ -5,8 +5,16 @@
  * critical lint rules are still active and catching violations.
  *
  * A canary that produces zero errors means the rule it tests is dead.
+ *
+ * An entry may also list `ruleIds`: every listed rule must report at least one
+ * error (a warning does not fail lint, so it does not count). Use it when
+ * several rules fire on one canary, so a live rule's errors cannot satisfy
+ * `minErrors` while the rule under test is dead or demoted.
  */
 import { execSync } from 'node:child_process';
+
+/** ESLint JSON severity for an error; 1 is a warning, which does not fail lint. */
+const ESLINT_ERROR = 2;
 
 const CANARIES = {
   'tests/eslint-canaries/TypeBypass.canary.ts': {
@@ -199,9 +207,17 @@ const CANARIES = {
   },
   'tests/eslint-canaries/portal/TopLevelAwait.canary.js': {
     minErrors: 1,
+    ruleIds: ['no-restricted-syntax'],
     config: 'config/eslint.portal-public.mjs',
     description:
       'PR 492 — portal SPA top-level call must be awaited (SonarCloud S7785): app.js loads as <script type="module"> with `await init()`',
+  },
+  'tests/eslint-canaries/portal/FloatingPromise.canary.js': {
+    minErrors: 1,
+    ruleIds: ['@typescript-eslint/no-floating-promises'],
+    config: 'config/eslint.portal-public.mjs',
+    description:
+      'portal SPA promise must not float (SonarCloud S9383, no-floating-promises): use await, .catch, or `void login()`',
   },
 };
 
@@ -225,9 +241,11 @@ for (const [file, expected] of Object.entries(CANARIES)) {
   } catch (e) {
     // ESLint exits 1 when it finds errors -- this is EXPECTED for canaries
     let errorCount = 0;
+    let messages = [];
     try {
       const output = JSON.parse(e.stdout);
       errorCount = output[0]?.errorCount ?? 0;
+      messages = output[0]?.messages ?? [];
     } catch {
       // JSON parse failed -- ESLint may have crashed
       console.error(`CRASH: ${file} -- ESLint did not produce valid JSON output`);
@@ -237,11 +255,24 @@ for (const [file, expected] of Object.entries(CANARIES)) {
       continue;
     }
 
-    if (errorCount >= expected.minErrors) {
+    const silentRules = (expected.ruleIds ?? []).filter(
+      (ruleId) =>
+        !messages.some(
+          (message) => message.ruleId === ruleId && message.severity === ESLINT_ERROR,
+        ),
+    );
+
+    if (errorCount >= expected.minErrors && silentRules.length === 0) {
       console.log(
         `PASS: ${file}: ${errorCount} errors (expected >= ${expected.minErrors}) [${expected.description}]`,
       );
       passCount++;
+    } else if (silentRules.length > 0) {
+      console.error(
+        `DEAD RULE: ${file}: ${silentRules.join(', ')} reported no error [${expected.description}]`,
+      );
+      allPassed = false;
+      failCount++;
     } else {
       console.error(
         `WEAK RULE: ${file}: only ${errorCount} errors (expected >= ${expected.minErrors}) [${expected.description}]`,
