@@ -687,6 +687,28 @@ describe('TelegramNotifier', () => {
       await expect(notifier.waitForReply('Enter OTP:', 50)).rejects.toThrow('2FA reply wait timed out');
     });
 
+    it('backs off between polls and stops polling once the deadline passes', async () => {
+      vi.useFakeTimers();
+      try {
+        const notifier = createNotifier();
+        fetchMock.mockImplementation(() =>
+          Promise.resolve({ ok: true, text: vi.fn(), json: () => Promise.resolve({ ok: true, result: [] }) }));
+
+        const waiting = notifier.waitForReply('Enter OTP:', 3000);
+        const outcome = expect(waiting).rejects.toThrow('2FA reply wait timed out');
+        await vi.advanceTimersByTimeAsync(1999);
+        const pollsBeforeBackoffEnds = fetchMock.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(2001);
+        await outcome;
+
+        // 1 getLatestOffset + 1 prompt + polls at t=0 and t=2000; none after t=4000 > deadline
+        expect({ pollsBeforeBackoffEnds, total: fetchMock.mock.calls.length })
+          .toEqual({ pollsBeforeBackoffEnds: 3, total: 4 });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('confirms the OTP update offset before returning', async () => {
       const notifier = createNotifier();
       const futureTime = Math.floor(Date.now() / 1000) + 100;
