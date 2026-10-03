@@ -384,6 +384,20 @@ describe('AppTokenStore', () => {
       expect([attacker, retry, phone].map((result) => result.success)).toEqual([false, false, false]);
       expect(store.list(NOW + 1002)).toHaveLength(0);
     });
+
+    it('refuses every token of a sign-in the file shows two spent tokens naming one successor', () => {
+      const current = storedToken('current', NOW + 1001);
+      writeFileSync(file, JSON.stringify({
+        tokens: [
+          storedToken('first', NOW, { revokedAt: NOW + 1000, successorId: current.id }),
+          storedToken('second', NOW + 1000, { revokedAt: NOW + 1001, successorId: current.id }),
+          current,
+        ],
+      }));
+      const replay = store.rotate('first', NOW + 1002);
+      expect(isSuccess(replay)).toBe(false);
+      expect(store.list(NOW + 1002)).toHaveLength(0);
+    });
   });
 
   describe('rotation overlap against a reference model', () => {

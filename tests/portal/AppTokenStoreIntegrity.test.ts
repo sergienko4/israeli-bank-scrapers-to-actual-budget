@@ -149,6 +149,14 @@ describe('AppTokenStore on the secure store', () => {
       JSON.stringify({ tokens: [storedRecord({ successorId: 'BBBBBBBBBBBBBBBBBBBBBB' })] })],
     ['two unspent tokens in one sign-in',
       JSON.stringify({ tokens: [storedRecord(), storedRecord({ id: 'BBBBBBBBBBBBBBBBBBBBBB', tokenHash: 'b'.repeat(64) })] })],
+    ['two spent tokens naming one successor',
+      JSON.stringify({ tokens: [
+        storedRecord({ revokedAt: NOW, successorId: 'CCCCCCCCCCCCCCCCCCCCCC' }),
+        storedRecord({
+          id: 'BBBBBBBBBBBBBBBBBBBBBB', tokenHash: 'b'.repeat(64), revokedAt: NOW, successorId: 'CCCCCCCCCCCCCCCCCCCCCC',
+        }),
+        storedRecord({ id: 'CCCCCCCCCCCCCCCCCCCCCC', tokenHash: 'c'.repeat(64) }),
+      ] })],
     ['two records sharing an id',
       JSON.stringify({ tokens: [storedRecord(), storedRecord({ tokenHash: 'b'.repeat(64) })] })],
     ['two records sharing a token hash',
@@ -182,6 +190,20 @@ describe('AppTokenStore on the secure store', () => {
       id: 'DDDDDDDDDDDDDDDDDDDDDD', tokenHash: 'd'.repeat(64), familyId: '1f1e1d1c-1b1a-4918-8716-151413121110',
     });
     const { store, fileSystem } = makeStore(JSON.stringify({ tokens: [spent, successor, sibling, other] }));
+    const issued = store.issue(GRANT, NOW);
+    expect(storedJson(fileSystem).tokens).toEqual([other, issued.record]);
+  });
+
+  it('drops every record of a sign-in where two spent tokens name one successor', () => {
+    const first = storedRecord({ revokedAt: NOW, successorId: 'CCCCCCCCCCCCCCCCCCCCCC' });
+    const second = storedRecord({
+      id: 'BBBBBBBBBBBBBBBBBBBBBB', tokenHash: 'b'.repeat(64), revokedAt: NOW, successorId: 'CCCCCCCCCCCCCCCCCCCCCC',
+    });
+    const current = storedRecord({ id: 'CCCCCCCCCCCCCCCCCCCCCC', tokenHash: 'c'.repeat(64) });
+    const other = storedRecord({
+      id: 'DDDDDDDDDDDDDDDDDDDDDD', tokenHash: 'd'.repeat(64), familyId: '1f1e1d1c-1b1a-4918-8716-151413121110',
+    });
+    const { store, fileSystem } = makeStore(JSON.stringify({ tokens: [first, second, current, other] }));
     const issued = store.issue(GRANT, NOW);
     expect(storedJson(fileSystem).tokens).toEqual([other, issued.record]);
   });
