@@ -35,16 +35,12 @@ export type IRecoveryDecision =
   | {
     /** Discriminant marking a retryable failure. */
     readonly outcome: 'retry';
-    /** The status string the poll cycle resolves with. */
-    readonly status: string;
     /** Backoff delay in milliseconds before the next poll attempt. */
     readonly sleepMs: number;
   }
   | {
     /** Discriminant marking a fatal HTTP code or circuit-breaker trip. */
     readonly outcome: Exclude<RecoveryOutcome, 'retry'>;
-    /** The status string the poll cycle resolves with. */
-    readonly status: string;
   };
 
 /** Classifies Telegram poll failures into stop/retry decisions with backoff. */
@@ -71,7 +67,7 @@ export default class TelegramPollRecovery {
     if (isFatalHttpCode(httpCode)) {
       const log = `🛑 Telegram poll fatal error (HTTP ${httpCode}) — stopping poller`;
       getLogger().error(log);
-      return { outcome: 'fatal-stop', status: 'poll-fatal-stopped' };
+      return { outcome: 'fatal-stop' };
     }
     return this.backoffOrTrip(`HTTP ${httpCode}`);
   }
@@ -98,7 +94,7 @@ export default class TelegramPollRecovery {
     if (this._consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
       const max = String(MAX_CONSECUTIVE_ERRORS);
       getLogger().error(`🛑 Telegram poll ${detail} — ${max} errors, stopping`);
-      return { outcome: 'circuit-breaker-stop', status: 'poll-circuit-breaker' };
+      return { outcome: 'circuit-breaker-stop' };
     }
     return this.logAndScheduleRetry(detail);
   }
@@ -116,10 +112,6 @@ export default class TelegramPollRecovery {
     getLogger().warn(
       `⚠️  Telegram poll ${detail} (${count}/${max}) — retrying in ${seconds}s`
     );
-    return {
-      outcome: 'retry',
-      status: 'poll-error-handled',
-      sleepMs: computeBackoff(this._consecutiveErrors),
-    };
+    return { outcome: 'retry', sleepMs: computeBackoff(this._consecutiveErrors) };
   }
 }
