@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ImportQueue from '../../src/Services/ImportQueue.js';
+import { succeed } from '../../src/Types/Index.js';
 
 vi.mock('../../src/Logger/Index.js', () => ({
   getLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -159,6 +160,42 @@ describe('ImportQueue', () => {
 
     expect(process.mock.calls.map((call) => call[0])).toEqual(['first', 'second']);
   });
+
+  it.each(Array.from({ length: 21 }, (_, depth) => depth))(
+    'processes a job enqueued from onJobComplete after %i microtask hops',
+    async (depth) => {
+      const process = vi.fn().mockResolvedValue('ok');
+      const emptiedAt: { busy: boolean; processed: number }[] = [];
+      /**
+       * Runs a callback after the given number of nested microtask hops.
+       * @param hops - How many microtasks to wait.
+       * @param run - The callback to run.
+       */
+      const afterHops = (hops: number, run: () => void): void => {
+        if (hops === 0) { run(); return; }
+        queueMicrotask(() => { afterHops(hops - 1, run); });
+      };
+      const queue: ImportQueue<string> = new ImportQueue({
+        process,
+        onJobComplete: (job: string) => {
+          if (job === 'first') afterHops(depth, () => { queue.enqueue('second'); });
+          return succeed({ status: 'noted' });
+        },
+        onQueueEmpty: () => {
+          emptiedAt.push({ busy: queue.isBusy(), processed: process.mock.calls.length });
+          return succeed({ status: 'noted' });
+        },
+      });
+
+      queue.enqueue('first');
+      await new Promise((settle) => { setTimeout(settle, 0); });
+
+      expect(process.mock.calls.map((call) => call[0])).toEqual(['first', 'second']);
+      expect(queue.isBusy()).toBe(false);
+      expect(emptiedAt.every((at) => !at.busy)).toBe(true);
+      expect(emptiedAt.at(-1)?.processed).toBe(2);
+    },
+  );
 
   it('works with all required callbacks', async () => {
     const process = vi.fn().mockResolvedValue('ok');

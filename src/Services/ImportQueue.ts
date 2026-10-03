@@ -67,12 +67,18 @@ export default class ImportQueue<T> {
 
   /**
    * Drains the queue by processing jobs sequentially until empty.
+   * A job enqueued after the last empty check but while still active
+   * started no drain of its own, so it is handed to a fresh drain here.
    * @returns Procedure indicating the queue has been drained.
    */
   private async drain(): Promise<Procedure<{ status: string }>> {
     this._active = true;
     await this.processPendingJobs();
     this._active = false;
+    if (this._items.length > 0) {
+      void this.drain();
+      return succeed({ status: 'restarted' });
+    }
     this._callbacks.onQueueEmpty();
     return succeed({ status: 'drained' });
   }
