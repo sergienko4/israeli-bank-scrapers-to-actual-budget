@@ -1515,7 +1515,7 @@ function addBank(name) {
 
 $('pw-btn').onclick = login;
 $('pw').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') login();
+  if (e.key === 'Enter') void login();
 });
 $('logout').onclick = async () => {
   await api('/auth/logout', { method: 'POST' }).catch(() => ({}));
