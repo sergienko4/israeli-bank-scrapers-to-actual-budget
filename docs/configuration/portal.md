@@ -486,12 +486,14 @@ one. Presenting a spent token again normally means a copy exists, so the portal
 revokes every token of that sign-in and the phone has to sign in again.
 
 A phone whose refresh reply never arrived holds only the spent token, so for
-two minutes after a rotation that token is still accepted: each time, it
-replaces the successor nobody has used with a new one. A spent token whose
-successor has already been presented, one presented more than two minutes after
-its rotation, one presented at a time the portal's clock puts before its
-rotation (as after the clock is set back), or one from a sign-in that was
-revoked still revokes everything.
+two minutes after a rotation that token is still accepted, even when it would
+have expired sooner: each time, it replaces the successor nobody has used with
+a new one. A spent token whose successor has already been presented, one
+presented more than two minutes after its rotation, one presented at a time
+the portal's clock puts before its rotation (as after the clock is set back),
+or one from a sign-in that was revoked still revokes everything. Once both
+those two minutes and its own lifetime have passed, a spent token is refused as
+unknown, like any expired token, and revokes nothing.
 If someone else redeemed the spent token in those two minutes, the phone's own
 token is the one replaced, and its next refresh revokes the sign-in for both.
 

@@ -355,6 +355,25 @@ describe('AppTokenStore', () => {
       expect(ROTATION_OVERLAP_MS).toBe(120_000);
     });
 
+    it('keeps the overlap for a token rotated in the last two minutes of its life', () => {
+      const first = store.issue(GRANT, NOW);
+      const rotatedAt = first.record.expiresAt - 1000;
+      const second = store.rotate(first.token, rotatedAt);
+      if (!isSuccess(second)) throw new Error('expected rotation to succeed');
+      const again = store.rotate(first.token, rotatedAt + ROTATION_OVERLAP_MS);
+      if (!isSuccess(again)) throw new Error('expected a re-grant past the old expiry');
+      expect(store.list(rotatedAt + ROTATION_OVERLAP_MS)).toEqual([again.data.record]);
+    });
+
+    it('reads a token rotated near its expiry as unknown once the overlap has passed', () => {
+      const first = store.issue(GRANT, NOW);
+      const rotatedAt = first.record.expiresAt - 1000;
+      store.rotate(first.token, rotatedAt);
+      const late = store.rotate(first.token, rotatedAt + ROTATION_OVERLAP_MS + 1);
+      expect(isFail(late) && late.message).toBe('Unknown refresh token');
+      expect(store.list(rotatedAt + ROTATION_OVERLAP_MS + 1)).toHaveLength(1);
+    });
+
     it('refuses every token of a sign-in the file shows holding two unused tokens', () => {
       writeFileSync(file, JSON.stringify({
         tokens: [storedToken('stolen', NOW), storedToken('phone', NOW)],

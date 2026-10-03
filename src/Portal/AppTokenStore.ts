@@ -48,6 +48,8 @@ export const DEFAULT_REFRESH_TTL_DAYS = 60;
  * successor was never presented, so a family still has one live token and the
  * holder of the replaced one revokes the family when it presents it. The
  * window is counted from the first rotation and is not extended by a re-grant.
+ * A rotation keeps the spent record at least until the window ends, so a token
+ * rotated in its last two minutes keeps the whole window.
  * A time before the rotation is outside it, so a clock set back cannot
  * stretch it.
  * The app holds a late reply for up to 60 s, so this leaves room for its retry.
@@ -187,7 +189,8 @@ export class AppTokenStore {
    * it falls within {@link ROTATION_OVERLAP_MS} of its rotation.
    *
    * An expired token reads as unknown, because the load that feeds this drops
-   * expired records before anything looks at them.
+   * expired records before anything looks at them. A spent token is kept until
+   * its overlap has passed, even when that is after its own expiry.
    * @param token - The plaintext refresh token presented by the client.
    * @param now - Current epoch milliseconds, injectable for tests.
    * @returns Procedure with the replacement token, or a failure naming the reason.
@@ -204,6 +207,7 @@ export class AppTokenStore {
     record.revokedAt = now;
     record.lastUsedAt = now;
     record.successorId = issued.record.id;
+    record.expiresAt = Math.max(record.expiresAt, now + ROTATION_OVERLAP_MS + 1);
     this.save([...records, issued.record], loaded.isIntact);
     return succeed(issued);
   }
