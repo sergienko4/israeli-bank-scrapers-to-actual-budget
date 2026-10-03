@@ -38,7 +38,8 @@ policy file at all. The advisory could only be cleared by moving the pin.
 > states a rationale, and expires within 30 days. The decision this ADR records
 > is unaffected — regeneration remains the primary remedy, and the acceptance
 > class exists only for advisories that regeneration cannot fix, such as
-> `GHSA-vwc7-r8mq-g2x9` in `adm-zip`, where no patched release exists to move to.
+> `GHSA-vwc7-r8mq-g2x9` in `adm-zip`, which had no patched release to move to
+> until 0.6.1.
 
 The decisive detail is that **the fix was already inside the allowed range**.
 Regeneration alone would have produced `4.28.8`. The lockfile had simply never
