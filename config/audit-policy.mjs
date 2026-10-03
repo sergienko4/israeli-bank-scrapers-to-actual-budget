@@ -49,45 +49,27 @@ const MS_PER_DAY = 86_400_000;
  */
 export const ACCEPTED_ADVISORIES = [
   {
-    ghsa: 'GHSA-vwc7-r8mq-g2x9',
-    package: 'adm-zip',
-    added: '2026-09-10',
-    expires: '2026-10-10',
-    productionReachable: true,
-    noUpstreamFix: true,
-    upstream: 'https://github.com/cthackers/adm-zip/issues/574',
+    ghsa: 'GHSA-vfj7-8cjw-p6xm',
+    package: 'braces',
+    expires: '2027-01-01',
     reason:
-      'Reaches production through @sergienko4/israeli-bank-scrapers -> '
-      + '@hieutran094/camoufox-js, which unpacks the Camoufox browser from '
-      + 'GitHub releases and its addons from addons.mozilla.org using '
-      + 'adm-zip. Both extraction paths do run, so this is an accepted risk '
-      + 'rather than an unreachable one. The exposure is not a malicious '
-      + 'archive: per the advisory the write needs no traversal sequence in '
-      + 'the archive at all, so TLS on those two origins does not mitigate '
-      + 'it. It needs an attacker who can pre-create a symlink at a matching '
-      + 'destination path inside the extraction directory, plus overwrite '
-      + 'enabled. The impact is therefore bounded by the location and '
-      + 'ownership of the extraction directory, not by TLS. Both paths write '
-      + 'under INSTALL_DIR: it is overridable via CAMOUFOX_INSTALL_DIR and '
-      + 'otherwise defaults to userCacheDir(camoufox), with addons resolving '
-      + 'beneath it through getPath(addons/<name>). We never set that '
-      + 'variable, so INSTALL_DIR is /home/node/.cache/camoufox, a tree '
-      + 'created at image-build time and owned by the node user the process '
-      + 'runs as, rather than a shared temp directory. Placing the symlink '
-      + 'therefore presupposes code execution as the same user that does the '
-      + 'extracting, and pointing CAMOUFOX_INSTALL_DIR at a shared or '
-      + 'world-writable path would void that reasoning. 0.6.0 is the newest '
-      + 'release and is '
-      + 'unpatched, downgrading trades this moderate advisory for the high '
-      + 'GHSA-xcpc-8h2w-3j85, and generative-bayesian-network requires '
-      + '^0.6.0, so no version in range is clean. Upstream fixes are open '
-      + 'but unmerged (PRs 575 and 576). At expiry either upstream has '
-      + 'shipped and we take the bump, or we vendor an extraction path that '
-      + 'refuses to follow symlinks at the destination: O_NOFOLLOW on the '
-      + 'write plus an lstat check of each destination component, into a '
-      + 'freshly created directory. Lexical containment alone is not a fix, '
-      + 'because comparing the entry name against the resolved root is '
-      + 'precisely the check this advisory defeats.',
+      'Dev-only: three devDependencies reach braces through micromatch '
+      + '4.0.8 (eslint-plugin-check-file; markdownlint-cli2 directly and '
+      + 'through globby, which also uses fast-glob; patch-package via '
+      + 'find-yarn-workspace-root). It is absent from the production tree and '
+      + 'npm prune --omit=dev deletes it from the image node_modules, so '
+      + 'nothing at runtime loads it. micromatch calls braces only from '
+      + 'parse, braces and braceExpand, and micromatch.braces skips it unless '
+      + 'the pattern contains a brace. check-file, markdownlint-cli2, globby '
+      + 'and find-yarn-workspace-root match through picomatch alone; only '
+      + 'fast-glob expands brace patterns. Every pattern that can get there '
+      + 'is a glob written in this repository, never outside input, and a '
+      + 'full eslint src run and npm run lint:docs make zero braces calls. '
+      + 'No fix is available: braces 3.0.3 and each package on these paths '
+      + 'is already its newest release, and the upstream fix is open but '
+      + 'unreleased (braces issue 70, PR 72). At expiry either braces has '
+      + 'shipped and we take the bump, or these paths are re-checked before '
+      + 'renewing.',
   },
 ];
 

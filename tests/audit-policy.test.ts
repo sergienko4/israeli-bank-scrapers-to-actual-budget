@@ -51,7 +51,7 @@ const notInProductionTree = new Set<string>();
  * and still pass, because nothing forced the fixture to be updated with it.
  */
 const PACKAGE_TREE: Readonly<Record<string, 'production' | 'development' | undefined>> = {
-  'adm-zip': 'production',
+  braces: 'development',
 };
 
 /**
