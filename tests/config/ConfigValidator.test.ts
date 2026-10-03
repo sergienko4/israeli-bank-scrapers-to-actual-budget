@@ -377,6 +377,38 @@ describe('ConfigValidator', () => {
       expectCheck(results, 'bank.discount.target[0]', 'fail');
     });
 
+    it.each([
+      { scenario: 'an empty string', target: { actualAccountId: '', reconcile: true, accounts: 'all' } },
+      { scenario: 'an omitted key', target: { reconcile: true, accounts: 'all' } },
+    ])('labels the actualAccountId "(empty)" when it is $scenario', ({ target }) => {
+      const cfg = makeConfig({
+        banks: { discount: { id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7, targets: [target] } },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expect(results.find(r => r.check === 'bank.discount.target[0]')).toEqual({
+        check: 'bank.discount.target[0]',
+        status: 'fail',
+        message: 'discount target[0]: invalid actualAccountId "(empty)" — expected UUID',
+      });
+    });
+
+    it('echoes a malformed actualAccountId verbatim in the failure message', () => {
+      const cfg = makeConfig({
+        banks: {
+          discount: {
+            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
+            targets: [{ actualAccountId: '1234567', reconcile: true, accounts: 'all' }],
+          },
+        },
+      });
+      const results = ConfigValidator.validateOffline(cfg);
+      expect(results.find(r => r.check === 'bank.discount.target[0]')).toEqual({
+        check: 'bank.discount.target[0]',
+        status: 'fail',
+        message: 'discount target[0]: invalid actualAccountId "1234567" — expected UUID',
+      });
+    });
+
     it('passes on valid target', () => {
       const results = ConfigValidator.validateOffline(makeConfig());
       expectCheck(results, 'bank.discount.target[0]', 'pass');
