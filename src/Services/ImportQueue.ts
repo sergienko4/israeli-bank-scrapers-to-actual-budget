@@ -6,7 +6,7 @@
 import { getLogger } from '../Logger/Index.js';
 import type { IQueueCallbacks, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
-import { errorMessage } from '../Utils/Index.js';
+import { errorMessage, repeatWhile } from '../Utils/Index.js';
 
 /** Generic sequential job queue that processes items via a provided callback. */
 export default class ImportQueue<T> {
@@ -71,22 +71,30 @@ export default class ImportQueue<T> {
    */
   private async drain(): Promise<Procedure<{ status: string }>> {
     this._active = true;
-    await this.processNextItem();
+    await this.processPendingJobs();
     this._active = false;
     this._callbacks.onQueueEmpty();
     return succeed({ status: 'drained' });
   }
 
   /**
-   * Iteratively processes all items in the queue.
+   * Processes waiting jobs one at a time, oldest first, until none are left.
+   * Jobs enqueued while a job runs are picked up by this same drain.
    * @returns Procedure indicating all items were processed.
    */
-  private async processNextItem(): Promise<Procedure<{ status: string }>> {
-    while (this._items.length > 0) {
-      const job = this._items.shift() as T;
-      await this.processOneJob(job);
-    }
+  private async processPendingJobs(): Promise<Procedure<{ status: string }>> {
+    const pending = repeatWhile(() => this._items.length > 0, () => this.takeNextJob());
+    for await (const job of pending) await this.processOneJob(job);
     return succeed({ status: 'empty' });
+  }
+
+  /**
+   * Removes the oldest waiting job from the queue.
+   * @returns The removed job.
+   */
+  private takeNextJob(): Promise<T> {
+    const job = this._items.shift() as T;
+    return Promise.resolve(job);
   }
 
   /**
