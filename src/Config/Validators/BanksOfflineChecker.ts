@@ -123,15 +123,17 @@ function formatTargetSummary(target: IBankTarget, idx: number): string {
   return `target[${String(idx)}] "${label}": accounts=${accts}, reconcile=${rec}`;
 }
 
+/** Label shown in place of an empty or missing actualAccountId. */
+const EMPTY_ID_LABEL = '(empty)';
+
 /**
  * Builds the invalid-actualAccountId failure result.
  * @param name - Bank key used in result messages.
  * @param idx - Zero-based target index used in result labels.
- * @param id - The actualAccountId that failed validation.
+ * @param idLabel - The rejected actualAccountId, or EMPTY_ID_LABEL when it is blank.
  * @returns A fail result describing the invalid actualAccountId.
  */
-function invalidTargetId(name: string, idx: number, id: string): IValidationResult {
-  const idLabel = id || '(empty)';
+function invalidTargetId(name: string, idx: number, idLabel: string): IValidationResult {
   const tag = `bank.${name}.target[${String(idx)}]`;
   return fail(tag,
     `${name} target[${String(idx)}]: invalid actualAccountId "${idLabel}" — expected UUID`);
@@ -174,7 +176,8 @@ function checkBankTarget(
   name: string, target: IBankTarget, idx: number
 ): IValidationResult {
   const id = target.actualAccountId;
-  if (!id || !isValidUUID(id)) return invalidTargetId(name, idx, id);
+  if (!id) return invalidTargetId(name, idx, EMPTY_ID_LABEL);
+  if (!isValidUUID(id)) return invalidTargetId(name, idx, id);
   const tag = `bank.${name}.target[${String(idx)}]`;
   if (!isValidAccounts(target.accounts)) return invalidTargetAccounts(name, idx, tag);
   return pass(tag, `${name} ${formatTargetSummary(target, idx)}`);
