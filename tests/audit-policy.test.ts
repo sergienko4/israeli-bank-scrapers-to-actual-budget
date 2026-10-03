@@ -52,6 +52,7 @@ const notInProductionTree = new Set<string>();
  */
 const PACKAGE_TREE: Readonly<Record<string, 'production' | 'development' | undefined>> = {
   'adm-zip': 'production',
+  braces: 'development',
 };
 
 /**
