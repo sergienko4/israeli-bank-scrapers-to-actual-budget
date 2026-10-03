@@ -378,6 +378,9 @@ describe('AppTokenStore', () => {
 
     type Outcome = 'rotated' | 'regranted' | 'reused';
 
+    /** The model's own overlap, the two minutes the docs promise, not the store's constant. */
+    const MODEL_OVERLAP_MS = 120_000;
+
     /**
      * What presenting a token must do, decided from which token replaced
      * which and how long ago, by the store's clock, it was first spent.
@@ -388,7 +391,7 @@ describe('AppTokenStore', () => {
     function expectedOutcome(presented: IModelToken, now: number): Outcome {
       if (presented.live) return 'rotated';
       const elapsed = now - (presented.spentAt ?? Number.NEGATIVE_INFINITY);
-      const inOverlap = elapsed >= 0 && elapsed <= ROTATION_OVERLAP_MS;
+      const inOverlap = elapsed >= 0 && elapsed <= MODEL_OVERLAP_MS;
       if (inOverlap && presented.successor?.live === true) return 'regranted';
       return 'reused';
     }
