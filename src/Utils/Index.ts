@@ -1,3 +1,4 @@
+export { mapInOrder,repeatWhile } from './AsyncSequence.js';
 export { fromCents,toCents } from './Currency.js';
 export { filterByDateCutoff,formatDate } from './Date.js';
 
