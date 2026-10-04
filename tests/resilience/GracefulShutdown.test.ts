@@ -89,7 +89,7 @@ describe('GracefulShutdownHandler', () => {
       log.push('telegram stop');
       return succeed({ status: 'telegram-stopped' });
     });
-    exitSpy.mockImplementation((() => { log.push('exit'); }) as any);
+    exitSpy.mockImplementation(() => { log.push('exit'); });
 
     process.emit('SIGTERM');
     await vi.waitFor(() => expect(log).toEqual(['db start', 'db end', 'telegram stop', 'exit']));
