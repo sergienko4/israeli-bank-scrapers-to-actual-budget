@@ -75,32 +75,64 @@ async function resolveInstallDir() {
 }
 
 /**
+ * Reads what the command line asks for.
+ * @param {string[]} args - Command-line arguments after the script path.
+ * @returns {'install' | 'verify' | undefined} The mode, or undefined for any other arguments.
+ */
+function parseMode(args) {
+  if (args.length === 0) return 'install';
+  if (args.length === 1 && args[0] === '--verify') return 'verify';
+  return undefined;
+}
+
+/**
+ * Loads the pin and the asset it names for this platform.
+ * @returns {{ pin: import('./camoufox-pin-logic.d.mts').ICamoufoxPin,
+ *   asset: import('./camoufox-pin-logic.d.mts').ISelectedAsset, build: string }}
+ *   The pin, this platform's asset and the build's display name.
+ */
+function loadPinnedTarget() {
+  const pin = parsePin(JSON.parse(readFileSync(join(REPO_ROOT, PIN_FILE), 'utf8')));
+  const asset = selectAsset(pin, process.platform, process.arch);
+  return { pin, asset, build: `${pin.version}-${pin.release} (${asset.key})` };
+}
+
+/**
+ * Downloads and installs the pinned asset.
+ * @param {import('./camoufox-pin-logic.d.mts').ISelectedAsset} asset - Asset for this platform.
+ * @param {string} build - Display name of the pinned build.
+ * @param {string} installDir - Camoufox install directory.
+ * @returns {Promise<number>} Process exit code.
+ */
+async function installPinned(asset, build, installDir) {
+  const { PinnedCamoufoxFetcher } = await import('./camoufox-pinned-fetcher.mjs');
+  await new PinnedCamoufoxFetcher(asset).install();
+  console.log(`Installed Camoufox ${build} at ${installDir}`);
+  return 0;
+}
+
+/**
  * Installs or verifies the pinned build.
  * @param {string[]} args - Command-line arguments after the script path.
  * @returns {Promise<number>} Process exit code.
  */
 async function run(args) {
-  const verifyOnly = args.length === 1 && args[0] === '--verify';
-  if (args.length > 0 && !verifyOnly) {
+  const mode = parseMode(args);
+  if (!mode) {
     console.error(USAGE);
     return 1;
   }
-  const pin = parsePin(JSON.parse(readFileSync(join(REPO_ROOT, PIN_FILE), 'utf8')));
-  const asset = selectAsset(pin, process.platform, process.arch);
-  const build = `${pin.version}-${pin.release} (${asset.key})`;
+  const { pin, asset, build } = loadPinnedTarget();
   const installDir = await resolveInstallDir();
   if (isPinnedInstall(installDir, pin, asset)) {
     console.log(`Camoufox ${build} is installed at ${installDir}`);
     return 0;
   }
-  if (verifyOnly) {
+  if (mode === 'verify') {
     console.error(`Camoufox at ${installDir} is not ${build}, the build pinned in ${PIN_FILE}`);
     return 1;
   }
-  const { PinnedCamoufoxFetcher } = await import('./camoufox-pinned-fetcher.mjs');
-  await new PinnedCamoufoxFetcher(asset).install();
-  console.log(`Installed Camoufox ${build} at ${installDir}`);
-  return 0;
+  return installPinned(asset, build, installDir);
 }
 
 try {

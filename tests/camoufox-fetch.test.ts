@@ -1,11 +1,12 @@
 /**
  * Drives scripts/camoufox-fetch.mjs as CI, the Dockerfile and
  * `npm run camoufox:install` do: a child process pointed at an install
- * directory through CAMOUFOX_INSTALL_DIR. Only paths that never reach the
- * network run here; the download path is covered by
- * camoufox-pinned-fetcher.test.ts against a local server. Each child runs
- * with fetch stubbed out and a time limit, so a regression that starts a
- * download fails fast instead of pulling the real browser from GitHub.
+ * directory through CAMOUFOX_INSTALL_DIR. Each child runs with fetch stubbed
+ * out and a time limit, so a regression that starts a real download fails
+ * fast instead of pulling the browser from GitHub. One stub answers the
+ * pinned URL with bytes that fail the digest check, which proves the CLI
+ * downloads the pinned asset; a successful download is covered by
+ * camoufox-pinned-fetcher.test.ts against a local server.
  */
 
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
@@ -30,6 +31,11 @@ const ASSET = selectAsset(PIN, process.platform, process.arch);
 const OTHER_KEY = Object.keys(PIN.assets).find((key) => key !== ASSET.key) ?? 'lin.arm64';
 const NO_NETWORK =
   'data:text/javascript,globalThis.fetch=()=>Promise.reject(new Error("network disabled in tests"))';
+const SERVES_WRONG_ASSET = `data:text/javascript,${encodeURIComponent(
+  `globalThis.fetch=(url)=>String(url)===${JSON.stringify(ASSET.url)}` +
+    '?Promise.resolve(new Response("not the pinned browser"))' +
+    ':Promise.reject(new Error("network disabled in tests"))',
+)}`;
 const CHILD_TIMEOUT_MS = 10_000;
 
 /**
@@ -54,10 +60,15 @@ function installPinnedBuild(installDir: string): void {
  * Runs the installer CLI against one install directory, offline.
  * @param installDir - Directory exported as CAMOUFOX_INSTALL_DIR.
  * @param args - Command-line arguments after the script path.
+ * @param fetchStub - Module preloaded to replace fetch; by default every request fails.
  * @returns The finished child process.
  */
-function runCli(installDir: string, args: readonly string[]): SpawnSyncReturns<string> {
-  return spawnSync(process.execPath, ['--import', NO_NETWORK, CLI, ...args], {
+function runCli(
+  installDir: string,
+  args: readonly string[],
+  fetchStub = NO_NETWORK,
+): SpawnSyncReturns<string> {
+  return spawnSync(process.execPath, ['--import', fetchStub, CLI, ...args], {
     encoding: 'utf8',
     env: { ...process.env, CAMOUFOX_INSTALL_DIR: installDir },
     timeout: CHILD_TIMEOUT_MS,
@@ -132,8 +143,27 @@ describe('camoufox-fetch CLI', () => {
     });
   });
 
+  it('downloads the pinned asset when nothing is installed and refuses a wrong digest', () => {
+    const result = runCli(installDir, [], SERVES_WRONG_ASSET);
+
+    expect({
+      status: result.status,
+      refused: result.stderr.includes('Camoufox archive digest mismatch'),
+      installed: existsSync(join(installDir, 'version.json')),
+    }).toEqual({ status: 1, refused: true, installed: false });
+  });
+
   it('exits 1 with usage on an unknown flag', () => {
     const result = runCli(installDir, ['--latest']);
+
+    expect({ status: result.status, usage: result.stderr.includes('Usage') })
+      .toEqual({ status: 1, usage: true });
+  });
+
+  it('exits 1 with usage when --verify comes with another argument', () => {
+    installPinnedBuild(installDir);
+
+    const result = runCli(installDir, ['--verify', '--latest']);
 
     expect({ status: result.status, usage: result.stderr.includes('Usage') })
       .toEqual({ status: 1, usage: true });
