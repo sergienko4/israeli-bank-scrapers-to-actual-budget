@@ -2,9 +2,10 @@
  * E2E: logging in with the stored long-term token through the real import assembly.
  *
  * <p>A long-term token is what lets an unattended run skip the SMS login, and
- * for Pepper and PayBox it logs in by itself, so the token a run sends decides
- * whose account it imports. This suite drives the shipped composition through
- * {@link runImport}, once for each API-direct bank, against a fake bank
+ * for PayBox it logs in by itself, so the token a run sends decides whose
+ * account it imports. This suite drives the shipped composition through
+ * {@link runImport}, once for each bank that still logs in with one
+ * ({@link LONG_TERM_TOKEN_BANKS}), against a fake bank
  * ({@link openApiDirectBank}) that knows its customers, honours only the
  * latest fresh token it minted for each account, imports the account the
  * token belongs to, and charges one SMS code for a cold login.
@@ -21,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import loginFingerprint from '../../src/Scraper/Tokens/LoginFingerprint.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
 import type { IApiDirectBank } from '../helpers/apiDirectBanks.js';
-import { accountOf, API_DIRECT_BANKS } from '../helpers/apiDirectBanks.js';
+import { accountOf, LONG_TERM_TOKEN_BANKS } from '../helpers/apiDirectBanks.js';
 import type { IFakeApiDirectBank } from './helpers/fakeApiDirectBank.js';
 import { accountNumberOf, openApiDirectBank } from './helpers/fakeApiDirectBank.js';
 import type { IRun, ITokenStoreDir, SpyLogger } from './helpers/warmStartHarness.js';
@@ -64,10 +65,13 @@ const NO_RETRIEVER = { success: false, errorType: 'TWO_FACTOR_RETRIEVER_MISSING'
  * <p>Upstream rejects an expired token itself and spends the run's one cold
  * login at once. When that login fails, it tries a second one, which the
  * one-login budget refuses, so upstream fails as `GENERIC`. The importer
- * counts that as worth another try, has none left, and throws with
- * upstream's message.
+ * counts that as worth another try, has none left, and returns upstream's
+ * own failure, as it does for a failure it never retried.
  */
-const BUDGET_SPENT = { message: expect.stringContaining('already spent its one cold SMS login') };
+const BUDGET_SPENT = {
+  success: false, errorType: 'GENERIC',
+  errorMessage: expect.stringContaining('already spent its one cold SMS login'),
+};
 
 let store: ITokenStoreDir;
 
@@ -160,7 +164,7 @@ const brokenStores: IBrokenStore[] = [
   },
 ];
 
-describe.each(API_DIRECT_BANKS)('E2E: long-term token replay, $name', (row: IApiDirectBank) => {
+describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token replay, $name', (row: IApiDirectBank) => {
   const [FIRST, SECOND] = row.entries;
   let bank: IFakeApiDirectBank;
 

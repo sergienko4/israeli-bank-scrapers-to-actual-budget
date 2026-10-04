@@ -7,6 +7,7 @@ import type { IBankConfig } from '../../../Types/Index.js';
 import buildCredentials from '../../CredentialsBuilder.js';
 import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
 import { isApiDirectBank } from '../../Tokens/AuthFlowCapture.js';
+import { isPepper, withoutLongTermToken } from '../../Tokens/PepperDeviceState.js';
 import resolveWarmToken from '../../Tokens/WarmTokenResolver.js';
 import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
 import { watchRetriever } from '../../Tokens/WarmTokenWatch.js';
@@ -47,11 +48,58 @@ function warmLogin(
   return { credentials: buildCredentials(loginConfig, watched), tokenWatch };
 }
 
+/** Builds one attempt's credentials, and the watch on the token they carry. */
+type LoginBuilder = (
+  captureParams: IAuthFlowCaptureParams, bankConfig: IBankConfig, retriever: OtpRetriever,
+) => AttemptLogin;
+
+/**
+ * Builds a browser bank's credentials from its entry as configured.
+ *
+ * Browser banks never read the store, so they send no token.
+ * @param captureParams - Account key and logger for this attempt.
+ * @param bankConfig - The entry as configured.
+ * @param retriever - The attempt's OTP retriever, when it can ask for an SMS code.
+ * @returns Provider credentials for this attempt, which carry no token.
+ */
+function plainLogin(
+  captureParams: IAuthFlowCaptureParams, bankConfig: IBankConfig, retriever: OtpRetriever,
+): AttemptLogin {
+  const tokenWatch = watchOf(captureParams, false);
+  return { credentials: buildCredentials(bankConfig, retriever), tokenWatch };
+}
+
+/**
+ * Builds a Pepper attempt's credentials, which never carry a long-term token.
+ *
+ * Pepper logs in with the device state attached to the provider options, or
+ * enrolls with an SMS code, and refuses a long-term token next to either.
+ * @param captureParams - Account key and logger for this attempt.
+ * @param bankConfig - The entry as configured.
+ * @param retriever - The attempt's OTP retriever, when it can ask for an SMS code.
+ * @returns Provider credentials for this attempt, which carry no token.
+ */
+function deviceLogin(
+  captureParams: IAuthFlowCaptureParams, bankConfig: IBankConfig, retriever: OtpRetriever,
+): AttemptLogin {
+  const loginConfig = withoutLongTermToken(captureParams, bankConfig);
+  return plainLogin(captureParams, loginConfig, retriever);
+}
+
+/**
+ * Picks how a bank's attempt logs in.
+ * @param companyType - Provider company id of the bank being scraped.
+ * @returns `deviceLogin` for Pepper, `warmLogin` for the other API-direct
+ *   banks, and `plainLogin` for browser banks.
+ */
+function loginBuilderFor(companyType: string): LoginBuilder {
+  if (isPepper(companyType)) return deviceLogin;
+  if (isApiDirectBank(companyType)) return warmLogin;
+  return plainLogin;
+}
+
 /**
  * Builds the credentials one attempt logs in with.
- *
- * API-direct entries go through `warmLogin`. Browser banks never read
- * the store, so their entry is used as configured and sends no token.
  * @param captureParams - Account key, login, store and logger for this attempt.
  * @param bankConfig - The entry as configured.
  * @param retriever - The attempt's OTP retriever, when it can ask for an SMS code.
@@ -60,9 +108,6 @@ function warmLogin(
 export default function credentialsFor(
   captureParams: IAuthFlowCaptureParams, bankConfig: IBankConfig, retriever: OtpRetriever,
 ): AttemptLogin {
-  if (isApiDirectBank(captureParams.companyType)) {
-    return warmLogin(captureParams, bankConfig, retriever);
-  }
-  const tokenWatch = watchOf(captureParams, false);
-  return { credentials: buildCredentials(bankConfig, retriever), tokenWatch };
+  const build = loginBuilderFor(captureParams.companyType);
+  return build(captureParams, bankConfig, retriever);
 }

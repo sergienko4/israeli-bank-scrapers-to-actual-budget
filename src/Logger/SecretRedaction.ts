@@ -38,6 +38,16 @@ function markedAny(words: readonly string[]): string {
 const AUTH_KEY = String.raw`${marked('auth')}(?:\p{Cf}*${marked('orization')})?`;
 
 /**
+ * Spells two words that one `_` or `-`, or nothing, may join, each with `marked`.
+ * @param first - The first word.
+ * @param second - The second word.
+ * @returns A pattern source for `firstsecond`, `first_second` and `first-second`.
+ */
+function joined(first: string, second: string): string {
+  return String.raw`${marked(first)}(?:\p{Cf}*[_-])?\p{Cf}*${marked(second)}`;
+}
+
+/**
  * Keys whose value is hidden.
  *
  * <p>Any name ending in "token", "password" or "secret" is a secret, so the
@@ -46,7 +56,9 @@ const AUTH_KEY = String.raw`${marked('auth')}(?:\p{Cf}*${marked('orization')})?`
  * PayBox's `access_token`, as are `clientSecret` and `new_password`. Listing
  * them one by one would miss the next rename. A name ending in
  * `phoneNumber`, `phone_number` or `phone-number` is hidden too: a phone
- * number is personal data, and the login for OneZero, PayBox and Pepper.
+ * number is personal data, and the login for OneZero, PayBox and Pepper. So
+ * is one ending in `authState`, `auth_state` or `auth-state`, which holds
+ * Pepper's enrolled device keys as `persistentAuthState`.
  *
  * <p>The other keys must be a word of their own, so the importer's own
  * `twoFactorAuth: true` hint and `OAuth:` stay readable.
@@ -55,7 +67,7 @@ const SECRET_KEYS = [
   // Starts only where a word does. Starting after every `_` would rescan the
   // rest of the word from each one, which is quadratic on `a_a_a_...`.
   String.raw`\b\w*(?:${markedAny(['token', 'password', 'secret'])}` +
-    String.raw`|${marked('phone')}(?:\p{Cf}*[_-])?\p{Cf}*${marked('number')})`,
+    `|${joined('phone', 'number')}|${joined('auth', 'state')})`,
   // Here `_` also splits words, so `card_cvv` is caught; `\b` would not be.
   `(?<![a-z0-9])(?:${AUTH_KEY}|${markedAny(['creditcard', 'cvv', 'bearer', 'jwt'])})`,
 ].join('|');

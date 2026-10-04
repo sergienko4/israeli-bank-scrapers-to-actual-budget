@@ -1,12 +1,15 @@
 /**
  * Chooses the long-term token an API-direct login sends.
  *
- * <p>A Pepper or PayBox token logs in by itself (the provider skips every
- * login step on the warm path), so the token an attempt sends decides which
- * account it imports. A token is sent only when the store vouches that it
- * belongs to this attempt's login. The order is: the entry's own stored token,
- * then the configured one while the store holds none for the entry, then none,
- * so the provider logs in cold with an SMS.
+ * <p>A PayBox token logs in by itself (the provider skips every login step on
+ * the warm path), so the token an attempt sends decides which account it
+ * imports. A token is sent only when the store vouches that it belongs to this
+ * attempt's login. The order is: the entry's own stored token, then the
+ * configured one while the store holds none for the entry, then none, so the
+ * provider logs in cold with an SMS.
+ *
+ * <p>Pepper never asks here: its enrolled-device state replaced its long-term
+ * token, and `PepperDeviceState` chooses what it sends.
  *
  * <p>Every doubt fails closed. If the store cannot be read, or the file is
  * damaged, a configured token is never sent, because the store could not say

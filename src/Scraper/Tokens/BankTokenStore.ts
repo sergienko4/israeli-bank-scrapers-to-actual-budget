@@ -1,9 +1,10 @@
 /**
  * The durable long-term tokens API-direct banks mint, one per bank account.
  *
- * <p>OneZero, Pepper and PayBox return a long-lived re-login token after a
- * successful SMS login. Replaying it skips the SMS on later runs, so it is a
- * standing bypass of the second factor and is stored like a password.
+ * <p>OneZero and PayBox return a long-lived re-login token after a successful
+ * SMS login, and Pepper an enrolled device's state. Replaying either skips the
+ * SMS on later runs, so each is a standing bypass of the second factor and is
+ * stored like a password.
  *
  * <p>This is a thin adapter. {@link SecureJsonStore} owns every filesystem
  * guarantee — no-follow reads, owner-only files, exclusive staging, atomic

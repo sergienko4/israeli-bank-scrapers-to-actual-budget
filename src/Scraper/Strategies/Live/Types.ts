@@ -16,6 +16,7 @@ import type { ITwoFactorPrompter } from '../../../Services/ITwoFactorPrompter.js
 import type NotificationService from '../../../Services/NotificationService.js';
 import type { IBankConfig, IImporterConfig } from '../../../Types/Index.js';
 import type { IBankTokenStore } from '../../Tokens/BankTokenStore.js';
+import type { IDeviceStateWatch } from '../../Tokens/PepperDeviceState.js';
 import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
 import type { BrowserRegistry } from './BrowserRegistry.js';
@@ -67,6 +68,8 @@ export interface IInitializedLiveScrape {
   readonly hasTokenCapture: boolean;
   /** Whether the credentials carry a long-term token, so a refusal can warn. */
   readonly tokenWatch: IWarmTokenWatch;
+  /** Whether Pepper's stored device state was sent, so a refusal can remove it. */
+  readonly deviceWatch: IDeviceStateWatch;
 }
 
 /** Timeout wrapper input bundle for one provider scrape invocation. */

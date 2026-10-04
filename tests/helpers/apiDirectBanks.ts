@@ -85,6 +85,18 @@ export const API_DIRECT_BANKS: readonly IApiDirectBank[] = Object.freeze([
 ]);
 
 /**
+ * The API-direct banks that still log in with a long-term token.
+ *
+ * <p>From scraper 8.7.4 Pepper logs in as an enrolled device and never sends
+ * one, so the token replay suites leave it out and its device login has a
+ * suite of its own. Contracts every API-direct bank shares still run on
+ * {@link API_DIRECT_BANKS}.
+ */
+export const LONG_TERM_TOKEN_BANKS: readonly IApiDirectBank[] = Object.freeze(
+  API_DIRECT_BANKS.filter((bank) => bank.bankId !== 'pepper'),
+);
+
+/**
  * Draws an Israeli mobile number in the digits-only form the provider receives.
  * @returns `9725` followed by eight digits.
  */

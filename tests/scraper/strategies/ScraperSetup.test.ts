@@ -9,7 +9,8 @@
  * 4. Each attempt logs in with the long-term token the store vouches for
  */
 
-import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
+import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
+import { CompanyTypes, createScraper } from '@sergienko4/israeli-bank-scrapers';
 import { describe, it, expect, vi } from 'vitest';
 import buildCredentials from '../../../src/Scraper/CredentialsBuilder.js';
 import {
@@ -299,7 +300,6 @@ describe('ScraperSetup', () => {
 
     it.each([
       ['onezero', CompanyTypes.OneZero],
-      ['pepper', CompanyTypes.Pepper],
       ['paybox', CompanyTypes.PayBox],
     ] as const)('logs %s in with the stored token bound to its login, not the configured one', (bankId, companyType) => {
       const bankConfig = fakeValidBankConfigFor(bankId, { otpLongTermToken: fakeToken() });
@@ -369,6 +369,97 @@ describe('ScraperSetup', () => {
       initScrape(liveDeps(makeStore().store), opts);
 
       expect(opts.logger.warn).not.toHaveBeenCalled();
+    });
+
+    describe('Pepper, which logs in as an enrolled device', () => {
+      /**
+       * Builds a Pepper entry that can ask for an SMS code.
+       * @param overrides - Bank-config fields to pin.
+       * @returns The entry.
+       */
+      const pepper = (overrides: Partial<IBankConfig> = {}): IEntry => ({
+        bankId: 'pepper', companyType: CompanyTypes.Pepper,
+        bankConfig: fakeValidBankConfigFor('pepper', overrides), otpRetriever: async () => '123456',
+      });
+
+      /**
+       * Reads the provider options the last attempt created its scraper with.
+       * @returns Those options.
+       */
+      const lastOptions = (): ScraperOptions => {
+        const options = vi.mocked(createScraper).mock.lastCall?.[0];
+        if (options === undefined) throw new Error('no scraper was created');
+        return options;
+      };
+
+      it('sends the stored device state with the save callback, and no long-term token', () => {
+        const opts = liveOpts(pepper({ otpLongTermToken: fakeToken() }));
+        const deps = liveDeps(makeStore().store);
+        storeOwnToken(deps, opts);
+        const state = fakeToken();
+        deps.bankTokens.write(`pepper-device:${ACCOUNT_KEY}`, state, ownLogin(opts));
+
+        const { credentials } = initScrape(deps, opts);
+
+        expect(lastOptions().persistentAuthState).toBe(state);
+        expect(lastOptions().onPersistentAuthStateUpdate).toBeTypeOf('function');
+        expect(credentials).not.toHaveProperty('otpLongTermToken');
+        expect(credentials).toHaveProperty('otpCodeRetriever');
+      });
+
+      it('hands the attempt a watch on the state it sent, keyed on the entry\'s device state', () => {
+        const opts = liveOpts(pepper());
+        const deps = liveDeps(makeStore().store);
+        deps.bankTokens.write(`pepper-device:${ACCOUNT_KEY}`, fakeToken(), ownLogin(opts));
+
+        const { deviceWatch } = initScrape(deps, opts);
+
+        expect(deviceWatch.didSendState).toBe(true);
+        expect(deviceWatch.params.storeKey).toBe(`pepper-device:${ACCOUNT_KEY}`);
+      });
+
+      it('hands an enrolling attempt a watch that sent nothing', () => {
+        const { deviceWatch } = initScrape(liveDeps(makeStore().store), liveOpts(pepper()));
+
+        expect(deviceWatch.didSendState).toBe(false);
+      });
+
+      it('enrolls with the save callback alone when no state is stored, never sending the legacy token', () => {
+        const opts = liveOpts(pepper());
+        const deps = liveDeps(makeStore().store);
+        storeOwnToken(deps, opts);
+
+        const { credentials } = initScrape(deps, opts);
+
+        expect(lastOptions()).not.toHaveProperty('persistentAuthState');
+        expect(lastOptions().onPersistentAuthStateUpdate).toBeTypeOf('function');
+        expect(credentials).not.toHaveProperty('otpLongTermToken');
+      });
+
+      it('keeps the login callback, so the attempt still runs a single try', () => {
+        const { hasTokenCapture } = initScrape(liveDeps(makeStore().store), liveOpts(pepper()));
+
+        expect(hasTokenCapture).toBe(true);
+      });
+
+      /**
+       * Builds a PayBox entry.
+       * @returns The entry.
+       */
+      const payBox = (): IEntry => ({
+        bankId: 'paybox', companyType: CompanyTypes.PayBox, bankConfig: fakeValidBankConfigFor('paybox'),
+      });
+
+      it.each([['OneZero', oneZero], ['PayBox', payBox]] as const)(
+        'attaches no device options for %s',
+        (_name, entry) => {
+          const { deviceWatch } = initScrape(liveDeps(makeStore().store), liveOpts(entry()));
+
+          expect(lastOptions()).not.toHaveProperty('persistentAuthState');
+          expect(lastOptions()).not.toHaveProperty('onPersistentAuthStateUpdate');
+          expect(deviceWatch.didSendState).toBe(false);
+        },
+      );
     });
   });
 });

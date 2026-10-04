@@ -49,7 +49,7 @@ and the import history.
 
 ## 2FA / OTP requested every run
 
-**Symptom:** every import asks for an OTP, even for banks that issue a long-term token (OneZero, Pepper and PayBox).
+**Symptom:** every import asks for an OTP, even for banks that issue a long-term token (OneZero and PayBox) or keep an enrolled device (Pepper).
 
 **Cause:** the importer saves the long-term token after each SMS login, in `bank-tokens.json` on the data volume, and sends it on the next run. An SMS every run means the token is not saved or not sent. The log lines in [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) say which:
 
@@ -59,6 +59,7 @@ and the import history.
 - `The token file is damaged`: the importer sets the file aside when it saves the next token, so this costs at most one SMS per account. If the old file is kept when the config password is turned on, off or changed, it also appears until the importer saves the first new token; each account then needs at most one SMS.
 - `Could not read the long-term token`: the warning names the cause, such as a permission error. Fix it so the importer can read and write the file.
 - Two `banks` entries that log in to the same account: each SMS login makes the bank refuse the other entry's token. Keep one entry per login.
+- Pepper logs `Pepper device state` lines instead, listed in [Pepper](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md#2fa--otp). `Could not store` there fails the run, so fix the data volume as above; `Removed the Pepper device state` means Pepper refused it, and the next run enrolls with one SMS.
 
 **Fix:** keep `twoFactorAuth: true` so a refused token costs one SMS, not a failed run. The logs never show the token.
 

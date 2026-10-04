@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeStrategy.js';
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
 import type { IBankTokenStore } from '../../../src/Scraper/Tokens/BankTokenStore.js';
+import loginFingerprint from '../../../src/Scraper/Tokens/LoginFingerprint.js';
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import { ExponentialBackoffRetry } from '../../../src/Resilience/RetryStrategy.js';
 import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
@@ -22,7 +23,7 @@ import type { IApiDirectBank } from '../../helpers/apiDirectBanks.js';
 import { API_DIRECT_BANKS, apiDirectEntry } from '../../helpers/apiDirectBanks.js';
 import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
-import { makeStore } from '../BankTokenStoreFixture.js';
+import { fakeToken, makeStore } from '../BankTokenStoreFixture.js';
 
 vi.mock('node:fs');
 
@@ -252,6 +253,70 @@ describe('LiveScrapeStrategy', () => {
         `⚠️ OTP for <b>${bank.bankId}</b> was rejected. This run asks for no new code; `
         + 'the next run can ask for a new one.',
       ]]);
+    });
+  });
+
+  /**
+   * A run whose result proves Pepper's stored device state dead removes it, so
+   * the next run enrolls again with one SMS code; any other failure keeps it.
+   */
+  describe('a stored Pepper device state', () => {
+    const pepper = API_DIRECT_BANKS.find((bank) => bank.bankId === 'pepper');
+
+    /**
+     * Scrapes Pepper once over a store holding the entry's device state.
+     * @param result - What the provider returns.
+     * @param build - Builds the strategy over the store; the shared mocks unless given.
+     * @returns The keys the store holds afterwards.
+     */
+    async function scrapeWithState(
+      result: Record<string, unknown>,
+      build: (store: IBankTokenStore) => LiveScrapeStrategy = makeStrategy,
+    ): Promise<string[]> {
+      if (pepper === undefined) throw new Error('Pepper is not an API-direct bank');
+      const { store } = makeStore();
+      const bankConfig = apiDirectEntry(pepper);
+      const login = loginFingerprint(pepper.companyType, bankConfig);
+      if (!login.success) throw new Error(login.message);
+      store.write('pepper-device:primary', fakeToken(), login.data);
+      store.write('pepper:primary', fakeToken(), login.data);
+      mockScraper.scrape.mockResolvedValue(result);
+      await build(store).scrape({
+        bankId: 'pepper', companyType: pepper.companyType as CompanyTypes, accountKey: 'primary',
+        bankConfig, startDate: new Date(), logger, otpRetriever: () => Promise.resolve(faker.string.numeric(6)),
+      });
+      const holds = (key: string): boolean => {
+        const view = store.read(key);
+        return view.success && view.data.record.token !== '';
+      };
+      return ['pepper-device:primary', 'pepper:primary'].filter(holds);
+    }
+
+    it('removes the state when Pepper refuses it at login', async () => {
+      const kept = await scrapeWithState({
+        success: false, errorType: 'GENERIC',
+        errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/login 401: {"error_code":4001}',
+      });
+      expect(kept).toEqual(['pepper:primary']);
+      expect(logger.warn).toHaveBeenCalledWith(
+        '  ⚠️  Removed the Pepper device state for pepper-device:primary; the next run asks for one SMS code',
+      );
+    });
+
+    it('keeps the state when the login only timed out', async () => {
+      const kept = await scrapeWithState({
+        success: false, errorType: 'TIMEOUT',
+        errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/login network error: Timeout 30000ms exceeded',
+      });
+      expect(kept).toEqual(['pepper-device:primary', 'pepper:primary']);
+    });
+
+    it('removes the state when the shipped single-try policy spends its budget', async () => {
+      const kept = await scrapeWithState({
+        success: false, errorType: 'GENERIC',
+        errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/login 401: {"error_code":4001}',
+      }, (store) => shippedStrategy(store));
+      expect(kept).toEqual(['pepper:primary']);
     });
   });
 

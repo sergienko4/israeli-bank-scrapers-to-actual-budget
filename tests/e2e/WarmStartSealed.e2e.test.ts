@@ -3,7 +3,8 @@
  *
  * <p>A long-term token skips the bank's SMS, so a copied token file must not
  * hand it over. This suite sets the config password and drives the shipped
- * composition through {@link runImport}, once for each API-direct bank,
+ * composition through {@link runImport}, once for each bank that still logs
+ * in with a long-term token ({@link LONG_TERM_TOKEN_BANKS}),
  * against the fake bank from {@link openApiDirectBank}. The token must still
  * replay, while the file on disk holds neither the token nor the login it is
  * bound to. A changed password must cost one SMS, not every run.
@@ -16,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import loginFingerprint from '../../src/Scraper/Tokens/LoginFingerprint.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
 import type { IApiDirectBank } from '../helpers/apiDirectBanks.js';
-import { API_DIRECT_BANKS } from '../helpers/apiDirectBanks.js';
+import { LONG_TERM_TOKEN_BANKS } from '../helpers/apiDirectBanks.js';
 import { TEST_ENCRYPTION_KEY } from '../helpers/testCredentials.js';
 import type { IFakeApiDirectBank } from './helpers/fakeApiDirectBank.js';
 import { openApiDirectBank } from './helpers/fakeApiDirectBank.js';
@@ -61,7 +62,7 @@ function quarantinedFiles(): string[] {
   return readdirSync(store.directory).filter((name) => name.startsWith('bank-tokens.json.quarantined-'));
 }
 
-describe.each(API_DIRECT_BANKS)('E2E: long-term token sealed at rest, $name', (row: IApiDirectBank) => {
+describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token sealed at rest, $name', (row: IApiDirectBank) => {
   const [FIRST] = row.entries;
   const storeKey = `${row.bankId}:${FIRST}`;
   let bank: IFakeApiDirectBank;
