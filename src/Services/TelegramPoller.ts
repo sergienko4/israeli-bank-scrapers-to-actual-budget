@@ -3,7 +3,13 @@
  *
  * Thin shell around {@link TelegramPollHttp} (HTTP),
  * {@link TelegramUpdateDispatcher} (update routing), and
- * {@link TelegramPollRecovery} (error classification + backoff policy).
+ * {@link TelegramPollRun} (one run's liveness, error policy and cancellation).
+ *
+ * A run is superseded when a newer start() or stopAndFlush() replaces it. The
+ * /scan import does exactly that while its handler is still running, so the
+ * superseded run's cycle settles after the next run has started. It still
+ * dispatches the updates it fetched, but it never moves the shared poll offset
+ * and never retries: it ends and logs the outcome at debug.
  *
  * Public class API is byte-identical to the pre-PR-7 version.
  */
@@ -11,11 +17,10 @@
 import { getLogger } from '../Logger/Index.js';
 import type { Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
-import { repeatWhile } from '../Utils/Index.js';
+import { errorMessage, repeatWhile } from '../Utils/Index.js';
 import TelegramPollHttp, { type PollOutcome } from './TelegramPollHttp.js';
-import TelegramPollRecovery, {
-  type IRecoveryDecision,
-} from './TelegramPollRecovery.js';
+import type { IRecoveryDecision } from './TelegramPollRecovery.js';
+import TelegramPollRun from './TelegramPollRun.js';
 import TelegramUpdateDispatcher, {
   type PhotoHandler, type TextHandler,
 } from './TelegramUpdateDispatcher.js';
@@ -23,16 +28,48 @@ import TelegramUpdateDispatcher, {
 /** Backoff meaning the next poll cycle starts at once. */
 const NO_BACKOFF_MS = 0;
 
+/**
+ * Describes how a poll settled, for the superseded-run debug line.
+ *
+ * @param outcome - The settled poll outcome.
+ * @returns `data`, `aborted` or `http-<status>`.
+ */
+function describeOutcome(outcome: PollOutcome): string {
+  if (outcome.kind === 'http-error') return `http-${String(outcome.statusCode)}`;
+  return outcome.kind;
+}
+
+/**
+ * Applies a recovery decision: ends the run on fatal or circuit-breaker
+ * outcomes, or hands a retry's backoff to the poll loop to wait out.
+ *
+ * @param run - The run the decision belongs to.
+ * @param decision - The classified decision from the run's recovery policy.
+ * @returns The retry backoff in milliseconds, or zero once the run is ending.
+ */
+function backoffFor(run: TelegramPollRun, decision: IRecoveryDecision): number {
+  if (decision.outcome === 'retry') return decision.sleepMs;
+  run.end();
+  return NO_BACKOFF_MS;
+}
+
+/**
+ * Ends a superseded run's cycle without classifying or retrying it: the run
+ * that replaced it owns error handling from here on.
+ *
+ * @param detail - How the superseded run's last cycle settled.
+ * @returns Zero, so the ended run's loop exits without a backoff.
+ */
+function endSupersededCycle(detail: string): number {
+  getLogger().debug(`Telegram poll: superseded run ended (${detail})`);
+  return NO_BACKOFF_MS;
+}
+
 /** Long-polls the Telegram Bot API for updates and dispatches them to a handler. */
 export default class TelegramPoller {
   private readonly _http: TelegramPollHttp;
-  private readonly _recovery = new TelegramPollRecovery();
   private _offset = 0;
-  private _running = false;
-  private _startedAt = 0;
-  private _abortController: AbortController | null = null;
-  private _sleepController: AbortController | null = null;
-  private _runId = 0;
+  private _run: TelegramPollRun | null = null;
   private _onPhoto?: PhotoHandler;
 
   /**
@@ -62,19 +99,19 @@ export default class TelegramPoller {
 
   /**
    * Starts the long-poll loop, blocking until stop() is called.
-   * Clears any old pending messages before entering the loop.
+   * Clears any old pending messages before entering the loop. Supersedes a
+   * run that is still in progress.
    *
    * @returns Procedure indicating the poll loop has ended.
    */
   public async start(): Promise<Procedure<{ status: string }>> {
-    this._running = true;
-    const runId = ++this._runId;
-    this._startedAt = Math.floor(Date.now() / 1000);
-    this._recovery.reset();
-    await this.clearOldMessages();
-    if (this._runId !== runId) return succeed({ status: 'superseded' });
+    this._run?.end();
+    const run = new TelegramPollRun();
+    this._run = run;
+    await this.clearOldMessages(run);
+    if (!this.isCurrent(run)) return succeed({ status: 'superseded' });
     getLogger().info('🤖 Telegram command listener started');
-    return await this.pollLoop(runId);
+    return await this.pollLoop(run);
   }
 
   /**
@@ -83,9 +120,7 @@ export default class TelegramPoller {
    * @returns Procedure indicating the poller was stopped.
    */
   public stop(): Procedure<{ status: string }> {
-    this._running = false;
-    this._abortController?.abort();
-    this._sleepController?.abort();
+    this._run?.stop();
     return succeed({ status: 'stopped' });
   }
 
@@ -96,25 +131,33 @@ export default class TelegramPoller {
    * @returns Procedure indicating the flush status.
    */
   public async stopAndFlush(): Promise<Procedure<{ status: string }>> {
-    this._runId++;
     this.stop();
+    this._run = null;
     if (this._offset === 0) return succeed({ status: 'nothing-to-flush' });
     return await this._http.flushOffset(this._offset);
   }
 
   /**
-   * Runs poll cycles one at a time until stopped or superseded by a new run,
-   * backing off (interruptibly) after a failed cycle while still running.
+   * Whether the run is still the poller's current run, not superseded.
    *
-   * @param runId - Token captured at start() to detect stale loops.
+   * @param run - The run to check.
+   * @returns True when no newer start() or stopAndFlush() has replaced it.
+   */
+  private isCurrent(run: TelegramPollRun): boolean {
+    return this._run === run;
+  }
+
+  /**
+   * Runs poll cycles one at a time until the run ends, backing off
+   * (interruptibly) after a failed cycle while the run is still active.
+   *
+   * @param run - The run this loop belongs to.
    * @returns Procedure indicating the loop has ended.
    */
-  private async pollLoop(runId: number): Promise<Procedure<{ status: string }>> {
-    const backoffs = repeatWhile(
-      () => this._running && this._runId === runId, () => this.runOnePollCycle()
-    );
+  private async pollLoop(run: TelegramPollRun): Promise<Procedure<{ status: string }>> {
+    const backoffs = repeatWhile(() => run.isActive, () => this.runOnePollCycle(run));
     for await (const backoffMs of backoffs) {
-      if (backoffMs > NO_BACKOFF_MS && this._running) await this.interruptibleSleep(backoffMs);
+      if (backoffMs > NO_BACKOFF_MS && run.isActive) await run.sleep(backoffMs);
     }
     return succeed({ status: 'stopped' });
   }
@@ -122,54 +165,57 @@ export default class TelegramPoller {
   /**
    * Executes one poll cycle: HTTP request + dispatch + error classification.
    *
+   * @param run - The run this cycle belongs to.
    * @returns Milliseconds to back off before the next cycle, or zero for none.
    */
-  private async runOnePollCycle(): Promise<number> {
+  private async runOnePollCycle(run: TelegramPollRun): Promise<number> {
     try {
-      const outcome = await this.fetchUpdates();
-      if (outcome.kind === 'http-error') {
-        const code = String(outcome.statusCode);
-        const decision = this._recovery.onHttpError(code);
-        return this.backoffFor(decision);
-      }
-      if (outcome.kind === 'aborted') return NO_BACKOFF_MS;
-      await this.dispatchUpdates(outcome);
-      this._recovery.reset();
-      return NO_BACKOFF_MS;
+      const outcome = await run.poll((signal) => this._http.poll(this._offset, signal));
+      if (outcome.kind === 'data') await this.dispatchUpdates(run, outcome);
+      return this.settleCycle(run, outcome);
     } catch (error: unknown) {
-      const decision = this._recovery.onException(error);
-      return this.backoffFor(decision);
+      if (!this.isCurrent(run)) return endSupersededCycle(`error: ${errorMessage(error)}`);
+      const decision = run.recovery.onException(error);
+      return backoffFor(run, decision);
     }
   }
 
   /**
-   * Runs one long-poll HTTP request with a fresh abort controller.
+   * Classifies a settled poll for the current run; a superseded run just ends.
    *
-   * @returns The PollOutcome describing data, http-error, or abort.
+   * @param run - The run the poll belongs to.
+   * @param outcome - The settled poll outcome, already dispatched when data.
+   * @returns Milliseconds to back off before the next cycle, or zero for none.
    */
-  private async fetchUpdates(): Promise<PollOutcome> {
-    this._abortController = new AbortController();
-    try {
-      return await this._http.poll(this._offset, this._abortController.signal);
-    } finally {
-      this._abortController = null;
+  private settleCycle(run: TelegramPollRun, outcome: PollOutcome): number {
+    if (!this.isCurrent(run)) {
+      const detail = describeOutcome(outcome);
+      return endSupersededCycle(detail);
     }
+    if (outcome.kind === 'http-error') {
+      const code = String(outcome.statusCode);
+      const decision = run.recovery.onHttpError(code);
+      return backoffFor(run, decision);
+    }
+    if (outcome.kind === 'data') run.recovery.reset();
+    return NO_BACKOFF_MS;
   }
 
   /**
    * Dispatches the returned updates to the registered handlers and advances
    * the poll offset.
    *
+   * @param run - The run that fetched the updates.
    * @param outcome - The data outcome from a successful poll.
    * @returns Resolves when all updates have been dispatched.
    */
   private async dispatchUpdates(
-    outcome: PollOutcome & { kind: 'data' }
+    run: TelegramPollRun, outcome: PollOutcome & { kind: 'data' }
   ): Promise<Procedure<{ status: string }>> {
-    const dispatcher = this.buildDispatcher();
+    const dispatcher = this.buildDispatcher(run);
     const result = await dispatcher.apply(outcome.data);
     if (result.success && result.data.nextOffset !== undefined) {
-      this._offset = result.data.nextOffset;
+      this.recordOffset(run, result.data.nextOffset);
     }
     return succeed({ status: 'dispatched' });
   }
@@ -177,66 +223,44 @@ export default class TelegramPoller {
   /**
    * Builds a dispatcher bound to the current handler set.
    *
+   * @param run - The run whose start time filters out older messages.
    * @returns A new TelegramUpdateDispatcher instance.
    */
-  private buildDispatcher(): TelegramUpdateDispatcher {
+  private buildDispatcher(run: TelegramPollRun): TelegramUpdateDispatcher {
     return new TelegramUpdateDispatcher(this._http, {
       chatId: this.chatId,
-      startedAt: this._startedAt,
+      startedAt: run.startedAt,
       onText: this.onMessage,
       onPhoto: this._onPhoto,
     });
   }
 
   /**
-   * Applies a recovery decision: stops the loop on fatal or circuit-breaker
-   * outcomes, or hands a retry's backoff to the poll loop to wait out.
-   *
-   * @param decision - The classified decision from {@link TelegramPollRecovery}.
-   * @returns The retry backoff in milliseconds, or zero once the loop is stopping.
-   */
-  private backoffFor(decision: IRecoveryDecision): number {
-    if (decision.outcome === 'retry') return decision.sleepMs;
-    this._running = false;
-    return NO_BACKOFF_MS;
-  }
-
-  /**
    * Sets the offset to skip all messages that arrived before the bot started.
    * Prevents replaying stale commands from a previous session.
    *
+   * @param run - The run that is starting.
    * @returns Procedure indicating the initial offset was set.
    */
-  private async clearOldMessages(): Promise<Procedure<{ status: string }>> {
+  private async clearOldMessages(run: TelegramPollRun): Promise<Procedure<{ status: string }>> {
     const result = await this._http.getInitialOffset();
     if (result.success && result.data.offset !== 0) {
-      this._offset = result.data.offset;
+      this.recordOffset(run, result.data.offset);
     }
     return succeed({ status: 'initial-offset-set' });
   }
 
   /**
-   * Sleeps for the given duration, but can be interrupted by stop().
+   * Records the next offset to poll from, unless the run was superseded: a
+   * newer run has already read a later offset from Telegram.
    *
-   * @param ms - Duration in milliseconds to wait.
-   * @returns Procedure indicating the sleep completed or was aborted.
+   * @param run - The run reporting the offset.
+   * @param offset - One past the last update the run has seen.
+   * @returns True when the offset was recorded.
    */
-  private async interruptibleSleep(
-    ms: number
-  ): Promise<Procedure<{ status: string }>> {
-    this._sleepController = new AbortController();
-    const signal = this._sleepController.signal;
-    try {
-      await new Promise<void>((resolve) => {
-        const timer = globalThis.setTimeout(resolve, ms);
-        signal.addEventListener('abort', () => {
-          globalThis.clearTimeout(timer);
-          resolve();
-        }, { once: true });
-      });
-    } finally {
-      this._sleepController = null;
-    }
-    return succeed({ status: 'slept' });
+  private recordOffset(run: TelegramPollRun, offset: number): boolean {
+    if (!this.isCurrent(run)) return false;
+    this._offset = offset;
+    return true;
   }
 }
