@@ -48,11 +48,12 @@ export interface IPortalServer {
 /**
  * Launches the product's Camoufox (Firefox) browser in headless mode.
  *
- * The binary is the one the scraper toolchain already installs (host cache or
- * the CI `camoufox-js fetch` step), so this never needs chromium and is never
- * skipped — a missing browser fails the test loudly. A fixed window size is
- * passed because Camoufox derives the CSS layout viewport (and thus responsive
- * breakpoints) from the real window, not from Playwright's per-context viewport;
+ * The binary is the pinned build `scripts/camoufox-fetch.mjs` installs
+ * (`npm run camoufox:install` locally, the camoufox-cache action in CI), so
+ * this never needs chromium and is never skipped — a missing browser fails
+ * the test loudly. A fixed window size is passed because Camoufox derives the
+ * CSS layout viewport (and thus responsive breakpoints) from the real window,
+ * not from Playwright's per-context viewport;
  * pinning it keeps desktop vs. mobile flows deterministic. Tests therefore open
  * contexts with `viewport: null` (no Playwright viewport emulation): Camoufox
  * uses this window instead, and it avoids the Firefox `Browser.setDefaultViewport`

@@ -85,41 +85,46 @@ SHELL ["/bin/sh", "-c"]
 # with full CI validation before merge).
 RUN npm ci
 
-# Install Camoufox browser (Firefox-based anti-detect)
-# CI pre-downloads the binary into .camoufox-cache/ for amd64 smoke test only.
-# Production multi-arch build (amd64+arm64) fetches fresh per-platform via npx.
-# ELF e_machine check validates the binary matches the build architecture.
+# Install the Camoufox browser (Firefox-based anti-detect): the build pinned
+# in config/camoufox-pin.json, never upstream's newest. CI installs it on the
+# runner (.github/actions/docker/camoufox-cache) and an amd64 build with
+# SKIP_BROWSER_FETCH=true copies that from .camoufox-cache/; every other build
+# (arm64, local) downloads it with the pinned installer, which checks its
+# SHA-256. Both paths must pass --verify, so a stale precache cannot ship, and
+# the ELF e_machine check confirms the binary matches the build architecture.
 ARG SKIP_BROWSER_FETCH=false
 COPY .camoufox-cache/ /tmp/camoufox-precache/
+COPY config/camoufox-pin.json ./config/camoufox-pin.json
+COPY scripts/camoufox-fetch.mjs scripts/camoufox-pin-logic.mjs scripts/camoufox-pinned-fetcher.mjs ./scripts/
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN ARCH=$(uname -m) && \
-    echo "Building for architecture: $ARCH" && \
+RUN set -e; \
+    ARCH=$(uname -m); \
+    export CAMOUFOX_INSTALL_DIR=/home/node/.cache/camoufox; \
+    echo "Building for architecture: $ARCH"; \
     if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ "$ARCH" = "x86_64" ] && \
        [ -f /tmp/camoufox-precache/camoufox-bin ] && [ -f /tmp/camoufox-precache/version.json ]; then \
-      echo "Using pre-cached Camoufox binary (x86_64)" && \
-      mkdir -p /home/node/.cache/camoufox && \
-      cp -r /tmp/camoufox-precache/* /home/node/.cache/camoufox/; \
+      echo "Using pre-cached Camoufox binary (x86_64)"; \
+      mkdir -p "$CAMOUFOX_INSTALL_DIR"; \
+      cp -r /tmp/camoufox-precache/* "$CAMOUFOX_INSTALL_DIR"/; \
     else \
-      echo "Fetching Camoufox for $ARCH..." && \
-      npx @hieutran094/camoufox-js fetch && \
-      mkdir -p /home/node/.cache && \
-      mv /root/.cache/camoufox /home/node/.cache/camoufox; \
-    fi && \
-    rm -rf /tmp/camoufox-precache && \
-    echo "Validating Camoufox binary for $ARCH..." && \
-    [ -f /home/node/.cache/camoufox/version.json ] || \
-      (echo "ERROR: Camoufox version manifest missing — startup banner would be blank" && exit 1) && \
-    node -e "const m=JSON.parse(require('node:fs').readFileSync('/home/node/.cache/camoufox/version.json','utf8')); if(typeof m.version!=='string'||m.version.trim()===''){console.error('ERROR: Camoufox manifest declares no usable version');process.exit(1)}" && \
-    head -c 4 /home/node/.cache/camoufox/camoufox-bin | grep -qP '\x7fELF' || \
-      (echo "ERROR: Camoufox binary is not a valid ELF executable" && exit 1) && \
-    EXPECTED_MACHINE=$([ "$ARCH" = "aarch64" ] && echo "b7 00" || echo "3e 00") && \
-    ACTUAL_MACHINE=$(od -An -tx1 -j18 -N2 /home/node/.cache/camoufox/camoufox-bin | tr -d ' \n') && \
-    EXPECTED_HEX=$(echo "$EXPECTED_MACHINE" | tr -d ' ') && \
-    [ "$ACTUAL_MACHINE" = "$EXPECTED_HEX" ] || \
-      (echo "ERROR: ELF e_machine mismatch — expected $EXPECTED_HEX ($ARCH) got $ACTUAL_MACHINE" && exit 1) && \
-    chmod +x /home/node/.cache/camoufox/camoufox-bin && \
-    echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE, $(cat /home/node/.cache/camoufox/version.json))"
+      echo "Installing the pinned Camoufox for $ARCH..."; \
+      node scripts/camoufox-fetch.mjs; \
+    fi; \
+    rm -rf /tmp/camoufox-precache; \
+    echo "Validating Camoufox binary for $ARCH..."; \
+    node scripts/camoufox-fetch.mjs --verify; \
+    BIN="$CAMOUFOX_INSTALL_DIR/camoufox-bin"; \
+    if ! head -c 4 "$BIN" | grep -qP '\x7fELF'; then \
+      echo "ERROR: Camoufox binary is not a valid ELF executable"; exit 1; \
+    fi; \
+    EXPECTED_HEX=$([ "$ARCH" = "aarch64" ] && echo "b700" || echo "3e00"); \
+    ACTUAL_MACHINE=$(od -An -tx1 -j18 -N2 "$BIN" | tr -d ' \n'); \
+    if [ "$ACTUAL_MACHINE" != "$EXPECTED_HEX" ]; then \
+      echo "ERROR: ELF e_machine mismatch — expected $EXPECTED_HEX ($ARCH) got $ACTUAL_MACHINE"; exit 1; \
+    fi; \
+    chmod +x "$BIN"; \
+    echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE, $(cat "$CAMOUFOX_INSTALL_DIR/version.json"))"
 
 # Copy source code and build config
 COPY src ./src

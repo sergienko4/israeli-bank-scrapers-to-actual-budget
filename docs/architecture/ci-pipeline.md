@@ -237,7 +237,9 @@ Consolidates the Docker build sequence used by `pr.yml` (trivy), `release.yml`
 (smoke + push), and `_e2e-suite.yml`. Wraps:
 
 1. `ci/free-disk-space` composite
-2. `docker/camoufox-cache` composite
+2. `docker/camoufox-cache` composite — installs the Camoufox build pinned in
+   `config/camoufox-pin.json`, cached per pin, installer version and runner
+   architecture
 3. `docker/setup-buildx-action`
 4. `docker/build-push-action`
 

@@ -1,8 +1,8 @@
 /**
  * BrowserVersion tests — pins the forensic reporting of the bundled browser.
  *
- * The browser binary is fetched at image build time and is not pinned by
- * version, so the running build must be visible in the logs. Without it,
+ * The browser binary is installed at image build time from a pinned build,
+ * and the running build must still be visible in the logs. Without it,
  * diagnosing a regression means guessing which browser the image shipped.
  */
 

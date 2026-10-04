@@ -21,7 +21,6 @@ runtime:
   node_ci_version: "26.x"
   npm_engines: ">=10.0.0"
   python_ci_version: "3.12"
-  camoufox: latest
 
 docker:
   image: sergienko4/israeli-bank-importer

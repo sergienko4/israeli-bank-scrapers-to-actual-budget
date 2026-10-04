@@ -136,8 +136,8 @@ jobs:
         # host: portal-ui.e2e.test.ts (in-process server) and
         # portal-docker.e2e.test.ts (server inside the israeli-bank-importer:e2e
         # container, exercising the read-only/read-write config-directory mounts).
-        # build-image already warms ~/.cache/camoufox, but make the dependency
-        # explicit + rate-limit-safe.
+        # build-image already installs the pinned build into ~/.cache/camoufox;
+        # this keeps the dependency explicit and is a no-op when it is there.
         uses: ./.github/actions/docker/camoufox-cache
 
       - name: Verify pipeline results

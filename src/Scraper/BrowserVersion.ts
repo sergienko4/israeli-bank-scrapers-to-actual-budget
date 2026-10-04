@@ -1,10 +1,10 @@
 /**
  * Reports the Camoufox build bundled into the running image.
  *
- * The browser binary is fetched at image build time rather than pinned to a
- * version, so the only way to tell which build a container is running is to
- * read the manifest the fetch leaves behind. Surfacing it at startup makes a
- * silent browser upgrade visible in the logs instead of a guessing game.
+ * The browser binary is installed at image build time from the build pinned in
+ * config/camoufox-pin.json. Reading the manifest the install leaves behind
+ * still shows which build a container actually runs, so an image built from
+ * an older pin, or a pin bump, is visible in the logs instead of a guess.
  */
 
 import * as fs from 'node:fs';
