@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import NetworkError from '../../src/Errors/NetworkError.js';
 import TelegramUpdateDispatcher, { type TextHandler } from '../../src/Services/TelegramUpdateDispatcher.js';
-import type TelegramPollHttp from '../../src/Services/TelegramPollHttp.js';
+import TelegramPollHttp from '../../src/Services/TelegramPollHttp.js';
 import type { ITelegramUpdate } from '../../src/Types/Index.js';
 import { fail, succeed } from '../../src/Types/ProcedureHelpers.js';
 
@@ -24,9 +24,8 @@ function textUpdate(updateId: number, text: string): ITelegramUpdate {
  * @returns A dispatcher bound to CHAT_ID.
  */
 function makeDispatcher(onText: TextHandler) {
-  const http = {
-    answerCallbackQuery: vi.fn().mockResolvedValue(succeed({ status: 'acked' })),
-  } as unknown as TelegramPollHttp;
+  const http = new TelegramPollHttp('test-token');
+  vi.spyOn(http, 'answerCallbackQuery').mockResolvedValue(succeed({ status: 'acked' }));
   return new TelegramUpdateDispatcher(http, { chatId: CHAT_ID, startedAt: STARTED_AT, onText });
 }
 

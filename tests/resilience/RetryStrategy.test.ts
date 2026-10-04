@@ -152,8 +152,9 @@ describe('ExponentialBackoffRetry', () => {
     const error = await retry.execute(fn, 'single-op').catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ShutdownError);
-    expect((error as Error).message)
-      .toBe('single-op failed after 1 attempts. Last error: only try');
+    expect(error).toHaveProperty(
+      'message', 'single-op failed after 1 attempts. Last error: only try'
+    );
     expect(fn).toHaveBeenCalledTimes(1);
     expect(onRetry).not.toHaveBeenCalled();
   });
@@ -170,7 +171,7 @@ describe('ExponentialBackoffRetry', () => {
     const error = await resultPromise;
 
     expect(error).toBeInstanceOf(ShutdownError);
-    expect((error as Error).message).toBe('test-op failed after 2 attempts. Last error: Fail 2');
+    expect(error).toHaveProperty('message', 'test-op failed after 2 attempts. Last error: Fail 2');
   });
 
   it('starts the next attempt only after the backoff elapses', async () => {
@@ -206,7 +207,7 @@ describe('ExponentialBackoffRetry', () => {
     const error = await resultPromise;
 
     expect(error).toBeInstanceOf(ShutdownError);
-    expect((error as Error).message).toBe('cancelled due to shutdown');
+    expect(error).toHaveProperty('message', 'cancelled due to shutdown');
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
