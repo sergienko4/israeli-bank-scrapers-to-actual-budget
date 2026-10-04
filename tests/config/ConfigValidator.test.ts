@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConfigValidator, IValidationResult, runValidateMode } from '../../src/Config/ConfigValidator.js';
-import { IImporterConfig } from '../../src/Types/Index.js';
+import { IBankTarget, IImporterConfig } from '../../src/Types/Index.js';
 import * as fs from 'fs';
 import {
+  fakeBankConfig,
+  fakeBankTarget,
+  fakeImporterConfig,
   fakeUuid,
   fakeValidBankConfigFor,
   BANK_SPEC_CASES,
@@ -378,12 +381,18 @@ describe('ConfigValidator', () => {
     });
 
     it.each([
-      { scenario: 'an empty string', target: { actualAccountId: '', reconcile: true, accounts: 'all' } },
-      { scenario: 'an omitted key', target: { reconcile: true, accounts: 'all' } },
-    ])('labels the actualAccountId "(empty)" when it is $scenario', ({ target }) => {
-      const cfg = makeConfig({
-        banks: { discount: { id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7, targets: [target] } },
-      });
+      {
+        scenario: 'an empty string',
+        malform: (target: IBankTarget): void => { target.actualAccountId = ''; },
+      },
+      {
+        scenario: 'an omitted key',
+        malform: (target: IBankTarget): void => { Reflect.deleteProperty(target, 'actualAccountId'); },
+      },
+    ])('labels the actualAccountId "(empty)" when it is $scenario', ({ malform }) => {
+      const target = fakeBankTarget();
+      malform(target);
+      const cfg = fakeImporterConfig({ banks: { discount: fakeBankConfig({ targets: [target] }) } });
       const results = ConfigValidator.validateOffline(cfg);
       expect(results.find(r => r.check === 'bank.discount.target[0]')).toEqual({
         check: 'bank.discount.target[0]',
@@ -393,14 +402,8 @@ describe('ConfigValidator', () => {
     });
 
     it('echoes a malformed actualAccountId verbatim in the failure message', () => {
-      const cfg = makeConfig({
-        banks: {
-          discount: {
-            id: '1', password: TEST_CREDENTIAL_SHORT, num: 'A', daysBack: 7,
-            targets: [{ actualAccountId: '1234567', reconcile: true, accounts: 'all' }],
-          },
-        },
-      });
+      const target = fakeBankTarget({ actualAccountId: '1234567' });
+      const cfg = fakeImporterConfig({ banks: { discount: fakeBankConfig({ targets: [target] }) } });
       const results = ConfigValidator.validateOffline(cfg);
       expect(results.find(r => r.check === 'bank.discount.target[0]')).toEqual({
         check: 'bank.discount.target[0]',
@@ -738,7 +741,7 @@ describe('ConfigValidator', () => {
     });
 
     it('reports the exact found message with the first 8 syncId characters', async () => {
-      const cfg = makeConfig();
+      const cfg = fakeImporterConfig();
       cfg.actual.budget.syncId = '3f2a9c71-5b8e-4d02-9a6f-1c7e8b4d2a90';
       setupOnlineMocks(cfg);
       const results = await ConfigValidator.validateOnline(cfg);
@@ -750,7 +753,7 @@ describe('ConfigValidator', () => {
     });
 
     it('reports the exact not-found message naming the full syncId', async () => {
-      const cfg = makeConfig();
+      const cfg = fakeImporterConfig();
       cfg.actual.budget.syncId = '3f2a9c71-5b8e-4d02-9a6f-1c7e8b4d2a90';
       const fetchMock = vi.fn()
         .mockResolvedValueOnce({ ok: true, status: 200 }) // server ping
