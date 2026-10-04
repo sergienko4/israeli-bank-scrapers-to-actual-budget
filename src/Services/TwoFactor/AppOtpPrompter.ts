@@ -12,9 +12,10 @@
  */
 import TimeoutError from '../../Errors/TimeoutError.js';
 import { getLogger } from '../../Logger/Index.js';
+import { repeatWhile } from '../../Utils/Index.js';
 import type { ITwoFactorPrompter } from '../ITwoFactorPrompter.js';
 import type OtpRequestStore from './OtpRequestStore.js';
-import type { IOtpRequest } from './OtpRequestStore.js';
+import type { IOtpRequest, OtpPoll } from './OtpRequestStore.js';
 
 /** Pushes an OTP prompt to the registered devices. Best-effort (never throws). */
 export interface IOtpPushSender {
@@ -88,13 +89,23 @@ export default class AppOtpPrompter implements ITwoFactorPrompter {
     bankName: string, request: IOtpRequest, ttlMs: number,
   ): Promise<string> {
     let polled = this.store.poll(request);
-    while (polled.kind === 'waiting') {
-      await AppOtpPrompter.sleep(this._pollIntervalMs);
-      polled = this.store.poll(request);
-    }
-    if (polled.kind === 'expired') throw new TimeoutError('App OTP wait', ttlMs);
+    const repolls = repeatWhile(
+      () => polled.kind === 'waiting', () => this.pollAfterInterval(request),
+    );
+    for await (const next of repolls) polled = next;
+    if (polled.kind !== 'code') throw new TimeoutError('App OTP wait', ttlMs);
     getLogger().info(`  ✅ App OTP received for ${bankName}`);
     return polled.code;
+  }
+
+  /**
+   * Waits one poll interval, then asks the store about the request again.
+   * @param request - The pending request (id + deadline).
+   * @returns The store's answer: still waiting, the code, or expired.
+   */
+  private async pollAfterInterval(request: IOtpRequest): Promise<OtpPoll> {
+    await AppOtpPrompter.sleep(this._pollIntervalMs);
+    return this.store.poll(request);
   }
 
   /**

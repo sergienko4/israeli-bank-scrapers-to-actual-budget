@@ -197,6 +197,61 @@ describe('AccountImporter.processAllAccounts', () => {
     expect(opts.transactionService.importTransactions).toHaveBeenCalledTimes(1);
   });
 
+  it('processes no account when shutdown was requested before the first', async () => {
+    const shutdownHandler = { isShuttingDown: vi.fn().mockReturnValue(true), onShutdown: vi.fn() };
+    const opts = makeOpts({ shutdownHandler });
+    const importer = new AccountImporter(opts);
+    const config = fakeBankConfig({ targets: [fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all' })] });
+    const accounts = [{ accountNumber: '1', txns: fakeBankTransactions(1), balance: undefined }];
+
+    const result = await importer.processAllAccounts('discount', config, makeScrapeResult(accounts));
+
+    expect(result).toEqual({ imported: 0, skipped: 0 });
+    expect(opts.transactionService.importTransactions).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith('  ⚠️  Shutdown requested, stopping import...');
+  });
+
+  it('sums imported and skipped counts across every account', async () => {
+    const opts = makeOpts();
+    const importResult = (imported: number, skipped: number) => succeed({
+      imported, skipped, newTransactions: [], existingTransactions: [],
+    });
+    opts.transactionService.importTransactions
+      .mockResolvedValueOnce(importResult(2, 1))
+      .mockResolvedValueOnce(importResult(3, 0))
+      .mockResolvedValueOnce(importResult(0, 4));
+    const importer = new AccountImporter(opts);
+    const target = fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all', reconcile: false });
+    const accounts = ['1', '2', '3'].map(accountNumber => ({
+      accountNumber, txns: fakeBankTransactions(1), balance: undefined,
+    }));
+
+    const result = await importer.processAllAccounts(
+      'discount', fakeBankConfig({ targets: [target] }), makeScrapeResult(accounts),
+    );
+
+    expect(result).toEqual({ imported: 5, skipped: 5 });
+  });
+
+  it('does not report a stop when shutdown arrives after the last account', async () => {
+    const shutdownHandler = { isShuttingDown: vi.fn(), onShutdown: vi.fn() };
+    shutdownHandler.isShuttingDown
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
+    const opts = makeOpts({ shutdownHandler });
+    const importer = new AccountImporter(opts);
+    const config = fakeBankConfig({ targets: [fakeBankTarget({ actualAccountId: ACCOUNT_ID, accounts: 'all' })] });
+    const accounts = ['1', '2'].map(accountNumber => ({
+      accountNumber, txns: fakeBankTransactions(1), balance: undefined,
+    }));
+
+    await importer.processAllAccounts('discount', config, makeScrapeResult(accounts));
+
+    expect(opts.transactionService.importTransactions).toHaveBeenCalledTimes(2);
+    expect(mockLogger.warn).not.toHaveBeenCalledWith('  ⚠️  Shutdown requested, stopping import...');
+  });
+
   it('handles reconciliation error gracefully without throwing', async () => {
     const opts = makeOpts();
     const reconcileError = new Error('reconcile failed');

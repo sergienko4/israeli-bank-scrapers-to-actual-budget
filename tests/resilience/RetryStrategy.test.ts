@@ -144,6 +144,73 @@ describe('ExponentialBackoffRetry', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
+  it('gives up after a single attempt when maxAttempts is 1', async () => {
+    const onRetry = vi.fn();
+    const retry = new ExponentialBackoffRetry({ maxAttempts: 1, initialBackoffMs: 1000, onRetry });
+    const fn = vi.fn().mockRejectedValue(new Error('only try'));
+
+    const error = await retry.execute(fn, 'single-op').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ShutdownError);
+    expect(error).toHaveProperty(
+      'message', 'single-op failed after 1 attempts. Last error: only try'
+    );
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it('reports the last attempt error once attempts are exhausted', async () => {
+    vi.useFakeTimers();
+    const retry = new ExponentialBackoffRetry({ maxAttempts: 2, initialBackoffMs: 100 });
+    const fn = vi.fn()
+      .mockRejectedValueOnce(new Error('Fail 1'))
+      .mockRejectedValueOnce(new Error('Fail 2'));
+
+    const resultPromise = retry.execute(fn, 'test-op').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(100);
+    const error = await resultPromise;
+
+    expect(error).toBeInstanceOf(ShutdownError);
+    expect(error).toHaveProperty('message', 'test-op failed after 2 attempts. Last error: Fail 2');
+  });
+
+  it('starts the next attempt only after the backoff elapses', async () => {
+    vi.useFakeTimers();
+    const retry = new ExponentialBackoffRetry({ maxAttempts: 3, initialBackoffMs: 1000 });
+    const fn = vi.fn()
+      .mockRejectedValueOnce(new Error('Fail 1'))
+      .mockResolvedValue('success');
+
+    const promise = retry.execute(fn, 'test');
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fn).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(await promise).toBe('success');
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops retrying when shutdown is requested during the backoff', async () => {
+    vi.useFakeTimers();
+    let shuttingDown = false;
+    const retry = new ExponentialBackoffRetry({
+      maxAttempts: 3,
+      initialBackoffMs: 1000,
+      shouldShutdown: () => shuttingDown,
+    });
+    const fn = vi.fn().mockRejectedValue(new Error('Fail'));
+
+    const resultPromise = retry.execute(fn, 'test').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(500);
+    shuttingDown = true;
+    await vi.advanceTimersByTimeAsync(500);
+    const error = await resultPromise;
+
+    expect(error).toBeInstanceOf(ShutdownError);
+    expect(error).toHaveProperty('message', 'cancelled due to shutdown');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('uses exponential backoff timing', async () => {
     vi.useFakeTimers();
 

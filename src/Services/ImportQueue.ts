@@ -6,7 +6,7 @@
 import { getLogger } from '../Logger/Index.js';
 import type { IQueueCallbacks, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
-import { errorMessage } from '../Utils/Index.js';
+import { errorMessage, repeatWhile } from '../Utils/Index.js';
 
 /** Generic sequential job queue that processes items via a provided callback. */
 export default class ImportQueue<T> {
@@ -67,26 +67,42 @@ export default class ImportQueue<T> {
 
   /**
    * Drains the queue by processing jobs sequentially until empty.
+   * A job enqueued after the last empty check but while still active
+   * started no drain of its own, so it is handed to a fresh drain here.
    * @returns Procedure indicating the queue has been drained.
    */
   private async drain(): Promise<Procedure<{ status: string }>> {
     this._active = true;
-    await this.processNextItem();
+    await this.processPendingJobs();
     this._active = false;
+    if (this._items.length > 0) {
+      void this.drain();
+      return succeed({ status: 'restarted' });
+    }
     this._callbacks.onQueueEmpty();
     return succeed({ status: 'drained' });
   }
 
   /**
-   * Iteratively processes all items in the queue.
+   * Processes waiting jobs one at a time, oldest first, until none are left.
+   * Jobs enqueued while a job runs are picked up by this same drain.
    * @returns Procedure indicating all items were processed.
    */
-  private async processNextItem(): Promise<Procedure<{ status: string }>> {
-    while (this._items.length > 0) {
-      const job = this._items.shift() as T;
-      await this.processOneJob(job);
-    }
+  private async processPendingJobs(): Promise<Procedure<{ status: string }>> {
+    const pending = repeatWhile(() => this._items.length > 0, () => this.takeNextJob());
+    for await (const taken of pending) await this.processOneJob(taken.job);
     return succeed({ status: 'empty' });
+  }
+
+  /**
+   * Removes the oldest waiting job from the queue.
+   * The job is boxed because the sequence awaits every value it yields,
+   * which would unwrap a thenable job instead of handing it to process.
+   * @returns The removed job, boxed.
+   */
+  private takeNextJob(): Promise<{ readonly job: T }> {
+    const job = this._items.shift() as T;
+    return Promise.resolve({ job });
   }
 
   /**

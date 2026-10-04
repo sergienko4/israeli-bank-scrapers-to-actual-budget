@@ -11,6 +11,7 @@
 import { getLogger } from '../Logger/Index.js';
 import type { Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
+import { repeatWhile } from '../Utils/Index.js';
 import TelegramPollHttp, { type PollOutcome } from './TelegramPollHttp.js';
 import TelegramPollRecovery, {
   type IRecoveryDecision,
@@ -18,6 +19,9 @@ import TelegramPollRecovery, {
 import TelegramUpdateDispatcher, {
   type PhotoHandler, type TextHandler,
 } from './TelegramUpdateDispatcher.js';
+
+/** Backoff meaning the next poll cycle starts at once. */
+const NO_BACKOFF_MS = 0;
 
 /** Long-polls the Telegram Bot API for updates and dispatches them to a handler. */
 export default class TelegramPoller {
@@ -99,14 +103,18 @@ export default class TelegramPoller {
   }
 
   /**
-   * Iteratively runs the poll loop until stopped or superseded by a new run.
+   * Runs poll cycles one at a time until stopped or superseded by a new run,
+   * backing off (interruptibly) after a failed cycle while still running.
    *
    * @param runId - Token captured at start() to detect stale loops.
    * @returns Procedure indicating the loop has ended.
    */
   private async pollLoop(runId: number): Promise<Procedure<{ status: string }>> {
-    while (this._running && this._runId === runId) {
-      await this.runOnePollCycle();
+    const backoffs = repeatWhile(
+      () => this._running && this._runId === runId, () => this.runOnePollCycle()
+    );
+    for await (const backoffMs of backoffs) {
+      if (backoffMs > NO_BACKOFF_MS && this._running) await this.interruptibleSleep(backoffMs);
     }
     return succeed({ status: 'stopped' });
   }
@@ -114,23 +122,23 @@ export default class TelegramPoller {
   /**
    * Executes one poll cycle: HTTP request + dispatch + error classification.
    *
-   * @returns Procedure indicating the cycle result.
+   * @returns Milliseconds to back off before the next cycle, or zero for none.
    */
-  private async runOnePollCycle(): Promise<Procedure<{ status: string }>> {
+  private async runOnePollCycle(): Promise<number> {
     try {
       const outcome = await this.fetchUpdates();
       if (outcome.kind === 'http-error') {
         const code = String(outcome.statusCode);
         const decision = this._recovery.onHttpError(code);
-        return await this.applyRecovery(decision);
+        return this.backoffFor(decision);
       }
-      if (outcome.kind === 'aborted') return succeed({ status: 'poll-aborted' });
+      if (outcome.kind === 'aborted') return NO_BACKOFF_MS;
       await this.dispatchUpdates(outcome);
       this._recovery.reset();
-      return succeed({ status: 'poll-ok' });
+      return NO_BACKOFF_MS;
     } catch (error: unknown) {
       const decision = this._recovery.onException(error);
-      return await this.applyRecovery(decision);
+      return this.backoffFor(decision);
     }
   }
 
@@ -182,22 +190,15 @@ export default class TelegramPoller {
 
   /**
    * Applies a recovery decision: stops the loop on fatal or circuit-breaker
-   * outcomes, or sleeps with backoff (interruptibly) on a retry outcome.
+   * outcomes, or hands a retry's backoff to the poll loop to wait out.
    *
    * @param decision - The classified decision from {@link TelegramPollRecovery}.
-   * @returns Procedure carrying the decision's status string.
+   * @returns The retry backoff in milliseconds, or zero once the loop is stopping.
    */
-  private async applyRecovery(
-    decision: IRecoveryDecision
-  ): Promise<Procedure<{ status: string }>> {
-    if (decision.outcome !== 'retry') {
-      this._running = false;
-      return succeed({ status: decision.status });
-    }
-    if (this._running) {
-      await this.interruptibleSleep(decision.sleepMs);
-    }
-    return succeed({ status: decision.status });
+  private backoffFor(decision: IRecoveryDecision): number {
+    if (decision.outcome === 'retry') return decision.sleepMs;
+    this._running = false;
+    return NO_BACKOFF_MS;
   }
 
   /**

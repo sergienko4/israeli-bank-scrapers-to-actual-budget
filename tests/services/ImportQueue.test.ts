@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import ImportQueue from '../../src/Services/ImportQueue.js';
+import { succeed } from '../../src/Types/Index.js';
 
 vi.mock('../../src/Logger/Index.js', () => ({
   getLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
@@ -117,6 +118,121 @@ describe('ImportQueue', () => {
     await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalled());
 
     expect(process).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs one job at a time and drains jobs enqueued mid-drain in the same drain', async () => {
+    const finishers: Record<string, () => void> = {};
+    const process = vi.fn().mockImplementation(
+      (job: string) => new Promise<string>((r) => { finishers[job] = (): void => r(job); })
+    );
+    const onJobComplete = vi.fn();
+    const onQueueEmpty = vi.fn();
+    const queue = new ImportQueue({ process, onJobComplete, onQueueEmpty });
+
+    queue.enqueue('a');
+    await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(1));
+    queue.enqueueAll(['b', 'c']);
+    expect(process).toHaveBeenCalledTimes(1);
+    finishers.a();
+    await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(2));
+    expect(queue.size()).toBe(1);
+    finishers.b();
+    await vi.waitFor(() => expect(process).toHaveBeenCalledTimes(3));
+    expect(onQueueEmpty).not.toHaveBeenCalled();
+    finishers.c();
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalled());
+
+    expect(process.mock.calls.map((call) => call[0])).toEqual(['a', 'b', 'c']);
+    expect(onJobComplete.mock.calls).toEqual([['a', 'a'], ['b', 'b'], ['c', 'c']]);
+    expect(onQueueEmpty).toHaveBeenCalledTimes(1);
+    expect(queue.isBusy()).toBe(false);
+  });
+
+  it('starts a fresh drain for a job enqueued after the queue went idle', async () => {
+    const process = vi.fn().mockResolvedValue('ok');
+    const onQueueEmpty = vi.fn();
+    const queue = new ImportQueue({ process, onJobComplete: vi.fn(), onQueueEmpty });
+
+    queue.enqueue('first');
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalledTimes(1));
+    queue.enqueue('second');
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalledTimes(2));
+
+    expect(process.mock.calls.map((call) => call[0])).toEqual(['first', 'second']);
+  });
+
+  it.each(Array.from({ length: 21 }, (_, depth) => depth))(
+    'processes a job enqueued from onJobComplete after %i microtask hops',
+    async (depth) => {
+      const process = vi.fn().mockResolvedValue('ok');
+      const emptiedAt: { busy: boolean; processed: number }[] = [];
+      /**
+       * Runs a callback after the given number of nested microtask hops.
+       * @param hops - How many microtasks to wait.
+       * @param run - The callback to run.
+       */
+      const afterHops = (hops: number, run: () => void): void => {
+        if (hops === 0) { run(); return; }
+        queueMicrotask(() => { afterHops(hops - 1, run); });
+      };
+      const queue: ImportQueue<string> = new ImportQueue({
+        process,
+        onJobComplete: (job: string) => {
+          if (job === 'first') afterHops(depth, () => { queue.enqueue('second'); });
+          return succeed({ status: 'noted' });
+        },
+        onQueueEmpty: () => {
+          emptiedAt.push({ busy: queue.isBusy(), processed: process.mock.calls.length });
+          return succeed({ status: 'noted' });
+        },
+      });
+
+      queue.enqueue('first');
+      await new Promise((settle) => { setTimeout(settle, 0); });
+
+      expect(process.mock.calls.map((call) => call[0])).toEqual(['first', 'second']);
+      expect(queue.isBusy()).toBe(false);
+      expect(emptiedAt.every((at) => !at.busy)).toBe(true);
+      expect(emptiedAt.at(-1)?.processed).toBe(2);
+    },
+  );
+
+  it('passes a thenable job to process as-is instead of unwrapping it', async () => {
+    const job = Promise.resolve('payload');
+    const process = vi.fn().mockResolvedValue('ok');
+    const onJobComplete = vi.fn();
+    const onQueueEmpty = vi.fn();
+    const queue = new ImportQueue<Promise<string>>({ process, onJobComplete, onQueueEmpty });
+
+    queue.enqueue(job);
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalled());
+
+    expect(process).toHaveBeenCalledTimes(1);
+    expect(process.mock.calls[0][0]).toBe(job);
+    expect(onJobComplete.mock.calls[0][0]).toBe(job);
+  });
+
+  it('reports a rejecting thenable job as failed and keeps draining', async () => {
+    const rejecting = Promise.reject(new Error('job rejected'));
+    rejecting.catch(() => undefined);
+    const fulfilling = Promise.resolve('fine');
+    const process = vi.fn().mockImplementation(async (job: Promise<string>) => await job);
+    const onJobComplete = vi.fn();
+    const onQueueEmpty = vi.fn();
+    const queue = new ImportQueue<Promise<string>>({ process, onJobComplete, onQueueEmpty });
+
+    queue.enqueueAll([rejecting, fulfilling]);
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalled());
+
+    expect(process).toHaveBeenCalledTimes(2);
+    expect(process.mock.calls[0][0]).toBe(rejecting);
+    expect(process.mock.calls[1][0]).toBe(fulfilling);
+    expect(onJobComplete.mock.calls[0][0]).toBe(rejecting);
+    expect(onJobComplete.mock.calls[0][1]).toEqual(new Error('job rejected'));
+    expect(onJobComplete.mock.calls[1][0]).toBe(fulfilling);
+    expect(onJobComplete.mock.calls[1][1]).toBe('fine');
+    expect(onQueueEmpty).toHaveBeenCalledTimes(1);
+    expect(queue.isBusy()).toBe(false);
   });
 
   it('works with all required callbacks', async () => {

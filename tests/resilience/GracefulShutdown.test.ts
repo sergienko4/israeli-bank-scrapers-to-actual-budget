@@ -76,6 +76,38 @@ describe('GracefulShutdownHandler', () => {
     await vi.waitFor(() => expect(asyncCb).toHaveBeenCalledTimes(1));
   });
 
+  it('runs callbacks one at a time in registration order, then exits', async () => {
+    const handler = new GracefulShutdownHandler();
+    const log: string[] = [];
+    handler.onShutdown(async () => {
+      log.push('db start');
+      await new Promise<void>(resolve => { setImmediate(resolve); });
+      log.push('db end');
+      return succeed({ status: 'db-closed' });
+    });
+    handler.onShutdown(() => {
+      log.push('telegram stop');
+      return succeed({ status: 'telegram-stopped' });
+    });
+    exitSpy.mockImplementation(() => { log.push('exit'); });
+
+    process.emit('SIGTERM');
+    await vi.waitFor(() => expect(log).toEqual(['db start', 'db end', 'telegram stop', 'exit']));
+  });
+
+  it('logs a failed callback before the next callback starts', async () => {
+    const handler = new GracefulShutdownHandler();
+    const telegramStop = vi.fn().mockReturnValue(succeed({ status: 'telegram-stopped' }));
+    handler.onShutdown(() => Promise.resolve(fail('db close timed out')));
+    handler.onShutdown(telegramStop);
+
+    process.emit('SIGTERM');
+    await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(0));
+    expect(mockLogger.error).toHaveBeenCalledWith('Shutdown callback failed: db close timed out');
+    expect(mockLogger.error.mock.invocationCallOrder[0])
+      .toBeLessThan(telegramStop.mock.invocationCallOrder[0]);
+  });
+
   it('catches errors from callbacks without stopping', async () => {
     const handler = new GracefulShutdownHandler();
     const failingCb = vi.fn().mockRejectedValue(new Error('callback error'));

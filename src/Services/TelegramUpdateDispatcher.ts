@@ -13,6 +13,7 @@ import type {
   ITelegramUpdate, Procedure,
 } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
+import { mapInOrder } from '../Utils/Index.js';
 import type TelegramPollHttp from './TelegramPollHttp.js';
 
 /** Async callback invoked with the text body of an incoming message or callback_data. */
@@ -79,10 +80,8 @@ export default class TelegramUpdateDispatcher {
     updates: ITelegramUpdate[]
   ): Promise<number> {
     let nextOffset = 0;
-    for (const update of updates) {
-      nextOffset = update.update_id + 1;
-      await this.processSingleUpdate(update);
-    }
+    const offsets = mapInOrder(updates, update => this.processSingleUpdate(update));
+    for await (const offset of offsets) nextOffset = offset;
     return nextOffset;
   }
 
@@ -90,14 +89,12 @@ export default class TelegramUpdateDispatcher {
    * Processes a single Telegram update: message and/or callback query.
    *
    * @param update - The ITelegramUpdate to process.
-   * @returns Procedure indicating the update was handled.
+   * @returns The poll offset just past this update.
    */
-  private async processSingleUpdate(
-    update: ITelegramUpdate
-  ): Promise<Procedure<{ status: string }>> {
+  private async processSingleUpdate(update: ITelegramUpdate): Promise<number> {
     await this.dispatchMessage(update.message);
     await this.dispatchCallbackQuery(update.callback_query);
-    return succeed({ status: 'update-processed' });
+    return update.update_id + 1;
   }
 
   /**

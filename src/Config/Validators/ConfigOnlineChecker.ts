@@ -57,16 +57,22 @@ async function listUserFiles(
 }
 
 /**
- * Builds the budget-presence result from the lookup outcome.
- * @param found - Whether the budget syncId was present on the server.
- * @param syncId - The budget sync ID that was looked up.
- * @returns A pass result if found, fail if not found.
+ * Builds the pass result for a budget that is present on the server.
+ * @param syncId - The budget sync ID that was found.
+ * @returns A pass result naming the first 8 characters of the syncId.
  */
-function budgetFoundResult(found: boolean, syncId: string): IValidationResult {
-  return found
-    ? pass('actual.budget', `Budget ${syncId.slice(0, 8)}… found on server`)
-    : fail('actual.budget',
-      `Budget "${syncId}" not found — check syncId in Settings → Advanced`);
+function budgetFoundResult(syncId: string): IValidationResult {
+  return pass('actual.budget', `Budget ${syncId.slice(0, 8)}… found on server`);
+}
+
+/**
+ * Builds the fail result for a budget that is absent from the server.
+ * @param syncId - The budget sync ID that was looked up.
+ * @returns A fail result naming the full syncId and where to fix it.
+ */
+function budgetMissingResult(syncId: string): IValidationResult {
+  return fail('actual.budget',
+    `Budget "${syncId}" not found — check syncId in Settings → Advanced`);
 }
 
 /**
@@ -81,7 +87,7 @@ async function findBudgetOnServer(
 ): Promise<IValidationResult> {
   const data = await listUserFiles(serverURL, token);
   const wasFound = (data.data ?? []).some(f => f.groupId === syncId);
-  return budgetFoundResult(wasFound, syncId);
+  return wasFound ? budgetFoundResult(syncId) : budgetMissingResult(syncId);
 }
 
 /**
