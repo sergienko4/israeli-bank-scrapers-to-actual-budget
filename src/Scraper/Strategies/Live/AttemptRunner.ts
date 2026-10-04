@@ -153,10 +153,11 @@ function settleToken(
 /**
  * Stores the durable token an attempt's result carried.
  *
- * Runs only when the attempt returns a result. A failure the retry policy
- * turns into an error skips it; the login callback has already stored any
- * token minted before that failure. A store failure is a warning, never an
- * error.
+ * Runs only when the attempt returns a result, which includes a provider
+ * failure restored after the retry budget is spent. An error that is not a
+ * provider failure, such as a timeout, skips it; the login callback has
+ * already stored any token minted before that error. A store failure is a
+ * warning, never an error.
  * @param deps - Strategy dependencies exposing the token store.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @param result - Provider result of the attempt.
@@ -214,12 +215,17 @@ async function runRetries(
 
 /**
  * Restores the provider's own result after the retry budget is spent.
+ *
+ * A spent retry loop throws its own error and keeps the last try's error as
+ * the cause, so the provider failure is looked for on both.
  * @param error - Value thrown out of the retry strategy.
  * @returns The provider result carried by an exhausted retry loop.
  * @throws The original error when it did not come from a provider failure.
  */
 function restoreProviderResult(error: unknown): IScraperScrapingResult {
-  if (error instanceof RetryableProviderFailure) return error.result;
+  const lastTry = error instanceof Error ? error.cause : undefined;
+  const failure = lastTry instanceof RetryableProviderFailure ? lastTry : error;
+  if (failure instanceof RetryableProviderFailure) return failure.result;
   throw error;
 }
 

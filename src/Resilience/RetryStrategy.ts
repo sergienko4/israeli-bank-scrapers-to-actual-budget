@@ -57,9 +57,21 @@ export class ExponentialBackoffRetry implements IRetryStrategy {
       this.tryOneAttempt(fn, operationName, attempt);
     const outcome = await this.attemptUntilSettled(attemptOnce);
     if (outcome.success) return outcome.data;
-    throw new ShutdownError(
-      `${operationName} failed after ${String(this.options.maxAttempts)} attempts. ` +
-      `Last error: ${outcome.error.message}`
+    throw this.exhaustedError(operationName, outcome.error);
+  }
+
+  /**
+   * Builds the error thrown once every attempt failed. The last attempt's own
+   * error rides along as the cause, so a caller can still tell what failed.
+   * @param operationName - Human-readable label used in the message.
+   * @param lastError - The error the last attempt failed with.
+   * @returns The ShutdownError to throw.
+   */
+  private exhaustedError(operationName: string, lastError: Error): ShutdownError {
+    const attempts = String(this.options.maxAttempts);
+    return new ShutdownError(
+      `${operationName} failed after ${attempts} attempts. Last error: ${lastError.message}`,
+      { cause: lastError },
     );
   }
 

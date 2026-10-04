@@ -14,6 +14,7 @@ import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeSt
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
 import type { IBankTokenStore } from '../../../src/Scraper/Tokens/BankTokenStore.js';
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
+import { ExponentialBackoffRetry } from '../../../src/Resilience/RetryStrategy.js';
 import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
 import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
 import type { IRawScrape, Procedure } from '../../../src/Types/Index.js';
@@ -77,6 +78,29 @@ function makeStrategy(bankTokens: IBankTokenStore = makeStore().store): LiveScra
   return new LiveScrapeStrategy({
     config: fakeImporterConfig(),
     retryStrategy, noRetryStrategy, timeoutWrapper,
+    twoFactorPrompter: null,
+    notificationService: notificationService as never,
+    bankTokens,
+  });
+}
+
+/**
+ * Constructs a LiveScrapeStrategy over the retry policies the importer ships.
+ *
+ * The shared mocks rethrow a try's own error, so they cannot show what the
+ * shipped policy throws once its budget is spent; these are the real thing.
+ * @param bankTokens - Token store the strategy reads and writes; an empty one unless given.
+ * @param shouldShutdown - Reports a shutdown signal; never one unless given.
+ * @returns LiveScrapeStrategy over the shipped retry policies.
+ */
+function shippedStrategy(
+  bankTokens: IBankTokenStore = makeStore().store, shouldShutdown = (): boolean => false,
+): LiveScrapeStrategy {
+  return new LiveScrapeStrategy({
+    config: fakeImporterConfig(),
+    retryStrategy: new ExponentialBackoffRetry({ maxAttempts: 3, initialBackoffMs: 0, shouldShutdown }),
+    noRetryStrategy: new ExponentialBackoffRetry({ maxAttempts: 1, initialBackoffMs: 0, shouldShutdown }),
+    timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
     bankTokens,
@@ -228,6 +252,47 @@ describe('LiveScrapeStrategy', () => {
         `⚠️ OTP for <b>${bank.bankId}</b> was rejected. This run asks for no new code; `
         + 'the next run can ask for a new one.',
       ]]);
+    });
+  });
+
+  describe('the shipped retry policy', () => {
+    const transient = {
+      success: false, errorType: 'GENERIC', errorMessage: 'socket hang up', accounts: [],
+    };
+
+    it('returns the provider\'s own result once the retrying policy spends its budget', async () => {
+      mockScraper.scrape.mockResolvedValue(transient);
+      const result = await shippedStrategy().scrape(makeOpts());
+      expect(mockScraper.scrape).toHaveBeenCalledTimes(3);
+      expect(result.success && result.data.raw).toMatchObject(transient);
+    });
+
+    it('returns the provider\'s own result after the single try a 2FA bank gets', async () => {
+      mockScraper.scrape.mockResolvedValue(transient);
+      const result = await shippedStrategy().scrape(makeOpts({ twoFactorAuth: true }));
+      expect(mockScraper.scrape).toHaveBeenCalledTimes(1);
+      expect(result.success && result.data.raw).toMatchObject(transient);
+    });
+
+    it('still fails a scrape whose every try timed out', async () => {
+      mockScraper.scrape.mockReturnValue(new Promise(() => undefined));
+      timeoutWrapper.wrap.mockRejectedValue(new Error('Scraping discount timed out'));
+      const scraping = shippedStrategy().scrape(makeOpts());
+      await expect(scraping).rejects.toThrow('Last error: Scraping discount timed out');
+    });
+
+    it('still cancels a scrape when shutdown begins between tries', async () => {
+      mockScraper.scrape.mockResolvedValue(transient);
+      let checks = 0;
+      const isShuttingDown = (): boolean => (checks += 1) > 1;
+      const scraping = shippedStrategy(makeStore().store, isShuttingDown).scrape(makeOpts());
+      await expect(scraping).rejects.toThrow('cancelled due to shutdown');
+      expect(mockScraper.scrape).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes on a thrown value that is not an Error', async () => {
+      retryStrategy.execute.mockRejectedValue('policy gave up');
+      await expect(makeStrategy().scrape(makeOpts())).rejects.toBe('policy gave up');
     });
   });
 

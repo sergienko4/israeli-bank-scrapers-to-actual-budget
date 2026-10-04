@@ -125,6 +125,11 @@ const FAILURES: readonly [string, IProviderFailure][] = [
     errorMessage: 'phoneNumber: expected ≥10 digits, got 9 (cannot be normalised to the international-plus wire format)',
     words: 'phoneNumber=[REDACTED] ≥10 digits, got 9',
   }],
+  ['a transient auth API failure that spent every try and quotes the token', {
+    errorType: 'GENERIC',
+    errorMessage: `Auth API HTTP 5xx (503): {"idToken":"${TEST_CREDENTIAL}"}`,
+    words: 'Auth API HTTP 5xx (503)',
+  }],
 ];
 
 /** The outputs that report the bank's error, each of which must carry its code and words. */
