@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import TelegramPoller from '../../src/Services/TelegramPoller.js';
+import type { Procedure } from '../../src/Types/Index.js';
+import { fail, succeed } from '../../src/Types/Index.js';
 
 const mockLogger = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
@@ -695,5 +697,330 @@ describe('TelegramPoller', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // A run is superseded when stopAndFlush() (the /scan import lifecycle) or a
+  // newer start() replaces it while its cycle is still in flight. These tests
+  // pin that the old run cannot change the state of the run that replaced it.
+  describe('superseded run isolation', () => {
+    /** A long poll the test settles by hand. */
+    interface IHeldPoll {
+      /** The getUpdates URL the poller requested. */
+      readonly url: string;
+      /** The abort signal the poller sent with the request. */
+      readonly signal: AbortSignal | undefined;
+      /** Settles the poll with the given fetch response. */
+      readonly settle: (response: unknown) => void;
+    }
+
+    /** @returns Resolves once every promise chain not waiting on a timer settles. */
+    const flushAsyncWork = (): Promise<unknown> => vi.advanceTimersByTimeAsync(0);
+
+    /** @returns The current fake-clock time in Telegram's whole-second format. */
+    const nowSeconds = (): number => Math.floor(Date.now() / 1000);
+
+    /** @returns A successful getUpdates response carrying the given updates. */
+    const updatesResponse = (result: unknown[]): unknown => ({
+      ok: true, json: () => Promise.resolve({ ok: true, result }),
+    });
+
+    /** @returns A getUpdates response failing with the given HTTP status. */
+    const httpErrorResponse = (status: number): unknown => ({ ok: false, status });
+
+    /** @returns A /scan command from the configured chat, sent after the run started. */
+    const scanUpdate = (updateId: number): unknown => ({
+      update_id: updateId,
+      message: { chat: { id: 999 }, text: '/scan', date: nowSeconds() + 10 },
+    });
+
+    /**
+     * Fakes the getUpdates endpoint: the offset=-1 probe returns the configured
+     * last update, a timeout=0 flush returns nothing, and every long poll is
+     * held until the test settles it.
+     *
+     * @returns The held polls and a setter for the probe's last update id.
+     */
+    const fakeTelegram = (): {
+      polls: IHeldPoll[]; setLastUpdateId: (id: number) => void;
+    } => {
+      const polls: IHeldPoll[] = [];
+      let lastUpdateId: number | undefined;
+      fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes('offset=-1')) {
+          const result = lastUpdateId === undefined ? [] : [{ update_id: lastUpdateId }];
+          return Promise.resolve(updatesResponse(result));
+        }
+        if (url.includes('timeout=0')) return Promise.resolve(updatesResponse([]));
+        return new Promise((resolve) => {
+          polls.push({ url, signal: init?.signal ?? undefined, settle: resolve });
+        });
+      });
+      return { polls, setLastUpdateId: (id) => { lastUpdateId = id; } };
+    };
+
+    /**
+     * A text handler whose replies the test releases, like the /scan handler
+     * that waits for its import batch.
+     *
+     * @returns The handler and the pending reply resolvers, in call order.
+     */
+    const heldHandler = (): {
+      onMessage: (text: string) => Promise<Procedure<{ status: string }>>;
+      replies: ((reply: Procedure<{ status: string }>) => void)[];
+    } => {
+      const replies: ((reply: Procedure<{ status: string }>) => void)[] = [];
+      const onMessage = vi.fn(() => new Promise<Procedure<{ status: string }>>(
+        (resolve) => { replies.push(resolve); }
+      ));
+      return { onMessage, replies };
+    };
+
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('keeps the current run polling when a superseded run gets a fatal HTTP error', async () => {
+      const telegram = fakeTelegram();
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      const firstRun = poller.start();
+      await flushAsyncWork();
+      const secondRun = poller.start();
+      await flushAsyncWork();
+
+      telegram.polls[0].settle(httpErrorResponse(409));
+      await flushAsyncWork();
+      telegram.polls[1].settle(updatesResponse([]));
+      await flushAsyncWork();
+
+      expect(telegram.polls).toHaveLength(3);
+      poller.stop();
+      telegram.polls[2]?.settle(updatesResponse([]));
+      await Promise.all([firstRun, secondRun]);
+    });
+
+    it('lets stop() interrupt the current run backoff after a superseded run handler fails', async () => {
+      const telegram = fakeTelegram();
+      const handler = heldHandler();
+      const poller = new TelegramPoller('123:ABC', '999', handler.onMessage);
+      const firstRun = poller.start();
+      await flushAsyncWork();
+      telegram.polls[0].settle(updatesResponse([scanUpdate(42)]));
+      await flushAsyncWork();
+      await poller.stopAndFlush();
+      let secondRunEnded = false;
+      const secondRun = poller.start().then((result) => { secondRunEnded = true; return result; });
+      await flushAsyncWork();
+      telegram.polls[1].settle(httpErrorResponse(500));
+      await flushAsyncWork();
+      handler.replies[0](fail('import failed'));
+      await flushAsyncWork();
+
+      poller.stop();
+      await flushAsyncWork();
+
+      expect(secondRunEnded).toBe(true);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await Promise.all([firstRun, secondRun]);
+    });
+
+    it('lets stop() abort the current run poll after a superseded run poll settles', async () => {
+      const telegram = fakeTelegram();
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      const firstRun = poller.start();
+      await flushAsyncWork();
+      const secondRun = poller.start();
+      await flushAsyncWork();
+      telegram.polls[0].settle(updatesResponse([]));
+      await firstRun;
+
+      poller.stop();
+
+      expect(telegram.polls[1].signal?.aborted).toBe(true);
+      telegram.polls[1].settle(updatesResponse([]));
+      await secondRun;
+    });
+
+    it('keeps the current run offset when a superseded run finishes its dispatch later', async () => {
+      const telegram = fakeTelegram();
+      const handler = heldHandler();
+      const poller = new TelegramPoller('123:ABC', '999', handler.onMessage);
+      telegram.setLastUpdateId(40);
+      const firstRun = poller.start();
+      await flushAsyncWork();
+      telegram.polls[0].settle(updatesResponse([scanUpdate(42)]));
+      await flushAsyncWork();
+      await poller.stopAndFlush();
+      telegram.setLastUpdateId(100);
+      const secondRun = poller.start();
+      await flushAsyncWork();
+
+      handler.replies[0](succeed({ status: 'imported' }));
+      await firstRun;
+      telegram.polls[1].settle(updatesResponse([]));
+      await flushAsyncWork();
+
+      expect(telegram.polls[2]?.url).toContain('offset=101');
+      poller.stop();
+      telegram.polls[2]?.settle(updatesResponse([]));
+      await secondRun;
+    });
+
+    it('keeps the current run offset when a superseded run offset probe answers late', async () => {
+      const telegram = fakeTelegram();
+      const probeAnswers: ((response: unknown) => void)[] = [];
+      fetchMock.mockImplementationOnce(
+        () => new Promise((resolve) => { probeAnswers.push(resolve); })
+      );
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      const firstRun = poller.start();
+      await flushAsyncWork();
+      telegram.setLastUpdateId(100);
+      const secondRun = poller.start();
+      await flushAsyncWork();
+
+      probeAnswers[0](updatesResponse([{ update_id: 40 }]));
+      await firstRun;
+      telegram.polls[0].settle(updatesResponse([]));
+      await flushAsyncWork();
+
+      expect(telegram.polls[1]?.url).toContain('offset=101');
+      poller.stop();
+      telegram.polls[1]?.settle(updatesResponse([]));
+      await secondRun;
+    });
+
+    it('keeps the current run error count when a superseded run dispatch succeeds', async () => {
+      const telegram = fakeTelegram();
+      const handler = heldHandler();
+      const poller = new TelegramPoller('123:ABC', '999', handler.onMessage);
+      const firstRun = poller.start();
+      await flushAsyncWork();
+      telegram.polls[0].settle(updatesResponse([scanUpdate(42)]));
+      await flushAsyncWork();
+      await poller.stopAndFlush();
+      const secondRun = poller.start();
+      await flushAsyncWork();
+      telegram.polls[1].settle(httpErrorResponse(502));
+      await flushAsyncWork();
+
+      handler.replies[0](succeed({ status: 'imported' }));
+      await firstRun;
+      await vi.advanceTimersByTimeAsync(5000);
+      telegram.polls[2]?.settle(httpErrorResponse(502));
+      await flushAsyncWork();
+
+      expect(mockLogger.warn).toHaveBeenLastCalledWith(
+        expect.stringContaining('HTTP 502 (2/60)')
+      );
+      poller.stop();
+      await flushAsyncWork();
+      await secondRun;
+    });
+
+    it('dispatches a message a superseded run fetched before the current run started', async () => {
+      const telegram = fakeTelegram();
+      const onMessage = vi.fn().mockResolvedValue(undefined);
+      const poller = new TelegramPoller('123:ABC', '999', onMessage);
+      const firstRun = poller.start();
+      await flushAsyncWork();
+      const sentAt = nowSeconds() + 30;
+      vi.setSystemTime(Date.now() + 60_000);
+      const secondRun = poller.start();
+      await flushAsyncWork();
+
+      telegram.polls[0].settle(updatesResponse([{
+        update_id: 42, message: { chat: { id: 999 }, text: '/balance', date: sentAt },
+      }]));
+      await firstRun;
+
+      expect(onMessage).toHaveBeenCalledWith('/balance');
+      poller.stop();
+      telegram.polls[1].settle(updatesResponse([]));
+      await secondRun;
+    });
+
+    it('ends a superseded run without a retry backoff when its handler fails', async () => {
+      const telegram = fakeTelegram();
+      const handler = heldHandler();
+      const poller = new TelegramPoller('123:ABC', '999', handler.onMessage);
+      let firstRunEnded = false;
+      const firstRun = poller.start().then((result) => { firstRunEnded = true; return result; });
+      await flushAsyncWork();
+      telegram.polls[0].settle(updatesResponse([scanUpdate(42)]));
+      await flushAsyncWork();
+      await poller.stopAndFlush();
+      const secondRun = poller.start();
+      await flushAsyncWork();
+
+      handler.replies[0](fail('import failed'));
+      await flushAsyncWork();
+
+      expect(firstRunEnded).toBe(true);
+      poller.stop();
+      telegram.polls[1].settle(updatesResponse([]));
+      await vi.advanceTimersByTimeAsync(10_000);
+      await Promise.all([firstRun, secondRun]);
+    });
+
+    it('logs a superseded run handler failure at debug instead of a retry warning', async () => {
+      const telegram = fakeTelegram();
+      const handler = heldHandler();
+      const poller = new TelegramPoller('123:ABC', '999', handler.onMessage);
+      const firstRun = poller.start();
+      await flushAsyncWork();
+      telegram.polls[0].settle(updatesResponse([scanUpdate(42)]));
+      await flushAsyncWork();
+      await poller.stopAndFlush();
+      const secondRun = poller.start();
+      await flushAsyncWork();
+
+      handler.replies[0](fail('import failed'));
+      await flushAsyncWork();
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Telegram poll: superseded run ended (error: Telegram handler returned unsuccessful Procedure)'
+      );
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+      poller.stop();
+      telegram.polls[1].settle(updatesResponse([]));
+      await vi.advanceTimersByTimeAsync(10_000);
+      await Promise.all([firstRun, secondRun]);
+    });
+
+    it('logs a superseded run late HTTP error at debug instead of a fatal stop', async () => {
+      const telegram = fakeTelegram();
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      const firstRun = poller.start();
+      await flushAsyncWork();
+      const secondRun = poller.start();
+      await flushAsyncWork();
+
+      telegram.polls[0].settle(httpErrorResponse(409));
+      await firstRun;
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'Telegram poll: superseded run ended (http-409)'
+      );
+      expect(mockLogger.error).not.toHaveBeenCalled();
+      poller.stop();
+      telegram.polls[1].settle(updatesResponse([]));
+      await secondRun;
+    });
+
+    it('reports superseded when stopAndFlush() lands while start() clears old messages', async () => {
+      const telegram = fakeTelegram();
+      const probeAnswers: ((response: unknown) => void)[] = [];
+      fetchMock.mockImplementationOnce(
+        () => new Promise((resolve) => { probeAnswers.push(resolve); })
+      );
+      const poller = new TelegramPoller('123:ABC', '999', vi.fn());
+      const run = poller.start();
+      await flushAsyncWork();
+
+      await poller.stopAndFlush();
+      probeAnswers[0](updatesResponse([]));
+
+      expect(await run).toMatchObject({ success: true, data: { status: 'superseded' } });
+      expect(telegram.polls).toHaveLength(0);
+    });
   });
 });
