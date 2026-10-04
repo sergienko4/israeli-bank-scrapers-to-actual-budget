@@ -90,17 +90,19 @@ export default class ImportQueue<T> {
    */
   private async processPendingJobs(): Promise<Procedure<{ status: string }>> {
     const pending = repeatWhile(() => this._items.length > 0, () => this.takeNextJob());
-    for await (const job of pending) await this.processOneJob(job);
+    for await (const taken of pending) await this.processOneJob(taken.job);
     return succeed({ status: 'empty' });
   }
 
   /**
    * Removes the oldest waiting job from the queue.
-   * @returns The removed job.
+   * The job is boxed because the sequence awaits every value it yields,
+   * which would unwrap a thenable job instead of handing it to process.
+   * @returns The removed job, boxed.
    */
-  private takeNextJob(): Promise<T> {
+  private takeNextJob(): Promise<{ readonly job: T }> {
     const job = this._items.shift() as T;
-    return Promise.resolve(job);
+    return Promise.resolve({ job });
   }
 
   /**

@@ -9,6 +9,10 @@
  *
  * Unlike a recursive promise chain, a long-running sequence keeps memory
  * flat because no promise ever waits on the next one.
+ *
+ * Every yielded value is awaited. Yield the result of async work, and box
+ * caller-supplied data that may be thenable, or it is unwrapped (and its
+ * rejection thrown into the consumer's loop) before the loop body sees it.
  */
 import logger from './UtilLogger.js';
 

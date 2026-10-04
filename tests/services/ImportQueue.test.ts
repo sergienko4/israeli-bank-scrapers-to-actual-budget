@@ -197,6 +197,44 @@ describe('ImportQueue', () => {
     },
   );
 
+  it('passes a thenable job to process as-is instead of unwrapping it', async () => {
+    const job = Promise.resolve('payload');
+    const process = vi.fn().mockResolvedValue('ok');
+    const onJobComplete = vi.fn();
+    const onQueueEmpty = vi.fn();
+    const queue = new ImportQueue<Promise<string>>({ process, onJobComplete, onQueueEmpty });
+
+    queue.enqueue(job);
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalled());
+
+    expect(process).toHaveBeenCalledTimes(1);
+    expect(process.mock.calls[0][0]).toBe(job);
+    expect(onJobComplete.mock.calls[0][0]).toBe(job);
+  });
+
+  it('reports a rejecting thenable job as failed and keeps draining', async () => {
+    const rejecting = Promise.reject(new Error('job rejected'));
+    rejecting.catch(() => undefined);
+    const fulfilling = Promise.resolve('fine');
+    const process = vi.fn().mockImplementation(async (job: Promise<string>) => await job);
+    const onJobComplete = vi.fn();
+    const onQueueEmpty = vi.fn();
+    const queue = new ImportQueue<Promise<string>>({ process, onJobComplete, onQueueEmpty });
+
+    queue.enqueueAll([rejecting, fulfilling]);
+    await vi.waitFor(() => expect(onQueueEmpty).toHaveBeenCalled());
+
+    expect(process).toHaveBeenCalledTimes(2);
+    expect(process.mock.calls[0][0]).toBe(rejecting);
+    expect(process.mock.calls[1][0]).toBe(fulfilling);
+    expect(onJobComplete.mock.calls[0][0]).toBe(rejecting);
+    expect(onJobComplete.mock.calls[0][1]).toEqual(new Error('job rejected'));
+    expect(onJobComplete.mock.calls[1][0]).toBe(fulfilling);
+    expect(onJobComplete.mock.calls[1][1]).toBe('fine');
+    expect(onQueueEmpty).toHaveBeenCalledTimes(1);
+    expect(queue.isBusy()).toBe(false);
+  });
+
   it('works with all required callbacks', async () => {
     const process = vi.fn().mockResolvedValue('ok');
     const onJobComplete = vi.fn();
