@@ -1,9 +1,11 @@
 /**
  * Captures the durable long-term token API-direct banks mint.
  *
- * <p>OneZero, Pepper and PayBox return a long-lived re-login token after a
- * successful SMS login. The provider redacts it from its own logs, so a token
- * not captured here is never available to anyone.
+ * <p>OneZero and PayBox return a long-lived re-login token after a successful
+ * SMS login. The provider redacts it from its own logs, so a token not
+ * captured here is never available to anyone. Pepper keeps the capture, which
+ * keeps it on the single-try policy, but `PepperDeviceState` stores its device
+ * state.
  *
  * <p>Two capture points cover different failures. `onAuthFlowComplete` fires
  * the moment login succeeds, including when the provider logs in again

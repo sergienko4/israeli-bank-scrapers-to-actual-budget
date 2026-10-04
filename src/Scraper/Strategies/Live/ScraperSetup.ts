@@ -16,6 +16,7 @@ import {
 } from '../../Tokens/AuthFlowCapture.js';
 import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
 import loginFingerprint from '../../Tokens/LoginFingerprint.js';
+import { attachDeviceAuth } from '../../Tokens/PepperDeviceState.js';
 import credentialsFor from './AttemptLogin.js';
 import { BrowserRegistry } from './BrowserRegistry.js';
 import { resolveOtpRetriever } from './OtpRetriever.js';
@@ -37,24 +38,52 @@ type ProviderScraper = ILiveProviderScraper;
  *
  * Both lifecycle callbacks are attached here: the browser capture for every
  * bank, and the token capture for the API-direct banks, whose logins mint a
- * durable token. The retriever is attached for exactly the banks the token
- * capture skips, since the API-direct ones read it from the credentials.
+ * durable token. Pepper also gets its device login, which keeps the state
+ * that replaced its long-term token. The retriever is attached for exactly
+ * the banks the token capture skips, since the API-direct ones read it from
+ * the credentials.
  * The capture and the token resolver share one parameter bundle, so the
  * token an attempt sends is read under the key and login it is stored under.
  * @param deps - Strategy dependencies captured by the public facade.
  * @param scrapeOpts - Resolved scrape options for the current bank.
- * @returns Configured provider scraper and credentials, the watch on the
- *   token they carry, and whether its login callback stores a durable token.
+ * @returns Configured provider scraper and credentials, the watches on the
+ *   token and device state they carry, and whether its login callback stores
+ *   a durable token.
  */
 export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLiveScrape {
   const retriever = resolveOtpRetriever(deps, scrapeOpts);
   const options = buildScraperOptions(deps, scrapeOpts, retriever);
   const captureParams = buildTokenCaptureParams(deps, scrapeOpts);
-  const hasTokenCapture = attachAuthFlowCapture(options, captureParams);
+  const hooks = attachLoginHooks(options, captureParams, { scrapeOpts, retriever });
   const browsers = captureBrowsers(options);
   const scraper = prepareScraper(scrapeOpts, options);
   const login = credentialsFor(captureParams, scrapeOpts.bankConfig, retriever);
-  return { scraper, ...login, browsers, hasTokenCapture };
+  return { scraper, ...login, browsers, ...hooks };
+}
+
+/** The attempt a login hook is attached for: its options and its OTP retriever. */
+interface ILoginHookSource {
+  readonly scrapeOpts: LiveOpts;
+  readonly retriever: OtpRetriever;
+}
+
+/**
+ * Attaches the callbacks that keep an API-direct login across runs: the
+ * token capture, and Pepper's device login.
+ * @param options - Provider options that receive the callbacks.
+ * @param captureParams - Account key, login, store and logger for this attempt.
+ * @param source - The attempt's options and OTP retriever.
+ * @returns Whether the login callback stores a durable token, and the watch
+ *   on the device state the attempt sent.
+ */
+function attachLoginHooks(
+  options: ScraperOptions, captureParams: IAuthFlowCaptureParams, source: ILoginHookSource,
+): Pick<IInitializedLiveScrape, 'hasTokenCapture' | 'deviceWatch'> {
+  const hasTokenCapture = attachAuthFlowCapture(options, captureParams);
+  const { accountKey } = source.scrapeOpts;
+  const canAskForOtp = source.retriever !== undefined;
+  const deviceWatch = attachDeviceAuth(options, captureParams, { accountKey, canAskForOtp });
+  return { hasTokenCapture, deviceWatch };
 }
 
 /**

@@ -9,6 +9,36 @@ the new image.
 
 ---
 
+## 1.43.3 — Pepper enrolls the importer as a device
+
+**Affects:** deployments with a Pepper entry in `banks`.
+
+Pepper now keeps its login as an enrolled device instead of a long-term token.
+The first Pepper run after the upgrade asks for one SMS code and enrolls the
+importer. Later runs need no code, including when Pepper renews the device's
+access, instead of one each time its short-lived token expires. The importer
+saves the device state in `bank-tokens.json`, under
+`pepper-device:<entry name>`, and no longer sends Pepper a long-term token:
+neither the one an earlier release saved nor a configured `otpLongTermToken`.
+
+**Migration:**
+
+- Keep `twoFactorAuth: true` on the Pepper entry, and answer one SMS code on
+  the first run. With it off, the run cannot enroll: it warns
+  `No Pepper device state for <key>, and this run cannot ask for an SMS code`
+  and fails until you turn it on.
+- Remove `otpLongTermToken` from the Pepper entry. It is not sent, and every
+  run warns `The configured long-term token for pepper:<entry name> is not sent`
+  until you remove it.
+- Keep `/app/data` writable. A device state that cannot be saved now fails
+  the Pepper run, and the previous state is kept.
+
+**Rollback:** an earlier release leaves the device state in the file, unused,
+and logs in with the long-term token it saved before, which may cost one SMS.
+Upgrading again sends the saved device state. If Pepper no longer accepts it,
+that run fails and removes it, and the next run enrolls with one SMS. See
+[Pepper](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md#2fa--otp).
+
 ## 1.43.2 — Actual Budget API 26.10: do not roll back below this release
 
 **Affects:** deployments that run 1.43.2 and then roll back to 1.43.1 or

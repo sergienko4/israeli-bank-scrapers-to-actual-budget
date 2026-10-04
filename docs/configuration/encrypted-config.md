@@ -56,10 +56,10 @@ variable, sets it to an empty string.
 
 ## Long-term bank tokens
 
-The same password seals the long-term tokens that OneZero, Pepper and PayBox
-logins save in `bank-tokens.json` on the data volume. The importer seals each
-record itself; do not run `encrypt-config.js` on that file, or the importer
-reads it as damaged.
+The same password seals the long-term tokens that OneZero and PayBox logins
+save, and Pepper's device state, in `bank-tokens.json` on the data volume.
+The importer seals each record itself; do not run `encrypt-config.js` on that
+file, or the importer reads it as damaged.
 
 - Turning the password on or off, or changing it, costs one SMS login per
   account, once, so keep `twoFactorAuth: true` for that run. If the old file

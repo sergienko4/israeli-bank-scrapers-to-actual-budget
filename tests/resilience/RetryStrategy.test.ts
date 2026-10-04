@@ -68,6 +68,17 @@ describe('ExponentialBackoffRetry', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps the last attempt\'s own error as the cause once the budget is spent', async () => {
+    const last = new Error('Fail 2');
+    const retry = new ExponentialBackoffRetry({ maxAttempts: 2, initialBackoffMs: 0 });
+    const fn = vi.fn()
+      .mockRejectedValueOnce(new Error('Fail 1'))
+      .mockRejectedValueOnce(last);
+    const error = await retry.execute(fn, 'test-op').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ShutdownError);
+    expect((error as Error).cause).toBe(last);
+  });
+
   it('throws ShutdownError when shouldShutdown returns true', async () => {
     const retry = new ExponentialBackoffRetry({
       maxAttempts: 3,

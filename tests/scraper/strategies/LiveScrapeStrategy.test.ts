@@ -13,7 +13,9 @@ import * as fs from 'node:fs';
 import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeStrategy.js';
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
 import type { IBankTokenStore } from '../../../src/Scraper/Tokens/BankTokenStore.js';
+import loginFingerprint from '../../../src/Scraper/Tokens/LoginFingerprint.js';
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
+import { ExponentialBackoffRetry } from '../../../src/Resilience/RetryStrategy.js';
 import type { ITimeoutWrapper } from '../../../src/Resilience/TimeoutWrapper.js';
 import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
 import type { IRawScrape, Procedure } from '../../../src/Types/Index.js';
@@ -21,7 +23,7 @@ import type { IApiDirectBank } from '../../helpers/apiDirectBanks.js';
 import { API_DIRECT_BANKS, apiDirectEntry } from '../../helpers/apiDirectBanks.js';
 import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
-import { makeStore } from '../BankTokenStoreFixture.js';
+import { fakeToken, makeStore } from '../BankTokenStoreFixture.js';
 
 vi.mock('node:fs');
 
@@ -77,6 +79,29 @@ function makeStrategy(bankTokens: IBankTokenStore = makeStore().store): LiveScra
   return new LiveScrapeStrategy({
     config: fakeImporterConfig(),
     retryStrategy, noRetryStrategy, timeoutWrapper,
+    twoFactorPrompter: null,
+    notificationService: notificationService as never,
+    bankTokens,
+  });
+}
+
+/**
+ * Constructs a LiveScrapeStrategy over the retry policies the importer ships.
+ *
+ * The shared mocks rethrow a try's own error, so they cannot show what the
+ * shipped policy throws once its budget is spent; these are the real thing.
+ * @param bankTokens - Token store the strategy reads and writes; an empty one unless given.
+ * @param shouldShutdown - Reports a shutdown signal; never one unless given.
+ * @returns LiveScrapeStrategy over the shipped retry policies.
+ */
+function shippedStrategy(
+  bankTokens: IBankTokenStore = makeStore().store, shouldShutdown = (): boolean => false,
+): LiveScrapeStrategy {
+  return new LiveScrapeStrategy({
+    config: fakeImporterConfig(),
+    retryStrategy: new ExponentialBackoffRetry({ maxAttempts: 3, initialBackoffMs: 0, shouldShutdown }),
+    noRetryStrategy: new ExponentialBackoffRetry({ maxAttempts: 1, initialBackoffMs: 0, shouldShutdown }),
+    timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
     bankTokens,
@@ -228,6 +253,111 @@ describe('LiveScrapeStrategy', () => {
         `⚠️ OTP for <b>${bank.bankId}</b> was rejected. This run asks for no new code; `
         + 'the next run can ask for a new one.',
       ]]);
+    });
+  });
+
+  /**
+   * A run whose result proves Pepper's stored device state dead removes it, so
+   * the next run enrolls again with one SMS code; any other failure keeps it.
+   */
+  describe('a stored Pepper device state', () => {
+    const pepper = API_DIRECT_BANKS.find((bank) => bank.bankId === 'pepper');
+
+    /**
+     * Scrapes Pepper once over a store holding the entry's device state.
+     * @param result - What the provider returns.
+     * @param build - Builds the strategy over the store; the shared mocks unless given.
+     * @returns The keys the store holds afterwards.
+     */
+    async function scrapeWithState(
+      result: Record<string, unknown>,
+      build: (store: IBankTokenStore) => LiveScrapeStrategy = makeStrategy,
+    ): Promise<string[]> {
+      if (pepper === undefined) throw new Error('Pepper is not an API-direct bank');
+      const { store } = makeStore();
+      const bankConfig = apiDirectEntry(pepper);
+      const login = loginFingerprint(pepper.companyType, bankConfig);
+      if (!login.success) throw new Error(login.message);
+      store.write('pepper-device:primary', fakeToken(), login.data);
+      store.write('pepper:primary', fakeToken(), login.data);
+      mockScraper.scrape.mockResolvedValue(result);
+      await build(store).scrape({
+        bankId: 'pepper', companyType: pepper.companyType as CompanyTypes, accountKey: 'primary',
+        bankConfig, startDate: new Date(), logger, otpRetriever: () => Promise.resolve(faker.string.numeric(6)),
+      });
+      const holds = (key: string): boolean => {
+        const view = store.read(key);
+        return view.success && view.data.record.token !== '';
+      };
+      return ['pepper-device:primary', 'pepper:primary'].filter(holds);
+    }
+
+    it('removes the state when Pepper refuses it at login', async () => {
+      const kept = await scrapeWithState({
+        success: false, errorType: 'GENERIC',
+        errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/login 401: {"error_code":4001}',
+      });
+      expect(kept).toEqual(['pepper:primary']);
+      expect(logger.warn).toHaveBeenCalledWith(
+        '  ⚠️  Removed the Pepper device state for pepper-device:primary; the next run asks for one SMS code',
+      );
+    });
+
+    it('keeps the state when the login only timed out', async () => {
+      const kept = await scrapeWithState({
+        success: false, errorType: 'TIMEOUT',
+        errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/login network error: Timeout 30000ms exceeded',
+      });
+      expect(kept).toEqual(['pepper-device:primary', 'pepper:primary']);
+    });
+
+    it('removes the state when the shipped single-try policy spends its budget', async () => {
+      const kept = await scrapeWithState({
+        success: false, errorType: 'GENERIC',
+        errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/login 401: {"error_code":4001}',
+      }, (store) => shippedStrategy(store));
+      expect(kept).toEqual(['pepper:primary']);
+    });
+  });
+
+  describe('the shipped retry policy', () => {
+    const transient = {
+      success: false, errorType: 'GENERIC', errorMessage: 'socket hang up', accounts: [],
+    };
+
+    it('returns the provider\'s own result once the retrying policy spends its budget', async () => {
+      mockScraper.scrape.mockResolvedValue(transient);
+      const result = await shippedStrategy().scrape(makeOpts());
+      expect(mockScraper.scrape).toHaveBeenCalledTimes(3);
+      expect(result.success && result.data.raw).toMatchObject(transient);
+    });
+
+    it('returns the provider\'s own result after the single try a 2FA bank gets', async () => {
+      mockScraper.scrape.mockResolvedValue(transient);
+      const result = await shippedStrategy().scrape(makeOpts({ twoFactorAuth: true }));
+      expect(mockScraper.scrape).toHaveBeenCalledTimes(1);
+      expect(result.success && result.data.raw).toMatchObject(transient);
+    });
+
+    it('still fails a scrape whose every try timed out', async () => {
+      mockScraper.scrape.mockReturnValue(new Promise(() => undefined));
+      timeoutWrapper.wrap.mockRejectedValue(new Error('Scraping discount timed out'));
+      const scraping = shippedStrategy().scrape(makeOpts());
+      await expect(scraping).rejects.toThrow('Last error: Scraping discount timed out');
+    });
+
+    it('still cancels a scrape when shutdown begins between tries', async () => {
+      mockScraper.scrape.mockResolvedValue(transient);
+      let checks = 0;
+      const isShuttingDown = (): boolean => (checks += 1) > 1;
+      const scraping = shippedStrategy(makeStore().store, isShuttingDown).scrape(makeOpts());
+      await expect(scraping).rejects.toThrow('cancelled due to shutdown');
+      expect(mockScraper.scrape).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes on a thrown value that is not an Error', async () => {
+      retryStrategy.execute.mockRejectedValue('policy gave up');
+      await expect(makeStrategy().scrape(makeOpts())).rejects.toBe('policy gave up');
     });
   });
 

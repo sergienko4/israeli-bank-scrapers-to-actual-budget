@@ -101,15 +101,20 @@ Any bank that shows an SMS verification screen supports `twoFactorAuth`. The Tel
 |--------|---------|-------------|
 | `twoFactorAuth` | `false` | Enable 2FA flow for this bank |
 | `twoFactorTimeout` | `300` | Seconds to wait for OTP reply before failing |
-| `otpLongTermToken` | — | Optional (OneZero, Pepper and PayBox). The importer saves and reuses the long-term token by itself; set this only to bring one from another install. See [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) |
+| `otpLongTermToken` | — | Optional (OneZero and PayBox; Pepper ignores it and warns, see [Pepper](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md#2fa--otp)). The importer saves and reuses the long-term token by itself; set this only to bring one from another install. See [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) |
 
 For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ### Long-term token
 
-OneZero, Pepper and PayBox return a long-term token after an SMS login. The
+OneZero and PayBox return a long-term token after an SMS login. The
 importer saves it and sends it on later logins, so they skip the SMS. You do
 not need to set anything.
+
+Pepper keeps its login another way: one SMS enrolls the importer as a device,
+and the importer saves that device's state in the same file, under
+`pepper-device:<entry name>`. It never sends Pepper a long-term token. See
+[Pepper](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md#2fa--otp).
 
 - **Where it is saved:** `bank-tokens.json` on the data volume (`/app/data`,
   or the absolute path in `BANK_TOKENS_PATH`). The volume must be writable.
@@ -119,9 +124,9 @@ not need to set anything.
   bank asks for an SMS; the token from that login is saved and used from then
   on.
 - **Each token belongs to one login.** The importer records which login
-  created each token: the email for OneZero, the phone number for Pepper and
-  PayBox. A Pepper or PayBox token logs in by itself, so sending it for
-  another login would import another account. A token is never sent for a
+  created each token: the email for OneZero, the phone number for PayBox. A
+  PayBox token logs in by itself, so sending it for another login would
+  import another account. A token is never sent for a
   login other than its own:
   - after you change an entry's email or phone number, the next run logs in
     with one SMS and saves a token for the new login;
@@ -150,8 +155,8 @@ not need to set anything.
   `bank-tokens.json.quarantined-*`, only when it next saves a token. See
   [Encrypted config](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/encrypted-config.md).
 - **How long a token lasts:** upstream measured one OneZero token valid for
-  ten years. That is one observation, not a promise, and Pepper and PayBox
-  publish none. The bank can refuse a token at any time.
+  ten years. That is one observation, not a promise, and PayBox publishes
+  none. The bank can refuse a token at any time.
 - **Setting `otpLongTermToken` by hand** is only for bringing a token from
   another install. Until the importer has saved a token, it cannot tell whose
   it is, so it trusts a configured token to belong to the entry's own login.

@@ -56,6 +56,9 @@ describe('redactSecrets', () => {
     ['a camel-case password', `userPassword: ${TEST_CREDENTIAL}`],
     ['a snake-case card code', `card_cvv=${TEST_CREDENTIAL}`],
     ['a phone number', `phoneNumber=${TEST_CREDENTIAL}`],
+    ['the Pepper device state', `persistentAuthState=${TEST_CREDENTIAL}`],
+    ['a quoted Pepper device state', `{"persistentAuthState":"${TEST_CREDENTIAL}"}`],
+    ['a snake-case device state', `auth_state: ${TEST_CREDENTIAL}`],
     ['a capitalised phone number', `PhoneNumber: ${TEST_CREDENTIAL}`],
     ['a snake-case phone number in JSON', `{"phone_number":"${TEST_CREDENTIAL}"}`],
     ['a hyphenated phone number', `phone-number=${TEST_CREDENTIAL}`],
@@ -325,6 +328,18 @@ describe('redactSecrets', () => {
 
   it('treats each failure code that ends in a secret word as a key', () => {
     expect(FAILURE_CODE_KEYS.filter(code => !isSecretKey(code))).toEqual([]);
+  });
+
+  it.each(['persistentAuthState', 'authState', 'auth_state', 'auth-state'])('treats the device state field %s as a secret key', (name) => {
+    expect(isSecretKey(name)).toBe(true);
+  });
+
+  it.each([
+    'persistent auth state invalid: shape',
+    'persistent auth failed: callback',
+    'Pepper: persistent auth state invalid: accessToken',
+  ])('keeps the upstream device-auth failure readable: %s', (text) => {
+    expect(redactSecrets(text)).toBe(text);
   });
 
   it.each([

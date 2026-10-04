@@ -9,6 +9,8 @@ import type { IRetryStrategy } from '../../../Resilience/RetryStrategy.js';
 import type { IBankConfig, IRawScrape, Procedure } from '../../../Types/Index.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../../Types/Index.js';
 import { captureResultToken, isApiDirectBank, sweepTokenLeftovers } from '../../Tokens/AuthFlowCapture.js';
+import type { IDeviceStateWatch } from '../../Tokens/PepperDeviceState.js';
+import forgetRefusedState from '../../Tokens/PepperStateRefusal.js';
 import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
 import { warnIfNotAccepted } from '../../Tokens/WarmTokenWatch.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
@@ -119,44 +121,48 @@ async function handleOtpReject(
 async function executeAttempt(
   deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts,
 ): Promise<IScraperScrapingResult> {
-  const { hasTokenCapture, tokenWatch, ...prepared } = initScrape(deps, scrapeOpts);
+  const { hasTokenCapture, tokenWatch, deviceWatch, ...prepared } = initScrape(deps, scrapeOpts);
   const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig, hasTokenCapture);
   const label = `Scraping ${scrapeOpts.bankId}`;
   const params = { deps, ...prepared, logger: scrapeOpts.logger, label };
   const result = await runAttemptThenSeal(retryStrategy, params);
-  return settleToken(deps, scrapeOpts, { result, tokenWatch });
+  return settleToken(deps, scrapeOpts, { result, tokenWatch, deviceWatch });
 }
 
-/** An attempt's provider result, and the watch on the token it sent. */
+/** An attempt's provider result, and the watches on the token and device state it sent. */
 interface IFinishedAttempt {
   readonly result: IScraperScrapingResult;
   readonly tokenWatch: IWarmTokenWatch;
+  readonly deviceWatch: IDeviceStateWatch;
 }
 
 /**
  * Acts on what an attempt's result says about its token.
  *
  * Warns when a sent token did not log in and the run could not ask for a
- * code, then stores any token the result carried.
+ * code, removes a Pepper device state the result proves refused, then stores
+ * any token the result carried.
  * @param deps - Strategy dependencies exposing the token store.
  * @param scrapeOpts - Resolved scrape options for the current bank.
- * @param attempt - The attempt's result and token watch.
+ * @param attempt - The attempt's result and watches.
  * @returns The attempt's result, unchanged.
  */
 function settleToken(
   deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts, attempt: IFinishedAttempt,
 ): IScraperScrapingResult {
   warnIfNotAccepted(attempt.tokenWatch, attempt.result);
+  forgetRefusedState(attempt.deviceWatch, attempt.result);
   return keepMintedToken(deps, scrapeOpts, attempt.result);
 }
 
 /**
  * Stores the durable token an attempt's result carried.
  *
- * Runs only when the attempt returns a result. A failure the retry policy
- * turns into an error skips it; the login callback has already stored any
- * token minted before that failure. A store failure is a warning, never an
- * error.
+ * Runs only when the attempt returns a result, which includes a provider
+ * failure restored after the retry budget is spent. An error that is not a
+ * provider failure, such as a timeout, skips it; the login callback has
+ * already stored any token minted before that error. A store failure is a
+ * warning, never an error.
  * @param deps - Strategy dependencies exposing the token store.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @param result - Provider result of the attempt.
@@ -214,12 +220,17 @@ async function runRetries(
 
 /**
  * Restores the provider's own result after the retry budget is spent.
+ *
+ * A spent retry loop throws its own error and keeps the last try's error as
+ * the cause, so the provider failure is looked for on both.
  * @param error - Value thrown out of the retry strategy.
  * @returns The provider result carried by an exhausted retry loop.
  * @throws The original error when it did not come from a provider failure.
  */
 function restoreProviderResult(error: unknown): IScraperScrapingResult {
-  if (error instanceof RetryableProviderFailure) return error.result;
+  const lastTry = error instanceof Error ? error.cause : undefined;
+  const failure = lastTry instanceof RetryableProviderFailure ? lastTry : error;
+  if (failure instanceof RetryableProviderFailure) return failure.result;
   throw error;
 }
 

@@ -1,10 +1,11 @@
 # Bank token store
 
 `src/Scraper/Tokens/BankTokenStore.ts` keeps the long-term tokens that
-API-direct banks (OneZero, Pepper, PayBox) mint after an SMS login, so a
-later run can log in without another SMS. A token is a standing bypass of the
-second factor. Upstream measured one OneZero token valid for ten years; that
-is one observation, not a promise.
+OneZero and PayBox mint after an SMS login, and the device state Pepper issues
+when an SMS login enrolls the importer, so a later run can log in without
+another SMS. Each is a standing bypass of the second factor, and this page
+calls both tokens unless it says otherwise. Upstream measured one OneZero token
+valid for ten years; that is one observation, not a promise.
 
 The store is a thin adapter over [`SecureJsonStore`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/secure-json-store.md),
 which owns every filesystem guarantee: no-follow reads, owner-only files,
@@ -56,7 +57,7 @@ One flat record per bank account, keyed by the store key:
 ```json
 {
   "onezero:oneZero": { "token": "…", "capturedAt": "2026-09-23T15:11:00.000Z", "login": "3f1c…" },
-  "pepper:pepper": { "token": "…", "capturedAt": "2026-09-24T08:30:00.000Z", "login": "9a07…" }
+  "pepper-device:pepper": { "token": "…", "capturedAt": "2026-09-24T08:30:00.000Z", "login": "9a07…" }
 }
 ```
 
@@ -67,6 +68,11 @@ names and matches them case-insensitively, so `oneZero`, `onezero` and
 keys. Renaming an entry orphans its token, which costs one SMS. A blank or
 missing entry name falls back to `bankId` alone.
 
+Pepper's device state is stored under its own bank id, `pepper-device`, so it
+never shares a key with the long-term token an earlier release saved under
+`pepper:<entry name>`. That legacy entry stays in the file, unsent; see
+[Pepper device state](#pepper-device-state).
+
 The entry name is used verbatim, and the key is stored verbatim: normalising
 either would put two accounts on one entry, and because each mint revokes the
 previous token, both would then need an SMS on every run.
@@ -76,9 +82,9 @@ previous token, both would then need an SMS on every run.
 characters, of the bank's company id and its identity fields. The identity
 fields are upstream's `loginFields` minus `password`, each in the form the
 provider receives it, so OneZero is keyed by email and Pepper and PayBox by
-phone number. The password never enters it. A Pepper or PayBox token logs in by
-itself, so the binding is what stops one entry from importing another's
-account.
+phone number. The password never enters it. A Pepper device state or a PayBox
+token logs in by itself, so the binding is what stops one entry from importing
+another's account.
 
 **Invariant:** the file binds each token to exactly one login, and that
 binding never moves.
@@ -128,7 +134,7 @@ fails closed in the same way:
 |---|---|---|
 | Set | Sealed under this password | The opened record |
 | Set | Sealed under another password, or edited | Unusable |
-| Set | Plain text | Unusable, so no one who can write the file can plant a Pepper or PayBox token |
+| Set | Plain text | Unusable, so no one who can write the file can plant a Pepper device state or a PayBox token |
 | None | Sealed | Unusable |
 | None | Plain text | The record |
 
@@ -210,6 +216,20 @@ Every token read from the file, and every token about to be written, is
 registered with the value masker first, so no output shows one even when a
 bank quotes it back with no key in front of it.
 
+## Removing
+
+`remove(storeKey)` deletes one account's entry and keeps every other entry as
+it was. Like a write, it reads the file afresh and replaces it whole, so a
+damaged file is quarantined first and a file that could not be read is never
+replaced. A key with no usable entry writes nothing, and succeeds: there is
+nothing that account could send, and the next write sets any damage aside. A
+failure names the key and the cause, never the token
+(`Could not remove the long-term token for <key>: <cause>`).
+
+Only Pepper's device state is ever removed, and only after Pepper refused it;
+see [Pepper device state](#pepper-device-state). A long-term token the bank
+refuses is replaced by the next SMS login instead.
+
 ## Leftover staging files
 
 A process killed mid-write can leave a staged file holding a live token.
@@ -241,12 +261,15 @@ For each API-direct scrape, `src/Scraper/Tokens/AuthFlowCapture.ts`:
    the scrape then fails;
 3. when an attempt returns a result, stores its `persistentOtpToken` as
    well, in case a path fills it without calling back. The provider fills
-   that field only on success, and a failure the retry policy turns into an
-   error returns no result, so the callback is what keeps a token minted
-   before a failure. The store skips a token it already holds, so after the
-   callback stored a token the backstop writes nothing. After the callback
-   failed to store it, the backstop tries once more, so a store that stays
-   broken warns twice.
+   that field only on success, so the callback is what keeps a token minted
+   before a failure. A failure the provider returned is still a result, even
+   after the retry policy spent its tries: `ExponentialBackoffRetry` keeps the
+   last try's error as the `cause` of the error it throws, and
+   `restoreProviderResult` in `AttemptRunner.ts` hands that result back. Only
+   an error with no result, such as a timeout, skips this step. The store
+   skips a token it already holds, so after the callback stored a token the
+   backstop writes nothing. After the callback failed to store it, the
+   backstop tries once more, so a store that stays broken warns twice.
 
 `buildTokenCaptureParams` in `src/Scraper/Strategies/Live/ScraperSetup.ts`
 builds what all three steps share, so the callback and the backstop use the
@@ -321,6 +344,71 @@ The attempt's login fingerprint is computed once, in
 and a token the attempt mints is bound to the login that sent it. The chosen
 token is registered with the value masker, and no log line shows it.
 
+### Pepper device state
+
+From scraper 8.7.4 Pepper keeps a login only as an enrolled device: one SMS
+login enrolls the importer, and the state Pepper hands back logs later runs in
+with no SMS. `attachDeviceAuth` in `src/Scraper/Tokens/PepperDeviceState.ts`
+keeps that state in this store under `pepper-device:<entry name>`, bound to
+the attempt's login fingerprint like a token, so every rule on this page
+covers it. Before each Pepper attempt it reads that key and starts the login
+in one of three ways:
+
+- **resume:** a state bound to this login is sent as `persistentAuthState`,
+  with the `onPersistentAuthStateUpdate` callback (INFO
+  `Using the stored Pepper device state for <key>`). Upstream replays it with
+  no SMS, or renews it with no SMS and calls back with the renewed state;
+- **enroll:** no usable state, or one bound to another login (INFO), so only
+  the callback is attached and upstream enrolls with one SMS. A damaged file
+  warns, as it does for tokens;
+- **legacy:** no login fingerprint, or a store that cannot be read or throws.
+  A WARN names the key and neither option is attached, so Pepper logs in with
+  an SMS as before. Upstream fails a run that attaches the callback for an
+  entry with no phone number, and a store that cannot be read would refuse
+  the state and fail the run after its SMS, so this run still imports.
+
+The callback stores each state with `write` and resolves only once it is
+stored (INFO `Stored the Pepper device state for <key>`). Upstream waits for
+it, and when it rejects, fails the run as `persistent auth failed: callback`
+before using the new state, so the previous one stays stored. With no state
+to send and no OTP retriever, a WARN says to turn on `twoFactorAuth`.
+
+Pepper refuses a long-term token next to either option. `deviceLogin` in
+`AttemptLogin.ts` drops a configured `otpLongTermToken` with a WARN naming
+`pepper:<entry name>`, and never calls `resolveWarmToken`, so a token an
+earlier release stored under that key stays in the file unsent.
+`onAuthFlowComplete` stays attached, so the attempt keeps the single-try
+policy, though upstream does not call it for a device login.
+
+After an attempt that sent the state, `settleToken` calls
+`forgetRefusedState` in `src/Scraper/Tokens/PepperStateRefusal.ts`, which
+removes the state only when the result is a `GENERIC` failure that says Pepper
+refused the state itself:
+
+- `persistent auth state invalid: <category>`; or
+- a 401 or 403 from `https://sa.pepper.co.il/api/v2/auth/login`.
+
+Every renewal request is signed with the state's device key, and
+`auth/login` goes first, so a device Pepper no longer knows is refused there.
+The `/api/v2/auth/assert` step that follows adds the entry's password, so its
+4xx other than 408 or 429 keeps the state and warns
+`Kept the Pepper device state for <key>; Pepper refused the password, so check the password in the config`.
+Removing it would cost an SMS once the password is fixed.
+
+Every other failure keeps it silently, since the next run may succeed with
+it: a timeout, a Cloudflare page (`WAF_BLOCKED`), a 5xx, 408 or 429, any
+other login status, a network error, a refused data request (the state may
+still renew), and a rejected callback. Upstream recognizes only Cloudflare's
+page, so a 401 or 403 that another proxy returns for `auth/login` is
+`GENERIC` like Pepper's own: it removes the state, and the next run costs one
+SMS. A removal warns
+`Removed the Pepper device state for <key>; the next run asks for one SMS code`,
+so the next run enrolls instead of sending a dead state on every run. A removal
+that fails warns with the cause, and the next run sends the state again.
+`tests/scraper/PepperStateRefusal.test.ts` checks the wording this rule reads
+against the installed upstream bundle, so a bump that rewords it fails the
+tests.
+
 ## Limits
 
 One writer is assumed. Two importers sharing one file can lose an update: the
@@ -353,6 +441,9 @@ until it expires was judged more machinery than this risk warrants.
 Replay is tested end to end for all three banks against a fake bank built from
 upstream's published login fields and warm-login rules
 (`tests/e2e/WarmStartReplay.e2e.test.ts`,
-`tests/scraper/ApiDirectBankContract.test.ts`). The real transport is not:
+`tests/scraper/ApiDirectBankContract.test.ts`). Pepper's device login is tested
+end to end through the shipped import assembly against a fake Pepper that
+follows upstream's persistent-auth flow
+(`tests/e2e/PepperDeviceState.e2e.test.ts`). The real transport is not:
 Pepper and PayBox call the bank from inside a Camoufox page, and OneZero uses
 mutual TLS, so no test can stub their requests.

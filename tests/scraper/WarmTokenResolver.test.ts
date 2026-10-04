@@ -130,6 +130,7 @@ function storeThatReads(read: IBankTokenStore['read']): IBankTokenStore & { read
   return {
     read: vi.fn(read),
     write: vi.fn(),
+    remove: vi.fn(),
     sweepStagedLeftovers: vi.fn(),
   };
 }
