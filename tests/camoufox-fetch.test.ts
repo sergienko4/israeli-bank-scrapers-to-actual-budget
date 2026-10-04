@@ -10,7 +10,15 @@
  */
 
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,13 +47,14 @@ const SERVES_WRONG_ASSET = `data:text/javascript,${encodeURIComponent(
 const CHILD_TIMEOUT_MS = 10_000;
 
 /**
- * Lays out what a finished install of the pinned build leaves behind.
+ * Lays out what a finished install of the pinned build leaves behind; like
+ * upstream's install, the browser executable is mode 755.
  * @param installDir - Directory to populate.
  */
 function installPinnedBuild(installDir: string): void {
   const launchFile = join(installDir, launchFileFor(ASSET.key));
   mkdirSync(dirname(launchFile), { recursive: true });
-  writeFileSync(launchFile, 'installed binary');
+  writeFileSync(launchFile, 'installed binary', { mode: 0o755 });
   writeFileSync(
     join(installDir, 'version.json'),
     JSON.stringify({ version: PIN.version, release: PIN.release }),
@@ -119,6 +128,43 @@ describe('camoufox-fetch CLI', () => {
     const result = runCli(installDir, ['--verify']);
 
     expect(result.status).toBe(1);
+  });
+
+  it('--verify exits 1 when a directory stands where the browser executable belongs', () => {
+    installPinnedBuild(installDir);
+    const launchFile = join(installDir, launchFileFor(ASSET.key));
+    rmSync(launchFile);
+    mkdirSync(launchFile);
+
+    const result = runCli(installDir, ['--verify']);
+
+    expect(result.status).toBe(1);
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    '--verify exits 1 when the browser executable cannot be run',
+    () => {
+      installPinnedBuild(installDir);
+      chmodSync(join(installDir, launchFileFor(ASSET.key)), 0o644);
+
+      const result = runCli(installDir, ['--verify']);
+
+      expect(result.status).toBe(1);
+    },
+  );
+
+  it('downloads again instead of keeping an install whose browser executable is damaged', () => {
+    installPinnedBuild(installDir);
+    const launchFile = join(installDir, launchFileFor(ASSET.key));
+    rmSync(launchFile);
+    mkdirSync(launchFile);
+
+    const result = runCli(installDir, [], SERVES_WRONG_ASSET);
+
+    expect({
+      status: result.status,
+      downloaded: result.stderr.includes('Camoufox archive digest mismatch'),
+    }).toEqual({ status: 1, downloaded: true });
   });
 
   it("--verify exits 1 when the install recorded another platform's asset", () => {

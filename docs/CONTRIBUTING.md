@@ -233,8 +233,9 @@ downloads the pinned URL directly, refuses an archive whose digest differs, and
 records the installed asset and its digest in `pinned-asset.json` beside
 `version.json`. It skips the download only when `version.json` names the pinned
 build, that record names this platform's asset and digest, and the executable
-camoufox-js launches is present. `--verify` applies the same test without
-installing, and the image build runs it on both of its paths.
+camoufox-js launches is a regular file the current user can run. `--verify`
+applies the same test without installing, and the image build runs it on both
+of its paths.
 `tests/deployment/CamoufoxPin.test.ts` fails if any build file goes back to
 fetching an unpinned build.
 

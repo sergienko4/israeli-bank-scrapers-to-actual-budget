@@ -12,7 +12,15 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -214,13 +222,18 @@ describe('CI Camoufox cache action check step', () => {
     rmSync(workDir, { recursive: true, force: true });
   });
 
-  it('reports a cached pinned build as installed', () => {
+  /**
+   * Lays out a cached install of the pinned build in workDir's HOME; like
+   * upstream's install, the browser executable is mode 755.
+   * @returns Path of the browser executable.
+   */
+  function cachePinnedBuild(): string {
     const pin = parsePin(JSON.parse(read(PIN_FILE)));
     const asset = selectAsset(pin, process.platform, process.arch);
     const cacheDir = join(workDir, '.cache', 'camoufox');
     const launchFile = join(cacheDir, launchFileFor(asset.key));
     mkdirSync(dirname(launchFile), { recursive: true });
-    writeFileSync(launchFile, 'cached binary');
+    writeFileSync(launchFile, 'cached binary', { mode: 0o755 });
     writeFileSync(
       join(cacheDir, 'version.json'),
       JSON.stringify({ version: pin.version, release: pin.release }),
@@ -229,9 +242,25 @@ describe('CI Camoufox cache action check step', () => {
       join(cacheDir, INSTALLED_ASSET_FILE),
       JSON.stringify({ key: asset.key, sha256: asset.sha256 }),
     );
+    return launchFile;
+  }
+
+  it('reports a cached pinned build as installed', () => {
+    cachePinnedBuild();
 
     const outputs = runCheckStep(workDir);
 
     expect(outputs).toContain('installed=true');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'reports a cached build whose browser cannot be run as not installed',
+    () => {
+      chmodSync(cachePinnedBuild(), 0o644);
+
+      const outputs = runCheckStep(workDir);
+
+      expect(outputs).toContain('installed=false');
+    },
+  );
 });

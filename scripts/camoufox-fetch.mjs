@@ -10,14 +10,14 @@
  *
  * "Installed" means version.json names the pinned build, the installer's
  * record names this platform's asset and its digest, and the executable
- * camoufox-js launches is present.
+ * camoufox-js launches is a regular file this user can run.
  *
  * The install directory is CAMOUFOX_INSTALL_DIR, else camoufox-js's default.
  * Only a download imports camoufox-js, so with CAMOUFOX_INSTALL_DIR set,
  * --verify and an up-to-date install need nothing but Node.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { accessSync, constants, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,6 +49,23 @@ function readInstallRecord(file) {
 }
 
 /**
+ * Tells whether the browser can be started from a file: it must be a regular
+ * file and, outside Windows, one this user may execute.
+ * @param {string} file - Path of the browser executable.
+ * @returns {boolean} True for an executable regular file.
+ */
+function isLaunchable(file) {
+  try {
+    if (!statSync(file).isFile()) return false;
+    if (process.platform !== 'win32') accessSync(file, constants.X_OK);
+    return true;
+  } catch {
+    // Missing or not executable: the browser cannot start from it.
+    return false;
+  }
+}
+
+/**
  * Tells whether the install directory holds the pinned build for this platform.
  * @param {string} installDir - Camoufox install directory.
  * @param {import('./camoufox-pin-logic.d.mts').ICamoufoxPin} pin - Validated pin.
@@ -59,7 +76,7 @@ function isPinnedInstall(installDir, pin, asset) {
   return (
     matchesPin(pin, readInstallRecord(join(installDir, 'version.json'))) &&
     matchesAsset(asset, readInstallRecord(join(installDir, INSTALLED_ASSET_FILE))) &&
-    existsSync(join(installDir, launchFileFor(asset.key)))
+    isLaunchable(join(installDir, launchFileFor(asset.key)))
   );
 }
 
