@@ -1,0 +1,30 @@
+{
+  "version": "152.0.4",
+  "release": "beta.31",
+  "assets": {
+    "lin.x86_64": {
+      "url": "https://github.com/daijro/camoufox/releases/download/font-bundle-v1/camoufox-152.0.4-beta.31-lin.x86_64.zip",
+      "sha256": "3a7958c84c0c1962574bb177a10a247b614823557308ccb7cf2e2bc9ce406c55"
+    },
+    "lin.arm64": {
+      "url": "https://github.com/daijro/camoufox/releases/download/font-bundle-v1/camoufox-152.0.4-beta.31-lin.arm64.zip",
+      "sha256": "98dbffa9b687d42693dd0abebc47737e651b9e4b6991ba8571c3c29062645c04"
+    },
+    "mac.arm64": {
+      "url": "https://github.com/daijro/camoufox/releases/download/font-bundle-v1/camoufox-152.0.4-beta.31-mac.arm64.zip",
+      "sha256": "7b8d12d61de9a9fbd3ce9c034399ba5307e44f4d8951873cc53ad39d20957737"
+    },
+    "mac.x86_64": {
+      "url": "https://github.com/daijro/camoufox/releases/download/font-bundle-v1/camoufox-152.0.4-beta.31-mac.x86_64.zip",
+      "sha256": "4a6f02ffc1992a41306b00851fc0ef339ff555c92a547fe865690f89b58d8840"
+    },
+    "win.x86_64": {
+      "url": "https://github.com/daijro/camoufox/releases/download/font-bundle-v1/camoufox-152.0.4-beta.31-win.x86_64.zip",
+      "sha256": "ed63ea51d2a07f99bacdae0f43b9ff5518bfc9ac2f15d84e2251fe06c7141e81"
+    },
+    "win.i686": {
+      "url": "https://github.com/daijro/camoufox/releases/download/font-bundle-v1/camoufox-152.0.4-beta.31-win.i686.zip",
+      "sha256": "28fcda907dc86e6524cd1fac6eab2c0735e0c0eca2f29d6795cad2efccab68a1"
+    }
+  }
+}

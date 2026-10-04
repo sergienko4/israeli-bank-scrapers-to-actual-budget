@@ -193,9 +193,9 @@ Run with `DRY_RUN=true` first to preview what would be imported.
 
 ## Camoufox download fails (CI / pre-commit)
 
-**Symptom:** first-time build downloads stall or 403.
+**Symptom:** first-time build downloads stall or 403, or the install stops with `digest mismatch`.
 
-**Fix:** the project ships a `docker/camoufox-cache` composite action that caches the Camoufox release between builds. Locally you can pre-download by running `npm install` once — the postinstall hook fetches Camoufox into `node_modules/`.
+**Fix:** every install site runs `scripts/camoufox-fetch.mjs`, which downloads the build pinned in `config/camoufox-pin.json` straight from its release asset URL (no GitHub API call, so no API rate limit) and retries a failed download. In CI the `docker/camoufox-cache` composite action caches the result per pin, installer version and runner architecture. Locally, run `npm run camoufox:install` once; it skips the download when the pinned build is already installed. A `digest mismatch` means the downloaded archive is not the one the pin names — retry, and if it persists, check the pin's SHA-256 against the release asset (see [Bumping the Camoufox browser](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-the-camoufox-browser)).
 
 ## Scraper times out on Oracle Cloud / slow VMs
 

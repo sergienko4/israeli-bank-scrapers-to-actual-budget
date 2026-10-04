@@ -1,8 +1,12 @@
 name: Camoufox Cache
 description: >
-  Cache the Camoufox browser binary with actions/cache, falling back to
-  authenticated gh release download when camoufox-js fetch is rate-limited.
-  Injects the binary into .camoufox-cache/ for Docker build context.
+  Install the Camoufox browser build pinned in config/camoufox-pin.json into
+  ~/.cache/camoufox, cached with actions/cache under a key that changes with
+  the pin, the installer and the runner architecture, so a cache never serves
+  another build.
+  scripts/camoufox-fetch.mjs downloads the pinned asset URL directly (no
+  GitHub API call, so no rate limit) and checks its SHA-256. It is then
+  copied into .camoufox-cache/ for the Docker build context.
 
 runs:
   using: composite
@@ -11,33 +15,33 @@ runs:
       uses: actions/cache@v5
       with:
         path: ~/.cache/camoufox
-        key: camoufox-${{ hashFiles('package-lock.json') }}
-        restore-keys: |
-          camoufox-
+        key: camoufox-pin-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('config/camoufox-pin.json', 'scripts/camoufox-*.mjs') }}
 
-    - name: Install Camoufox browser
+    - name: Check the cached Camoufox build
+      id: check
       shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
       run: |
-        if [ -f ~/.cache/camoufox/camoufox-bin ] && [ -f ~/.cache/camoufox/version.json ]; then
-          echo "Camoufox already cached (binary + version.json), skipping fetch"
+        # --verify reads only the pin and the install records, so it needs no
+        # node_modules; jobs that skip ci/setup only install on a cache miss.
+        if CAMOUFOX_INSTALL_DIR="$HOME/.cache/camoufox" node scripts/camoufox-fetch.mjs --verify; then
+          echo "installed=true" >> "$GITHUB_OUTPUT"
         else
-          echo "Cache miss — attempting camoufox-js fetch..."
-          if npx @hieutran094/camoufox-js fetch; then
-            echo "Camoufox installed via camoufox-js"
-          else
-            echo "camoufox-js fetch failed (likely rate-limited) — falling back to gh release download"
-            ASSET_DIR=$(mktemp -d)
-            gh release download --repo daijro/camoufox --pattern 'camoufox-*-lin.x86_64.zip' --dir "$ASSET_DIR" --clobber
-            mkdir -p ~/.cache/camoufox
-            unzip -o "$ASSET_DIR"/*.zip -d ~/.cache/camoufox/
-            rm -rf "$ASSET_DIR"
-            chmod -R 755 ~/.cache/camoufox
-            test -f ~/.cache/camoufox/camoufox-bin || (echo "ERROR: camoufox-bin not found after fallback" && exit 1)
-            echo "Camoufox installed via authenticated gh fallback"
-          fi
+          echo "installed=false" >> "$GITHUB_OUTPUT"
         fi
+        if [ -d node_modules/@hieutran094/camoufox-js ]; then
+          echo "deps=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "deps=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Install dependencies for the Camoufox installer
+      if: steps.check.outputs.installed != 'true' && steps.check.outputs.deps != 'true'
+      uses: ./.github/actions/ci/setup
+
+    - name: Install the pinned Camoufox build
+      if: steps.check.outputs.installed != 'true'
+      shell: bash
+      run: CAMOUFOX_INSTALL_DIR="$HOME/.cache/camoufox" node scripts/camoufox-fetch.mjs
 
     - name: Inject Camoufox into Docker build context
       shell: bash

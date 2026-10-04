@@ -216,6 +216,55 @@ left to CI on the pull request, which reports them accurately.
 
 ---
 
+## Bumping the Camoufox browser
+
+The scraper drives Camoufox, a Firefox build that is downloaded separately from
+`@hieutran094/camoufox-js`, the npm package that launches it. Every install
+site used to download whichever build upstream published last, so an upstream
+release could break the image without any change here: v156.0.1-beta.34
+dropped config properties that camoufox-js 0.11.2 still sets on every launch,
+and every browser launch failed with `UnknownProperty`.
+
+`config/camoufox-pin.json` now decides the build. It names one version and
+release, and for each platform the release asset URL and its SHA-256.
+`scripts/camoufox-fetch.mjs` is the only installer: the Dockerfile, the
+`docker/camoufox-cache` CI action and `npm run camoufox:install` all run it. It
+downloads the pinned URL directly, refuses an archive whose digest differs, and
+records the installed asset and its digest in `pinned-asset.json` beside
+`version.json`. It skips the download only when `version.json` names the pinned
+build, that record names this platform's asset and digest, and the executable
+camoufox-js launches is a regular file the current user can run. `--verify`
+applies the same test without installing, and the image build runs it on both
+of its paths.
+`tests/deployment/CamoufoxPin.test.ts` fails if any build file goes back to
+fetching an unpinned build.
+
+To move to another build:
+
+1. Find the release that carries the new build and read its asset URLs and
+   digests, for example
+   `gh api repos/daijro/camoufox/releases/tags/<tag> --jq '.assets[] | "\(.name) \(.digest)"'`.
+2. Update `version`, `release` and every entry in `assets` together. The schema
+   requires the same version and release in every asset file name, a canonical
+   `https://github.com/daijro/camoufox/releases/download/` URL and a 64-digit
+   lowercase SHA-256, without the API's `sha256:` prefix.
+3. Run `npm run camoufox:install`, then `npm run test:e2e:portal`, which drives
+   the real browser.
+4. Open a pull request. The CI cache key includes the hashes of the pin file and
+   the installer scripts, so CI downloads the new build instead of reusing the
+   old one, the image build
+   verifies it, and the E2E suite launches it. Pull requests build only the
+   amd64 image, so the arm64 asset is first installed by the release build;
+   its digest check is what guards it.
+
+A camoufox-js upgrade is a separate change that needs the same E2E proof: it
+installs into the same directory and launches whatever build is there.
+
+To roll back, set the pin to the previous build. Reverting the pin commit
+instead would restore the unpinned download.
+
+---
+
 ## Pull Request Process
 
 1. Use a **conventional commit** title (e.g., `feat: Add health check endpoint`)

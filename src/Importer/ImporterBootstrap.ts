@@ -39,8 +39,8 @@ export interface IImporterBootHandle {
 /**
  * Prints the startup banner (dry-run + proxy notes when applicable).
  *
- * The browser build is included because it is fetched at image build time
- * rather than pinned, so a silent upgrade is otherwise invisible.
+ * The browser build is included because it is installed at image build time,
+ * so which pinned build an image carries is otherwise invisible.
  * @param wiring - The completed importer wiring handle.
  * @returns Procedure indicating banner emission.
  */
