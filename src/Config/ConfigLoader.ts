@@ -13,6 +13,7 @@ import { fail, isFail, isSuccess, succeed } from '../Types/Index.js';
 import {
 validateActualConfig, validateBank,
 validateServerUrl} from './ConfigLoaderValidator.js';
+import { DEFAULT_CONFIG_PATH } from './ConfigPath.js';
 import registerConfigSecrets from './ConfigSecretValues.js';
 import deepMerge from './Loaders/ConfigMerger.js';
 import loadFromEnvironment from './Loaders/EnvLoader.js';
@@ -31,10 +32,10 @@ export class ConfigLoader implements IConfigLoader {
 
   /**
    * Creates a ConfigLoader pointing at the given config file path.
-   * @param configPath - Absolute path to config.json; defaults to /app/config.json.
+   * @param configPath - Absolute path to config.json; defaults to DEFAULT_CONFIG_PATH.
    */
-  constructor(configPath?: string) {
-    this._configPath = configPath || '/app/config.json';
+  constructor(configPath = DEFAULT_CONFIG_PATH) {
+    this._configPath = configPath;
   }
 
   /**
