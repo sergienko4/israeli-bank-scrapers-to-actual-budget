@@ -20,9 +20,9 @@ export default class TwoFactorService implements ITwoFactorPrompter {
    */
   constructor(
     private readonly notifier: TelegramNotifier,
-    timeoutSeconds?: number
+    timeoutSeconds = 300
   ) {
-    this._defaultTimeoutMs = (timeoutSeconds ?? 300) * 1000;
+    this._defaultTimeoutMs = timeoutSeconds * 1000;
   }
 
   /**

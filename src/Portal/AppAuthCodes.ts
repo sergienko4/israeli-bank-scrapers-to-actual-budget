@@ -75,12 +75,12 @@ function isPrintable(char: string): boolean {
 /**
  * Strips control characters and trims a client-supplied device label to a
  * length safe to render in the sessions list.
- * @param raw - Untrusted `device_name` parameter, if any.
+ * @param raw - Untrusted `device_name` parameter; empty when the app sent none.
  * @returns A printable label, falling back to {@link DEFAULT_DEVICE_NAME}.
  */
-export function sanitizeDeviceName(raw?: string): string {
+export function sanitizeDeviceName(raw = ''): string {
   let kept = '';
-  for (const char of raw ?? '') if (isPrintable(char)) kept += char;
+  for (const char of raw) if (isPrintable(char)) kept += char;
   const cleaned = kept.trim();
   return cleaned.length > 0 ? cleaned.slice(0, MAX_DEVICE_NAME) : DEFAULT_DEVICE_NAME;
 }
