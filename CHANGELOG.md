@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.43.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.2...v1.43.3) (2026-10-05)
+
+
+### Fixed
+
+* chore(deps-dev): bump the dev-dependencies group across 1 directory with 2 updates ([#757](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/757)) ([d8f6570](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d8f65707825baaef281e9af0358566203ca62511))
+* **deps:** bump pino-pretty from 13.1.3 to 13.2.0 in the pino group ([#758](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/758)) ([803413f](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/803413fde062d3a5b370ab450451eb86a5a8a792))
+* **docker:** pin the Camoufox browser binary ([#754](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/754)) ([aeb4741](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/aeb47411e6a6110d7b2610b99d5516b4c072e6e3))
+* **pepper:** keep device auth across runs ([#756](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/756)) ([0917cc8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/0917cc8f3c10773074acf95a1d15118650e47cae))
+* **portal:** mark Enter-key login as fire-and-forget (Sonar S9383) ([#750](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/750)) ([299d92c](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/299d92c521f8cff15fd6ef0c170de9ce47b477a4))
+* **telegram:** isolate superseded poller runs ([#755](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/755)) ([4efcf58](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/4efcf5840b2a22db82131d2352c4f21745f7274f))
+
+
+### Refactored
+
+* clear Sonar maintainability issues (S9382, S7760, S2301) ([#752](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/752)) ([26a0438](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/26a0438b1c984a33ada02ecc317b138fce235aa8))
+
 ## [1.43.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.1...v1.43.2) (2026-10-03)
 
 
