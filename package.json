@@ -53,7 +53,7 @@
   "dependencies": {
     "@actual-app/api": "^26.10.0",
     "@fastify/cookie": "^11.0.2",
-    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/rate-limit": "^11.2.1",
     "@fastify/static": "^10.1.5",
     "@fastify/type-provider-typebox": "^6.1.0",
     "@sergienko4/israeli-bank-scrapers": "^8.7.4",
