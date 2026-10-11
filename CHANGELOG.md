@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.43.7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.6...v1.43.7) (2026-10-11)
+
+
+### Fixed
+
+* **deps:** bump @fastify/type-provider-typebox from 6.1.0 to 6.2.0 ([#774](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/774)) ([4d46886](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/4d46886be136c47935130c5612eba0544b5600c6))
+
 ## [1.43.6](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.5...v1.43.6) (2026-10-10)
 
 
