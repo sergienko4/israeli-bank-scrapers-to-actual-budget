@@ -56,7 +56,7 @@
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/static": "^10.1.6",
     "@fastify/type-provider-typebox": "^6.2.0",
-    "@sergienko4/israeli-bank-scrapers": "^8.7.4",
+    "@sergienko4/israeli-bank-scrapers": "^8.8.0",
     "@sinclair/typebox": "^0.34.52",
     "cron-parser": "^5.10.2",
     "fastify": "^5.12.4",
@@ -144,6 +144,6 @@
     "better-sqlite3@12.11.1": true,
     "tesseract.js@7.0.0": true,
     "unrs-resolver@1.12.2": true,
-    "@sergienko4/israeli-bank-scrapers@8.7.4": true
+    "@sergienko4/israeli-bank-scrapers@8.8.0": true
   }
 }
