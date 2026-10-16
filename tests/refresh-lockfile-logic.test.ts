@@ -541,6 +541,201 @@ describe('findMajorBumps', () => {
     expect(findMajorBumps(pinned('1.0.0'), pinned('1.0.0'))).toEqual([]);
   });
 
+  it('flags a dependant that now loads a major already present elsewhere', () => {
+    // 2.0.0 already sat under y, so the by-name check sees nothing new, yet
+    // z itself moves from the hoisted 1.0.0 to a nested 2.0.0.
+    const shared = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/z': { version: '1.0.0', dependencies: { x: '*' } },
+    };
+    const after = lockfile({ ...shared, 'node_modules/z/node_modules/x': { version: '2.0.0' } });
+    expect(findMajorBumps(lockfile(shared), after)).toEqual([
+      { path: 'node_modules/z/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a dependant whose resolved copy stays inside the same major', () => {
+    const shared = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/z': { version: '1.0.0', dependencies: { x: '*' } },
+    };
+    const after = lockfile({ ...shared, 'node_modules/z/node_modules/x': { version: '1.5.0' } });
+    expect(findMajorBumps(lockfile(shared), after)).toEqual([]);
+  });
+
+  it('resolves scoped packages declared through any dependency field', () => {
+    const shared = {
+      '': { name: 'root' },
+      'node_modules/@t/b': { version: '1.0.0' },
+      'node_modules/w/node_modules/@t/b': { version: '2.0.0' },
+      'node_modules/@s/a': { version: '1.0.0', peerDependencies: { '@t/b': '*' } },
+    };
+    const after = lockfile({ ...shared, 'node_modules/@s/a/node_modules/@t/b': { version: '2.0.0' } });
+    expect(findMajorBumps(lockfile(shared), after)).toEqual([
+      { path: 'node_modules/@s/a/node_modules/@t/b', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not compare a dependant that only exists after the refresh', () => {
+    const before = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    const after = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/z': { version: '1.0.0', dependencies: { x: '*' } },
+      'node_modules/z/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('flags a dependant that npm moved and that now loads a new major', () => {
+    // z leaves the top level for w's folder, so no z path exists on both
+    // sides; its earlier copy is matched by name and still loaded x 1.0.0.
+    const kept = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/w': { version: '1.0.0' },
+    };
+    const z = { version: '1.0.0', dependencies: { x: '*' } };
+    const before = lockfile({ ...kept, 'node_modules/z': z });
+    const after = lockfile({
+      ...kept,
+      'node_modules/w/node_modules/z': z,
+      'node_modules/w/node_modules/z/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'node_modules/w/node_modules/z/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a moved dependant whose copy stays inside the same major', () => {
+    const kept = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/w': { version: '1.0.0' },
+    };
+    const z = { version: '1.0.0', dependencies: { x: '*' } };
+    const before = lockfile({ ...kept, 'node_modules/z': z });
+    const after = lockfile({
+      ...kept,
+      'node_modules/w/node_modules/z': z,
+      'node_modules/w/node_modules/z/node_modules/x': { version: '1.5.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('does not compare a dependency the refresh newly declared', () => {
+    // z did not require x before, so the hoisted x 1.0.0 it could have
+    // reached was never its copy and there is nothing to break from.
+    const kept = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    };
+    const before = lockfile({ ...kept, 'node_modules/z': { version: '1.0.0' } });
+    const after = lockfile({
+      ...kept,
+      'node_modules/z': { version: '1.0.0', dependencies: { x: '*' } },
+      'node_modules/z/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('lists a path once when several checks catch the same jump', () => {
+    const root = { name: 'root', devDependencies: { pkg: '*' } };
+    const before = lockfile({ '': root, 'node_modules/pkg': { version: '1.0.0' } });
+    const after = lockfile({ '': root, 'node_modules/pkg': { version: '2.0.0' } });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'node_modules/pkg', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('flags a nested workspace that now loads its parent folder copy', () => {
+    // node searches packages/a/node_modules from packages/a/sub even though
+    // npm never installed packages/a itself, so the new copy there is the one
+    // the workspace loads. 2.0.0 already existed, so only this check sees it.
+    const sub = { version: '1.0.0', dependencies: { x: '*' } };
+    const kept = {
+      '': { name: 'root' },
+      'packages/a/sub': sub,
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    };
+    const before = lockfile(kept);
+    const after = lockfile({ ...kept, 'packages/a/node_modules/x': { version: '2.0.0' } });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'packages/a/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('judges a linked workspace by the folder the link points at', () => {
+    const root = { name: 'root', dependencies: { x: '*' } };
+    const link = { link: true, resolved: 'packages/x' };
+    const before = lockfile({
+      '': root,
+      'node_modules/x': link,
+      'packages/x': { version: '1.0.0' },
+    });
+    const after = lockfile({
+      '': root,
+      'node_modules/x': link,
+      'packages/x': { version: '1.5.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('flags a link that now points at a workspace of a new major', () => {
+    // Both workspace versions already existed, so no version diff shows the
+    // jump; only following the link reveals that root now loads 2.0.0.
+    const root = { name: 'root', dependencies: { x: '*' } };
+    const workspaces = {
+      'packages/x': { version: '1.0.0' },
+      'packages/x2': { version: '2.0.0' },
+    };
+    const before = lockfile({
+      '': root,
+      'node_modules/x': { link: true, resolved: 'packages/x' },
+      ...workspaces,
+    });
+    const after = lockfile({
+      '': root,
+      'node_modules/x': { link: true, resolved: 'packages/x2' },
+      ...workspaces,
+    });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'packages/x2', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('treats a link that never reaches a package as breaking', () => {
+    // A self-referencing link has no version to compare, and an unknown jump
+    // is never treated as safe.
+    const root = { name: 'root', dependencies: { x: '*' } };
+    const before = lockfile({
+      '': root,
+      'node_modules/x': { link: true, resolved: 'packages/x' },
+      'packages/x': { version: '1.0.0' },
+    });
+    const after = lockfile({
+      '': root,
+      'node_modules/x': { link: true, resolved: 'node_modules/x' },
+      'packages/x': { version: '1.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'node_modules/x', from: '1.0.0', to: undefined },
+    ]);
+  });
+
   it('ignores the root entry', () => {
     const before = lockfile({ '': { name: 'root', version: '1.0.0' } });
     const after = lockfile({ '': { name: 'root', version: '2.0.0' } });

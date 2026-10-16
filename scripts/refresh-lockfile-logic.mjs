@@ -254,10 +254,154 @@ function crossesBreakingBoundary(change) {
   return fromKey !== toKey;
 }
 
-/** Indexes every non-root lockfile entry's version by its path. */
-function pathVersions(lockText) {
-  const named = packageEntries(lockText).filter(([path]) => path !== '');
-  return new Map(named.map(([path, entry]) => [path, entry.version]));
+/**
+ * Indexes a lockfile by path: every entry, root included, and the version of
+ * every non-root entry. The root records the project itself, so it has no
+ * version worth comparing but its declared dependencies still matter.
+ */
+function lockIndex(lockText) {
+  const entries = new Map(packageEntries(lockText));
+  const named = [...entries].filter(([path]) => path !== '');
+  return { entries, versions: new Map(named.map(([path, entry]) => [path, entry.version])) };
+}
+
+/** Every field through which a lockfile entry declares a package it loads. */
+const DEPENDENCY_FIELDS = [
+  'dependencies',
+  'optionalDependencies',
+  'peerDependencies',
+  'devDependencies',
+];
+
+/** Lists the package names a lockfile entry declares in any dependency field. */
+function declaredNames(entry) {
+  return DEPENDENCY_FIELDS.filter((field) => isRecord(entry[field])).flatMap((field) =>
+    Object.keys(entry[field]),
+  );
+}
+
+/**
+ * Lists the directories node searches from a consumer, nearest first.
+ *
+ * Every ancestor folder is a candidate, not only the ones npm installed a
+ * package into: a nested workspace such as `packages/a/sub` also reaches
+ * `packages/a/node_modules`. Folders already named `node_modules` are
+ * skipped, exactly as node does, because `node_modules/node_modules` is
+ * never searched.
+ * See https://nodejs.org/api/modules.html#loading-from-node_modules-folders
+ */
+function lookupChain(consumerPath) {
+  const parts = consumerPath === '' ? [] : consumerPath.split('/');
+  const chain = [];
+  for (let end = parts.length; end > 0; end -= 1) {
+    if (parts[end - 1] !== 'node_modules') chain.push(parts.slice(0, end).join('/'));
+  }
+  return [...chain, ''];
+}
+
+/** Finds the lockfile path node would load for `name` when `consumerPath` requires it. */
+function resolvePath(entries, consumerPath, name) {
+  return lookupChain(consumerPath)
+    .map((base) => (base === '' ? `node_modules/${name}` : `${base}/node_modules/${name}`))
+    .find((candidate) => entries.has(candidate));
+}
+
+/**
+ * Follows npm `link` entries to the folder they stand for.
+ *
+ * A link records no version of its own; `resolved` names the entry that
+ * holds the real package. Returns `undefined` for a cycle or a link with no
+ * `resolved`, so the caller keeps the link itself, whose missing version is
+ * never read as safe.
+ * See https://docs.npmjs.com/cli/v11/configuring-npm/package-lock-json#packages
+ */
+function followLink(entries, path) {
+  const seen = new Set();
+  let current = path;
+  while (entries.get(current)?.link === true && !seen.has(current)) {
+    seen.add(current);
+    const target = entries.get(current).resolved;
+    if (typeof target !== 'string') return undefined;
+    current = target;
+  }
+  return seen.has(current) ? undefined : current;
+}
+
+/**
+ * Finds the copy of `name` that a consumer at `consumerPath` loads, or
+ * `undefined` when nothing on its lookup chain provides it. A link is
+ * reported as the folder it points at, which carries the real version.
+ */
+function resolvedCopy(index, consumerPath, name) {
+  const found = resolvePath(index.entries, consumerPath, name);
+  if (found === undefined) return undefined;
+  const path = followLink(index.entries, found) ?? found;
+  return { path, version: index.entries.get(path)?.version };
+}
+
+/**
+ * Lists the paths a consumer occupied before the refresh.
+ *
+ * A path present on both sides is the consumer itself. Otherwise npm moved
+ * the consumer — hoisted it or nested it anew — so its earlier copies are
+ * matched by package name: the same version first, any version after that.
+ * A package absent before the refresh has no earlier copy and yields none.
+ */
+function priorConsumers(before, consumer, afterEntry) {
+  if (before.entries.has(consumer)) return [consumer];
+  const copies = before.byName.get(packageNameFromPath(consumer));
+  if (copies === undefined) return [];
+  return copies.get(afterEntry.version) ?? [...copies.values()].flat();
+}
+
+/**
+ * Lists the versions of `name` that earlier copies of a consumer loaded.
+ *
+ * Only copies that declared `name` count: a dependency the refresh added has
+ * nothing to break from, so it is never compared against an unrelated copy
+ * that happened to sit on the old lookup chain.
+ */
+function priorVersions(before, priors, name) {
+  return priors
+    .filter((prior) => declaredNames(before.entries.get(prior)).includes(name))
+    .map((prior) => resolvedCopy(before, prior, name))
+    .filter((copy) => copy !== undefined)
+    .map((copy) => copy.version);
+}
+
+/**
+ * Describes a consumer's copy of `name` when it crossed a breaking boundary
+ * against every version earlier copies of that consumer loaded. As with the
+ * by-name check, a major an earlier copy already loaded is not new.
+ */
+function consumerChange(before, after, request) {
+  const target = resolvedCopy(after, request.consumer, request.name);
+  const froms = priorVersions(before, request.priors, request.name);
+  if (target === undefined || froms.length === 0) return undefined;
+  const to = target.version;
+  const breaking = froms.every((from) => from !== to && crossesBreakingBoundary({ from, to }));
+  return breaking ? { path: target.path, from: froms[0], to } : undefined;
+}
+
+/** Lists majors that a consumer present before the refresh now loads. */
+function consumerMajors(before, after) {
+  const prior = { ...before, byName: versionsByName(before.versions) };
+  const changes = [];
+  for (const [consumer, afterEntry] of after.entries) {
+    const priors = priorConsumers(prior, consumer, afterEntry);
+    for (const name of new Set(declaredNames(afterEntry))) {
+      const change = consumerChange(prior, after, { consumer, priors, name });
+      if (change !== undefined) changes.push(change);
+    }
+  }
+  return changes;
+}
+
+/** Keeps the first change recorded for each path. */
+function uniqueByPath(changes) {
+  const byPath = new Map();
+  for (const change of changes) if (!byPath.has(change.path)) byPath.set(change.path, change);
+  return [...byPath.values()];
 }
 
 /** Groups the paths in a path→version index by package name and version. */
@@ -299,23 +443,34 @@ function relocatedMajors(before, after) {
  * withholds auto-merge whenever this list is non-empty. A version that does
  * not parse counts as breaking: an unknown jump is never treated as safe.
  *
- * Two shapes are caught. A path present on both sides that re-pins across a
- * boundary is the plain case. A version that npm installs at a new path — a
+ * Three shapes are caught. A path present on both sides that re-pins across
+ * a boundary is the plain case. A version that npm installs at a new path — a
  * hoisted copy kept while a nested one lands next to it, or a hoisted copy
  * moved under its parent — is caught by name: a version the package never
  * had before is listed when it is breaking relative to every version the
- * package had. A brand-new package has nothing to break from and is not
- * listed; neither is a removal.
+ * package had. The last shape is per consumer: a dependant whose resolved
+ * copy of a package crosses a boundary is listed even when that version
+ * already sat elsewhere in the tree, because the dependant itself now loads
+ * a new major. A dependant npm moved is compared through its earlier copies,
+ * matched by name, and only for a package it declared on both sides. The
+ * dependant's copy is found the way node finds it — through every ancestor
+ * folder, so a nested workspace reaches its parent's copies — and an npm
+ * `link` is followed to the folder it points at, so a workspace or `file:`
+ * dependency is judged by the version it actually installs. A brand-new
+ * package has nothing to break from and is not listed; neither is a
+ * removal. Each path is listed once.
  */
 export function findMajorBumps(beforeText, afterText) {
-  const before = pathVersions(beforeText);
-  const after = pathVersions(afterText);
-  const repinned = diffVersions(before, after)
-    .filter((change) => before.has(change.path) && after.has(change.path))
+  const before = lockIndex(beforeText);
+  const after = lockIndex(afterText);
+  const repinned = diffVersions(before.versions, after.versions)
+    .filter((change) => before.versions.has(change.path) && after.versions.has(change.path))
     .filter(crossesBreakingBoundary);
-  const listed = new Set(repinned.map((change) => change.path));
-  const relocated = relocatedMajors(before, after).filter((change) => !listed.has(change.path));
-  return [...repinned, ...relocated].sort((a, b) => a.path.localeCompare(b.path));
+  const relocated = relocatedMajors(before.versions, after.versions);
+  const consumer = consumerMajors(before, after);
+  return uniqueByPath([...repinned, ...relocated, ...consumer]).sort((a, b) =>
+    a.path.localeCompare(b.path),
+  );
 }
 
 /** Describes one pin movement in a form a reviewer can scan without the diff. */
