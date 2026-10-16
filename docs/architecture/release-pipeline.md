@@ -21,7 +21,7 @@ a PR is green and merged.
 flowchart TD
     %% ---------- 1 · change sources ----------
     subgraph S1["1 · Change sources"]
-      DB["Dependabot<br/>weekly, grouped · incl. critical deps"]
+      DB["Dependabot<br/>npm daily · actions + docker weekly<br/>safe updates auto-merge"]
       HUM["Human PR"]
     end
 
@@ -82,7 +82,7 @@ output.
 
 | # | Stage | Workflow | Trigger | Key jobs / steps | Produces |
 |---|-------|----------|---------|------------------|----------|
-| 1 | Feed | Dependabot | weekly (Mon 06:00) | grouped npm / docker / actions PRs (incl. critical `@actual-app/api` + scraper) | dep PRs |
+| 1 | Feed | Dependabot + `lockfile-refresh.yml` | npm daily 06:00 · actions + docker Mon 06:00 · lockfile refresh Thu 05:00 UTC | grouped npm / docker / actions PRs (incl. critical `@actual-app/api` + scraper); safe patch/minor PRs auto-merge via `dependabot-auto-merge.yml` | dep PRs |
 | 2 | Gate | `pr.yml` | PR + push to `main` | 8 required checks + `CI Pass` aggregator | green merge |
 | 3 | Release PR | `release-please.yml` → `release-please` | push to `main` | create/update Release PR (version + CHANGELOG) | Release PR |
 | 3 | Badges | `release-please.yml` → `update-badge` | push to `main` | run unit + E2E, push counts to gist | 2 shields badges |

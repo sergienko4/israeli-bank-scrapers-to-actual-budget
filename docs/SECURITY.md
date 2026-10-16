@@ -284,13 +284,19 @@ If a security vulnerability is discovered in a released version:
   `productionReachable` and `noUpstreamFix`, carry an `added` date no later
   than today, give an HTTPS `upstream` link to the work being tracked, and
   expire within 30 days of `added`.
-- ✅ Automated dependency updates via Dependabot (npm, Actions, Docker)
+- ✅ Automated dependency updates via Dependabot (npm, Actions, Docker).
+  Safe patch and minor updates merge on their own after every required
+  check passes; majors, Docker minors and script-pin rotations wait for a
+  human (see
+  [ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md))
 - ✅ CodeQL static analysis on every PR
 - ✅ Latest security patches applied (Node.js 26, TypeScript 6)
 
 #### Build Security
 
 - ✅ Digest-pinned base image (immutable, reproducible)
+- ✅ npm, npx, corepack and yarn removed from the runtime image, so their
+  bundled dependency trees cannot carry unpatchable CVEs
 - ✅ Multi-stage security in CI/CD
 - ✅ Automated vulnerability scanning
 - ✅ OWASP Docker Security compliance: 9/10
@@ -299,7 +305,11 @@ If a security vulnerability is discovered in a released version:
 
 - ✅ SBOM (Software Bill of Materials) attached to every GitHub Release (SPDX format)
 - ✅ Docker images scanned with Trivy on every PR (CRITICAL + HIGH, blocks merge)
-- ✅ Automated dependency updates via Dependabot (npm, GitHub Actions, Docker)
+- ✅ Automated dependency updates via Dependabot (npm, GitHub Actions, Docker),
+  with safe patch and minor updates auto-merged after CI
+- ✅ Weekly lockfile refresh updates transitive dependencies and applies
+  `npm audit fix` changes within declared ranges, then auto-merges after CI
+  unless a pin crossed a major
 - ✅ `npm run audit` runs as blocking CI check (no bypass; exceptions expire)
 
 ---
