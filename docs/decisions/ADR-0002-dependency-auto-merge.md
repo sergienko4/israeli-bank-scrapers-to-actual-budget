@@ -120,9 +120,16 @@ tools that kept producing image alerts.
    `github/codeql-action/*` pattern never matched.
 
 6. **`Dockerfile`** removes npm, npx, corepack and yarn from the runtime
-   image after `npm prune --omit=dev`, and drops the npm self-upgrade and
-   patching block. Advisories against the npm CLI's bundled packages no
-   longer apply to the image.
+   image after `npm prune --omit=dev`, and drops the block that patched
+   packages inside npm. Advisories against the npm CLI's bundled packages
+   no longer apply to the image. The build still upgrades to npm 12,
+   pinned to an exact version through the `NPM_VERSION` build argument,
+   because npm 12 enforces the `allowScripts` allowlist during `npm ci`.
+   Dependabot does not track that argument, so bumping it is a manual,
+   reviewed change. The npm 11 bundled with the base image runs every
+   install script, including a default `node-gyp rebuild` for
+   better-sqlite3 v13. That package ships prebuilt binaries and needs no
+   build, but the rebuild still runs and fails without Python.
 
 7. **`package.json`** pins `"katex": "^0.18.2"` in `overrides`. A floor in
    `overrides` is the only way to lift a transitive package whose parent

@@ -37,6 +37,23 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
+# Build with npm 12. The npm 11 bundled with the base image only warns
+# about the package.json allowScripts allowlist and still runs every
+# dependency install script. better-sqlite3 v13 ships prebuilt binaries,
+# yet npm 11 still runs a default `node-gyp rebuild` for it, which fails
+# because the image has no Python. npm 12 enforces the allowlist and skips
+# that build (see docs/CONTRIBUTING.md). The exact version is pinned so
+# builds are reproducible and no npm release changes install behaviour
+# unreviewed. npm is deleted further down, so it is absent from the final
+# image filesystem.
+ARG NPM_VERSION=12.2.1
+RUN npm install -g "npm@${NPM_VERSION}" \
+    && echo "Using npm $(npm --version)" \
+    && if [ "$(npm --version)" != "${NPM_VERSION}" ]; then \
+         echo "ERROR: expected npm ${NPM_VERSION}, got $(npm --version)" >&2; \
+         exit 1; \
+       fi
+
 # Install ALL project dependencies (devDependencies included for build).
 # npm ci installs exact versions from package-lock.json, giving reproducible
 # builds. Dependency updates are managed by Dependabot (weekly grouped PRs
