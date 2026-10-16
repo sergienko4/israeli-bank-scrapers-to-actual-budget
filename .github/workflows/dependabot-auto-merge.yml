@@ -1,0 +1,636 @@
+name: Dependabot Auto-Merge
+
+# Merges safe Dependabot updates without a human in the loop, and keeps the
+# queue of approved updates moving once main advances.
+#
+# 1. `automerge` decides, per pull request, whether an update is safe to merge
+#    unattended. The decision is a pure, unit-tested policy module
+#    (scripts/dependabot-automerge-logic.mjs): npm patch/minor (grouped or
+#    not), GitHub Actions patch/minor and Docker digest/patch updates merge;
+#    majors, and update types an ecosystem is held back from (a Docker
+#    minor), are labelled `needs-manual-review`; anything the policy cannot
+#    classify is skipped and left for a human.
+# 2. `rebase-behind` nudges one auto-merge-enabled Dependabot PR at a time
+#    with `@dependabot rebase` when main has moved past it. The ruleset
+#    requires branches to be strictly up to date, auto-merge never updates a
+#    branch on its own, and Dependabot only rebases by itself on conflicts.
+#
+# Design decisions, each backed by GitHub documentation:
+#
+# 1. `workflow_run` on PR Pipeline, not `pull_request`: Dependabot-triggered
+#    `pull_request` runs get a read-only token and no secrets, and merging
+#    must wait for CI anyway.
+#    https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-on-actions
+#    https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+# 2. RELEASE_TOKEN (the owner's PAT), not GITHUB_TOKEN, for every write: its
+#    approval satisfies the code-owner review rule, and merges or comments it
+#    makes trigger the downstream workflows (release-please) that a
+#    GITHUB_TOKEN merge would silently suppress.
+#    https://docs.github.com/en/actions/concepts/security/github_token
+# 3. Only the default branch is checked out and no pull-request code ever
+#    runs. Pull-request data reaches the shell through `env:` only, never
+#    through `${{ }}` inside `run:`.
+#    https://securitylab.github.com/resources/github-actions-preventing-pwn-requests/
+# 4. `@dependabot rebase` from a write-access user is the supported way to
+#    bring a Dependabot branch up to date; a GitHub "update branch" merge
+#    commit would make Dependabot stop maintaining the PR.
+#    https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-pull-requests-for-dependency-updates
+#    https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands
+#
+# Interplay with Dependabot Meta Render: meta-render may push a re-render
+# commit after PR Pipeline finishes. That push dismisses any approval given
+# here (stale-review dismissal), so nothing merges on a head that was not
+# decided on; PR Pipeline re-runs on the new head and this workflow decides
+# again. A commit that rotated install-script pins is never auto-merged — it
+# re-approves install-script execution and needs a human read. Meta-render
+# commits are unsigned, so each one is vetted by content, not by its author
+# or subject: one parent, only the rendered READMEs and (for a prune or
+# rotation) the `allowScripts` block of package.json changed, and a prune
+# only drops pins.
+#
+# The same push can land between this workflow's lookup and its merge call;
+# the merge step re-reads the head and defers to the newer run instead of
+# failing.
+#
+# Scope: only PRs opened by dependabot[bot]. Lockfile Sync never runs on
+# Dependabot PRs, and PRs from the manual Dependency Bump workflow
+# (dependency-bump.yml) stay a human merge.
+#
+# Fails closed: an unknown ecosystem, an unexpected or unvetted commit, a CI
+# run on the current head that did not pass, or a policy failure ends
+# unmerged with auto-merge disabled. A lookup error never approves or arms.
+# Once the run has confirmed it judges the current head of an open
+# dependabot[bot] pull request, a later lookup error also withdraws any
+# earlier arming. A failure before that point, or a cancelled run, touches
+# nothing: the run for the newest head, or a manual dispatch, decides.
+
+on:
+  # The decision point: CI on a Dependabot PR has finished.
+  workflow_run:
+    workflows: [PR Pipeline]
+    types: [completed]
+  # Manual re-decision for one PR, e.g. after a label was removed.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to (re)decide
+        required: true
+        type: string
+  # Main moved: approved PRs are now BEHIND and need a rebase nudge.
+  push:
+    branches: [main]
+  # Safety net for nudges lost to a race or a Dependabot outage.
+  schedule:
+    - cron: '41 */6 * * *'
+
+# Every write goes through RELEASE_TOKEN; GITHUB_TOKEN only reads.
+permissions: {}
+
+jobs:
+  automerge:
+    name: Decide auto-merge for a Dependabot PR
+    # Any finished pull-request CI run (or a manual dispatch). Only a success
+    # for the current head can arm; any other conclusion for the current head
+    # (failure, cancelled, timed out, ...) carries no passing verdict, so an
+    # earlier arming is withdrawn.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'pull_request')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    # One decision per pull request at a time; a queued run re-reads fresh
+    # state. A dispatch and a CI-triggered run share the PR-number key; the
+    # branch name is used only when the CI run lists no pull request.
+    concurrency:
+      group: >-
+        dependabot-auto-merge-${{ inputs.pr ||
+        github.event.workflow_run.pull_requests[0].number ||
+        github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    env:
+      HUSKY: 0
+    steps:
+      - name: Resolve the pull request and gather decision inputs
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          DISPATCH_PR: ${{ inputs.pr }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          # Two kinds of skip, both ending the decision:
+          # - leave_alone: the PR is not a Dependabot PR, or this run is stale
+          #   (the head moved past the commit CI tested). Auto-merge is not
+          #   touched: a human may have armed their own PR, and the run for
+          #   the newest head owns the decision.
+          # - distrust: a Dependabot PR whose current head cannot be vetted.
+          #   An arming from an earlier decision must not survive it.
+          leave_alone() {
+            echo "::notice::Skipping auto-merge: $1"
+            { echo 'skip=true'; echo 'disarm=false'; } >> "${GITHUB_OUTPUT}"
+            exit 0
+          }
+          distrust() {
+            echo "::notice::Skipping and disarming auto-merge: $1"
+            { echo 'skip=true'; echo 'disarm=true'; } >> "${GITHUB_OUTPUT}"
+            exit 0
+          }
+
+          if [ -n "${DISPATCH_PR}" ]; then
+            [[ "${DISPATCH_PR}" =~ ^[0-9]+$ ]] \
+              || leave_alone 'the dispatch input is not a pull request number.'
+            number="${DISPATCH_PR}"
+          else
+            number=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/commits/${RUN_HEAD_SHA}/pulls" \
+              --jq 'map(select(.state == "open")) | .[0].number // empty')
+          fi
+          [ -n "${number}" ] \
+            || leave_alone 'no open pull request found for this run.'
+
+          IFS=$'\t' read -r state author head_repo head_sha head_ref < <(
+            gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}" \
+              --jq '[.state, .user.login, .head.repo.full_name,
+                     .head.sha, .head.ref] | @tsv')
+
+          [ "${state}" = 'open' ] \
+            || leave_alone "pull request #${number} is ${state}."
+          [ "${author}" = 'dependabot[bot]' ] \
+            || leave_alone "pull request #${number} was opened by ${author}."
+          # A CI run for an older head says nothing about the current one; the
+          # run for the newest head makes the decision.
+          if [ -n "${RUN_HEAD_SHA}" ] && [ "${head_sha}" != "${RUN_HEAD_SHA}" ]; then
+            leave_alone "pull request #${number} moved past the head this CI run tested."
+          fi
+          # From here the run judges the current head of a Dependabot PR, so
+          # the number is published: a distrust verdict, or a lookup that
+          # fails from here on, withdraws any earlier arming (see the
+          # "Withdraw auto-merge when the inputs could not be gathered" step).
+          # Published no earlier, so a failed lookup can never disarm a
+          # human's own PR or a head this run does not own.
+          echo "number=${number}" >> "${GITHUB_OUTPUT}"
+          [ "${head_repo}" = "${GITHUB_REPOSITORY}" ] \
+            || distrust "head branch lives in ${head_repo}."
+          case "${head_ref}" in
+            dependabot/*/*) ;;
+            *) distrust "head branch ${head_ref} is not a Dependabot branch." ;;
+          esac
+          # dependabot/<ecosystem>/<path>: the policy rejects unknown values.
+          ecosystem=$(printf '%s' "${head_ref}" | cut -d/ -f2)
+
+          # Written to files rather than piped into `grep -q`: an early-exiting
+          # reader would SIGPIPE `gh`, and `pipefail` would turn that into a
+          # failed lookup.
+          gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}/commits?per_page=100" \
+            > "${RUNNER_TEMP}/commits.json"
+          count=$(jq 'length' "${RUNNER_TEMP}/commits.json")
+          # A vetted branch is Dependabot's commit plus at most a few
+          # meta-render commits (each Dependabot rebase starts over). A longer
+          # history is not a shape this policy knows.
+          [ "${count}" -le 20 ] \
+            || distrust "pull request #${number} has ${count} commits; at most 20 are vetted."
+
+          # A meta-render commit is unsigned, so its author login and subject
+          # prove nothing: anyone with push access can set both. It is held
+          # instead to what meta-render can produce — one parent, a known
+          # subject, and a diff confined to the rendered READMEs plus, for a
+          # pin rotation or prune, the `allowScripts` block of package.json
+          # with every other key unchanged. A prune may only drop pins, never
+          # add or flip one. Every check returns non-zero on failure (errexit
+          # does not apply inside a function called from a condition), and the
+          # caller distrusts: an API error withdraws arming, never grants it.
+          vet_meta_render() {
+            local sha="$1" parent="$2" parents="$3" subject="$4"
+            local mode file ref
+            [ "${parents}" = '1' ] || return 1
+            case "${subject}" in
+              'docs: re-render README meta markers [dependabot skip]')
+                mode=docs ;;
+              'chore: re-render meta and prune script pins [dependabot skip]')
+                mode=prune ;;
+              'chore: re-render meta and rotate script pins [dependabot skip]')
+                mode=rotate ;;
+              *) return 1 ;;
+            esac
+            # JSON-encoded names, so a crafted file name cannot pose as an
+            # allowed one; a rename's old path counts as touched.
+            gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}" \
+              --jq '.files[] | (.filename, (.previous_filename // empty))
+                    | @json' \
+              > "${RUNNER_TEMP}/files.txt" || return 1
+            while IFS= read -r file; do
+              case "${file}" in
+                '"README.md"' | '"README.docker-hub.md"') ;;
+                '"package.json"') [ "${mode}" != docs ] || return 1 ;;
+                *) return 1 ;;
+              esac
+            done < "${RUNNER_TEMP}/files.txt"
+            grep -qxF '"package.json"' "${RUNNER_TEMP}/files.txt" || return 0
+            for ref in "${sha}" "${parent}"; do
+              gh api -H 'Accept: application/vnd.github.raw+json' \
+                "repos/${GITHUB_REPOSITORY}/contents/package.json?ref=${ref}" \
+                > "${RUNNER_TEMP}/package-${ref}.json" || return 1
+            done
+            jq -e -n --arg mode "${mode}" \
+              --slurpfile after "${RUNNER_TEMP}/package-${sha}.json" \
+              --slurpfile before "${RUNNER_TEMP}/package-${parent}.json" \
+              '$after[0] as $a | $before[0] as $b
+               | ($a | del(.allowScripts)) == ($b | del(.allowScripts))
+                 and ($mode != "prune"
+                      or (($a.allowScripts | type) == "object"
+                          and ($b.allowScripts | type) == "object"
+                          and ($b.allowScripts as $was
+                               | $a.allowScripts | to_entries
+                               | all(.value == $was[.key]))))' \
+              > /dev/null || return 1
+          }
+
+          # An author login comes from the commit e-mail, which anyone with
+          # push access can set, so each author is held to what only that
+          # author produces:
+          # - dependabot[bot]: Dependabot commits through the GitHub API, so
+          #   each one must carry a valid signature from GitHub's web-flow key
+          #   and Dependabot's exact author e-mail. The first commit must be
+          #   one: it is the update itself. GitHub signs every commit made
+          #   through its web UI or API with that same key, so this proves the
+          #   commit was made by GitHub, not that Dependabot made it; anyone
+          #   with write access could still mint one. Write access remains the
+          #   trust boundary.
+          # - github-actions[bot]: the meta-render workflow, vetted above.
+          # Anything else means a human owns the merge, so any arming is
+          # withdrawn; the human arms or merges again after their CI run.
+          # No field may be empty: tab is IFS whitespace, so `read` would
+          # collapse an empty field and shift the rest. The subject stays last
+          # because @tsv escapes any tab inside it.
+          jq -r '.[] | [(.author.login // "unknown"),
+                        (.commit.verification.verified // false | tostring),
+                        .sha,
+                        (.parents[0].sha // "none"),
+                        (.parents | length | tostring),
+                        (.committer.login // "unknown"),
+                        (.commit.verification.reason // "unknown"),
+                        (.commit.author.email // "unknown"),
+                        (.commit.message | split("\n")[0])] | @tsv' \
+            "${RUNNER_TEMP}/commits.json" > "${RUNNER_TEMP}/authors.tsv"
+          first=true
+          dependabot_email='49699333+dependabot[bot]@users.noreply.github.com'
+          # Read on fd 3 so the API calls inside the loop cannot drain it.
+          while IFS=$'\t' read -r -u 3 login verified sha parent parents committer reason email subject; do
+            if [ "${first}" = true ] && [ "${login}" != 'dependabot[bot]' ]; then
+              distrust "pull request #${number} does not start with a Dependabot commit."
+            fi
+            first=false
+            case "${login}" in
+              'dependabot[bot]')
+                { [ "${verified}" = 'true' ] && [ "${reason}" = 'valid' ] \
+                    && [ "${committer}" = 'web-flow' ] \
+                    && [ "${email}" = "${dependabot_email}" ]; } \
+                  || distrust "pull request #${number} has a Dependabot commit ${sha} that GitHub did not sign as Dependabot's."
+                ;;
+              'github-actions[bot]')
+                vet_meta_render "${sha}" "${parent}" "${parents}" "${subject}" \
+                  || distrust "pull request #${number} has a github-actions[bot] commit ${sha} that is not a vetted meta render."
+                ;;
+              *) distrust "pull request #${number} has a commit by ${login}." ;;
+            esac
+          done 3< "${RUNNER_TEMP}/authors.tsv"
+
+          # The first Dependabot commit carries the `updated-dependencies`
+          # metadata the policy reads; later bot commits only re-render docs.
+          jq -r 'map(select(.author.login == "dependabot[bot]"))
+                 | .[0].commit.message // empty' \
+            "${RUNNER_TEMP}/commits.json" > "${RUNNER_TEMP}/message.txt"
+          [ -s "${RUNNER_TEMP}/message.txt" ] \
+            || distrust "pull request #${number} has no Dependabot commit message."
+
+          # A rotated install-script pin is approval nobody has given yet, so it
+          # always routes to a human. Two independent signals, either one wins:
+          # the meta-render review comment, or its rotation commit subject.
+          # Meta-render posts that comment with this same token, so only its
+          # owner's comments count: the marker is plain text anyone can paste.
+          repinned=false
+          me=$(gh api user --jq .login)
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/issues/${number}/comments" \
+            --jq ".[] | select(.user.login == \"${me}\") | .body" \
+            > "${RUNNER_TEMP}/comments.txt"
+          if grep -qF '<!-- allowscripts-rotation:' "${RUNNER_TEMP}/comments.txt"; then
+            repinned=true
+          fi
+          jq -r '.[].commit.message | split("\n")[0]' \
+            "${RUNNER_TEMP}/commits.json" > "${RUNNER_TEMP}/subjects.txt"
+          if grep -qF 'chore: re-render meta and rotate script pins' \
+            "${RUNNER_TEMP}/subjects.txt"; then
+            repinned=true
+          fi
+
+          {
+            echo 'skip=false'
+            echo 'disarm=false'
+            echo "head_sha=${head_sha}"
+            echo "ecosystem=${ecosystem}"
+            echo "repinned=${repinned}"
+          } >> "${GITHUB_OUTPUT}"
+
+      # Withdraws an earlier arming when the current head cannot be vetted
+      # (distrust) or its CI run ended without a pass (failure, cancelled,
+      # timed out, ...). A red PR should not sit armed: disarming keeps the
+      # rebase nudge below off it, and a green re-run comes back through here
+      # and re-arms it. Resolve has already left a stale run alone, and
+      # CI-triggered runs for one branch are serialised by the concurrency
+      # group, so this never undoes an arming made for a newer head.
+      - name: Disarm auto-merge when the head has no passing verdict
+        if: >-
+          steps.resolve.outputs.disarm == 'true' ||
+          (steps.resolve.outputs.skip == 'false' &&
+           github.event_name == 'workflow_run' &&
+           github.event.workflow_run.conclusion != 'success')
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+          CI_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          DISTRUSTED: ${{ steps.resolve.outputs.disarm }}
+        run: |
+          set -euo pipefail
+          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+            --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "${armed}" = 'true' ]; then
+            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
+          fi
+          if [ "${DISTRUSTED}" = 'true' ]; then
+            reason='the current head cannot be vetted'
+          else
+            reason="CI concluded ${CI_CONCLUSION}"
+          fi
+          echo "::notice::#${PR_NUMBER}: auto-merge is not armed (${reason})."
+          echo "- #${PR_NUMBER}: disarmed — ${reason}" >> "${GITHUB_STEP_SUMMARY}"
+
+      # Fail closed on a lookup error: once Resolve has published the number
+      # (the run owns the current head of a Dependabot PR), a Resolve step
+      # that then fails leaves that head unvetted, so any earlier arming is
+      # withdrawn. A failure before the number is published touches nothing:
+      # the run has not yet shown the PR is a Dependabot PR at the head it
+      # tested; the run for the newest head, or a manual dispatch, decides.
+      # Like the catch-all below, a cancelled run writes nothing.
+      - name: Withdraw auto-merge when the inputs could not be gathered
+        if: >-
+          !cancelled() &&
+          steps.resolve.outcome == 'failure' &&
+          steps.resolve.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+        run: |
+          set -euo pipefail
+          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+            --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "${armed}" = 'true' ]; then
+            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
+          fi
+          echo "::notice::#${PR_NUMBER}: decision inputs could not be gathered; any arming withdrawn."
+          echo "- #${PR_NUMBER}: inputs could not be gathered — any arming withdrawn" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+      # The policy runs from the default branch, never from the PR head: the
+      # code that decides whether to merge must not be editable by the change
+      # it is judging. Only a passing CI verdict (or a manual dispatch, whose
+      # merge the ruleset's required checks still gate) reaches a decision.
+      - name: Check out the trusted policy from the default branch
+        if: >-
+          steps.resolve.outputs.skip == 'false' &&
+          (github.event_name == 'workflow_dispatch' ||
+           github.event.workflow_run.conclusion == 'success')
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        if: >-
+          steps.resolve.outputs.skip == 'false' &&
+          (github.event_name == 'workflow_dispatch' ||
+           github.event.workflow_run.conclusion == 'success')
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # A non-zero exit fails the job before any write step, so a broken
+      # decision can never merge (fail closed).
+      - name: Decide
+        id: decide
+        if: >-
+          steps.resolve.outputs.skip == 'false' &&
+          (github.event_name == 'workflow_dispatch' ||
+           github.event.workflow_run.conclusion == 'success')
+        env:
+          ECOSYSTEM: ${{ steps.resolve.outputs.ecosystem }}
+          REPINNED: ${{ steps.resolve.outputs.repinned }}
+        run: |
+          set -euo pipefail
+          node scripts/check-dependabot-automerge.mjs \
+            --message-file "${RUNNER_TEMP}/message.txt" \
+            --repinned "${REPINNED}" \
+            --ecosystem "${ECOSYSTEM}"
+
+      # Approve, then arm auto-merge pinned to the exact head the policy
+      # judged; the ruleset's required checks still gate the merge itself.
+      # Re-arming first disarms, so a re-decision after a rebase moves the
+      # pinned head forward instead of keeping the stale one.
+      - name: Approve and enable auto-merge
+        if: steps.decide.outputs.action == 'merge'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          DECISION_REASON: ${{ steps.decide.outputs.reason }}
+        run: |
+          set -euo pipefail
+          # meta-render reacts to the same CI run and may push a commit after
+          # Resolve; the run for that newer head makes the decision instead.
+          head_moved() {
+            current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+              --jq .head.sha)
+            [ "${current}" != "${HEAD_SHA}" ]
+          }
+          if head_moved; then
+            echo "::notice::#${PR_NUMBER}: head moved past ${HEAD_SHA}; the newer run decides."
+            exit 0
+          fi
+          me=$(gh api user --jq .login)
+          # One approval per head: a re-run on the same head must not stack
+          # duplicate reviews.
+          gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+            > "${RUNNER_TEMP}/reviews.json"
+          approved=$(jq -s --arg me "${me}" --arg sha "${HEAD_SHA}" \
+            'add // [] | map(select(.user.login == $me
+               and .state == "APPROVED" and .commit_id == $sha)) | length' \
+            "${RUNNER_TEMP}/reviews.json")
+          if [ "${approved}" -eq 0 ]; then
+            gh api -X POST \
+              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+              -f event=APPROVE -f commit_id="${HEAD_SHA}" \
+              -f body='Approved by Dependabot Auto-Merge: the update is inside the unattended policy.' \
+              > /dev/null
+          fi
+          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+            --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "${armed}" = 'true' ]; then
+            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
+          fi
+          # --match-head-commit refuses to arm if the head moved in between; that
+          # race is benign, any other failure is real.
+          if ! gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+            --auto --squash --match-head-commit "${HEAD_SHA}"; then
+            if head_moved; then
+              echo "::notice::#${PR_NUMBER}: head moved while arming; the newer run decides."
+              exit 0
+            fi
+            exit 1
+          fi
+          echo "::notice::#${PR_NUMBER}: auto-merge enabled (${DECISION_REASON})."
+          echo "- #${PR_NUMBER}: auto-merge enabled — ${DECISION_REASON}" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+      # The policy judged the update and found it outside the unattended
+      # scope (a semver-major, or an update type this ecosystem does not
+      # merge alone): unarmed and labelled, so the PR sits in the
+      # maintainer's review queue.
+      - name: Label for manual review
+        if: steps.decide.outputs.action == 'label'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+          DECISION_REASON: ${{ steps.decide.outputs.reason }}
+        run: |
+          set -euo pipefail
+          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+            --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "${armed}" = 'true' ]; then
+            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
+          fi
+          gh label create needs-manual-review --repo "${GITHUB_REPOSITORY}" \
+            --force --color D93F0B \
+            --description 'Dependency update outside the auto-merge policy'
+          # The REST add-labels call is idempotent: re-labelling on a re-run
+          # is a no-op, not an error.
+          gh api -X POST \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+            -f 'labels[]=needs-manual-review' > /dev/null
+          echo "::notice::#${PR_NUMBER}: needs manual review (${DECISION_REASON})."
+          echo "- #${PR_NUMBER}: labelled needs-manual-review — ${DECISION_REASON}" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+      # Fail-closed catch-all: a "skip" verdict, or a Decide step that failed
+      # or never ran (checkout / setup-node error), disarms instead of leaving
+      # an earlier arming in place. The status function in the condition
+      # drops the implicit success() so this still runs after a failure.
+      - name: Skip and disarm
+        if: >-
+          !cancelled() &&
+          steps.resolve.outputs.skip == 'false' &&
+          (github.event_name == 'workflow_dispatch' ||
+           github.event.workflow_run.conclusion == 'success') &&
+          steps.decide.outputs.action != 'merge' &&
+          steps.decide.outputs.action != 'label'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+          DECISION_REASON: ${{ steps.decide.outputs.reason || 'policy decision unavailable' }}
+        run: |
+          set -euo pipefail
+          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+            --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "${armed}" = 'true' ]; then
+            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
+          fi
+          echo "::notice::#${PR_NUMBER}: not auto-merged (${DECISION_REASON})."
+          echo "- #${PR_NUMBER}: skipped — ${DECISION_REASON}" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+  rebase-behind:
+    name: Nudge one behind Dependabot PR to rebase
+    # A failed CI run means main did not move, so there is nothing to nudge.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    # Global and queued, never cancelled: concurrent triggers must not nudge
+    # two PRs at once, and a queued run re-reads fresh state.
+    concurrency:
+      group: dependabot-rebase-nudge
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      LC_ALL: C
+    steps:
+      - name: Ask Dependabot to rebase the oldest behind, armed PR
+        run: |
+          set -euo pipefail
+          base=$(gh repo view "${GITHUB_REPOSITORY}" \
+            --json defaultBranchRef --jq .defaultBranchRef.name)
+          me=$(gh api user --jq .login)
+          gh pr list --repo "${GITHUB_REPOSITORY}" --state open \
+            --author app/dependabot --base "${base}" --limit 100 \
+            --json number,headRefOid,autoMergeRequest \
+            > "${RUNNER_TEMP}/candidates.json"
+          # Only PRs this workflow armed: unarmed ones wait for a human, and
+          # rebasing them would only burn CI minutes.
+          jq -r 'map(select(.autoMergeRequest != null)) | sort_by(.number)
+                 | .[] | "\(.number)\t\(.headRefOid)"' \
+            "${RUNNER_TEMP}/candidates.json" > "${RUNNER_TEMP}/armed.tsv"
+          while IFS=$'\t' read -r number sha <&3; do
+            behind=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${base}...${sha}" \
+              --jq '.behind_by // empty')
+            if ! [[ "${behind}" =~ ^[0-9]+$ ]]; then
+              echo "::warning::#${number}: could not compare ${sha} with ${base}; skipped."
+              continue
+            fi
+            if [ "${behind}" -eq 0 ]; then
+              continue
+            fi
+            head_date=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}" \
+              --jq .commit.committer.date)
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/issues/${number}/comments" \
+              > "${RUNNER_TEMP}/comments.json"
+            # Nudges made since the current head was committed. Both sides are
+            # GitHub's ISO-8601 UTC strings, so string order is time order.
+            jq -rs --arg me "${me}" --arg head "${head_date}" \
+              'add // [] | map(select(.user.login == $me
+                 and (.body | startswith("@dependabot rebase"))
+                 and .created_at > $head))
+               | "\(length)\t\(map(.created_at) | max // "")"' \
+              "${RUNNER_TEMP}/comments.json" > "${RUNNER_TEMP}/nudges.tsv"
+            IFS=$'\t' read -r nudges last_nudge < "${RUNNER_TEMP}/nudges.tsv"
+            if [ "${nudges}" -gt 0 ]; then
+              age=$(( $(date -u +%s) - $(date -u -d "${last_nudge}" +%s) ))
+              if [ "${age}" -lt 7200 ]; then
+                echo "::notice::#${number}: rebase already requested at ${last_nudge}; waiting."
+                exit 0
+              fi
+              # One retry covers a nudge lost to a Dependabot outage. Past that
+              # the branch is stuck (Dependabot ignores rebase requests on a
+              # branch carrying a foreign commit without "[dependabot skip]"),
+              # so warn and let the rest of the queue move.
+              if [ "${nudges}" -ge 2 ]; then
+                echo "::warning::#${number}: ${nudges} rebase requests since ${head_date} went unanswered; it needs a manual rebase."
+                continue
+              fi
+            fi
+            gh pr comment "${number}" --repo "${GITHUB_REPOSITORY}" \
+              --body '@dependabot rebase'
+            echo "::notice::#${number}: ${behind} commit(s) behind ${base}; asked Dependabot to rebase."
+            # One nudge per run: each merge moves main again, so rebasing the
+            # whole queue at once would waste every CI run but the first.
+            exit 0
+          done 3< "${RUNNER_TEMP}/armed.tsv"
+          echo "::notice::No armed Dependabot PR is behind ${base}."
