@@ -1,10 +1,14 @@
 version: 2
-# Dependabot grouped weekly updates — dev tooling is batched into one PR
-# so the bounded open-pull-requests-limit is never exhausted by low-risk
-# churn. Production packages remain individually reviewable, except for
-# the retained pino group below, which is the single deliberate
-# exception. Dependabot owns ALL npm dependencies, including the
-# critical @actual-app/api and @sergienko4/israeli-bank-scrapers packages.
+# Dependabot grouped updates (npm daily; docker and actions weekly) — dev
+# tooling is batched into one PR so the bounded open-pull-requests-limit is
+# never exhausted by low-risk churn. Production packages remain
+# individually reviewable, except for the retained pino groups below,
+# which are the single deliberate exception. Every group that can be
+# merged unattended carries only minor/patch updates; majors land in a
+# separate `*-major` group (or, for ungrouped production packages, their
+# own PR) so the auto-merge policy never has to hold a safe bump behind
+# a breaking one. Dependabot owns ALL npm dependencies, including the critical
+# @actual-app/api and @sergienko4/israeli-bank-scrapers packages.
 # The previous daily dependency-check.yml workflow was retired: its
 # `npm update` step could not cross major versions and crashed on the
 # scraper's patch-package postinstall (added in 8.6.0), so scraper updates
@@ -117,16 +121,41 @@ updates:
       # as @sergienko4/israeli-bank-scrapers: its 8.6.1 release was never
       # proposed because no slot was free. Collapsing every devDependency
       # into a single PR keeps slots reserved for production packages.
+      #
+      # Majors are split into their own group because the auto-merge policy
+      # (scripts/dependabot-automerge-logic.mjs) refuses a whole PR when ANY
+      # entry is a major. Without the split, one breaking bump would park
+      # every safe minor/patch dev update behind a manual review. Majors stay
+      # grouped (not one PR each) so unreviewed majors cannot refill the PR
+      # slots and starve runtime packages again. Cost: one broken major holds
+      # the rest of that PR; drop it with `@dependabot ignore <dep> major
+      # version` and Dependabot regenerates the group without it.
       dev-dependencies:
         dependency-type: development
+        update-types: ["minor", "patch"]
+      dev-dependencies-major:
+        dependency-type: development
+        update-types: ["major"]
       # The one grouped production entry: pino and pino-pretty are both
       # runtime dependencies, and pino-pretty consumes pino's log format,
       # so they are bumped together to stop the logger and its transport
       # drifting apart. Every OTHER production package stays ungrouped so
-      # it remains individually reviewable and revertible.
+      # it remains individually reviewable and revertible; its majors
+      # arrive as one PR per package and are labelled for manual review.
+      #
+      # The pino pair follows the same major split as the dev group: the
+      # minor/patch group stays auto-mergeable, while a major moves both
+      # packages together in `pino-major` for manual review. Both groups
+      # sit after the dev groups (first-wins) and only match production
+      # entries in practice, since no dev dependency is named pino*.
       pino:
         patterns:
           - "pino*"
+        update-types: ["minor", "patch"]
+      pino-major:
+        patterns:
+          - "pino*"
+        update-types: ["major"]
 
   # ── Docker (Dockerfile base image) ──────────────────────
   - package-ecosystem: docker
@@ -142,6 +171,9 @@ updates:
     # the same reason production npm dependencies do.
     commit-message:
       prefix: "fix(docker)"
+    # No groups: the Dockerfile has a single base image, so every Docker
+    # PR already carries exactly one update. The auto-merge policy merges
+    # a digest or patch tag change and labels a minor or major one.
 
   # ── GitHub Actions ──────────────────────────────────────
   - package-ecosystem: github-actions
@@ -158,18 +190,33 @@ updates:
     # unparseable `chore(ci)(deps):` double scope (see ce02193).
     commit-message:
       prefix: "chore(ci)"
+    # Same major split as the npm dev group: the four owner groups carry
+    # only minor/patch so they stay auto-mergeable, and every action major lands
+    # in the `actions-major` catch-all for manual review. Groups are matched
+    # first-wins, so the catch-all MUST stay last.
     groups:
       actions-core:
         patterns:
           - "actions/*"
+        update-types: ["minor", "patch"]
       docker-actions:
         patterns:
           - "docker/*"
+        update-types: ["minor", "patch"]
+      # Dependabot names an action `owner/repo` with no sub-path, so the
+      # init/analyze steps are both the single dependency below; a
+      # `github/codeql-action/*` pattern would never match it.
       codeql:
         patterns:
-          - "github/codeql-action/*"
+          - "github/codeql-action"
+        update-types: ["minor", "patch"]
       security-actions:
         patterns:
           - "aquasecurity/*"
           - "anchore/*"
           - "SonarSource/*"
+        update-types: ["minor", "patch"]
+      actions-major:
+        patterns:
+          - "*"
+        update-types: ["major"]
