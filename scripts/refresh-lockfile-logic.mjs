@@ -340,18 +340,37 @@ function resolvedCopy(index, consumerPath, name) {
 }
 
 /**
+ * Lists the earlier copies of a package on the same breaking line as
+ * `version`. A version that does not parse has no line and matches none,
+ * so the caller falls back to every copy rather than guessing.
+ */
+function sameLineCopies(copies, version) {
+  const line = breakingKey(version);
+  if (line === undefined) return [];
+  return [...copies]
+    .filter(([prior]) => breakingKey(prior) === line)
+    .flatMap(([, paths]) => paths);
+}
+
+/**
  * Lists the paths a consumer occupied before the refresh.
  *
  * A path present on both sides is the consumer itself. Otherwise npm moved
  * the consumer — hoisted it or nested it anew — so its earlier copies are
- * matched by package name: the same version first, any version after that.
- * A package absent before the refresh has no earlier copy and yields none.
+ * matched by package name: the same version first, then the same major
+ * line, any version after that. A different major line is a different
+ * release whose dependencies say nothing about this one, so it is consulted
+ * only when nothing closer exists. A package absent before the refresh has
+ * no earlier copy and yields none.
  */
 function priorConsumers(before, consumer, afterEntry) {
   if (before.entries.has(consumer)) return [consumer];
   const copies = before.byName.get(packageNameFromPath(consumer));
   if (copies === undefined) return [];
-  return copies.get(afterEntry.version) ?? [...copies.values()].flat();
+  const same = copies.get(afterEntry.version);
+  if (same !== undefined) return same;
+  const line = sameLineCopies(copies, afterEntry.version);
+  return line.length > 0 ? line : [...copies.values()].flat();
 }
 
 /**
@@ -371,16 +390,21 @@ function priorVersions(before, priors, name) {
 
 /**
  * Describes a consumer's copy of `name` when it crossed a breaking boundary
- * against every version earlier copies of that consumer loaded. As with the
- * by-name check, a major an earlier copy already loaded is not new.
+ * against any version an earlier copy of that consumer loaded.
+ *
+ * A moved consumer can have several earlier copies that loaded different
+ * majors, and nothing in the lockfile says which one npm kept. The check
+ * fails closed: one earlier copy the new copy breaks from is enough, and the
+ * change reports that copy's version.
  */
 function consumerChange(before, after, request) {
   const target = resolvedCopy(after, request.consumer, request.name);
-  const froms = priorVersions(before, request.priors, request.name);
-  if (target === undefined || froms.length === 0) return undefined;
+  if (target === undefined) return undefined;
   const to = target.version;
-  const breaking = froms.every((from) => from !== to && crossesBreakingBoundary({ from, to }));
-  return breaking ? { path: target.path, from: froms[0], to } : undefined;
+  const from = priorVersions(before, request.priors, request.name).find(
+    (prior) => prior !== to && crossesBreakingBoundary({ from: prior, to }),
+  );
+  return from === undefined ? undefined : { path: target.path, from, to };
 }
 
 /** Lists majors that a consumer present before the refresh now loads. */
@@ -452,7 +476,10 @@ function relocatedMajors(before, after) {
  * copy of a package crosses a boundary is listed even when that version
  * already sat elsewhere in the tree, because the dependant itself now loads
  * a new major. A dependant npm moved is compared through its earlier copies,
- * matched by name, and only for a package it declared on both sides. The
+ * matched by name — preferring the same version, then the same major line —
+ * and only for a package it declared on both sides; when those copies loaded
+ * different majors, breaking from any one of them is enough, because the
+ * lockfile cannot say which copy npm kept. The
  * dependant's copy is found the way node finds it — through every ancestor
  * folder, so a nested workspace reaches its parent's copies — and an npm
  * `link` is followed to the folder it points at, so a workspace or `file:`

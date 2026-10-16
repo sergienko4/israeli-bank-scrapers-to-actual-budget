@@ -634,6 +634,94 @@ describe('findMajorBumps', () => {
     expect(findMajorBumps(before, after)).toEqual([]);
   });
 
+  // Two earlier copies of y at one version loaded different majors of x, so
+  // the copy npm kept cannot be told apart. Any earlier copy that the new
+  // copy breaks from is enough to withhold auto-merge.
+  const splitPriors = {
+    '': { name: 'root' },
+    'node_modules/a': { version: '1.0.0' },
+    'node_modules/b': { version: '1.0.0' },
+    'node_modules/c': { version: '1.0.0' },
+  };
+  const yNeedsX = { version: '1.0.0', dependencies: { x: '*' } };
+  const beforeSplit = lockfile({
+    ...splitPriors,
+    'node_modules/a/node_modules/y': yNeedsX,
+    'node_modules/a/node_modules/y/node_modules/x': { version: '1.0.0' },
+    'node_modules/b/node_modules/y': yNeedsX,
+    'node_modules/b/node_modules/y/node_modules/x': { version: '2.0.0' },
+  });
+
+  it('flags a moved dependant when any earlier copy loaded an older major', () => {
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/c/node_modules/y': yNeedsX,
+      'node_modules/c/node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(beforeSplit, after)).toEqual([
+      { path: 'node_modules/c/node_modules/y/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('flags a hoisted dependant when any earlier copy loaded an older major', () => {
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/y': yNeedsX,
+      'node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(beforeSplit, after)).toEqual([
+      { path: 'node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a moved dependant when every earlier copy shares its major', () => {
+    const before = lockfile({
+      ...splitPriors,
+      'node_modules/a/node_modules/y': yNeedsX,
+      'node_modules/a/node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/b/node_modules/y': yNeedsX,
+      'node_modules/b/node_modules/y/node_modules/x': { version: '2.1.0' },
+    });
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/c/node_modules/y': yNeedsX,
+      'node_modules/c/node_modules/y/node_modules/x': { version: '2.3.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  // y 1.x loaded x 1.0.0 and y 3.x loaded x 2.0.0. A moved y at a new 3.x
+  // version is compared with the 3.x copy only: the 1.x copy is a different
+  // release line whose dependencies say nothing about this one.
+  const yLines = lockfile({
+    ...splitPriors,
+    'node_modules/a/node_modules/y': yNeedsX,
+    'node_modules/a/node_modules/y/node_modules/x': { version: '1.0.0' },
+    'node_modules/b/node_modules/y': { ...yNeedsX, version: '3.0.0' },
+    'node_modules/b/node_modules/y/node_modules/x': { version: '2.0.0' },
+  });
+
+  it('compares a moved dependant only with earlier copies on its major line', () => {
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/c/node_modules/y': { ...yNeedsX, version: '3.1.0' },
+      'node_modules/c/node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(yLines, after)).toEqual([]);
+  });
+
+  it('compares a moved dependant with every earlier copy when none shares its line', () => {
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/c/node_modules/y': { ...yNeedsX, version: '5.0.0' },
+      'node_modules/c/node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(yLines, after)).toEqual([
+      { path: 'node_modules/c/node_modules/y', from: '1.0.0', to: '5.0.0' },
+      { path: 'node_modules/c/node_modules/y/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
   it('does not compare a dependency the refresh newly declared', () => {
     // z did not require x before, so the hoisted x 1.0.0 it could have
     // reached was never its copy and there is nothing to break from.
