@@ -11,9 +11,13 @@
  *     --message-file <path> --repinned <true|false> --ecosystem <name>
  *
  * `--message-file` holds the first Dependabot-authored commit message.
- * Any failure — an unreadable file, a missing flag, an unexpected error —
- * still emits a `skip` verdict and exits non-zero, so the workflow never
- * merges on a broken decision.
+ * Any failure — an unreadable file, a missing flag, an unwritable
+ * `GITHUB_OUTPUT`, an unexpected error — still prints a `skip` verdict and
+ * exits non-zero, so the workflow never merges on a broken decision.
+ *
+ * The step outputs are written before the verdict is printed. When that
+ * write fails, stdout therefore never carries a `merge` verdict the
+ * workflow did not actually record.
  */
 
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -46,16 +50,65 @@ function parseRepinned(value) {
   return undefined;
 }
 
+/** The verdict recorded whenever the decision cannot be trusted. */
+const FAIL_CLOSED_VERDICT = Object.freeze({
+  action: AUTO_MERGE_ACTIONS.skip,
+  reason: 'decision step failed; failing closed',
+  entries: [],
+});
+
 /**
- * Writes a verdict to stdout and, inside Actions, to the step outputs.
+ * Appends a verdict to the Actions step outputs when running inside Actions.
+ *
+ * @param {{ action: string, reason: string }} verdict The verdict to record.
+ * @returns {void}
+ * @throws {Error} When the `GITHUB_OUTPUT` file cannot be written.
+ */
+function writeStepOutputs(verdict) {
+  const outputFile = process.env.GITHUB_OUTPUT;
+  if (outputFile) appendFileSync(outputFile, toGithubOutput(verdict));
+}
+
+/**
+ * Records a verdict in the step outputs first, then prints it to stdout.
  *
  * @param {{ action: string, reason: string }} verdict The verdict to emit.
  * @returns {void}
+ * @throws {Error} When the step outputs cannot be written.
  */
 function emit(verdict) {
+  writeStepOutputs(verdict);
   console.log(JSON.stringify(verdict, null, 2));
-  const outputFile = process.env.GITHUB_OUTPUT;
-  if (outputFile) appendFileSync(outputFile, toGithubOutput(verdict));
+}
+
+/**
+ * Reports a failed decision, records a `skip` verdict and exits non-zero.
+ *
+ * A second write failure is logged rather than thrown, so the step always
+ * ends with the `skip` verdict on stdout and exit code 1.
+ *
+ * @param {unknown} error The error that broke the decision.
+ * @returns {never} Never returns; the process exits.
+ */
+function failClosed(error) {
+  console.error(`❌ Dependabot auto-merge decision failed: ${errorText(error)}`);
+  try {
+    writeStepOutputs(FAIL_CLOSED_VERDICT);
+  } catch (writeError) {
+    console.error(`❌ Unable to write step outputs: ${errorText(writeError)}`);
+  }
+  console.log(JSON.stringify(FAIL_CLOSED_VERDICT, null, 2));
+  process.exit(1);
+}
+
+/**
+ * Renders any thrown value as a one-line message.
+ *
+ * @param {unknown} error The thrown value.
+ * @returns {string} The error message, or the value as a string.
+ */
+function errorText(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
@@ -77,7 +130,5 @@ try {
   emit(run());
   process.exit(0);
 } catch (error) {
-  console.error(`❌ Dependabot auto-merge decision failed: ${error.message}`);
-  emit({ action: AUTO_MERGE_ACTIONS.skip, reason: 'decision step failed; failing closed', entries: [] });
-  process.exit(1);
+  failClosed(error);
 }
