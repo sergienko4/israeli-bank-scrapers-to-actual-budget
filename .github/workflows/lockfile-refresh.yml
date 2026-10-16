@@ -39,7 +39,10 @@ name: Lockfile refresh
 # still gates it — auto-merge only removes the click, never a gate. Two cases
 # stay with a human: a refresh that crosses a major (labelled, never armed)
 # and one whose CI fails. Either stays open until next week's run supersedes
-# it.
+# it. A refresh whose branch moves after it was opened joins them, best
+# effort: lockfile-refresh-guard.yml withdraws auto-merge and labels it,
+# but reacts after the push. The preventive control is the "Restrict
+# updates" ruleset in docs/architecture/ci-pipeline.md.
 
 on:
   schedule:
@@ -275,6 +278,9 @@ jobs:
           # the exact commit this run produced: if anything else reached the
           # branch first, arming fails loudly instead of adopting it. The retry
           # covers GitHub still computing the new pull request's merge state.
+          # The check holds only at arming time. A later push to the branch
+          # is blocked by the "Restrict updates" ruleset, and
+          # lockfile-refresh-guard.yml disarms it best effort after the fact.
           head_sha="$(git rev-parse HEAD)"
           armed=false
           for attempt in 1 2 3; do

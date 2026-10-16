@@ -107,7 +107,14 @@ tools that kept producing image alerts.
    - It arms squash auto-merge on the exact commit it pushed. A refresh
      that moved any pin across a major is labelled `needs-manual-review`
      instead, matching the Dependabot policy. A missing or non-numeric
-     majors count stops the run before anything is pushed.
+     majors count stops the run before anything is pushed. Arming pins only
+     the commit it saw. A later push to the branch is blocked by a "Restrict
+     updates" ruleset on `chore/lockfile-refresh-*`, a manual repository
+     setting described in
+     [Lockfile refresh guard](../architecture/ci-pipeline.md#lockfile-refresh-guard).
+     As best-effort defence in depth, `lockfile-refresh-guard.yml` withdraws
+     auto-merge and applies the same label after any push that gets
+     through. It reacts after the push, so a merge can win the race.
 
 5. **`.github/dependabot.yml`** splits majors out of every group. The
    development-dependency group, the pino group and each GitHub Actions group
@@ -280,3 +287,9 @@ record the result here.
    every Dependabot pull request is skipped and the check needs revisiting.
 10. A refresh that crosses a major opens labelled `needs-manual-review` and
     is not armed.
+11. A push to an open refresh branch fires `lockfile-refresh-guard.yml`,
+    which tries to withdraw auto-merge and labels the PR
+    `needs-manual-review`. If it cannot confirm auto-merge is off, the run
+    fails red. The refresh run's own push, made before the pull request
+    opens, does not fire it. With the "Restrict updates" ruleset in place,
+    no push can move the branch at all; the ruleset has no bypass.

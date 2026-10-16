@@ -48,7 +48,10 @@ policy file at all. The advisory could only be cleared by moving the pin.
 > It runs a non-fatal `npm audit fix --package-lock-only --ignore-scripts`
 > after the transitive refresh, and arms squash auto-merge on the commit it
 > pushed, unless a pin crossed a major, which is labelled
-> `needs-manual-review` instead.
+> `needs-manual-review` instead. Arming pins only the commit it saw, so a
+> "Restrict updates" ruleset on refresh branches blocks later pushes, and a
+> companion workflow, `lockfile-refresh-guard.yml`, withdraws auto-merge and
+> applies the same label, best effort, when a push gets through anyway.
 > Dependabot now scans npm daily; Docker and GitHub Actions stay on Monday.
 > The statements below about the duplicate check, the Monday Dependabot
 > batch and the review burden describe the original decision. So does the

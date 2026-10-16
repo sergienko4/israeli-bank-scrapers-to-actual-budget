@@ -29,6 +29,7 @@ graph TD
     DMR[dependabot-meta-render.yml<br/>after PR Pipeline]
     DAM[dependabot-auto-merge.yml<br/>after PR Pipeline + push/cron]
     LFS[lockfile-sync.yml<br/>PR edits manifest]
+    LFG[lockfile-refresh-guard.yml<br/>refresh PR push]
   end
 
   subgraph Reusable["Reusable workflows"]
@@ -49,6 +50,7 @@ graph TD
   E2ES --> E2E
   LFR -.opens PR.-> PR
   LFS -.uploads lockfile artifact.-> PR
+  LFG -.disarms refresh PR.-> PR
   PR -.uses.-> SETUP
   PR -.uses.-> BUILD
   PR -.uses.-> TRIVY
@@ -337,7 +339,7 @@ mappings.
 | Secret                  | Used by                                  |
 |-------------------------|------------------------------------------|
 | `GITHUB_TOKEN` (built-in) | many                                   |
-| `RELEASE_TOKEN`         | release.yml, release-please.yml, dependabot-meta-render.yml, dependabot-auto-merge.yml, lockfile-refresh.yml |
+| `RELEASE_TOKEN`         | release.yml, release-please.yml, dependabot-meta-render.yml, dependabot-auto-merge.yml, lockfile-refresh.yml, lockfile-refresh-guard.yml |
 | `SONAR_TOKEN`           | `pr.yml` → sonar job                     |
 | `SONAR_ORG`             | `pr.yml` → sonar job                     |
 | `SONAR_PROJECT_KEY`     | `pr.yml` → sonar job                     |
@@ -414,8 +416,9 @@ opens a PR when anything moved:
   The close runs last, so a failed run never leaves the week without a
   refresh, and a stuck PR never blocks the next week.
 - **Auto-merge is armed** with `RELEASE_TOKEN` and `--match-head-commit`, so
-  the PR squash-merges once every required check passes, and never lands a
-  head other than the one this run pushed.
+  the PR squash-merges once every required check passes. The match holds only
+  at arming time; a later push is handled by the
+  [lockfile refresh guard](#lockfile-refresh-guard).
 - **A refresh that crosses a major is not armed.** A loose range (`*`,
   `>=1.0.0`) lets `npm update` or `npm audit fix` move a transitive pin
   across a major while staying inside it. The summary compares main's
@@ -448,6 +451,40 @@ re-fetching the tarball. Rationale and rejected alternatives:
 [ADR-0001](../decisions/ADR-0001-scheduled-lockfile-refresh.md). The
 auto-merge decision is recorded in
 [ADR-0002](../decisions/ADR-0002-dependency-auto-merge.md).
+
+## Lockfile refresh guard
+
+`lockfile-refresh.yml` arms auto-merge with `--match-head-commit`, but that
+check runs once, at arming time. A refresh needs no approving review, so a
+commit pushed to the branch afterwards would merge unseen once the required
+checks pass. Two controls cover that window.
+
+**Preventive — repository ruleset (manual setting).** Create a branch ruleset
+under Settings → Rules → Rulesets:
+
+| Field | Value |
+|---|---|
+| Enforcement | Active |
+| Target branches | Include by pattern `chore/lockfile-refresh-*` |
+| Bypass list | None |
+| Rules | Restrict updates only |
+
+No bypass is needed. Each run pushes a new `chore/lockfile-refresh-<run_id>`
+branch, and creating a branch falls under "Restrict creations", which stays
+off. Every later push is rejected, including an admin's and the GitHub
+"Update branch" button. A refresh that falls behind `main` is not updated;
+the next run regenerates it from `main` and closes the stale one. Leave
+"Restrict deletions" unchecked: it is on by default and would stop the merged
+or superseded branch from being deleted. Disabling auto-merge is not a push,
+so the ruleset never blocks the guard below. See
+[Restrict updates](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#restrict-updates).
+
+**Best effort — `lockfile-refresh-guard.yml`.** Any push to an open refresh
+branch withdraws auto-merge and labels the PR `needs-manual-review`. It runs
+on `pull_request_target`, checks out nothing and runs no PR code. It reacts
+after the push, so a merge can win the race when the checks finish first or
+Actions is down. It re-reads the state and retries the disable three times;
+if disarming cannot be confirmed, it still labels the PR and fails red.
 
 ## Git hooks
 

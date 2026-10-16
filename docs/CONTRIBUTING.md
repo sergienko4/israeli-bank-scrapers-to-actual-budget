@@ -214,7 +214,11 @@ The push re-runs the check, which then passes.
 Fixes that already fit inside existing ranges arrive on their own:
 the Thursday `lockfile-refresh.yml` run applies `npm audit fix` and merges
 itself once CI is green. If that fix moves a pin across a major, the pull
-request is labelled `needs-manual-review` and waits for you instead.
+request is labelled `needs-manual-review` and waits for you instead. Do not
+push to a refresh branch: the "Restrict updates" ruleset described in the
+[lockfile refresh guard][ci-refresh-guard] blocks it, and if a push gets
+through anyway, a guard labels the pull request and tries to withdraw
+auto-merge (best effort).
 
 Pull requests opened by `dependency-bump.yml`, described next, are never
 merged automatically — they carry your identity, not Dependabot's. The full
@@ -222,6 +226,7 @@ policy is in the [CI pipeline reference][ci-automerge] and
 [ADR-0002][adr-0002].
 
 [ci-automerge]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#dependabot-auto-merge
+[ci-refresh-guard]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#lockfile-refresh-guard
 [adr-0002]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md
 
 ### Bumping a package on demand
