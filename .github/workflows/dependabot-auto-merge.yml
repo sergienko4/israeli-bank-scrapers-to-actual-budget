@@ -50,7 +50,8 @@ name: Dependabot Auto-Merge
 #
 # The same push can land between this workflow's lookup and its merge call;
 # the merge step re-reads the head and defers to the newer run instead of
-# failing.
+# failing. A re-read that errors is not taken as a move: the step fails and
+# any arming is withdrawn.
 #
 # Scope: only PRs opened by dependabot[bot]. Lockfile Sync never runs on
 # Dependabot PRs, and PRs from the manual Dependency Bump workflow
@@ -63,6 +64,8 @@ name: Dependabot Auto-Merge
 # dependabot[bot] pull request, a later lookup error also withdraws any
 # earlier arming. A failure before that point, or a cancelled run, touches
 # nothing: the run for the newest head, or a manual dispatch, decides.
+# Every disarm re-reads the state and retries; one it cannot confirm ends
+# the run red.
 
 on:
   # The decision point: CI on a Dependabot PR has finished.
@@ -114,6 +117,37 @@ jobs:
     env:
       HUSKY: 0
     steps:
+      # One disarm routine for every write step below. A single API blip must
+      # not leave an earlier arming in place: the state is re-read and the
+      # disable retried, and an answer that is neither true nor false counts
+      # as still armed. Still unconfirmed after three tries, it returns
+      # non-zero so the calling step ends red (fail closed).
+      - name: Write the disarm helper
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/disarm.sh" <<'HELPER'
+          disarm() {
+            local i armed
+            for i in 1 2 3; do
+              if armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+                --json autoMergeRequest --jq '.autoMergeRequest != null'); then
+                case "${armed}" in
+                  false) return 0 ;;
+                  true)
+                    if gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
+                      --disable-auto; then
+                      return 0
+                    fi
+                    ;;
+                esac
+              fi
+              sleep $((i * 5))
+            done
+            echo "::error::#${PR_NUMBER}: could not confirm auto-merge is disarmed."
+            return 1
+          }
+          HELPER
+
       - name: Resolve the pull request and gather decision inputs
         id: resolve
         env:
@@ -345,6 +379,7 @@ jobs:
       # CI-triggered runs for one branch are serialised by the concurrency
       # group, so this never undoes an arming made for a newer head.
       - name: Disarm auto-merge when the head has no passing verdict
+        id: nopass
         if: >-
           steps.resolve.outputs.disarm == 'true' ||
           (steps.resolve.outputs.skip == 'false' &&
@@ -357,11 +392,8 @@ jobs:
           DISTRUSTED: ${{ steps.resolve.outputs.disarm }}
         run: |
           set -euo pipefail
-          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
-            --json autoMergeRequest --jq '.autoMergeRequest != null')
-          if [ "${armed}" = 'true' ]; then
-            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
-          fi
+          source "${RUNNER_TEMP}/disarm.sh"
+          disarm
           if [ "${DISTRUSTED}" = 'true' ]; then
             reason='the current head cannot be vetted'
           else
@@ -378,6 +410,7 @@ jobs:
       # tested; the run for the newest head, or a manual dispatch, decides.
       # Like the catch-all below, a cancelled run writes nothing.
       - name: Withdraw auto-merge when the inputs could not be gathered
+        id: gather
         if: >-
           !cancelled() &&
           steps.resolve.outcome == 'failure' &&
@@ -387,11 +420,8 @@ jobs:
           PR_NUMBER: ${{ steps.resolve.outputs.number }}
         run: |
           set -euo pipefail
-          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
-            --json autoMergeRequest --jq '.autoMergeRequest != null')
-          if [ "${armed}" = 'true' ]; then
-            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
-          fi
+          source "${RUNNER_TEMP}/disarm.sh"
+          disarm
           echo "::notice::#${PR_NUMBER}: decision inputs could not be gathered; any arming withdrawn."
           echo "- #${PR_NUMBER}: inputs could not be gathered — any arming withdrawn" \
             >> "${GITHUB_STEP_SUMMARY}"
@@ -442,6 +472,7 @@ jobs:
       # Re-arming first disarms, so a re-decision after a rebase moves the
       # pinned head forward instead of keeping the stale one.
       - name: Approve and enable auto-merge
+        id: arm
         if: steps.decide.outputs.action == 'merge'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
@@ -452,9 +483,21 @@ jobs:
           set -euo pipefail
           # meta-render reacts to the same CI run and may push a commit after
           # Resolve; the run for that newer head makes the decision instead.
+          # A failed or malformed lookup is not proof the head moved: it ends
+          # the step red (exit inside the function leaves the script even
+          # from an if condition), and the withdraw step at the end of the
+          # job removes any arming.
           head_moved() {
-            current=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
-              --jq .head.sha)
+            local current
+            if ! current=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha); then
+              echo "::error::#${PR_NUMBER}: could not read the current head."
+              exit 1
+            fi
+            if [[ ! "${current}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::#${PR_NUMBER}: the current head is not a commit SHA."
+              exit 1
+            fi
             [ "${current}" != "${HEAD_SHA}" ]
           }
           if head_moved; then
@@ -478,11 +521,8 @@ jobs:
               -f body='Approved by Dependabot Auto-Merge: the update is inside the unattended policy.' \
               > /dev/null
           fi
-          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
-            --json autoMergeRequest --jq '.autoMergeRequest != null')
-          if [ "${armed}" = 'true' ]; then
-            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
-          fi
+          source "${RUNNER_TEMP}/disarm.sh"
+          disarm
           # --match-head-commit refuses to arm if the head moved in between; that
           # race is benign, any other failure is real.
           if ! gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
@@ -502,6 +542,7 @@ jobs:
       # merge alone): unarmed and labelled, so the PR sits in the
       # maintainer's review queue.
       - name: Label for manual review
+        id: label
         if: steps.decide.outputs.action == 'label'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
@@ -509,11 +550,8 @@ jobs:
           DECISION_REASON: ${{ steps.decide.outputs.reason }}
         run: |
           set -euo pipefail
-          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
-            --json autoMergeRequest --jq '.autoMergeRequest != null')
-          if [ "${armed}" = 'true' ]; then
-            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
-          fi
+          source "${RUNNER_TEMP}/disarm.sh"
+          disarm
           gh label create needs-manual-review --repo "${GITHUB_REPOSITORY}" \
             --force --color D93F0B \
             --description 'Dependency update outside the auto-merge policy'
@@ -531,6 +569,7 @@ jobs:
       # an earlier arming in place. The status function in the condition
       # drops the implicit success() so this still runs after a failure.
       - name: Skip and disarm
+        id: skip
         if: >-
           !cancelled() &&
           steps.resolve.outputs.skip == 'false' &&
@@ -544,13 +583,38 @@ jobs:
           DECISION_REASON: ${{ steps.decide.outputs.reason || 'policy decision unavailable' }}
         run: |
           set -euo pipefail
-          armed=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" \
-            --json autoMergeRequest --jq '.autoMergeRequest != null')
-          if [ "${armed}" = 'true' ]; then
-            gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --disable-auto
-          fi
+          source "${RUNNER_TEMP}/disarm.sh"
+          disarm
           echo "::notice::#${PR_NUMBER}: not auto-merged (${DECISION_REASON})."
           echo "- #${PR_NUMBER}: skipped — ${DECISION_REASON}" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+      # Fail closed when a write step fails: arming can fail (a lookup or
+      # API error) before it reaches its own disarm, and the disarm inside
+      # any other write step can stay unconfirmed, either way leaving an
+      # earlier arming in place. Any arming is withdrawn here (one more
+      # round of retries) and the job stays red. An approval left behind
+      # merges nothing on its own. Runs for one PR are serialised by the
+      # concurrency group, so this never undoes an arming made by a newer
+      # run. Like the catch-all above, a cancelled run writes nothing.
+      - name: Withdraw auto-merge when a write step failed
+        if: >-
+          !cancelled() &&
+          steps.resolve.outputs.number != '' &&
+          (steps.nopass.outcome == 'failure' ||
+           steps.gather.outcome == 'failure' ||
+           steps.arm.outcome == 'failure' ||
+           steps.label.outcome == 'failure' ||
+           steps.skip.outcome == 'failure')
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+        run: |
+          set -euo pipefail
+          source "${RUNNER_TEMP}/disarm.sh"
+          disarm
+          echo "::notice::#${PR_NUMBER}: a write step failed; any arming withdrawn."
+          echo "- #${PR_NUMBER}: a write step failed — any arming withdrawn" \
             >> "${GITHUB_STEP_SUMMARY}"
 
   rebase-behind:
