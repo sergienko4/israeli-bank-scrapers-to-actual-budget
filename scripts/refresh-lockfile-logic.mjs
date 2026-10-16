@@ -230,6 +230,94 @@ export function summarizeRefresh(beforeText, afterText) {
   return { runtimeChanges, devChanges, commitType, title, hasChanges };
 }
 
+const SEMVER_CORE = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/;
+
+/**
+ * Returns the semver component whose change signals a breaking release:
+ * major for `>=1`, minor for `0.x`, patch for `0.0.x`. Returns `undefined`
+ * for a version this module cannot parse.
+ */
+function breakingKey(version) {
+  const match = SEMVER_CORE.exec(version ?? '');
+  if (match === null) return undefined;
+  const [, major, minor, patch] = match;
+  if (major !== '0') return `${major}`;
+  if (minor !== '0') return `0.${minor}`;
+  return `0.0.${patch}`;
+}
+
+/** Whether moving between two pinned versions crosses a breaking boundary. */
+function crossesBreakingBoundary(change) {
+  const fromKey = breakingKey(change.from);
+  const toKey = breakingKey(change.to);
+  if (fromKey === undefined || toKey === undefined) return true;
+  return fromKey !== toKey;
+}
+
+/** Indexes every non-root lockfile entry's version by its path. */
+function pathVersions(lockText) {
+  const named = packageEntries(lockText).filter(([path]) => path !== '');
+  return new Map(named.map(([path, entry]) => [path, entry.version]));
+}
+
+/** Groups the paths in a path→version index by package name and version. */
+function versionsByName(paths) {
+  const byName = new Map();
+  for (const [path, version] of paths) {
+    const name = packageNameFromPath(path);
+    const versions = byName.get(name) ?? new Map();
+    versions.set(version, [...(versions.get(version) ?? []), path]);
+    byName.set(name, versions);
+  }
+  return byName;
+}
+
+/** Lists majors that appear at a path the package did not occupy before. */
+function relocatedMajors(before, after) {
+  const beforeByName = versionsByName(before);
+  const changes = [];
+  for (const [name, afterVersions] of versionsByName(after)) {
+    const known = beforeByName.get(name);
+    if (known === undefined) continue;
+    const priors = [...known.keys()];
+    for (const [to, paths] of afterVersions) {
+      if (known.has(to)) continue;
+      if (!priors.every((from) => crossesBreakingBoundary({ from, to }))) continue;
+      changes.push(...paths.map((path) => ({ path, from: priors[0], to })));
+    }
+  }
+  return changes;
+}
+
+/**
+ * Lists every package whose installed version crossed a semver-breaking
+ * boundary, across runtime and development entries alike.
+ *
+ * `npm update` stays inside the ranges parents declare, but some declared
+ * ranges are open-ended — `sax: ">=0.6.0"` or `@types/deep-eql: "*"` — so a
+ * "within range" refresh can still land a new major. The refresh workflow
+ * withholds auto-merge whenever this list is non-empty. A version that does
+ * not parse counts as breaking: an unknown jump is never treated as safe.
+ *
+ * Two shapes are caught. A path present on both sides that re-pins across a
+ * boundary is the plain case. A version that npm installs at a new path — a
+ * hoisted copy kept while a nested one lands next to it, or a hoisted copy
+ * moved under its parent — is caught by name: a version the package never
+ * had before is listed when it is breaking relative to every version the
+ * package had. A brand-new package has nothing to break from and is not
+ * listed; neither is a removal.
+ */
+export function findMajorBumps(beforeText, afterText) {
+  const before = pathVersions(beforeText);
+  const after = pathVersions(afterText);
+  const repinned = diffVersions(before, after)
+    .filter((change) => before.has(change.path) && after.has(change.path))
+    .filter(crossesBreakingBoundary);
+  const listed = new Set(repinned.map((change) => change.path));
+  const relocated = relocatedMajors(before, after).filter((change) => !listed.has(change.path));
+  return [...repinned, ...relocated].sort((a, b) => a.path.localeCompare(b.path));
+}
+
 /** Describes one pin movement in a form a reviewer can scan without the diff. */
 function describeChange(change) {
   const name = packageNameFromPath(change.path);
@@ -259,6 +347,24 @@ const RELEASE_RATIONALE = {
 };
 
 /**
+ * Warns the reviewer that the refresh crossed a breaking boundary and why the
+ * workflow left it unarmed. Renders nothing when no major moved.
+ */
+function majorSection(majorBumps) {
+  if (majorBumps === undefined || majorBumps.length === 0) return [];
+  return [
+    `## Major-version jumps (${majorBumps.length})`,
+    '',
+    ...majorBumps.map(describeChange),
+    '',
+    'An open-ended range let these cross a semver-breaking boundary. Auto-merge',
+    'is withheld and the PR is labelled `needs-manual-review`: a maintainer',
+    'must confirm each jump before it merges.',
+    '',
+  ];
+}
+
+/**
  * Renders the pull-request body for an automated refresh.
  *
  * The body has to answer the reviewer's actual question — "what moved, and why
@@ -267,10 +373,12 @@ const RELEASE_RATIONALE = {
  */
 export function formatRefreshBody(summary) {
   return [
-    'Regenerated `package-lock.json` with `npm update --package-lock-only`, which',
-    're-resolves transitive dependencies inside the ranges their parents already',
-    'allow. `package.json` is untouched.',
+    'Regenerated `package-lock.json` with `npm update --package-lock-only`, then',
+    '`npm audit fix --package-lock-only` (never `--force`). Both re-resolve',
+    'transitive dependencies inside the ranges their parents already allow.',
+    '`package.json` is untouched.',
     '',
+    ...majorSection(summary.majorBumps),
     ...changeSection('Runtime pins', summary.runtimeChanges),
     ...changeSection('Development pins', summary.devChanges),
     RELEASE_RATIONALE[summary.commitType],

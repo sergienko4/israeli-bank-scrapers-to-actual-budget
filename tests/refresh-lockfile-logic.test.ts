@@ -5,6 +5,7 @@ import {
   CANONICAL_REGISTRY,
   canonicalizeRegistryUrls,
   findForeignRegistryEntries,
+  findMajorBumps,
   findWeakIntegrities,
   formatLockfileReport,
   formatRefreshBody,
@@ -366,6 +367,7 @@ describe('formatRefreshBody', () => {
     });
     const body = formatRefreshBody(summarizeRefresh(runtimeMove, after));
     expect(body).toContain('npm update --package-lock-only');
+    expect(body).toContain('npm audit fix --package-lock-only');
   });
 
   it('reports a moved runtime pin by package name, not lockfile path', () => {
@@ -422,5 +424,126 @@ describe('formatRefreshBody', () => {
     const body = formatRefreshBody(summarizeRefresh(runtimeMove, after));
     expect(body).toContain('Development pins (1)');
     expect(body).not.toContain('Runtime pins');
+  });
+
+  it('flags major-version jumps and says auto-merge is withheld', () => {
+    const after = lockfile({
+      'node_modules/browserslist': { version: '5.0.0' },
+      'node_modules/vitest': { version: '3.0.0', dev: true },
+    });
+    const majorBumps = findMajorBumps(runtimeMove, after);
+    const body = formatRefreshBody({ ...summarizeRefresh(runtimeMove, after), majorBumps });
+    expect(body).toContain('Major-version jumps (1)');
+    expect(body).toContain('`browserslist` 4.28.2 → 5.0.0');
+    expect(body).toContain('needs-manual-review');
+  });
+
+  it('omits the major-version section when no major moved', () => {
+    const after = lockfile({
+      'node_modules/browserslist': { version: '4.28.8' },
+      'node_modules/vitest': { version: '3.0.0', dev: true },
+    });
+    const summary = summarizeRefresh(runtimeMove, after);
+    expect(formatRefreshBody({ ...summary, majorBumps: [] })).not.toContain('Major-version');
+    expect(formatRefreshBody(summary)).not.toContain('Major-version');
+  });
+});
+
+describe('findMajorBumps', () => {
+  /** Builds a one-package lockfile pinned at the given version. */
+  function pinned(version: string | undefined, extra: Record<string, unknown> = {}): string {
+    return lockfile({ '': { name: 'root' }, 'node_modules/pkg': { version, ...extra } });
+  }
+
+  it('flags a major jump on a stable package', () => {
+    // An open-ended range such as `sax: ">=0.6.0"` lets `npm update` do this.
+    expect(findMajorBumps(pinned('1.4.0'), pinned('2.0.0'))).toEqual([
+      { path: 'node_modules/pkg', from: '1.4.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a minor or patch move inside the same major', () => {
+    expect(findMajorBumps(pinned('1.4.0'), pinned('1.9.3'))).toEqual([]);
+  });
+
+  it('treats a 0.x minor move as breaking', () => {
+    expect(findMajorBumps(pinned('0.6.0'), pinned('0.7.0'))).toHaveLength(1);
+  });
+
+  it('does not flag a 0.x patch move', () => {
+    expect(findMajorBumps(pinned('0.6.0'), pinned('0.6.4'))).toEqual([]);
+  });
+
+  it('treats a 0.0.x patch move as breaking', () => {
+    expect(findMajorBumps(pinned('0.0.3'), pinned('0.0.4'))).toHaveLength(1);
+  });
+
+  it('compares prerelease versions by their numeric core', () => {
+    expect(findMajorBumps(pinned('2.0.0-rc.1'), pinned('2.0.1'))).toEqual([]);
+    expect(findMajorBumps(pinned('1.9.0'), pinned('2.0.0-beta.1'))).toHaveLength(1);
+  });
+
+  it('treats an unparseable version as breaking rather than safe', () => {
+    expect(findMajorBumps(pinned('1.0.0'), pinned('latest'))).toHaveLength(1);
+    expect(findMajorBumps(pinned('1.0.0'), pinned(undefined))).toHaveLength(1);
+  });
+
+  it('covers development entries as well as runtime ones', () => {
+    expect(findMajorBumps(pinned('1.0.0', { dev: true }), pinned('2.0.0', { dev: true }))).toHaveLength(1);
+  });
+
+  it('ignores packages that were only added or removed', () => {
+    const empty = lockfile({ '': { name: 'root' } });
+    expect(findMajorBumps(empty, pinned('3.0.0'))).toEqual([]);
+    expect(findMajorBumps(pinned('3.0.0'), empty)).toEqual([]);
+  });
+
+  it('flags a new major that npm installs at a new nested path', () => {
+    // npm keeps the hoisted copy and nests the new major under its parent,
+    // so no single path re-pins — the jump only shows up by package name.
+    const before = lockfile({ '': { name: 'root' }, 'node_modules/x': { version: '1.0.0' } });
+    const after = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'node_modules/y/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a nested copy that stays inside the same major', () => {
+    const before = lockfile({ '': { name: 'root' }, 'node_modules/x': { version: '1.0.0' } });
+    const after = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '1.5.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('does not flag a relocated major the package already had', () => {
+    const before = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    const after = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/z/node_modules/x': { version: '2.1.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('reports nothing for an unchanged lockfile', () => {
+    expect(findMajorBumps(pinned('1.0.0'), pinned('1.0.0'))).toEqual([]);
+  });
+
+  it('ignores the root entry', () => {
+    const before = lockfile({ '': { name: 'root', version: '1.0.0' } });
+    const after = lockfile({ '': { name: 'root', version: '2.0.0' } });
+    expect(findMajorBumps(before, after)).toEqual([]);
   });
 });

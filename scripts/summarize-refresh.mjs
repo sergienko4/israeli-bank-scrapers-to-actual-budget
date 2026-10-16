@@ -2,9 +2,10 @@
 /**
  * Reports what a lockfile refresh changed, for the refresh workflow to act on.
  *
- * `.github/workflows/lockfile-refresh.yml` needs three answers before it can
+ * `.github/workflows/lockfile-refresh.yml` needs four answers before it can
  * commit a regenerated lockfile: whether anything moved, which Conventional
- * Commit type the change demands, and what to tell the reviewer. Deriving them
+ * Commit type the change demands, which pins crossed a major version (and so
+ * must not auto-merge), and what to tell the reviewer. Deriving them
  * here rather than in workflow YAML keeps the rule unit-tested — see
  * tests/refresh-lockfile-logic.test.ts — instead of encoded in shell that
  * nothing exercises until the night it runs.
@@ -12,14 +13,15 @@
  * Usage:
  *   node scripts/summarize-refresh.mjs <before-lockfile> <after-lockfile>
  *
- * Prints one JSON object to stdout: { hasChanges, commitType, title, body }.
+ * Prints one JSON object to stdout:
+ *   { hasChanges, commitType, title, majorBumps, body }.
  * JSON rather than GitHub's `name=value` format, so the script stays useful —
  * and runnable by hand — outside Actions.
  */
 
 import { readFileSync } from 'node:fs';
 
-import { formatRefreshBody, summarizeRefresh } from './refresh-lockfile-logic.mjs';
+import { findMajorBumps, formatRefreshBody, summarizeRefresh } from './refresh-lockfile-logic.mjs';
 
 /**
  * Reads one lockfile, refusing to summarise a file it could not read.
@@ -44,13 +46,17 @@ function readLockfile(path) {
 }
 
 const [beforePath, afterPath] = process.argv.slice(2);
-const summary = summarizeRefresh(readLockfile(beforePath), readLockfile(afterPath));
+const beforeText = readLockfile(beforePath);
+const afterText = readLockfile(afterPath);
+const summary = summarizeRefresh(beforeText, afterText);
+const majorBumps = findMajorBumps(beforeText, afterText);
 
 process.stdout.write(
   `${JSON.stringify({
     hasChanges: summary.hasChanges,
     commitType: summary.commitType,
     title: summary.title,
-    body: formatRefreshBody(summary),
+    majorBumps,
+    body: formatRefreshBody({ ...summary, majorBumps }),
   })}\n`,
 );
