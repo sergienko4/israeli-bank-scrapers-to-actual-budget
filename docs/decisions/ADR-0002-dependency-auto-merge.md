@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-16
 - **Deciders:** Repository maintainer
-- **Amends:** [ADR-0001](ADR-0001-scheduled-lockfile-refresh.md)
+- **Amends:** [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md)
 
 ## Context
 
@@ -33,7 +33,7 @@ carried an `eslint-plugin-unicorn` 77 → 78 major next to a set of minor
 updates. Anything that judged the group by its name — "dev minor and patch" —
 would have merged a breaking change.
 
-The weekly lockfile refresh ([ADR-0001](ADR-0001-scheduled-lockfile-refresh.md))
+The weekly lockfile refresh ([ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md))
 had a timing problem too. The ruleset requires a branch to be strictly up to
 date with `main`. A refresh that waited a few days for review fell behind,
 could no longer merge, and was then kept open — blocking the next week's
@@ -112,7 +112,7 @@ tools that kept producing image alerts.
      only the commit it saw. A later push to the branch is blocked by a
      "Restrict updates" ruleset on `chore/lockfile-refresh-*`, a manual
      repository setting described in
-     [Lockfile refresh guard](../architecture/ci-pipeline.md#lockfile-refresh-guard).
+     [Lockfile refresh guard](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#lockfile-refresh-guard).
      The run arms only after the API shows that ruleset active with no
      bypass actor; otherwise a refresh that would arm is labelled
      `needs-manual-review` and the run fails red, so a missing setting is

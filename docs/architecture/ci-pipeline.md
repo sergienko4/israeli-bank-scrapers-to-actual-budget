@@ -136,7 +136,7 @@ that file, which a manifest-only comparison cannot see. The step lives inside
 an already-required job deliberately — a new top-level job would need a
 branch-protection ruleset change to be enforced. Policy:
 `scripts/release-signal-logic.mjs`; see
-[release-pipeline.md](release-pipeline.md).
+[release-pipeline.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/release-pipeline.md).
 
 ## Central config: `.github/config/ci-config.yml`
 
@@ -319,7 +319,7 @@ ownership of the branch.
 
 Scope is `dependabot[bot]` PRs only. A `dependency-bump.yml` PR is still a
 human merge. Rationale and rejected alternatives:
-[ADR-0002](../decisions/ADR-0002-dependency-auto-merge.md).
+[ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md).
 
 ## Pinning policy
 
@@ -475,9 +475,9 @@ integrity — both symptoms of a proxy or mirror rewriting the lockfile.
 `npm run refresh-lockfile` repairs foreign hosts in place; integrity
 downgrades fail closed, since a weakened hash cannot be strengthened without
 re-fetching the tarball. Rationale and rejected alternatives:
-[ADR-0001](../decisions/ADR-0001-scheduled-lockfile-refresh.md). The
+[ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md). The
 auto-merge decision is recorded in
-[ADR-0002](../decisions/ADR-0002-dependency-auto-merge.md).
+[ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md).
 
 ## Lockfile refresh guard
 

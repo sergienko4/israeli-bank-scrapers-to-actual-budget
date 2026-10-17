@@ -41,7 +41,7 @@ policy file at all. The advisory could only be cleared by moving the pin.
 > `GHSA-vwc7-r8mq-g2x9` in `adm-zip`, which had no patched release to move to
 > until 0.6.1.
 >
-> **Amended 2026-10-16.** [ADR-0002](ADR-0002-dependency-auto-merge.md)
+> **Amended 2026-10-16.** [ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md)
 > changes how the refresh lands, not what it does. The workflow now closes
 > older open refresh pull requests instead of skipping when one exists — but
 > only once its own replacement is open or `main` already carries every pin.
