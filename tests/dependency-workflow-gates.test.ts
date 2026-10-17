@@ -799,6 +799,7 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
     ],
     ['its comments cannot be read', `repos/${REPO}/issues/${first.number}/comments`, undefined],
     ['its comments are not a list', `repos/${REPO}/issues/${first.number}/comments`, { message: 'Bad gateway' }],
+    ['a page of its comments is not a list', `repos/${REPO}/issues/${first.number}/comments`, { fakePages: [[], null] }],
     [
       'an earlier rebase request carries no readable date',
       `repos/${REPO}/issues/${first.number}/comments`,
@@ -818,6 +819,60 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
 
     expect(run.status).toBe(0);
     expect(nudged(run)).toEqual(['12']);
+  });
+});
+
+describe.skipIf(!CAN_RUN)('Dependabot auto-merge approval', () => {
+  const step = stepOf(AUTOMERGE, 'automerge', 'arm');
+  const reviews = `repos/${REPO}/pulls/42/reviews`;
+
+  /**
+   * Runs the arm step for pull request 42 at HEAD_SHA, with its reviews paged.
+   * @param pages - The reviews on each page.
+   * @returns The step run.
+   */
+  function arm(pages: readonly unknown[]): IStepRun {
+    mkdirSync(join(work, 'runner-temp'), { recursive: true });
+    writeFileSync(join(work, 'runner-temp', 'disarm.sh'), 'disarm() { :; }\n');
+    const gh = {
+      user: { login: 'owner' },
+      [`repos/${REPO}/pulls/42`]: { head: { sha: HEAD_SHA } },
+      [reviews]: { fakePages: pages },
+    };
+    const env = { PR_NUMBER: '42', HEAD_SHA, DECISION_REASON: 'patch', GITHUB_STEP_SUMMARY: join(work, 'summary') };
+    return runStep(step, { env, gh });
+  }
+
+  /**
+   * Counts the approvals a run posted.
+   * @param run - The step run.
+   * @returns How many approvals it posted.
+   */
+  function approvals(run: IStepRun): number {
+    return run.ghCalls.filter((call) => call.startsWith(`api -X POST ${reviews}`)).length;
+  }
+
+  it.each([
+    ['approves a head it has not approved', [[]], 1],
+    [
+      'finds its approval of the head on a later page',
+      [[{ user: { login: 'other' } }], [{ user: { login: 'owner' }, state: 'APPROVED', commit_id: HEAD_SHA }]],
+      0,
+    ],
+  ])('%s, then arms auto-merge', (_case, pages, posted) => {
+    const run = arm(pages);
+
+    expect(run.status).toBe(0);
+    expect(approvals(run)).toBe(posted);
+    expect(run.ghCalls.filter((call) => call.startsWith('pr merge 42 '))).toHaveLength(1);
+  });
+
+  it('stops before approving when a page of reviews is not a list', () => {
+    const run = arm([[], null]);
+
+    expect(run.status).not.toBe(0);
+    expect(approvals(run)).toBe(0);
+    expect(run.ghCalls.filter((call) => call.startsWith('pr merge '))).toEqual([]);
   });
 });
 

@@ -582,14 +582,19 @@ jobs:
           fi
           me=$(gh api user --jq .login)
           # One approval per head: a re-run on the same head must not stack
-          # duplicate reviews.
+          # duplicate reviews. A page that is not a list of reviews ends the
+          # step red instead of counting as no approval.
           gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
             > "${RUNNER_TEMP}/reviews.json"
-          approved=$(jq -s --arg me "${me}" --arg sha "${HEAD_SHA}" \
-            'add // [] | map(select(.user.login == $me
+          if ! approved=$(jq -s --arg me "${me}" --arg sha "${HEAD_SHA}" \
+            'if all(.[]; type == "array") then add // [] else error("a page is not a list") end
+             | map(select(.user.login == $me
                and .state == "APPROVED" and .commit_id == $sha)) | length' \
-            "${RUNNER_TEMP}/reviews.json")
+            "${RUNNER_TEMP}/reviews.json"); then
+            echo "::error::#${PR_NUMBER}: could not read its reviews."
+            exit 1
+          fi
           if [ "${approved}" -eq 0 ]; then
             gh api -X POST \
               "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
@@ -765,7 +770,7 @@ jobs:
             # succeeds, its line always holds a count, a time and an age.
             if ! jq -rs --arg me "${me}" --arg head "${head_date}" \
               '($head | fromdateiso8601) as $since
-               | add // []
+               | if all(.[]; type == "array") then add // [] else error("a page is not a list") end
                | map(select(.user.login == $me
                    and ((.body // "") | startswith("@dependabot rebase")))
                  | .created_at | fromdateiso8601 | select(. > $since))
