@@ -423,8 +423,9 @@ opens a PR when anything moved:
   `>=1.0.0`) lets `npm update` or `npm audit fix` move a transitive pin
   across a major while staying inside it. The summary compares main's
   lockfile with the refreshed one, including relocated packages; when it
-  counts a major, the PR is labelled `needs-manual-review` instead. A missing
-  or non-numeric count fails the run before anything is pushed.
+  counts a major, the PR is labelled `needs-manual-review` instead. A summary
+  without a title, a body or a `majorBumps` list, or a non-numeric count,
+  fails the run before anything is pushed.
 
 `lockfile-sync.yml` covers the opposite direction: a same-repository PR that
 edits `package.json` (an `overrides` floor, say) from a machine that cannot

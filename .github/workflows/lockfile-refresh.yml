@@ -173,18 +173,30 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         run: node scripts/refresh-lockfile.mjs --check
 
+      # The summary's shape is checked before any field is read. jq reads a
+      # missing or null `majorBumps` as `length` 0, so a refresh whose majors
+      # were never counted would be armed, and a missing title or body would
+      # surface as the literal text "null". The check is its own command:
+      # a jq failure inside `echo "$(...)"` would not trip errexit.
       - name: Summarise the refresh
         id: summary
         if: steps.diff.outputs.changed == 'true'
         run: |
           set -euo pipefail
+          summary="${RUNNER_TEMP}/summary.json"
           node scripts/summarize-refresh.mjs \
-            "${RUNNER_TEMP}/before.json" package-lock.json > "${RUNNER_TEMP}/summary.json"
+            "${RUNNER_TEMP}/before.json" package-lock.json > "${summary}"
+          if ! jq -e '(.title | type == "string" and length > 0)
+                and (.body | type == "string" and length > 0)
+                and (.majorBumps | type == "array")' "${summary}" > /dev/null; then
+            echo '::error::The refresh summary lacks a title, a body or a majorBumps list; refusing to open the pull request.'
+            exit 1
+          fi
           {
-            echo "title=$(jq -r .title "${RUNNER_TEMP}/summary.json")"
-            echo "majors=$(jq '.majorBumps | length' "${RUNNER_TEMP}/summary.json")"
+            echo "title=$(jq -r .title "${summary}")"
+            echo "majors=$(jq '.majorBumps | length' "${summary}")"
             echo 'body<<LOCKFILE_REFRESH_BODY'
-            jq -r .body "${RUNNER_TEMP}/summary.json"
+            jq -r .body "${summary}"
             echo 'LOCKFILE_REFRESH_BODY'
           } >> "$GITHUB_OUTPUT"
 
