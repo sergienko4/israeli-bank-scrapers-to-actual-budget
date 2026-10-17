@@ -297,7 +297,7 @@ npm run test:e2e:portal # real-browser portal E2E suite (Camoufox)
 npm run docs:serve      # http://127.0.0.1:8000 — MkDocs Material preview
 ```
 
-Local verification is split across two git hooks. **Pre-commit** runs 5 fast gates (type-check on `src/`, cached ESLint, Biome, config-structure, PII scan) — roughly 24s. **Pre-push** runs 9 whole-repo gates (`type-check:test`, `type-check:e2e`, audit, build, TypeDoc, uncached ESLint, markdownlint, circular-dep, coupling regression) — roughly 40s, once per push instead of once per commit. The heavier unit-test, Docker image build, Trivy, Semgrep, link-check, ESLint-canary, manifest, mocked + Telegram E2E, and CodeQL gates run in CI only. Plan PRs accordingly. The decoupling baseline is captured at `tests/coupling-baseline.json` and regenerated via `npm run coupling:report`; CI fails on any new file scoring >= 8 (see `scripts/coupling-scanner.cjs`).
+Local verification is split across two git hooks. **Pre-commit** runs 6 gates on what you are committing (incremental type-check on `src/`, ESLint and Biome on staged files, config-structure, allowScripts pins, PII scan) — roughly 9s with warm caches. **Pre-push** runs 6 whole-repo gates (`type-check:test`, TypeDoc validation, uncached ESLint, markdownlint, circular-dep, coupling regression) — roughly 45s, once per push instead of once per commit. The build, `npm audit`, unit-test, Docker image build, Trivy, Semgrep, link-check, ESLint-canary, manifest, mocked + Telegram E2E, and CodeQL gates run in CI only. Plan PRs accordingly. The decoupling baseline is captured at `tests/coupling-baseline.json` and regenerated via `npm run coupling:report`; CI fails on any new file scoring >= 8 (see `scripts/coupling-scanner.cjs`).
 
 </details>
 
