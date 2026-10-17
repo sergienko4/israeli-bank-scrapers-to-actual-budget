@@ -183,6 +183,34 @@ function jobsOf(file: string): Readonly<Record<string, IJob>> {
   return workflow.jobs;
 }
 
+/** Any read of the `secrets` context, by property or by index. */
+const SECRET_READ = /\bsecrets\s*[.[]/;
+
+/**
+ * Reports whether a step runs the npm pin, however its path is spelled.
+ * @param step - Workflow step.
+ * @returns Whether it uses the pin-npm action.
+ */
+function usesPinNpm(step: IStep): boolean {
+  return (step.uses ?? '').replace(/@.*$/, '').replace(/\/+$/, '').endsWith(PIN_NPM);
+}
+
+/**
+ * Lists every job that runs the npm pin, in every workflow file of a folder.
+ * @param dir - Folder of workflow files.
+ * @returns Each pinned job as `file:job`, with whether it reads a secret.
+ */
+function pinnedJobs(dir: string): { job: string; readsSecret: boolean }[] {
+  return readdirSync(dir)
+    .filter((name) => /\.ya?ml$/.test(name))
+    .flatMap((name) => {
+      const workflow = parse(readFileSync(join(dir, name), 'utf8')) as { env?: unknown; jobs: Record<string, IJob> };
+      return Object.entries(workflow.jobs)
+        .filter(([, job]) => (job.steps ?? []).some(usesPinNpm))
+        .map(([id, job]) => ({ job: `${name}:${id}`, readsSecret: SECRET_READ.test(JSON.stringify([workflow.env, job])) }));
+    });
+}
+
 /**
  * Finds a step by id.
  * @param file - Repository-relative workflow path.
@@ -821,31 +849,35 @@ describe.skipIf(!CAN_RUN)('npm pin for lockfile writers', () => {
 
   it('lockfile-sync pins npm before its first npm command', () => {
     const steps = jobsOf(SYNC).sync?.steps ?? [];
-    const pinAt = steps.findIndex((s) => s.uses === `./${PIN_NPM}`);
+    const pinAt = steps.findIndex(usesPinNpm);
 
     expect(pinAt).toBeGreaterThanOrEqual(0);
     expect(pinAt).toBeLessThan(steps.findIndex((s) => /^\s*npm\s/m.test(s.run ?? '')));
   });
 
   it('pins npm only in jobs that can read no secret', () => {
-    const workflows = readdirSync(join(ROOT, '.github/workflows')).filter((name) => name.endsWith('.yml'));
-    const pinned = workflows.flatMap((name) => {
-      const text = readFileSync(join(ROOT, '.github/workflows', name), 'utf8');
-      const workflow = parse(text) as { env?: unknown; jobs: Record<string, IJob> };
-      return Object.entries(workflow.jobs)
-        .filter(([, job]) => (job.steps ?? []).some((s) => s.uses === `./${PIN_NPM}`))
-        .map(([id, job]) => ({ job: `${name}:${id}`, secret: /\bsecrets\./.test(JSON.stringify([workflow.env, job])) }));
-    });
+    const pinned = pinnedJobs(join(ROOT, '.github/workflows'));
 
     expect(pinned.map(({ job }) => job)).toContain('lockfile-sync.yml:sync');
-    expect(pinned.filter(({ secret }) => secret)).toEqual([]);
+    expect(pinned.filter(({ readsSecret }) => readsSecret)).toEqual([]);
+  });
+
+  it.each([
+    ['a secret by property', 'a.yml', `./${PIN_NPM}`, '${{ secrets.TOKEN }}'],
+    ['a secret by index', 'b.yaml', `./${PIN_NPM}/`, "${{ secrets['TOKEN'] }}"],
+    ['a secret through a remote ref', 'c.yml', `${REPO}/${PIN_NPM}@main`, '${{ secrets.TOKEN }}'],
+  ])('notices a pinned job that reads %s', (_case, file, uses, secret) => {
+    const job = `    runs-on: ubuntu-latest\n    steps:\n      - uses: ${uses}\n      - run: echo\n        env:\n          T: ${JSON.stringify(secret)}\n`;
+    writeFileSync(join(work, file), `on: push\njobs:\n  j:\n${job}`);
+
+    expect(pinnedJobs(work)).toEqual([{ job: `${file}:j`, readsSecret: true }]);
   });
 
   it('installs no package in the job that later holds RELEASE_TOKEN', () => {
     const steps = jobsOf(REFRESH).refresh?.steps ?? [];
 
     expect(JSON.stringify(steps)).toContain('secrets.RELEASE_TOKEN');
-    expect(steps.filter((s) => s.uses === `./${PIN_NPM}`)).toEqual([]);
+    expect(steps.filter(usesPinNpm)).toEqual([]);
     expect(steps.filter((s) => /\b(npm (install|i|ci|exec)|npx)\b/.test(s.run ?? ''))).toEqual([]);
   });
 
@@ -854,6 +886,6 @@ describe.skipIf(!CAN_RUN)('npm pin for lockfile writers', () => {
     const refuseAt = steps.findIndex((s) => s.name === 'Refuse a branch-supplied npm config');
 
     expect(refuseAt).toBeGreaterThanOrEqual(0);
-    expect(refuseAt).toBeLessThan(steps.findIndex((s) => s.uses === `./${PIN_NPM}`));
+    expect(refuseAt).toBeLessThan(steps.findIndex(usesPinNpm));
   });
 });
