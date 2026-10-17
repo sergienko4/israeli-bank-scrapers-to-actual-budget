@@ -83,9 +83,16 @@ function isForeignRegistryUrl(resolved) {
   return !resolved.startsWith(CANONICAL_REGISTRY);
 }
 
-/** Reports whether an integrity hash is weaker than npm's current default. */
-function isWeakIntegrity(integrity) {
-  return typeof integrity === 'string' && !STRONG_INTEGRITY_PATTERN.test(integrity);
+/**
+ * Reports whether an entry's integrity is weaker than npm's current default.
+ *
+ * A registry tarball recorded with no integrity at all is the weakest case:
+ * npm would install it unverified. Entries that resolve elsewhere (`file:`,
+ * `link:`, `git+`) or not at all (bundled packages) legitimately carry none.
+ */
+function isWeakIntegrity(entry) {
+  if (typeof entry.integrity === 'string') return !STRONG_INTEGRITY_PATTERN.test(entry.integrity);
+  return typeof entry.resolved === 'string' && HTTP_URL_PATTERN.test(entry.resolved);
 }
 
 /** Lists every package whose tarball resolves from outside public npm. */
@@ -95,11 +102,14 @@ export function findForeignRegistryEntries(lockText) {
     .map(([path, entry]) => ({ path, resolved: entry.resolved }));
 }
 
-/** Lists every package recorded with a downgraded integrity hash. */
+/**
+ * Lists every package recorded with a downgraded integrity hash, or a
+ * registry tarball with none. A missing hash is reported as `''`.
+ */
 export function findWeakIntegrities(lockText) {
   return packageEntries(lockText)
-    .filter(([, entry]) => isWeakIntegrity(entry.integrity))
-    .map(([path, entry]) => ({ path, integrity: entry.integrity }));
+    .filter(([, entry]) => isWeakIntegrity(entry))
+    .map(([path, entry]) => ({ path, integrity: typeof entry.integrity === 'string' ? entry.integrity : '' }));
 }
 
 /**
@@ -581,7 +591,7 @@ function remediesFor(audit) {
   }
   if (audit.weakIntegrities.length > 0) {
     remedies.push(
-      'Integrity downgrades are NOT repairable locally: a trustworthy hash requires a',
+      'Missing or downgraded integrity is NOT repairable locally: a trustworthy hash requires a',
       'trustworthy tarball, which a mirrored machine cannot obtain. Re-run the',
       '"Lockfile refresh" workflow, where npm resolves and verifies tarballs itself.',
     );
@@ -596,6 +606,6 @@ export function formatLockfileReport(audit) {
   }
   const lines = ['package-lock.json is NOT canonical.', ''];
   for (const e of audit.foreignRegistries) lines.push(`  foreign registry  ${e.path}  ->  ${e.resolved}`);
-  for (const e of audit.weakIntegrities) lines.push(`  weak integrity    ${e.path}  ->  ${e.integrity}`);
+  for (const e of audit.weakIntegrities) lines.push(`  weak integrity    ${e.path}  ->  ${e.integrity || '(missing)'}`);
   return [...lines, '', ...remediesFor(audit)].join('\n');
 }

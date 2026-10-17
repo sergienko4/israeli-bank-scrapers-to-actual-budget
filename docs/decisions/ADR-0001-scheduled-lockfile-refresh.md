@@ -83,10 +83,11 @@ canonical.
    `workflow_dispatch`), and opens a pull request when anything moved.
 
 2. **`npm run lint:lockfile`** (`scripts/refresh-lockfile.mjs --check`) runs
-   inside `validate:ci`, failing the build on a foreign registry host or a
-   `sha1` integrity. `npm run refresh-lockfile` repairs foreign hosts in place;
-   integrity downgrades **fail closed**, because a weakened hash cannot be
-   strengthened without re-fetching the tarball from the canonical registry.
+   inside `validate:ci`, failing the build on a foreign registry host, a
+   `sha1` integrity, or a registry tarball with no integrity.
+   `npm run refresh-lockfile` repairs foreign hosts in place; missing or
+   downgraded integrity **fails closed**, because a hash cannot be restored
+   without re-fetching the tarball from the canonical registry.
 
 3. **The commit type is derived from the lockfile**, not hard-coded.
    `summarizeRefresh()` marks the change `fix(deps)` when any non-`dev` entry

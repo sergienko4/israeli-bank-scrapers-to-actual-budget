@@ -10,7 +10,10 @@ export interface IForeignRegistryEntry {
   resolved: string;
 }
 
-/** A package recorded with an integrity hash weaker than npm's default. */
+/**
+ * A package recorded with an integrity hash weaker than npm's default, or a
+ * registry tarball recorded with none (`integrity` is then `''`).
+ */
 export interface IWeakIntegrityEntry {
   path: string;
   integrity: string;

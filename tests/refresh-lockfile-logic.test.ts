@@ -109,8 +109,24 @@ describe('findWeakIntegrities', () => {
     expect(findWeakIntegrities(text)).toEqual([]);
   });
 
-  it('ignores entries with no integrity field', () => {
-    expect(findWeakIntegrities(lockfile({ 'node_modules/x': { version: '1.0.0' } }))).toEqual([]);
+  it.each([
+    ['records no source', { version: '1.0.0' }],
+    ['links a workspace folder', { resolved: 'packages/x', link: true }],
+    ['comes from a local file', { resolved: 'file:../x-1.0.0.tgz' }],
+    ['comes from git', { resolved: 'git+ssh://git@github.com/o/x.git#abc' }],
+  ])('ignores a missing integrity on an entry that %s', (_case, entry) => {
+    expect(findWeakIntegrities(lockfile({ 'node_modules/x': entry }))).toEqual([]);
+  });
+
+  it.each([
+    ['the public registry', 'https://registry.npmjs.org/x/-/x-1.0.0.tgz'],
+    ['a plain-HTTP mirror', 'http://mirror.example/x/-/x-1.0.0.tgz'],
+  ])('flags a tarball from %s that carries no integrity', (_case, resolved) => {
+    const text = lockfile({ 'node_modules/x': { version: '1.0.0', resolved } });
+
+    expect(findWeakIntegrities(text)).toEqual([{ path: 'node_modules/x', integrity: '' }]);
+    expect(auditLockfile(text).ok).toBe(false);
+    expect(formatLockfileReport(auditLockfile(text))).toContain('node_modules/x  ->  (missing)');
   });
 });
 

@@ -469,10 +469,11 @@ and it skips Dependabot, release-please and refresh branches, which commit
 their own lockfile.
 
 A companion gate, `npm run lint:lockfile` (in `validate:ci`), fails the build
-on a `resolved` URL pointing anywhere but `registry.npmjs.org` or on a `sha1-`
-integrity — both symptoms of a proxy or mirror rewriting the lockfile.
-`npm run refresh-lockfile` repairs foreign hosts in place; integrity
-downgrades fail closed, since a weakened hash cannot be strengthened without
+on a `resolved` URL pointing anywhere but `registry.npmjs.org`, on a `sha1-`
+integrity, or on a registry tarball recorded with no integrity — each a
+symptom of a proxy, mirror or hand edit rewriting the lockfile.
+`npm run refresh-lockfile` repairs foreign hosts in place; missing or
+downgraded integrity fails closed, since a hash cannot be restored without
 re-fetching the tarball. Rationale and rejected alternatives:
 [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md). The
 auto-merge decision is recorded in
