@@ -38,13 +38,8 @@ export const CANONICAL_REGISTRY = 'https://registry.npmjs.org/';
  */
 const STRONG_INTEGRITY_PATTERN = /^sha(?:512|384)-/;
 
-/**
- * Matches the `resolved` values that describe an HTTP registry download.
- *
- * Case-insensitive because URL schemes are: npm installs `HTTPS://…` as a
- * remote tarball, so a case-sensitive test would let one skip both checks.
- */
-const HTTP_URL_PATTERN = /^https?:\/\//i;
+/** The URL schemes over which npm downloads a tarball. */
+const HTTP_PROTOCOLS = new Set(['http:', 'https:']);
 
 /** Reports whether a value is a JSON object rather than an array or scalar. */
 function isRecord(value) {
@@ -78,14 +73,26 @@ function packageEntries(lockText) {
 }
 
 /**
+ * Reports whether a `resolved` value is an HTTP(S) download as npm reads it.
+ *
+ * npm parses the value as a WHATWG URL, which ignores the scheme's case and
+ * accepts `https:host/x`, `https:/host/x` and backslashes. Parsing it the same
+ * way keeps every spelling npm downloads from skipping the checks below.
+ */
+function isHttpUrl(resolved) {
+  return typeof resolved === 'string' && URL.canParse(resolved) && HTTP_PROTOCOLS.has(new URL(resolved).protocol);
+}
+
+/**
  * Reports whether a `resolved` value points somewhere other than public npm.
  *
  * Only HTTP(S) downloads are judged. `file:`, `link:` and `git+` sources have
- * no registry to be wrong about, so flagging them would be noise.
+ * no registry to be wrong about, so flagging them would be noise. The host is
+ * judged on the raw text: any spelling but the canonical prefix is flagged,
+ * so a repair leaves exactly one form in the lockfile.
  */
 function isForeignRegistryUrl(resolved) {
-  if (typeof resolved !== 'string' || !HTTP_URL_PATTERN.test(resolved)) return false;
-  return !resolved.startsWith(CANONICAL_REGISTRY);
+  return isHttpUrl(resolved) && !resolved.startsWith(CANONICAL_REGISTRY);
 }
 
 /**
@@ -97,7 +104,7 @@ function isForeignRegistryUrl(resolved) {
  */
 function isWeakIntegrity(entry) {
   if (typeof entry.integrity === 'string') return !STRONG_INTEGRITY_PATTERN.test(entry.integrity);
-  return typeof entry.resolved === 'string' && HTTP_URL_PATTERN.test(entry.resolved);
+  return isHttpUrl(entry.resolved);
 }
 
 /** Lists every package whose tarball resolves from outside public npm. */
@@ -136,10 +143,11 @@ function packageNameFromPath(entryPath) {
  * The name is taken from the lockfile entry path rather than parsed out of
  * the mirror URL. Mirrors nest packages under arbitrary prefixes, and a
  * scoped name would be ambiguous to recover from the URL alone; the entry
- * path is unambiguous by construction.
+ * path is unambiguous by construction. The file name comes from the parsed
+ * URL, which drops any query and reads a backslash as a slash, as npm does.
  */
 function canonicalUrlFor(entryPath, resolved) {
-  const file = resolved.split('?')[0].split('/').pop();
+  const file = new URL(resolved).pathname.split('/').pop();
   return `${CANONICAL_REGISTRY}${packageNameFromPath(entryPath)}/-/${file}`;
 }
 
@@ -148,14 +156,17 @@ function canonicalUrlFor(entryPath, resolved) {
  *
  * The substitution runs over the raw text, not a re-serialised object, so
  * npm's exact formatting survives. Re-serialising would reformat the whole
- * file and bury the real change in tens of thousands of noise lines.
+ * file and bury the real change in tens of thousands of noise lines. Values
+ * are matched as JSON strings, so a URL that the file escapes (a backslash,
+ * say) is still found, and only whole values are replaced.
  */
 export function canonicalizeRegistryUrls(lockText) {
   let text = lockText;
   let replaced = 0;
   for (const { path, resolved } of findForeignRegistryEntries(lockText)) {
-    if (!text.includes(resolved)) continue;
-    text = text.split(resolved).join(canonicalUrlFor(path, resolved));
+    const quoted = JSON.stringify(resolved);
+    if (!text.includes(quoted)) continue;
+    text = text.split(quoted).join(JSON.stringify(canonicalUrlFor(path, resolved)));
     replaced += 1;
   }
   return { text, replaced };

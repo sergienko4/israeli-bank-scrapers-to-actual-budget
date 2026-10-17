@@ -67,12 +67,20 @@ describe('findForeignRegistryEntries', () => {
     expect(found).toHaveLength(1);
   });
 
-  it('flags an upper-case scheme, which npm still downloads', () => {
-    const resolved = 'HTTPS://evil.example/x/-/x-1.0.0.tgz';
+  it.each([
+    ['an upper-case scheme', 'HTTPS://evil.example/x/-/x-1.0.0.tgz'],
+    ['no slashes', 'https:evil.example/x/-/x-1.0.0.tgz'],
+    ['one slash', 'HTTPS:/evil.example/x/-/x-1.0.0.tgz'],
+    ['backslashes', 'https:\\evil.example\\x\\-\\x-1.0.0.tgz'],
+  ])('flags and repairs a URL spelled with %s, which npm still downloads', (_case, resolved) => {
     const text = lockfile({ 'node_modules/x': { version: '1.0.0', resolved } });
 
     expect(findForeignRegistryEntries(text)).toEqual([{ path: 'node_modules/x', resolved }]);
     expect(findWeakIntegrities(text)).toEqual([{ path: 'node_modules/x', integrity: '' }]);
+    expect(canonicalizeRegistryUrls(text)).toEqual({
+      text: lockfile({ 'node_modules/x': { version: '1.0.0', resolved: `${CANONICAL_REGISTRY}x/-/x-1.0.0.tgz` } }),
+      replaced: 1,
+    });
   });
 
   it('repairs an upper-case spelling of the public registry', () => {
