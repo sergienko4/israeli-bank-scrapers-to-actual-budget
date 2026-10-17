@@ -687,6 +687,42 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
     expect(nudged(run)).toEqual(['11']);
   });
 
+  /**
+   * Formats a time the given number of hours ago as GitHub does.
+   * @param hours - Hours before now.
+   * @returns The ISO-8601 UTC timestamp, without milliseconds.
+   */
+  function hoursAgo(hours: number): string {
+    return new Date(Date.now() - hours * 3_600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  }
+
+  /**
+   * Fixtures for both pull requests behind main, the first already nudged.
+   * @param times - When each earlier nudge on the first was posted.
+   * @returns The `gh api` fixtures.
+   */
+  function nudgedAt(times: readonly string[]): Record<string, unknown> {
+    const comments = times.map((created_at) => ({ user: { login: 'owner' }, body: '@dependabot rebase', created_at }));
+    return {
+      user: { login: 'owner' },
+      ...behindMain(first),
+      ...behindMain(second),
+      [`repos/${REPO}/issues/${first.number}/comments`]: comments,
+    };
+  }
+
+  it.each([
+    ['waits on a pull request nudged under two hours ago', [hoursAgo(1)], []],
+    ['nudges a pull request once more after two hours', [hoursAgo(3)], ['11']],
+    ['moves on after two unanswered nudges', [hoursAgo(5), hoursAgo(3)], ['12']],
+    ['ignores nudges made before the head commit', ['2026-05-04T07:00:00Z', '2026-05-04T07:30:00Z'], ['11']],
+  ])('%s', (_case, times, expected) => {
+    const run = runStep(step, { env: {}, gh: nudgedAt(times), prList });
+
+    expect(run.status).toBe(0);
+    expect(nudged(run)).toEqual(expected);
+  });
+
   it('reads past a comment that has no body', () => {
     const gh = {
       user: { login: 'owner' },
@@ -705,12 +741,22 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
     ['its comparison with main fails', `repos/${REPO}/compare/main...${first.sha}`, undefined],
     ['its head commit cannot be read', `repos/${REPO}/commits/${first.sha}`, undefined],
     ['its head commit carries no date', `repos/${REPO}/commits/${first.sha}`, { commit: { committer: {} } }],
+    [
+      'its head commit carries an impossible date',
+      `repos/${REPO}/commits/${first.sha}`,
+      { commit: { committer: { date: '2026-99-99T99:99:99Z' } } },
+    ],
     ['its comments cannot be read', `repos/${REPO}/issues/${first.number}/comments`, undefined],
     ['its comments are not a list', `repos/${REPO}/issues/${first.number}/comments`, { message: 'Bad gateway' }],
     [
       'an earlier rebase request carries no readable date',
       `repos/${REPO}/issues/${first.number}/comments`,
       [{ user: { login: 'owner' }, body: '@dependabot rebase', created_at: '9999' }],
+    ],
+    [
+      'an earlier rebase request carries an impossible date',
+      `repos/${REPO}/issues/${first.number}/comments`,
+      [{ user: { login: 'owner' }, body: '@dependabot rebase', created_at: '2026-99-99T99:99:99Z' }],
     ],
   ])('skips a pull request when %s and nudges the next', (_case, path, answer) => {
     const gh: Record<string, unknown> = { user: { login: 'owner' }, ...behindMain(first), ...behindMain(second) };

@@ -758,28 +758,24 @@ jobs:
               echo "::warning::#${number}: could not read its comments; skipped."
               continue
             fi
-            # Nudges made since the current head was committed. Both sides are
-            # GitHub's ISO-8601 UTC strings, so string order is time order.
-            # A page that is not a list of comments fails jq, and a count or
-            # date that does not parse would end the run under errexit, so
-            # both skip the PR instead.
+            # Nudges made since the current head was committed, the newest
+            # one, and its age in seconds. jq parses every date it compares,
+            # so a page that is not a list of comments, or a date that is not
+            # a real ISO-8601 UTC time, fails here and skips the PR. Once jq
+            # succeeds, its line always holds a count, a time and an age.
             if ! jq -rs --arg me "${me}" --arg head "${head_date}" \
-              'add // [] | map(select(.user.login == $me
-                 and ((.body // "") | startswith("@dependabot rebase"))
-                 and .created_at > $head))
-               | "\(length)\t\(map(.created_at) | max // "")"' \
+              '($head | fromdateiso8601) as $since
+               | add // []
+               | map(select(.user.login == $me
+                   and ((.body // "") | startswith("@dependabot rebase")))
+                 | .created_at | fromdateiso8601 | select(. > $since))
+               | "\(length)\t\(max // 0 | todate)\t\(now - (max // 0) | floor)"' \
               "${RUNNER_TEMP}/comments.json" > "${RUNNER_TEMP}/nudges.tsv"; then
-              echo "::warning::#${number}: could not parse its comments; skipped."
+              echo "::warning::#${number}: could not read its rebase history; skipped."
               continue
             fi
-            IFS=$'\t' read -r nudges last_nudge < "${RUNNER_TEMP}/nudges.tsv" || true
-            if ! [[ "${nudges:-}" =~ ^[0-9]+$ ]] \
-              || { [ "${nudges}" -gt 0 ] && ! [[ "${last_nudge:-}" =~ ${iso} ]]; }; then
-              echo "::warning::#${number}: could not read its earlier rebase requests; skipped."
-              continue
-            fi
+            IFS=$'\t' read -r nudges last_nudge age < "${RUNNER_TEMP}/nudges.tsv"
             if [ "${nudges}" -gt 0 ]; then
-              age=$(( $(date -u +%s) - $(date -u -d "${last_nudge}" +%s) ))
               if [ "${age}" -lt 7200 ]; then
                 echo "::notice::#${number}: rebase already requested at ${last_nudge}; waiting."
                 exit 0
