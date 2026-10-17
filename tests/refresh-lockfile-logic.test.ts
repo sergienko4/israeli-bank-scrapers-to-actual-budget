@@ -207,6 +207,20 @@ describe('canonicalizeRegistryUrls', () => {
     );
   });
 
+  it.each([
+    ['escaped slashes', 'https:\\/\\/evil.example\\/x\\/-\\/x-1.0.0.tgz'],
+    ['a unicode escape', '\\u0068ttps://evil.example/x/-/x-1.0.0.tgz'],
+  ])('rewrites a URL whose JSON spelling uses %s', (_case, encoded) => {
+    const plain = lockfile({ 'node_modules/x': { version: '1.0.0', resolved: 'https://evil.example/x/-/x-1.0.0.tgz' } });
+    const text = plain.replace('"https://evil.example/x/-/x-1.0.0.tgz"', `"${encoded}"`);
+
+    expect(text).not.toBe(plain);
+    expect(canonicalizeRegistryUrls(text)).toEqual({
+      text: lockfile({ 'node_modules/x': { version: '1.0.0', resolved: `${CANONICAL_REGISTRY}x/-/x-1.0.0.tgz` } }),
+      replaced: 1,
+    });
+  });
+
   it('drops a mirror query string rather than carrying it to the registry', () => {
     const withQuery = lockfile({ 'node_modules/nanoid': { resolved: `${PROXY}?resolve=true` } });
     const { text } = canonicalizeRegistryUrls(withQuery);

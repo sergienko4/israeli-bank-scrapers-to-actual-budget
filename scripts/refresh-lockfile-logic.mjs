@@ -152,23 +152,31 @@ function canonicalUrlFor(entryPath, resolved) {
 }
 
 /**
+ * Matches each `"resolved": "…"` member of the raw lockfile text, capturing
+ * the key with its spacing and the still-encoded string value.
+ */
+const RESOLVED_MEMBER = /("resolved"\s*:\s*)("(?:[^"\\]|\\.)*")/g;
+
+/**
  * Rewrites every mirror-sourced `resolved` URL back to the public registry.
  *
  * The substitution runs over the raw text, not a re-serialised object, so
  * npm's exact formatting survives. Re-serialising would reformat the whole
- * file and bury the real change in tens of thousands of noise lines. Values
- * are matched as JSON strings, so a URL that the file escapes (a backslash,
- * say) is still found, and only whole values are replaced.
+ * file and bury the real change in tens of thousands of noise lines. Each
+ * value is decoded before it is compared, so however the file escapes a URL
+ * (`\/`, `\u0068`, a backslash) the whole value is still found and replaced.
  */
 export function canonicalizeRegistryUrls(lockText) {
-  let text = lockText;
+  const canonical = new Map(
+    findForeignRegistryEntries(lockText).map(({ path, resolved }) => [resolved, canonicalUrlFor(path, resolved)]),
+  );
   let replaced = 0;
-  for (const { path, resolved } of findForeignRegistryEntries(lockText)) {
-    const quoted = JSON.stringify(resolved);
-    if (!text.includes(quoted)) continue;
-    text = text.split(quoted).join(JSON.stringify(canonicalUrlFor(path, resolved)));
+  const text = lockText.replace(RESOLVED_MEMBER, (member, key, encoded) => {
+    const url = canonical.get(JSON.parse(encoded));
+    if (url === undefined) return member;
     replaced += 1;
-  }
+    return `${key}${JSON.stringify(url)}`;
+  });
   return { text, replaced };
 }
 
