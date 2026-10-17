@@ -415,12 +415,11 @@ opens a PR when anything moved:
 - **Scope is transitive refresh only**, within ranges parents already permit.
   Raising a declared range stays Dependabot's job. This is **not** a
   Dependabot replacement.
-- **No project dependency executes.** `--package-lock-only` ignores
-  `node_modules` and downloads no dependency, so no install script exists to
-  run. The only package installed is npm itself, at the exact version the
-  Dockerfile pins (`ARG NPM_VERSION`), so the lockfile is written by the npm
-  the image installs it with rather than the older one bundled with the
-  runner's Node. `lockfile-sync.yml` does the same.
+- **No third-party code executes.** `--package-lock-only` ignores
+  `node_modules` and downloads nothing, so no install script exists to run.
+  The job uses the npm bundled with the runner's Node rather than installing
+  the image's pinned one, as `lockfile-sync.yml` does: this job later holds
+  `RELEASE_TOKEN`, so nothing fetched from the registry may run in it.
 - **The commit type is computed, not hard-coded** —
   `scripts/summarize-refresh.mjs` emits `fix(deps)` when a non-`dev` entry
   moved, `chore(deps)` otherwise. `npm update` never edits `package.json`, so

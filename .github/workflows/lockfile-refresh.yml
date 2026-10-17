@@ -94,23 +94,21 @@ jobs:
           # commits into the refresh.
           ref: main
 
+      # The npm bundled with this Node is used as is. lockfile-sync.yml
+      # installs the image's pinned npm, but it holds no secret; this job
+      # later holds RELEASE_TOKEN, so it runs nothing fetched from the
+      # registry.
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-
-      # Refresh with the npm the Docker image installs with, not the older
-      # one bundled with the runner's Node.
-      - uses: ./.github/actions/ci/pin-npm
 
       - name: Capture the committed lockfile
         run: cp package-lock.json "${RUNNER_TEMP}/before.json"
 
       # --package-lock-only ignores node_modules and downloads no tarballs, so
-      # this job never installs or executes any dependency of the project.
-      # The only package installed is npm itself, pinned above to the exact
-      # version the image builds with. That is what lets the token step
-      # below be safe in the same job: there is no freshly installed
-      # dependency that could shadow a later command. The
+      # this job never installs or executes third-party code at all. That is
+      # what lets the token step below be safe in the same job: there is no
+      # freshly installed package that could shadow a later command. The
       # explicit --ignore-scripts is redundant under that flag and kept as
       # defence in depth, not because a script would otherwise run.
       - name: Refresh transitive pins
@@ -391,7 +389,7 @@ jobs:
       # `!cancelled()` keeps the close after a replacement whose arming failed:
       # the new pull request still supersedes the old one.
       # The token is safe here: `--package-lock-only` never installed or ran
-      # a project dependency in this job; only the pinned npm was installed.
+      # third-party code in this job.
       - name: Supersede stale refresh pull requests
         if: >-
           !cancelled()

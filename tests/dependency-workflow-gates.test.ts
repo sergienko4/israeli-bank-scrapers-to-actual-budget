@@ -13,7 +13,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -753,15 +753,34 @@ describe.skipIf(!CAN_RUN)('npm pin for lockfile writers', () => {
     expect(npmCalls).toEqual([]);
   });
 
-  it.each([SYNC, REFRESH])('%s pins npm before its first npm command', (file) => {
-    const writers = Object.values(jobsOf(file)).filter((job) => job.steps.some((s) => /^\s*npm\s/m.test(s.run ?? '')));
-    expect(writers).not.toHaveLength(0);
-    for (const job of writers) {
-      const pinAt = job.steps.findIndex((s) => s.uses === `./${PIN_NPM}`);
-      const npmAt = job.steps.findIndex((s) => /^\s*npm\s/m.test(s.run ?? ''));
-      expect(pinAt).toBeGreaterThanOrEqual(0);
-      expect(pinAt).toBeLessThan(npmAt);
-    }
+  it('lockfile-sync pins npm before its first npm command', () => {
+    const steps = jobsOf(SYNC).sync?.steps ?? [];
+    const pinAt = steps.findIndex((s) => s.uses === `./${PIN_NPM}`);
+
+    expect(pinAt).toBeGreaterThanOrEqual(0);
+    expect(pinAt).toBeLessThan(steps.findIndex((s) => /^\s*npm\s/m.test(s.run ?? '')));
+  });
+
+  it('pins npm only in jobs that can read no secret', () => {
+    const workflows = readdirSync(join(ROOT, '.github/workflows')).filter((name) => name.endsWith('.yml'));
+    const pinned = workflows.flatMap((name) => {
+      const text = readFileSync(join(ROOT, '.github/workflows', name), 'utf8');
+      const workflow = parse(text) as { env?: unknown; jobs: Record<string, IJob> };
+      return Object.entries(workflow.jobs)
+        .filter(([, job]) => (job.steps ?? []).some((s) => s.uses === `./${PIN_NPM}`))
+        .map(([id, job]) => ({ job: `${name}:${id}`, secret: /\bsecrets\./.test(JSON.stringify([workflow.env, job])) }));
+    });
+
+    expect(pinned.map(({ job }) => job)).toContain('lockfile-sync.yml:sync');
+    expect(pinned.filter(({ secret }) => secret)).toEqual([]);
+  });
+
+  it('installs no package in the job that later holds RELEASE_TOKEN', () => {
+    const steps = jobsOf(REFRESH).refresh?.steps ?? [];
+
+    expect(JSON.stringify(steps)).toContain('secrets.RELEASE_TOKEN');
+    expect(steps.filter((s) => s.uses === `./${PIN_NPM}`)).toEqual([]);
+    expect(steps.filter((s) => /\b(npm (install|i|ci|exec)|npx)\b/.test(s.run ?? ''))).toEqual([]);
   });
 
   it('refuses a branch-supplied .npmrc before it installs npm', () => {

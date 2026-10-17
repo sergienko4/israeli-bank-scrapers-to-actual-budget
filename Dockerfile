@@ -45,7 +45,7 @@ COPY tsconfig.json ./
 # that build (see docs/CONTRIBUTING.md). The exact version is pinned so
 # builds are reproducible and no npm release changes install behaviour
 # unreviewed. npm is deleted further down, so it is absent from the final
-# image filesystem. The lockfile workflows install this same version
+# image filesystem. lockfile-sync.yml installs this same version
 # (.github/actions/ci/pin-npm reads the line below), so keep it one exact
 # x.y.z with no quotes.
 ARG NPM_VERSION=12.2.1
