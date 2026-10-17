@@ -1,0 +1,200 @@
+name: Lockfile sync
+
+# Regenerates package-lock.json on a runner when a maintainer's pull request
+# edits package.json, and hands the result back as a build artifact.
+#
+# Some maintainer networks cannot reach registry.npmjs.org, and a lockfile
+# produced through a mirror records the mirror's URLs and sometimes only a
+# sha1 integrity — both rejected by `npm run lint:lockfile`. Hand-substituting
+# hashes is forbidden (scripts/refresh-lockfile.mjs explains why). So a
+# declarative change such as a new `overrides` floor had no way to land
+# without a machine that can reach the registry. This job is that machine:
+# the maintainer commits package.json alone, the runner resolves against the
+# real registry, and when the committed lockfile no longer matches, the job
+# uploads the regenerated one as the `package-lock` artifact and fails with
+# the commands to commit it. The next push re-runs the job, which finds no
+# difference and passes. docs/CONTRIBUTING.md has the runbook.
+#
+# SCOPE: lockfile regeneration for an edited manifest only. Dependabot keeps
+# its own lockfile in sync (and receives no secrets), release-please bumps the
+# version fields itself, and the scheduled transitive refresh lives in
+# lockfile-refresh.yml — each of those is skipped below. A pull request that
+# touches only package-lock.json is left alone: there is no manifest change
+# to sync, and regenerating could undo a deliberate lockfile edit.
+#
+# TRUST: the job holds no secret and no write access. Its token is read-only
+# and it never pushes, so nothing it runs can change a branch. A
+# pull_request workflow runs from the merge ref, so the job's own definition
+# comes from the branch under review; a secret here would be readable by
+# anything that branch changes, which is why there is none. The head still
+# contributes data only (package.json, package-lock.json, .nvmrc): a
+# branch-supplied .npmrc is refused, npm resolves with --ignore-scripts
+# against the pinned public registry, and the canonical-form checker is
+# checked out from the base commit. The artifact is an ordinary change the
+# maintainer chooses to commit, and the PR Pipeline lints it like any other
+# lockfile. Writing the lockfile back automatically would need a PAT,
+# because a push made with GITHUB_TOKEN raises no pull_request event and so
+# skips CI. ADR-0002 explains why that trade was declined.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - package.json
+
+# Read-only: the job reads the repository and uploads an artifact, and
+# artifact upload needs no token permission.
+permissions:
+  contents: read
+
+concurrency:
+  group: lockfile-sync-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync package-lock.json
+    # Same-repository branches only: this is a maintainer tool, and an
+    # outside contributor's manifest change goes through ordinary review.
+    # Dependabot regenerates its own lockfile. release-please and the
+    # scheduled refresh already commit a regenerated lockfile, so a run here
+    # would only report a difference they are about to resolve themselves.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      !startsWith(github.head_ref, 'release-please--') &&
+      !startsWith(github.head_ref, 'chore/lockfile-refresh-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Nothing below runs a full `npm install`, so husky's `prepare` never
+    # plants git hooks in this checkout. Set so that stays true if a future
+    # step adds one.
+    env:
+      HUSKY: 0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Regenerate from the exact head that triggered the run, not the
+          # merge ref, so the artifact drops straight onto the branch.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # The job never pushes; keep the token out of .git/config anyway.
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # npm reads a project .npmrc from the checkout, and its settings outrank
+      # npm's defaults: a branch-supplied one could point resolution at another
+      # registry, weaken TLS, or switch lockfile writing off for a false green.
+      # The repository has none, so refuse one outright instead of reasoning
+      # about which keys are safe.
+      - name: Refuse a branch-supplied npm config
+        run: |
+          set -euo pipefail
+          if [ -e .npmrc ]; then
+            echo '::error::This branch adds a project .npmrc; lockfile-sync does not resolve under branch-supplied npm settings.'
+            exit 1
+          fi
+
+      # Resolve with the npm the Docker image installs with, not the older one
+      # bundled with the runner's Node. After the .npmrc refusal, so no
+      # branch-supplied config can steer that install either.
+      - uses: ./.github/actions/ci/pin-npm
+
+      # --package-lock-only resolves against the registry and writes the
+      # lockfile without downloading tarballs into node_modules, so no
+      # project dependency is installed or executed in this job; the only
+      # package installed is npm itself, pinned above. --ignore-scripts
+      # is redundant under that flag and kept as defence in depth. The env
+      # pins outrank any npm config file, so the settings that decide what
+      # gets resolved stay fixed whatever the runner image carries.
+      - name: Regenerate the lockfile
+        env:
+          npm_config_registry: https://registry.npmjs.org/
+          npm_config_package_lock: 'true'
+          npm_config_strict_ssl: 'true'
+        run: npm install --package-lock-only --ignore-scripts
+
+      # The working tree must be clean or differ by package-lock.json alone.
+      # Untracked files count: anything else npm touched or left behind means
+      # it did something this workflow has not reasoned about, so refuse
+      # rather than publish it.
+      - name: Detect whether the lockfile moved
+        id: diff
+        run: |
+          set -euo pipefail
+          status="$(git status --porcelain --untracked-files=all)"
+          if [ -z "${status}" ]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::package-lock.json already matches package.json.'
+          elif [ "${status}" = ' M package-lock.json' ]; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo '::error::Expected at most package-lock.json to change. Got:'
+            echo "${status}"
+            exit 1
+          fi
+
+      # The checker comes from the base commit, never the pull request head,
+      # so the regenerated lockfile is judged by the rules already on main —
+      # not by a copy of those rules the same branch may be changing — and
+      # no branch-supplied script runs here. Only scripts/ is fetched, into a
+      # scratch directory.
+      - name: Check out the trusted checker
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          sparse-checkout: scripts
+          persist-credentials: false
+
+      # The same canonical-lockfile guard the PR Pipeline runs, applied before
+      # the upload so a bad regeneration is never offered for commit. The
+      # checker resolves ../package-lock.json relative to itself, so the
+      # regenerated file is copied beside the trusted copy before it runs.
+      - name: Verify the regenerated lockfile is canonical
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          cp package-lock.json trusted/package-lock.json
+          node trusted/scripts/refresh-lockfile.mjs --check
+          rm -rf trusted
+
+      # overwrite lets a re-run of this job replace the artifact its earlier
+      # attempt uploaded instead of failing on the duplicate name.
+      - name: Upload the regenerated lockfile
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+      # Red on purpose: the committed lockfile does not match package.json, so
+      # the PR Pipeline's `npm ci` cannot pass either. The summary carries the
+      # commands; the push that follows them re-runs this job, which then
+      # finds no difference and passes.
+      - name: Report the out-of-date lockfile
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          {
+            echo '## package-lock.json is out of date'
+            echo ''
+            echo 'The lockfile regenerated from package.json is attached to this run as the `package-lock` artifact (kept 7 days). From a checkout of this pull request branch:'
+            echo ''
+            echo '```bash'
+            echo "gh run download ${GITHUB_RUN_ID} -R ${GITHUB_REPOSITORY} -n package-lock -D lockfile-sync-artifact"
+            echo 'cp lockfile-sync-artifact/package-lock.json package-lock.json'
+            echo 'rm -r lockfile-sync-artifact'
+            echo 'git add package-lock.json'
+            echo 'git commit -m "chore(deps): sync package-lock.json"'
+            echo 'git push'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::package-lock.json is out of date. Commit the package-lock artifact from run ${GITHUB_RUN_ID}; the run summary lists the commands."
+          exit 1

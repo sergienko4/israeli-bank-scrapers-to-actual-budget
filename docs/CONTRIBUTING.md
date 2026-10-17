@@ -8,7 +8,15 @@ Thank you for your interest in contributing!
 
 ### Prerequisites
 
-- Node.js 22+ and npm 10+
+- Node.js 26, the version in `.nvmrc` that CI and the Docker image run
+  (`nvm install && nvm use`). `package.json` accepts 22.14 and later.
+- npm 12.2.1, the version the Docker image pins:
+  `npm install -g npm@12.2.1`. Earlier npm runs every dependency install
+  script, including a source build of `better-sqlite3` that needs a C++
+  toolchain — on macOS, the multi-gigabyte Xcode Command Line Tools. npm 12
+  runs only the scripts listed in [`allowScripts`](#dependency-install-scripts-allowscripts),
+  and the `better-sqlite3` that `@actual-app/api` loads ships prebuilt
+  binaries, so no compiler is needed.
 - Docker and Docker Compose
 - Git
 
@@ -17,7 +25,8 @@ Thank you for your interest in contributing!
 ```bash
 git clone https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget.git
 cd israeli-bank-scrapers-to-actual-budget
-npm install
+nvm use
+npm ci
 ```
 
 ### Development Workflow
@@ -68,13 +77,13 @@ need one:
 
 | Package | Why it needs an install script |
 | --- | --- |
-| `better-sqlite3` | `prebuild-install` downloads the prebuilt native binary |
+| `better-sqlite3` | the 12.x copy under `@hieutran094/camoufox-js` runs `prebuild-install` to download its native binary; the 13.x copy `@actual-app/api` loads ships its binaries in the package and needs no script |
 | `tesseract.js` | OCR asset setup |
 | `unrs-resolver` | native resolver binary |
 | `@sergienko4/israeli-bank-scrapers` | scraper postinstall |
 
-If `better-sqlite3` is not built, `@actual-app/api` cannot open the budget and
-every E2E import fails.
+If the `better-sqlite3` binary that `@actual-app/api` loads is missing, it
+cannot open the budget and every E2E import fails.
 
 ### Why each entry is pinned to an exact version
 
@@ -152,6 +161,85 @@ The exception is deliberately narrow in two directions:
   `needs human approval` and left to fail the gate until someone runs
   `npm approve-scripts` themselves.
 
+### Dependabot pull requests merge themselves
+
+`.github/workflows/dependabot-auto-merge.yml` judges every Dependabot pull
+request once its PR Pipeline run finishes, and sorts it into one of three
+outcomes:
+
+- **Merged without a click.** npm patch and minor updates, alone or grouped,
+  GitHub Actions patch and minor updates, and Docker digest refreshes and patch
+  updates. The workflow approves with `RELEASE_TOKEN` and arms squash
+  auto-merge pinned to the exact head commit it judged. Every required check
+  on `main` still gates the merge — auto-merge removes the click, never a gate.
+  A CI run that does not pass disarms the pull request; a green re-run arms
+  it again.
+- **Labelled `needs-manual-review`.** Major updates and Docker minor updates.
+  Dependabot keeps majors out of every safe group: development and pino
+  majors arrive in `dev-dependencies-major` and `pino-major`, Actions majors
+  in `actions-major`, and any other production major in its own pull
+  request. Auto-merge is disarmed; review and merge them yourself.
+- **Disarmed and left for a human.** A pull request whose install-script pins
+  were rotated, as described above, is never merged automatically: the
+  rotation comment asks for a review, and merging by hand is how that review
+  is recorded. The same applies when the workflow cannot read Dependabot's
+  update metadata, cannot classify one of the updates, or finds a commit it
+  cannot prove came from Dependabot or the meta-render job — it fails closed
+  rather than guessing.
+
+Auto-merge never updates a branch on its own, so the same workflow posts
+`@dependabot rebase` on the oldest armed pull request that has fallen behind
+`main`, one at a time.
+
+If one package in a major group breaks the build, drop it instead of holding
+the rest of the group back. Comment on the pull request and Dependabot
+regenerates the group without it:
+
+```text
+@dependabot ignore <dependency> major version
+```
+
+A security fix for a transitive package that no parent range reaches yet is
+the one case that still needs a hand edit: add or raise its entry in the
+`overrides` block of `package.json` and open a pull request with only that
+change. A local registry is not needed:
+`.github/workflows/lockfile-sync.yml` regenerates `package-lock.json` on a
+runner, uploads it as the `package-lock` artifact and fails the check. It
+resolves against the public registry with the npm version the Docker image
+pins, and refuses a branch that adds a
+project `.npmrc`. The run summary lists the commands; from a checkout of
+your branch they are:
+
+```bash
+gh run download <run-id> -R sergienko4/israeli-bank-scrapers-to-actual-budget -n package-lock -D lockfile-sync-artifact
+cp lockfile-sync-artifact/package-lock.json package-lock.json
+rm -r lockfile-sync-artifact
+git add package-lock.json
+git commit -m "chore(deps): sync package-lock.json"
+git push
+```
+
+The push re-runs the check, which then passes.
+
+Fixes that already fit inside existing ranges arrive on their own:
+the Thursday `lockfile-refresh.yml` run applies `npm audit fix` and merges
+itself once CI is green. If that fix moves a pin across a major, the pull
+request is labelled `needs-manual-review` and waits for you instead. Do not
+push to a refresh branch: the "Restrict updates" ruleset described in the
+[lockfile refresh guard][ci-refresh-guard] blocks it, and the refresh arms
+only once it has confirmed that ruleset is in force. If a push gets
+through anyway, a guard labels the pull request and tries to withdraw
+auto-merge (best effort).
+
+Pull requests opened by `dependency-bump.yml`, described next, are never
+merged automatically — they carry your identity, not Dependabot's. The full
+policy is in the [CI pipeline reference][ci-automerge] and
+[ADR-0002][adr-0002].
+
+[ci-automerge]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#dependabot-auto-merge
+[ci-refresh-guard]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#lockfile-refresh-guard
+[adr-0002]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md
+
 ### Bumping a package on demand
 
 Dependabot scans once a day, which is slower than
@@ -202,7 +290,9 @@ cannot turn an exact pin or a `~` range into a `^` one. It will still let you
 name an older version: keeping `^` while lowering the floor accepts a wider
 range than before, which the diff shows. A range it cannot reproduce exactly,
 such as a compound range or a `git:` specifier, is refused rather than guessed
-at, and a package that appears only in `overrides` has to be edited by hand.
+at, and a package that appears only in `overrides` has to be edited by hand
+(see [the hand-edit case above](#dependabot-pull-requests-merge-themselves)
+for how its lockfile is regenerated).
 
 If the new version introduces an install script that has never been approved,
 `lint:allow-scripts` fails inside the workflow and the run stops without

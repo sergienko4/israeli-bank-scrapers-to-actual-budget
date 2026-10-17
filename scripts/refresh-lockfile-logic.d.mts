@@ -10,7 +10,10 @@ export interface IForeignRegistryEntry {
   resolved: string;
 }
 
-/** A package recorded with an integrity hash weaker than npm's default. */
+/**
+ * A package recorded with an integrity hash weaker than npm's default, or a
+ * registry tarball recorded with none (`integrity` is then `''`).
+ */
 export interface IWeakIntegrityEntry {
   path: string;
   integrity: string;
@@ -72,5 +75,11 @@ export function formatLockfileReport(audit: ILockfileAudit): string;
 /** Describes what a refresh changed and whether it must ship as a release. */
 export function summarizeRefresh(beforeText: string, afterText: string): IRefreshSummary;
 
+/**
+ * Lists every package whose installed version crossed a semver-breaking
+ * boundary, whether re-pinned at the same path or installed at a new one.
+ */
+export function findMajorBumps(beforeText: string, afterText: string): IVersionChange[];
+
 /** Renders the pull-request body describing an automated refresh. */
-export function formatRefreshBody(summary: IRefreshSummary): string;
+export function formatRefreshBody(summary: IRefreshSummary & { majorBumps?: IVersionChange[] }): string;

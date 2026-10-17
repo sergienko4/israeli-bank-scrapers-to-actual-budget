@@ -27,6 +27,9 @@ graph TD
     E2ES[e2e-schedule.yml<br/>weekly]
     LFR[lockfile-refresh.yml<br/>weekly cron]
     DMR[dependabot-meta-render.yml<br/>after PR Pipeline]
+    DAM[dependabot-auto-merge.yml<br/>after PR Pipeline + push/cron]
+    LFS[lockfile-sync.yml<br/>PR edits manifest]
+    LFG[lockfile-refresh-guard.yml<br/>refresh PR push]
   end
 
   subgraph Reusable["Reusable workflows"]
@@ -43,8 +46,11 @@ graph TD
 
   PR --> E2E
   PR -.triggers.-> DMR
+  PR -.triggers.-> DAM
   E2ES --> E2E
   LFR -.opens PR.-> PR
+  LFS -.uploads lockfile artifact.-> PR
+  LFG -.disarms refresh PR.-> PR
   PR -.uses.-> SETUP
   PR -.uses.-> BUILD
   PR -.uses.-> TRIVY
@@ -130,7 +136,7 @@ that file, which a manifest-only comparison cannot see. The step lives inside
 an already-required job deliberately — a new top-level job would need a
 branch-protection ruleset change to be enforced. Policy:
 `scripts/release-signal-logic.mjs`; see
-[release-pipeline.md](release-pipeline.md).
+[release-pipeline.md](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/release-pipeline.md).
 
 ## Central config: `.github/config/ci-config.yml`
 
@@ -217,6 +223,104 @@ changes nothing outside the manifest and the two rendered documents. The push
 is never forced, so a concurrent Dependabot rebase rejects it and the next run
 renders the newer head.
 
+### Dependabot auto-merge
+
+`dependabot-auto-merge.yml` lands safe Dependabot updates on `main` with no
+human step. The decision itself lives in a pure, unit-tested module,
+`scripts/dependabot-automerge-logic.mjs`, which reads the
+`updated-dependencies` metadata block from the PR's one Dependabot commit:
+
+| Update                                            | Action                          |
+|---------------------------------------------------|---------------------------------|
+| npm patch / minor                                 | approve + arm auto-merge        |
+| GitHub Actions patch / minor                      | approve + arm auto-merge        |
+| Docker patch, or a digest-only refresh            | approve + arm auto-merge        |
+| any semver-major, or a Docker minor               | label `needs-manual-review`     |
+| rotated install-script pin                        | skip (human approves the pin)   |
+| unknown ecosystem, unclassified or unparseable    | skip (fail closed)              |
+
+A skip outranks a label: one entry the policy cannot classify skips the whole
+PR, even when another entry is a major.
+
+Dependabot writes no `update-type` for Docker, so a Docker entry is
+classified from the tag pair in its bump line. A tag change that alters the
+variant suffix or the version precision, moves backwards or uses a named tag
+is unclassified and skipped.
+
+It runs on `workflow_run` after `PR Pipeline` completes, on a push to `main`,
+every six hours, and on `workflow_dispatch` with a PR number. The same two
+constraints as the meta-render job apply: `workflow_run` is the documented way
+to reach secrets for a Dependabot-created PR, and every write uses
+`RELEASE_TOKEN`, whose owner is the code owner the ruleset requires a review
+from.
+
+- **Pinned to the judged head.** The approval carries the head SHA as its
+  `commit_id`, and auto-merge is armed with `--match-head-commit`, so a later
+  push cannot ride an earlier verdict. The ruleset's required checks still gate
+  the merge itself.
+- **Vetted commits.** An author login comes from a commit's e-mail and a
+  subject is free text; anyone with push access can set both, so neither is
+  trusted on its own. The first commit must be `dependabot[bot]`'s and the
+  only Dependabot commit: Dependabot rewrites its branch as a single commit,
+  so a second one is not its shape, and its metadata would never be read.
+  That commit must carry a valid signature from GitHub's `web-flow` key and
+  Dependabot's exact author e-mail. That key signs every commit made through
+  GitHub's web UI or API, so it proves GitHub made the commit, not
+  Dependabot; write access stays the trust boundary. Meta-render
+  commits are unsigned, so each `github-actions[bot]` commit is vetted by
+  content: one parent, one of the three subjects meta-render writes, and a
+  diff limited to the two rendered READMEs plus, for a prune or a rotation
+  only, the `allowScripts` block of `package.json` with every other key
+  unchanged. A prune may only drop pins. More than 20 commits, any other
+  author, a failed vet or an API error means a human owns the merge.
+- **Trusted policy.** The policy is checked out from the default branch, never
+  from the PR head, and values reach the shell only through `env:`.
+- **Fail closed.** A skip verdict, a policy error, an untrusted branch (a
+  fork or a non-Dependabot ref), an unexpected or unvetted commit, or any CI
+  conclusion other than success for the current head disarms any earlier
+  arming. A lookup error never approves or arms. Once the run has confirmed
+  it judges the current head of an open Dependabot PR, a later lookup error
+  also withdraws any earlier arming. A failure before that point, or a
+  cancelled run, touches nothing: the newest head's run or a manual dispatch
+  decides. A green re-run comes back through the job and re-arms.
+- **Stale runs change nothing.** A run whose pull request is closed, not
+  opened by Dependabot or already on a newer head than CI tested exits
+  without a write, because a later run owns that decision.
+- **One decision per PR at a time.** A read-only `pr` job first names the
+  pull request: the dispatch input, or the open PR for the head CI tested.
+  The decision job queues on that number, so a dispatch and a CI run for the
+  same PR never decide side by side. No number, a non-canonical one such as
+  `0786`, or a failed lookup skips the decision with no write.
+- **The CI verdict is read, not carried.** The queue keeps the order runs
+  reach it, not the order they were triggered, so no run trusts the
+  conclusion its trigger carried. Each run, a manual dispatch included,
+  reads the newest PR Pipeline run for the current head (a re-run counts
+  from its own start) and decides on that: success may arm, any other
+  conclusion disarms, and a run still in progress writes nothing because
+  its completion triggers a run of its own. Runs that execute in any order
+  converge on the latest verdict. Every page of the run list is read, since
+  a re-run keeps its original place in it; a list GitHub cut short (at most
+  1,000 runs per filtered query) fails the run, withdrawing any arming.
+- **Rotated pins never auto-merge.** When meta-render rotates an
+  `allowScripts` pin, the PR is held for a human: either the rotation comment
+  or the rotation commit subject is enough. The comment marker counts only
+  when the `RELEASE_TOKEN` owner posted it, since anyone can paste the text.
+  A meta-render push also dismisses the stale approval, and the run for the
+  new head re-decides.
+
+A strict required-check set keeps an armed PR from merging once `main` moves
+ahead of it. The `rebase-behind` job therefore posts `@dependabot rebase` on
+**one** armed, behind PR per run, oldest first; it waits two hours between
+nudges to the same head and warns after two unanswered nudges. A PR whose
+comparison, head commit or comments cannot be read or parsed is skipped
+with a warning so the rest of the queue still moves. Dependabot's own
+rebase is used instead of the "update branch" button so Dependabot keeps
+ownership of the branch.
+
+Scope is `dependabot[bot]` PRs only. A `dependency-bump.yml` PR is still a
+human merge. Rationale and rejected alternatives:
+[ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md).
+
 ## Pinning policy
 
 - **GitHub Actions:** pinned to the **major tag** (e.g., `actions/checkout@v7`).
@@ -227,7 +331,7 @@ renders the newer head.
   hardening for the runtime image).
 - **SHA pinning of actions** is **deferred**. Tradeoff: at current scale the
   maintenance burden (manually bumping ~25 SHAs every minor) outweighs the
-  supply-chain marginal benefit on top of Dependabot's grouped weekly
+  supply-chain marginal benefit on top of Dependabot's scheduled grouped
   updates. Revisit when the repo reaches > 50 actions or after a supply-chain
   incident in this ecosystem.
 
@@ -254,7 +358,7 @@ mappings.
 | Secret                  | Used by                                  |
 |-------------------------|------------------------------------------|
 | `GITHUB_TOKEN` (built-in) | many                                   |
-| `RELEASE_TOKEN`         | release.yml, release-please.yml, dependabot-meta-render.yml |
+| `RELEASE_TOKEN`         | release.yml, release-please.yml, dependabot-meta-render.yml, dependabot-auto-merge.yml, lockfile-refresh.yml, lockfile-refresh-guard.yml |
 | `SONAR_TOKEN`           | `pr.yml` → sonar job                     |
 | `SONAR_ORG`             | `pr.yml` → sonar job                     |
 | `SONAR_PROJECT_KEY`     | `pr.yml` → sonar job                     |
@@ -266,18 +370,30 @@ mappings.
 
 ## Dependabot grouping
 
-`.github/dependabot.yml` batches related updates into per-group PRs
-(Monday 06:00 Asia/Jerusalem), bounded by each ecosystem’s
-`open-pull-requests-limit`:
+`.github/dependabot.yml` batches related updates into per-group PRs (06:00
+Asia/Jerusalem), bounded by each ecosystem’s `open-pull-requests-limit`:
 
-- **npm** — 2 groups (`dev-dependencies` covering every development
-  dependency, and `pino` covering the `pino` + `pino-pretty` production pair);
-  all other production dependencies stay individually reviewable. Dependabot
-  owns ALL npm deps, including the critical `@actual-app/api` and
+- **npm** — **daily**, via a `cron` schedule, limit 10. Four groups:
+  `dev-dependencies` (development minor/patch), `dev-dependencies-major`
+  (development majors, kept apart so a major never blocks the safe batch),
+  `pino` (the `pino` + `pino-pretty` production pair, minor/patch) and
+  `pino-major` (that pair's majors). All other production dependencies stay
+  individually reviewable, one PR per package. Dependabot owns ALL npm deps,
+  including the critical `@actual-app/api` and
   `@sergienko4/israeli-bank-scrapers` packages.
-- **docker** — base image bumps only.
-- **github-actions** — 4 groups (actions-core, docker-actions, codeql,
-  security-actions).
+- **docker** — weekly on Monday, base image bumps only, no groups. The
+  Dockerfile has one base image, so each PR already holds one update.
+- **github-actions** — weekly on Monday. Four minor/patch groups
+  (actions-core, docker-actions, codeql, security-actions), then
+  `actions-major`, which must stay last because a group takes the first
+  match. Group patterns match the `owner/repo` dependency name, never a
+  sub-path, so the codeql group names `github/codeql-action` exactly.
+
+Every unattended group is limited to minor/patch, and majors are routed to
+their own `*-major` group or an ungrouped PR, so a major never shares a PR
+with a safe bump. Majors therefore arrive in their own PR, and the
+[auto-merge policy](#dependabot-auto-merge) labels them
+`needs-manual-review` instead of arming them.
 
 ## Lockfile refresh (`lockfile-refresh.yml`)
 
@@ -293,13 +409,17 @@ already allowed the patched `4.28.8`. A CVE against `4.28.2` then failed both
 
 `lockfile-refresh.yml` closes it. Every Thursday 05:00 UTC (and on
 `workflow_dispatch`) it runs `npm update --package-lock-only --ignore-scripts`,
-and opens a PR when anything moved:
+then a best-effort `npm audit fix --package-lock-only --ignore-scripts`, and
+opens a PR when anything moved:
 
 - **Scope is transitive refresh only**, within ranges parents already permit.
-  `npm update` cannot cross a major, and raising a declared range stays
-  Dependabot's job. This is **not** a Dependabot replacement.
+  Raising a declared range stays Dependabot's job. This is **not** a
+  Dependabot replacement.
 - **No third-party code executes.** `--package-lock-only` ignores
   `node_modules` and downloads nothing, so no install script exists to run.
+  The job uses the npm bundled with the runner's Node rather than installing
+  the image's pinned one, as `lockfile-sync.yml` does: this job later holds
+  `RELEASE_TOKEN`, so nothing fetched from the registry may run in it.
 - **The commit type is computed, not hard-coded** —
   `scripts/summarize-refresh.mjs` emits `fix(deps)` when a non-`dev` entry
   moved, `chore(deps)` otherwise. `npm update` never edits `package.json`, so
@@ -307,16 +427,104 @@ and opens a PR when anything moved:
   made here; a hard-coded `chore` would ship it to users with no release.
 - **Pushes with `RELEASE_TOKEN`**, because a PR opened with `GITHUB_TOKEN`
   raises no `pull_request` event — every gate in `pr.yml` would be skipped.
-- **At most one open refresh PR**, enforced by a branch-name check before any
-  work is done.
+- **Audit fixes stay inside declared ranges.** `--force` is never passed, so
+  no declared range is raised. If the fix wants to edit `package.json`, both
+  files are restored to their post-`npm update` state: raising a declared
+  range is a reviewed change. The step never fails the job; an advisory it
+  cannot fix still fails the PR's own `npm run audit` gate.
+- **A newer run supersedes the open refresh PR.** Once this run has opened
+  its own PR, or proved main already carries every pin, any other open
+  same-repository `chore/lockfile-refresh-*` PR is closed (branch deleted).
+  The close runs last, so a failed run never leaves the week without a
+  refresh, and a stuck PR never blocks the next week.
+- **Auto-merge is armed only on a push-locked branch,** with `RELEASE_TOKEN`
+  and `--match-head-commit`, so the PR squash-merges once every required
+  check passes. The match holds only at arming time, so the run first proves
+  the [lockfile refresh guard](#lockfile-refresh-guard) ruleset is in force.
+  Without that proof, a refresh that would otherwise arm is labelled
+  `needs-manual-review`, left unarmed, and the run fails red.
+- **A refresh that crosses a major is not armed.** A loose range (`*`,
+  `>=1.0.0`) lets `npm update` or `npm audit fix` move a transitive pin
+  across a major while staying inside it. The summary compares main's
+  lockfile with the refreshed one, including relocated packages; when it
+  counts a major, the PR is labelled `needs-manual-review` instead. A summary
+  without a title, a body or a `majorBumps` list, or a non-numeric count,
+  fails the run before anything is pushed.
+
+`lockfile-sync.yml` covers the opposite direction: a same-repository PR that
+edits `package.json` (an `overrides` floor, say) from a machine that cannot
+reach the registry. It refuses a branch-supplied `.npmrc`, installs the npm
+the Dockerfile pins, runs
+`npm install --package-lock-only --ignore-scripts` on the runner against the
+pinned public registry, and requires a working tree that is clean or differs
+by `package-lock.json` alone (untracked files included), then applies the
+canonical-form guard. When the committed lockfile is out of date, it uploads
+the regenerated one as the `package-lock` artifact and fails the check; the
+run summary lists the commands that download and commit it. The job holds no
+secret and only `contents: read`: a `pull_request` workflow runs the branch's
+own definition, so a token there would be readable by the code under review.
+After the commit, the next run finds no diff and passes. It triggers on
+`package.json` only, so a PR that edits just the lockfile is never checked,
+and it skips Dependabot, release-please and refresh branches, which commit
+their own lockfile.
 
 A companion gate, `npm run lint:lockfile` (in `validate:ci`), fails the build
-on a `resolved` URL pointing anywhere but `registry.npmjs.org` or on a `sha1-`
-integrity — both symptoms of a proxy or mirror rewriting the lockfile.
-`npm run refresh-lockfile` repairs foreign hosts in place; integrity
-downgrades fail closed, since a weakened hash cannot be strengthened without
-re-fetching the tarball. Rationale and rejected alternatives:
-[ADR-0001](../decisions/ADR-0001-scheduled-lockfile-refresh.md).
+on a `resolved` URL pointing anywhere but `registry.npmjs.org`, on a `sha1-`
+integrity, or on a registry tarball recorded with no integrity — each a
+symptom of a proxy, mirror or hand edit rewriting the lockfile.
+`npm run refresh-lockfile` repairs foreign hosts in place; missing or
+downgraded integrity fails closed, since only a run against the public
+registry can restore the hash (the Lockfile refresh's `npm update` does).
+Rationale and rejected alternatives:
+[ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md). The
+auto-merge decision is recorded in
+[ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md).
+
+## Lockfile refresh guard
+
+`lockfile-refresh.yml` arms auto-merge with `--match-head-commit`, but that
+check runs once, at arming time. A refresh needs no approving review, so a
+commit pushed to the branch afterwards would merge unseen once the required
+checks pass. Two controls cover that window.
+
+**Preventive — repository ruleset (manual setting).** Create a branch ruleset
+under Settings → Rules → Rulesets:
+
+| Field | Value |
+|---|---|
+| Enforcement | Active |
+| Target branches | Include by pattern `chore/lockfile-refresh-*` |
+| Bypass list | None |
+| Rules | Restrict updates only |
+
+No bypass is needed. Each run pushes a new `chore/lockfile-refresh-<run_id>`
+branch, and creating a branch falls under "Restrict creations", which stays
+off. Every later push is rejected, including an admin's and the GitHub
+"Update branch" button. A refresh that falls behind `main` is not updated;
+the next run regenerates it from `main` and closes the stale one. Leave
+"Restrict deletions" unchecked: it is on by default and would stop the merged
+or superseded branch from being deleted. Disabling auto-merge is not a push,
+so the ruleset never blocks the guard below. See
+[Restrict updates](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#restrict-updates).
+
+**Checked before arming.** The refresh run does not assume the ruleset
+exists. Before arming, it asks the API which rules apply to its branch name
+and needs one ruleset that is active, restricts updates and lists no bypass
+actor. GitHub returns a ruleset's bypass list only to a token with write
+access to the ruleset, so `RELEASE_TOKEN` needs that access.
+With no such ruleset, a bypass actor, a hidden bypass list or an API error,
+a refresh that would otherwise arm is opened, labelled
+`needs-manual-review` and not armed, and the run fails red until the setting
+is restored. A refresh that crosses a major is labelled and left unarmed
+either way, and its run stays green. See
+[Get a repository ruleset](https://docs.github.com/en/rest/repos/rules#get-a-repository-ruleset).
+
+**Best effort — `lockfile-refresh-guard.yml`.** Any push to an open refresh
+branch withdraws auto-merge and labels the PR `needs-manual-review`. It runs
+on `pull_request_target`, checks out nothing and runs no PR code. It reacts
+after the push, so a merge can win the race when the checks finish first or
+Actions is down. It re-reads the state and retries the disable three times;
+if disarming cannot be confirmed, it still labels the PR and fails red.
 
 ## Git hooks
 

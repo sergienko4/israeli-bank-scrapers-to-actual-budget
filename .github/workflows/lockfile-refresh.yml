@@ -16,17 +16,34 @@ name: Lockfile refresh
 # This workflow is the thing that regenerates it, so the next stale transitive
 # pin is found on a schedule instead of by a CVE landing on unrelated work.
 #
-# SCOPE: transitive refresh, within ranges parents already permit. This is NOT
-# a Dependabot replacement. `npm update` cannot cross a major version, and
-# raising a *declared* range stays Dependabot's job (.github/dependabot.yml).
+# SCOPE: transitive refresh, within ranges parents already permit, plus any
+# `npm audit fix` that stays inside those ranges. This is NOT a Dependabot
+# replacement: raising a *declared* range stays Dependabot's job
+# (.github/dependabot.yml). Neither command leaves a range a parent declares,
+# but a loose range (`*`, `>=1.0.0`) still admits a new major, so "inside the
+# range" is not "non-breaking". The summary step therefore lists every pin
+# that crossed a breaking boundary (findMajorBumps in
+# scripts/refresh-lockfile-logic.mjs), and such a refresh is never armed.
 #
 # This supersedes the retired `dependency-check.yml`, whose two recorded
 # failure modes are addressed rather than inherited:
-#   1. It could not cross majors. Still true, and now explicitly out of scope
-#      above rather than an unstated limitation.
+#   1. It could not cross majors. Deliberately crossing one is still out of
+#      scope; a major that a loose range admits anyway is labelled
+#      needs-manual-review instead of merged unseen.
 #   2. It crashed on the scraper's patch-package postinstall. Cannot recur:
 #      `--package-lock-only` ignores node_modules and downloads nothing, so no
 #      install script exists to run.
+#
+# MERGE: the pull request arms squash auto-merge as soon as it is opened, so a
+# green refresh lands without a human click. Every required check on main
+# still gates it — auto-merge only removes the click, never a gate. Three cases
+# stay with a human: a refresh that crosses a major (labelled, never armed),
+# one whose branch is not proven push-locked by the "Restrict updates"
+# ruleset (labelled, never armed, run red) and one whose CI fails. Each stays
+# open until next week's run supersedes it. A refresh whose branch moves after
+# it was opened joins them, best effort: lockfile-refresh-guard.yml withdraws
+# auto-merge and labels it, but reacts after the push. The preventive control
+# is the "Restrict updates" ruleset in docs/architecture/ci-pipeline.md.
 
 on:
   schedule:
@@ -38,12 +55,11 @@ on:
     - cron: '0 5 * * 4'
   workflow_dispatch:
 
-# The job writes through RELEASE_TOKEN, so the workflow token stays read-only.
-# `pull-requests: read` is for the duplicate check below, which must not be
-# able to write anything.
+# Every write — pushing, opening, arming or labelling the pull request, and
+# closing a superseded refresh — goes through RELEASE_TOKEN, so the workflow
+# token needs nothing beyond reading the checkout.
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: lockfile-refresh
@@ -66,10 +82,11 @@ jobs:
         with:
           # No PAT here and no persisted credentials: a credential left in
           # .git/config is readable by anything the job runs. The PAT appears
-          # only in the final step, which needs it because a pull request
-          # opened with GITHUB_TOKEN does not raise `pull_request` events — so
-          # every gate in pr.yml would be skipped and the refresh would look
-          # green without having been tested at all.
+          # only in the last two steps. The pull request step needs it because
+          # a pull request opened with GITHUB_TOKEN does not raise
+          # `pull_request` events — so every gate in pr.yml would be skipped
+          # and the refresh would look green without having been tested at
+          # all.
           persist-credentials: false
           # `schedule` always runs on the default branch, but workflow_dispatch
           # can be aimed at any ref. The pull request is always based on main,
@@ -77,28 +94,15 @@ jobs:
           # commits into the refresh.
           ref: main
 
+      # The npm bundled with this Node is used as is. lockfile-sync.yml
+      # installs the image's pinned npm, but it holds no secret; this job
+      # later holds RELEASE_TOKEN, so it runs nothing fetched from the
+      # registry.
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
-      # Without this the workflow stacks a near-identical pull request every
-      # week, and the oldest — the one whose CI already ran — is the one that
-      # looks stalest. One open refresh at a time keeps the queue honest.
-      - name: Skip when a refresh pull request is already open
-        id: existing
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          open="$(gh pr list --state open --json headRefName \
-            --jq '[.[] | select(.headRefName | startswith("chore/lockfile-refresh-"))] | length')"
-          echo "count=${open}" >> "$GITHUB_OUTPUT"
-          if [ "${open}" != '0' ]; then
-            echo "::notice::A lockfile refresh pull request is already open; nothing to do."
-          fi
-
       - name: Capture the committed lockfile
-        if: steps.existing.outputs.count == '0'
         run: cp package-lock.json "${RUNNER_TEMP}/before.json"
 
       # --package-lock-only ignores node_modules and downloads no tarballs, so
@@ -108,12 +112,41 @@ jobs:
       # explicit --ignore-scripts is redundant under that flag and kept as
       # defence in depth, not because a script would otherwise run.
       - name: Refresh transitive pins
-        if: steps.existing.outputs.count == '0'
         run: npm update --package-lock-only --ignore-scripts
+
+      # Dependabot security updates only open a pull request when it can raise
+      # a range, so a vulnerable transitive pin whose fix sits inside its
+      # parent's existing range often gets no pull request at all. `npm audit
+      # fix` closes that gap with the same lockfile-only, no-scripts guarantees
+      # as the step above. `--force` is never used: it crosses majors, which is
+      # Dependabot's job and needs review. A major that a loose range admits
+      # without `--force` is caught by the summary step, not here.
+      #
+      # This step is best-effort and never fails the job. The authoritative
+      # gate stays `npm run audit` (config/check-audit.mjs with
+      # config/audit-policy.mjs) on the pull request's own CI. An advisory left
+      # unfixed here fails that gate, so auto-merge never lands it. Advisories
+      # outside every parent's range need an `overrides` floor in package.json
+      # (as katex does), which is a reviewed change, not something to automate.
+      #
+      # If the fix needs package.json, both files are put back to their state
+      # after `npm update`. Restoring only package.json would leave the
+      # lockfile's root entry declaring ranges package.json does not.
+      - name: Apply non-breaking audit fixes
+        run: |
+          set -euo pipefail
+          cp package-lock.json "${RUNNER_TEMP}/updated.json"
+          if ! npm audit fix --package-lock-only --ignore-scripts; then
+            echo '::warning::npm audit fix left advisories unresolved; the pull request audit gate decides whether they block.'
+          fi
+          if ! git diff --quiet -- package.json; then
+            echo '::warning::npm audit fix wanted to edit package.json; discarding its changes. Raising a declared range is a reviewed change.'
+            git checkout -- package.json
+            cp "${RUNNER_TEMP}/updated.json" package-lock.json
+          fi
 
       - name: Detect whether anything moved
         id: diff
-        if: steps.existing.outputs.count == '0'
         run: |
           set -euo pipefail
           if git diff --quiet -- package-lock.json; then
@@ -123,10 +156,11 @@ jobs:
             echo 'changed=true' >> "$GITHUB_OUTPUT"
           fi
 
-      # `npm update` is documented not to touch package.json, but this asserts
-      # it rather than trusting it: anything else in the tree changing means
-      # npm did something this workflow has not reasoned about, and the commit
-      # below would silently carry it.
+      # `npm update` is documented not to touch package.json, and the audit
+      # step above undoes any package.json edit of its own. This asserts the
+      # result rather than trusting either: anything else in the tree changing
+      # means npm did something this workflow has not reasoned about, and the
+      # commit below would silently carry it.
       - name: Verify only the lockfile changed
         if: steps.diff.outputs.changed == 'true'
         run: |
@@ -144,25 +178,41 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         run: node scripts/refresh-lockfile.mjs --check
 
+      # The summary's shape is checked before any field is read. jq reads a
+      # missing or null `majorBumps` as `length` 0, so a refresh whose majors
+      # were never counted would be armed, and a missing title or body would
+      # surface as the literal text "null". The check is its own command:
+      # a jq failure inside `echo "$(...)"` would not trip errexit.
       - name: Summarise the refresh
         id: summary
         if: steps.diff.outputs.changed == 'true'
         run: |
           set -euo pipefail
+          summary="${RUNNER_TEMP}/summary.json"
           node scripts/summarize-refresh.mjs \
-            "${RUNNER_TEMP}/before.json" package-lock.json > "${RUNNER_TEMP}/summary.json"
+            "${RUNNER_TEMP}/before.json" package-lock.json > "${summary}"
+          if ! jq -e '(.title | type == "string" and length > 0)
+                and (.body | type == "string" and length > 0)
+                and (.majorBumps | type == "array")' "${summary}" > /dev/null; then
+            echo '::error::The refresh summary lacks a title, a body or a majorBumps list; refusing to open the pull request.'
+            exit 1
+          fi
           {
-            echo "title=$(jq -r .title "${RUNNER_TEMP}/summary.json")"
+            echo "title=$(jq -r .title "${summary}")"
+            echo "majors=$(jq '.majorBumps | length' "${summary}")"
             echo 'body<<LOCKFILE_REFRESH_BODY'
-            jq -r .body "${RUNNER_TEMP}/summary.json"
+            jq -r .body "${summary}"
             echo 'LOCKFILE_REFRESH_BODY'
           } >> "$GITHUB_OUTPUT"
 
       # The commit type comes from the summary, not from a hard-coded `chore`.
-      # `npm update` never edits package.json, so the release-signal guard —
-      # which compares package.json and the Dockerfile — cannot see a runtime
-      # bump made here. Hard-coding `chore` would therefore ship a transitive
-      # runtime change to users with no release, which is the exact failure
+      # Neither `npm update` nor the audit step may leave package.json edited
+      # (the guard above enforces it), so the release-signal guard — which
+      # compares package.json and the Dockerfile — cannot see a runtime bump
+      # made here. An audit fix to a runtime pin therefore releases as
+      # `fix(deps)`, and a dev-only one stays `chore(deps)`.
+      # Hard-coding `chore` would ship a transitive runtime change to users
+      # with no release, which is the exact failure
       # scripts/release-signal-logic.mjs exists to prevent.
       - name: Commit the refresh
         if: steps.diff.outputs.changed == 'true'
@@ -181,17 +231,74 @@ jobs:
             -m "Opened by the lockfile-refresh workflow (run ${GITHUB_RUN_ID})." \
             -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
 
-      # The token is confined to the one step that cannot work without it, so
-      # it is absent from every step that produced what is being pushed.
+      # --match-head-commit holds only at arming time: a commit pushed to the
+      # branch afterwards would merge under this run's verdict. The "Restrict
+      # updates" ruleset on chore/lockfile-refresh-* is what stops that push,
+      # so arming requires proof it is in force: an active update rule on this
+      # branch name from a ruleset nobody may bypass. Rulesets stack, so one
+      # such ruleset is enough. Anything less — no rule, a bypass list, or a
+      # bypass list this token cannot read — is no proof, and the next step
+      # leaves the pull request for a human. The ruleset read must itself
+      # still list the update rule, so an edit between the two reads proves
+      # nothing. The rules endpoint matches by name, so the branch need not
+      # exist yet. Read-only; the token returns here for the same reason as
+      # below.
+      - name: Check the refresh branch is push-locked
+        id: lock
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          BRANCH: chore/lockfile-refresh-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          unproven() {
+            echo "::warning::${BRANCH} is not proven push-locked: $1"
+            { echo 'locked=false'; echo "why=$1"; } >> "${GITHUB_OUTPUT}"
+            exit 0
+          }
+          ids=$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/${BRANCH}" \
+            --jq '[.[] | select(.type == "update") | .ruleset_id] | unique | .[]') \
+            || unproven 'its rules could not be read.'
+          [ -n "${ids}" ] || unproven 'no "Restrict updates" rule applies to it.'
+          while IFS= read -r id; do
+            if ok=$(gh api "repos/${GITHUB_REPOSITORY}/rulesets/${id}" \
+                --jq '.enforcement == "active"
+                      and (.bypass_actors | type) == "array"
+                      and (.bypass_actors | length) == 0
+                      and any(.rules[]?; .type == "update")') \
+              && [ "${ok}" = true ]; then
+              echo 'locked=true' >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+          done <<< "${ids}"
+          unproven 'each ruleset restricting it is inactive, unreadable, or has bypass actors.'
+
+      # The token is absent from every step that produced what is being
+      # pushed; it returns only for the ruleset check, the push, the pull
+      # request, labelling and arming.
       - name: Push the branch and open the pull request
+        id: pr
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           BRANCH: chore/lockfile-refresh-${{ github.run_id }}
           TITLE: ${{ steps.summary.outputs.title }}
           BODY: ${{ steps.summary.outputs.body }}
+          MAJORS: ${{ steps.summary.outputs.majors }}
+          LOCKED: ${{ steps.lock.outputs.locked }}
+          LOCK_WHY: ${{ steps.lock.outputs.why }}
         run: |
           set -euo pipefail
+          # Fail closed before anything is pushed: an empty or non-numeric
+          # count would make the `-gt` test below error, which `if` reads as
+          # false — arming a refresh whose majors were never counted.
+          case "${MAJORS}" in
+            '' | *[!0-9]*)
+              echo "::error::The summary step reported no valid major count ('${MAJORS}'); refusing to open the pull request."
+              exit 1
+              ;;
+          esac
+
           # The remote is credential-free by design, so the token is supplied
           # for this one command rather than left in .git/config for the whole
           # job. Actions masks it in the log.
@@ -199,7 +306,113 @@ jobs:
             "HEAD:refs/heads/${BRANCH}"
 
           gh pr create \
+            --repo "${GITHUB_REPOSITORY}" \
             --title "${TITLE}" \
             --base main \
             --head "${BRANCH}" \
             --body "${BODY}"
+          # From here on a replacement exists, so the supersede step below may
+          # close older refreshes even if arming fails.
+          echo 'opened=true' >> "$GITHUB_OUTPUT"
+
+          # Routes the pull request to a human. REST rather than
+          # `gh pr edit --add-label`, which goes through a GraphQL mutation
+          # that also touches deprecated classic projects.
+          label_for_review() {
+            number="$(gh pr view "${BRANCH}" --repo "${GITHUB_REPOSITORY}" \
+              --json number --jq .number)"
+            gh label create needs-manual-review --repo "${GITHUB_REPOSITORY}" \
+              --force --color D93F0B \
+              --description 'Dependency update outside the auto-merge policy'
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${number}/labels" \
+              -f 'labels[]=needs-manual-review' > /dev/null
+          }
+
+          # A pin that crossed a breaking boundary is a reviewed change, the
+          # same rule the Dependabot auto-merge policy applies. The body
+          # already lists every such pin; the label routes it to a human and
+          # arming is skipped. Not an error: the refresh did its job.
+          if [ "${MAJORS}" -gt 0 ]; then
+            label_for_review
+            echo "::notice::${MAJORS} pin(s) crossed a major; #${number} is labelled needs-manual-review and not armed."
+            exit 0
+          fi
+
+          # Without proof the branch is push-locked, an armed refresh could
+          # merge a commit nobody judged. Left for a human and red, because a
+          # missing or weakened ruleset is a setting to restore.
+          if [ "${LOCKED}" != true ]; then
+            label_for_review
+            echo "::error::#${number} is not armed: ${BRANCH} is not proven push-locked (${LOCK_WHY:-the check did not report}). Restore the ruleset described under \"Lockfile refresh guard\" in docs/architecture/ci-pipeline.md, then merge it by hand."
+            exit 1
+          fi
+
+          # Armed with RELEASE_TOKEN, not GITHUB_TOKEN: a merge performed by
+          # GITHUB_TOKEN raises no `push` event, so release-please would never
+          # see a runtime refresh land on main. --match-head-commit arms only
+          # the exact commit this run produced: if anything else reached the
+          # branch first, arming fails loudly instead of adopting it. The retry
+          # covers GitHub still computing the new pull request's merge state.
+          # The check holds only at arming time. A later push to the branch
+          # is blocked by the "Restrict updates" ruleset the lock step proved
+          # in force, and lockfile-refresh-guard.yml disarms it best effort
+          # after the fact.
+          head_sha="$(git rev-parse HEAD)"
+          armed=false
+          for attempt in 1 2 3; do
+            if gh pr merge "${BRANCH}" --repo "${GITHUB_REPOSITORY}" \
+              --auto --squash --match-head-commit "${head_sha}"; then
+              armed=true
+              break
+            fi
+            echo "::warning::Arming auto-merge failed (attempt ${attempt}/3); retrying."
+            sleep 15
+          done
+          if [ "${armed}" != true ]; then
+            echo "::error::Could not arm auto-merge on ${BRANCH}; it stays open for a manual merge."
+            exit 1
+          fi
+
+      # One open refresh at a time keeps the queue honest, but skipping while
+      # one is open (the previous behaviour) stalls auto-merge for good: main
+      # requires branches to be up to date, so a refresh that falls behind can
+      # never merge, and updating its branch would merge two lockfiles rather
+      # than regenerate one — usually a conflict. A refresh still open a week
+      # later is stale by definition, so it is closed here.
+      #
+      # This runs last on purpose. Closing first would leave nothing open if
+      # any step after it failed — a canonical-check failure or a refused push
+      # would silently retire last week's refresh with no replacement. So a
+      # stale refresh is closed only once its replacement exists
+      # (`opened == 'true'`), or once this run proved main already carries
+      # every pin (`changed == 'false'`), which makes the stale one redundant.
+      # `!cancelled()` keeps the close after a replacement whose arming failed:
+      # the new pull request still supersedes the old one.
+      # The token is safe here: `--package-lock-only` never installed or ran
+      # third-party code in this job.
+      - name: Supersede stale refresh pull requests
+        if: >-
+          !cancelled()
+          && (steps.diff.outputs.changed == 'false'
+              || steps.pr.outputs.opened == 'true')
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          BRANCH: chore/lockfile-refresh-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          gh pr list --repo "${GITHUB_REPOSITORY}" --state open --limit 100 \
+            --json number,headRefName,isCrossRepository > "${RUNNER_TEMP}/open.json"
+          # Same-repository branches only: a fork can name its branch anything,
+          # and this step must never close a contributor's pull request. The
+          # branch this run opened is excluded by name.
+          jq -r --arg current "${BRANCH}" '.[]
+            | select((.isCrossRepository | not)
+                and (.headRefName | startswith("chore/lockfile-refresh-"))
+                and (.headRefName != $current))
+            | .number' "${RUNNER_TEMP}/open.json" > "${RUNNER_TEMP}/stale.txt"
+          while IFS= read -r number; do
+            [ -n "${number}" ] || continue
+            gh pr close "${number}" --repo "${GITHUB_REPOSITORY}" --delete-branch \
+              --comment "Superseded by lockfile-refresh run ${GITHUB_RUN_ID}, which regenerated from current main."
+            echo "::notice::Closed stale lockfile refresh #${number}."
+          done < "${RUNNER_TEMP}/stale.txt"

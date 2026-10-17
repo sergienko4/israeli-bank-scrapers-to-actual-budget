@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-02-27
-- **Amended:** 2026-09-10 — see the note under Context
+- **Amended:** 2026-09-10, 2026-10-16 — see the notes under Context
 - **Deciders:** Repository maintainer
 - **Supersedes:** the retired `dependency-check.yml` workflow
 
@@ -40,6 +40,24 @@ policy file at all. The advisory could only be cleared by moving the pin.
 > class exists only for advisories that regeneration cannot fix, such as
 > `GHSA-vwc7-r8mq-g2x9` in `adm-zip`, which had no patched release to move to
 > until 0.6.1.
+>
+> **Amended 2026-10-16.** [ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md)
+> changes how the refresh lands, not what it does. The workflow now closes
+> older open refresh pull requests instead of skipping when one exists — but
+> only once its own replacement is open or `main` already carries every pin.
+> It runs a non-fatal `npm audit fix --package-lock-only --ignore-scripts`
+> after the transitive refresh, and arms squash auto-merge on the commit it
+> pushed, unless a pin crossed a major, which is labelled
+> `needs-manual-review` instead. Arming pins only the commit it saw, so a
+> "Restrict updates" ruleset on refresh branches blocks later pushes, and a
+> companion workflow, `lockfile-refresh-guard.yml`, withdraws auto-merge and
+> applies the same label, best effort, when a push gets through anyway.
+> Dependabot now scans npm daily; Docker and GitHub Actions stay on Monday.
+> The statements below about the duplicate check, the Monday Dependabot
+> batch and the review burden describe the original decision. So does the
+> claim that `npm update` cannot cross a major: it stays inside each
+> parent's declared range, but a nested entry can still land on a new major
+> when an updated parent asks for one, which is why majors are detected.
 
 The decisive detail is that **the fix was already inside the allowed range**.
 Regeneration alone would have produced `4.28.8`. The lockfile had simply never
@@ -65,10 +83,12 @@ canonical.
    `workflow_dispatch`), and opens a pull request when anything moved.
 
 2. **`npm run lint:lockfile`** (`scripts/refresh-lockfile.mjs --check`) runs
-   inside `validate:ci`, failing the build on a foreign registry host or a
-   `sha1` integrity. `npm run refresh-lockfile` repairs foreign hosts in place;
-   integrity downgrades **fail closed**, because a weakened hash cannot be
-   strengthened without re-fetching the tarball from the canonical registry.
+   inside `validate:ci`, failing the build on a foreign registry host, a
+   `sha1` integrity, or a registry tarball with no integrity.
+   `npm run refresh-lockfile` repairs foreign hosts in place; missing or
+   downgraded integrity **fails closed**, because only a run against the
+   canonical registry can restore the hash (the scheduled refresh's
+   `npm update` does).
 
 3. **The commit type is derived from the lockfile**, not hard-coded.
    `summarizeRefresh()` marks the change `fix(deps)` when any non-`dev` entry
@@ -165,5 +185,5 @@ declared range remains Dependabot's job. This is not a Dependabot replacement.
 **Neutral**
 
 - `scripts/*.mjs` sits outside the coverage `include` (`src/**`), so the
-  90/95/90/90 thresholds do not apply. The logic is covered by 43 tests in
+  90/95/90/90 thresholds do not apply. The logic is covered by
   `tests/refresh-lockfile-logic.test.ts` regardless.

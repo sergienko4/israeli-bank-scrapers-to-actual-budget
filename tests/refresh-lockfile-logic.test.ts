@@ -5,6 +5,7 @@ import {
   CANONICAL_REGISTRY,
   canonicalizeRegistryUrls,
   findForeignRegistryEntries,
+  findMajorBumps,
   findWeakIntegrities,
   formatLockfileReport,
   formatRefreshBody,
@@ -66,6 +67,29 @@ describe('findForeignRegistryEntries', () => {
     expect(found).toHaveLength(1);
   });
 
+  it.each([
+    ['an upper-case scheme', 'HTTPS://evil.example/x/-/x-1.0.0.tgz'],
+    ['no slashes', 'https:evil.example/x/-/x-1.0.0.tgz'],
+    ['one slash', 'HTTPS:/evil.example/x/-/x-1.0.0.tgz'],
+    ['backslashes', 'https:\\evil.example\\x\\-\\x-1.0.0.tgz'],
+  ])('flags and repairs a URL spelled with %s, which npm still downloads', (_case, resolved) => {
+    const text = lockfile({ 'node_modules/x': { version: '1.0.0', resolved } });
+
+    expect(findForeignRegistryEntries(text)).toEqual([{ path: 'node_modules/x', resolved }]);
+    expect(findWeakIntegrities(text)).toEqual([{ path: 'node_modules/x', integrity: '' }]);
+    expect(canonicalizeRegistryUrls(text)).toEqual({
+      text: lockfile({ 'node_modules/x': { version: '1.0.0', resolved: `${CANONICAL_REGISTRY}x/-/x-1.0.0.tgz` } }),
+      replaced: 1,
+    });
+  });
+
+  it('repairs an upper-case spelling of the public registry', () => {
+    const text = lockfile({ 'node_modules/x': { resolved: 'HTTPS://REGISTRY.NPMJS.ORG/x/-/x-1.0.0.tgz' } });
+
+    expect(findForeignRegistryEntries(text)).toHaveLength(1);
+    expect(canonicalizeRegistryUrls(text).text).toContain(`"${CANONICAL_REGISTRY}x/-/x-1.0.0.tgz"`);
+  });
+
   it('ignores entries with no resolved URL, such as the root and link targets', () => {
     const text = lockfile({
       '': { name: 'root' },
@@ -108,8 +132,24 @@ describe('findWeakIntegrities', () => {
     expect(findWeakIntegrities(text)).toEqual([]);
   });
 
-  it('ignores entries with no integrity field', () => {
-    expect(findWeakIntegrities(lockfile({ 'node_modules/x': { version: '1.0.0' } }))).toEqual([]);
+  it.each([
+    ['records no source', { version: '1.0.0' }],
+    ['links a workspace folder', { resolved: 'packages/x', link: true }],
+    ['comes from a local file', { resolved: 'file:../x-1.0.0.tgz' }],
+    ['comes from git', { resolved: 'git+ssh://git@github.com/o/x.git#abc' }],
+  ])('ignores a missing integrity on an entry that %s', (_case, entry) => {
+    expect(findWeakIntegrities(lockfile({ 'node_modules/x': entry }))).toEqual([]);
+  });
+
+  it.each([
+    ['the public registry', 'https://registry.npmjs.org/x/-/x-1.0.0.tgz'],
+    ['a plain-HTTP mirror', 'http://mirror.example/x/-/x-1.0.0.tgz'],
+  ])('flags a tarball from %s that carries no integrity', (_case, resolved) => {
+    const text = lockfile({ 'node_modules/x': { version: '1.0.0', resolved } });
+
+    expect(findWeakIntegrities(text)).toEqual([{ path: 'node_modules/x', integrity: '' }]);
+    expect(auditLockfile(text).ok).toBe(false);
+    expect(formatLockfileReport(auditLockfile(text))).toContain('node_modules/x  ->  (missing)');
   });
 });
 
@@ -165,6 +205,20 @@ describe('canonicalizeRegistryUrls', () => {
     expect(canonicalizeRegistryUrls(nested).text).toContain(
       'https://registry.npmjs.org/@scope/child/-/child-1.0.0.tgz',
     );
+  });
+
+  it.each([
+    ['escaped slashes', 'https:\\/\\/evil.example\\/x\\/-\\/x-1.0.0.tgz'],
+    ['a unicode escape', '\\u0068ttps://evil.example/x/-/x-1.0.0.tgz'],
+  ])('rewrites a URL whose JSON spelling uses %s', (_case, encoded) => {
+    const plain = lockfile({ 'node_modules/x': { version: '1.0.0', resolved: 'https://evil.example/x/-/x-1.0.0.tgz' } });
+    const text = plain.replace('"https://evil.example/x/-/x-1.0.0.tgz"', `"${encoded}"`);
+
+    expect(text).not.toBe(plain);
+    expect(canonicalizeRegistryUrls(text)).toEqual({
+      text: lockfile({ 'node_modules/x': { version: '1.0.0', resolved: `${CANONICAL_REGISTRY}x/-/x-1.0.0.tgz` } }),
+      replaced: 1,
+    });
   });
 
   it('drops a mirror query string rather than carrying it to the registry', () => {
@@ -366,6 +420,7 @@ describe('formatRefreshBody', () => {
     });
     const body = formatRefreshBody(summarizeRefresh(runtimeMove, after));
     expect(body).toContain('npm update --package-lock-only');
+    expect(body).toContain('npm audit fix --package-lock-only');
   });
 
   it('reports a moved runtime pin by package name, not lockfile path', () => {
@@ -422,5 +477,409 @@ describe('formatRefreshBody', () => {
     const body = formatRefreshBody(summarizeRefresh(runtimeMove, after));
     expect(body).toContain('Development pins (1)');
     expect(body).not.toContain('Runtime pins');
+  });
+
+  it('flags major-version jumps and says auto-merge is withheld', () => {
+    const after = lockfile({
+      'node_modules/browserslist': { version: '5.0.0' },
+      'node_modules/vitest': { version: '3.0.0', dev: true },
+    });
+    const majorBumps = findMajorBumps(runtimeMove, after);
+    const body = formatRefreshBody({ ...summarizeRefresh(runtimeMove, after), majorBumps });
+    expect(body).toContain('Major-version jumps (1)');
+    expect(body).toContain('`browserslist` 4.28.2 → 5.0.0');
+    expect(body).toContain('needs-manual-review');
+  });
+
+  it('omits the major-version section when no major moved', () => {
+    const after = lockfile({
+      'node_modules/browserslist': { version: '4.28.8' },
+      'node_modules/vitest': { version: '3.0.0', dev: true },
+    });
+    const summary = summarizeRefresh(runtimeMove, after);
+    expect(formatRefreshBody({ ...summary, majorBumps: [] })).not.toContain('Major-version');
+    expect(formatRefreshBody(summary)).not.toContain('Major-version');
+  });
+});
+
+describe('findMajorBumps', () => {
+  /** Builds a one-package lockfile pinned at the given version. */
+  function pinned(version: string | undefined, extra: Record<string, unknown> = {}): string {
+    return lockfile({ '': { name: 'root' }, 'node_modules/pkg': { version, ...extra } });
+  }
+
+  it('flags a major jump on a stable package', () => {
+    // An open-ended range such as `sax: ">=0.6.0"` lets `npm update` do this.
+    expect(findMajorBumps(pinned('1.4.0'), pinned('2.0.0'))).toEqual([
+      { path: 'node_modules/pkg', from: '1.4.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a minor or patch move inside the same major', () => {
+    expect(findMajorBumps(pinned('1.4.0'), pinned('1.9.3'))).toEqual([]);
+  });
+
+  it('treats a 0.x minor move as breaking', () => {
+    expect(findMajorBumps(pinned('0.6.0'), pinned('0.7.0'))).toHaveLength(1);
+  });
+
+  it('does not flag a 0.x patch move', () => {
+    expect(findMajorBumps(pinned('0.6.0'), pinned('0.6.4'))).toEqual([]);
+  });
+
+  it('treats a 0.0.x patch move as breaking', () => {
+    expect(findMajorBumps(pinned('0.0.3'), pinned('0.0.4'))).toHaveLength(1);
+  });
+
+  it('compares prerelease versions by their numeric core', () => {
+    expect(findMajorBumps(pinned('2.0.0-rc.1'), pinned('2.0.1'))).toEqual([]);
+    expect(findMajorBumps(pinned('1.9.0'), pinned('2.0.0-beta.1'))).toHaveLength(1);
+  });
+
+  it('treats an unparseable version as breaking rather than safe', () => {
+    expect(findMajorBumps(pinned('1.0.0'), pinned('latest'))).toHaveLength(1);
+    expect(findMajorBumps(pinned('1.0.0'), pinned(undefined))).toHaveLength(1);
+  });
+
+  it('covers development entries as well as runtime ones', () => {
+    expect(findMajorBumps(pinned('1.0.0', { dev: true }), pinned('2.0.0', { dev: true }))).toHaveLength(1);
+  });
+
+  it('ignores packages that were only added or removed', () => {
+    const empty = lockfile({ '': { name: 'root' } });
+    expect(findMajorBumps(empty, pinned('3.0.0'))).toEqual([]);
+    expect(findMajorBumps(pinned('3.0.0'), empty)).toEqual([]);
+  });
+
+  it('flags a new major that npm installs at a new nested path', () => {
+    // npm keeps the hoisted copy and nests the new major under its parent,
+    // so no single path re-pins — the jump only shows up by package name.
+    const before = lockfile({ '': { name: 'root' }, 'node_modules/x': { version: '1.0.0' } });
+    const after = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'node_modules/y/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a nested copy that stays inside the same major', () => {
+    const before = lockfile({ '': { name: 'root' }, 'node_modules/x': { version: '1.0.0' } });
+    const after = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '1.5.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('does not flag a relocated major the package already had', () => {
+    const before = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    const after = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/z/node_modules/x': { version: '2.1.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('reports nothing for an unchanged lockfile', () => {
+    expect(findMajorBumps(pinned('1.0.0'), pinned('1.0.0'))).toEqual([]);
+  });
+
+  it('flags a dependant that now loads a major already present elsewhere', () => {
+    // 2.0.0 already sat under y, so the by-name check sees nothing new, yet
+    // z itself moves from the hoisted 1.0.0 to a nested 2.0.0.
+    const shared = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/z': { version: '1.0.0', dependencies: { x: '*' } },
+    };
+    const after = lockfile({ ...shared, 'node_modules/z/node_modules/x': { version: '2.0.0' } });
+    expect(findMajorBumps(lockfile(shared), after)).toEqual([
+      { path: 'node_modules/z/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a dependant whose resolved copy stays inside the same major', () => {
+    const shared = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/z': { version: '1.0.0', dependencies: { x: '*' } },
+    };
+    const after = lockfile({ ...shared, 'node_modules/z/node_modules/x': { version: '1.5.0' } });
+    expect(findMajorBumps(lockfile(shared), after)).toEqual([]);
+  });
+
+  it('resolves scoped packages declared through any dependency field', () => {
+    const shared = {
+      '': { name: 'root' },
+      'node_modules/@t/b': { version: '1.0.0' },
+      'node_modules/w/node_modules/@t/b': { version: '2.0.0' },
+      'node_modules/@s/a': { version: '1.0.0', peerDependencies: { '@t/b': '*' } },
+    };
+    const after = lockfile({ ...shared, 'node_modules/@s/a/node_modules/@t/b': { version: '2.0.0' } });
+    expect(findMajorBumps(lockfile(shared), after)).toEqual([
+      { path: 'node_modules/@s/a/node_modules/@t/b', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not compare a dependant that only exists after the refresh', () => {
+    const before = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    const after = lockfile({
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/z': { version: '1.0.0', dependencies: { x: '*' } },
+      'node_modules/z/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('flags a dependant that npm moved and that now loads a new major', () => {
+    // z leaves the top level for w's folder, so no z path exists on both
+    // sides; its earlier copy is matched by name and still loaded x 1.0.0.
+    const kept = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/w': { version: '1.0.0' },
+    };
+    const z = { version: '1.0.0', dependencies: { x: '*' } };
+    const before = lockfile({ ...kept, 'node_modules/z': z });
+    const after = lockfile({
+      ...kept,
+      'node_modules/w/node_modules/z': z,
+      'node_modules/w/node_modules/z/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'node_modules/w/node_modules/z/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a moved dependant whose copy stays inside the same major', () => {
+    const kept = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/w': { version: '1.0.0' },
+    };
+    const z = { version: '1.0.0', dependencies: { x: '*' } };
+    const before = lockfile({ ...kept, 'node_modules/z': z });
+    const after = lockfile({
+      ...kept,
+      'node_modules/w/node_modules/z': z,
+      'node_modules/w/node_modules/z/node_modules/x': { version: '1.5.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  // Two earlier copies of y at one version loaded different majors of x, so
+  // the copy npm kept cannot be told apart. Any earlier copy that the new
+  // copy breaks from is enough to withhold auto-merge.
+  const splitPriors = {
+    '': { name: 'root' },
+    'node_modules/a': { version: '1.0.0' },
+    'node_modules/b': { version: '1.0.0' },
+    'node_modules/c': { version: '1.0.0' },
+  };
+  const yNeedsX = { version: '1.0.0', dependencies: { x: '*' } };
+  const beforeSplit = lockfile({
+    ...splitPriors,
+    'node_modules/a/node_modules/y': yNeedsX,
+    'node_modules/a/node_modules/y/node_modules/x': { version: '1.0.0' },
+    'node_modules/b/node_modules/y': yNeedsX,
+    'node_modules/b/node_modules/y/node_modules/x': { version: '2.0.0' },
+  });
+
+  it('flags a moved dependant when any earlier copy loaded an older major', () => {
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/c/node_modules/y': yNeedsX,
+      'node_modules/c/node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(beforeSplit, after)).toEqual([
+      { path: 'node_modules/c/node_modules/y/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('flags a hoisted dependant when any earlier copy loaded an older major', () => {
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/y': yNeedsX,
+      'node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(beforeSplit, after)).toEqual([
+      { path: 'node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not flag a moved dependant when every earlier copy shares its major', () => {
+    const before = lockfile({
+      ...splitPriors,
+      'node_modules/a/node_modules/y': yNeedsX,
+      'node_modules/a/node_modules/y/node_modules/x': { version: '2.0.0' },
+      'node_modules/b/node_modules/y': yNeedsX,
+      'node_modules/b/node_modules/y/node_modules/x': { version: '2.1.0' },
+    });
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/c/node_modules/y': yNeedsX,
+      'node_modules/c/node_modules/y/node_modules/x': { version: '2.3.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  // y 1.x loaded x 1.0.0 and y 3.x loaded x 2.0.0. A moved y at a new 3.x
+  // version is compared with the 3.x copy only: the 1.x copy is a different
+  // release line whose dependencies say nothing about this one.
+  const yLines = lockfile({
+    ...splitPriors,
+    'node_modules/a/node_modules/y': yNeedsX,
+    'node_modules/a/node_modules/y/node_modules/x': { version: '1.0.0' },
+    'node_modules/b/node_modules/y': { ...yNeedsX, version: '3.0.0' },
+    'node_modules/b/node_modules/y/node_modules/x': { version: '2.0.0' },
+  });
+
+  it('compares a moved dependant only with earlier copies on its major line', () => {
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/c/node_modules/y': { ...yNeedsX, version: '3.1.0' },
+      'node_modules/c/node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(yLines, after)).toEqual([]);
+  });
+
+  it('compares a moved dependant with every earlier copy when none shares its line', () => {
+    const after = lockfile({
+      ...splitPriors,
+      'node_modules/c/node_modules/y': { ...yNeedsX, version: '5.0.0' },
+      'node_modules/c/node_modules/y/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(yLines, after)).toEqual([
+      { path: 'node_modules/c/node_modules/y', from: '1.0.0', to: '5.0.0' },
+      { path: 'node_modules/c/node_modules/y/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('does not compare a dependency the refresh newly declared', () => {
+    // z did not require x before, so the hoisted x 1.0.0 it could have
+    // reached was never its copy and there is nothing to break from.
+    const kept = {
+      '': { name: 'root' },
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    };
+    const before = lockfile({ ...kept, 'node_modules/z': { version: '1.0.0' } });
+    const after = lockfile({
+      ...kept,
+      'node_modules/z': { version: '1.0.0', dependencies: { x: '*' } },
+      'node_modules/z/node_modules/x': { version: '2.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('lists a path once when several checks catch the same jump', () => {
+    const root = { name: 'root', devDependencies: { pkg: '*' } };
+    const before = lockfile({ '': root, 'node_modules/pkg': { version: '1.0.0' } });
+    const after = lockfile({ '': root, 'node_modules/pkg': { version: '2.0.0' } });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'node_modules/pkg', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('flags a nested workspace that now loads its parent folder copy', () => {
+    // node searches packages/a/node_modules from packages/a/sub even though
+    // npm never installed packages/a itself, so the new copy there is the one
+    // the workspace loads. 2.0.0 already existed, so only this check sees it.
+    const sub = { version: '1.0.0', dependencies: { x: '*' } };
+    const kept = {
+      '': { name: 'root' },
+      'packages/a/sub': sub,
+      'node_modules/x': { version: '1.0.0' },
+      'node_modules/y/node_modules/x': { version: '2.0.0' },
+    };
+    const before = lockfile(kept);
+    const after = lockfile({ ...kept, 'packages/a/node_modules/x': { version: '2.0.0' } });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'packages/a/node_modules/x', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('judges a linked workspace by the folder the link points at', () => {
+    const root = { name: 'root', dependencies: { x: '*' } };
+    const link = { link: true, resolved: 'packages/x' };
+    const before = lockfile({
+      '': root,
+      'node_modules/x': link,
+      'packages/x': { version: '1.0.0' },
+    });
+    const after = lockfile({
+      '': root,
+      'node_modules/x': link,
+      'packages/x': { version: '1.5.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([]);
+  });
+
+  it('flags a link that now points at a workspace of a new major', () => {
+    // Both workspace versions already existed, so no version diff shows the
+    // jump; only following the link reveals that root now loads 2.0.0.
+    const root = { name: 'root', dependencies: { x: '*' } };
+    const workspaces = {
+      'packages/x': { version: '1.0.0' },
+      'packages/x2': { version: '2.0.0' },
+    };
+    const before = lockfile({
+      '': root,
+      'node_modules/x': { link: true, resolved: 'packages/x' },
+      ...workspaces,
+    });
+    const after = lockfile({
+      '': root,
+      'node_modules/x': { link: true, resolved: 'packages/x2' },
+      ...workspaces,
+    });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'packages/x2', from: '1.0.0', to: '2.0.0' },
+    ]);
+  });
+
+  it('treats a link that never reaches a package as breaking', () => {
+    // A self-referencing link has no version to compare, and an unknown jump
+    // is never treated as safe.
+    const root = { name: 'root', dependencies: { x: '*' } };
+    const before = lockfile({
+      '': root,
+      'node_modules/x': { link: true, resolved: 'packages/x' },
+      'packages/x': { version: '1.0.0' },
+    });
+    const after = lockfile({
+      '': root,
+      'node_modules/x': { link: true, resolved: 'node_modules/x' },
+      'packages/x': { version: '1.0.0' },
+    });
+    expect(findMajorBumps(before, after)).toEqual([
+      { path: 'node_modules/x', from: '1.0.0', to: undefined },
+    ]);
+  });
+
+  it('ignores the root entry', () => {
+    const before = lockfile({ '': { name: 'root', version: '1.0.0' } });
+    const after = lockfile({ '': { name: 'root', version: '2.0.0' } });
+    expect(findMajorBumps(before, after)).toEqual([]);
   });
 });
