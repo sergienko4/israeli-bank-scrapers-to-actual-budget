@@ -687,11 +687,31 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
     expect(nudged(run)).toEqual(['11']);
   });
 
+  it('reads past a comment that has no body', () => {
+    const gh = {
+      user: { login: 'owner' },
+      ...behindMain(first),
+      ...behindMain(second),
+      [`repos/${REPO}/issues/${first.number}/comments`]: [{ user: { login: 'owner' }, body: null, created_at: '2026-05-04T09:00:00Z' }],
+    };
+
+    const run = runStep(step, { env: {}, gh, prList });
+
+    expect(run.status).toBe(0);
+    expect(nudged(run)).toEqual(['11']);
+  });
+
   it.each([
     ['its comparison with main fails', `repos/${REPO}/compare/main...${first.sha}`, undefined],
     ['its head commit cannot be read', `repos/${REPO}/commits/${first.sha}`, undefined],
     ['its head commit carries no date', `repos/${REPO}/commits/${first.sha}`, { commit: { committer: {} } }],
     ['its comments cannot be read', `repos/${REPO}/issues/${first.number}/comments`, undefined],
+    ['its comments are not a list', `repos/${REPO}/issues/${first.number}/comments`, { message: 'Bad gateway' }],
+    [
+      'an earlier rebase request carries no readable date',
+      `repos/${REPO}/issues/${first.number}/comments`,
+      [{ user: { login: 'owner' }, body: '@dependabot rebase', created_at: '9999' }],
+    ],
   ])('skips a pull request when %s and nudges the next', (_case, path, answer) => {
     const gh: Record<string, unknown> = { user: { login: 'owner' }, ...behindMain(first), ...behindMain(second) };
     if (answer === undefined) delete gh[path];

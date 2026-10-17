@@ -732,6 +732,7 @@ jobs:
           # under errexit a bare `x=$(gh …)` would end the run, so each read
           # carries its own fallback. The nudge itself is a write and still
           # fails the run.
+          iso='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$'
           while IFS=$'\t' read -r number sha <&3; do
             behind=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${base}...${sha}" \
               --jq '.behind_by // empty') || behind=''
@@ -747,7 +748,7 @@ jobs:
             # nudge would go uncounted and the PR would be nudged forever.
             head_date=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}" \
               --jq .commit.committer.date) || head_date=''
-            if ! [[ "${head_date}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$ ]]; then
+            if ! [[ "${head_date}" =~ ${iso} ]]; then
               echo "::warning::#${number}: could not read when ${sha} was committed; skipped."
               continue
             fi
@@ -759,13 +760,24 @@ jobs:
             fi
             # Nudges made since the current head was committed. Both sides are
             # GitHub's ISO-8601 UTC strings, so string order is time order.
-            jq -rs --arg me "${me}" --arg head "${head_date}" \
+            # A page that is not a list of comments fails jq, and a count or
+            # date that does not parse would end the run under errexit, so
+            # both skip the PR instead.
+            if ! jq -rs --arg me "${me}" --arg head "${head_date}" \
               'add // [] | map(select(.user.login == $me
-                 and (.body | startswith("@dependabot rebase"))
+                 and ((.body // "") | startswith("@dependabot rebase"))
                  and .created_at > $head))
                | "\(length)\t\(map(.created_at) | max // "")"' \
-              "${RUNNER_TEMP}/comments.json" > "${RUNNER_TEMP}/nudges.tsv"
-            IFS=$'\t' read -r nudges last_nudge < "${RUNNER_TEMP}/nudges.tsv"
+              "${RUNNER_TEMP}/comments.json" > "${RUNNER_TEMP}/nudges.tsv"; then
+              echo "::warning::#${number}: could not parse its comments; skipped."
+              continue
+            fi
+            IFS=$'\t' read -r nudges last_nudge < "${RUNNER_TEMP}/nudges.tsv" || true
+            if ! [[ "${nudges:-}" =~ ^[0-9]+$ ]] \
+              || { [ "${nudges}" -gt 0 ] && ! [[ "${last_nudge:-}" =~ ${iso} ]]; }; then
+              echo "::warning::#${number}: could not read its earlier rebase requests; skipped."
+              continue
+            fi
             if [ "${nudges}" -gt 0 ]; then
               age=$(( $(date -u +%s) - $(date -u -d "${last_nudge}" +%s) ))
               if [ "${age}" -lt 7200 ]; then
