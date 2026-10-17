@@ -8,7 +8,8 @@
  * same cases: a refresh summary without a major count, a refresh branch with
  * no proven push lock, a Dependabot pull request carrying more than one
  * Dependabot commit, a CI verdict read from anything but the newest CI run
- * for the head, and a run that cannot name its pull request.
+ * for the head, a run that cannot name its pull request, and a rebase queue
+ * stalled by one pull request it cannot read.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -37,7 +38,9 @@ const CAN_RUN = HAS_TOOLS || process.env.CI === 'true';
 /**
  * Logs every call; `gh api` answers GETs from a fixture named after the
  * path (an absent fixture is an API error), `gh pr view` prints the pull
- * request number, and every other command succeeds silently. A fixture of
+ * request number, `gh pr list` prints the staged pull request list,
+ * `gh repo view` names `main` as the default branch, and every other
+ * command succeeds silently. A fixture of
  * the form `{ "fakePages": [...] }` answers as a paged list does: the first
  * page alone, every page in turn with `--paginate`, and one array of pages
  * with `--paginate --slurp`, which gh refuses alone or with `--jq`.
@@ -47,7 +50,13 @@ set -euo pipefail
 printf '%s\\n' "$*" >> "\${FAKE_DIR}/gh-calls.log"
 case "$1" in
   api) ;;
-  pr) [ "$2" != view ] || echo "\${FAKE_PR_NUMBER}"; exit 0 ;;
+  pr)
+    case "$2" in
+      view) echo "\${FAKE_PR_NUMBER}" ;;
+      list) [ ! -f "\${FAKE_DIR}/pr-list" ] || cat "\${FAKE_DIR}/pr-list" ;;
+    esac
+    exit 0 ;;
+  repo) [ "$2" != view ] || echo main; exit 0 ;;
   *) exit 0 ;;
 esac
 shift
@@ -109,6 +118,7 @@ interface IRunOptions {
   readonly env: Readonly<Record<string, string>>;
   readonly gh?: Readonly<Record<string, unknown>>;
   readonly nodeOutput?: unknown;
+  readonly prList?: readonly unknown[];
 }
 
 /** What a step run left behind. */
@@ -198,6 +208,7 @@ function stageFixtures(options: IRunOptions): void {
     writeFileSync(join(work, 'gh', fixtureName(path)), JSON.stringify(value));
   }
   writeFileSync(join(work, 'node-output'), JSON.stringify(options.nodeOutput ?? null));
+  if (options.prList !== undefined) writeFileSync(join(work, 'pr-list'), JSON.stringify(options.prList));
 }
 
 /**
@@ -612,5 +623,66 @@ describe.skipIf(!CAN_RUN)('Dependabot auto-merge resolve', () => {
 
     expect(automerge).not.toContain('workflow_run.conclusion');
     expect(decide.if).toContain("steps.resolve.outputs.ci == 'success'");
+  });
+});
+
+describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
+  const step = stepOf(AUTOMERGE, 'rebase-behind', 'nudge');
+  const first = { number: 11, sha: 'b'.repeat(40) };
+  const second = { number: 12, sha: 'c'.repeat(40) };
+  const armed = { enabledAt: '2026-05-04T07:00:00Z' };
+  const prList = [
+    { number: first.number, headRefOid: first.sha, autoMergeRequest: armed },
+    { number: second.number, headRefOid: second.sha, autoMergeRequest: armed },
+  ];
+
+  /**
+   * Fixtures for an armed pull request three commits behind main, never
+   * nudged since its head was committed.
+   * @param pr - Its number and head commit.
+   * @param pr.number - Pull request number.
+   * @param pr.sha - Head commit.
+   * @returns The `gh api` fixtures.
+   */
+  function behindMain(pr: { readonly number: number; readonly sha: string }): Record<string, unknown> {
+    return {
+      [`repos/${REPO}/compare/main...${pr.sha}`]: { behind_by: 3 },
+      [`repos/${REPO}/commits/${pr.sha}`]: { commit: { committer: { date: '2026-05-04T08:00:00Z' } } },
+      [`repos/${REPO}/issues/${pr.number}/comments`]: [],
+    };
+  }
+
+  /**
+   * Lists the pull requests a run asked Dependabot to rebase.
+   * @param run - The step run.
+   * @returns The nudged pull request numbers.
+   */
+  function nudged(run: IStepRun): string[] {
+    return run.ghCalls.filter((call) => call.startsWith('pr comment ')).map((call) => call.split(' ')[2] ?? '');
+  }
+
+  it('nudges the oldest armed pull request behind main', () => {
+    const gh = { user: { login: 'owner' }, ...behindMain(first), ...behindMain(second) };
+
+    const run = runStep(step, { env: {}, gh, prList });
+
+    expect(run.status).toBe(0);
+    expect(nudged(run)).toEqual(['11']);
+  });
+
+  it.each([
+    ['its comparison with main fails', `repos/${REPO}/compare/main...${first.sha}`, undefined],
+    ['its head commit cannot be read', `repos/${REPO}/commits/${first.sha}`, undefined],
+    ['its head commit carries no date', `repos/${REPO}/commits/${first.sha}`, { commit: { committer: {} } }],
+    ['its comments cannot be read', `repos/${REPO}/issues/${first.number}/comments`, undefined],
+  ])('skips a pull request when %s and nudges the next', (_case, path, answer) => {
+    const gh: Record<string, unknown> = { user: { login: 'owner' }, ...behindMain(first), ...behindMain(second) };
+    if (answer === undefined) delete gh[path];
+    else gh[path] = answer;
+
+    const run = runStep(step, { env: {}, gh, prList });
+
+    expect(run.status).toBe(0);
+    expect(nudged(run)).toEqual(['12']);
   });
 });

@@ -311,7 +311,9 @@ from.
 A strict required-check set keeps an armed PR from merging once `main` moves
 ahead of it. The `rebase-behind` job therefore posts `@dependabot rebase` on
 **one** armed, behind PR per run, oldest first; it waits two hours between
-nudges to the same head and warns after two unanswered nudges. Dependabot's
+nudges to the same head and warns after two unanswered nudges. A PR whose
+comparison, head commit or comments cannot be read is skipped with a warning
+so the rest of the queue still moves. Dependabot's
 own rebase is used instead of the "update branch" button so Dependabot keeps
 ownership of the branch.
 
