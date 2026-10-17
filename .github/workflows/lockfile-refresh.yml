@@ -234,9 +234,11 @@ jobs:
       # branch name from a ruleset nobody may bypass. Rulesets stack, so one
       # such ruleset is enough. Anything less — no rule, a bypass list, or a
       # bypass list this token cannot read — is no proof, and the next step
-      # leaves the pull request for a human. The rules endpoint matches by
-      # name, so the branch need not exist yet. Read-only; the token returns
-      # here for the same reason as below.
+      # leaves the pull request for a human. The ruleset read must itself
+      # still list the update rule, so an edit between the two reads proves
+      # nothing. The rules endpoint matches by name, so the branch need not
+      # exist yet. Read-only; the token returns here for the same reason as
+      # below.
       - name: Check the refresh branch is push-locked
         id: lock
         if: steps.diff.outputs.changed == 'true'
@@ -258,7 +260,8 @@ jobs:
             if ok=$(gh api "repos/${GITHUB_REPOSITORY}/rulesets/${id}" \
                 --jq '.enforcement == "active"
                       and (.bypass_actors | type) == "array"
-                      and (.bypass_actors | length) == 0') \
+                      and (.bypass_actors | length) == 0
+                      and any(.rules[]?; .type == "update")') \
               && [ "${ok}" = true ]; then
               echo 'locked=true' >> "${GITHUB_OUTPUT}"
               exit 0

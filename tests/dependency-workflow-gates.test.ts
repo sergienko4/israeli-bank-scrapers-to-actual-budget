@@ -346,6 +346,13 @@ describe.skipIf(!CAN_RUN)('lockfile refresh push lock', () => {
         [`repos/${REPO}/rulesets/7`]: ruleset({ enforcement: 'evaluate' }),
       },
     ],
+    [
+      'the ruleset no longer restricts updates',
+      {
+        [rulesPath]: [{ type: 'update', ruleset_id: 7 }],
+        [`repos/${REPO}/rulesets/7`]: ruleset({ rules: [{ type: 'deletion' }] }),
+      },
+    ],
     ['the ruleset cannot be read', { [rulesPath]: [{ type: 'update', ruleset_id: 7 }] }],
   ])('is not proven when %s', (_case, gh) => {
     const run = runStep(step, { env, gh });
