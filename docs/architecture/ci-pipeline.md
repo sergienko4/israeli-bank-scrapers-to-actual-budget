@@ -289,7 +289,10 @@ from.
 - **One decision per PR at a time.** A read-only `pr` job first names the
   pull request: the dispatch input, or the open PR for the head CI tested.
   The decision job queues on that number, so a dispatch and a CI run for the
-  same PR never decide side by side. No number, a non-canonical one such as
+  same PR never decide side by side. The queue keeps every waiting run
+  (`queue: max`). By default a newly queued run cancels the one already
+  waiting, so a delayed run for an older head could cancel the current
+  head's run and then exit as stale. No number, a non-canonical one such as
   `0786`, or a failed lookup skips the decision with no write.
 - **The CI verdict is read, not carried.** The queue keeps the order runs
   reach it, not the order they were triggered, so no run trusts the
