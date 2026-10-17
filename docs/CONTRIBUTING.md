@@ -205,7 +205,8 @@ the one case that still needs a hand edit: add or raise its entry in the
 change. A local registry is not needed:
 `.github/workflows/lockfile-sync.yml` regenerates `package-lock.json` on a
 runner, uploads it as the `package-lock` artifact and fails the check. It
-resolves against the public registry and refuses a branch that adds a
+resolves against the public registry with the npm version the Docker image
+pins, and refuses a branch that adds a
 project `.npmrc`. The run summary lists the commands; from a checkout of
 your branch they are:
 

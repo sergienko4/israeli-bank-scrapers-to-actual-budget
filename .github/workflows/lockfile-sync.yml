@@ -97,9 +97,15 @@ jobs:
             exit 1
           fi
 
+      # Resolve with the npm the Docker image installs with, not the older one
+      # bundled with the runner's Node. After the .npmrc refusal, so no
+      # branch-supplied config can steer that install either.
+      - uses: ./.github/actions/ci/pin-npm
+
       # --package-lock-only resolves against the registry and writes the
       # lockfile without downloading tarballs into node_modules, so no
-      # third-party code is installed or executed in this job. --ignore-scripts
+      # project dependency is installed or executed in this job; the only
+      # package installed is npm itself, pinned above. --ignore-scripts
       # is redundant under that flag and kept as defence in depth. The env
       # pins outrank any npm config file, so the settings that decide what
       # gets resolved stay fixed whatever the runner image carries.

@@ -1,0 +1,33 @@
+name: Use the image's npm
+description: >-
+  Installs the npm version the Dockerfile pins (ARG NPM_VERSION), so a job
+  that writes package-lock.json resolves with the npm that installs it in the
+  image rather than the older one bundled with the runner's Node.
+
+runs:
+  using: composite
+  steps:
+    # The Dockerfile stays the single source of the version. Anything but one
+    # exact x.y.z pin is refused rather than guessed, and the registry is
+    # fixed in the environment so no npm config file can redirect the
+    # download. --ignore-scripts: npm needs no install script of its own.
+    - name: Install the npm the Dockerfile pins
+      id: pin
+      shell: bash
+      env:
+        npm_config_registry: https://registry.npmjs.org/
+        npm_config_strict_ssl: 'true'
+      run: |
+        set -euo pipefail
+        version=$(sed -n 's/^ARG NPM_VERSION=//p' Dockerfile)
+        if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo '::error::The Dockerfile does not pin exactly one npm version (ARG NPM_VERSION=x.y.z); refusing to guess which npm writes the lockfile.'
+          exit 1
+        fi
+        npm install -g "npm@${version}" --ignore-scripts
+        actual=$(npm --version)
+        if [ "${actual}" != "${version}" ]; then
+          echo "::error::Expected npm ${version} after installing it, got ${actual}."
+          exit 1
+        fi
+        echo "::notice::Using npm ${actual}, the version the Docker image builds with."

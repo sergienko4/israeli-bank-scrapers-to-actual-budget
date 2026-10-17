@@ -160,9 +160,11 @@ declared range remains Dependabot's job. This is not a Dependabot replacement.
   release and the change actually reaches users.
 - Mirror-rewritten `resolved` URLs and `sha1` downgrades now fail CI rather
   than merging invisibly.
-- The workflow installs and executes **no** third-party code:
+- The workflow installs and executes **no** project dependency:
   `--package-lock-only` "will only use the `package-lock.json`, ignoring
-  `node_modules`", so no tarball is downloaded and no install script runs.
+  `node_modules`", so no dependency tarball is downloaded and no install
+  script runs. The one package it installs is npm itself, pinned to the
+  version the Dockerfile builds with.
   That makes it strictly safer than `dependency-bump.yml`, whose header records
   an unresolved token-exposure concern from running a script with
   `node_modules/.bin` on `PATH`.

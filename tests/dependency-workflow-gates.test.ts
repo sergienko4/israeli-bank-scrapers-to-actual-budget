@@ -24,6 +24,8 @@ import { parse } from 'yaml';
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const REFRESH = '.github/workflows/lockfile-refresh.yml';
 const AUTOMERGE = '.github/workflows/dependabot-auto-merge.yml';
+const SYNC = '.github/workflows/lockfile-sync.yml';
+const PIN_NPM = '.github/actions/ci/pin-npm';
 const REPO = 'sergienko4/israeli-bank-scrapers-to-actual-budget';
 const TITLE = 'fix(deps): refresh package-lock.json';
 const BODY = 'Refreshed 3 transitive pins: katex 0.18.9 -> 0.18.10.';
@@ -97,10 +99,24 @@ const FAKE_NODE = `#!/usr/bin/env bash
 cat "\${FAKE_DIR}/node-output"
 `;
 
+/**
+ * Logs every call; `npm install -g npm@X` records X as installed, and
+ * `npm --version` reports it unless FAKE_NPM_VERSION overrides the answer.
+ */
+const FAKE_NPM = `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "\${FAKE_DIR}/npm-calls.log"
+case "$1" in
+  install) printf '%s' "\${3#npm@}" > "\${FAKE_DIR}/npm-installed" ;;
+  --version) if [ -n "\${FAKE_NPM_VERSION:-}" ]; then echo "\${FAKE_NPM_VERSION}"; else cat "\${FAKE_DIR}/npm-installed"; fi ;;
+esac
+`;
+
 /** Fields of a workflow step this suite reads. */
 interface IStep {
   readonly id?: string;
+  readonly name?: string;
   readonly if?: string;
+  readonly uses?: string;
   readonly run?: string;
   readonly env?: Readonly<Record<string, string>>;
 }
@@ -142,6 +158,7 @@ beforeAll(() => {
   writeExecutable(join(bin, 'gh'), FAKE_GH);
   writeExecutable(join(bin, 'git'), FAKE_GIT);
   writeExecutable(join(bin, 'node'), FAKE_NODE);
+  writeExecutable(join(bin, 'npm'), FAKE_NPM);
 });
 
 afterAll(() => {
@@ -684,5 +701,74 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
 
     expect(run.status).toBe(0);
     expect(nudged(run)).toEqual(['12']);
+  });
+});
+
+describe.skipIf(!CAN_RUN)('npm pin for lockfile writers', () => {
+  const action = parse(readFileSync(join(ROOT, PIN_NPM, 'action.yml'), 'utf8')) as { runs: { steps: IStep[] } };
+  const step = action.runs.steps.find((candidate) => candidate.id === 'pin') ?? {};
+
+  /**
+   * Runs the pin step against a Dockerfile.
+   * @param dockerfile - Dockerfile contents.
+   * @param npmVersion - What `npm --version` reports; defaults to the installed version.
+   * @returns The run and every npm call it made.
+   */
+  function pin(dockerfile: string, npmVersion = ''): { run: IStepRun; npmCalls: string[] } {
+    writeFileSync(join(work, 'Dockerfile'), dockerfile);
+    const run = runStep(step, { env: { FAKE_NPM_VERSION: npmVersion } });
+    const log = join(work, 'npm-calls.log');
+    return { run, npmCalls: existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [] };
+  }
+
+  it('installs the exact npm the Dockerfile pins', () => {
+    const { run, npmCalls } = pin('FROM node:26-slim\nARG NPM_VERSION=12.2.1\n');
+
+    expect(run.status).toBe(0);
+    expect(npmCalls).toEqual(['install -g npm@12.2.1 --ignore-scripts', '--version']);
+  });
+
+  it('pins the version the repository Dockerfile names', () => {
+    const { run, npmCalls } = pin(readFileSync(join(ROOT, 'Dockerfile'), 'utf8'));
+
+    expect(run.status).toBe(0);
+    expect(npmCalls[0]).toMatch(/^install -g npm@\d+\.\d+\.\d+ --ignore-scripts$/);
+  });
+
+  it('fails when npm still reports another version after the install', () => {
+    const { run } = pin('ARG NPM_VERSION=12.2.1\n', '11.21.1');
+
+    expect(run.status).not.toBe(0);
+  });
+
+  it.each([
+    ['names no npm version', 'FROM node:26-slim\n'],
+    ['names a range', 'ARG NPM_VERSION=^12\n'],
+    ['quotes the version', 'ARG NPM_VERSION="12.2.1"\n'],
+    ['names two versions', 'ARG NPM_VERSION=12.2.1\nARG NPM_VERSION=12.3.0\n'],
+  ])('installs nothing when the Dockerfile %s', (_case, dockerfile) => {
+    const { run, npmCalls } = pin(dockerfile);
+
+    expect(run.status).not.toBe(0);
+    expect(npmCalls).toEqual([]);
+  });
+
+  it.each([SYNC, REFRESH])('%s pins npm before its first npm command', (file) => {
+    const writers = Object.values(jobsOf(file)).filter((job) => job.steps.some((s) => /^\s*npm\s/m.test(s.run ?? '')));
+    expect(writers).not.toHaveLength(0);
+    for (const job of writers) {
+      const pinAt = job.steps.findIndex((s) => s.uses === `./${PIN_NPM}`);
+      const npmAt = job.steps.findIndex((s) => /^\s*npm\s/m.test(s.run ?? ''));
+      expect(pinAt).toBeGreaterThanOrEqual(0);
+      expect(pinAt).toBeLessThan(npmAt);
+    }
+  });
+
+  it('refuses a branch-supplied .npmrc before it installs npm', () => {
+    const steps = jobsOf(SYNC).sync?.steps ?? [];
+    const refuseAt = steps.findIndex((s) => s.name === 'Refuse a branch-supplied npm config');
+
+    expect(refuseAt).toBeGreaterThanOrEqual(0);
+    expect(refuseAt).toBeLessThan(steps.findIndex((s) => s.uses === `./${PIN_NPM}`));
   });
 });
