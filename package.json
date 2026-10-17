@@ -40,6 +40,7 @@
     "coupling:report": "node scripts/coupling-scanner.cjs",
     "coupling:check": "node scripts/coupling-scanner.cjs --check",
     "docs": "typedoc --options config/typedoc.json",
+    "docs:check": "typedoc --options config/typedoc.json --emit none",
     "docs:site": "pip install -r requirements-docs.txt && python -m mkdocs build --strict",
     "docs:serve": "python -m mkdocs serve",
     "meta:render": "node scripts/render-readme-meta.mjs",

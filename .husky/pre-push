@@ -5,20 +5,27 @@ export MSYS_NO_PATHCONV=1
 
 # ── Push-stage scope ─────────────────────────────────────────────────────
 # This hook answers: **is what leaves this machine correct as a whole?**
+# It runs the whole-repo checks that a staged-file commit stage cannot see:
 #
-# It owns the whole-repo integrity gates that used to run on every commit.
-# Their verdict depends on the repository as a unit rather than on the
-# individual snapshot being recorded, so running them once per push costs
-# a fraction of the time while blocking exactly the same defects from ever
-# reaching the remote.
+#   type-check:test  every src/ and tests/ file, incremental (tsbuildinfo
+#                    under node_modules/.cache/tsc). tsconfig.e2e.json is a
+#                    subset of tsconfig.test.json, so this covers e2e too;
+#                    tests/hook-ci-parity.test.ts keeps it that way.
+#   lint             full ESLint, no cache. The commit stage lints only the
+#                    staged files, and a typed rule can fail an unchanged
+#                    file when a type it uses changes; this run catches that.
+#   docs:check       TypeDoc validation (`--emit none`): an exported
+#                    signature that uses an unexported type fails here.
+#   lint:docs, lint:circular, coupling:check   repo-wide structure checks.
 #
-# ESLint runs here with no cache. The commit hook lints against a cache for
-# speed, and a cache can only ever be as trustworthy as its invalidation;
-# this uncached run is what the branch is actually judged on.
-#
-# Acceptance-stage gates (unit tests + coverage, Docker build, Trivy,
-# Semgrep, CodeQL, mocked + Telegram E2E, lychee, ESLint canaries)
-# still run in GitHub CI only. See docs/architecture/ci-pipeline.md.
+# Moved to GitHub CI only (job in .github/workflows/pr.yml):
+#   build     → build job. Same TypeScript program as type-check; adds
+#               only the emit.
+#   audit     → build job, plus Dependabot. Needs the network, and an
+#               advisory can appear without any change to this branch.
+#   TypeDoc emit → build job (`npm run docs`).
+#   Unit tests + coverage, ESLint canaries, config manifest, lychee,
+#   Semgrep, CodeQL, Trivy, Docker build and E2E were already CI only.
 
 . "$(dirname "$0")/../config/hooks/gate-runner.sh"
 
@@ -44,27 +51,24 @@ echo "==========================================="
 gate_init "prepush"
 
 echo ""
-echo "⚡ Running 9 push-stage gates in parallel..."
+echo "⚡ Running 6 push-stage gates in parallel..."
 echo ""
 
-run_gate "1b-typecheck-e2e"  "Type-checking tests/e2e/"           npm run type-check:e2e
-run_gate "1c-typecheck-test" "Type-checking tests/"               npm run type-check:test
-run_gate "2-audit"           "Auditing dependencies"              npm run audit
-run_gate "3-build"           "Compiling TypeScript"               npm run build
-run_gate "3b-typedoc"        "Generating API docs"                npm run docs
+run_gate "1c-typecheck-test" "Type-checking src/ and tests/"      npm run type-check:test
+run_gate "3b-typedoc"        "Validating API docs"                npm run docs:check
 run_gate "6-eslint-full"     "Running ESLint (uncached)"          npm run lint
 run_gate "8-markdownlint"    "Linting markdown docs"              npm run lint:docs
 run_gate "15-circular"       "Checking for circular deps in src/" npm run lint:circular
 run_gate "18-coupling"       "Checking coupling regression"       npm run coupling:check
 
 wait_gates \
-  "1b-typecheck-e2e" "1c-typecheck-test" "2-audit" "3-build" "3b-typedoc" \
-  "6-eslint-full" "8-markdownlint" "15-circular" "18-coupling"
+  "1c-typecheck-test" "3b-typedoc" "6-eslint-full" "8-markdownlint" \
+  "15-circular" "18-coupling"
 
 echo ""
 echo "==========================================="
-echo "✅ ALL 9 PUSH-STAGE GATES PASSED. PUSHING."
-echo "   Acceptance stage runs in GitHub CI only:"
+echo "✅ ALL 6 PUSH-STAGE GATES PASSED. PUSHING."
+echo "   GitHub CI also runs: build, npm audit, TypeDoc emit,"
 echo "   unit tests + coverage, ESLint canaries, config manifest,"
 echo "   lychee, Semgrep, CodeQL, Trivy, Docker build, E2E."
 echo "   See .github/workflows/pr.yml (job: ci-pass)."
