@@ -235,6 +235,33 @@ function pinnedJobs(dir: string): { job: string; readsSecret: boolean }[] {
 }
 
 /**
+ * Lists every action definition in a repository, wherever it sits: a
+ * workflow may run a local action from any `./path`, not only `.github/`.
+ * @param root - Repository root.
+ * @returns Each `action.yml` or `action.yaml`, tracked or not yet added.
+ */
+function actionFiles(root: string): string[] {
+  const listed = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  if (listed.status !== 0) throw new Error(`git ls-files failed in ${root}: ${listed.stderr}`);
+  return listed.stdout.split('\0').filter((file) => /(^|\/)action\.ya?ml$/.test(file));
+}
+
+/**
+ * Lists the action definitions that run the npm pin as one of their steps.
+ * @param root - Repository root.
+ * @returns Each nesting action's path.
+ */
+function nestedPins(root: string): string[] {
+  return actionFiles(root).filter((file) => {
+    const action = parse(readFileSync(join(root, file), 'utf8')) as { runs?: { steps?: IStep[] } };
+    return (action.runs?.steps ?? []).some(usesPinNpm);
+  });
+}
+
+/**
  * Finds a step by id.
  * @param file - Repository-relative workflow path.
  * @param job - Job id.
@@ -956,16 +983,18 @@ describe.skipIf(!CAN_RUN)('npm pin for lockfile writers', () => {
     expect(pinnedJobs(work)).toEqual([{ job: `${file}:j`, readsSecret: true }]);
   });
 
-  it('runs the npm pin from no composite action, which the job check cannot see into', () => {
-    const actions = join(ROOT, '.github/actions');
-    const nesting = readdirSync(actions, { recursive: true, encoding: 'utf8' })
-      .filter((file) => /(^|\/)action\.ya?ml$/.test(file))
-      .filter((file) => {
-        const action = parse(readFileSync(join(actions, file), 'utf8')) as { runs?: { steps?: IStep[] } };
-        return (action.runs?.steps ?? []).some(usesPinNpm);
-      });
+  it('runs the npm pin from no other action, which the job check cannot see into', () => {
+    expect(actionFiles(ROOT)).toContain(`${PIN_NPM}/action.yml`);
+    expect(nestedPins(ROOT)).toEqual([]);
+  });
 
-    expect(nesting).toEqual([]);
+  it('notices an action outside .github that runs the npm pin', () => {
+    spawnSync('git', ['init', '-q'], { cwd: work });
+    mkdirSync(join(work, 'ci/wrapper'), { recursive: true });
+    const wrapper = { runs: { using: 'composite', steps: [{ uses: `./${PIN_NPM}` }] } };
+    writeFileSync(join(work, 'ci/wrapper/action.yaml'), stringify(wrapper));
+
+    expect(nestedPins(work)).toEqual(['ci/wrapper/action.yaml']);
   });
 
   it('installs no package in the job that later holds RELEASE_TOKEN', () => {
