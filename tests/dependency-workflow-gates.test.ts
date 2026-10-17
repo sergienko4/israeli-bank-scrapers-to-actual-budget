@@ -8,8 +8,9 @@
  * same cases: a refresh summary without a major count, a refresh branch with
  * no proven push lock, a Dependabot pull request carrying more than one
  * Dependabot commit, a CI verdict read from anything but the newest CI run
- * for the head, a run that cannot name its pull request, and a rebase queue
- * stalled by one pull request it cannot read.
+ * for the head, a run that cannot name its pull request, a decision lock
+ * that lets a stale run cancel the current head's waiting run, and a rebase
+ * queue stalled by one pull request it cannot read.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -121,11 +122,18 @@ interface IStep {
   readonly env?: Readonly<Record<string, string>>;
 }
 
+/** Fields of a concurrency setting this suite reads. */
+interface IConcurrency {
+  readonly group?: string;
+  readonly 'cancel-in-progress'?: boolean | string;
+  readonly queue?: string;
+}
+
 /** Fields of a workflow job this suite reads. */
 interface IJob {
   readonly needs?: string;
   readonly if?: string;
-  readonly concurrency?: { readonly group?: string };
+  readonly concurrency?: IConcurrency;
   readonly steps: readonly IStep[];
 }
 
@@ -231,6 +239,39 @@ function pinnedJobs(dir: string): { job: string; readsSecret: boolean }[] {
           job: `${name}:${id}`,
           readsSecret: expressionsOf(workflow.env, job).some((expression) => SECRET_READ.test(expression)),
         }));
+    });
+}
+
+/** The head a run's trigger carried: the commit its event was about. */
+const TRIGGER_HEAD = /github\.event\.(?:workflow_run\.head_sha|pull_request\.head\.sha)/i;
+
+/**
+ * Reports whether a step leaves a pull request that has moved on to a later
+ * run: it compares the head its trigger carried with another commit.
+ * @param step - Workflow step.
+ * @returns Whether the step can skip the current head as a stale one.
+ */
+function dropsMovedHeads(step: IStep): boolean {
+  return Object.entries(step.env ?? {})
+    .filter(([, value]) => TRIGGER_HEAD.test(String(value)))
+    .some(([name]) => new RegExp(`!=\\s*"\\$\\{${name}\\}"|"\\$\\{${name}\\}"\\s*!=`).test(step.run ?? ''));
+}
+
+/**
+ * Lists every job, in every workflow file of a folder, that waits on a lock
+ * and leaves a moved head to a later run.
+ * @param dir - Folder of workflow files.
+ * @returns Each such job as `file:job`, with the lock it waits on.
+ */
+function headDroppingLocks(dir: string): { job: string; concurrency: unknown }[] {
+  return readdirSync(dir)
+    .filter((name) => /\.ya?ml$/.test(name))
+    .flatMap((name) => {
+      const workflow = parse(readFileSync(join(dir, name), 'utf8')) as { concurrency?: unknown; jobs: Record<string, IJob> };
+      return Object.entries(workflow.jobs)
+        .filter(([, job]) => (job.steps ?? []).some(dropsMovedHeads))
+        .map(([id, job]) => ({ job: `${name}:${id}`, concurrency: job.concurrency ?? workflow.concurrency }))
+        .filter(({ concurrency }) => concurrency !== undefined);
     });
 }
 
@@ -578,6 +619,17 @@ describe.skipIf(!CAN_RUN)('Dependabot auto-merge pull-request lookup', () => {
     expect(automerge?.needs).toBe('pr');
     expect(automerge?.concurrency?.group).toBe('dependabot-auto-merge-${{ needs.pr.outputs.number }}');
     expect(resolve.env?.CANDIDATE_PR).toBe('${{ needs.pr.outputs.number }}');
+  });
+
+  it('keeps every waiting run in a lock whose runs leave a moved head to a later run', () => {
+    const locks = headDroppingLocks(join(ROOT, '.github/workflows'));
+    const dropping = locks.filter(({ concurrency }) => {
+      const lock = typeof concurrency === 'object' && concurrency !== null ? (concurrency as IConcurrency) : {};
+      return lock.queue !== 'max' || lock['cancel-in-progress'] !== false;
+    });
+
+    expect(locks.map(({ job }) => job)).toContain('dependabot-auto-merge.yml:automerge');
+    expect(dropping.map(({ job }) => job)).toEqual([]);
   });
 });
 

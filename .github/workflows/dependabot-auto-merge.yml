@@ -164,9 +164,14 @@ jobs:
     # state. Dispatched and CI-triggered runs share the number `pr` found.
     # The group does not order its runs, so each run also reads the CI
     # verdict fresh (see Resolve) instead of trusting its trigger's.
+    # Every waiting run is kept (`queue: max`). By default a newly queued
+    # run cancels the one already waiting, so a delayed run for an older
+    # head could cancel the current head's run and then exit as stale,
+    # leaving that head undecided until its next CI run.
     concurrency:
       group: dependabot-auto-merge-${{ needs.pr.outputs.number }}
       cancel-in-progress: false
+      queue: max
     env:
       HUSKY: 0
     steps:
@@ -709,7 +714,9 @@ jobs:
     permissions:
       contents: read
     # Global and queued, never cancelled: concurrent triggers must not nudge
-    # two PRs at once, and a queued run re-reads fresh state.
+    # two PRs at once, and a queued run re-reads fresh state. One waiting
+    # run is enough: a run carries nothing from its trigger, so the run that
+    # replaces a waiting one does the same work.
     concurrency:
       group: dependabot-rebase-nudge
       cancel-in-progress: false

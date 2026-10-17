@@ -179,7 +179,9 @@ tools that kept producing image alerts.
 - **Stale is not unsafe.** A run that finds its pull request closed, not
   opened by Dependabot, or already moved past the head CI tested makes no
   write at all. Disarming there could undo an arming made for a newer head;
-  the run for that head decides instead.
+  the run for that head decides instead. That run cannot be cancelled while
+  it waits: the queue for a pull request keeps every waiting run, not only
+  the newest to arrive.
 - **The CI verdict is read, not carried.** Runs queued for one pull request
   are not kept in trigger order, so a delayed run could act on an outdated
   conclusion. Every run, a manual dispatch included, reads the newest PR
