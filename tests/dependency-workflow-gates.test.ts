@@ -37,7 +37,10 @@ const CAN_RUN = HAS_TOOLS || process.env.CI === 'true';
 /**
  * Logs every call; `gh api` answers GETs from a fixture named after the
  * path (an absent fixture is an API error), `gh pr view` prints the pull
- * request number, and every other command succeeds silently.
+ * request number, and every other command succeeds silently. A fixture of
+ * the form `{ "fakePages": [...] }` answers as a paged list does: the first
+ * page alone, every page in turn with `--paginate`, and one array of pages
+ * with `--paginate --slurp`, which gh refuses alone or with `--jq`.
  */
 const FAKE_GH = `#!/usr/bin/env bash
 set -euo pipefail
@@ -48,20 +51,33 @@ case "$1" in
   *) exit 0 ;;
 esac
 shift
-path='' jq_filter='' method=GET
+path='' jq_filter='' method=GET paginate=false slurp=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --jq) jq_filter="$2"; shift 2 ;;
     -X) method="$2"; shift 2 ;;
     -H | -f | -F) shift 2 ;;
+    --paginate) paginate=true; shift ;;
+    --slurp) slurp=true; shift ;;
     -*) shift ;;
     *) path="$1"; shift ;;
   esac
 done
+if [ "\${slurp}" = true ]; then
+  [ "\${paginate}" = true ] || { echo 'fake gh: --paginate required when passing --slurp' >&2; exit 1; }
+  [ -z "\${jq_filter}" ] || { echo 'fake gh: --slurp is not supported with --jq' >&2; exit 1; }
+fi
 [ "\${method}" = GET ] || { echo '{}'; exit 0; }
 fixture="\${FAKE_DIR}/gh/$(printf '%s' "\${path}" | tr -c 'A-Za-z0-9._-' '_')"
 [ -f "\${fixture}" ] || { echo "fake gh: no fixture for \${path}" >&2; exit 1; }
-if [ -n "\${jq_filter}" ]; then jq -r "\${jq_filter}" "\${fixture}"; else cat "\${fixture}"; fi
+pages='.'
+if jq -e 'type == "object" and has("fakePages")' "\${fixture}" > /dev/null; then
+  if [ "\${paginate}" = true ]; then pages='.fakePages[]'; else pages='.fakePages[0]'; fi
+fi
+if [ "\${slurp}" = true ]; then jq -c "[\${pages}]" "\${fixture}"
+elif [ -n "\${jq_filter}" ]; then jq -r "\${pages} | (\${jq_filter})" "\${fixture}"
+else jq -c "\${pages}" "\${fixture}"
+fi
 `;
 
 const FAKE_GIT = `#!/usr/bin/env bash
@@ -101,6 +117,11 @@ interface IStepRun {
   readonly outputs: Readonly<Record<string, string>>;
   readonly ghCalls: readonly string[];
   readonly temp: string;
+}
+
+/** A fixture the fake gh serves as a paged list. */
+interface IPaged {
+  readonly fakePages: readonly unknown[];
 }
 
 let bin = '';
@@ -474,14 +495,14 @@ describe.skipIf(!CAN_RUN)('Dependabot auto-merge resolve', () => {
   }
 
   /**
-   * Builds the run list as `gh api --paginate --slurp` prints it: one entry
-   * per page, each carrying the total GitHub reports.
+   * Builds the run list as the API pages it, each page carrying the total
+   * GitHub reports; the fake gh serves the pages as `--paginate` asks.
    * @param pages - The runs on each page.
    * @param total - The total count GitHub reports; defaults to every run.
-   * @returns The pages.
+   * @returns The paged fixture.
    */
-  function listing(pages: readonly (readonly Record<string, unknown>[])[], total = pages.flat().length): unknown[] {
-    return pages.map((runs) => ({ total_count: total, workflow_runs: runs }));
+  function listing(pages: readonly (readonly Record<string, unknown>[])[], total = pages.flat().length): IPaged {
+    return { fakePages: pages.map((runs) => ({ total_count: total, workflow_runs: runs })) };
   }
 
   /**
@@ -492,7 +513,7 @@ describe.skipIf(!CAN_RUN)('Dependabot auto-merge resolve', () => {
    */
   function pullRequest(
     commits: readonly Record<string, unknown>[],
-    runs: readonly unknown[] | null = listing([[passed]]),
+    runs: IPaged | null = listing([[passed]]),
   ): Record<string, unknown> {
     return {
       [`repos/${REPO}/pulls/5`]: {
