@@ -3,49 +3,29 @@
 # Prevent MSYS from converting Unix paths to Windows paths for Docker volume mounts
 export MSYS_NO_PATHCONV=1
 
-# ── Commit-stage scope (Testing Diamond) ─────────────────────────────────
-# This hook answers one question: **is the snapshot I am recording
-# internally correct?** It therefore runs only the gates whose verdict can
-# change from one commit to the next within a single branch — type safety,
-# architecture rules, formatting, config shape, dependency install-script
-# pins, and PII leakage.
+# ── Commit-stage scope ───────────────────────────────────────────────────
+# This hook answers: **are the files I am committing clean?** It checks the
+# staged path set (added, copied, modified, renamed) as it is in the working
+# tree, plus the cheap whole-repo checks:
 #
-# Whole-repo integrity gates moved to .husky/pre-push, which answers a
-# different question: **is what leaves this machine correct as a whole?**
-# Nothing was dropped or weakened — every gate still runs before any commit
-# reaches the remote, just once per push instead of once per commit:
+#   type-check            src/, incremental (tsbuildinfo under
+#                         node_modules/.cache/tsc), so a warm run re-checks
+#                         only what changed and what depends on it.
+#   lint:staged           ESLint on staged src/ TS (main config) and staged
+#                         portal JS (portal-public config); cached by content.
+#   lint:biome:staged     Biome on staged src/ TS.
+#   lint:config-structure, lint:allow-scripts, lint:pii   whole repo, < 3s.
 #
-#   type-check:test / type-check:e2e  → pre-push
-#   build (tsup)                      → pre-push
-#   npm audit                         → pre-push (needs the network)
-#   markdownlint                      → pre-push
-#   circular-dependency check         → pre-push
-#   coupling regression check         → pre-push
-#   full uncached ESLint              → pre-push
+# A partially staged file is linted as it is on disk, not as staged: a bad
+# staged version fixed only on disk passes here, and a clean staged version
+# with an unstaged error blocks. CI judges the committed tree. The ESLint
+# cache is a speed aid, never the verdict: it cannot see that a file's
+# imports changed, so push and CI lint the whole tree uncached.
 #
-# Why the split pays: the gates run in parallel, so a stage costs its
-# slowest gate plus the contention between them, not the sum. Measured on
-# this repo (minimum of three alternating runs, to discount ambient load):
-# the old twelve-gate hook took 35s, the split hook takes 24s — a 31%
-# cut on the operation performed most often. The `allowScripts` pin gate
-# added later reads two JSON files and finishes far inside that floor, so
-# it does not move the number.
-#
-# The win is 31% rather than 60% because the two tall poles, `type-check`
-# and ESLint, both stay here: each has to build the TypeScript program
-# before it can say anything, and that build is the floor for the stage.
-# Gates cheaper than that floor were free to keep and are kept; the ones
-# moved to pre-push are the ones that verify the repo as a whole rather
-# than the snapshot being recorded.
-#
-# ESLint runs against a cache here so an unchanged file is not re-linted.
-# The cache is a speed optimisation only and is never trusted as the final
-# verdict: pre-push re-runs ESLint with no cache at all.
-#
-# Acceptance-stage gates (unit tests + coverage, Docker build, Trivy,
-# Semgrep, CodeQL, mocked + Telegram E2E, TypeDoc, lychee, ESLint canaries)
-# run in GitHub CI only. See docs/architecture/ci-pipeline.md and
-# .github/workflows/pr.yml (job: ci-pass).
+# Whole-repo checks run at push (.husky/pre-push): type-check of src/ and
+# tests/, full uncached ESLint, TypeDoc validation, markdownlint, circular
+# deps, coupling. Everything else runs in GitHub CI only. Every gate here
+# also runs in CI; tests/hook-ci-parity.test.ts enforces that.
 
 . "$(dirname "$0")/../config/hooks/gate-runner.sh"
 
@@ -60,8 +40,8 @@ echo "⚡ Running 6 commit-stage gates in parallel..."
 echo ""
 
 run_gate "1-typecheck"   "Type-checking src/"             npm run type-check
-run_gate "6-eslint"      "Running ESLint (cached)"        npm run lint:cached
-run_gate "6b-biome"      "Running Biome lint"             npm run lint:biome
+run_gate "6-eslint"      "Running ESLint (staged)"        npm run lint:staged
+run_gate "6b-biome"      "Running Biome lint (staged)"    npm run lint:biome:staged
 run_gate "9-configcheck" "Checking config structure"      npm run lint:config-structure
 run_gate "9b-allowscripts" "Checking allowScripts pins"   npm run lint:allow-scripts
 run_gate "16-pii-check"  "Checking for PII in error messages" npm run lint:pii
@@ -72,7 +52,7 @@ wait_gates \
 echo ""
 echo "==========================================="
 echo "✅ ALL 6 COMMIT-STAGE GATES PASSED. COMMITTING."
-echo "   Push stage (.husky/pre-push) adds: test/e2e type-checks,"
-echo "   build, npm audit, markdownlint, circular deps, coupling,"
-echo "   and a full uncached ESLint run."
+echo "   Push stage (.husky/pre-push) adds: src/ + tests/ type-check,"
+echo "   full uncached ESLint, TypeDoc validation, markdownlint,"
+echo "   circular deps and coupling."
 echo "==========================================="

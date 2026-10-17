@@ -45,8 +45,8 @@ const HOOK_STAGES: readonly HookStage[] = ['pre-commit', 'pre-push'];
 
 const INVENTORY: readonly IGateRow[] = [
   { script: 'type-check', stages: ['pre-commit'], ciScript: 'type-check' },
-  { script: 'lint:cached', stages: ['pre-commit'], ciScript: 'lint' },
-  { script: 'lint:biome', stages: ['pre-commit'], ciScript: 'lint:biome' },
+  { script: 'lint:staged', stages: ['pre-commit'], ciScript: 'lint' },
+  { script: 'lint:biome:staged', stages: ['pre-commit'], ciScript: 'lint:biome' },
   { script: 'lint:config-structure', stages: ['pre-commit'], ciScript: 'lint:config-structure' },
   { script: 'lint:allow-scripts', stages: ['pre-commit'], ciScript: 'lint:allow-scripts' },
   { script: 'lint:pii', stages: ['pre-commit'], ciScript: 'lint:pii' },
