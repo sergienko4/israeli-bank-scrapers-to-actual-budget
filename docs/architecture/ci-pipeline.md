@@ -415,10 +415,12 @@ opens a PR when anything moved:
   same-repository `chore/lockfile-refresh-*` PR is closed (branch deleted).
   The close runs last, so a failed run never leaves the week without a
   refresh, and a stuck PR never blocks the next week.
-- **Auto-merge is armed** with `RELEASE_TOKEN` and `--match-head-commit`, so
-  the PR squash-merges once every required check passes. The match holds only
-  at arming time; a later push is handled by the
-  [lockfile refresh guard](#lockfile-refresh-guard).
+- **Auto-merge is armed only on a push-locked branch,** with `RELEASE_TOKEN`
+  and `--match-head-commit`, so the PR squash-merges once every required
+  check passes. The match holds only at arming time, so the run first proves
+  the [lockfile refresh guard](#lockfile-refresh-guard) ruleset is in force.
+  Without that proof, a refresh that would otherwise arm is labelled
+  `needs-manual-review`, left unarmed, and the run fails red.
 - **A refresh that crosses a major is not armed.** A loose range (`*`,
   `>=1.0.0`) lets `npm update` or `npm audit fix` move a transitive pin
   across a major while staying inside it. The summary compares main's
@@ -479,6 +481,18 @@ the next run regenerates it from `main` and closes the stale one. Leave
 or superseded branch from being deleted. Disabling auto-merge is not a push,
 so the ruleset never blocks the guard below. See
 [Restrict updates](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#restrict-updates).
+
+**Checked before arming.** The refresh run does not assume the ruleset
+exists. Before arming, it asks the API which rules apply to its branch name
+and needs one ruleset that is active, restricts updates and lists no bypass
+actor. GitHub returns a ruleset's bypass list only to a token with write
+access to the ruleset, so `RELEASE_TOKEN` needs that access.
+With no such ruleset, a bypass actor, a hidden bypass list or an API error,
+a refresh that would otherwise arm is opened, labelled
+`needs-manual-review` and not armed, and the run fails red until the setting
+is restored. A refresh that crosses a major is labelled and left unarmed
+either way, and its run stays green. See
+[Get a repository ruleset](https://docs.github.com/en/rest/repos/rules#get-a-repository-ruleset).
 
 **Best effort — `lockfile-refresh-guard.yml`.** Any push to an open refresh
 branch withdraws auto-merge and labels the PR `needs-manual-review`. It runs

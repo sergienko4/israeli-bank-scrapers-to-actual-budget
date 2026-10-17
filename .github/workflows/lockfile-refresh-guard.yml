@@ -18,7 +18,9 @@ name: Lockfile refresh guard
 # The preventive control is a repository ruleset that applies "Restrict
 # updates" to refs/heads/chore/lockfile-refresh-* with an empty bypass
 # list. The refresh only creates new branches, which that rule does not
-# restrict; see "Lockfile refresh guard" in docs/architecture/ci-pipeline.md.
+# restrict, and it arms only after reading that ruleset back through the API
+# as active with no bypass actor; see "Lockfile refresh guard" in
+# docs/architecture/ci-pipeline.md.
 # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets#restrict-updates
 #
 # The refresh run's own push never reaches this workflow. It pushes the

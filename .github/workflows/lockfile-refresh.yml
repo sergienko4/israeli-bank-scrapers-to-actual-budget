@@ -36,13 +36,14 @@ name: Lockfile refresh
 #
 # MERGE: the pull request arms squash auto-merge as soon as it is opened, so a
 # green refresh lands without a human click. Every required check on main
-# still gates it — auto-merge only removes the click, never a gate. Two cases
-# stay with a human: a refresh that crosses a major (labelled, never armed)
-# and one whose CI fails. Either stays open until next week's run supersedes
-# it. A refresh whose branch moves after it was opened joins them, best
-# effort: lockfile-refresh-guard.yml withdraws auto-merge and labels it,
-# but reacts after the push. The preventive control is the "Restrict
-# updates" ruleset in docs/architecture/ci-pipeline.md.
+# still gates it — auto-merge only removes the click, never a gate. Three cases
+# stay with a human: a refresh that crosses a major (labelled, never armed),
+# one whose branch is not proven push-locked by the "Restrict updates"
+# ruleset (labelled, never armed, run red) and one whose CI fails. Each stays
+# open until next week's run supersedes it. A refresh whose branch moves after
+# it was opened joins them, best effort: lockfile-refresh-guard.yml withdraws
+# auto-merge and labels it, but reacts after the push. The preventive control
+# is the "Restrict updates" ruleset in docs/architecture/ci-pipeline.md.
 
 on:
   schedule:
@@ -226,9 +227,48 @@ jobs:
             -m "Opened by the lockfile-refresh workflow (run ${GITHUB_RUN_ID})." \
             -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'
 
+      # --match-head-commit holds only at arming time: a commit pushed to the
+      # branch afterwards would merge under this run's verdict. The "Restrict
+      # updates" ruleset on chore/lockfile-refresh-* is what stops that push,
+      # so arming requires proof it is in force: an active update rule on this
+      # branch name from a ruleset nobody may bypass. Rulesets stack, so one
+      # such ruleset is enough. Anything less — no rule, a bypass list, or a
+      # bypass list this token cannot read — is no proof, and the next step
+      # leaves the pull request for a human. The rules endpoint matches by
+      # name, so the branch need not exist yet. Read-only; the token returns
+      # here for the same reason as below.
+      - name: Check the refresh branch is push-locked
+        id: lock
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          BRANCH: chore/lockfile-refresh-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          unproven() {
+            echo "::warning::${BRANCH} is not proven push-locked: $1"
+            { echo 'locked=false'; echo "why=$1"; } >> "${GITHUB_OUTPUT}"
+            exit 0
+          }
+          ids=$(gh api "repos/${GITHUB_REPOSITORY}/rules/branches/${BRANCH}" \
+            --jq '[.[] | select(.type == "update") | .ruleset_id] | unique | .[]') \
+            || unproven 'its rules could not be read.'
+          [ -n "${ids}" ] || unproven 'no "Restrict updates" rule applies to it.'
+          while IFS= read -r id; do
+            if ok=$(gh api "repos/${GITHUB_REPOSITORY}/rulesets/${id}" \
+                --jq '.enforcement == "active"
+                      and (.bypass_actors | type) == "array"
+                      and (.bypass_actors | length) == 0') \
+              && [ "${ok}" = true ]; then
+              echo 'locked=true' >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+          done <<< "${ids}"
+          unproven 'each ruleset restricting it is inactive, unreadable, or has bypass actors.'
+
       # The token is absent from every step that produced what is being
-      # pushed; it returns only for the push, the pull request, labelling and
-      # arming.
+      # pushed; it returns only for the ruleset check, the push, the pull
+      # request, labelling and arming.
       - name: Push the branch and open the pull request
         id: pr
         if: steps.diff.outputs.changed == 'true'
@@ -238,6 +278,8 @@ jobs:
           TITLE: ${{ steps.summary.outputs.title }}
           BODY: ${{ steps.summary.outputs.body }}
           MAJORS: ${{ steps.summary.outputs.majors }}
+          LOCKED: ${{ steps.lock.outputs.locked }}
+          LOCK_WHY: ${{ steps.lock.outputs.why }}
         run: |
           set -euo pipefail
           # Fail closed before anything is pushed: an empty or non-numeric
@@ -266,13 +308,10 @@ jobs:
           # close older refreshes even if arming fails.
           echo 'opened=true' >> "$GITHUB_OUTPUT"
 
-          # A pin that crossed a breaking boundary is a reviewed change, the
-          # same rule the Dependabot auto-merge policy applies. The body
-          # already lists every such pin; the label routes it to a human and
-          # arming is skipped. Not an error: the refresh did its job.
-          if [ "${MAJORS}" -gt 0 ]; then
-            # REST rather than `gh pr edit --add-label`, which goes through a
-            # GraphQL mutation that also touches deprecated classic projects.
+          # Routes the pull request to a human. REST rather than
+          # `gh pr edit --add-label`, which goes through a GraphQL mutation
+          # that also touches deprecated classic projects.
+          label_for_review() {
             number="$(gh pr view "${BRANCH}" --repo "${GITHUB_REPOSITORY}" \
               --json number --jq .number)"
             gh label create needs-manual-review --repo "${GITHUB_REPOSITORY}" \
@@ -280,8 +319,25 @@ jobs:
               --description 'Dependency update outside the auto-merge policy'
             gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${number}/labels" \
               -f 'labels[]=needs-manual-review' > /dev/null
+          }
+
+          # A pin that crossed a breaking boundary is a reviewed change, the
+          # same rule the Dependabot auto-merge policy applies. The body
+          # already lists every such pin; the label routes it to a human and
+          # arming is skipped. Not an error: the refresh did its job.
+          if [ "${MAJORS}" -gt 0 ]; then
+            label_for_review
             echo "::notice::${MAJORS} pin(s) crossed a major; #${number} is labelled needs-manual-review and not armed."
             exit 0
+          fi
+
+          # Without proof the branch is push-locked, an armed refresh could
+          # merge a commit nobody judged. Left for a human and red, because a
+          # missing or weakened ruleset is a setting to restore.
+          if [ "${LOCKED}" != true ]; then
+            label_for_review
+            echo "::error::#${number} is not armed: ${BRANCH} is not proven push-locked (${LOCK_WHY:-the check did not report}). Restore the ruleset described under \"Lockfile refresh guard\" in docs/architecture/ci-pipeline.md, then merge it by hand."
+            exit 1
           fi
 
           # Armed with RELEASE_TOKEN, not GITHUB_TOKEN: a merge performed by
@@ -291,8 +347,9 @@ jobs:
           # branch first, arming fails loudly instead of adopting it. The retry
           # covers GitHub still computing the new pull request's merge state.
           # The check holds only at arming time. A later push to the branch
-          # is blocked by the "Restrict updates" ruleset, and
-          # lockfile-refresh-guard.yml disarms it best effort after the fact.
+          # is blocked by the "Restrict updates" ruleset the lock step proved
+          # in force, and lockfile-refresh-guard.yml disarms it best effort
+          # after the fact.
           head_sha="$(git rev-parse HEAD)"
           armed=false
           for attempt in 1 2 3; do

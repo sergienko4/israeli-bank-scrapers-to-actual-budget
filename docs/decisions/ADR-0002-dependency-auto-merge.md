@@ -113,6 +113,10 @@ tools that kept producing image alerts.
      "Restrict updates" ruleset on `chore/lockfile-refresh-*`, a manual
      repository setting described in
      [Lockfile refresh guard](../architecture/ci-pipeline.md#lockfile-refresh-guard).
+     The run arms only after the API shows that ruleset active with no
+     bypass actor; otherwise a refresh that would arm is labelled
+     `needs-manual-review` and the run fails red, so a missing setting is
+     visible instead of silently trusted.
      As best-effort defence in depth, `lockfile-refresh-guard.yml` withdraws
      auto-merge and applies the same label after any push that gets
      through. It reacts after the push, so a merge can win the race.
@@ -294,3 +298,8 @@ record the result here.
     fails red. The refresh run's own push, made before the pull request
     opens, does not fire it. With the "Restrict updates" ruleset in place,
     no push can move the branch at all; the ruleset has no bypass.
+12. The refresh run's lock check reads that ruleset through
+    `RELEASE_TOKEN`: the bypass list is returned and empty, and the first
+    refresh arms. If the token cannot see the bypass list, every refresh
+    that would arm opens labelled `needs-manual-review` with a red run
+    until the token gains write access to the ruleset.
