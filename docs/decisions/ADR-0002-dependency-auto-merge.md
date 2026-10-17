@@ -160,9 +160,11 @@ tools that kept producing image alerts.
   No path ends in a merge by default.
 - **Commits are proven, not trusted.** A commit's author login comes from
   its e-mail, and its subject is free text; anyone with push access can set
-  both. So the first commit must be Dependabot's, and every Dependabot
-  commit must carry a valid signature from GitHub's `web-flow` key and
-  Dependabot's exact author e-mail. GitHub signs every commit made through
+  both. So the first commit must be Dependabot's and the only Dependabot
+  commit, since Dependabot rewrites its branch as a single commit and a
+  second one's metadata would never be read. That commit must carry a valid
+  signature from GitHub's `web-flow` key and Dependabot's exact author
+  e-mail. GitHub signs every commit made through
   its web UI or API with that key, so this proves GitHub made the commit,
   not that Dependabot did; anyone with write access could still mint one.
   Write access stays the trust boundary. `dependabot-meta-render.yml`

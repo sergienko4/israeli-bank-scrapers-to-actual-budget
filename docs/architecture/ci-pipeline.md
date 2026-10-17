@@ -228,7 +228,7 @@ renders the newer head.
 `dependabot-auto-merge.yml` lands safe Dependabot updates on `main` with no
 human step. The decision itself lives in a pure, unit-tested module,
 `scripts/dependabot-automerge-logic.mjs`, which reads the
-`updated-dependencies` metadata block from the first Dependabot commit:
+`updated-dependencies` metadata block from the PR's one Dependabot commit:
 
 | Update                                            | Action                          |
 |---------------------------------------------------|---------------------------------|
@@ -260,11 +260,13 @@ from.
   the merge itself.
 - **Vetted commits.** An author login comes from a commit's e-mail and a
   subject is free text; anyone with push access can set both, so neither is
-  trusted on its own. The first commit must be `dependabot[bot]`'s, and every
-  `dependabot[bot]` commit must carry a valid signature from GitHub's
-  `web-flow` key and Dependabot's exact author e-mail. That key signs every
-  commit made through GitHub's web UI or API, so it proves GitHub made the
-  commit, not Dependabot; write access stays the trust boundary. Meta-render
+  trusted on its own. The first commit must be `dependabot[bot]`'s and the
+  only Dependabot commit: Dependabot rewrites its branch as a single commit,
+  so a second one is not its shape, and its metadata would never be read.
+  That commit must carry a valid signature from GitHub's `web-flow` key and
+  Dependabot's exact author e-mail. That key signs every commit made through
+  GitHub's web UI or API, so it proves GitHub made the commit, not
+  Dependabot; write access stays the trust boundary. Meta-render
   commits are unsigned, so each `github-actions[bot]` commit is vetted by
   content: one parent, one of the three subjects meta-render writes, and a
   diff limited to the two rendered READMEs plus, for a prune or a rotation

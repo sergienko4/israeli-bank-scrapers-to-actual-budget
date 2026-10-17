@@ -288,13 +288,13 @@ jobs:
           # push access can set, so each author is held to what only that
           # author produces:
           # - dependabot[bot]: Dependabot commits through the GitHub API, so
-          #   each one must carry a valid signature from GitHub's web-flow key
-          #   and Dependabot's exact author e-mail. The first commit must be
-          #   one: it is the update itself. GitHub signs every commit made
-          #   through its web UI or API with that same key, so this proves the
-          #   commit was made by GitHub, not that Dependabot made it; anyone
-          #   with write access could still mint one. Write access remains the
-          #   trust boundary.
+          #   its commit must carry a valid signature from GitHub's web-flow
+          #   key and Dependabot's exact author e-mail. There must be exactly
+          #   one, and it must come first: it is the update itself. GitHub
+          #   signs every commit made through its web UI or API with that same
+          #   key, so this proves the commit was made by GitHub, not that
+          #   Dependabot made it; anyone with write access could still mint
+          #   one. Write access remains the trust boundary.
           # - github-actions[bot]: the meta-render workflow, vetted above.
           # Anything else means a human owns the merge, so any arming is
           # withdrawn; the human arms or merges again after their CI run.
@@ -334,8 +334,15 @@ jobs:
             esac
           done 3< "${RUNNER_TEMP}/authors.tsv"
 
-          # The first Dependabot commit carries the `updated-dependencies`
-          # metadata the policy reads; later bot commits only re-render docs.
+          # The Dependabot commit carries the `updated-dependencies` metadata
+          # the policy reads; later bot commits only re-render docs. Dependabot
+          # rewrites its branch as one commit on every update and rebase, so a
+          # second Dependabot-signed commit is not a shape it produces, and its
+          # metadata would never be read: one is distrusted, not merged unread.
+          dependabot_commits=$(jq 'map(select(.author.login == "dependabot[bot]")) | length' \
+            "${RUNNER_TEMP}/commits.json")
+          [ "${dependabot_commits}" -eq 1 ] \
+            || distrust "pull request #${number} has ${dependabot_commits} Dependabot commits; exactly one is vetted."
           jq -r 'map(select(.author.login == "dependabot[bot]"))
                  | .[0].commit.message // empty' \
             "${RUNNER_TEMP}/commits.json" > "${RUNNER_TEMP}/message.txt"
