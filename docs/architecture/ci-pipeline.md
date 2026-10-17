@@ -286,6 +286,21 @@ from.
 - **Stale runs change nothing.** A run whose pull request is closed, not
   opened by Dependabot or already on a newer head than CI tested exits
   without a write, because a later run owns that decision.
+- **One decision per PR at a time.** A read-only `pr` job first names the
+  pull request: the dispatch input, or the open PR for the head CI tested.
+  The decision job queues on that number, so a dispatch and a CI run for the
+  same PR never decide side by side. No number, a non-canonical one such as
+  `0786`, or a failed lookup skips the decision with no write.
+- **The CI verdict is read, not carried.** The queue keeps the order runs
+  reach it, not the order they were triggered, so no run trusts the
+  conclusion its trigger carried. Each run, a manual dispatch included,
+  reads the newest PR Pipeline run for the current head (a re-run counts
+  from its own start) and decides on that: success may arm, any other
+  conclusion disarms, and a run still in progress writes nothing because
+  its completion triggers a run of its own. Runs that execute in any order
+  converge on the latest verdict. Every page of the run list is read, since
+  a re-run keeps its original place in it; a list GitHub cut short (at most
+  1,000 runs per filtered query) fails the run, withdrawing any arming.
 - **Rotated pins never auto-merge.** When meta-render rotates an
   `allowScripts` pin, the PR is held for a human: either the rotation comment
   or the rotation commit subject is enough. The comment marker counts only

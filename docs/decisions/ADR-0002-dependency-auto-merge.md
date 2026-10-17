@@ -180,6 +180,12 @@ tools that kept producing image alerts.
   opened by Dependabot, or already moved past the head CI tested makes no
   write at all. Disarming there could undo an arming made for a newer head;
   the run for that head decides instead.
+- **The CI verdict is read, not carried.** Runs queued for one pull request
+  are not kept in trigger order, so a delayed run could act on an outdated
+  conclusion. Every run, a manual dispatch included, reads the newest PR
+  Pipeline run for the current head and decides on it; one still in
+  progress writes nothing. In any execution order the last run acts on the
+  latest verdict.
 - **Classify per entry, never per group.** The decision reads every entry in
   the metadata block. A group name says nothing about what the group
   contains, which is how the `eslint-plugin-unicorn` major was nearly missed.

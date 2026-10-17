@@ -4,12 +4,13 @@ name: Dependabot Auto-Merge
 # queue of approved updates moving once main advances.
 #
 # 1. `automerge` decides, per pull request, whether an update is safe to merge
-#    unattended. The decision is a pure, unit-tested policy module
-#    (scripts/dependabot-automerge-logic.mjs): npm patch/minor (grouped or
-#    not), GitHub Actions patch/minor and Docker digest/patch updates merge;
-#    majors, and update types an ecosystem is held back from (a Docker
-#    minor), are labelled `needs-manual-review`; anything the policy cannot
-#    classify is skipped and left for a human.
+#    unattended, after `pr` has named the pull request so that every run for
+#    it shares one concurrency group. The decision is a pure, unit-tested
+#    policy module (scripts/dependabot-automerge-logic.mjs): npm patch/minor
+#    (grouped or not), GitHub Actions patch/minor and Docker digest/patch
+#    updates merge; majors, and update types an ecosystem is held back from
+#    (a Docker minor), are labelled `needs-manual-review`; anything the policy
+#    cannot classify is skipped and left for a human.
 # 2. `rebase-behind` nudges one auto-merge-enabled Dependabot PR at a time
 #    with `@dependabot rebase` when main has moved past it. The ruleset
 #    requires branches to be strictly up to date, auto-merge never updates a
@@ -36,6 +37,13 @@ name: Dependabot Auto-Merge
 #    commit would make Dependabot stop maintaining the PR.
 #    https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-pull-requests-for-dependency-updates
 #    https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-pull-request-comment-commands
+# 5. The CI verdict is read from the workflow-runs API, never taken from the
+#    triggering event: a concurrency group queues in the order runs reach
+#    it, not the order they were triggered, so a delayed run could act on an
+#    outdated verdict. Every run judges the newest PR Pipeline run for the
+#    head, a manual dispatch included.
+#    https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency
+#    https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow
 #
 # Interplay with Dependabot Meta Render: meta-render may push a re-render
 # commit after PR Pipeline finishes. That push dismisses any approval given
@@ -90,8 +98,16 @@ on:
 permissions: {}
 
 jobs:
-  automerge:
-    name: Decide auto-merge for a Dependabot PR
+  # Names the pull request a run decides, so every run for one pull request —
+  # a finished CI run or a manual dispatch — joins the same concurrency group
+  # in `automerge`. A key built from whatever each trigger carries could
+  # differ between a dispatch and a CI run for the same pull request; the two
+  # would then run side by side, and the older run's disarm could undo the
+  # newer run's arming. Read-only: the number is only a candidate, and
+  # Resolve re-reads the pull request before acting on it. No number, or a
+  # failed lookup, skips `automerge` and touches nothing.
+  pr:
+    name: Find the pull request to decide
     # Any finished pull-request CI run (or a manual dispatch). Only a success
     # for the current head can arm; any other conclusion for the current head
     # (failure, cancelled, timed out, ...) carries no passing verdict, so an
@@ -101,18 +117,55 @@ jobs:
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.event == 'pull_request')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
+    outputs:
+      number: ${{ steps.find.outputs.number }}
+    steps:
+      - name: Find the pull request
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_PR: ${{ inputs.pr }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DISPATCH_PR}" ]; then
+            number="${DISPATCH_PR}"
+            reason='the dispatch input is not a pull request number.'
+          else
+            number=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/commits/${RUN_HEAD_SHA}/pulls" \
+              --jq 'map(select(.state == "open")) | .[0].number // empty')
+            reason='no open pull request found for this run.'
+          fi
+          # Canonical form only: the API reads 0786 as #786, but the
+          # concurrency key would not, and the two runs would decide side by
+          # side.
+          if [[ ! "${number}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::notice::Skipping auto-merge: ${reason}"
+            exit 0
+          fi
+          echo "number=${number}" >> "${GITHUB_OUTPUT}"
+
+  automerge:
+    name: Decide auto-merge for a Dependabot PR
+    needs: pr
+    if: needs.pr.outputs.number != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
     # One decision per pull request at a time; a queued run re-reads fresh
-    # state. A dispatch and a CI-triggered run share the PR-number key; the
-    # branch name is used only when the CI run lists no pull request.
+    # state. Dispatched and CI-triggered runs share the number `pr` found.
+    # The group does not order its runs, so each run also reads the CI
+    # verdict fresh (see Resolve) instead of trusting its trigger's.
     concurrency:
-      group: >-
-        dependabot-auto-merge-${{ inputs.pr ||
-        github.event.workflow_run.pull_requests[0].number ||
-        github.event.workflow_run.head_branch }}
+      group: dependabot-auto-merge-${{ needs.pr.outputs.number }}
       cancel-in-progress: false
     env:
       HUSKY: 0
@@ -152,8 +205,10 @@ jobs:
         id: resolve
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          DISPATCH_PR: ${{ inputs.pr }}
+          CANDIDATE_PR: ${{ needs.pr.outputs.number }}
           RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_WORKFLOW: pr.yml
+          READ_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -175,17 +230,9 @@ jobs:
             exit 0
           }
 
-          if [ -n "${DISPATCH_PR}" ]; then
-            [[ "${DISPATCH_PR}" =~ ^[0-9]+$ ]] \
-              || leave_alone 'the dispatch input is not a pull request number.'
-            number="${DISPATCH_PR}"
-          else
-            number=$(gh api \
-              "repos/${GITHUB_REPOSITORY}/commits/${RUN_HEAD_SHA}/pulls" \
-              --jq 'map(select(.state == "open")) | .[0].number // empty')
-          fi
-          [ -n "${number}" ] \
-            || leave_alone 'no open pull request found for this run.'
+          # The `pr` job found this number and checked its form; everything
+          # it claims is re-read below before the run acts on it.
+          number="${CANDIDATE_PR}"
 
           IFS=$'\t' read -r state author head_repo head_sha head_ref < <(
             gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}" \
@@ -370,32 +417,57 @@ jobs:
             repinned=true
           fi
 
+          # The CI verdict is read here, not taken from the event that started
+          # the run: the concurrency group does not order its runs, so a
+          # delayed run would act on an outdated verdict. Every run, CI or
+          # dispatch, judges the newest PR Pipeline run for the current head
+          # (a re-run resets its start time; the id breaks a same-second tie),
+          # so whatever order the runs execute in, the last one acts on the
+          # current verdict. A run still going, or none yet, is `pending`:
+          # nothing is written, and its completion comes back through here.
+          # The list keeps a re-run in its original place, so every page is
+          # read; a list GitHub cut short (it returns at most 1,000 filtered
+          # runs) may hide the newest run and fails the step instead.
+          GH_TOKEN="${READ_TOKEN}" gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_WORKFLOW}/runs?head_sha=${head_sha}&event=pull_request&per_page=100" \
+            > "${RUNNER_TEMP}/ci-runs.json"
+          jq -e '([.[].workflow_runs[]] | length) as $listed
+                 | all(.[]; .total_count <= $listed)' \
+            "${RUNNER_TEMP}/ci-runs.json" > /dev/null \
+            || { echo "::error::#${number}: the CI runs for ${head_sha} could not all be listed."; exit 1; }
+          ci=$(jq -r '[.[].workflow_runs[]] | max_by([.run_started_at, .id])
+                      | if .status != "completed" then "pending"
+                        else .conclusion // "unknown" end' \
+            "${RUNNER_TEMP}/ci-runs.json")
+          if [ "${ci}" = 'pending' ]; then
+            echo "::notice::#${number}: CI for ${head_sha} has not finished; its completion decides."
+          fi
+
           {
             echo 'skip=false'
             echo 'disarm=false'
+            echo "ci=${ci}"
             echo "head_sha=${head_sha}"
             echo "ecosystem=${ecosystem}"
             echo "repinned=${repinned}"
           } >> "${GITHUB_OUTPUT}"
 
       # Withdraws an earlier arming when the current head cannot be vetted
-      # (distrust) or its CI run ended without a pass (failure, cancelled,
-      # timed out, ...). A red PR should not sit armed: disarming keeps the
-      # rebase nudge below off it, and a green re-run comes back through here
-      # and re-arms it. Resolve has already left a stale run alone, and
-      # CI-triggered runs for one branch are serialised by the concurrency
-      # group, so this never undoes an arming made for a newer head.
+      # (distrust) or the newest CI run for it ended without a pass
+      # (failure, cancelled, timed out, ...). A red PR should not sit armed,
+      # whoever armed it: disarming keeps the rebase nudge below off it, and
+      # a green re-run comes back through here and re-arms it.
       - name: Disarm auto-merge when the head has no passing verdict
         id: nopass
         if: >-
           steps.resolve.outputs.disarm == 'true' ||
           (steps.resolve.outputs.skip == 'false' &&
-           github.event_name == 'workflow_run' &&
-           github.event.workflow_run.conclusion != 'success')
+           steps.resolve.outputs.ci != 'success' &&
+           steps.resolve.outputs.ci != 'pending')
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           PR_NUMBER: ${{ steps.resolve.outputs.number }}
-          CI_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          CI_CONCLUSION: ${{ steps.resolve.outputs.ci }}
           DISTRUSTED: ${{ steps.resolve.outputs.disarm }}
         run: |
           set -euo pipefail
@@ -435,13 +507,12 @@ jobs:
 
       # The policy runs from the default branch, never from the PR head: the
       # code that decides whether to merge must not be editable by the change
-      # it is judging. Only a passing CI verdict (or a manual dispatch, whose
-      # merge the ruleset's required checks still gate) reaches a decision.
+      # it is judging. Only a passing CI verdict for the current head, read
+      # by Resolve, reaches a decision; a manual dispatch needs one too.
       - name: Check out the trusted policy from the default branch
         if: >-
           steps.resolve.outputs.skip == 'false' &&
-          (github.event_name == 'workflow_dispatch' ||
-           github.event.workflow_run.conclusion == 'success')
+          steps.resolve.outputs.ci == 'success'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
@@ -450,8 +521,7 @@ jobs:
       - name: Set up Node.js
         if: >-
           steps.resolve.outputs.skip == 'false' &&
-          (github.event_name == 'workflow_dispatch' ||
-           github.event.workflow_run.conclusion == 'success')
+          steps.resolve.outputs.ci == 'success'
         uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -462,8 +532,7 @@ jobs:
         id: decide
         if: >-
           steps.resolve.outputs.skip == 'false' &&
-          (github.event_name == 'workflow_dispatch' ||
-           github.event.workflow_run.conclusion == 'success')
+          steps.resolve.outputs.ci == 'success'
         env:
           ECOSYSTEM: ${{ steps.resolve.outputs.ecosystem }}
           REPINNED: ${{ steps.resolve.outputs.repinned }}
@@ -580,8 +649,7 @@ jobs:
         if: >-
           !cancelled() &&
           steps.resolve.outputs.skip == 'false' &&
-          (github.event_name == 'workflow_dispatch' ||
-           github.event.workflow_run.conclusion == 'success') &&
+          steps.resolve.outputs.ci == 'success' &&
           steps.decide.outputs.action != 'merge' &&
           steps.decide.outputs.action != 'label'
         env:
@@ -601,9 +669,10 @@ jobs:
       # any other write step can stay unconfirmed, either way leaving an
       # earlier arming in place. Any arming is withdrawn here (one more
       # round of retries) and the job stays red. An approval left behind
-      # merges nothing on its own. Runs for one PR are serialised by the
-      # concurrency group, so this never undoes an arming made by a newer
-      # run. Like the catch-all above, a cancelled run writes nothing.
+      # merges nothing on its own. Runs for one PR never overlap (the
+      # concurrency group), so the arming withdrawn here is never one another
+      # run is making at the same time. Like the catch-all above, a
+      # cancelled run writes nothing.
       - name: Withdraw auto-merge when a write step failed
         if: >-
           !cancelled() &&
