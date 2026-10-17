@@ -8,7 +8,15 @@ Thank you for your interest in contributing!
 
 ### Prerequisites
 
-- Node.js 22+ and npm 10+
+- Node.js 26, the version in `.nvmrc` that CI and the Docker image run
+  (`nvm install && nvm use`). `package.json` accepts 22.14 and later.
+- npm 12.2.1, the version the Docker image pins:
+  `npm install -g npm@12.2.1`. Earlier npm runs every dependency install
+  script, including a source build of `better-sqlite3` that needs a C++
+  toolchain — on macOS, the multi-gigabyte Xcode Command Line Tools. npm 12
+  runs only the scripts listed in [`allowScripts`](#dependency-install-scripts-allowscripts),
+  and the `better-sqlite3` that `@actual-app/api` loads ships prebuilt
+  binaries, so no compiler is needed.
 - Docker and Docker Compose
 - Git
 
@@ -17,7 +25,8 @@ Thank you for your interest in contributing!
 ```bash
 git clone https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget.git
 cd israeli-bank-scrapers-to-actual-budget
-npm install
+nvm use
+npm ci
 ```
 
 ### Development Workflow
@@ -68,13 +77,13 @@ need one:
 
 | Package | Why it needs an install script |
 | --- | --- |
-| `better-sqlite3` | `prebuild-install` downloads the prebuilt native binary |
+| `better-sqlite3` | the 12.x copy under `@hieutran094/camoufox-js` runs `prebuild-install` to download its native binary; the 13.x copy `@actual-app/api` loads ships its binaries in the package and needs no script |
 | `tesseract.js` | OCR asset setup |
 | `unrs-resolver` | native resolver binary |
 | `@sergienko4/israeli-bank-scrapers` | scraper postinstall |
 
-If `better-sqlite3` is not built, `@actual-app/api` cannot open the budget and
-every E2E import fails.
+If the `better-sqlite3` binary that `@actual-app/api` loads is missing, it
+cannot open the budget and every E2E import fails.
 
 ### Why each entry is pinned to an exact version
 
