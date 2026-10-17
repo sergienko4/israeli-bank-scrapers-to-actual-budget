@@ -473,8 +473,9 @@ on a `resolved` URL pointing anywhere but `registry.npmjs.org`, on a `sha1-`
 integrity, or on a registry tarball recorded with no integrity — each a
 symptom of a proxy, mirror or hand edit rewriting the lockfile.
 `npm run refresh-lockfile` repairs foreign hosts in place; missing or
-downgraded integrity fails closed, since a hash cannot be restored without
-re-fetching the tarball. Rationale and rejected alternatives:
+downgraded integrity fails closed, since only a run against the public
+registry can restore the hash (the Lockfile refresh's `npm update` does).
+Rationale and rejected alternatives:
 [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md). The
 auto-merge decision is recorded in
 [ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md).

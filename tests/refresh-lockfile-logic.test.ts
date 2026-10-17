@@ -67,6 +67,21 @@ describe('findForeignRegistryEntries', () => {
     expect(found).toHaveLength(1);
   });
 
+  it('flags an upper-case scheme, which npm still downloads', () => {
+    const resolved = 'HTTPS://evil.example/x/-/x-1.0.0.tgz';
+    const text = lockfile({ 'node_modules/x': { version: '1.0.0', resolved } });
+
+    expect(findForeignRegistryEntries(text)).toEqual([{ path: 'node_modules/x', resolved }]);
+    expect(findWeakIntegrities(text)).toEqual([{ path: 'node_modules/x', integrity: '' }]);
+  });
+
+  it('repairs an upper-case spelling of the public registry', () => {
+    const text = lockfile({ 'node_modules/x': { resolved: 'HTTPS://REGISTRY.NPMJS.ORG/x/-/x-1.0.0.tgz' } });
+
+    expect(findForeignRegistryEntries(text)).toHaveLength(1);
+    expect(canonicalizeRegistryUrls(text).text).toContain(`"${CANONICAL_REGISTRY}x/-/x-1.0.0.tgz"`);
+  });
+
   it('ignores entries with no resolved URL, such as the root and link targets', () => {
     const text = lockfile({
       '': { name: 'root' },

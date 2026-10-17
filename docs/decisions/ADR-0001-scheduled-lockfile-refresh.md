@@ -86,8 +86,9 @@ canonical.
    inside `validate:ci`, failing the build on a foreign registry host, a
    `sha1` integrity, or a registry tarball with no integrity.
    `npm run refresh-lockfile` repairs foreign hosts in place; missing or
-   downgraded integrity **fails closed**, because a hash cannot be restored
-   without re-fetching the tarball from the canonical registry.
+   downgraded integrity **fails closed**, because only a run against the
+   canonical registry can restore the hash (the scheduled refresh's
+   `npm update` does).
 
 3. **The commit type is derived from the lockfile**, not hard-coded.
    `summarizeRefresh()` marks the change `fix(deps)` when any non-`dev` entry

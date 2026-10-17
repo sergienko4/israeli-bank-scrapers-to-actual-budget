@@ -38,8 +38,13 @@ export const CANONICAL_REGISTRY = 'https://registry.npmjs.org/';
  */
 const STRONG_INTEGRITY_PATTERN = /^sha(?:512|384)-/;
 
-/** Matches the `resolved` values that describe an HTTP registry download. */
-const HTTP_URL_PATTERN = /^https?:\/\//;
+/**
+ * Matches the `resolved` values that describe an HTTP registry download.
+ *
+ * Case-insensitive because URL schemes are: npm installs `HTTPS://…` as a
+ * remote tarball, so a case-sensitive test would let one skip both checks.
+ */
+const HTTP_URL_PATTERN = /^https?:\/\//i;
 
 /** Reports whether a value is a JSON object rather than an array or scalar. */
 function isRecord(value) {
@@ -591,9 +596,9 @@ function remediesFor(audit) {
   }
   if (audit.weakIntegrities.length > 0) {
     remedies.push(
-      'Missing or downgraded integrity is NOT repairable locally: a trustworthy hash requires a',
-      'trustworthy tarball, which a mirrored machine cannot obtain. Re-run the',
-      '"Lockfile refresh" workflow, where npm resolves and verifies tarballs itself.',
+      'Missing or downgraded integrity is NOT repairable locally: a trustworthy hash must',
+      'come from the public registry, which a mirrored machine cannot reach. Re-run the',
+      '"Lockfile refresh" workflow, whose `npm update` re-reads it from registry.npmjs.org.',
     );
   }
   return remedies;
