@@ -3,8 +3,8 @@ description: >-
   Installs the npm version the Dockerfile pins (ARG NPM_VERSION), so a job
   that writes package-lock.json resolves with the npm that installs it in the
   image rather than the older one bundled with the runner's Node. It runs
-  code fetched from the registry, so use it only in a job that can read no
-  secret.
+  code fetched from the registry, so use it only directly from a workflow job
+  that can read no secret, never from another composite action.
 
 runs:
   using: composite

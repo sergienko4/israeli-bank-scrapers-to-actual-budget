@@ -15,11 +15,11 @@
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const REFRESH = '.github/workflows/lockfile-refresh.yml';
@@ -183,8 +183,12 @@ function jobsOf(file: string): Readonly<Record<string, IJob>> {
   return workflow.jobs;
 }
 
-/** Any read of the `secrets` context, by property or by index. */
-const SECRET_READ = /\bsecrets\s*[.[]/;
+/**
+ * Any expression that can reach a secret: the `secrets` context in any form,
+ * or the `github` context other than through a property that is not `token`
+ * (`toJSON(github)` holds the token too). Expression names ignore case.
+ */
+const SECRET_READ = /\bsecrets\b|\bgithub\b(?!\s*\.\s*(?!token\b)\w)/i;
 
 /**
  * Reports whether a step runs the npm pin, however its path is spelled.
@@ -192,7 +196,23 @@ const SECRET_READ = /\bsecrets\s*[.[]/;
  * @returns Whether it uses the pin-npm action.
  */
 function usesPinNpm(step: IStep): boolean {
-  return (step.uses ?? '').replace(/@.*$/, '').replace(/\/+$/, '').endsWith(PIN_NPM);
+  return posix
+    .normalize((step.uses ?? '').replace(/@.*$/, ''))
+    .replace(/\/+$/, '')
+    .endsWith(PIN_NPM);
+}
+
+/**
+ * Lists the expressions a job evaluates: every `${{ }}` body in the job and
+ * the workflow env it inherits, plus `if:` conditions, which may omit braces.
+ * @param workflowEnv - The workflow-level env.
+ * @param job - Workflow job.
+ * @returns The expression bodies.
+ */
+function expressionsOf(workflowEnv: unknown, job: IJob): string[] {
+  const braced = [...JSON.stringify([workflowEnv, job]).matchAll(/\$\{\{(.*?)\}\}/g)].map(([, body]) => body ?? '');
+  const conditions = [job.if, ...(job.steps ?? []).map((step) => step.if)];
+  return [...braced, ...conditions.filter((condition) => condition !== undefined)];
 }
 
 /**
@@ -207,7 +227,10 @@ function pinnedJobs(dir: string): { job: string; readsSecret: boolean }[] {
       const workflow = parse(readFileSync(join(dir, name), 'utf8')) as { env?: unknown; jobs: Record<string, IJob> };
       return Object.entries(workflow.jobs)
         .filter(([, job]) => (job.steps ?? []).some(usesPinNpm))
-        .map(([id, job]) => ({ job: `${name}:${id}`, readsSecret: SECRET_READ.test(JSON.stringify([workflow.env, job])) }));
+        .map(([id, job]) => ({
+          job: `${name}:${id}`,
+          readsSecret: expressionsOf(workflow.env, job).some((expression) => SECRET_READ.test(expression)),
+        }));
     });
 }
 
@@ -863,14 +886,31 @@ describe.skipIf(!CAN_RUN)('npm pin for lockfile writers', () => {
   });
 
   it.each([
-    ['a secret by property', 'a.yml', `./${PIN_NPM}`, '${{ secrets.TOKEN }}'],
-    ['a secret by index', 'b.yaml', `./${PIN_NPM}/`, "${{ secrets['TOKEN'] }}"],
-    ['a secret through a remote ref', 'c.yml', `${REPO}/${PIN_NPM}@main`, '${{ secrets.TOKEN }}'],
-  ])('notices a pinned job that reads %s', (_case, file, uses, secret) => {
-    const job = `    runs-on: ubuntu-latest\n    steps:\n      - uses: ${uses}\n      - run: echo\n        env:\n          T: ${JSON.stringify(secret)}\n`;
-    writeFileSync(join(work, file), `on: push\njobs:\n  j:\n${job}`);
+    ['a secret by property', 'a.yml', `./${PIN_NPM}`, { env: { T: '${{ secrets.TOKEN }}' } }],
+    ['a secret by index', 'b.yaml', `./${PIN_NPM}/`, { env: { T: "${{ secrets['TOKEN'] }}" } }],
+    ['a secret through a remote ref', 'c.yml', `${REPO}/${PIN_NPM}@main`, { env: { T: '${{ secrets.TOKEN }}' } }],
+    ['the whole secrets context', 'd.yml', './.github/actions/ci/./pin-npm', { env: { T: '${{ toJSON(secrets) }}' } }],
+    ['a secret in upper case', 'e.yml', './.github/actions/x/../ci/pin-npm', { env: { T: '${{ SECRETS.TOKEN }}' } }],
+    ['the GitHub token', 'f.yml', `./${PIN_NPM}`, { env: { T: '${{ github.token }}' } }],
+    ['the whole github context', 'g.yml', `./${PIN_NPM}`, { env: { T: '${{ toJSON(github) }}' } }],
+    ['the GitHub token in a bare condition', 'h.yml', `./${PIN_NPM}`, { if: "github['token'] != ''" }],
+  ])('notices a pinned job that reads %s', (_case, file, uses, read) => {
+    const steps = [{ uses }, { run: 'echo', ...read }];
+    writeFileSync(join(work, file), stringify({ on: 'push', jobs: { j: { 'runs-on': 'ubuntu-latest', steps } } }));
 
     expect(pinnedJobs(work)).toEqual([{ job: `${file}:j`, readsSecret: true }]);
+  });
+
+  it('runs the npm pin from no composite action, which the job check cannot see into', () => {
+    const actions = join(ROOT, '.github/actions');
+    const nesting = readdirSync(actions, { recursive: true, encoding: 'utf8' })
+      .filter((file) => /(^|\/)action\.ya?ml$/.test(file))
+      .filter((file) => {
+        const action = parse(readFileSync(join(actions, file), 'utf8')) as { runs?: { steps?: IStep[] } };
+        return (action.runs?.steps ?? []).some(usesPinNpm);
+      });
+
+    expect(nesting).toEqual([]);
   });
 
   it('installs no package in the job that later holds RELEASE_TOKEN', () => {
