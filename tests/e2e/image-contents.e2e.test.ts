@@ -23,14 +23,18 @@ const CAMOUFOX_SIZED_LAYER_BYTES = 1_000_000_000;
 /** Shell the shell-form HEALTHCHECK runs through. */
 const EXPECTED_SHELL = ['/bin/bash', '-o', 'pipefail', '-c'];
 
-/** Launches the shipped Camoufox with the scraper's default OS fingerprint and reports the platform. */
+/**
+ * Launches the shipped Camoufox with the scraper's default OS fingerprint and
+ * reports the OS user it ran as and the platform the page saw.
+ */
 const CAMOUFOX_LAUNCH = `
+import { userInfo } from 'node:os';
 import { Camoufox } from '@hieutran094/camoufox-js';
 const browser = await Camoufox({ headless: true, os: 'windows' });
 const page = await browser.newPage();
 const platform = await page.evaluate(() => navigator.platform);
 await browser.close();
-process.stdout.write(platform);
+process.stdout.write(JSON.stringify({ user: userInfo().username, platform }));
 `;
 
 /**
@@ -94,9 +98,9 @@ describe.runIf(hasDockerImage())('published image contents E2E', () => {
     expect(present).toBe('true');
   });
 
-  it('launches the shipped Camoufox headless', () => {
-    const platform = runInImage('node', ['--input-type=module', '-e', CAMOUFOX_LAUNCH]);
+  it('launches the shipped Camoufox headless as the node user', () => {
+    const launch: unknown = JSON.parse(runInImage('node', ['--input-type=module', '-e', CAMOUFOX_LAUNCH]));
 
-    expect(platform).toBe('Win32');
+    expect(launch).toEqual({ user: 'node', platform: 'Win32' });
   }, 180_000);
 });
