@@ -13,6 +13,8 @@
 
 import { getLogger } from '../Logger/Index.js';
 import describeBrowserVersion from '../Scraper/BrowserVersion.js';
+import type { CamoufoxOs } from '../Scraper/CamoufoxFontGuard.js';
+import checkCamoufoxFonts from '../Scraper/CamoufoxFontGuard.js';
 import { execute } from '../Scrapers/Pipeline/Index.js';
 import type { IImporterConfig, IProcedureSuccess } from '../Types/Index.js';
 import { isFail, succeed } from '../Types/Index.js';
@@ -111,9 +113,21 @@ async function runImporter(handle: IImporterBootHandle): Promise<never> {
 }
 
 /**
+ * Exits with code 1 when the bundled browser lacks the fonts for its spoofed
+ * OS, writing the reason to stderr like a config-load failure.
+ * @returns The spoofed OS when its fonts are present.
+ */
+function enforceCamoufoxFonts(): IProcedureSuccess<{ os: CamoufoxOs }> {
+  const fonts = checkCamoufoxFonts();
+  if (fonts.success) return fonts;
+  process.stderr.write(`${fonts.message}\n`);
+  return process.exit(1);
+}
+
+/**
  * Top-level entry: short-circuits on --validate or --cleanup-card-refunds,
- * otherwise assembles everything, sweeps the staging leftovers of the runtime
- * stores, and runs the importer pipeline to completion.
+ * otherwise checks the browser fonts, assembles everything, sweeps the staging
+ * leftovers of the runtime stores, and runs the importer pipeline to completion.
  *
  * @returns Promise that never resolves on the main path (process
  *   exits before resolution). Only awaits on the CLI-mode
@@ -124,6 +138,7 @@ export async function bootImporter(): Promise<never> {
   await handleValidateMode();
   // --cleanup-card-refunds: one-off 8.6.7 sign migration; exits when present
   await handleCardRefundCleanupMode();
+  enforceCamoufoxFonts();
   const handle = buildImporterBootHandle();
   emitStartupBanner(handle.wiring);
   const logger = getLogger();

@@ -8,6 +8,7 @@
  */
 
 import { createLogger, getLogger } from '../Logger/Index.js';
+import checkCamoufoxFonts from '../Scraper/CamoufoxFontGuard.js';
 import type { ImportMediator } from '../Services/ImportMediator.js';
 import type { IProcedureSuccess, Procedure } from '../Types/Index.js';
 import { fail, isFail, succeed } from '../Types/Index.js';
@@ -124,6 +125,8 @@ export async function runScheduler(
  * Entry-point wrapper that catches fatal errors and exits via the lifecycle.
  *
  * Called from the Scheduler.ts barrel when the module is executed directly.
+ * A browser install without the fonts for its spoofed OS is fatal before
+ * anything else starts.
  *
  * @param lifecycle - Optional lifecycle override; defaults to live exit/logger.
  * @returns Promise that never resolves (lifecycle exits).
@@ -132,6 +135,8 @@ export async function bootScheduler(
   lifecycle: ISchedulerProcessLifecycle = buildSchedulerProcessLifecycle(),
 ): Promise<never> {
   try {
+    const fonts = checkCamoufoxFonts();
+    if (!fonts.success) return lifecycle.exitOnFatalError(new Error(fonts.message));
     await runScheduler(lifecycle);
     return lifecycle.exitClean();
   } catch (err: unknown) {
