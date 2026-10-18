@@ -43,11 +43,14 @@ RUN npm ci
 
 # Install the Camoufox browser (Firefox-based anti-detect): the build pinned
 # in config/camoufox-pin.json, never upstream's newest. CI installs it on the
-# runner (.github/actions/docker/camoufox-cache) and an amd64 build with
-# SKIP_BROWSER_FETCH=true copies that from .camoufox-cache/; every other build
-# (arm64, local) downloads it with the pinned installer, which checks its
-# SHA-256. Both paths must pass --verify, so a stale precache cannot ship, and
-# the ELF e_machine check confirms the binary matches the build architecture.
+# runner (.github/actions/docker/camoufox-cache) for the runner's own
+# architecture; a build with SKIP_BROWSER_FETCH=true copies that from
+# .camoufox-cache/ only when --verify accepts it for this build's
+# architecture. Every other build (local, or a precache for another pin or
+# architecture) downloads it with the pinned installer, which checks its
+# SHA-256. Both paths must pass --verify again, so a stale precache cannot
+# ship, and the ELF e_machine check confirms the binary matches the build
+# architecture.
 # The final modes are set here, inside the same RUN: a later chmod/chown RUN
 # would rewrite the whole 1.2 GB tree into another layer.
 ARG SKIP_BROWSER_FETCH=false
@@ -60,9 +63,9 @@ RUN set -e; \
     ARCH=$(uname -m); \
     export CAMOUFOX_INSTALL_DIR=/home/node/.cache/camoufox; \
     echo "Building for architecture: $ARCH"; \
-    if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ "$ARCH" = "x86_64" ] && \
-       [ -f /tmp/camoufox-precache/camoufox-bin ] && [ -f /tmp/camoufox-precache/version.json ]; then \
-      echo "Using pre-cached Camoufox binary (x86_64)"; \
+    if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ -f /tmp/camoufox-precache/camoufox-bin ] && \
+       CAMOUFOX_INSTALL_DIR=/tmp/camoufox-precache node scripts/camoufox-fetch.mjs --verify; then \
+      echo "Using pre-cached Camoufox binary ($ARCH)"; \
       mkdir -p "$CAMOUFOX_INSTALL_DIR"; \
       cp -r /tmp/camoufox-precache/* "$CAMOUFOX_INSTALL_DIR"/; \
     else \

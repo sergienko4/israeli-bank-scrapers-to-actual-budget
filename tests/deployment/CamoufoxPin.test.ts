@@ -139,8 +139,14 @@ describe('Dockerfile Camoufox step', () => {
   const installLine = lines.findIndex(
     (line) => line.includes(`node ${INSTALLER}`) && !line.includes('--verify'),
   );
-  const verifyLine = lines.findIndex((line) => line.includes(`node ${INSTALLER} --verify`));
+  const verifyLine = lines.findIndex(
+    (line) =>
+      line.includes(`node ${INSTALLER} --verify`) && !line.includes('/tmp/camoufox-precache'),
+  );
   const precacheLine = lines.findIndex((line) => line.includes('cp -r /tmp/camoufox-precache/'));
+  const branchStart = lines.findIndex((line) => line.includes('if [ "$SKIP_BROWSER_FETCH"'));
+  const branchEnd = lines.findIndex((line, index) => index >= branchStart && /;\s*then/.test(line));
+  const precacheCondition = lines.slice(branchStart, branchEnd + 1).join('\n');
 
   it('installs through the pinned installer when no precached binary is used', () => {
     expect(installLine).toBeGreaterThanOrEqual(0);
@@ -150,6 +156,16 @@ describe('Dockerfile Camoufox step', () => {
     const verifiedAfter = [precacheLine, installLine].map((line) => line >= 0 && line < verifyLine);
 
     expect(verifiedAfter).toEqual([true, true]);
+  });
+
+  it('uses the precache only when --verify accepts it, whatever the architecture', () => {
+    expect({
+      verified: precacheCondition.includes(
+        `CAMOUFOX_INSTALL_DIR=/tmp/camoufox-precache node ${INSTALLER} --verify`,
+      ),
+      archGated: /\$ARCH|x86_64|aarch64/.test(precacheCondition),
+      beforeCopy: branchEnd >= 0 && branchEnd < precacheLine,
+    }).toEqual({ verified: true, archGated: false, beforeCopy: true });
   });
 
   it('copies the pin and every installer module before installing', () => {

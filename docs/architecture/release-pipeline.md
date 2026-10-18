@@ -132,7 +132,7 @@ flowchart LR
     subgraph BLD["docker/build-image"]
       CAM["docker/camoufox-cache"]
       BX["docker/setup-buildx"]
-      BP["docker/build-push-action<br/>SKIP_BROWSER_FETCH, gha cache in release"]
+      BP["docker/build-push-action<br/>SKIP_BROWSER_FETCH, no layer cache"]
     end
 
     SETUP["ci/setup<br/>node + npm ci"]

@@ -348,7 +348,14 @@ Consolidates the Docker build sequence used by `pr.yml` (trivy), `release.yml`
 3. `docker/build-push-action`
 4. `df -h /`, even when the build fails, so a disk regression is visible
 
-Inputs: `tag`, `platforms`, `push`, `load`, `labels`, `provenance`, `sbom`.
+Inputs: `tag`, `platforms`, `push`, `load`, `push-by-digest`, `labels`,
+`provenance`, `sbom`. Output: `digest`.
+
+With `push-by-digest: 'true'` the image is pushed untagged and `tag` is the
+bare image name; the digest output names it. The `.camoufox-cache/` precache
+is used only when `scripts/camoufox-fetch.mjs --verify` accepts it for the
+build's own architecture, so the same composite works on amd64 and arm64
+runners.
 
 No step frees runner disk: an `ubuntu-24.04` runner starts with about 86 GB
 free, and the release smoke build used about 16 GB of it. The `df` output after

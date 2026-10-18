@@ -27,6 +27,13 @@ inputs:
   load:
     description: Load the image into the local docker daemon (true/false). Mutually exclusive with multi-arch push.
     default: 'true'
+  push-by-digest:
+    description: |
+      Push the image untagged, by digest only (true/false). `tag` must then
+      be the bare image name and `push` is ignored. The release workflow
+      builds each architecture this way and joins the digests into one
+      tagged index afterwards.
+    default: 'false'
   labels:
     description: Optional OCI labels (multi-line string, as emitted by docker/metadata-action).
     default: ''
@@ -44,6 +51,11 @@ inputs:
       independent of this input.
     default: ''
 
+outputs:
+  digest:
+    description: Image digest (sha256:...) that build-push-action reports.
+    value: ${{ steps.build.outputs.digest }}
+
 runs:
   using: composite
   steps:
@@ -51,11 +63,13 @@ runs:
     - uses: docker/setup-buildx-action@v4
 
     - name: Build Docker image
+      id: build
       uses: docker/build-push-action@v7
       with:
         context: .
-        push: ${{ inputs.push }}
+        push: ${{ inputs.push-by-digest == 'true' && 'false' || inputs.push }}
         load: ${{ inputs.load }}
+        outputs: ${{ inputs.push-by-digest == 'true' && 'type=image,push-by-digest=true,name-canonical=true,push=true' || '' }}
         platforms: ${{ inputs.platforms }}
         tags: ${{ inputs.tag }}
         labels: ${{ inputs.labels }}
