@@ -1,5 +1,5 @@
 name: Trivy Scan
-description: Scan Docker image for vulnerabilities and upload SARIF to Security tab
+description: Scan a Docker image once, gate on fixable CRITICAL/HIGH vulnerabilities and on any secret, and upload SARIF to the Security tab
 
 inputs:
   image-ref:
@@ -9,68 +9,110 @@ inputs:
 runs:
   using: composite
   steps:
-    # Gate 1 — vulnerabilities. Deliberately capped at CRITICAL/HIGH: lower
-    # severities are dominated by unfixable upstream OS CVEs that would make
-    # the gate unactionable. `ignore-unfixed` keeps it to CVEs we can resolve.
-    - name: Fail on CRITICAL or HIGH vulnerabilities
-      uses: aquasecurity/trivy-action@v0.36.0
-      with:
-        image-ref: ${{ inputs.image-ref }}
-        format: table
-        exit-code: '1'
-        severity: CRITICAL,HIGH
-        ignore-unfixed: true
-        scanners: vuln
-        vuln-type: os,library
-        skip-dirs: root/.npm
-
-    # Gate 2 — secrets. Fails on ANY severity, by design.
+    # One scan feeds the SARIF upload and both gates below. Each extra
+    # trivy-action pass re-read the whole image, so three passes cost three
+    # scans of the same layers.
     #
-    # Trivy grades most secret rules MEDIUM (e.g. `jwt-token`), so folding
-    # secrets into the CRITICAL/HIGH vulnerability gate above silently made
-    # them non-blocking: the gate counted `Secrets: 0` and exited 0 while the
-    # SARIF upload still published the findings to the Security tab. A real
-    # leaked credential would have behaved the same way — reported, never
-    # blocking. Severity is a useful lever for CVE triage; for a credential in
-    # a shipped image it is not, so every detection breaks the build here.
+    # Every severity is kept: the SARIF carries them all, as the old SARIF
+    # pass did (trivy-action drops the severity filter for SARIF), and the
+    # gates pick their own. `ignore-unfixed` applies to vulnerabilities
+    # only, so the secret gate still sees every detection.
     #
-    # False positives are suppressed by rule in config/trivy/secret.yaml
-    # rather than by raising this threshold.
-    #
-    # That file is passed via TRIVY_SECRET_CONFIG, *not* the action's
-    # `trivy-config` input. `trivy-config` maps to Trivy's `--config`
-    # (general configuration), which does not understand the `allow-rules`
-    # key — it parses without error and silently ignores every rule. Only
-    # `--secret-config` / TRIVY_SECRET_CONFIG feeds the secret scanner.
-    - name: Fail on any detected secret
+    # The secret allow-rules in config/trivy/secret.yaml reach the scanner
+    # through TRIVY_SECRET_CONFIG, *not* the action's `trivy-config` input.
+    # `trivy-config` maps to Trivy's `--config` (general configuration),
+    # which does not understand the `allow-rules` key: it parses without
+    # error and silently ignores every rule. Only `--secret-config` /
+    # TRIVY_SECRET_CONFIG feeds the secret scanner.
+    - name: Scan the image for vulnerabilities and secrets
+      id: scan
       uses: aquasecurity/trivy-action@v0.36.0
       env:
         TRIVY_SECRET_CONFIG: config/trivy/secret.yaml
       with:
         image-ref: ${{ inputs.image-ref }}
-        format: table
-        exit-code: '1'
+        format: json
+        output: trivy-results.json
+        exit-code: '0'
         severity: CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN
-        scanners: secret
-        skip-dirs: root/.npm
-
-    - name: Generate SARIF report
-      if: always()
-      uses: aquasecurity/trivy-action@v0.36.0
-      env:
-        TRIVY_SECRET_CONFIG: config/trivy/secret.yaml
-      with:
-        image-ref: ${{ inputs.image-ref }}
-        format: sarif
-        output: trivy-results.sarif
-        severity: CRITICAL,HIGH
         ignore-unfixed: true
         scanners: vuln,secret
         vuln-type: os,library
         skip-dirs: root/.npm
 
+    # trivy-action leaves the trivy binary on PATH (setup-trivy adds it).
+    - name: Convert the report to SARIF
+      id: sarif
+      if: always()
+      shell: bash
+      run: trivy convert --format sarif --output trivy-results.sarif trivy-results.json
+
     - name: Upload SARIF to Security tab
+      id: upload
       uses: github/codeql-action/upload-sarif@v4
       if: always()
       with:
         sarif_file: trivy-results.sarif
+
+    # Both gates read the report with `jq -n input`, so an empty, truncated
+    # or non-object report fails them instead of reading as "no findings".
+    # A report without `Results` (nothing to report) passes.
+
+    # Gate 1: vulnerabilities. Deliberately capped at CRITICAL/HIGH: lower
+    # severities are dominated by unfixable upstream OS CVEs that would make
+    # the gate unactionable. The scan's `ignore-unfixed` keeps it to CVEs we
+    # can resolve.
+    - name: Fail on CRITICAL or HIGH vulnerabilities
+      id: vulns
+      shell: bash
+      run: |
+        report=trivy-results.json
+        if ! count=$(jq -n 'input
+            | if type == "object" then . else error("not a Trivy report") end
+            | [.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL" or .Severity == "HIGH")]
+            | length' "$report"); then
+          echo "::error::Trivy report unreadable: ${report}"
+          exit 1
+        fi
+        if [ "$count" -eq 0 ]; then
+          echo "No fixable CRITICAL or HIGH vulnerabilities."
+          exit 0
+        fi
+        trivy convert --format table --severity CRITICAL,HIGH "$report"
+        echo "::error::${count} fixable CRITICAL or HIGH vulnerabilities (table above)."
+        exit 1
+
+    # Gate 2: secrets. Fails on ANY severity, by design.
+    #
+    # Trivy grades most secret rules MEDIUM (e.g. `jwt-token`), so a
+    # CRITICAL/HIGH gate would let them through while the SARIF upload still
+    # published them to the Security tab: reported, never blocking. Severity
+    # is a useful lever for CVE triage; for a credential in a shipped image
+    # it is not, so every detection breaks the build here. False positives
+    # are suppressed by rule in config/trivy/secret.yaml rather than by
+    # raising this threshold.
+    #
+    # The log names each finding by rule, file and line only: the matched
+    # text never reaches it, and the fixed prefix plus the JSON-quoted path
+    # keep an image path from starting a workflow command. It runs even after gate 1 fails, so one
+    # run reports both.
+    - name: Fail on any detected secret
+      id: secrets
+      if: always()
+      shell: bash
+      run: |
+        report=trivy-results.json
+        if ! found=$(jq -nr 'input
+            | if type == "object" then . else error("not a Trivy report") end
+            | .Results[]? | .Target as $target | .Secrets[]?
+            | "secret: \(.RuleID) (\(.Severity)) in \($target | tojson) line \(.StartLine)"' "$report"); then
+          echo "::error::Trivy report unreadable: ${report}"
+          exit 1
+        fi
+        if [ -z "$found" ]; then
+          echo "No secrets detected."
+          exit 0
+        fi
+        printf '%s\n' "$found"
+        echo "::error::$(grep -c '^secret: ' <<< "$found") secret(s) detected (listed above)."
+        exit 1
