@@ -21,8 +21,19 @@ import { parse } from 'yaml';
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const COMPOSITE = '.github/actions/security/trivy-scan/action.yml';
 const REPORT = 'trivy-results.json';
-const UNREADABLE = '::error::Trivy report unreadable';
+const VULNS_ONLY = 'trivy-vulns.json';
+const IMAGE = 'israeli-bank-importer:e2e';
+const UNUSABLE = '::error::No usable Trivy report of the image';
 const MATCHED_TEXT = 'MATCHED-TEXT-MUST-NOT-BE-LOGGED';
+const CODE_CONTEXT = 'CODE-CONTEXT-MUST-NOT-BE-LOGGED';
+
+/** Fields that prove a report is Trivy's scan of IMAGE. */
+const IDENTITY = {
+  SchemaVersion: 2,
+  ArtifactName: IMAGE,
+  ArtifactType: 'container_image',
+  Metadata: { ImageID: 'sha256:0123' },
+} as const;
 
 /** Both gates need bash and jq; CI must have them, a laptop may lack them. */
 const CAN_RUN =
@@ -57,7 +68,7 @@ interface IGateRun {
 }
 
 /** One finding of a report, as Trivy writes it. */
-type Finding = Readonly<Record<string, string | number>>;
+type Finding = Readonly<Record<string, unknown>>;
 
 let bin = '';
 let work = '';
@@ -129,6 +140,7 @@ function secret(severity: string): Finding {
     StartLine: 3,
     EndLine: 3,
     Match: MATCHED_TEXT,
+    Code: { Lines: [{ Number: 2, Content: CODE_CONTEXT }] },
   };
 }
 
@@ -140,10 +152,9 @@ function secret(severity: string): Finding {
  */
 function report(vulns: readonly Finding[], secrets: readonly Finding[] = []): object {
   return {
-    SchemaVersion: 2,
-    ArtifactName: 'israeli-bank-importer:e2e',
+    ...IDENTITY,
     Results: [
-      { Target: 'israeli-bank-importer:e2e (debian 13.4)', Class: 'os-pkgs', Vulnerabilities: vulns },
+      { Target: `${IMAGE} (debian 13.4)`, Class: 'os-pkgs', Vulnerabilities: vulns },
       { Target: 'app/dist/settings.js', Class: 'secret', Secrets: secrets },
     ],
   };
@@ -161,7 +172,7 @@ function runGate(stepId: string, contents?: string): IGateRun {
   const result = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script], {
     cwd: work,
     encoding: 'utf8',
-    env: { PATH: `${bin}:${process.env.PATH ?? ''}`, FAKE_DIR: work },
+    env: { PATH: `${bin}:${process.env.PATH ?? ''}`, FAKE_DIR: work, IMAGE_REF: IMAGE },
     timeout: 20_000,
   });
   const callLog = join(work, 'trivy-calls.log');
@@ -191,8 +202,8 @@ describe.skipIf(!CAN_RUN)('Trivy gates decide on the one report', () => {
     ['only MEDIUM and LOW vulnerabilities', JSON.stringify(report([vuln('MEDIUM'), vuln('LOW')])), 'pass', 'pass'],
     ['one MEDIUM secret', JSON.stringify(report([], [secret('MEDIUM')])), 'pass', 'fail'],
     ['a HIGH vulnerability and a LOW secret', JSON.stringify(report([vuln('HIGH')], [secret('LOW')])), 'fail', 'fail'],
-    ['no Results key', JSON.stringify({ SchemaVersion: 2 }), 'pass', 'pass'],
-    ['null Results', JSON.stringify({ SchemaVersion: 2, Results: null }), 'pass', 'pass'],
+    ['no Results key', JSON.stringify(IDENTITY), 'pass', 'pass'],
+    ['null Results', JSON.stringify({ ...IDENTITY, Results: null }), 'pass', 'pass'],
   ];
 
   it.each(decisions)('%s: vulnerability gate %s, secret gate %s', (_name, contents, vulnVerdict, secretVerdict) => {
@@ -207,22 +218,36 @@ describe.skipIf(!CAN_RUN)('Trivy gates decide on the one report', () => {
     ['invalid JSON', '{"Results": ['],
     ['a JSON null', 'null'],
     ['a JSON array', '[]'],
+    ['a report of another image', JSON.stringify({ ...report([]), ArtifactName: 'other:latest' })],
+    ['a report of a filesystem', JSON.stringify({ ...report([]), ArtifactType: 'filesystem' })],
+    ['a report without the image ID', JSON.stringify({ ...report([]), Metadata: {} })],
+    ['a report with an empty image ID', JSON.stringify({ ...report([]), Metadata: { ImageID: '' } })],
+    ['a report with no metadata', JSON.stringify({ ...report([]), Metadata: null })],
   ];
 
   it.each(unreadable)('fails both gates on %s', (_name, contents) => {
     const runs = runGates(contents);
     expect(runs.vulns.status).toBe(EXIT.fail);
-    expect(runs.vulns.stdout).toContain(UNREADABLE);
+    expect(runs.vulns.stdout).toContain(UNUSABLE);
     expect(runs.secrets.status).toBe(EXIT.fail);
-    expect(runs.secrets.stdout).toContain(UNREADABLE);
+    expect(runs.secrets.stdout).toContain(UNUSABLE);
   });
 
   it('prints the CRITICAL/HIGH table only when the vulnerability gate fails', () => {
     expect(runGate('vulns', JSON.stringify(report([vuln('MEDIUM')]))).trivyCalls).toEqual([]);
 
     const failed = runGate('vulns', JSON.stringify(report([vuln('CRITICAL'), vuln('HIGH'), vuln('LOW')])));
-    expect(failed.trivyCalls).toEqual([`convert --format table --severity CRITICAL,HIGH ${REPORT}`]);
+    expect(failed.trivyCalls).toEqual([`convert --format table --severity CRITICAL,HIGH ${VULNS_ONLY}`]);
     expect(failed.stdout).toContain('::error::2 fixable CRITICAL or HIGH vulnerabilities');
+  });
+
+  it('draws the vulnerability table from a copy without the secrets', () => {
+    const failed = runGate('vulns', JSON.stringify(report([vuln('HIGH')], [secret('CRITICAL')])));
+    expect(failed.status).toBe(1);
+    const tableInput = readFileSync(join(work, VULNS_ONLY), 'utf8');
+    expect(tableInput).toContain('CVE-2026-HIGH');
+    expect(tableInput).not.toContain(MATCHED_TEXT);
+    expect(tableInput).not.toContain(CODE_CONTEXT);
   });
 
   it('names each secret by rule, file and line without its matched text', () => {
@@ -230,10 +255,14 @@ describe.skipIf(!CAN_RUN)('Trivy gates decide on the one report', () => {
     expect(failed.stdout).toContain('secret: jwt-token (MEDIUM) in "app/dist/settings.js" line 3');
     expect(failed.stdout).toContain('::error::2 secret(s) detected');
     expect(failed.stdout).not.toContain(MATCHED_TEXT);
+    expect(failed.stdout).not.toContain(CODE_CONTEXT);
   });
 
   it('keeps a crafted image path from starting a workflow command', () => {
-    const crafted = { Results: [{ Target: 'x\n::error::forged', Class: 'secret', Secrets: [secret('LOW')] }] };
+    const crafted = {
+      ...IDENTITY,
+      Results: [{ Target: 'x\n::error::forged', Class: 'secret', Secrets: [secret('LOW')] }],
+    };
     const failed = runGate('secrets', JSON.stringify(crafted));
     const lines = failed.stdout.split('\n');
     expect(lines.filter((line) => line.startsWith('::'))).toEqual(['::error::1 secret(s) detected (listed above).']);
@@ -256,6 +285,13 @@ describe('Trivy composite scans once', () => {
   it('feeds the secret allow-rules through TRIVY_SECRET_CONFIG', () => {
     expect(step('scan').env).toEqual({ TRIVY_SECRET_CONFIG: 'config/trivy/secret.yaml' });
     expect(step('scan').with).not.toHaveProperty('trivy-config');
+  });
+
+  it('gives both gates the scanned image to check the report against', () => {
+    expect(['vulns', 'secrets'].map((id) => step(id).env)).toEqual([
+      { IMAGE_REF: '${{ inputs.image-ref }}' },
+      { IMAGE_REF: '${{ inputs.image-ref }}' },
+    ]);
   });
 
   it('uploads SARIF and checks secrets even after an earlier step failed', () => {

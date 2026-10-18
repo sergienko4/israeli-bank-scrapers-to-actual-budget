@@ -379,13 +379,15 @@ the image again (each scan re-reads every layer):
 | Vulnerability gate | fixable `CRITICAL`/`HIGH` vulnerabilities | any is found; prints Trivy's table |
 | Secret gate | secrets of any severity | any is found; runs even after the vulnerability gate failed |
 
-Both gates also fail when the report is missing, empty or not a Trivy report,
-so a broken scan never reads as clean. The secret gate logs rule, file and
-line, never the matched text. Secret false positives are allow-listed in
-`config/trivy/secret.yaml`, passed through `TRIVY_SECRET_CONFIG`: the action's
-`trivy-config` input would silently ignore its `allow-rules`.
-`tests/trivy-scan-gates.test.ts` runs both gate scripts from the composite
-against sample reports.
+Both gates also fail unless the report is Trivy's report of the scanned image
+(right artifact name and type, and the image ID Trivy read), so a missing,
+empty or unrelated report never reads as clean. The secret gate logs rule,
+file and line, never the matched text, and the vulnerability table is drawn
+from a copy without the secrets, so no step prints a secret's source lines.
+Secret false positives are allow-listed in `config/trivy/secret.yaml`, passed
+through `TRIVY_SECRET_CONFIG`: the action's `trivy-config` input would
+silently ignore its `allow-rules`. `tests/trivy-scan-gates.test.ts` runs both
+gate scripts from the composite against sample reports.
 
 ## Secrets matrix
 

@@ -54,31 +54,43 @@ runs:
       with:
         sarif_file: trivy-results.sarif
 
-    # Both gates read the report with `jq -n input`, so an empty, truncated
-    # or non-object report fails them instead of reading as "no findings".
-    # A report without `Results` (nothing to report) passes.
+    # Both gates read the report with `jq -n input` and accept it only as a
+    # Trivy report of this image: an object naming IMAGE_REF as its
+    # container_image artifact, with the image ID Trivy read. A missing,
+    # empty, truncated or unrelated report fails them instead of reading as
+    # "no findings". With that proven, a report without `Results` (nothing
+    # to report) passes.
 
     # Gate 1: vulnerabilities. Deliberately capped at CRITICAL/HIGH: lower
     # severities are dominated by unfixable upstream OS CVEs that would make
     # the gate unactionable. The scan's `ignore-unfixed` keeps it to CVEs we
     # can resolve.
+    #
+    # The table is drawn from a copy without `Secrets`: Trivy renders a
+    # secret with the source lines around it, which gate 2 keeps out of the
+    # log.
     - name: Fail on CRITICAL or HIGH vulnerabilities
       id: vulns
       shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image-ref }}
       run: |
         report=trivy-results.json
-        if ! count=$(jq -n 'input
-            | if type == "object" then . else error("not a Trivy report") end
+        if ! count=$(jq -n --arg image "$IMAGE_REF" 'input
+            | if type == "object" and .ArtifactType == "container_image" and .ArtifactName == $image
+                and (.Metadata.ImageID | type == "string" and length > 0)
+              then . else error("not a Trivy report of \($image)") end
             | [.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL" or .Severity == "HIGH")]
             | length' "$report"); then
-          echo "::error::Trivy report unreadable: ${report}"
+          echo "::error::No usable Trivy report of the image in ${report}"
           exit 1
         fi
         if [ "$count" -eq 0 ]; then
           echo "No fixable CRITICAL or HIGH vulnerabilities."
           exit 0
         fi
-        trivy convert --format table --severity CRITICAL,HIGH "$report"
+        jq 'del(.Results[]?.Secrets)' "$report" > trivy-vulns.json
+        trivy convert --format table --severity CRITICAL,HIGH trivy-vulns.json
         echo "::error::${count} fixable CRITICAL or HIGH vulnerabilities (table above)."
         exit 1
 
@@ -94,19 +106,23 @@ runs:
     #
     # The log names each finding by rule, file and line only: the matched
     # text never reaches it, and the fixed prefix plus the JSON-quoted path
-    # keep an image path from starting a workflow command. It runs even after gate 1 fails, so one
-    # run reports both.
+    # keep an image path from starting a workflow command. It runs even
+    # after gate 1 fails, so one run reports both.
     - name: Fail on any detected secret
       id: secrets
       if: always()
       shell: bash
+      env:
+        IMAGE_REF: ${{ inputs.image-ref }}
       run: |
         report=trivy-results.json
-        if ! found=$(jq -nr 'input
-            | if type == "object" then . else error("not a Trivy report") end
+        if ! found=$(jq -nr --arg image "$IMAGE_REF" 'input
+            | if type == "object" and .ArtifactType == "container_image" and .ArtifactName == $image
+                and (.Metadata.ImageID | type == "string" and length > 0)
+              then . else error("not a Trivy report of \($image)") end
             | .Results[]? | .Target as $target | .Secrets[]?
             | "secret: \(.RuleID) (\(.Severity)) in \($target | tojson) line \(.StartLine)"' "$report"); then
-          echo "::error::Trivy report unreadable: ${report}"
+          echo "::error::No usable Trivy report of the image in ${report}"
           exit 1
         fi
         if [ -z "$found" ]; then
