@@ -13,6 +13,9 @@
 # Build (from the repository root, after `npm run build`):
 #   docker build -f tests/e2e/local-stack/Dockerfile.overlay \
 #     --build-arg BASE_VERSION=v1.42.11 -t israeli-bank-importer:e2e .
+#
+# Dockerfile.overlay.dockerignore limits the build context to dist/. BuildKit
+# reads it in place of the repository .dockerignore, which excludes dist/.
 
 ARG BASE_VERSION=v1.42.11
 FROM sergienko4/israeli-bank-importer:${BASE_VERSION}

@@ -1,0 +1,5 @@
+# Build context for Dockerfile.overlay. BuildKit reads this file in place of
+# the repository .dockerignore, which keeps a local dist/ out of the published
+# image build. The overlay copies dist/ and nothing else.
+*
+!dist/

@@ -2,16 +2,19 @@ name: Build Docker Image
 description: |
   Composite that consolidates the Docker build sequence used by pr.yml (trivy),
   release.yml (smoke + push), and _e2e-suite.yml. Steps:
-    1. Free disk space (composite)
-    2. Restore Camoufox cache (composite)
-    3. Set up Buildx
-    4. Build (and optionally push) the image
+    1. Restore Camoufox cache (composite)
+    2. Set up Buildx
+    3. Build (and optionally push) the image
+    4. Report the runner's free disk, even when the build fails
+  The runner starts with ~86 GB free and the release smoke build used
+  ~16 GB of it, so no step deletes preinstalled toolchains to make room.
   Inputs were originally capped at 5 (see plan §R6); the count grew to 6
   (labels) and now to 8 (provenance, sbom). The two attestation knobs are
   required for the release.yml Docker Hub leg to disable SLSA provenance +
   SBOM attestations, halving the push burst that triggers HAProxy 400 from
-  Docker Hub's edge proxy. All defaults preserve existing call-site
-  behavior (empty string = pass-through to build-push-action@v7 default).
+  Docker Hub's edge proxy. Their empty defaults pass through to
+  build-push-action@v7's own defaults. An empty cache-suffix, by contrast,
+  turns the GHA layer cache off (see that input).
 
 inputs:
   tag:
@@ -27,7 +30,11 @@ inputs:
     description: Load the image into the local docker daemon (true/false). Mutually exclusive with multi-arch push.
     default: 'true'
   cache-suffix:
-    description: GHA cache scope suffix (lets release vs PR use independent cache scopes).
+    description: |
+      GHA layer cache scope. Empty (the default) skips the GHA cache: a
+      PR build's own steps take ~80 s, while exporting the cache took
+      ~300 s. The release workflow sets `release` so its push build reuses
+      the layers its smoke build just exported.
     default: ''
   labels:
     description: Optional OCI labels (multi-line string, as emitted by docker/metadata-action).
@@ -52,7 +59,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/ci/free-disk-space
     - uses: ./.github/actions/docker/camoufox-cache
     - uses: docker/setup-buildx-action@v4
 
@@ -70,5 +76,10 @@ runs:
         build-args: |
           SKIP_BROWSER_FETCH=true
           APT_CACHE_BUST=${{ github.run_id }}
-        cache-from: type=gha${{ inputs.cache-suffix && format(',scope={0}', inputs.cache-suffix) || '' }}
-        cache-to: type=gha,mode=max${{ inputs.cache-suffix && format(',scope={0}', inputs.cache-suffix) || '' }}
+        cache-from: ${{ inputs.cache-suffix && format('type=gha,scope={0}', inputs.cache-suffix) || '' }}
+        cache-to: ${{ inputs.cache-suffix && format('type=gha,mode=max,scope={0}', inputs.cache-suffix) || '' }}
+
+    - name: Report free disk
+      if: always()
+      shell: bash
+      run: df -h /

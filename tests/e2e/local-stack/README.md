@@ -149,6 +149,7 @@ Two consequences worth knowing:
 | --- | --- |
 | `docker-compose.yml` | Portal, TLS proxy, and the two importer legs |
 | `Dockerfile.overlay` | Importer image built without a registry |
+| `Dockerfile.overlay.dockerignore` | Limits the overlay's build context to `dist/` |
 | `setup.mjs` | Portal config + credentials for the stack |
 | `status.mjs` | Reads `/api/status` the way the app does |
 | `make-certs.ps1` | Throwaway CA and server certificate |

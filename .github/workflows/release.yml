@@ -153,7 +153,7 @@ jobs:
 
       # GHCR is the primary, REQUIRED publish target. GitHub-internal network
       # avoids the Docker Hub edge proxy 400 errors that have made Docker Hub
-      # pushes flaky for this image (~2.7GB, large Camoufox layer).
+      # pushes flaky for this image (~1 GB per architecture, large Camoufox layer).
       - name: Push to GHCR (primary)
         id: push_ghcr
         uses: ./.github/actions/docker/build-image
@@ -183,7 +183,7 @@ jobs:
       # which regctl reads natively, so no extra secret plumbing is needed.
       #
       # Cross-registry blob mount is not supported by Docker Hub free tier, so
-      # regctl streams the bytes (~2.7 GB multi-arch) from GHCR to DH via the
+      # regctl streams the bytes (~2 GB multi-arch) from GHCR to DH via the
       # runner. That's fine — it costs ~2 min and only runs after a successful
       # GHCR push, so we never burn CI minutes on a failed build.
       - name: Install regctl

@@ -1,48 +1,19 @@
-# Git
-.git/
-.gitignore
+# Allowlist: send the daemon only what the Dockerfile copies. Everything else
+# (tests, docs, local dist/, .env files, config.json with secrets) stays out.
+# A Dockerfile with a sibling <name>.dockerignore uses that file instead.
+# tests/deployment/DockerImageLayout.test.ts fails if a COPY source is missing.
+*
 
-# Documentation (not needed in container)
-*.md
-LICENSE
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!config/camoufox-pin.json
+!config/tsc-strict-src.sh
+!scripts/camoufox-fetch.mjs
+!scripts/camoufox-pin-logic.mjs
+!scripts/camoufox-pinned-fetcher.mjs
+!.camoufox-cache/
 
-# Config files (user-provided at runtime via volume mount)
-config.json
-config.json.example
-
-# Runtime data (mounted as volumes)
-data/
-cache/
-chrome-data/
-
-# Node.js
-node_modules/
-npm-debug.log
-*.log
-
-# Environment files
-.env
-.env.template
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Build artifacts
-*.tar.gz
-# dist/ - Generated during Docker build, no need to exclude
-
-# Testing
-coverage/
-.nyc_output/
-
-# Temporary
-tmp/
-temp/
-*.tmp
+# OS litter inside the re-included directories.
+**/.DS_Store
