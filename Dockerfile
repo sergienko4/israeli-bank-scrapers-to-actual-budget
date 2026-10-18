@@ -52,7 +52,12 @@ RUN npm ci
 # ship, and the ELF e_machine check confirms the binary matches the build
 # architecture.
 # The final modes are set here, inside the same RUN: a later chmod/chown RUN
-# would rewrite the whole 1.2 GB tree into another layer.
+# would rewrite the whole browser tree into another layer.
+# Only the Windows fonts ship: the scraper spoofs Windows by default, and the
+# macOS and Linux sets (~610 MB) would serve only a CAMOUFOX_OS override,
+# which the startup font check now rejects. The prune runs in this RUN for
+# the same reason as the modes, and the build fails unless fonts/windows
+# remains and both other sets are gone.
 ARG SKIP_BROWSER_FETCH=false
 COPY .camoufox-cache/ /tmp/camoufox-precache/
 COPY config/camoufox-pin.json ./config/camoufox-pin.json
@@ -83,6 +88,11 @@ RUN set -e; \
     ACTUAL_MACHINE=$(od -An -tx1 -j18 -N2 "$BIN" | tr -d ' \n'); \
     if [ "$ACTUAL_MACHINE" != "$EXPECTED_HEX" ]; then \
       echo "ERROR: ELF e_machine mismatch — expected $EXPECTED_HEX ($ARCH) got $ACTUAL_MACHINE"; exit 1; \
+    fi; \
+    FONTS="$CAMOUFOX_INSTALL_DIR/fonts"; \
+    rm -rf "$FONTS/macos" "$FONTS/linux"; \
+    if [ ! -d "$FONTS/windows" ] || [ -e "$FONTS/macos" ] || [ -e "$FONTS/linux" ]; then \
+      echo "ERROR: Camoufox font prune left an unexpected tree"; exit 1; \
     fi; \
     chmod -R 755 "$CAMOUFOX_INSTALL_DIR"; \
     echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE, $(cat "$CAMOUFOX_INSTALL_DIR/version.json"))"

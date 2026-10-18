@@ -1,14 +1,15 @@
 /**
  * Published image contents E2E.
  *
- * The image is built in two stages so that Camoufox (1.2 GB) ships once and
- * no build tooling ships at all. These checks run against the built image,
- * so they catch a Dockerfile edit that quietly reintroduces a duplicate
- * Camoufox layer, devDependencies or a package manager, or that drops a
- * file the runtime needs.
+ * The image is built in two stages so that Camoufox ships once, with only the
+ * Windows fonts its default fingerprint uses, and no build tooling ships at
+ * all. These checks run against the built image, so they catch a Dockerfile
+ * edit that quietly reintroduces a duplicate Camoufox layer, the unused font
+ * sets, devDependencies or a package manager, or that drops a file the
+ * runtime needs.
  */
 
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 
 import { describe, it, expect } from 'vitest';
 
@@ -17,15 +18,28 @@ import { hasDockerImage } from './helpers/dockerRunner.js';
 /** Image the E2E job builds before running this suite. */
 const DOCKER_IMAGE = 'israeli-bank-importer:e2e';
 
-/** Only the Camoufox install is this large; any second one is a duplicate. */
-const CAMOUFOX_SIZED_LAYER_BYTES = 1_000_000_000;
+/** Smallest layer that can hold the Camoufox install, or a copy of it. */
+const CAMOUFOX_LAYER_MIN_BYTES = 100_000_000;
+
+/** The install with only the Windows fonts; with every OS font set it is 1.29 GB. */
+const CAMOUFOX_LAYER_MAX_BYTES = 700_000_000;
+
+/** Leading text of the startup font check's failure message. */
+const FONT_GUARD_PREFIX = 'Camoufox font check failed';
+
+/** Families the Windows fingerprint must render with their own glyphs. */
+const RENDERED_FAMILIES = ['Segoe UI', 'Arial', 'Times New Roman'] as const;
 
 /** Shell the shell-form HEALTHCHECK runs through. */
 const EXPECTED_SHELL = ['/bin/bash', '-o', 'pipefail', '-c'];
 
 /**
  * Launches the shipped Camoufox with the scraper's default OS fingerprint and
- * reports the OS user it ran as and the platform the page saw.
+ * reports the OS user it ran as, the platform the page saw, and canvas text
+ * widths for a few Windows families and an unknown one. Both fall back to
+ * monospace, so a family renders at the fallback width only when it is
+ * missing. Widths are compared within this one launch: Camoufox seeds its
+ * font metrics per launch.
  */
 const CAMOUFOX_LAUNCH = `
 import { userInfo } from 'node:os';
@@ -33,8 +47,43 @@ import { Camoufox } from '@hieutran094/camoufox-js';
 const browser = await Camoufox({ headless: true, os: 'windows' });
 const page = await browser.newPage();
 const platform = await page.evaluate(() => navigator.platform);
+const widths = await page.evaluate((families) => {
+  const context = document.createElement('canvas').getContext('2d');
+  const measure = (family) => {
+    context.font = '48px "' + family + '", monospace';
+    return context.measureText('mmmmmmmmmmlli1WQ@#').width;
+  };
+  return Object.fromEntries([...families, 'No Such Font Zz'].map((family) => [family, measure(family)]));
+}, ${JSON.stringify(RENDERED_FAMILIES)});
 await browser.close();
-process.stdout.write(JSON.stringify({ user: userInfo().username, platform }));
+process.stdout.write(JSON.stringify({ user: userInfo().username, platform, widths }));
+`;
+
+/**
+ * Lists the fonts Camoufox's Windows fontconfig exposes and reports which
+ * families of camoufox-js's Windows allowlist are not among them, and any
+ * listed font file outside the install's own fonts.
+ */
+const FONT_COVERAGE = `
+import { execFileSync } from 'node:child_process';
+const { default: mappings } = await import('@hieutran094/camoufox-js/dist/mappings/fonts.config.js');
+const install = '/home/node/.cache/camoufox';
+const env = { ...process.env, FONTCONFIG_PATH: install + '/fontconfig/windows', XDG_CACHE_HOME: '/tmp/fc' };
+const listed = execFileSync('fc-list', ['-f', '%{family}\\t%{file}\\n'], { cwd: install, env, encoding: 'utf8' })
+  .split('\\n').filter(Boolean).map((line) => line.split('\\t'));
+const families = new Set(listed.flatMap(([family]) => family.split(',').map((name) => name.trim().toLowerCase())));
+process.stdout.write(JSON.stringify({
+  allowed: mappings.win.length,
+  missing: mappings.win.filter((name) => !families.has(name.toLowerCase())),
+  outside: listed.map(([, file]) => file).filter((file) => !file.startsWith(install + '/fonts/')),
+}));
+`;
+
+/** Reports which OS font sets the Camoufox install ships. */
+const FONT_SETS = `
+import { existsSync } from 'node:fs';
+const fonts = '/home/node/.cache/camoufox/fonts';
+process.stdout.write(JSON.stringify(['windows', 'macos', 'linux'].filter((os) => existsSync(fonts + '/' + os))));
 `;
 
 /** Builds a scraper through the public API and reports whether it can scrape. */
@@ -51,6 +100,27 @@ const db = new Database(':memory:');
 db.close();
 process.stdout.write('ok');
 `;
+
+/** What the shipped Camoufox launch reports. */
+interface ILaunchReport {
+  readonly user: string;
+  readonly platform: string;
+  readonly widths: Readonly<Record<string, number>>;
+}
+
+/** What the font coverage probe reports. */
+interface IFontCoverage {
+  readonly allowed: number;
+  readonly missing: readonly string[];
+  readonly outside: readonly string[];
+}
+
+/** Exit status and output of a container run to completion. */
+interface IContainerExit {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
 
 /**
  * Runs a docker CLI command and returns its output.
@@ -72,14 +142,43 @@ function runInImage(entrypoint: string, args: readonly string[]): string {
   return docker(['run', '--rm', '--entrypoint', entrypoint, DOCKER_IMAGE, ...args], 150_000);
 }
 
+/**
+ * Runs the image's own command, or the given one, with CAMOUFOX_OS set, and
+ * returns how it exited whatever the status.
+ * @param camoufoxOs - Value of CAMOUFOX_OS in the container.
+ * @param command - Command replacing the image CMD; the CMD when empty.
+ * @returns Exit status and output.
+ */
+function runWithCamoufoxOs(camoufoxOs: string, command: readonly string[]): IContainerExit {
+  const args = ['run', '--rm', '-e', `CAMOUFOX_OS=${camoufoxOs}`, DOCKER_IMAGE, ...command];
+  const run = spawnSync('docker', args, { encoding: 'utf8', timeout: 60_000 });
+  return { status: run.status, stdout: run.stdout, stderr: run.stderr };
+}
+
 describe.runIf(hasDockerImage())('published image contents E2E', () => {
-  it('ships Camoufox in exactly one layer', () => {
-    const history = docker(['history', '--no-trunc', '--human=false', '--format', '{{.Size}}', DOCKER_IMAGE]);
-    const layerBytes = history.split('\n').map(Number);
+  it('ships Camoufox in exactly one layer, without the unused font sets', () => {
+    const history = docker(['history', '--no-trunc', '--human=false', '--format', '{{.Size}}\t{{.CreatedBy}}', DOCKER_IMAGE]);
+    const layers = history.split('\n').map((line) => line.split('\t'));
 
-    const camoufoxSized = layerBytes.filter((bytes) => bytes >= CAMOUFOX_SIZED_LAYER_BYTES);
+    const camoufoxLayers = layers.filter(
+      ([size, createdBy]) => Number(size) >= CAMOUFOX_LAYER_MIN_BYTES && (createdBy ?? '').includes('camoufox'));
 
-    expect(camoufoxSized).toHaveLength(1);
+    expect(camoufoxLayers).toHaveLength(1);
+    expect(Number(camoufoxLayers[0]?.[0])).toBeLessThanOrEqual(CAMOUFOX_LAYER_MAX_BYTES);
+  });
+
+  it('ships only the Windows font set', () => {
+    const sets: unknown = JSON.parse(runInImage('node', ['--input-type=module', '-e', FONT_SETS]));
+
+    expect(sets).toEqual(['windows']);
+  });
+
+  it('covers the whole Windows font allowlist from the install alone', () => {
+    const coverage = JSON.parse(runInImage('node', ['--input-type=module', '-e', FONT_COVERAGE])) as IFontCoverage;
+
+    expect(coverage.allowed).toBeGreaterThan(0);
+    expect(coverage.missing).toEqual([]);
+    expect(coverage.outside).toEqual([]);
   });
 
   it('runs the health check through bash with pipefail', () => {
@@ -113,11 +212,37 @@ describe.runIf(hasDockerImage())('published image contents E2E', () => {
     expect(present).toBe('true');
   });
 
-  it('launches the shipped Camoufox headless as the node user', () => {
-    const launch: unknown = JSON.parse(runInImage('node', ['--input-type=module', '-e', CAMOUFOX_LAUNCH]));
+  it('launches the shipped Camoufox headless as the node user, rendering Windows fonts', () => {
+    const launch = JSON.parse(runInImage('node', ['--input-type=module', '-e', CAMOUFOX_LAUNCH])) as ILaunchReport;
+    const { widths, ...identity } = launch;
+    const fallback = widths['No Such Font Zz'];
 
-    expect(launch).toEqual({ user: 'node', platform: 'Win32' });
+    expect(identity).toEqual({ user: 'node', platform: 'Win32' });
+    expect(fallback).toBeGreaterThan(0);
+    for (const family of RENDERED_FAMILIES) expect(widths[family], family).not.toBe(fallback);
   }, 180_000);
+
+  it('stops the importer when CAMOUFOX_OS selects a font set the image does not ship', () => {
+    const run = runWithCamoufoxOs('linux', ['node', 'dist/Index.js']);
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(`${FONT_GUARD_PREFIX}: CAMOUFOX_OS=linux selects the linux fingerprint`);
+  }, 90_000);
+
+  it('stops the default scheduler when CAMOUFOX_OS selects a font set the image does not ship', () => {
+    const run = runWithCamoufoxOs('macos', []);
+
+    expect(run.status).toBe(1);
+    expect(run.stdout + run.stderr).toContain(`${FONT_GUARD_PREFIX}: CAMOUFOX_OS=macos selects the macos fingerprint`);
+  }, 90_000);
+
+  it('lets the importer past the font check for the Windows fingerprint in any case', () => {
+    const run = runWithCamoufoxOs('WINDOWS', ['node', 'dist/Index.js']);
+
+    expect(run.stdout + run.stderr).not.toContain(FONT_GUARD_PREFIX);
+    // With no config in the container, the config load that follows the check is what fails.
+    expect(run.stderr).toMatch(/^Fatal: /mu);
+  }, 90_000);
 
   it('exposes the scraper API', () => {
     const scrapeType = runInImage('node', ['--input-type=module', '-e', SCRAPER_API]);
