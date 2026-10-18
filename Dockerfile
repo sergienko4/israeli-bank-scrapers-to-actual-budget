@@ -43,13 +43,22 @@ RUN npm ci
 
 # Install the Camoufox browser (Firefox-based anti-detect): the build pinned
 # in config/camoufox-pin.json, never upstream's newest. CI installs it on the
-# runner (.github/actions/docker/camoufox-cache) and an amd64 build with
-# SKIP_BROWSER_FETCH=true copies that from .camoufox-cache/; every other build
-# (arm64, local) downloads it with the pinned installer, which checks its
-# SHA-256. Both paths must pass --verify, so a stale precache cannot ship, and
-# the ELF e_machine check confirms the binary matches the build architecture.
+# runner (.github/actions/docker/camoufox-cache) for the runner's own
+# architecture; a build with SKIP_BROWSER_FETCH=true copies that from
+# .camoufox-cache/ only when --verify accepts it for this build's
+# architecture. Every other build (local, or a precache for another pin or
+# architecture) downloads it with the pinned installer, which checks its
+# SHA-256. Both paths must pass --verify again, so a stale precache cannot
+# ship, and the ELF e_machine check confirms the binary matches the build
+# architecture.
 # The final modes are set here, inside the same RUN: a later chmod/chown RUN
-# would rewrite the whole 1.2 GB tree into another layer.
+# would rewrite the whole browser tree into another layer. The RUN ends by
+# moving the install into /camoufox-root, which the runtime stage copies.
+# Only the Windows fonts ship: the scraper spoofs Windows by default, and the
+# macOS and Linux sets (~610 MB) would serve only a CAMOUFOX_OS override,
+# which the startup font check now rejects. The prune runs in this RUN for
+# the same reason as the modes, and the build fails unless fonts/windows
+# remains and both other sets are gone.
 ARG SKIP_BROWSER_FETCH=false
 COPY .camoufox-cache/ /tmp/camoufox-precache/
 COPY config/camoufox-pin.json ./config/camoufox-pin.json
@@ -60,9 +69,9 @@ RUN set -e; \
     ARCH=$(uname -m); \
     export CAMOUFOX_INSTALL_DIR=/home/node/.cache/camoufox; \
     echo "Building for architecture: $ARCH"; \
-    if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ "$ARCH" = "x86_64" ] && \
-       [ -f /tmp/camoufox-precache/camoufox-bin ] && [ -f /tmp/camoufox-precache/version.json ]; then \
-      echo "Using pre-cached Camoufox binary (x86_64)"; \
+    if [ "$SKIP_BROWSER_FETCH" = "true" ] && [ -f /tmp/camoufox-precache/camoufox-bin ] && \
+       CAMOUFOX_INSTALL_DIR=/tmp/camoufox-precache node scripts/camoufox-fetch.mjs --verify; then \
+      echo "Using pre-cached Camoufox binary ($ARCH)"; \
       mkdir -p "$CAMOUFOX_INSTALL_DIR"; \
       cp -r /tmp/camoufox-precache/* "$CAMOUFOX_INSTALL_DIR"/; \
     else \
@@ -81,8 +90,24 @@ RUN set -e; \
     if [ "$ACTUAL_MACHINE" != "$EXPECTED_HEX" ]; then \
       echo "ERROR: ELF e_machine mismatch — expected $EXPECTED_HEX ($ARCH) got $ACTUAL_MACHINE"; exit 1; \
     fi; \
+    FONTS="$CAMOUFOX_INSTALL_DIR/fonts"; \
+    rm -rf "$FONTS/macos" "$FONTS/linux"; \
+    if [ ! -d "$FONTS/windows" ] || [ -e "$FONTS/macos" ] || [ -e "$FONTS/linux" ]; then \
+      echo "ERROR: Camoufox font prune left an unexpected tree"; exit 1; \
+    fi; \
     chmod -R 755 "$CAMOUFOX_INSTALL_DIR"; \
-    echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE, $(cat "$CAMOUFOX_INSTALL_DIR/version.json"))"
+    echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE, $(cat "$CAMOUFOX_INSTALL_DIR/version.json"))"; \
+    ROOT=/camoufox-root; \
+    mkdir -p "$ROOT/home/node/.cache"; \
+    mv "$CAMOUFOX_INSTALL_DIR" "$ROOT/home/node/.cache/"; \
+    chown --reference=/home "$ROOT/home"; \
+    chmod --reference=/home "$ROOT/home"; \
+    chown --reference=/home/node "$ROOT/home/node"; \
+    chmod --reference=/home/node "$ROOT/home/node"; \
+    chown root:root "$ROOT/home/node/.cache"; \
+    chmod 755 "$ROOT/home/node/.cache"; \
+    chown -R node:node "$ROOT/home/node/.cache/camoufox"; \
+    find "$ROOT" -exec touch -h -d @0 {} +
 
 # Copy source code and build config
 COPY src ./src
@@ -110,10 +135,14 @@ LABEL security.capabilities="Camoufox (Firefox) runs without SYS_ADMIN"
 # the runtime stage repeats the build stage's bash + pipefail.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# One Camoufox layer, owned by node with the modes set in the build stage.
+# One Camoufox layer, holding the build stage's /camoufox-root tree: the
+# install plus the /home, /home/node and ~/.cache entries above it, with the
+# owners, modes and epoch mtimes set there. The layer is then the same bytes
+# on every build of the same Camoufox pin and base image, so a release that
+# changes only the app does not make users download the browser again.
 # It comes before the apt layer so APT_CACHE_BUST (a fresh value on every CI
 # run) does not invalidate the largest layer in any build cache.
-COPY --from=build --chown=node:node /home/node/.cache/camoufox /home/node/.cache/camoufox
+COPY --from=build /camoufox-root/ /
 
 # Install minimal system deps (fonts, certs, Firefox/Camoufox libs)
 # APT_CACHE_BUST is set by CI to force fresh packages on every release
@@ -125,9 +154,7 @@ COPY --from=build --chown=node:node /home/node/.cache/camoufox /home/node/.cache
 # image patch. Deleting npm, npx, corepack and yarn removes that tree.
 #
 # It also creates the data directories with node ownership; /app/logs lets
-# the node user write log files without a volume mount. ~/.cache stays
-# root-owned as before: BuildKit creates it for the Camoufox COPY with the
-# --chown owner, the legacy builder as root.
+# the node user write log files without a volume mount.
 ARG APT_CACHE_BUST=1
 RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     fonts-liberation \
@@ -151,9 +178,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
        fi \
     && mkdir -p /app/data /app/cache /app/logs \
     && chown node:node /app/data /app/cache /app/logs \
-    && chmod 755 /app/data /app/cache /app/logs \
-    && chown root:root /home/node/.cache \
-    && chmod 755 /home/node/.cache
+    && chmod 755 /app/data /app/cache /app/logs
 
 WORKDIR /app
 

@@ -1,5 +1,19 @@
 name: Docker Build & Publish
 
+# Three jobs:
+#   prepare  resolves what this run publishes (a pushed tag, a republished
+#            tag, or a rehearsal) and checks the tag against the manifest.
+#   build    builds each architecture natively on its own runner, pushes it
+#            to GHCR untagged (by digest), and runs the image smoke test on
+#            that exact candidate. Nothing is tagged yet.
+#   publish  runs only when both candidates passed: it joins the two digests
+#            into one tagged multi-arch index, then mirrors to Docker Hub and
+#            writes the SBOM and release notes.
+# A rehearsal (workflow_dispatch with rehearsal=true) runs the same build and
+# smoke legs from the dispatched commit and tags the result only as GHCR
+# `:rehearsal`; every step that needs the Docker Hub or release secrets is
+# skipped.
+
 on:
   push:
     tags:
@@ -7,32 +21,118 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to build and publish (e.g., v1.9.0)'
-        required: true
+        description: 'Tag to republish (e.g., v1.9.0). Ignored when rehearsal is true.'
+        required: false
+        default: ''
+      rehearsal:
+        description: 'Build and smoke test both architectures, then tag only GHCR :rehearsal.'
+        type: boolean
+        default: false
 
+# Each job widens this default only as far as it needs.
 permissions:
-  contents: write
-  packages: write
-  id-token: write
+  contents: read
 
 env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
   GHCR_IMAGE: ghcr.io/sergienko4/israeli-bank-importer
 
 jobs:
-  release:
+  prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      version: ${{ steps.mode.outputs.version }}
+      ref: ${{ steps.mode.outputs.ref }}
+      overlay: ${{ steps.mode.outputs.overlay }}
+
+    steps:
+      # tag-push  : the release-please tag; builds and publishes that tag.
+      # republish : workflow_dispatch with a tag; rebuilds that tag's image
+      #             content with this commit's CI tooling (see the overlay).
+      # rehearsal : workflow_dispatch with rehearsal=true; builds this commit
+      #             and publishes nothing but GHCR :rehearsal.
+      - name: Resolve release mode
+        id: mode
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_REHEARSAL: ${{ inputs.rehearsal }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_REHEARSAL" = "true" ]; then
+            mode=rehearsal version=rehearsal ref="$GITHUB_SHA" overlay=false
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if ! [[ "$INPUT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Invalid tag format: '${INPUT_TAG}' (expected v1.2.3)"
+              exit 1
+            fi
+            mode=republish version="$INPUT_TAG" ref="$INPUT_TAG" overlay=true
+          else
+            mode=tag-push version="$GITHUB_REF_NAME" ref="$GITHUB_REF" overlay=false
+          fi
+          {
+            echo "mode=${mode}"
+            echo "version=${version}"
+            echo "ref=${ref}"
+            echo "overlay=${overlay}"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice::Release mode ${mode}: ${version} from ${ref}"
+
+      - name: Checkout code
+        id: checkout
+        if: steps.mode.outputs.mode != 'rehearsal'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.mode.outputs.ref }}
+          persist-credentials: false
+
+      - name: Verify tag matches manifest
+        id: manifest
+        if: steps.mode.outputs.mode != 'rehearsal'
+        env:
+          VERSION: ${{ steps.mode.outputs.version }}
+        run: |
+          MANIFEST_VERSION=$(jq -r '.["."]//"unknown"' config/release-please/manifest.json)
+          if [ "$VERSION" != "v${MANIFEST_VERSION}" ]; then
+            echo "::error::Tag $VERSION does not match manifest v${MANIFEST_VERSION}"
+            exit 1
+          fi
+
+      - name: Verify CHANGELOG entry
+        id: changelog
+        if: steps.mode.outputs.mode != 'rehearsal'
+        env:
+          VERSION: ${{ steps.mode.outputs.version }}
+        run: |
+          BARE="${VERSION#v}"
+          if ! grep -q "## \[${BARE}\]" CHANGELOG.md; then
+            echo "::warning::No CHANGELOG entry for ${BARE}"
+          fi
+
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # One failed architecture cancels the other: publish needs both.
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout code
+        id: checkout
         uses: actions/checkout@v7
         with:
-          # For workflow_dispatch, checkout the requested tag (not the default
-          # branch) so we build the historical commit, preserving release
-          # provenance. For tag-push events, github.ref already points at the
-          # tag so leaving ref unset (default) is correct.
-          ref: ${{ github.event.inputs.tag || github.ref }}
-          fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.ref }}
 
       # When republishing an old tag via workflow_dispatch, actions/checkout
       # above rewinds the worktree to that tag — which may pre-date changes
@@ -44,67 +144,25 @@ jobs:
       # composite actions it references are guaranteed to be from the same
       # commit — deterministic even if main advances mid-run. Image content
       # (Dockerfile, src, deps) is still from the requested tag; only the
-      # CI tooling is refreshed. Step is gated on workflow_dispatch so
-      # tag-push releases (the production path) are completely unaffected.
-      # Grep assertions fail fast if the overlay didn't deliver the expected
-      # composite schema, e.g. if a future refactor renames the inputs.
-      - name: Overlay workflow CI tooling (workflow_dispatch only)
-        if: github.event_name == 'workflow_dispatch'
+      # CI tooling is refreshed. Grep assertions fail fast if the overlay
+      # didn't deliver the composite schema this job relies on.
+      - name: Overlay workflow CI tooling (republish only)
+        id: overlay
+        if: needs.prepare.outputs.overlay == 'true'
         env:
           TOOLING_SHA: ${{ github.sha }}
         run: |
           git cat-file -e "${TOOLING_SHA}^{commit}" 2>/dev/null \
             || git fetch --depth=1 origin "${TOOLING_SHA}"
           git checkout "${TOOLING_SHA}" -- .github/actions/
-          grep -qE '^  provenance:' .github/actions/docker/build-image/action.yml \
-            || { echo "::error::Overlay missing 'provenance' input — composite schema unexpected"; exit 1; }
-          grep -qE '^  sbom:' .github/actions/docker/build-image/action.yml \
-            || { echo "::error::Overlay missing 'sbom' input — composite schema unexpected"; exit 1; }
+          grep -qE '^  push-by-digest:' .github/actions/docker/build-image/action.yml \
+            || { echo "::error::Overlay missing 'push-by-digest' input — composite schema unexpected"; exit 1; }
+          grep -qE '^  digest:' .github/actions/docker/build-image/action.yml \
+            || { echo "::error::Overlay missing 'digest' output — composite schema unexpected"; exit 1; }
           echo "::notice::Overlaid .github/actions/ from workflow commit ${TOOLING_SHA}"
 
-      - name: Determine tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag }}"
-            if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-              echo "ERROR: Invalid tag format: $TAG (expected v1.2.3)"
-              exit 1
-            fi
-            echo "version=$TAG" >> $GITHUB_OUTPUT
-          else
-            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Verify tag matches manifest
-        run: |
-          VERSION="${{ steps.tag.outputs.version }}"
-          MANIFEST_VERSION=$(jq -r '.["."]//"unknown"' config/release-please/manifest.json)
-          if [ "$VERSION" != "v${MANIFEST_VERSION}" ]; then
-            echo "::error::Tag $VERSION does not match manifest v${MANIFEST_VERSION}"
-            exit 1
-          fi
-
-      - name: Verify CHANGELOG entry
-        run: |
-          BARE="${{ steps.tag.outputs.version }}"
-          BARE="${BARE#v}"
-          if ! grep -q "## \[${BARE}\]" CHANGELOG.md; then
-            echo "::warning::No CHANGELOG entry for ${BARE}"
-          fi
-
-      - name: Login to Docker Hub
-        # Best-effort: missing/invalid DOCKERHUB_* secrets must NOT fail the
-        # release. The Docker Hub push step is also continue-on-error, so the
-        # release still publishes to GHCR even when Docker Hub auth fails.
-        id: login_dockerhub
-        continue-on-error: true
-        uses: docker/login-action@v4.6.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Login to GHCR
+        id: login_ghcr
         uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
@@ -112,36 +170,67 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata (GHCR)
-        id: meta_ghcr
+        id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.GHCR_IMAGE }}
-          tags: ${{ steps.tag.outputs.version }}
+          tags: ${{ needs.prepare.outputs.version }}
 
-      - name: Extract metadata (Docker Hub)
-        id: meta_dockerhub
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.DOCKER_IMAGE }}
-          tags: ${{ steps.tag.outputs.version }}
-
-      - name: Build for smoke test (amd64)
+      # The candidate is pushed untagged: nobody can pull it by tag until
+      # publish joins both architectures, so a failed smoke test never
+      # reaches users.
+      - name: Build and push the candidate by digest
+        id: build
         uses: ./.github/actions/docker/build-image
         with:
-          tag: ${{ env.DOCKER_IMAGE }}:smoke-test
-          platforms: linux/amd64
-          push: 'false'
-          load: 'true'
-          cache-suffix: release
+          tag: ${{ env.GHCR_IMAGE }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/${{ matrix.arch }}
+          push-by-digest: 'true'
+          load: 'false'
 
-      - name: Scraper API smoke test (verify createScraper inside image)
-        # The current scraper API manages the browser lifecycle inside
-        # .scrape() — there is no separate .initialize()/.terminate().
-        # This smoke just verifies the package imports and exposes the
-        # expected public surface; full browser launch is covered by
-        # the E2E suite.
+      - name: Pull the candidate for the smoke test
+        id: candidate
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          docker run --rm --cap-add SYS_ADMIN ${{ env.DOCKER_IMAGE }}:smoke-test \
+          set -euo pipefail
+          if ! [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::The build reported no valid image digest: '${DIGEST}'"
+            exit 1
+          fi
+          docker pull "${GHCR_IMAGE}@${DIGEST}"
+          docker tag "${GHCR_IMAGE}@${DIGEST}" israeli-bank-importer:e2e
+          docker image inspect israeli-bank-importer:e2e > /dev/null
+
+      # Tags built before the image contents E2E existed (every tag up to
+      # v1.43.8) get the older createScraper check instead, and that check
+      # needs no host npm install.
+      - name: Detect the smoke test this tag supports
+        id: smoke_mode
+        run: |
+          if [ -f tests/e2e/image-contents.e2e.test.ts ] && [ -f config/vitest.config.e2e.ts ]; then
+            echo "mode=modern" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=legacy" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js for the smoke test
+        id: setup
+        if: steps.smoke_mode.outputs.mode == 'modern'
+        uses: ./.github/actions/ci/setup
+
+      - name: Smoke test the candidate (image contents E2E)
+        id: smoke
+        if: steps.smoke_mode.outputs.mode == 'modern'
+        run: npx vitest run --config config/vitest.config.e2e.ts tests/e2e/image-contents.e2e.test.ts
+
+      - name: Smoke test the candidate (legacy scraper API check)
+        id: smoke_legacy
+        if: steps.smoke_mode.outputs.mode == 'legacy'
+        run: |
+          echo "::warning::This tag predates the image contents E2E; only the scraper API is checked."
+          docker run --rm --cap-add SYS_ADMIN israeli-bank-importer:e2e \
             node --input-type=module -e "
               import { createScraper } from '@sergienko4/israeli-bank-scrapers';
               const s = createScraper({ companyId: 'hapoalim', startDate: new Date() });
@@ -151,19 +240,135 @@ jobs:
               console.log('Scraper API smoke test passed');
             "
 
-      # GHCR is the primary, REQUIRED publish target. GitHub-internal network
-      # avoids the Docker Hub edge proxy 400 errors that have made Docker Hub
-      # pushes flaky for this image (~1 GB per architecture, large Camoufox layer).
-      - name: Push to GHCR (primary)
-        id: push_ghcr
-        uses: ./.github/actions/docker/build-image
+      - name: Report the candidate's compressed layers and free disk
+        id: layers
+        if: always() && steps.build.outputs.digest != ''
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -uo pipefail
+          df -h /
+          raw=$(docker buildx imagetools inspect "${GHCR_IMAGE}@${DIGEST}" --raw) || exit 0
+          platform=$(jq -r --arg arch "$ARCH" '[.manifests[]? | select(.platform.architecture == $arch) | .digest][0] // empty' <<<"$raw")
+          if [ -n "$platform" ]; then
+            raw=$(docker buildx imagetools inspect "${GHCR_IMAGE}@${platform}" --raw) || exit 0
+          fi
+          jq -r '.layers[]? | "\(.size)\t\(.digest)"' <<<"$raw"
+          jq -r '"Compressed total: \([.layers[]?.size] | add // 0) bytes"' <<<"$raw"
+
+      - name: Record the candidate digest
+        id: digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
+
+      - name: Upload the candidate digest
+        id: upload_digest
+        uses: actions/upload-artifact@v7
         with:
-          tag: ${{ steps.meta_ghcr.outputs.tags }}
-          labels: ${{ steps.meta_ghcr.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          push: 'true'
-          load: 'false'
-          cache-suffix: release
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      # sbom-action attaches its SBOM to the release with the job token.
+      contents: write
+      packages: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        id: checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          # The release notes count commits since the previous tag.
+          fetch-depth: 0
+
+      - name: Login to GHCR
+        id: login_ghcr
+        uses: docker/login-action@v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        # Best-effort: missing/invalid DOCKERHUB_* secrets must NOT fail the
+        # release. The Docker Hub push step is also continue-on-error, so the
+        # release still publishes to GHCR even when Docker Hub auth fails.
+        id: login_dockerhub
+        if: needs.prepare.outputs.mode != 'rehearsal'
+        continue-on-error: true
+        uses: docker/login-action@v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (GHCR)
+        id: meta_ghcr
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.GHCR_IMAGE }}
+          tags: ${{ needs.prepare.outputs.version }}
+
+      - name: Download the candidate digests
+        id: digests
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - name: Check both candidate digests arrived
+        id: digest_count
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=("${RUNNER_TEMP}"/digests/*)
+          count=0
+          for path in "${files[@]}"; do
+            if [[ -f "$path" && "${path##*/}" =~ ^[0-9a-f]{64}$ ]]; then count=$((count + 1)); fi
+          done
+          # The index step joins every file here, so a stray file must fail too.
+          if [ "${#files[@]}" -ne 2 ] || [ "$count" -ne 2 ]; then
+            echo "::error::expected 2 platform digests, found ${count} among ${#files[@]} files"
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v4
+
+      # GHCR is the primary, REQUIRED publish target. This is the only step
+      # that writes a tag; everything before it is untagged.
+      - name: Tag the multi-arch index on GHCR
+        id: index
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAGS: ${{ steps.meta_ghcr.outputs.tags }}
+        run: |
+          set -euo pipefail
+          tag_args=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then tag_args+=(-t "$tag"); fi
+          done <<<"$TAGS"
+          if [ "${#tag_args[@]}" -eq 0 ]; then
+            echo "::error::metadata-action produced no GHCR tag"
+            exit 1
+          fi
+          sources=()
+          for digest in *; do sources+=("${GHCR_IMAGE}@sha256:${digest}"); done
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
+          docker buildx imagetools inspect "${GHCR_IMAGE}:${VERSION}"
 
       # Docker Hub is the secondary, BEST-EFFORT target. Failure here does NOT
       # fail the release — users can pull from GHCR.
@@ -178,15 +383,17 @@ jobs:
       #
       # regctl uses a plain, sequential per-blob PUT/PATCH protocol — the
       # request shape registries have always expected — and reuses the bytes
-      # already on GHCR (no rebuild, no QEMU emulation, no Camoufox download).
+      # already on GHCR (no rebuild, no Camoufox download).
       # Both Docker logins above wrote credentials to ~/.docker/config.json,
       # which regctl reads natively, so no extra secret plumbing is needed.
       #
       # Cross-registry blob mount is not supported by Docker Hub free tier, so
-      # regctl streams the bytes (~2 GB multi-arch) from GHCR to DH via the
-      # runner. That's fine — it costs ~2 min and only runs after a successful
-      # GHCR push, so we never burn CI minutes on a failed build.
+      # regctl streams the bytes (~1 GB multi-arch) from GHCR to DH via the
+      # runner. That's fine — it takes about a minute and only runs after a
+      # successful GHCR push, so we never burn CI minutes on a failed build.
       - name: Install regctl
+        id: install_regctl
+        if: needs.prepare.outputs.mode != 'rehearsal'
         # Pinned by version + SHA-256 for supply-chain safety. Direct download
         # from the official regclient/regclient release avoids depending on a
         # third-party installer action.
@@ -204,14 +411,15 @@ jobs:
 
       - name: Promote image from GHCR to Docker Hub via regctl
         id: push_dockerhub
+        if: needs.prepare.outputs.mode != 'rehearsal'
         continue-on-error: true
         # `regctl image copy` preserves the multi-arch manifest list, all
         # platform manifests, and all referenced blobs. The destination tag on
         # Docker Hub ends up byte-identical to the GHCR source.
         run: |
           set -euo pipefail
-          SRC="${GHCR_IMAGE}:${{ steps.tag.outputs.version }}"
-          DST="${DOCKER_IMAGE}:${{ steps.tag.outputs.version }}"
+          SRC="${GHCR_IMAGE}:${VERSION}"
+          DST="${DOCKER_IMAGE}:${VERSION}"
           echo "::notice::Promoting ${SRC} → ${DST}"
           regctl image copy --digest-tags "${SRC}" "${DST}"
           echo "::group::Verify destination manifest"
@@ -219,34 +427,38 @@ jobs:
           echo "::endgroup::"
 
       - name: Warn if Docker Hub push failed
-        if: steps.push_dockerhub.outcome == 'failure'
+        id: dockerhub_warning
+        if: needs.prepare.outputs.mode != 'rehearsal' && steps.push_dockerhub.outcome == 'failure'
         run: |
-          echo "::warning::Docker Hub push failed for ${{ steps.tag.outputs.version }} — image is published only to GHCR (${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.version }})"
+          echo "::warning::Docker Hub push failed for ${VERSION} — image is published only to GHCR (${GHCR_IMAGE}:${VERSION})"
 
       - name: Generate SBOM
+        id: sbom
+        if: needs.prepare.outputs.mode != 'rehearsal'
         # Generate SBOM from the GHCR image (always available since GHCR push
         # is required). Anchore pulls the image to scan it; using GHCR avoids
         # any Docker Hub dependency in the SBOM path.
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.GHCR_IMAGE }}:${{ steps.tag.outputs.version }}
+          image: ${{ env.GHCR_IMAGE }}:${{ needs.prepare.outputs.version }}
           output-file: sbom.spdx.json
-          artifact-name: sbom-${{ steps.tag.outputs.version }}.spdx.json
+          artifact-name: sbom-${{ needs.prepare.outputs.version }}.spdx.json
 
       - name: Build enriched release notes
+        id: notes
+        if: needs.prepare.outputs.mode != 'rehearsal'
         env:
           # Surface the Docker Hub push outcome to the bash script so the
           # release notes only advertise the Docker Hub URL when the mirror
           # actually published. Otherwise users get a 404 from `docker pull`.
           DOCKERHUB_OUTCOME: ${{ steps.push_dockerhub.outcome }}
         run: |
-          VERSION="${{ steps.tag.outputs.version }}"
-          PREV_TAG=$(git describe --tags --abbrev=0 ${VERSION}^ 2>/dev/null || echo "")
+          PREV_TAG=$(git describe --tags --abbrev=0 "${VERSION}^" 2>/dev/null || echo "")
 
           if [ -n "$PREV_TAG" ]; then
-            COMMIT_COUNT=$(git rev-list --count ${PREV_TAG}..${VERSION})
-            FILES_CHANGED=$(git diff --name-only ${PREV_TAG}..${VERSION} | wc -l | tr -d ' ')
-            SHORTSTAT=$(git diff --shortstat ${PREV_TAG}..${VERSION})
+            COMMIT_COUNT=$(git rev-list --count "${PREV_TAG}..${VERSION}")
+            FILES_CHANGED=$(git diff --name-only "${PREV_TAG}..${VERSION}" | wc -l | tr -d ' ')
+            SHORTSTAT=$(git diff --shortstat "${PREV_TAG}..${VERSION}")
             LINES_ADDED=$(echo "$SHORTSTAT" | grep -oP '\d+(?= insertions?)' || echo "0")
             LINES_DELETED=$(echo "$SHORTSTAT" | grep -oP '\d+(?= deletions?)' || echo "0")
             COMPARE_URL="https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/${PREV_TAG}...${VERSION}"
@@ -289,7 +501,7 @@ jobs:
             echo "## Commits"
             echo ""
             if [ -n "$PREV_TAG" ]; then
-              git log ${PREV_TAG}..${VERSION} --pretty=format:"- %s (%h)"
+              git log "${PREV_TAG}..${VERSION}" --pretty=format:"- %s (%h)"
             else
               git log --pretty=format:"- %s (%h)" -10
             fi
@@ -364,21 +576,23 @@ jobs:
           } > enriched_notes.md
 
       - name: Attach SBOM and enrich release
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        id: gh_release
+        if: needs.prepare.outputs.mode != 'rehearsal'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.tag.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.version }}
           append_body: true
           body_path: enriched_notes.md
           files: sbom.spdx.json
           token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Update Docker Hub description
+        id: dockerhub_description
         # Only attempt when the Docker Hub push itself succeeded — if the
         # registry is rejecting us, no point updating the description.
         # Marked best-effort so a Docker Hub API hiccup doesn't fail a
         # release whose images already published successfully.
-        if: steps.push_dockerhub.outcome == 'success'
+        if: needs.prepare.outputs.mode != 'rehearsal' && steps.push_dockerhub.outcome == 'success'
         continue-on-error: true
         uses: peter-evans/dockerhub-description@v5
         with:

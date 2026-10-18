@@ -42,19 +42,24 @@ flowchart TD
     RELPR -->|merge| TAG["release-please creates<br/>tag vX.Y.Z + GitHub Release"]
 
     %% ---------- 5 · tag-triggered deploy ----------
-    TAG --> REL["release.yml · job: release<br/>on push: tag v*"]
+    TAG --> REL["release.yml<br/>on push: tag v*"]
     TAG --> DOCS2["docs.yml<br/>on push: tag v* @ released SHA"]
 
-    subgraph S5["release.yml — build and publish (single job)"]
+    subgraph S5["release.yml — prepare → build per architecture → publish"]
       direction TB
-      B1["build-image: smoke build (amd64)"] --> B2["scraper API smoke<br/>createScraper().scrape"]
-      B2 --> B3["build-image: push GHCR<br/>amd64 + arm64 · REQUIRED"]
+      B0["prepare<br/>release mode · tag = manifest · CHANGELOG entry"]
+      B0 --> B1A["build amd64 · ubuntu-24.04<br/>push untagged by digest"]
+      B0 --> B1R["build arm64 · ubuntu-24.04-arm<br/>push untagged by digest"]
+      B1A --> B2A["smoke test the amd64 candidate<br/>image contents E2E"]
+      B1R --> B2R["smoke test the arm64 candidate<br/>image contents E2E"]
+      B2A --> B3["publish: tag the multi-arch<br/>index on GHCR · REQUIRED"]
+      B2R --> B3
       B3 --> B4["regctl promote → Docker Hub<br/>best-effort"]
       B3 --> B5["SBOM (anchore)"]
       B3 --> B6["enrich GitHub Release notes"]
       B4 --> B7["update Docker Hub description<br/>best-effort"]
     end
-    REL --> B1
+    REL --> B0
 
     %% ---------- 6 · outputs ----------
     B3 --> O1[["GHCR image<br/>ghcr.io/sergienko4/israeli-bank-importer:vX.Y.Z"]]
@@ -88,37 +93,86 @@ output.
 | 3 | Badges | `release-please.yml` → `update-badge` | push to `main` | run unit + E2E, push counts to gist | 2 shields badges |
 | 3 | Docs | `docs.yml` | push to `main` | TypeDoc + `mkdocs build --strict` | Pages deploy |
 | 4 | Tag | `release-please.yml` | merge Release PR | create tag `vX.Y.Z` + GitHub Release | tag + release |
-| 5 | Images | `release.yml` → `release` | push tag `v*` | smoke → GHCR push → Docker Hub promote → SBOM → notes | images + SBOM |
+| 5 | Images | `release.yml` → `prepare`, `build`, `publish` | push tag `v*` | native build + smoke test per arch → tag GHCR index → Docker Hub promote → SBOM → notes | images + SBOM |
 | 5 | Docs | `docs.yml` | push tag `v*` | rebuild at released SHA | Pages deploy |
 
 ---
 
-## `release.yml` step order (the deploy job)
+## `release.yml` jobs
 
-The whole deployment is a **single `release` job**; there is no fan-out to
-other jobs. Steps, in order:
+Three jobs. Nothing is tagged until both architectures passed their smoke
+test, so a broken image never reaches a user.
 
-1. **Checkout** at the tag (`fetch-depth: 0` for changelog stats).
-2. **Overlay CI tooling** — only on `workflow_dispatch`, so a re-published old
-   tag uses today's composite actions while keeping the tag's image content.
-3. **Determine tag** → verify tag matches `config/release-please/manifest.json` →
-   **verify CHANGELOG entry**.
-4. **Login** to Docker Hub (best-effort) and **GHCR** (required).
-5. **Extract metadata** for both registries.
-6. **Build smoke image (amd64)** via `docker/build-image`, then run the
-   **scraper API smoke test** (`createScraper().scrape` must exist) inside it.
-7. **Push to GHCR** — `amd64 + arm64`, `push: true`. **This is the required
-   publish target.**
-8. **Install regctl** → **promote GHCR → Docker Hub** (`regctl image copy`,
-   best-effort). regctl is used instead of a second buildx push because Docker
-   Hub's edge proxy rejects BuildKit's concurrent multi-arch uploads.
-9. **SBOM** (anchore, scanned from the GHCR image) → **enriched release notes**
-   → **attach SBOM + notes to the GitHub Release** → **update Docker Hub
-   description** (best-effort).
+1. **`prepare`** resolves the release mode (below). For a tag it checks out
+   the tag, verifies it matches `config/release-please/manifest.json`, and
+   verifies the CHANGELOG entry.
+2. **`build`**, one leg per architecture, each on its own native runner
+   (`ubuntu-24.04` for amd64, `ubuntu-24.04-arm` for arm64). A failed leg
+   cancels the other (`fail-fast`). Each leg:
+   - builds via `docker/build-image` and pushes the image to GHCR
+     **untagged**, by digest;
+   - pulls that exact candidate and runs the image contents E2E
+     (`tests/e2e/image-contents.e2e.test.ts`) against it. Among other
+     things, that test launches Camoufox and checks the scraper API, the
+     font set and the Camoufox layer. Tags built before that test existed
+     (up to v1.43.8) get the older `createScraper().scrape` check instead;
+   - logs the candidate's compressed layer sizes and the runner's free disk;
+   - uploads the candidate digest as an artifact.
+3. **`publish`** runs only when both legs passed. It checks that exactly two
+   digests arrived and joins them into one multi-arch index with
+   `docker buildx imagetools create`, which writes the GHCR tags. **This is
+   the required publish target.** Then:
+   - **promote GHCR → Docker Hub** with `regctl image copy` (best-effort).
+     regctl is used instead of a buildx push because Docker Hub's edge proxy
+     rejects BuildKit's concurrent multi-arch uploads;
+   - **SBOM** (anchore, scanned from the GHCR image) → **enriched release
+     notes** → **attach SBOM + notes to the GitHub Release** → **update
+     Docker Hub description** (best-effort).
 
 > **GHCR is primary and required; Docker Hub is a best-effort mirror.** If
 > Docker Hub auth or push fails, the release still succeeds and the notes
 > advertise only the GHCR pull command.
+
+Each job gets only the token permissions it needs: `build` can write
+packages, and only `publish` can write release contents.
+
+### Release modes
+
+| Mode | Trigger | Builds | Publishes |
+|------|---------|--------|-----------|
+| tag-push | release-please pushes `vX.Y.Z` | the tag | GHCR + Docker Hub tags, SBOM, release notes |
+| republish | `workflow_dispatch` with `tag` | the tag's image content, with today's `.github/actions/` overlaid from the workflow commit | same as tag-push |
+| rehearsal | `workflow_dispatch` with `rehearsal: true` | the dispatched commit | only GHCR `:rehearsal`; every step that needs Docker Hub or release secrets is skipped |
+
+### Rehearsing a release
+
+Run the full build, smoke test and index publish from a branch without
+releasing anything:
+
+```bash
+gh workflow run release.yml --ref <branch> -f rehearsal=true
+```
+
+The run tags only `ghcr.io/sergienko4/israeli-bank-importer:rehearsal`. Run one
+rehearsal at a time: the workflow has no concurrency group, and two runs
+would race for that tag.
+
+### Why the build is fast
+
+- **Native runners.** arm64 builds on an arm64 runner instead of under QEMU
+  emulation on amd64, and both legs run in parallel.
+- **No layer cache.** Exporting the GHA layer cache cost about 170 s per
+  release build, more than the layers it saved, so no release build reads or
+  writes one.
+- **A reproducible Camoufox layer.** The Dockerfile installs Camoufox into a
+  staging root with fixed owners, modes and timestamps, so a release that
+  keeps the same Camoufox pin and base image produces the same layer digest.
+  GHCR and Docker Hub then skip that layer on push, and users skip it on
+  pull: it is about 300 MB of the roughly 530 MB compressed image per
+  architecture.
+- **Only the Windows fonts.** The image ships the Windows font set that the
+  default fingerprint uses; see
+  [`CAMOUFOX_OS`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-run.md#browser-fingerprint-os-camoufox_os).
 
 ---
 
@@ -132,7 +186,7 @@ flowchart LR
     subgraph BLD["docker/build-image"]
       CAM["docker/camoufox-cache"]
       BX["docker/setup-buildx"]
-      BP["docker/build-push-action<br/>SKIP_BROWSER_FETCH, gha cache in release"]
+      BP["docker/build-push-action<br/>SKIP_BROWSER_FETCH, no layer cache"]
     end
 
     SETUP["ci/setup<br/>node + npm ci"]
@@ -238,10 +292,9 @@ publish stable TS 7 support.
 
 ## If the deploy fails
 
-- **`buildx failed: ... BlobNotFound` / cache copy error** — a transient
-  `type=gha` build-cache eviction. The images build deterministically, so
-  **re-run the failed `release.yml` run** (`gh run rerun <id> --failed`); it
-  republishes the same tag.
+- **A smoke test or build leg failed** — nothing was tagged. The candidate
+  stays untagged on GHCR, users see no change. Fix and re-run, or re-run the
+  failed jobs if the failure was transient.
 - **Docker Hub push failed** — non-fatal by design; the image is on GHCR. Pull
   from GHCR or re-run to retry the mirror.
 - **`Tag vX.Y.Z does not match manifest`** — the tag was pushed out of band;

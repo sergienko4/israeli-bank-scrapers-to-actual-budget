@@ -1,20 +1,20 @@
 name: Build Docker Image
 description: |
   Composite that consolidates the Docker build sequence used by pr.yml (trivy),
-  release.yml (smoke + push), and _e2e-suite.yml. Steps:
+  release.yml (one native build per architecture, pushed by digest), and
+  _e2e-suite.yml. Steps:
     1. Restore Camoufox cache (composite)
     2. Set up Buildx
     3. Build (and optionally push) the image
     4. Report the runner's free disk, even when the build fails
-  The runner starts with ~86 GB free and the release smoke build used
-  ~16 GB of it, so no step deletes preinstalled toolchains to make room.
-  Inputs were originally capped at 5 (see plan §R6); the count grew to 6
-  (labels) and now to 8 (provenance, sbom). The two attestation knobs are
-  required for the release.yml Docker Hub leg to disable SLSA provenance +
-  SBOM attestations, halving the push burst that triggers HAProxy 400 from
-  Docker Hub's edge proxy. Their empty defaults pass through to
-  build-push-action@v7's own defaults. An empty cache-suffix, by contrast,
-  turns the GHA layer cache off (see that input).
+  The runner starts with ~86 GB free and a release build leg still has
+  ~78 GB left after its build, so no step deletes preinstalled toolchains
+  to make room.
+  The provenance and sbom inputs were added for an earlier Docker Hub
+  push leg. release.yml now copies the GHCR image to Docker Hub with
+  regctl, so no caller sets them and their empty defaults pass through to
+  build-push-action@v7's own defaults. No build uses a remote layer cache:
+  exporting it cost more than the layers it saved.
 
 inputs:
   tag:
@@ -29,13 +29,13 @@ inputs:
   load:
     description: Load the image into the local docker daemon (true/false). Mutually exclusive with multi-arch push.
     default: 'true'
-  cache-suffix:
+  push-by-digest:
     description: |
-      GHA layer cache scope. Empty (the default) skips the GHA cache: a
-      PR build's own steps take ~80 s, while exporting the cache took
-      ~300 s. The release workflow sets `release` so its push build reuses
-      the layers its smoke build just exported.
-    default: ''
+      Push the image untagged, by digest only (true/false). `tag` must then
+      be the bare image name and `push` is ignored. The release workflow
+      builds each architecture this way and joins the digests into one
+      tagged index afterwards.
+    default: 'false'
   labels:
     description: Optional OCI labels (multi-line string, as emitted by docker/metadata-action).
     default: ''
@@ -43,18 +43,20 @@ inputs:
     description: |
       SLSA provenance attestation. `false` disables; `mode=min` / `mode=max`
       enables explicitly. Empty string keeps build-push-action@v7's default
-      (mode=max on multi-platform builds, mode=min otherwise). The release
-      workflow's Docker Hub leg sets this to `false` to reduce edge-proxy
-      push burst that triggers HAProxy 400 BadReq on this account.
+      (mode=max on multi-platform builds, mode=min otherwise).
     default: ''
   sbom:
     description: |
       SBOM attestation embedded in the image index. `false` disables.
       Empty string keeps build-push-action@v7's default. The repo-level
       SBOM attached to the GitHub release via `anchore/sbom-action` is
-      independent of this input. The release workflow's Docker Hub leg
-      sets this to `false` to reduce edge-proxy push burst.
+      independent of this input.
     default: ''
+
+outputs:
+  digest:
+    description: Image digest (sha256:...) that build-push-action reports.
+    value: ${{ steps.build.outputs.digest }}
 
 runs:
   using: composite
@@ -63,11 +65,13 @@ runs:
     - uses: docker/setup-buildx-action@v4
 
     - name: Build Docker image
+      id: build
       uses: docker/build-push-action@v7
       with:
         context: .
-        push: ${{ inputs.push }}
+        push: ${{ inputs.push-by-digest == 'true' && 'false' || inputs.push }}
         load: ${{ inputs.load }}
+        outputs: ${{ inputs.push-by-digest == 'true' && 'type=image,push-by-digest=true,name-canonical=true,push=true' || '' }}
         platforms: ${{ inputs.platforms }}
         tags: ${{ inputs.tag }}
         labels: ${{ inputs.labels }}
@@ -76,8 +80,6 @@ runs:
         build-args: |
           SKIP_BROWSER_FETCH=true
           APT_CACHE_BUST=${{ github.run_id }}
-        cache-from: ${{ inputs.cache-suffix && format('type=gha,scope={0}', inputs.cache-suffix) || '' }}
-        cache-to: ${{ inputs.cache-suffix && format('type=gha,mode=max,scope={0}', inputs.cache-suffix) || '' }}
 
     - name: Report free disk
       if: always()

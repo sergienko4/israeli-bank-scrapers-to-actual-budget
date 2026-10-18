@@ -45,7 +45,31 @@ vi.mock('../../src/Scheduler/TelegramSchedulerWiring.js', () => ({
   createReceiptHandler: vi.fn(),
 }));
 
-import { runScheduler } from '../../src/Scheduler/SchedulerBootstrap.js';
+import { bootScheduler, runScheduler } from '../../src/Scheduler/SchedulerBootstrap.js';
+import type { ISchedulerProcessLifecycle } from '../../src/Scheduler/Process/SchedulerProcessLifecycle.js';
+
+const { mockCheckCamoufoxFonts } = vi.hoisted(() => ({
+  mockCheckCamoufoxFonts: vi.fn(),
+}));
+vi.mock('../../src/Scraper/CamoufoxFontGuard.js', () => ({
+  default: mockCheckCamoufoxFonts,
+}));
+
+type FakeLifecycle = { [K in keyof ISchedulerProcessLifecycle]: ReturnType<typeof vi.fn> };
+
+/**
+ * Builds a lifecycle whose exits only record their calls, so control flow
+ * after an exit request is observable.
+ * @returns The recording lifecycle.
+ */
+function makeLifecycle(): FakeLifecycle {
+  return {
+    exitOnImportResult: vi.fn(),
+    exitOnInvalidSchedule: vi.fn(),
+    exitOnFatalError: vi.fn(),
+    exitClean: vi.fn(),
+  };
+}
 
 interface IFakeMediator {
   requestImport: ReturnType<typeof vi.fn>;
@@ -143,5 +167,48 @@ describe('SchedulerBootstrap.runScheduler', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(
       expect.stringContaining('Invalid SCHEDULE format')
     );
+  });
+});
+
+describe('SchedulerBootstrap.bootScheduler browser font check', () => {
+  const fontFailure = 'Camoufox font check failed: CAMOUFOX_OS=macos selects the macos fingerprint';
+  const originalSchedule = process.env.SCHEDULE;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLoadLogConfig.mockReturnValue(succeed({ format: 'words', logDir: './logs' }));
+    delete process.env.SCHEDULE;
+  });
+
+  afterEach(() => {
+    if (originalSchedule === undefined) delete process.env.SCHEDULE;
+    else process.env.SCHEDULE = originalSchedule;
+  });
+
+  it('exits through the fatal-error path before the scheduler starts when the fonts are missing', async () => {
+    mockCheckCamoufoxFonts.mockReturnValue(fail(fontFailure));
+    const lifecycle = makeLifecycle();
+
+    await bootScheduler(lifecycle as unknown as ISchedulerProcessLifecycle);
+
+    expect(lifecycle.exitOnFatalError).toHaveBeenCalledTimes(1);
+    const [error] = lifecycle.exitOnFatalError.mock.calls[0] ?? [];
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(fontFailure);
+    expect(mockLoadLogConfig).not.toHaveBeenCalled();
+    expect(mockStartTelegramCommands).not.toHaveBeenCalled();
+    expect(lifecycle.exitClean).not.toHaveBeenCalled();
+  });
+
+  it('starts the scheduler when the fonts are present', async () => {
+    mockCheckCamoufoxFonts.mockReturnValue(succeed({ os: 'windows' }));
+    mockStartTelegramCommands.mockResolvedValue(succeed(makeMediator()));
+    const lifecycle = makeLifecycle();
+
+    await bootScheduler(lifecycle as unknown as ISchedulerProcessLifecycle);
+
+    expect(mockStartTelegramCommands).toHaveBeenCalledTimes(1);
+    expect(lifecycle.exitOnImportResult).toHaveBeenCalledWith({ failureCount: 0 });
+    expect(lifecycle.exitOnFatalError).not.toHaveBeenCalled();
   });
 });
