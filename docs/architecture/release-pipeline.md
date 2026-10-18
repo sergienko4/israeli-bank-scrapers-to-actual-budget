@@ -238,10 +238,6 @@ publish stable TS 7 support.
 
 ## If the deploy fails
 
-- **`buildx failed: ... BlobNotFound` / cache copy error** — a transient
-  `type=gha` build-cache eviction. The images build deterministically, so
-  **re-run the failed `release.yml` run** (`gh run rerun <id> --failed`); it
-  republishes the same tag.
 - **Docker Hub push failed** — non-fatal by design; the image is on GHCR. Pull
   from GHCR or re-run to retry the mirror.
 - **`Tag vX.Y.Z does not match manifest`** — the tag was pushed out of band;

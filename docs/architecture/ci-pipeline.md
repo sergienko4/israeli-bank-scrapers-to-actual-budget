@@ -348,17 +348,15 @@ Consolidates the Docker build sequence used by `pr.yml` (trivy), `release.yml`
 3. `docker/build-push-action`
 4. `df -h /`, even when the build fails, so a disk regression is visible
 
-Inputs: `tag`, `platforms`, `push`, `load`, `cache-suffix`, `labels`,
-`provenance`, `sbom`.
+Inputs: `tag`, `platforms`, `push`, `load`, `labels`, `provenance`, `sbom`.
 
 No step frees runner disk: an `ubuntu-24.04` runner starts with about 86 GB
 free, and the release smoke build used about 16 GB of it. The `df` output after
 each build shows the real headroom.
 
-The GHA layer cache is used only when `cache-suffix` is set. `release.yml` sets
-`cache-suffix: release`, so its multi-arch push reuses the layers the smoke
-build exported. PR and E2E builds leave it empty: their build steps take about
-80 s, and exporting the cache took about 300 s.
+No build uses a remote layer cache. A PR build's own steps take about 80 s,
+while exporting the GHA cache took about 300 s, and each release cache export
+took about 170 s.
 
 ## Secrets matrix
 

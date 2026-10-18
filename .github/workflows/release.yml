@@ -132,7 +132,6 @@ jobs:
           platforms: linux/amd64
           push: 'false'
           load: 'true'
-          cache-suffix: release
 
       - name: Scraper API smoke test (verify createScraper inside image)
         # The current scraper API manages the browser lifecycle inside
@@ -163,7 +162,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: 'true'
           load: 'false'
-          cache-suffix: release
 
       # Docker Hub is the secondary, BEST-EFFORT target. Failure here does NOT
       # fail the release — users can pull from GHCR.
