@@ -15,17 +15,17 @@ import * as path from 'node:path';
 import type { Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 
+/** OS fingerprint Camoufox spoofs. */
+export type CamoufoxOs = 'linux' | 'macos' | 'windows';
+
 /** OS fingerprints the scraper accepts, sorted so a hint lists them stably. */
-const CAMOUFOX_OSES = ['linux', 'macos', 'windows'] as const;
+const CAMOUFOX_OSES: readonly CamoufoxOs[] = ['linux', 'macos', 'windows'];
 
 /** OS fingerprint the scraper spoofs when CAMOUFOX_OS is unset or unknown. */
-const DEFAULT_OS = 'windows';
+const DEFAULT_OS: CamoufoxOs = 'windows';
 
 /** Leading text of every guard failure, for operators and the image E2E. */
 export const FONT_GUARD_PREFIX = 'Camoufox font check failed';
-
-/** OS fingerprint Camoufox spoofs. */
-export type CamoufoxOs = (typeof CAMOUFOX_OSES)[number];
 
 /** Process facts the guard reads, passed in so tests need no globals. */
 export interface IFontGuardInput {
