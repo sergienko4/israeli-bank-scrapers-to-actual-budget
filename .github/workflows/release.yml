@@ -29,10 +29,9 @@ on:
         type: boolean
         default: false
 
+# Each job widens this default only as far as it needs.
 permissions:
-  contents: write
-  packages: write
-  id-token: write
+  contents: read
 
 env:
   DOCKER_IMAGE: sergienko4/israeli-bank-importer
@@ -278,6 +277,10 @@ jobs:
   publish:
     needs: [prepare, build]
     runs-on: ubuntu-latest
+    permissions:
+      # sbom-action attaches its SBOM to the release with the job token.
+      contents: write
+      packages: write
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
 

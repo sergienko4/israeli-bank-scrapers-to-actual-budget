@@ -46,6 +46,7 @@ interface IStep {
 /** Fields of a workflow job this suite reads. */
 interface IJob {
   readonly needs?: string | readonly string[];
+  readonly permissions?: Readonly<Record<string, string>>;
   readonly 'runs-on'?: string;
   readonly strategy?: {
     readonly 'fail-fast'?: boolean;
@@ -82,13 +83,26 @@ afterEach(() => {
   rmSync(work, { recursive: true, force: true });
 });
 
+/** Fields of the release workflow this suite reads. */
+interface IWorkflow {
+  readonly permissions?: Readonly<Record<string, string>>;
+  readonly jobs: Readonly<Record<string, IJob>>;
+}
+
+/**
+ * Reads the release workflow.
+ * @returns The parsed workflow.
+ */
+function workflow(): IWorkflow {
+  return parse(readFileSync(join(ROOT, RELEASE), 'utf8')) as IWorkflow;
+}
+
 /**
  * Reads the jobs of the release workflow.
  * @returns The workflow's jobs by id.
  */
 function jobs(): Readonly<Record<string, IJob>> {
-  const workflow = parse(readFileSync(join(ROOT, RELEASE), 'utf8')) as { jobs: Record<string, IJob> };
-  return workflow.jobs;
+  return workflow().jobs;
 }
 
 /**
@@ -324,6 +338,13 @@ describe('release workflow job graph', () => {
     for (const id of stepIds('prepare').slice(1)) {
       expect(conjuncts(step('prepare', id).if), id).toContain("steps.mode.outputs.mode != 'rehearsal'");
     }
+  });
+
+  it('grants each job only the token scopes it uses', () => {
+    expect(workflow().permissions).toEqual({ contents: 'read' });
+    expect(jobs().prepare?.permissions).toEqual({ contents: 'read' });
+    expect(jobs().build?.permissions).toEqual({ contents: 'read', packages: 'write' });
+    expect(jobs().publish?.permissions).toEqual({ contents: 'write', packages: 'write' });
   });
 
   it('publishes only after both builds, and builds only after prepare', () => {
