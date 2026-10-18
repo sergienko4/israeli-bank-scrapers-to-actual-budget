@@ -6,14 +6,15 @@ description: |
     2. Set up Buildx
     3. Build (and optionally push) the image
     4. Report the runner's free disk, even when the build fails
-  The runner starts with ~86 GB free and a build peaks far below that, so
-  no step deletes preinstalled toolchains to make room.
+  The runner starts with ~86 GB free and the release smoke build used
+  ~16 GB of it, so no step deletes preinstalled toolchains to make room.
   Inputs were originally capped at 5 (see plan §R6); the count grew to 6
   (labels) and now to 8 (provenance, sbom). The two attestation knobs are
   required for the release.yml Docker Hub leg to disable SLSA provenance +
   SBOM attestations, halving the push burst that triggers HAProxy 400 from
-  Docker Hub's edge proxy. All defaults preserve existing call-site
-  behavior (empty string = pass-through to build-push-action@v7 default).
+  Docker Hub's edge proxy. Their empty defaults pass through to
+  build-push-action@v7's own defaults. An empty cache-suffix, by contrast,
+  turns the GHA layer cache off (see that input).
 
 inputs:
   tag:
