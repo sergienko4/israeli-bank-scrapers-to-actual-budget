@@ -531,48 +531,78 @@ if disarming cannot be confirmed, it still labels the PR and fails red.
 
 ## Git hooks
 
-Local verification is split across two stages so the cost lands where it
-belongs. Nothing was dropped or weakened when the stages were separated —
-every gate below still runs before any commit reaches the remote.
+Local verification is split across two stages, each sized to the question
+it answers. Every hook gate also runs in CI, and
+`tests/hook-ci-parity.test.ts` fails when a hook gate has no CI counterpart.
 
 ### Commit stage — `.husky/pre-commit`
 
-Answers **"is the snapshot I am recording internally correct?"** — 5 gates:
-`type-check` (src), ESLint (cached), Biome, config-structure, PII scan.
+Answers **"are the files I am committing clean?"** — 6 gates:
+
+| Gate | Scope |
+| --- | --- |
+| `type-check` | `src/`, incremental |
+| `lint:staged` | ESLint on staged `src/` TS and staged portal JS |
+| `lint:biome:staged` | Biome on staged files |
+| `lint:config-structure` | whole repo |
+| `lint:allow-scripts` | `package.json` against `package-lock.json` |
+| `lint:pii` | `src/` |
+
+The staged gates lint the staged path set as it is in the working tree, so
+a partially staged file is judged by its on-disk content: a bad staged
+version fixed only on disk passes, and a clean staged version with an
+unstaged error blocks. CI judges the committed tree.
+
+`type-check`, `type-check:test` and `type-check:e2e` keep TypeScript build
+info under `node_modules/.cache/tsc/`, so a warm run re-checks only what changed and
+what depends on it. ESLint keeps content caches under
+`node_modules/.cache/eslint/`. The previous `lint:cached` never hit its
+cache: `lint:portal-js` runs ESLint without `--cache`, and ESLint deletes
+the default `.eslintcache` whenever it does.
 
 ### Push stage — `.husky/pre-push`
 
-Answers **"is what leaves this machine correct as a whole?"** — 9 gates:
-`type-check:test`, `type-check:e2e`, `npm run audit`, build, TypeDoc, ESLint
-(uncached), markdownlint, circular deps, coupling.
+Answers **"is what leaves this machine correct as a whole?"** — 7 gates:
+`type-check:test` (`src/` and `tests/`, incremental), `type-check:e2e`
+(`tests/e2e` on its own, incremental), `docs:check` (TypeDoc
+validation with `--emit none`), `lint` (uncached ESLint), `lint:docs`
+(markdownlint), `lint:circular`, `coupling:check`.
 
 A push that only deletes a remote branch ships no code, so the hook detects
 the all-zero local SHA and exits without running anything.
 
-ESLint appears in both stages deliberately. The commit stage lints against
-`.eslintcache` for speed; a cache is only ever as trustworthy as its
-invalidation, so the push stage re-runs it with no cache at all and that
-uncached run is what the branch is judged on.
+ESLint appears in both stages deliberately. The commit-stage cache keys on
+file content, so it cannot see that a file's imports changed, and a typed
+rule can start failing a file that did not. The push stage lints the whole
+tree uncached, and that run is what the branch is judged on.
 
-TypeDoc is a push gate rather than a CI-only one because it fails on a class
-of error nothing else catches: an interface referenced by an exported
-signature but not itself exported. That is a real API-surface defect, and
-finding it in CI costs a full round-trip to learn something a local 23s gate
-already knew.
+TypeDoc is a push gate rather than a CI-only one because it fails on a
+class of error nothing else catches: an interface referenced by an exported
+signature but not itself exported. `docs:check` validates without writing
+the site; the full `docs` build runs in CI.
 
 ### Why this split
 
-The gates run in parallel, so a stage costs its slowest gate plus the
-contention between them, not the sum. Measured on this repo (minimum of
-three alternating runs, to discount ambient load): the previous single
-twelve-gate hook took **35s**, the commit stage now takes **24s** — a 31%
-cut on the operation performed most often — and the push stage adds **40s**
-once per push rather than once per commit.
+Gates run in parallel, so a stage costs its slowest gate plus the
+contention between them. Measured on this repo (minimum of three runs):
 
-The win is 31% rather than 60% because the two tall poles, `type-check` and
-ESLint, both stay in the commit stage: each must build the TypeScript
-program before it can report anything, and that build is the floor for the
-stage. Gates cheaper than that floor were free to keep, so they were kept.
+| Stage | Before | After |
+| --- | --- | --- |
+| Commit, 1 staged file, warm caches | 40s | 9s |
+| Commit, 5 staged files, all caches cold | — | 17s |
+| Push, warm caches | 76s | 43s |
+
+The commit stage now scales with the files being committed rather than with
+`src/`. The push stage's tall pole is the full uncached ESLint run.
+
+The build and `npm audit` left the push stage for CI. The build compiles
+the sources `type-check` already checks, and audit needs the network and
+reports advisories rather than defects in the change.
+
+`type-check:e2e` stays separate from `type-check:test`, and now runs in CI
+too. A `/// <reference lib="dom" />` in a unit test adds DOM globals to the
+whole `tsconfig.test.json` program, so that program accepts an e2e file
+that uses `document`; only the e2e program on its own rejects it.
 
 ### Acceptance stage — CI only
 
@@ -580,6 +610,7 @@ Every acceptance-stage gate runs in CI and **only** in CI:
 
 | Gate | Owning CI job |
 | --- | --- |
+| build, `npm audit`, TypeDoc site build | `build` |
 | unit tests + coverage thresholds | `validate` (`validate:ci`) |
 | ESLint canary fixtures | `validate` (`validate:ci`) |
 | lockfile canonicality (`lint:lockfile`) | `validate` (`validate:ci`) |

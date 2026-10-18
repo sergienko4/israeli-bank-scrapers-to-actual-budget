@@ -34,9 +34,9 @@ This is NOT optional. If you skip this checklist you WILL introduce bugs that Co
 2. Plan first → explain approach → wait for user approval
 3. Fresh branch: `git checkout main && git pull origin refs/heads/main && git checkout -b task-XX-desc`
 4. **FULL hook cycle (NEVER skip):** just `git commit`, then `git push` — verification is split across two stages:
-   - `git commit` → 5 commit-stage gates: type-check (`src/`), cached ESLint, Biome, config-structure, PII scan
-   - `git push` → 9 push-stage gates: `type-check:test`, `type-check:e2e`, audit, build, TypeDoc, uncached ESLint, markdownlint, circular-dep, coupling
-   - Neither hook uses Docker. Unit tests, Semgrep, Trivy, Docker image build, link-check, mocked + Telegram E2E run in CI only — but a local `docker build` is still required before opening a PR (step 5), because the hooks cannot catch a broken image.
+   - `git commit` → 6 commit-stage gates: incremental type-check (`src/`), ESLint + Biome on staged files, config-structure, allowScripts pins, PII scan
+   - `git push` → 7 push-stage gates: incremental `type-check:test` and `type-check:e2e`, TypeDoc validation (`docs:check`), uncached ESLint, markdownlint, circular-dep, coupling
+   - Neither hook uses Docker. Build, `npm audit`, unit tests, Semgrep, Trivy, Docker image build, link-check, mocked + Telegram E2E run in CI only — but a local `docker build` is still required before opening a PR (step 5), because the hooks cannot catch a broken image.
 5. `docker build -t israeli-bank-importer:test .`
 6. Write E2E tests for every new feature — unit tests + E2E tests are BOTH required
 7. Update docs: README.md, task files, config.json.example (CHANGELOG is auto-generated)
@@ -114,8 +114,8 @@ After creating every PR:
 ## CI/CD
 
 - `pr.yml`: build+audit, validate:ci, Docker build, Trivy, CodeQL, SonarCloud, License Compliance, markdownlint+lychee, E2E
-- `.husky/pre-commit`: 5 commit-stage gates (type-check, cached ESLint, Biome, config-structure, PII scan)
-- `.husky/pre-push`: 9 push-stage gates (type-check:test/:e2e, audit, build, TypeDoc, uncached ESLint, markdownlint, circular-dep, coupling); shared runner in `config/hooks/gate-runner.sh`
+- `.husky/pre-commit`: 6 commit-stage gates (type-check, staged ESLint, staged Biome, config-structure, allowScripts pins, PII scan)
+- `.husky/pre-push`: 7 push-stage gates (type-check:test, type-check:e2e, docs:check, uncached ESLint, markdownlint, circular-dep, coupling); shared runner in `config/hooks/gate-runner.sh`; `tests/hook-ci-parity.test.ts` requires every hook gate to run in CI
 - `release-please.yml`: on push to main → release PR + test count badge
 - `release.yml`: on tag push `v*` → multi-arch build+push → SBOM → enriched notes
 - Ruleset: squash only, required checks: Build+Test, Container Scan, CodeQL Security Scan, Docs Quality, E2E Tests, SonarCloud Analysis, License Compliance
