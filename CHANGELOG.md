@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.44.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.8...v1.44.0) (2026-10-18)
+
+
+### Added
+
+* faster native release and a smaller image ([#792](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/792)) ([e5eb9bb](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/e5eb9bb098e10f99c950761f9e2933f95ef0d9f7))
+
+
+### Fixed
+
+* **ci:** keep every waiting auto-merge decision ([#789](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/789)) ([747288a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/747288a1839fbbea75230c0307eeccf655a8c341))
+* **deps:** automate dependabot pipeline; patch katex and image npm ([#786](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/786)) ([9891da0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/9891da03339cc1dc1f31804d6735e00cbada1d34))
+* **deps:** refresh 44 runtime and 47 dev lockfile pins ([#783](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/783)) ([d344c50](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/d344c504704ecfc78f3e37e7149ddcac14009eb8))
+
+
+### Performance
+
+* **docker:** multi-stage image and leaner CI builds ([#791](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/791)) ([a9672ca](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/a9672ca236a09affe03ac3ef31c15f37d51fef41))
+
 ## [1.43.8](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.7...v1.43.8) (2026-10-11)
 
 
