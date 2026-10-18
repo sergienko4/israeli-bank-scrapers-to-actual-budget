@@ -37,6 +37,21 @@ await browser.close();
 process.stdout.write(JSON.stringify({ user: userInfo().username, platform }));
 `;
 
+/** Builds a scraper through the public API and reports whether it can scrape. */
+const SCRAPER_API = `
+import { createScraper } from '@sergienko4/israeli-bank-scrapers';
+const scraper = createScraper({ companyId: 'hapoalim', startDate: new Date() });
+process.stdout.write(typeof scraper.scrape);
+`;
+
+/** Opens and closes an in-memory database through the native module. */
+const SQLITE_OPEN = `
+import Database from 'better-sqlite3';
+const db = new Database(':memory:');
+db.close();
+process.stdout.write('ok');
+`;
+
 /**
  * Runs a docker CLI command and returns its output.
  * @param args - Arguments passed to the docker CLI.
@@ -103,4 +118,16 @@ describe.runIf(hasDockerImage())('published image contents E2E', () => {
 
     expect(launch).toEqual({ user: 'node', platform: 'Win32' });
   }, 180_000);
+
+  it('exposes the scraper API', () => {
+    const scrapeType = runInImage('node', ['--input-type=module', '-e', SCRAPER_API]);
+
+    expect(scrapeType).toBe('function');
+  });
+
+  it('loads the better-sqlite3 native module', () => {
+    const opened = runInImage('node', ['--input-type=module', '-e', SQLITE_OPEN]);
+
+    expect(opened).toBe('ok');
+  });
 });
