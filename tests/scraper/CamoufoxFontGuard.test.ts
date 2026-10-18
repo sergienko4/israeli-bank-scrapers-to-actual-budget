@@ -8,7 +8,7 @@
  * and checks the guard reads it exactly as the scraper and camoufox-js do.
  */
 
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -16,6 +16,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import checkCamoufoxFonts from '../../src/Scraper/CamoufoxFontGuard.js';
 
 type Env = Record<string, string | undefined>;
+
+/** Stand-in font contents: the guard needs a non-empty file, not a parsable font. */
+const FONT_BYTES = 'not-a-real-font';
 
 describe('checkCamoufoxFonts', () => {
   let home: string;
@@ -29,7 +32,8 @@ describe('checkCamoufoxFonts', () => {
   });
 
   /**
-   * Creates font directories for the given OSes under an install directory.
+   * Creates a font set, one non-empty font file in its own directory, for
+   * each given OS under an install directory.
    * @param installDir - Camoufox install directory.
    * @param oses - OS font sets to create.
    * @returns The install's fonts directory.
@@ -37,7 +41,10 @@ describe('checkCamoufoxFonts', () => {
   function installFonts(installDir: string, oses: readonly string[]): string {
     const fontsDir = join(installDir, 'fonts');
     mkdirSync(fontsDir, { recursive: true });
-    for (const os of oses) mkdirSync(join(fontsDir, os));
+    for (const os of oses) {
+      mkdirSync(join(fontsDir, os));
+      writeFileSync(join(fontsDir, os, 'Candara.ttf'), FONT_BYTES);
+    }
     return fontsDir;
   }
 
@@ -104,6 +111,58 @@ describe('checkCamoufoxFonts', () => {
 
       expect(message).toContain('has no linux fonts');
       expect(message.endsWith('one of: windows.')).toBe(true);
+    });
+
+    it.each<[string, (osDir: string) => void]>([
+      ['an empty directory', (osDir) => mkdirSync(osDir)],
+      ['a directory of subdirectories only', (osDir) => mkdirSync(join(osDir, 'nested'), { recursive: true })],
+      ['a directory of zero-byte files only', (osDir) => {
+        mkdirSync(osDir);
+        writeFileSync(join(osDir, 'Ubuntu.ttf'), '');
+      }],
+      ['a directory of dangling symlinks only', (osDir) => {
+        mkdirSync(osDir);
+        symlinkSync(join(osDir, 'gone.ttf'), join(osDir, 'Ubuntu.ttf'));
+      }],
+    ])('does not count %s as an installed font set', (_label, layOut) => {
+      layOut(join(fontsDir, 'linux'));
+
+      expect(failureOf({ CAMOUFOX_OS: 'linux' }).endsWith('has no linux fonts. Unset CAMOUFOX_OS or set it to one of: windows.'))
+        .toBe(true);
+    });
+
+    it.skipIf(process.getuid?.() === 0)('stops when its user cannot list the selected font set', () => {
+      const windowsDir = join(fontsDir, 'windows');
+      chmodSync(windowsDir, 0o000);
+
+      try {
+        expect(failureOf({})).toContain('has no fonts for any OS');
+      } finally {
+        chmodSync(windowsDir, 0o755);
+      }
+    });
+
+    it.skipIf(process.getuid?.() === 0)('stops when its user cannot read any font in the selected set', () => {
+      const font = join(fontsDir, 'windows', 'Candara.ttf');
+      chmodSync(font, 0o000);
+
+      try {
+        expect(failureOf({})).toContain('has no fonts for any OS');
+      } finally {
+        chmodSync(font, 0o644);
+      }
+    });
+
+    it('accepts a font set whose fonts are symlinks to readable files', () => {
+      const store = join(home, 'font-store');
+      mkdirSync(store);
+      writeFileSync(join(store, 'Ubuntu.ttf'), FONT_BYTES);
+      mkdirSync(join(fontsDir, 'linux'));
+      symlinkSync(join(store, 'Ubuntu.ttf'), join(fontsDir, 'linux', 'Ubuntu.ttf'));
+
+      const result = check({ CAMOUFOX_OS: 'linux' });
+
+      expect(result.success && result.data.os).toBe('linux');
     });
   });
 

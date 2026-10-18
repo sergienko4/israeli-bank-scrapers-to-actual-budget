@@ -80,14 +80,50 @@ function isDirectory(target: string): boolean {
 }
 
 /**
- * Reports whether an install has the font set for one OS.
+ * Reports whether a path is a readable, non-empty file, following symlinks.
+ * @param target - Path to check.
+ * @returns True when the browser could load the file's bytes.
+ */
+function isReadableFile(target: string): boolean {
+  try {
+    fs.accessSync(target, fs.constants.R_OK);
+    const stats = fs.statSync(target);
+    return stats.isFile() && stats.size > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reports whether a directory holds at least one readable, non-empty file. A
+ * directory that cannot be listed counts as empty: the browser runs as the
+ * same user, so it could not read the fonts either.
+ * @param target - Directory to list.
+ * @returns True when the directory holds such a file.
+ */
+function hasFile(target: string): boolean {
+  try {
+    const names = fs.readdirSync(target);
+    return names.some((name) => {
+      const entry = path.join(target, name);
+      return isReadableFile(entry);
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reports whether an install has the font set for one OS. Camoufox keeps each
+ * set as font files directly in `fonts/<os>`, so a directory without a
+ * readable, non-empty file is a lost set, not an installed one.
  * @param fontsDir - The install's fonts directory.
  * @param os - OS whose font set to look for.
- * @returns True when the OS font directory exists.
+ * @returns True when the OS font directory holds a font file.
  */
 function hasFontSet(fontsDir: string, os: CamoufoxOs): boolean {
   const osDir = path.join(fontsDir, os);
-  return isDirectory(osDir);
+  return hasFile(osDir);
 }
 
 /**
