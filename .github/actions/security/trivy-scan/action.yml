@@ -43,14 +43,14 @@ runs:
     # trivy-action leaves the trivy binary on PATH (setup-trivy adds it).
     - name: Convert the report to SARIF
       id: sarif
-      if: always()
+      if: ${{ !cancelled() }}
       shell: bash
       run: trivy convert --format sarif --output trivy-results.sarif trivy-results.json
 
     - name: Upload SARIF to Security tab
       id: upload
       uses: github/codeql-action/upload-sarif@v4
-      if: always()
+      if: ${{ !cancelled() }}
       with:
         sarif_file: trivy-results.sarif
 
@@ -60,6 +60,12 @@ runs:
     # empty, truncated or unrelated report fails them instead of reading as
     # "no findings". With that proven, a report without `Results` (nothing
     # to report) passes.
+    #
+    # Every step after the scan runs even when an earlier one failed, so a
+    # failed SARIF upload cannot hide a gate's result and one run reports
+    # both gates. A failed scan cannot slip through: its missing or partial
+    # report fails both gates. `!cancelled()`, not `always()`: a cancelled
+    # run stops here instead of uploading and gating a scan it cut short.
 
     # Gate 1: vulnerabilities. Deliberately capped at CRITICAL/HIGH: lower
     # severities are dominated by unfixable upstream OS CVEs that would make
@@ -71,6 +77,7 @@ runs:
     # log.
     - name: Fail on CRITICAL or HIGH vulnerabilities
       id: vulns
+      if: ${{ !cancelled() }}
       shell: bash
       env:
         IMAGE_REF: ${{ inputs.image-ref }}
@@ -106,11 +113,10 @@ runs:
     #
     # The log names each finding by rule, file and line only: the matched
     # text never reaches it, and the fixed prefix plus the JSON-quoted path
-    # keep an image path from starting a workflow command. It runs even
-    # after gate 1 fails, so one run reports both.
+    # keep an image path from starting a workflow command.
     - name: Fail on any detected secret
       id: secrets
-      if: always()
+      if: ${{ !cancelled() }}
       shell: bash
       env:
         IMAGE_REF: ${{ inputs.image-ref }}

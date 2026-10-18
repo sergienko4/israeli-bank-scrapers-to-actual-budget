@@ -375,10 +375,13 @@ the image again (each scan re-reads every layer):
 
 | Step | Reads from the report | Fails the job when |
 |------|-----------------------|--------------------|
-| SARIF (`trivy convert`) + upload | every finding, all severities | the report cannot be converted or uploaded; runs even after a failure |
+| SARIF (`trivy convert`) + upload | every finding, all severities | the report cannot be converted or uploaded |
 | Vulnerability gate | fixable `CRITICAL`/`HIGH` vulnerabilities | any is found; prints Trivy's table |
-| Secret gate | secrets of any severity | any is found; runs even after the vulnerability gate failed |
+| Secret gate | secrets of any severity | any is found |
 
+Every step after the scan runs even when an earlier one failed (but not once
+the run is cancelled), so a failed SARIF upload cannot hide a gate's result
+and one run reports both gates.
 Both gates also fail unless the report is Trivy's report of the scanned image
 (right artifact name and type, and the image ID Trivy read), so a missing,
 empty or unrelated report never reads as clean. The secret gate logs rule,

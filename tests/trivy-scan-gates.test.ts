@@ -5,8 +5,8 @@
  * The behavioural cases lift each gate's `run:` script and run it the way
  * Actions runs a bash step, against a report written in the scratch folder
  * and with `trivy` replaced by a fake that logs its calls. The structural
- * cases pin what the scripts cannot see: one scan, and gates that still run
- * after an earlier step failed.
+ * cases pin what the scripts cannot see: one scan, and every later step
+ * still running after an earlier step failed.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -294,8 +294,12 @@ describe('Trivy composite scans once', () => {
     ]);
   });
 
-  it('uploads SARIF and checks secrets even after an earlier step failed', () => {
-    expect(['sarif', 'upload', 'secrets'].map((id) => step(id).if)).toEqual(['always()', 'always()', 'always()']);
+  it('runs every step after the scan after an earlier failure, but not once cancelled', () => {
+    const [first, ...later] = steps();
+    const conditions = later.map((candidate) => [candidate.id, candidate.if]);
+    const unlessCancelled = later.map((candidate) => [candidate.id, '${{ !cancelled() }}']);
+    expect(first?.id).toBe('scan');
+    expect(conditions).toEqual(unlessCancelled);
     expect(step('sarif').run).toContain(`trivy convert --format sarif --output trivy-results.sarif ${REPORT}`);
     expect(step('upload').with).toEqual({ sarif_file: 'trivy-results.sarif' });
   });
