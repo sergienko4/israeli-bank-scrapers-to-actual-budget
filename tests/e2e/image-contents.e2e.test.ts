@@ -30,6 +30,14 @@ const FONT_GUARD_PREFIX = 'Camoufox font check failed';
 /** Families the Windows fingerprint must render with their own glyphs. */
 const RENDERED_FAMILIES = ['Segoe UI', 'Arial', 'Times New Roman'] as const;
 
+/** Owner, group and octal mode of each path from the home directory down to the browser binary. */
+const INSTALL_OWNERSHIP: Readonly<Record<string, string>> = {
+  '/home/node': 'node:node 700',
+  '/home/node/.cache': 'root:root 755',
+  '/home/node/.cache/camoufox': 'node:node 755',
+  '/home/node/.cache/camoufox/camoufox-bin': 'node:node 755',
+};
+
 /** Shell the shell-form HEALTHCHECK runs through. */
 const EXPECTED_SHELL = ['/bin/bash', '-o', 'pipefail', '-c'];
 
@@ -179,6 +187,22 @@ describe.runIf(hasDockerImage())('published image contents E2E', () => {
     expect(coverage.allowed).toBeGreaterThan(0);
     expect(coverage.missing).toEqual([]);
     expect(coverage.outside).toEqual([]);
+  });
+
+  it('keeps the owners and modes from the home directory down to the browser binary', () => {
+    const stats = runInImage('stat', ['-c', '%n\t%U:%G %a', ...Object.keys(INSTALL_OWNERSHIP)]);
+    const ownership = Object.fromEntries(stats.split('\n').map((line) => line.split('\t')));
+
+    expect(ownership).toEqual(INSTALL_OWNERSHIP);
+  });
+
+  it('stamps every Camoufox layer entry with the epoch, so the layer rebuilds byte-identical', () => {
+    const newer = runInImage('bash', [
+      '-c',
+      'find /home /home/node -maxdepth 0 -newermt @0 && find /home/node/.cache -newermt @0',
+    ]);
+
+    expect(newer).toBe('');
   });
 
   it('runs the health check through bash with pipefail', () => {
