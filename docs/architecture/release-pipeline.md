@@ -130,10 +130,9 @@ propagates everywhere.
 ```mermaid
 flowchart LR
     subgraph BLD["docker/build-image"]
-      FD["ci/free-disk-space"]
       CAM["docker/camoufox-cache"]
       BX["docker/setup-buildx"]
-      BP["docker/build-push-action<br/>SKIP_BROWSER_FETCH, gha cache"]
+      BP["docker/build-push-action<br/>SKIP_BROWSER_FETCH, gha cache in release"]
     end
 
     SETUP["ci/setup<br/>node + npm ci"]

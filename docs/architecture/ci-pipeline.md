@@ -38,7 +38,6 @@ graph TD
 
   subgraph Composites[".github/actions/* composites"]
     SETUP[ci/setup<br/>node + npm ci]
-    FREE[ci/free-disk-space]
     CAM[docker/camoufox-cache]
     BUILD[docker/build-image<br/>NEW]
     TRIVY[security/trivy-scan]
@@ -59,7 +58,6 @@ graph TD
   E2E -.uses.-> BUILD
   SCH -.uses.-> SETUP
   DOCS -.uses.-> SETUP
-  BUILD -.includes.-> FREE
   BUILD -.includes.-> CAM
 ```
 
@@ -343,15 +341,24 @@ human merge. Rationale and rejected alternatives:
 Consolidates the Docker build sequence used by `pr.yml` (trivy), `release.yml`
 (smoke + push), and `_e2e-suite.yml`. Wraps:
 
-1. `ci/free-disk-space` composite
-2. `docker/camoufox-cache` composite — installs the Camoufox build pinned in
+1. `docker/camoufox-cache` composite — installs the Camoufox build pinned in
    `config/camoufox-pin.json`, cached per pin, installer version and runner
    architecture
-3. `docker/setup-buildx-action`
-4. `docker/build-push-action`
+2. `docker/setup-buildx-action`
+3. `docker/build-push-action`
+4. `df -h /`, even when the build fails, so a disk regression is visible
 
-Inputs (5 max — see plan §R6): `tag`, `platforms`, `push`, `load`,
-`cache-suffix`, `labels`.
+Inputs: `tag`, `platforms`, `push`, `load`, `cache-suffix`, `labels`,
+`provenance`, `sbom`.
+
+No step frees runner disk: an `ubuntu-24.04` runner starts with about 86 GB
+free, and the release smoke build used about 16 GB of it. The `df` output after
+each build shows the real headroom.
+
+The GHA layer cache is used only when `cache-suffix` is set. `release.yml` sets
+`cache-suffix: release`, so its multi-arch push reuses the layers the smoke
+build exported. PR and E2E builds leave it empty: their build steps take about
+80 s, and exporting the cache took about 300 s.
 
 ## Secrets matrix
 
