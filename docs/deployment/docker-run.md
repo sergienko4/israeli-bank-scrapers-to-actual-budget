@@ -125,6 +125,24 @@ colour codes into the container log. See
 [Logging](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/logging.md)
 for the full procedure.
 
+## Browser fingerprint OS (`CAMOUFOX_OS`)
+
+Camoufox presents the fingerprint of one operating system and renders pages
+with that system's fonts. The image ships only the Windows font set, so leave
+`CAMOUFOX_OS` unset or set it to `windows`. The scraper reads the value
+case-insensitively and treats anything other than `linux`, `macos` or
+`windows` as `windows`.
+
+`linux` or `macos` stops the container at startup, before any bank login:
+
+```text
+Camoufox font check failed: CAMOUFOX_OS=macos selects the macos fingerprint, but /home/node/.cache/camoufox/fonts has no macos fonts. Unset CAMOUFOX_OS or set it to one of: windows.
+```
+
+The same check stops startup if the Camoufox install has lost its fonts.
+Camoufox itself would launch with fallback fonts, and its font fingerprint
+would then contradict the OS it claims to be.
+
 ## Volumes reference
 
 | Mount | Purpose | Required |

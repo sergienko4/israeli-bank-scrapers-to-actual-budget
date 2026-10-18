@@ -339,7 +339,8 @@ human merge. Rationale and rejected alternatives:
 ## Composite: `docker/build-image`
 
 Consolidates the Docker build sequence used by `pr.yml` (trivy), `release.yml`
-(smoke + push), and `_e2e-suite.yml`. Wraps:
+(one native build per architecture, pushed by digest), and `_e2e-suite.yml`.
+Wraps:
 
 1. `docker/camoufox-cache` composite — installs the Camoufox build pinned in
    `config/camoufox-pin.json`, cached per pin, installer version and runner
@@ -358,12 +359,33 @@ build's own architecture, so the same composite works on amd64 and arm64
 runners.
 
 No step frees runner disk: an `ubuntu-24.04` runner starts with about 86 GB
-free, and the release smoke build used about 16 GB of it. The `df` output after
-each build shows the real headroom.
+free, and a release build leg still has about 78 GB left after its build. The
+`df` output after each build shows the real headroom.
 
 No build uses a remote layer cache. A PR build's own steps take about 80 s,
 while exporting the GHA cache took about 300 s, and each release cache export
 took about 170 s.
+
+## Composite: `security/trivy-scan`
+
+Used by the `pr.yml` `trivy` job (check name `Container Security Scan`).
+Input: `image-ref`. One `trivy-action` scan writes `trivy-results.json` with
+every severity, and every later step reads that report instead of scanning
+the image again (each scan re-reads every layer):
+
+| Step | Reads from the report | Fails the job when |
+|------|-----------------------|--------------------|
+| SARIF (`trivy convert`) + upload | every finding, all severities | the report cannot be converted or uploaded; runs even after a failure |
+| Vulnerability gate | fixable `CRITICAL`/`HIGH` vulnerabilities | any is found; prints Trivy's table |
+| Secret gate | secrets of any severity | any is found; runs even after the vulnerability gate failed |
+
+Both gates also fail when the report is missing, empty or not a Trivy report,
+so a broken scan never reads as clean. The secret gate logs rule, file and
+line, never the matched text. Secret false positives are allow-listed in
+`config/trivy/secret.yaml`, passed through `TRIVY_SECRET_CONFIG`: the action's
+`trivy-config` input would silently ignore its `allow-rules`.
+`tests/trivy-scan-gates.test.ts` runs both gate scripts from the composite
+against sample reports.
 
 ## Secrets matrix
 

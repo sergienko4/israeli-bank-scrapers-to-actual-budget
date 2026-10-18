@@ -1,13 +1,15 @@
 name: Build Docker Image
 description: |
   Composite that consolidates the Docker build sequence used by pr.yml (trivy),
-  release.yml (smoke + push), and _e2e-suite.yml. Steps:
+  release.yml (one native build per architecture, pushed by digest), and
+  _e2e-suite.yml. Steps:
     1. Restore Camoufox cache (composite)
     2. Set up Buildx
     3. Build (and optionally push) the image
     4. Report the runner's free disk, even when the build fails
-  The runner starts with ~86 GB free and the release smoke build used
-  ~16 GB of it, so no step deletes preinstalled toolchains to make room.
+  The runner starts with ~86 GB free and a release build leg still has
+  ~78 GB left after its build, so no step deletes preinstalled toolchains
+  to make room.
   The provenance and sbom inputs were added for an earlier Docker Hub
   push leg. release.yml now copies the GHCR image to Docker Hub with
   regctl, so no caller sets them and their empty defaults pass through to

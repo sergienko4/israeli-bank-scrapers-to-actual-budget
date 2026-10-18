@@ -383,14 +383,14 @@ jobs:
       #
       # regctl uses a plain, sequential per-blob PUT/PATCH protocol — the
       # request shape registries have always expected — and reuses the bytes
-      # already on GHCR (no rebuild, no QEMU emulation, no Camoufox download).
+      # already on GHCR (no rebuild, no Camoufox download).
       # Both Docker logins above wrote credentials to ~/.docker/config.json,
       # which regctl reads natively, so no extra secret plumbing is needed.
       #
       # Cross-registry blob mount is not supported by Docker Hub free tier, so
-      # regctl streams the bytes (~2 GB multi-arch) from GHCR to DH via the
-      # runner. That's fine — it costs ~2 min and only runs after a successful
-      # GHCR push, so we never burn CI minutes on a failed build.
+      # regctl streams the bytes (~1 GB multi-arch) from GHCR to DH via the
+      # runner. That's fine — it takes about a minute and only runs after a
+      # successful GHCR push, so we never burn CI minutes on a failed build.
       - name: Install regctl
         id: install_regctl
         if: needs.prepare.outputs.mode != 'rehearsal'
