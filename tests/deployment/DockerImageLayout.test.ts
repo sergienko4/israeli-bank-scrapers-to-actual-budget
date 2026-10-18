@@ -1,16 +1,20 @@
 /**
- * Guards the two-stage layout of the published image.
+ * Guards the repository's Docker builds.
  *
  * The build stage and the runtime stage each name the base image. Native
  * modules such as better-sqlite3 are installed in the build stage and run in
  * the runtime stage, so the two must be the same image: a digest bump applied
  * to one FROM line only would ship binaries built against a different system.
  *
- * The build context is an allowlist, so a new COPY source that is not
- * re-included in .dockerignore would fail the build only once it runs.
+ * Every build context is an allowlist, so a COPY source that is not
+ * re-included would fail the build only once it runs. BuildKit applies a
+ * Dockerfile's sibling `<name>.dockerignore` when one exists and the context's
+ * .dockerignore otherwise, so each Dockerfile is checked against its own.
  */
 
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -20,8 +24,8 @@ import { parseBaseImages } from '../../scripts/release-signal-logic.mjs';
 /** Dockerfile that produces the published importer image. */
 const DOCKERFILE = fileURLToPath(new URL('../../Dockerfile', import.meta.url));
 
-/** Build-context allowlist next to the Dockerfile. */
-const DOCKERIGNORE = fileURLToPath(new URL('../../.dockerignore', import.meta.url));
+/** Repository root, the build context of every Dockerfile in the repository. */
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 /** A base image reference pinned to an immutable content digest. */
 const DIGEST_PINNED = /@sha256:[0-9a-f]{64}$/;
@@ -59,6 +63,29 @@ function contextCopySources(dockerfile: string): string[] {
 }
 
 /**
+ * Lists every Dockerfile in the repository, tracked or not yet added.
+ * @returns Repository-relative Dockerfile paths.
+ */
+function dockerfiles(): string[] {
+  const listed = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+  if (listed.status !== 0) throw new Error(`git ls-files failed in ${ROOT}: ${listed.stderr}`);
+  return listed.stdout.split('\0').filter((file) => /(^|\/)Dockerfile[^/]*$/.test(file) && !file.endsWith('.dockerignore'));
+}
+
+/**
+ * Resolves the ignore file BuildKit applies when building from the repository root.
+ * @param dockerfile - Repository-relative Dockerfile path.
+ * @returns The Dockerfile's own ignore file if present, else the root .dockerignore.
+ */
+function ignoreFileFor(dockerfile: string): string {
+  const own = `${dockerfile}.dockerignore`;
+  return existsSync(join(ROOT, own)) ? own : '.dockerignore';
+}
+
+/**
  * Lists the active rules of a .dockerignore, in order.
  * @param dockerignore - .dockerignore text.
  * @returns Rules without comments and blank lines.
@@ -67,7 +94,7 @@ function ignoreRules(dockerignore: string): string[] {
   return trimmedLines(dockerignore).filter((line) => !line.startsWith('#'));
 }
 
-describe('published image stage layout', () => {
+describe('Docker build layout', () => {
   it('builds every stage from one digest-pinned base image', () => {
     const images = parseBaseImages(readFileSync(DOCKERFILE, 'utf8'));
 
@@ -76,10 +103,14 @@ describe('published image stage layout', () => {
     expect(images[0]).toMatch(DIGEST_PINNED);
   });
 
-  it('sends every COPY source through the build-context allowlist', () => {
-    const rules = ignoreRules(readFileSync(DOCKERIGNORE, 'utf8'));
+  it('finds the published and the local-overlay Dockerfiles', () => {
+    expect(dockerfiles()).toEqual(expect.arrayContaining(['Dockerfile', 'tests/e2e/local-stack/Dockerfile.overlay']));
+  });
+
+  it.each(dockerfiles())('sends every COPY source of %s through its build-context allowlist', (dockerfile) => {
+    const rules = ignoreRules(readFileSync(join(ROOT, ignoreFileFor(dockerfile)), 'utf8'));
     const allowed = rules.filter((rule) => rule.startsWith('!')).map((rule) => normalise(rule.slice(1)));
-    const sources = contextCopySources(readFileSync(DOCKERFILE, 'utf8'));
+    const sources = contextCopySources(readFileSync(join(ROOT, dockerfile), 'utf8'));
 
     const blocked = sources.filter((source) => !allowed.some((path) => source === path || source.startsWith(`${path}/`)));
 

@@ -1,5 +1,6 @@
 # Allowlist: send the daemon only what the Dockerfile copies. Everything else
 # (tests, docs, local dist/, .env files, config.json with secrets) stays out.
+# A Dockerfile with a sibling <name>.dockerignore uses that file instead.
 # tests/deployment/DockerImageLayout.test.ts fails if a COPY source is missing.
 *
 
