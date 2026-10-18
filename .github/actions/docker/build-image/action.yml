@@ -29,7 +29,11 @@ inputs:
     description: Load the image into the local docker daemon (true/false). Mutually exclusive with multi-arch push.
     default: 'true'
   cache-suffix:
-    description: GHA cache scope suffix (lets release vs PR use independent cache scopes).
+    description: |
+      GHA layer cache scope. Empty (the default) skips the GHA cache: a
+      PR build's own steps take ~80 s, while exporting the cache took
+      ~300 s. The release workflow sets `release` so its push build reuses
+      the layers its smoke build just exported.
     default: ''
   labels:
     description: Optional OCI labels (multi-line string, as emitted by docker/metadata-action).
@@ -71,8 +75,8 @@ runs:
         build-args: |
           SKIP_BROWSER_FETCH=true
           APT_CACHE_BUST=${{ github.run_id }}
-        cache-from: type=gha${{ inputs.cache-suffix && format(',scope={0}', inputs.cache-suffix) || '' }}
-        cache-to: type=gha,mode=max${{ inputs.cache-suffix && format(',scope={0}', inputs.cache-suffix) || '' }}
+        cache-from: ${{ inputs.cache-suffix && format('type=gha,scope={0}', inputs.cache-suffix) || '' }}
+        cache-to: ${{ inputs.cache-suffix && format('type=gha,mode=max,scope={0}', inputs.cache-suffix) || '' }}
 
     - name: Report free disk
       if: always()
