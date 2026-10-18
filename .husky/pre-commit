@@ -22,9 +22,9 @@ export MSYS_NO_PATHCONV=1
 # cache is a speed aid, never the verdict: it cannot see that a file's
 # imports changed, so push and CI lint the whole tree uncached.
 #
-# Whole-repo checks run at push (.husky/pre-push): type-check of src/ and
-# tests/, full uncached ESLint, TypeDoc validation, markdownlint, circular
-# deps, coupling. Everything else runs in GitHub CI only. Every gate here
+# Whole-repo checks run at push (.husky/pre-push): type-check:test (src/
+# and tests/), type-check:e2e (tests/e2e on its own), full uncached ESLint,
+# TypeDoc validation, markdownlint, circular deps, coupling. Everything else runs in GitHub CI only. Every gate here
 # also runs in CI; tests/hook-ci-parity.test.ts enforces that.
 
 . "$(dirname "$0")/../config/hooks/gate-runner.sh"
@@ -52,7 +52,7 @@ wait_gates \
 echo ""
 echo "==========================================="
 echo "✅ ALL 6 COMMIT-STAGE GATES PASSED. COMMITTING."
-echo "   Push stage (.husky/pre-push) adds: src/ + tests/ type-check,"
-echo "   full uncached ESLint, TypeDoc validation, markdownlint,"
-echo "   circular deps and coupling."
+echo "   Push stage (.husky/pre-push) adds: type-check:test,"
+echo "   type-check:e2e, full uncached ESLint, TypeDoc validation,"
+echo "   markdownlint, circular deps and coupling."
 echo "==========================================="

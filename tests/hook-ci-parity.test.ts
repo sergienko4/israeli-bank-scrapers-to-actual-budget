@@ -13,7 +13,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
@@ -51,6 +50,7 @@ const INVENTORY: readonly IGateRow[] = [
   { script: 'lint:allow-scripts', stages: ['pre-commit'], ciScript: 'lint:allow-scripts' },
   { script: 'lint:pii', stages: ['pre-commit'], ciScript: 'lint:pii' },
   { script: 'type-check:test', stages: ['pre-push'], ciScript: 'type-check:test' },
+  { script: 'type-check:e2e', stages: ['pre-push'], ciScript: 'type-check:e2e' },
   { script: 'docs:check', stages: ['pre-push'], ciScript: 'docs' },
   { script: 'lint', stages: ['pre-push'], ciScript: 'lint' },
   { script: 'lint:docs', stages: ['pre-push'], ciScript: 'lint:docs' },
@@ -140,23 +140,6 @@ function ciScripts(scripts: Record<string, string>): Set<string> {
   return expandScripts(roots, scripts);
 }
 
-/**
- * Resolves a tsconfig the way tsc does.
- * @param relPath - tsconfig path relative to the repository root.
- * @returns The parsed command line.
- */
-function resolveTsconfig(relPath: string): ts.ParsedCommandLine {
-  const host: ts.ParseConfigFileHost = {
-    ...ts.sys,
-    onUnRecoverableConfigFileDiagnostic: (diag) => {
-      throw new Error(ts.flattenDiagnosticMessageText(diag.messageText, '\n'));
-    },
-  };
-  const parsed = ts.getParsedCommandLineOfConfigFile(join(ROOT, relPath), {}, host);
-  if (!parsed) throw new Error(`cannot parse ${relPath}`);
-  return parsed;
-}
-
 const PACKAGE_SCRIPTS = (JSON.parse(readRepoFile('package.json')) as { scripts: Record<string, string> })
   .scripts;
 
@@ -194,22 +177,5 @@ describe('CI coverage of the gate inventory', () => {
     const reached = ciScripts(PACKAGE_SCRIPTS);
     const missing = INVENTORY.filter((row) => !reached.has(row.ciScript));
     expect(missing).toEqual([]);
-  });
-});
-
-describe('tsconfig.e2e.json stays covered by type-check:test', () => {
-  const e2e = resolveTsconfig('tsconfig.e2e.json');
-  const test = resolveTsconfig('tsconfig.test.json');
-
-  it('type-checks no file that tsconfig.test.json leaves out', () => {
-    expect(e2e.fileNames.length).toBeGreaterThan(0);
-    const covered = new Set(test.fileNames);
-    expect(e2e.fileNames.filter((file) => !covered.has(file))).toEqual([]);
-  });
-
-  it('uses the same compiler options as tsconfig.test.json', () => {
-    const { configFilePath: _e2ePath, ...e2eOptions } = e2e.options;
-    const { configFilePath: _testPath, ...testOptions } = test.options;
-    expect(e2eOptions).toEqual(testOptions);
   });
 });

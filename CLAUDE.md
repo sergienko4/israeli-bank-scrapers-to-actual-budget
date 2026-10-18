@@ -35,7 +35,7 @@ This is NOT optional. If you skip this checklist you WILL introduce bugs that Co
 3. Fresh branch: `git checkout main && git pull origin refs/heads/main && git checkout -b task-XX-desc`
 4. **FULL hook cycle (NEVER skip):** just `git commit`, then `git push` — verification is split across two stages:
    - `git commit` → 6 commit-stage gates: incremental type-check (`src/`), ESLint + Biome on staged files, config-structure, allowScripts pins, PII scan
-   - `git push` → 6 push-stage gates: incremental `type-check:test`, TypeDoc validation (`docs:check`), uncached ESLint, markdownlint, circular-dep, coupling
+   - `git push` → 7 push-stage gates: incremental `type-check:test` and `type-check:e2e`, TypeDoc validation (`docs:check`), uncached ESLint, markdownlint, circular-dep, coupling
    - Neither hook uses Docker. Build, `npm audit`, unit tests, Semgrep, Trivy, Docker image build, link-check, mocked + Telegram E2E run in CI only — but a local `docker build` is still required before opening a PR (step 5), because the hooks cannot catch a broken image.
 5. `docker build -t israeli-bank-importer:test .`
 6. Write E2E tests for every new feature — unit tests + E2E tests are BOTH required
@@ -115,7 +115,7 @@ After creating every PR:
 
 - `pr.yml`: build+audit, validate:ci, Docker build, Trivy, CodeQL, SonarCloud, License Compliance, markdownlint+lychee, E2E
 - `.husky/pre-commit`: 6 commit-stage gates (type-check, staged ESLint, staged Biome, config-structure, allowScripts pins, PII scan)
-- `.husky/pre-push`: 6 push-stage gates (type-check:test, docs:check, uncached ESLint, markdownlint, circular-dep, coupling); shared runner in `config/hooks/gate-runner.sh`; `tests/hook-ci-parity.test.ts` requires every hook gate to run in CI
+- `.husky/pre-push`: 7 push-stage gates (type-check:test, type-check:e2e, docs:check, uncached ESLint, markdownlint, circular-dep, coupling); shared runner in `config/hooks/gate-runner.sh`; `tests/hook-ci-parity.test.ts` requires every hook gate to run in CI
 - `release-please.yml`: on push to main → release PR + test count badge
 - `release.yml`: on tag push `v*` → multi-arch build+push → SBOM → enriched notes
 - Ruleset: squash only, required checks: Build+Test, Container Scan, CodeQL Security Scan, Docs Quality, E2E Tests, SonarCloud Analysis, License Compliance

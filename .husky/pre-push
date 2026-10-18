@@ -8,9 +8,11 @@ export MSYS_NO_PATHCONV=1
 # It runs the whole-repo checks that a staged-file commit stage cannot see:
 #
 #   type-check:test  every src/ and tests/ file, incremental (tsbuildinfo
-#                    under node_modules/.cache/tsc). tsconfig.e2e.json is a
-#                    subset of tsconfig.test.json, so this covers e2e too;
-#                    tests/hook-ci-parity.test.ts keeps it that way.
+#                    under node_modules/.cache/tsc).
+#   type-check:e2e   tests/e2e on its own, incremental. Not covered by
+#                    type-check:test: a `/// <reference lib="dom" />` in a
+#                    unit test puts DOM globals into that whole program, so
+#                    an e2e file using `document` passes there and fails here.
 #   lint             full ESLint, no cache. The commit stage lints only the
 #                    staged files, and a typed rule can fail an unchanged
 #                    file when a type it uses changes; this run catches that.
@@ -51,10 +53,11 @@ echo "==========================================="
 gate_init "prepush"
 
 echo ""
-echo "⚡ Running 6 push-stage gates in parallel..."
+echo "⚡ Running 7 push-stage gates in parallel..."
 echo ""
 
 run_gate "1c-typecheck-test" "Type-checking src/ and tests/"      npm run type-check:test
+run_gate "1d-typecheck-e2e"  "Type-checking tests/e2e"            npm run type-check:e2e
 run_gate "3b-typedoc"        "Validating API docs"                npm run docs:check
 run_gate "6-eslint-full"     "Running ESLint (uncached)"          npm run lint
 run_gate "8-markdownlint"    "Linting markdown docs"              npm run lint:docs
@@ -62,12 +65,12 @@ run_gate "15-circular"       "Checking for circular deps in src/" npm run lint:c
 run_gate "18-coupling"       "Checking coupling regression"       npm run coupling:check
 
 wait_gates \
-  "1c-typecheck-test" "3b-typedoc" "6-eslint-full" "8-markdownlint" \
-  "15-circular" "18-coupling"
+  "1c-typecheck-test" "1d-typecheck-e2e" "3b-typedoc" "6-eslint-full" \
+  "8-markdownlint" "15-circular" "18-coupling"
 
 echo ""
 echo "==========================================="
-echo "✅ ALL 6 PUSH-STAGE GATES PASSED. PUSHING."
+echo "✅ ALL 7 PUSH-STAGE GATES PASSED. PUSHING."
 echo "   GitHub CI also runs: build, npm audit, TypeDoc emit,"
 echo "   unit tests + coverage, ESLint canaries, config manifest,"
 echo "   lychee, Semgrep, CodeQL, Trivy, Docker build, E2E."

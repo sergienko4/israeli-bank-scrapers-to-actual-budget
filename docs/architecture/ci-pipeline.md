@@ -553,8 +553,8 @@ a partially staged file is judged by its on-disk content: a bad staged
 version fixed only on disk passes, and a clean staged version with an
 unstaged error blocks. CI judges the committed tree.
 
-`type-check` and `type-check:test` keep TypeScript build info under
-`node_modules/.cache/tsc/`, so a warm run re-checks only what changed and
+`type-check`, `type-check:test` and `type-check:e2e` keep TypeScript build
+info under `node_modules/.cache/tsc/`, so a warm run re-checks only what changed and
 what depends on it. ESLint keeps content caches under
 `node_modules/.cache/eslint/`. The previous `lint:cached` never hit its
 cache: `lint:portal-js` runs ESLint without `--cache`, and ESLint deletes
@@ -562,8 +562,9 @@ the default `.eslintcache` whenever it does.
 
 ### Push stage — `.husky/pre-push`
 
-Answers **"is what leaves this machine correct as a whole?"** — 6 gates:
-`type-check:test` (`src/` and `tests/`, incremental), `docs:check` (TypeDoc
+Answers **"is what leaves this machine correct as a whole?"** — 7 gates:
+`type-check:test` (`src/` and `tests/`, incremental), `type-check:e2e`
+(`tests/e2e` on its own, incremental), `docs:check` (TypeDoc
 validation with `--emit none`), `lint` (uncached ESLint), `lint:docs`
 (markdownlint), `lint:circular`, `coupling:check`.
 
@@ -589,17 +590,19 @@ contention between them. Measured on this repo (minimum of three runs):
 | --- | --- | --- |
 | Commit, 1 staged file, warm caches | 40s | 9s |
 | Commit, 5 staged files, all caches cold | — | 17s |
-| Push, warm caches | 76s | 45s |
+| Push, warm caches | 76s | 43s |
 
 The commit stage now scales with the files being committed rather than with
 `src/`. The push stage's tall pole is the full uncached ESLint run.
 
-The build, `npm audit` and the `tests/e2e` type-check left the push stage.
-The build compiles the sources `type-check` already checks, and audit needs
-the network and reports advisories rather than defects in the change.
-`tsconfig.e2e.json` checks a subset of the files `tsconfig.test.json` does
-with the same options, so `type-check:test` covers it; the parity test pins
-that.
+The build and `npm audit` left the push stage for CI. The build compiles
+the sources `type-check` already checks, and audit needs the network and
+reports advisories rather than defects in the change.
+
+`type-check:e2e` stays separate from `type-check:test`, and now runs in CI
+too. A `/// <reference lib="dom" />` in a unit test adds DOM globals to the
+whole `tsconfig.test.json` program, so that program accepts an e2e file
+that uses `document`; only the e2e program on its own rejects it.
 
 ### Acceptance stage — CI only
 
