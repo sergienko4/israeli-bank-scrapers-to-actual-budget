@@ -36,12 +36,22 @@ function normalise(path: string): string {
 }
 
 /**
+ * Splits text into trimmed, non-blank lines, whether it uses LF or CRLF.
+ * @param text - Dockerfile or .dockerignore text.
+ * @returns Lines without surrounding whitespace.
+ */
+function trimmedLines(text: string): string[] {
+  return text.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '');
+}
+
+/**
  * Lists the build-context sources of every COPY that does not read from a stage.
  * @param dockerfile - Dockerfile text.
  * @returns Source paths, one per copied file or directory.
  */
 function contextCopySources(dockerfile: string): string[] {
-  const copies = dockerfile.split('\n').filter((line) => /^COPY\s/.test(line) && !line.includes('--from='));
+  const instructions = trimmedLines(dockerfile.replace(/\\\r?\n/g, ' '));
+  const copies = instructions.filter((line) => /^COPY\s/.test(line) && !line.includes('--from='));
   return copies.flatMap((line) => {
     const operands = line.split(/\s+/).slice(1).filter((token) => !token.startsWith('--'));
     return operands.slice(0, -1).map(normalise);
@@ -49,13 +59,12 @@ function contextCopySources(dockerfile: string): string[] {
 }
 
 /**
- * Lists the paths a `*`-first .dockerignore re-includes with `!` rules.
+ * Lists the active rules of a .dockerignore, in order.
  * @param dockerignore - .dockerignore text.
- * @returns Re-included paths.
+ * @returns Rules without comments and blank lines.
  */
-function reincludedPaths(dockerignore: string): string[] {
-  const rules = dockerignore.split('\n').map((line) => line.trim());
-  return rules.filter((rule) => rule.startsWith('!')).map((rule) => normalise(rule.slice(1)));
+function ignoreRules(dockerignore: string): string[] {
+  return trimmedLines(dockerignore).filter((line) => !line.startsWith('#'));
 }
 
 describe('published image stage layout', () => {
@@ -68,13 +77,13 @@ describe('published image stage layout', () => {
   });
 
   it('sends every COPY source through the build-context allowlist', () => {
-    const dockerignore = readFileSync(DOCKERIGNORE, 'utf8');
-    const allowed = reincludedPaths(dockerignore);
+    const rules = ignoreRules(readFileSync(DOCKERIGNORE, 'utf8'));
+    const allowed = rules.filter((rule) => rule.startsWith('!')).map((rule) => normalise(rule.slice(1)));
     const sources = contextCopySources(readFileSync(DOCKERFILE, 'utf8'));
 
     const blocked = sources.filter((source) => !allowed.some((path) => source === path || source.startsWith(`${path}/`)));
 
-    expect(dockerignore.split('\n')).toContain('*');
+    expect(rules[0]).toBe('*');
     expect(sources).not.toHaveLength(0);
     expect(blocked).toEqual([]);
   });
