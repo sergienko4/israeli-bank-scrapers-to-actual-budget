@@ -66,8 +66,8 @@ function installDir(input: IFontGuardInput): string {
 
 /**
  * Reports whether a path is an existing directory. A path that cannot be
- * inspected counts as absent, so an unreadable install starts as it did
- * before the guard instead of crashing on it.
+ * inspected counts as absent instead of crashing the guard: the browser runs
+ * as the same user, so it could not read that path either.
  * @param target - Path to check.
  * @returns True only for a directory.
  */
@@ -103,7 +103,8 @@ function describeMissing(missing: IMissingFonts): string {
   const reinstall = `${head} fonts for any OS. Reinstall the pinned Camoufox build.`;
   if (available.length === 0) return reinstall;
   const choices = available.join(', ');
-  return `${head} ${missing.os} fonts. Unset CAMOUFOX_OS or set it to one of: ${choices}.`;
+  const remedy = available.includes(DEFAULT_OS) ? 'Unset CAMOUFOX_OS or set it' : 'Set CAMOUFOX_OS';
+  return `${head} ${missing.os} fonts. ${remedy} to one of: ${choices}.`;
 }
 
 /**
@@ -117,9 +118,10 @@ function processFacts(): IFontGuardInput {
 /**
  * Checks that the install has the fonts for the OS the browser will spoof.
  *
- * Only the Linux install layout, the one the image uses, is checked. A
- * missing install or fonts directory passes, so a host without the browser
- * starts exactly as before.
+ * Only the Linux install layout, the one the image uses, is checked. A host
+ * without the browser install starts exactly as before; an install that is
+ * present needs a readable font set for the spoofed OS, even when its whole
+ * fonts directory is gone, because the browser would still launch.
  * @param input - Process facts; the running process when omitted.
  * @returns The resolved OS, or a failure carrying the operator message.
  */
@@ -130,7 +132,7 @@ export default function checkCamoufoxFonts(
   if (input.platform !== 'linux') return succeed({ os: spoofed });
   const installRoot = installDir(input);
   const fontsDir = path.join(installRoot, 'fonts');
-  const isSatisfied = !isDirectory(fontsDir) || hasFontSet(fontsDir, spoofed);
+  const isSatisfied = !isDirectory(installRoot) || hasFontSet(fontsDir, spoofed);
   if (isSatisfied) return succeed({ os: spoofed });
   const message = describeMissing({ raw: input.env.CAMOUFOX_OS, os: spoofed, fontsDir });
   return fail(message);

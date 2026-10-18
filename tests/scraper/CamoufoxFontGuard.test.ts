@@ -113,6 +113,14 @@ describe('checkCamoufoxFonts', () => {
     expect(failureOf({ CAMOUFOX_OS: 'macos' }).endsWith('one of: linux, windows.')).toBe(true);
   });
 
+  it('does not suggest unsetting CAMOUFOX_OS when the default Windows set is missing too', () => {
+    const fontsDir = installFonts(join(home, '.cache', 'camoufox'), ['linux']);
+
+    expect(failureOf({})).toBe(
+      `Camoufox font check failed: CAMOUFOX_OS=(unset) selects the windows fingerprint, but ${fontsDir} has no windows `
+      + 'fonts. Set CAMOUFOX_OS to one of: linux.');
+  });
+
   it('asks for a reinstall when the fonts directory holds no OS set, naming an unset value plainly', () => {
     const fontsDir = installFonts(join(home, '.cache', 'camoufox'), []);
 
@@ -128,13 +136,21 @@ describe('checkCamoufoxFonts', () => {
     expect(check({ CAMOUFOX_OS: 'linux' }).success).toBe(true);
   });
 
-  it.skipIf(process.getuid?.() === 0)('leaves startup unchanged when the install cannot be read', () => {
+  it('stops an install whose fonts directory is gone, since the browser would launch with fallback fonts', () => {
+    const installDir = join(home, '.cache', 'camoufox');
+    mkdirSync(installDir, { recursive: true });
+    writeFileSync(join(installDir, 'camoufox-bin'), '');
+
+    expect(failureOf({})).toContain(`but ${join(installDir, 'fonts')} has no fonts for any OS. Reinstall`);
+  });
+
+  it.skipIf(process.getuid?.() === 0)('stops an install whose fonts its user cannot read', () => {
     const installDir = join(home, '.cache', 'camoufox');
     installFonts(installDir, ['windows']);
     chmodSync(installDir, 0o000);
 
     try {
-      expect(check({ CAMOUFOX_OS: 'linux' }).success).toBe(true);
+      expect(failureOf({})).toContain('has no fonts for any OS');
     } finally {
       chmodSync(installDir, 0o755);
     }
