@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.44.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.44.0...v1.44.1) (2026-10-24)
+
+
+### Fixed
+
+* **deps:** bump @fastify/static from 10.1.6 to 10.1.7 ([#798](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/798)) ([36bfdc0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/36bfdc0c7e5783881e9e31f3da6623db6dbfcb9c))
+* **deps:** patch undici and fast-uri advisories ([#807](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/807)) ([c59a032](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c59a03221525c53181c2095b447bbf1ec064c4f7))
+* **deps:** refresh 26 runtime and 35 dev lockfile pins ([#811](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/811)) ([48d3b99](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/48d3b99413c98a7d1e8944c5e43947b82be389e1))
+* never send a token another entry retired ([#810](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/810)) ([606b247](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/606b247be32f9732a66984f604360f084bd86c83))
+* stop resending a long-term token that failed ([#806](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/806)) ([5537527](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/5537527a78ca2dd820e77d871e30398ce024400a))
+
+
+### Testing
+
+* check docs links are absolute and resolve ([#809](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/809)) ([bafc8e1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/bafc8e1664004262db6a68a8fbcbdb1989a45857))
+* fix dead default-parameters canary ([#812](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/812)) ([530308a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/530308af733756be0cbef91d35179e29ce8e39fa))
+
 ## [1.44.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.8...v1.44.0) (2026-10-18)
 
 
