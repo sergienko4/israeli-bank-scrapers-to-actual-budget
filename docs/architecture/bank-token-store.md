@@ -71,7 +71,7 @@ missing entry name falls back to `bankId` alone.
 Pepper's device state is stored under its own bank id, `pepper-device`, so it
 never shares a key with the long-term token an earlier release saved under
 `pepper:<entry name>`. That legacy entry stays in the file, unsent; see
-[Pepper device state](#pepper-device-state).
+[Pepper device state](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#pepper-device-state).
 
 The entry name is used verbatim, and the key is stored verbatim: normalising
 either would put two accounts on one entry, and because each mint revokes the
@@ -172,7 +172,7 @@ why a run went cold. Swallowing it would make a broken store
 indistinguishable from a first run.
 
 With a password set, an entry is usable only if it opens
-([At rest](#at-rest)), and the rules below apply to the opened record. An
+([At rest](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#at-rest)), and the rules below apply to the opened record. An
 entry is usable when `token` is an own string that is non-blank once
 trimmed and `login` is a fingerprint. A token bound to two different logins
 makes every entry holding it unusable, since none of the bindings can be
@@ -227,10 +227,10 @@ failure names the key and the cause, never the token
 (`Could not remove the long-term token for <key>: <cause>`).
 
 Pepper's device state is removed after Pepper refused it; see
-[Pepper device state](#pepper-device-state). A long-term token the bank
+[Pepper device state](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#pepper-device-state). A long-term token the bank
 refuses is replaced by the next SMS login instead. The exception is a token
 that ends a run with the one-SMS-login error, which is retired; see
-[Refused tokens](#refused-tokens).
+[Refused tokens](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens).
 
 `removeMatching(storeKey, digest)` is the compare-and-remove that retirement
 uses. Within one read of the file, it digests the entry's stored token and
@@ -252,7 +252,7 @@ also sweep afterwards. [Wiring](https://github.com/sergienko4/israeli-bank-scrap
 
 `buildScrapeStrategy` in `src/Importer/PipelineComposition.ts` builds one
 store per import process and hands it to the live strategy, together with the
-[refused-token registry](#refused-tokens).
+[refused-token registry](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens).
 `openBankTokenStore` in `src/Importer/BankTokenStoreWiring.ts` reads the
 config password once and gives the store a sealing cipher, or the plain-text
 one when no password is set. Building either touches no file and derives no
@@ -315,7 +315,7 @@ browser banks never read it. The order is:
    `Using the stored long-term token for <key>`). When it is bound to another
    login, the entry's email or phone number changed since it was minted: no
    token is sent, and the configured one is not consulted either, since it is
-   at least as old (INFO). When it was [retired](#refused-tokens), a WARN, and
+   at least as old (INFO). When it was [retired](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens), a WARN, and
    the attempt goes on to step 2 as if the store held none;
 2. when the store holds none for the entry, the configured
    `otpLongTermToken`, only if it is non-blank text, the file is intact,
@@ -351,7 +351,7 @@ sent, since the resolver has already said why. A stale token takes neither
 path: upstream spends the run's one cold login at once, and when that login
 fails its second one is refused, so the attempt fails as `GENERIC` with
 `already spent its one cold SMS login`, which the error advice explains, and
-`settleToken` [retires](#refused-tokens) the token.
+`settleToken` [retires](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens) the token.
 
 The attempt's login fingerprint is computed once, in
 `buildTokenCaptureParams`, so the resolver and the capture use the same login,
@@ -467,7 +467,7 @@ shared with the error advice in `ScraperErrorMessages.ts`. The watch carries
 the token's source and digest, never the token. Then:
 
 1. `refuse(storeKey, digest)` records the digest;
-2. for a stored token, [`removeMatching`](#removing) removes it, unless the
+2. for a stored token, [`removeMatching`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#removing) removes it, unless the
    entry now holds a token minted since the attempt read the store;
 3. a WARN says the token is retired, or, when step 1 failed, that it could not
    be retired and to remove `otpLongTermToken`. Any store failure warns with
@@ -479,7 +479,7 @@ sends no long-term token, so nothing is retired for it.
 
 **Reading.** The resolver reads the entry's refusals once per attempt, and
 checks the stored and the configured token against that one snapshot; see
-[Replay](#replay). The file is in one of three states:
+[Replay](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#replay). The file is in one of three states:
 
 - **absent or intact:** the recorded digests are skipped. An intact entry is
   a list of at most 8 distinct digests, each 64 lowercase hex characters;
