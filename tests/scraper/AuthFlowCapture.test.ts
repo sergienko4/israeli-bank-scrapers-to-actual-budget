@@ -27,7 +27,8 @@ import { STALE_STAGING_AGE_MS } from '../../src/Storage/SecureJsonStore.js';
 import { NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
 import { fakeLoginFingerprint, fakeUuid } from '../helpers/factories.js';
 import {
-  ACCOUNT_LOGIN, CAPTURED_AT, fakeToken, makeStore, seedRecords, STORE_PATH, storedRecords,
+  ACCOUNT_LOGIN, CAPTURED_AT, fakeToken, makeRefusals, makeStore, REFUSED_PATH, seedRecords,
+  STORE_PATH, storedRecords,
 } from './BankTokenStoreFixture.js';
 
 /** The key a `oneZero` config entry resolves to. */
@@ -87,7 +88,10 @@ function throwingStore(): IBankTokenStore {
   const explode = (): never => {
     throw new Error('EIO: i/o error');
   };
-  return { read: explode, write: explode, remove: explode, sweepStagedLeftovers: explode };
+  return {
+    read: explode, write: explode, remove: explode, removeMatching: explode,
+    sweepStagedLeftovers: explode,
+  };
 }
 
 /**
@@ -260,6 +264,30 @@ describe('sweepTokenLeftovers', () => {
     expect(sweepTokenLeftovers(params)).toBe(true);
     expect(fileSystem.hasEntry(abandoned)).toBe(false);
     expect(String(params.logger.info.mock.calls[0]?.[0])).toContain('beside the token store');
+  });
+
+  it('sweeps the refused-token file when that is the store it is given, naming it', () => {
+    const { store, fileSystem } = makeStore();
+    const abandoned = `${REFUSED_PATH}.${fakeUuid()}.tmp`;
+    fileSystem.seedFile(abandoned, '{}', 0o600);
+    fileSystem.setModifiedAt(abandoned, Date.now() - STALE_STAGING_AGE_MS - 1);
+    const params = captureFor(store);
+    const refused = { label: 'refused-token', store: makeRefusals(fileSystem) };
+    expect(sweepTokenLeftovers(params, refused)).toBe(true);
+    expect(fileSystem.hasEntry(abandoned)).toBe(false);
+    expect(params.logger.info).toHaveBeenCalledWith(
+      '  🧹 Removed 1 abandoned staged files beside the refused-token store',
+    );
+  });
+
+  it('names the refused-token files when their sweep fails', () => {
+    const { store, fileSystem } = makeStore();
+    fileSystem.forcedFailures.set('listNames', 'EACCES');
+    const params = captureFor(store);
+    const refused = { label: 'refused-token', store: makeRefusals(fileSystem) };
+    expect(sweepTokenLeftovers(params, refused)).toBe(false);
+    expect(String(params.logger.warn.mock.calls[0]?.[0]))
+      .toContain('Could not sweep staged refused-token files: ');
   });
 
   it('stays quiet when there is nothing to sweep', () => {

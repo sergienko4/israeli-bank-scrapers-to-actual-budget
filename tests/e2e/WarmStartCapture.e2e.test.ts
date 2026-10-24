@@ -214,6 +214,19 @@ describe('E2E: long-term token capture', () => {
     expect(existsSync(leftover)).toBe(false);
   });
 
+  it('clears a staged refused-token file a killed run left behind', async () => {
+    const leftover = join(store.directory, `bank-tokens.refused.json.${fakeUuid()}.tmp`);
+    writeFileSync(leftover, '{}', { mode: OWNER_ONLY });
+    const staleSeconds = (Date.now() - STALE_STAGING_AGE_MS) / 1000 - 60;
+    utimesSync(leftover, staleSeconds, staleSeconds);
+    providerWill(provider.createScraper, { result: scrapedAccount() });
+
+    const { logger } = await runImport();
+
+    expect(existsSync(leftover)).toBe(false);
+    expect(everythingLogged(logger)).toContain('abandoned staged files beside the refused-token store');
+  });
+
   it('leaves the token store alone for a browser bank', async () => {
     providerWill(provider.createScraper, { result: scrapedAccount() });
 

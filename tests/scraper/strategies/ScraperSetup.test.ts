@@ -25,11 +25,12 @@ import type {
 } from '../../../src/Scraper/Strategies/Live/Types.js';
 import type { IBankTokenStore } from '../../../src/Scraper/Tokens/BankTokenStore.js';
 import loginFingerprint from '../../../src/Scraper/Tokens/LoginFingerprint.js';
+import tokenDigest from '../../../src/Scraper/Tokens/TokenDigest.js';
 import type { IBankConfig } from '../../../src/Types/Index.js';
 import {
   fakeImporterConfig, fakeLoginFingerprint, fakeValidBankConfigFor,
 } from '../../helpers/factories.js';
-import { fakeToken, makeStore } from '../BankTokenStoreFixture.js';
+import { fakeToken, makeRefusals, makeStore } from '../BankTokenStoreFixture.js';
 
 vi.mock('@sergienko4/israeli-bank-scrapers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@sergienko4/israeli-bank-scrapers')>();
@@ -233,7 +234,8 @@ describe('ScraperSetup', () => {
      */
     const liveDeps = (store: IBankTokenStore): ILiveScrapeDependencies =>
       ({
-        config: fakeImporterConfig(), bankTokens: store, twoFactorPrompter: null,
+        config: fakeImporterConfig(), bankTokens: store, refusedTokens: makeRefusals(),
+        twoFactorPrompter: null,
       }) as unknown as ILiveScrapeDependencies;
 
     /** The config entry name every attempt here comes from. */
@@ -294,7 +296,9 @@ describe('ScraperSetup', () => {
      */
     const readCountingStore = (): { store: IBankTokenStore; read: ReturnType<typeof vi.fn> } => {
       const read = vi.fn();
-      const store = { read, write: vi.fn(), remove: vi.fn(), sweepStagedLeftovers: vi.fn() };
+      const store = {
+        read, write: vi.fn(), remove: vi.fn(), removeMatching: vi.fn(), sweepStagedLeftovers: vi.fn(),
+      };
       return { store: store as unknown as IBankTokenStore, read };
     };
 
@@ -332,6 +336,29 @@ describe('ScraperSetup', () => {
       const { credentials } = initScrape(deps, opts);
 
       expect(credentials).toHaveProperty('otpLongTermToken', renewed);
+    });
+
+    it('tags the attempt\'s watch with the digest of the token it sent', () => {
+      const opts = liveOpts(oneZero());
+      const deps = liveDeps(makeStore().store);
+      const stored = storeOwnToken(deps, opts);
+
+      const { tokenWatch } = initScrape(deps, opts);
+
+      expect(tokenWatch.decision).toEqual({ source: 'stored', digest: tokenDigest(stored) });
+    });
+
+    it('skips a stored token the strategy\'s refusals name, and tags the watch as sending none', () => {
+      const opts = liveOpts(oneZero());
+      const deps = liveDeps(makeStore().store);
+      const stored = storeOwnToken(deps, opts);
+      const digest = tokenDigest(stored);
+      deps.refusedTokens.refuse(ownKey(opts), digest);
+
+      const { credentials, tokenWatch } = initScrape(deps, opts);
+
+      expect(credentials).not.toHaveProperty('otpLongTermToken');
+      expect(tokenWatch.decision).toEqual({ source: 'none' });
     });
 
     it('never reads the token store for a browser bank', () => {

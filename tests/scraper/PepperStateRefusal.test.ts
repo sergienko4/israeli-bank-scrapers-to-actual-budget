@@ -324,7 +324,9 @@ describe('forgetRefusedState', () => {
 
     it('never touches the store for another bank', () => {
       const remove = vi.fn<IBankTokenStore['remove']>();
-      const store: IBankTokenStore = { read: vi.fn(), write: vi.fn(), remove, sweepStagedLeftovers: vi.fn() };
+      const store: IBankTokenStore = {
+        read: vi.fn(), write: vi.fn(), remove, removeMatching: vi.fn(), sweepStagedLeftovers: vi.fn(),
+      };
       const watch: IDeviceStateWatch = {
         params: { storeKey: DEVICE_KEY, companyType: CompanyTypes.OneZero, login: ACCOUNT_LOGIN, store, logger: spyLogger() },
         didSendState: false,
@@ -343,7 +345,9 @@ describe('forgetRefusedState', () => {
      */
     function sentOver(remove: IBankTokenStore['remove']): { readonly watch: IDeviceStateWatch; readonly logger: SpyLogger } {
       const logger = spyLogger();
-      const store: IBankTokenStore = { read: vi.fn(), write: vi.fn(), remove, sweepStagedLeftovers: vi.fn() };
+      const store: IBankTokenStore = {
+        read: vi.fn(), write: vi.fn(), remove, removeMatching: vi.fn(), sweepStagedLeftovers: vi.fn(),
+      };
       const params = { storeKey: DEVICE_KEY, companyType: CompanyTypes.Pepper, login: ACCOUNT_LOGIN, store, logger };
       return { watch: { params, didSendState: true }, logger };
     }

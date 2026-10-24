@@ -17,6 +17,7 @@ import {
 import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
 import loginFingerprint from '../../Tokens/LoginFingerprint.js';
 import { attachDeviceAuth } from '../../Tokens/PepperDeviceState.js';
+import type { AttemptLogin } from './AttemptLogin.js';
 import credentialsFor from './AttemptLogin.js';
 import { BrowserRegistry } from './BrowserRegistry.js';
 import { resolveOtpRetriever } from './OtpRetriever.js';
@@ -43,7 +44,8 @@ type ProviderScraper = ILiveProviderScraper;
  * the banks the token capture skips, since the API-direct ones read it from
  * the credentials.
  * The capture and the token resolver share one parameter bundle, so the
- * token an attempt sends is read under the key and login it is stored under.
+ * token an attempt sends is read under the key and login it is stored under;
+ * the resolver also reads the tokens that were not accepted before.
  * @param deps - Strategy dependencies captured by the public facade.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @returns Configured provider scraper and credentials, the watches on the
@@ -57,7 +59,7 @@ export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLi
   const hooks = attachLoginHooks(options, captureParams, { scrapeOpts, retriever });
   const browsers = captureBrowsers(options);
   const scraper = prepareScraper(scrapeOpts, options);
-  const login = credentialsFor(captureParams, scrapeOpts.bankConfig, retriever);
+  const login = attemptLoginOf(deps, { scrapeOpts, retriever }, captureParams);
   return { scraper, ...login, browsers, ...hooks };
 }
 
@@ -65,6 +67,21 @@ export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLi
 interface ILoginHookSource {
   readonly scrapeOpts: LiveOpts;
   readonly retriever: OtpRetriever;
+}
+
+/**
+ * Builds the credentials one attempt logs in with, reading its token and the
+ * tokens that were not accepted before.
+ * @param deps - Strategy dependencies exposing the refused-token list.
+ * @param source - The attempt's options and OTP retriever.
+ * @param captureParams - Account key, login, store and logger for this attempt.
+ * @returns The attempt's credentials and the watch on the token they carry.
+ */
+function attemptLoginOf(
+  deps: LiveDeps, source: ILoginHookSource, captureParams: IAuthFlowCaptureParams,
+): AttemptLogin {
+  const context = { capture: captureParams, refusals: deps.refusedTokens };
+  return credentialsFor(context, source.scrapeOpts.bankConfig, source.retriever);
 }
 
 /**

@@ -46,12 +46,19 @@ import type { IBankTokenRecord } from './BankTokenRecords.js';
 import {
   isLoginFingerprint, NO_LOGIN, NO_RECORD, readTokenRecords, toStoreRecords,
 } from './BankTokenRecords.js';
+import tokenDigest from './TokenDigest.js';
 import { type ITokenRecordCipher, PLAINTEXT_TOKEN_CIPHER } from './TokenRecordCipher.js';
 
 /** Outcome of a write: whether the file on disk was replaced. */
 export interface IBankTokenWrite {
   readonly written: boolean;
 }
+
+/**
+ * What a compare-and-remove found: the token was `retired`, the entry held
+ * no usable token (`absent`), or it now holds a different one (`changed`).
+ */
+export type TokenRetirement = 'retired' | 'absent' | 'changed';
 
 /**
  * What the file says about one bank account, for deciding which token to send.
@@ -104,6 +111,14 @@ export interface IBankTokenStore {
    * @returns Whether the file was replaced, or why it was not.
    */
   remove: (storeKey: string) => Procedure<IBankTokenWrite>;
+
+  /**
+   * Deletes one bank account's entry only while it still holds a given token.
+   * @param storeKey - Opaque key identifying one bank account.
+   * @param digest - Digest of the token to retire; never the token itself.
+   * @returns What the entry held, or why the file could not be read or replaced.
+   */
+  removeMatching: (storeKey: string, digest: string) => Procedure<TokenRetirement>;
 
   /**
    * Deletes staged token files an earlier run was killed before cleaning up.
@@ -298,11 +313,28 @@ export default class BankTokenStore implements IBankTokenStore {
     const loaded = this.load();
     if (!loaded.success) return tokenNotChanged('remove', storeKey, loaded);
     if (!loaded.data.tokens.has(storeKey)) return succeed({ written: false });
-    const tokens = new Map(loaded.data.tokens);
-    tokens.delete(storeKey);
-    const committed = this.commitTokens(tokens, loaded.data.isIntact);
-    if (!committed.success) return tokenNotChanged('remove', storeKey, committed);
-    return committed;
+    return this.drop(loaded.data, storeKey);
+  }
+
+  /**
+   * Deletes one account's entry only while it still holds the given token.
+   *
+   * <p>The comparison and the removal share one read, so a token minted after
+   * the caller decided to retire the old one is never deleted. The removal
+   * replaces the file exactly as {@link remove} does.
+   * @param storeKey - Opaque key identifying one bank account.
+   * @param digest - Digest of the token to retire; never the token itself.
+   * @returns What the entry held, or why the file could not be read or replaced.
+   */
+  public removeMatching(storeKey: string, digest: string): Procedure<TokenRetirement> {
+    const loaded = this.load();
+    if (!loaded.success) return tokenNotChanged('remove', storeKey, loaded);
+    const record = loaded.data.tokens.get(storeKey);
+    if (record === undefined) return succeed('absent');
+    if (tokenDigest(record.token) !== digest) return succeed('changed');
+    const dropped = this.drop(loaded.data, storeKey);
+    if (!dropped.success) return dropped;
+    return succeed('retired');
   }
 
   /**
@@ -356,6 +388,20 @@ export default class BankTokenStore implements IBankTokenStore {
     tokens.set(storeKey, { ...binding, capturedAt: now.toISOString() });
     const committed = this.commitTokens(tokens, loaded.isIntact);
     if (!committed.success) return tokenNotChanged('store', storeKey, committed);
+    return committed;
+  }
+
+  /**
+   * Replaces the file with one account's entry taken out.
+   * @param loaded - Tokens read from the file, holding the entry.
+   * @param storeKey - Opaque key identifying one bank account.
+   * @returns Confirmation of the write, or why it did not happen.
+   */
+  private drop(loaded: ILoadedTokens, storeKey: string): Procedure<IBankTokenWrite> {
+    const tokens = new Map(loaded.tokens);
+    tokens.delete(storeKey);
+    const committed = this.commitTokens(tokens, loaded.isIntact);
+    if (!committed.success) return tokenNotChanged('remove', storeKey, committed);
     return committed;
   }
 

@@ -79,6 +79,15 @@ export interface IFailureSignature {
 }
 
 /**
+ * The scraper's refusal of a second cold SMS login in one scrape (8.7.3+).
+ *
+ * Shared with token retirement, so the operator advice and the retirement
+ * decision always match the same wording. It has no `g` flag, so `test()`
+ * keeps no state between calls.
+ */
+export const BUDGET_SPENT_PATTERN = /already spent its one cold SMS login/iu;
+
+/**
  * Upstream failures whose own message points the reader at the wrong cause.
  *
  * OCP: add a signature here rather than teaching call sites about bank quirks.
@@ -115,14 +124,18 @@ export const UPSTREAM_FAILURE_SIGNATURES: readonly IFailureSignature[] = [
     },
   },
   {
-    // scraper 8.7.3 allows one SMS login per scrape. When a run needs a second
-    // one (a session repair when its first login produced no session), the
-    // scraper refuses and fails as GENERIC. The fix is a new run, not a
-    // scraper update.
-    pattern: /already spent its one cold SMS login/iu,
+    // scraper 8.7.3 allows one SMS login per scrape. A run that sends a
+    // long-term token falls back to a second cold login when the first fails,
+    // and the scraper refuses that second one. The refusal replaces the real
+    // failure, and running again with the same token fails the same way.
+    pattern: BUDGET_SPENT_PATTERN,
     advice: {
-      message: 'This run already used its one SMS login and will not send a second code',
-      action: 'Run the import again — the new run may ask for one new code',
+      message: 'The login failed, and the scraper hid the real reason behind its '
+        + 'one-SMS-login limit',
+      action: 'The importer tries to retire any long-term token this run sent, so the '
+        + 'next run logs in without it and either asks for one SMS code or shows the real '
+        + 'reason. If this repeats, remove otpLongTermToken for this bank and keep '
+        + 'twoFactorAuth on',
     },
   },
 ];

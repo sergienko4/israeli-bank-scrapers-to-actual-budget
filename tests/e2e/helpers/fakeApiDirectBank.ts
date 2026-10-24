@@ -16,6 +16,10 @@
  *       as upstream's `jwtClaims` rule decides; an unreadable token is stale;</li>
  *   <li>a stale token spends the run's one cold login at once, so when that
  *       login fails the run ends with upstream's one-login budget failure;</li>
+ *   <li>a case can make the bank refuse to send the SMS code
+ *       (`otp/prepare` 429). Upstream then tries a second cold login when the
+ *       credentials carry a token, so the budget failure hides the 429; with
+ *       no token the 429 itself is reported;</li>
  *   <li>a warm login opens the account the token belongs to, whatever login
  *       sent it, because a Pepper or PayBox token logs in by itself;</li>
  *   <li>like upstream, it reports the token it holds through
@@ -85,6 +89,12 @@ export interface IFakeApiDirectBank {
    * @returns Nothing.
    */
   readonly rejectNextCode: () => void;
+  /**
+   * Refuses to send the SMS code of cold logins, before the code is asked for.
+   * @param times - How many coming cold logins it refuses; every one unless given.
+   * @returns Nothing.
+   */
+  readonly refuseCodeRequests: (times?: number) => void;
 }
 
 /** A logged-in session: whose account it is, and the token the bank now honours for it. */
@@ -108,10 +118,18 @@ interface IBankState {
   readonly clock: { now: number };
   /** How many coming cold logins get their SMS code rejected. */
   readonly codeRejections: { left: number };
+  /** How many coming cold logins the bank refuses to send an SMS code for. */
+  readonly codeRequestRefusals: { left: number };
 }
 
 /** What a cold login answers when the bank rejects its SMS code. */
 const CODE_REJECTED = 'code-rejected';
+
+/** What a cold login answers when the bank refuses to send its SMS code. */
+const CODE_NOT_SENT = 'code-not-sent';
+
+/** How a cold login that ended before the session fails. */
+type ColdFailure = typeof CODE_REJECTED | typeof CODE_NOT_SENT | undefined;
 
 /** Upstream's failure when a run needs a second cold login (`BUDGET_SPENT_MESSAGE`). */
 const BUDGET_SPENT_MESSAGE = 'this scrape has already spent its one cold SMS login; '
@@ -222,13 +240,17 @@ function warmSession(state: IBankState, token: string | undefined): ISession | u
  * @param state - The bank's memory.
  * @param credentials - What the importer sent.
  * @param account - The customer the login fields name.
- * @returns The new session, {@link CODE_REJECTED}, or undefined when the login cannot ask for a code.
+ * @returns The new session, how the login failed, or undefined when it cannot ask for a code.
  */
 async function coldSession(
   state: IBankState, credentials: ScraperCredentials, account: string,
-): Promise<ISession | typeof CODE_REJECTED | undefined> {
+): Promise<ISession | ColdFailure> {
   const retriever = retrieverIn(credentials);
   if (retriever === undefined) return undefined;
+  if (state.codeRequestRefusals.left > 0) {
+    state.codeRequestRefusals.left -= 1;
+    return CODE_NOT_SENT;
+  }
   await retriever();
   if (state.codeRejections.left === 0) return { account, token: mint(state, account) };
   state.codeRejections.left -= 1;
@@ -236,21 +258,34 @@ async function coldSession(
 }
 
 /**
+ * Names the failure a bank's refusal to send an SMS code reads as.
+ * @param bank - The bank.
+ * @returns Upstream's wording of the `otp/prepare` 429.
+ */
+export function codeRequestRefusalOf(bank: IApiDirectBank): string {
+  return `POST https://${bank.bankId}.example/otp/prepare 429: {"error":"too many requests"}`;
+}
+
+/**
  * Reports a failed cold login the way upstream does.
  *
  * <p>Upstream refuses a stale token itself and spends the run's one cold login
  * at once. When that login fails, it tries a second one, which the budget
- * refuses, so the run ends with the budget's failure instead.
+ * refuses, so the run ends with the budget's failure instead. A refused code
+ * request fails before the code is asked for, so upstream tries that second
+ * login after any token, stale or not.
  * @param state - The bank's memory.
  * @param token - The long-term token the login sent, if any.
  * @param failure - How the cold login failed.
  * @returns The failure upstream reports.
  */
 function coldFailure(
-  state: IBankState, token: string | undefined, failure: typeof CODE_REJECTED | undefined,
+  state: IBankState, token: string | undefined, failure: ColdFailure,
 ): IScraperScrapingResult {
-  const isStaleSeed = token !== undefined && token !== '' && !isFresh(state, token);
-  if (isStaleSeed) return refused('GENERIC', BUDGET_SPENT_MESSAGE);
+  const hasToken = token !== undefined && token !== '';
+  if (hasToken && failure === CODE_NOT_SENT) return refused('GENERIC', BUDGET_SPENT_MESSAGE);
+  if (failure === CODE_NOT_SENT) return refused('GENERIC', codeRequestRefusalOf(state.bank));
+  if (hasToken && !isFresh(state, token)) return refused('GENERIC', BUDGET_SPENT_MESSAGE);
   if (failure === undefined) return refused('TWO_FACTOR_RETRIEVER_MISSING', 'no SMS code retriever');
   return refused('INVALID_OTP', 'wrong SMS code');
 }
@@ -301,7 +336,7 @@ async function scrape(
   const account = customerOf(state, credentials);
   if (account === undefined) return refused('INVALID_PASSWORD', 'unknown login');
   const session = warmSession(state, token) ?? await coldSession(state, credentials, account);
-  if (session === undefined || session === CODE_REJECTED) return coldFailure(state, token, session);
+  if (session === undefined || typeof session === 'string') return coldFailure(state, token, session);
   await options.onAuthFlowComplete?.({ longTermToken: session.token, bearer: `bearer-${fakeUuid()}` });
   return scrapeOf(session);
 }
@@ -393,6 +428,12 @@ function controlsOf(state: IBankState): IFakeApiDirectBank {
      * @returns Nothing.
      */
     rejectNextCode: (): void => { state.codeRejections.left += 1; },
+    /**
+     * Refuses to send the SMS code of cold logins.
+     * @param times - How many coming cold logins it refuses; every one unless given.
+     * @returns Nothing.
+     */
+    refuseCodeRequests: (times = Number.POSITIVE_INFINITY): void => { state.codeRequestRefusals.left += times; },
   };
 }
 
@@ -405,7 +446,7 @@ function controlsOf(state: IBankState): IFakeApiDirectBank {
 export function openApiDirectBank(createScraper: Mock, bank: IApiDirectBank): IFakeApiDirectBank {
   const state: IBankState = {
     bank, sent: [], minted: [], customers: new Map(), ownerOf: new Map(), latestOf: new Map(),
-    clock: { now: Math.floor(Date.now() / 1000) }, codeRejections: { left: 0 },
+    clock: { now: Math.floor(Date.now() / 1000) }, codeRejections: { left: 0 }, codeRequestRefusals: { left: 0 },
   };
   createScraper.mockImplementation((options: ScraperOptions) => ({
     /**

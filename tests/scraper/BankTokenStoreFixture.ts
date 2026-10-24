@@ -6,7 +6,9 @@
  * exercised once, in `BankTokenStoreOnRealFs.test.ts`.
  */
 
+import { refusedTokensPathOf } from '../../src/Scraper/Tokens/BankTokenPath.js';
 import BankTokenStore from '../../src/Scraper/Tokens/BankTokenStore.js';
+import RefusedTokens from '../../src/Scraper/Tokens/RefusedTokens.js';
 import type { ITokenRecordCipher } from '../../src/Scraper/Tokens/TokenRecordCipher.js';
 import { fakeLoginFingerprint, fakeUuid } from '../helpers/factories.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
@@ -16,6 +18,9 @@ export const DATA_DIRECTORY = '/app/data';
 
 /** Path every case reads from and writes to. */
 export const STORE_PATH = `${DATA_DIRECTORY}/bank-tokens.json`;
+
+/** Where the refused-token digests sit, beside the store. */
+export const REFUSED_PATH = refusedTokensPathOf(STORE_PATH);
 
 /** Owner read/write only. */
 export const OWNER_ONLY = 0o600;
@@ -46,6 +51,16 @@ export function makeStore(
 ): IStoreUnderTest {
   fileSystem.seedDirectory(DATA_DIRECTORY);
   return { store: new BankTokenStore(fileSystem, STORE_PATH, cipher), fileSystem };
+}
+
+/**
+ * Builds the refused-token registry beside the store, over an in-memory volume.
+ * @param fileSystem - Filesystem to use; pass a store's own to share its volume.
+ * @returns The registry under test.
+ */
+export function makeRefusals(fileSystem = new FakeFileSystem()): RefusedTokens {
+  fileSystem.seedDirectory(DATA_DIRECTORY);
+  return new RefusedTokens(fileSystem, REFUSED_PATH);
 }
 
 /**

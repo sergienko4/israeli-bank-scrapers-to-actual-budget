@@ -89,20 +89,45 @@ it does not ask again. Other banks still ask for a fresh code in the same run.
 
 **Fix:** run the import again and enter the new code.
 
-## "This run already used its one SMS login"
+## "The scraper hid the real reason behind its one-SMS-login limit"
 
-**Symptom:** a OneZero, Pepper or PayBox import fails with `This run already
-used its one SMS login and will not send a second code`.
+**Symptom:** a OneZero or PayBox import fails with `already spent its one
+cold SMS login`, often with no SMS code asked for. The log and Telegram add
+`The login failed, and the scraper hid the real reason behind its
+one-SMS-login limit`.
 
-**Cause:** the bank library allows one SMS login per run for these banks. The
-run's SMS login did not give it a working session, and a second login would
-need a second code, so the library stopped.
+**Cause:** the run sent a long-term token, and the login failed. The bank
+library then tries an SMS login of its own, but it allows one per run, so it
+refuses and reports that refusal instead of the first failure. Sending the
+same token again would most likely fail the same way.
 
-It also happens when the saved token has expired and `twoFactorAuth` is off:
-the library sets the expired token aside, and the run cannot ask for a code.
+**What the importer does:** it retires the token. It records the token as not
+accepted, removes it from `bank-tokens.json` when it was the saved one, and
+warns `The stored long-term token for <key> was not accepted; it is retired,
+so the next run logs in without it` (`configured` for an `otpLongTermToken`).
+The next run skips that token. Unless `otpLongTermToken` holds a different
+usable token, it sends none, so it asks for one SMS code and saves the new
+token, or fails with the bank's real error. The importer cannot see the first
+failure, so it may retire a token that was still valid; that may cost one SMS
+login. Deleting `bank-tokens.refused.json`, or a copy that cannot be read,
+lets a retired token be sent again.
 
-**Fix:** keep `twoFactorAuth: true`, then run the import again. The new run
-may ask for one new code.
+**Fix:** keep `twoFactorAuth: true` and run the import again. With it off,
+a next run that has no other usable token cannot ask for a code and fails
+with `TWO_FACTOR_RETRIEVER_MISSING`.
+
+- `was not accepted and could not be retired`: the warning before it names
+  the cause, most often a data volume that is not writable. Fix that, and
+  remove `otpLongTermToken` for the bank, or the next run may fail the same
+  way.
+- `The configured long-term token for <key> was not accepted before, so it is
+  not sent`: remove or replace `otpLongTermToken`. The importer saves the
+  token from the next SMS login and sends that one instead.
+- Pepper sends no long-term token, so there is nothing to retire: run the
+  import again.
+
+The [long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token)
+log lines say what each run did with the token.
 
 ## One bank failed but the notification says the import failed
 

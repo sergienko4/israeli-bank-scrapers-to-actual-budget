@@ -183,15 +183,34 @@ export function captureResultToken(
  * Reports a sweep that removed something, staying silent when it did not.
  * @param report - What the sweep did.
  * @param params - Capture parameters carrying the logger.
+ * @param owner - The store that was swept, named in the line.
  * @returns True, since the sweep ran.
  */
-function reportSwept(report: ISweepReport, params: IAuthFlowCaptureParams): true {
-  if (report.removedCount > 0) params.logger.info(`  🧹 ${report.summary} beside the token store`);
+function reportSwept(
+  report: ISweepReport, params: IAuthFlowCaptureParams, owner: IStagedFileOwner,
+): true {
+  if (report.removedCount > 0) {
+    params.logger.info(`  🧹 ${report.summary} beside the ${owner.label} store`);
+  }
   return true;
 }
 
-/** What a failed sweep warns, ahead of the cause. */
-const SWEEP_FAILED = 'Could not sweep staged token files';
+/** A store that stages files beside its own, and what log lines call it. */
+export interface IStagedFileOwner {
+  /** What log lines call the store's files, e.g. `token` or `refused-token`. */
+  readonly label: string;
+  /** The store whose staged files a killed run may have left. */
+  readonly store: Pick<IBankTokenStore, 'sweepStagedLeftovers'>;
+}
+
+/**
+ * Names the token store as the owner to sweep.
+ * @param params - Capture parameters carrying the token store.
+ * @returns The token store, labelled `token`.
+ */
+function tokenFilesOf(params: IAuthFlowCaptureParams): IStagedFileOwner {
+  return { label: 'token', store: params.store };
+}
 
 /**
  * Deletes staged token files a killed run left behind, before an API-direct scrape.
@@ -199,17 +218,23 @@ const SWEEP_FAILED = 'Could not sweep staged token files';
  * <p>Each leftover holds a live credential. Every import runs in its own
  * process, so sweeping when an API-direct scrape starts covers every run that
  * can stage one. Browser banks never touch the store, so their runs skip it.
+ * The refused-token file sits beside the token file and is swept the same way,
+ * under its own label, so a log line says which file it means.
  * @param params - Account key, store and logger for this scrape.
+ * @param owner - Store to sweep and its label; the token store unless another is given.
  * @returns True when the sweep ran; a failure is a warning, never an error.
  */
-export function sweepTokenLeftovers(params: IAuthFlowCaptureParams): boolean {
+export function sweepTokenLeftovers(
+  params: IAuthFlowCaptureParams, owner: IStagedFileOwner = tokenFilesOf(params),
+): boolean {
   if (!isApiDirectBank(params.companyType)) return false;
+  const failed = `Could not sweep staged ${owner.label} files`;
   try {
-    const swept = params.store.sweepStagedLeftovers();
-    if (!swept.success) return warnOf(params, `${SWEEP_FAILED}: ${swept.message}`);
-    return reportSwept(swept.data, params);
+    const swept = owner.store.sweepStagedLeftovers();
+    if (!swept.success) return warnOf(params, `${failed}: ${swept.message}`);
+    return reportSwept(swept.data, params, owner);
   } catch (error: unknown) {
     const detail = errorMessage(error);
-    return warnOf(params, `${SWEEP_FAILED}: ${detail}`);
+    return warnOf(params, `${failed}: ${detail}`);
   }
 }
