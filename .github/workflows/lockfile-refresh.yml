@@ -40,10 +40,12 @@ name: Lockfile refresh
 # stay with a human: a refresh that crosses a major (labelled, never armed),
 # one whose branch is not proven push-locked by the "Restrict updates"
 # ruleset (labelled, never armed, run red) and one whose CI fails. Each stays
-# open until next week's run supersedes it. A refresh whose branch moves after
-# it was opened joins them, best effort: lockfile-refresh-guard.yml withdraws
-# auto-merge and labels it, but reacts after the push. The preventive control
-# is the "Restrict updates" ruleset in docs/architecture/ci-pipeline.md.
+# open until a later run supersedes it: the next weekly run, or the first push
+# to main that leaves it behind (the `behind` job below). A refresh whose
+# branch moves after it was opened joins them, best effort:
+# lockfile-refresh-guard.yml withdraws auto-merge and labels it, but reacts
+# after the push. The preventive control is the "Restrict updates" ruleset in
+# docs/architecture/ci-pipeline.md.
 
 on:
   schedule:
@@ -54,6 +56,13 @@ on:
     # would bury this PR in that pile-up and leave no working days to react.
     - cron: '0 5 * * 4'
   workflow_dispatch:
+  # Main moved. The ruleset requires a branch to be strictly up to date with
+  # main, so an open refresh that main has moved past can never merge, and
+  # updating its branch would merge two lockfiles rather than regenerate one
+  # (usually a conflict). The `behind` job decides whether one needs
+  # regenerating; a push that leaves no refresh behind ends there.
+  push:
+    branches: [main]
 
 # Every write — pushing, opening, arming or labelling the pull request, and
 # closing a superseded refresh — goes through RELEASE_TOKEN, so the workflow
@@ -61,13 +70,71 @@ on:
 permissions:
   contents: read
 
+# Every waiting run is kept (`queue: max`). By default a newly queued run
+# cancels the one already waiting, so a push to main could cancel a waiting
+# weekly or dispatched refresh and then find nothing behind, losing that
+# refresh until the next week. Kept runs execute in order, and each one
+# regenerates from main as it is when that run starts.
 concurrency:
   group: lockfile-refresh
   cancel-in-progress: false
+  queue: max
 
 jobs:
+  # Read-only, with the workflow token: nothing is checked out and nothing is
+  # written. It uses the same branch filter as the supersede step, so a fork's
+  # pull request never triggers a regeneration. A comparison that cannot be
+  # read skips that pull request, not the run; the next push or the weekly
+  # run looks again.
+  behind:
+    name: Find a refresh that main has moved past
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      stale: ${{ steps.stale.outputs.stale }}
+    steps:
+      - name: Check whether an open refresh is behind main
+        id: stale
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh pr list --repo "${GITHUB_REPOSITORY}" --state open --limit 100 \
+            --json number,headRefName,headRefOid,isCrossRepository > "${RUNNER_TEMP}/open.json"
+          jq -r '.[]
+            | select((.isCrossRepository | not)
+                and (.headRefName | startswith("chore/lockfile-refresh-")))
+            | "\(.number)\t\(.headRefOid)"' "${RUNNER_TEMP}/open.json" > "${RUNNER_TEMP}/refreshes.tsv"
+          stale=false
+          # The list arrives on its own descriptor: gh may read stdin.
+          while IFS=$'\t' read -r number sha <&3; do
+            behind=$(gh api "repos/${GITHUB_REPOSITORY}/compare/main...${sha}" \
+              --jq '.behind_by // empty') || behind=''
+            if ! [[ "${behind}" =~ ^[0-9]+$ ]]; then
+              echo "::warning::#${number}: could not compare ${sha} with main; skipped."
+              continue
+            fi
+            if [ "${behind}" -gt 0 ]; then
+              echo "::notice::Refresh #${number} is ${behind} commit(s) behind main; regenerating it."
+              stale=true
+            fi
+          done 3< "${RUNNER_TEMP}/refreshes.tsv"
+          echo "stale=${stale}" >> "${GITHUB_OUTPUT}"
+
   refresh:
     name: Refresh transitive lockfile pins
+    # The weekly and dispatched runs always refresh; `behind` is skipped for
+    # them, and `!cancelled()` keeps that skip from skipping this job too. A
+    # push refreshes only when `behind` found a refresh to replace; if
+    # `behind` failed, its output is empty and nothing is regenerated.
+    needs: behind
+    if: >-
+      !cancelled()
+      && (github.event_name != 'push' || needs.behind.outputs.stale == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Nothing below runs `npm install`, so husky's `prepare` never executes and

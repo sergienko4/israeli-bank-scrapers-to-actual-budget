@@ -25,7 +25,7 @@ graph TD
     SCH[release-please.yml<br/>push to main]
     DOCS[docs.yml<br/>tag push v*]
     E2ES[e2e-schedule.yml<br/>weekly]
-    LFR[lockfile-refresh.yml<br/>weekly cron]
+    LFR[lockfile-refresh.yml<br/>weekly cron + push to main]
     DMR[dependabot-meta-render.yml<br/>after PR Pipeline]
     DAM[dependabot-auto-merge.yml<br/>after PR Pipeline + push/cron]
     LFS[lockfile-sync.yml<br/>PR edits manifest]
@@ -449,8 +449,9 @@ That gap blocked four unrelated Dependabot PRs at once: `browserslist` sat at
 already allowed the patched `4.28.8`. A CVE against `4.28.2` then failed both
 `npm audit` and Trivy on the production tree.
 
-`lockfile-refresh.yml` closes it. Every Thursday 05:00 UTC (and on
-`workflow_dispatch`) it runs `npm update --package-lock-only --ignore-scripts`,
+`lockfile-refresh.yml` closes it. Every Thursday 05:00 UTC (also on
+`workflow_dispatch`, and after a push to main that leaves an open refresh
+behind) it runs `npm update --package-lock-only --ignore-scripts`,
 then a best-effort `npm audit fix --package-lock-only --ignore-scripts`, and
 opens a PR when anything moved:
 
@@ -479,6 +480,16 @@ opens a PR when anything moved:
   same-repository `chore/lockfile-refresh-*` PR is closed (branch deleted).
   The close runs last, so a failed run never leaves the week without a
   refresh, and a stuck PR never blocks the next week.
+- **A refresh that main moves past is regenerated.** The ruleset requires a
+  branch to be up to date with main, so such a refresh can never merge, and
+  updating its branch would merge two lockfiles (usually a conflict) instead
+  of regenerating one. On every push to main a read-only `behind` job lists
+  the open same-repository `chore/lockfile-refresh-*` PRs and compares each
+  head with main. If any is behind, the refresh runs from current main and
+  its result supersedes the stale PR; otherwise the run ends there, as it
+  does after a refresh's own merge. A comparison that cannot be read skips
+  that PR, so the next push or the weekly run looks again. Runs queue
+  (`queue: max`), so a push never cancels a waiting weekly or dispatched run.
 - **Auto-merge is armed only on a push-locked branch,** with `RELEASE_TOKEN`
   and `--match-head-commit`, so the PR squash-merges once every required
   check passes. The match holds only at arming time, so the run first proves
