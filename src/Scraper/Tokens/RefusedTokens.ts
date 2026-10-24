@@ -10,10 +10,13 @@
  *
  * <p>Only a token digest is stored, never the token, so this file is not a
  * second copy of a credential. Each entry keeps its newest distinct digests up
- * to a cap, and nothing else clears one.
+ * to a cap, and nothing else clears one. A token logs in to one account
+ * whichever entry sends it, so a digest any entry recorded is refused for
+ * every entry.
  *
- * <p>Losing this file only brings back the old behaviour, so a damaged or
- * unreadable file is not fatal: the caller warns and checks tokens as before.
+ * <p>A damaged or unreadable file is not fatal: the caller warns, still sends
+ * a token the token store binds to the login, and withholds a configured token
+ * it binds to none, since only this file could say another entry retired it.
  * A refusal is never written over a file that could not be read, and a damaged
  * file is set aside before it is replaced.
  */
@@ -28,12 +31,12 @@ import { isTokenDigest } from './TokenDigest.js';
 /** How many distinct refused digests each entry keeps, newest last. */
 export const REFUSALS_PER_ENTRY = 8;
 
-/** What the file says about one entry's refused tokens. */
+/** What the file says about refused tokens, across every entry. */
 export interface IRefusalView {
   /**
-   * Tells whether a token digest was refused for this entry.
+   * Tells whether any entry recorded a token digest as refused.
    * @param digest - Digest of the token about to be sent.
-   * @returns True when the entry recorded that digest.
+   * @returns True when some entry recorded that digest.
    */
   readonly has: (digest: string) => boolean;
   /** False when the file was damaged or held anything this registry does not write. */
@@ -48,11 +51,10 @@ export interface IRefusalWrite {
 /** Read/write access to the refused long-term tokens, keyed by store key. */
 export interface IRefusedTokens {
   /**
-   * Returns what the file says about one entry's refused tokens.
-   * @param storeKey - Opaque key identifying one bank account.
-   * @returns The entry's view, or why the file could not be read.
+   * Returns what the file says about refused tokens, across every entry.
+   * @returns The view, or why the file could not be read.
    */
-  read: (storeKey: string) => Procedure<IRefusalView>;
+  read: () => Procedure<IRefusalView>;
 
   /**
    * Records that a token an entry sent was not accepted.
@@ -146,21 +148,21 @@ export default class RefusedTokens implements IRefusedTokens {
   }
 
   /**
-   * Returns what the file says about one entry's refused tokens.
+   * Returns what the file says about refused tokens, across every entry.
    *
    * <p>No file reads as no refusals. A damaged file reads as whatever valid
    * digests it still holds, with `isIntact` false so the caller can warn.
-   * @param storeKey - Opaque key identifying one bank account.
-   * @returns The entry's view, or why the file could not be read.
+   * @returns The view, or why the file could not be read.
    */
-  public read(storeKey: string): Procedure<IRefusalView> {
+  public read(): Procedure<IRefusalView> {
     const loaded = this.load();
     if (!loaded.success) return loaded;
-    const refused = new Set(loaded.data.digests.get(storeKey));
+    const everyEntry = [...loaded.data.digests.values()];
+    const refused = new Set(everyEntry.flat());
     /**
-     * Tells whether the entry recorded a digest.
+     * Tells whether any entry recorded a digest.
      * @param digest - Digest of the token about to be sent.
-     * @returns True when the digest is refused for this entry.
+     * @returns True when the digest is refused.
      */
     const has = (digest: string): boolean => refused.has(digest);
     return succeed({ has, isIntact: loaded.data.isIntact });

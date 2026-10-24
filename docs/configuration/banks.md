@@ -123,7 +123,8 @@ and the importer saves that device's state in the same file, under
   none is saved yet, or the saved one was retired, the entry's
   `otpLongTermToken`. Otherwise none, and the bank asks for an SMS; the token
   from that login is saved and used from then on. While
-  `bank-tokens.refused.json` can be read, a retired token is not sent.
+  `bank-tokens.refused.json` can be read, a retired token is not sent, by
+  this entry or any other.
 - **Each token belongs to one login.** The importer records which login
   created each token: the email for OneZero, the phone number for PayBox. A
   PayBox token logs in by itself, so sending it for another login would
@@ -131,7 +132,10 @@ and the importer saves that device's state in the same file, under
   login other than its own:
   - after you change an entry's email or phone number, the next run logs in
     with one SMS and saves a token for the new login;
-  - an `otpLongTermToken` that the file saved for another login is not sent.
+  - an `otpLongTermToken` that the file saved for another login is not sent;
+  - an `otpLongTermToken` that any entry retired is not sent. Retiring a saved
+    token removes its record, so the retired list is what still stops another
+    entry from sending it.
 - **Renaming a `banks` entry** also costs one SMS. Tokens are saved per entry,
   under `<bank id>:<entry name>`, such as `onezero:oneZero`.
 - **Keep `twoFactorAuth: true`.** Each SMS login creates a new token, and the
@@ -158,9 +162,11 @@ and the importer saves that device's state in the same file, under
   - The record is `bank-tokens.refused.json`, beside the token file. It holds
     a one-way digest of each retired token, never the token, and keeps the
     last 8 per entry.
-  - Deleting it, or a copy that cannot be read, lets retired tokens be sent
-    again; a run that cannot read it warns. Back it up and restore it together
-    with `bank-tokens.json`.
+  - Deleting it lets retired tokens be sent again, by any entry. A run that
+    cannot read it in full warns, and does not send an `otpLongTermToken`
+    that `bank-tokens.json` has not saved for the entry's login; a saved token
+    may still be sent again. Back it up and restore it together with
+    `bank-tokens.json`.
 - **With a config password** (`CREDENTIALS_ENCRYPTION_PASSWORD`, or the
   legacy `CONFIG_PASSWORD`), each token the importer saves is sealed under it,
   so a copy of the file gives no token away. Turning the password on or off,
@@ -205,8 +211,9 @@ the `<bank id>:<entry name>` above):
 | `Could not record the refused long-term token for <key>` / `Could not remove the long-term token for <key>` | A step of retiring a token failed; the warning names the cause. The `was not accepted` warning that follows says whether the token is retired. A token that is retired but could not be removed stays in the file and is skipped. |
 | `The stored long-term token for <key> was not accepted before, so it is not sent` | The saved token was retired earlier, but it is still in the file, for example after `bank-tokens.json` was restored from a backup. The run tries `otpLongTermToken` instead, or logs in with an SMS. |
 | `The configured long-term token for <key> was not accepted before, so it is not sent — remove or replace otpLongTermToken` | `otpLongTermToken` was retired earlier. The run logs in with an SMS and saves a new token, which later runs send instead. |
-| `Could not read which long-term tokens for <key> were not accepted before, so none is skipped` | `bank-tokens.refused.json` could not be read, so retired tokens may be sent again; the warning names the cause. |
-| `The list of long-term tokens that were not accepted is damaged, so only the ones it still holds are skipped` | `bank-tokens.refused.json` is damaged. It is set aside the next time a token is retired. |
+| `Could not read which long-term tokens for <key> were not accepted before, so none is skipped` | `bank-tokens.refused.json` could not be read, so a retired token saved for this login may be sent again; the warning names the cause. An `otpLongTermToken` not saved for this login is not sent. |
+| `The list of long-term tokens that were not accepted is damaged, so only the ones it still holds are skipped` | `bank-tokens.refused.json` is damaged. It is set aside the next time a token is retired. An `otpLongTermToken` not saved for this login is not sent. |
+| `The configured long-term token for <key> is not saved for this login, and the list of tokens that were not accepted could not be fully read, so it is not sent` | Follows one of the two lines above. `otpLongTermToken` may be a token another entry retired, and only that list could tell, so the run logs in with an SMS and saves a token for this login. |
 | `Removed <n> abandoned staged files beside the token store` / `… beside the refused-token store` | A run was stopped, or could not clean up, while saving `bank-tokens.json` or `bank-tokens.refused.json`, and left a staged copy. Each run deletes those over an hour old. |
 | `Could not sweep staged token files` / `Could not sweep staged refused-token files` | The folder holding that file could not be listed, so its staged copies were not checked; the warning names the cause. The run goes on. Check that `/app/data` is readable and writable. |
 

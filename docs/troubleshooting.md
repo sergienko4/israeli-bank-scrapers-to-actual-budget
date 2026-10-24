@@ -109,8 +109,10 @@ The next run skips that token. Unless `otpLongTermToken` holds a different
 usable token, it sends none, so it asks for one SMS code and saves the new
 token, or fails with the bank's real error. The importer cannot see the first
 failure, so it may retire a token that was still valid; that may cost one SMS
-login. Deleting `bank-tokens.refused.json`, or a copy that cannot be read,
-lets a retired token be sent again.
+login. No other `banks` entry sends a retired token either. Deleting
+`bank-tokens.refused.json` lets a retired token be sent again; a copy that
+cannot be read in full lets only a token saved for the entry's login be
+sent again.
 
 **Fix:** keep `twoFactorAuth: true` and run the import again. With it off,
 a next run that has no other usable token cannot ask for a code and fails

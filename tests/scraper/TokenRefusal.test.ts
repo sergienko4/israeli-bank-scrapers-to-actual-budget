@@ -88,13 +88,13 @@ function everythingLogged(watch: IWarmTokenWatch): string {
 }
 
 /**
- * Tells whether the registry refuses a token for the entry.
+ * Tells whether the registry refuses a token.
  * @param refusals - Registry to ask.
  * @param token - Token to check.
  * @returns True when the token's digest is recorded.
  */
 function isRefused(refusals: IRefusedTokens, token: string): boolean {
-  const view = refusals.read(STORE_KEY);
+  const view = refusals.read();
   if (!view.success) throw new Error(`read failed: ${view.message}`);
   const digest = tokenDigest(token);
   return view.data.has(digest);
@@ -189,7 +189,7 @@ describe('retireRefusedToken', () => {
     const isRetired = retireRefusedToken(watch, failedWith('GENERIC'), { bankTokens: store, refusedTokens: refusals });
 
     expect(isRetired).toBe(true);
-    expect(isRefused(refusals, token)).toBe(true);
+    expect(JSON.parse(fileSystem.contentsOf(REFUSED_PATH))).toEqual({ [STORE_KEY]: [tokenDigest(token)] });
     expect(storedRecords(fileSystem)).toEqual({});
     expect(warningsOf(watch)).toEqual([retiredOf('stored')]);
   });
