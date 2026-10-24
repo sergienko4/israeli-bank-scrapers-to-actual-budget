@@ -215,7 +215,7 @@ const CANARIES = {
     minErrors: 1,
     ruleIds: ['unicorn/prefer-default-parameters'],
     description:
-      'unicorn/prefer-default-parameters (SonarCloud S7760): declare a default parameter instead of reassigning a fallback',
+      'unicorn/prefer-default-parameters (SonarCloud S7760): declare a default parameter instead of using a fallback expression',
   },
   'tests/eslint-canaries/AwaitInLoop.canary.ts': {
     minErrors: 1,
