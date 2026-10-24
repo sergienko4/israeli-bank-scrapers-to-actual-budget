@@ -10,9 +10,11 @@ import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 
+import buildCredentials from '../../../src/Scraper/CredentialsBuilder.js';
 import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeStrategy.js';
 import type { IBankScrapeStrategyOpts } from '../../../src/Scraper/Strategies/IBankScrapeStrategy.js';
 import type { IBankTokenStore } from '../../../src/Scraper/Tokens/BankTokenStore.js';
+import type { IRefusedTokens } from '../../../src/Scraper/Tokens/RefusedTokens.js';
 import loginFingerprint from '../../../src/Scraper/Tokens/LoginFingerprint.js';
 import type { IRetryStrategy } from '../../../src/Resilience/RetryStrategy.js';
 import { ExponentialBackoffRetry } from '../../../src/Resilience/RetryStrategy.js';
@@ -23,7 +25,7 @@ import type { IApiDirectBank } from '../../helpers/apiDirectBanks.js';
 import { API_DIRECT_BANKS, apiDirectEntry } from '../../helpers/apiDirectBanks.js';
 import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
-import { fakeToken, makeStore } from '../BankTokenStoreFixture.js';
+import { fakeToken, makeRefusals, makeStore } from '../BankTokenStoreFixture.js';
 
 vi.mock('node:fs');
 
@@ -73,15 +75,18 @@ const notificationService = {
 /**
  * Constructs a default LiveScrapeStrategy with shared mock collaborators.
  * @param bankTokens - Token store the strategy reads and writes; an empty one unless given.
+ * @param refusedTokens - Refused-token registry; an empty one unless given.
  * @returns LiveScrapeStrategy ready for invocation.
  */
-function makeStrategy(bankTokens: IBankTokenStore = makeStore().store): LiveScrapeStrategy {
+function makeStrategy(
+  bankTokens: IBankTokenStore = makeStore().store, refusedTokens: IRefusedTokens = makeRefusals(),
+): LiveScrapeStrategy {
   return new LiveScrapeStrategy({
     config: fakeImporterConfig(),
     retryStrategy, noRetryStrategy, timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
-    bankTokens,
+    bankTokens, refusedTokens,
   });
 }
 
@@ -104,7 +109,7 @@ function shippedStrategy(
     timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
-    bankTokens,
+    bankTokens, refusedTokens: makeRefusals(),
   });
 }
 
@@ -320,6 +325,44 @@ describe('LiveScrapeStrategy', () => {
     });
   });
 
+  /**
+   * A stored long-term token that leaves upstream needing a second cold login
+   * fails every run that sends it, so the run that proves it retires it and
+   * the next run logs in with an SMS code.
+   */
+  describe('a long-term token upstream cannot log in with', () => {
+    const oneZero = API_DIRECT_BANKS.find((bank) => bank.bankId === 'onezero');
+    const budgetSpent = {
+      success: false, errorType: 'GENERIC',
+      errorMessage: 'this scrape has already spent its one cold SMS login; '
+        + 'the session cannot be re-minted in-run \u2014 start a new scrape',
+    };
+
+    it('is retired, so the next run logs in without it', async () => {
+      if (oneZero === undefined) throw new Error('OneZero is not an API-direct bank');
+      const { store, fileSystem } = makeStore();
+      const strategy = makeStrategy(store, makeRefusals(fileSystem));
+      const bankConfig = apiDirectEntry(oneZero);
+      const login = loginFingerprint(oneZero.companyType, bankConfig);
+      if (!login.success) throw new Error(login.message);
+      const token = fakeToken();
+      store.write('onezero:primary', token, login.data);
+      mockScraper.scrape.mockResolvedValueOnce(budgetSpent).mockResolvedValueOnce({ success: true, accounts: [] });
+      const opts = {
+        bankId: 'onezero', companyType: oneZero.companyType as CompanyTypes, accountKey: 'primary',
+        bankConfig, startDate: new Date(), logger, otpRetriever: () => Promise.resolve(faker.string.numeric(6)),
+      };
+
+      await strategy.scrape(opts);
+      await strategy.scrape(opts);
+
+      const sent = vi.mocked(buildCredentials).mock.calls.map(([config]) => config.otpLongTermToken);
+      expect(sent).toEqual([token, undefined]);
+      expect(logger.warn).toHaveBeenCalledWith('  ⚠️  The stored long-term token for onezero:primary '
+        + 'was not accepted; it is retired, so the next run logs in without it');
+    });
+  });
+
   describe('the shipped retry policy', () => {
     const transient = {
       success: false, errorType: 'GENERIC', errorMessage: 'socket hang up', accounts: [],
@@ -401,7 +444,7 @@ describe('LiveScrapeStrategy', () => {
       retryStrategy, noRetryStrategy, timeoutWrapper,
       twoFactorPrompter,
       notificationService: notificationService as never,
-      bankTokens: makeStore().store,
+      bankTokens: makeStore().store, refusedTokens: makeRefusals(),
     });
     await strategy.scrape(makeOpts({
       twoFactorAuth: true, otpLongTermToken: 'placeholder-not-a-jwt',

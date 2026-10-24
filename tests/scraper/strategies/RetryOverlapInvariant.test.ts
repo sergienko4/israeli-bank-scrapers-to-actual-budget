@@ -26,7 +26,7 @@ import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeSt
 import type { ITwoFactorPrompter } from '../../../src/Services/ITwoFactorPrompter.js';
 import { fakeImporterConfig, fakeValidBankConfigFor } from '../../helpers/factories.js';
 import type { IStoreUnderTest } from '../BankTokenStoreFixture.js';
-import { makeStore } from '../BankTokenStoreFixture.js';
+import { makeRefusals, makeStore } from '../BankTokenStoreFixture.js';
 
 const provider = vi.hoisted(() => ({ createScraper: vi.fn() }));
 vi.mock('@sergienko4/israeli-bank-scrapers', async (importOriginal) => {
@@ -150,7 +150,7 @@ function makeStrategy(row: IOverlapRow, subject: IStoreUnderTest): LiveScrapeStr
     timeoutWrapper: timeoutOnFirstTry(),
     twoFactorPrompter: row.hasPrompter ? prompter : null,
     notificationService: { sendMessage: vi.fn() } as never,
-    bankTokens: subject.store,
+    bankTokens: subject.store, refusedTokens: makeRefusals(subject.fileSystem),
   });
 }
 

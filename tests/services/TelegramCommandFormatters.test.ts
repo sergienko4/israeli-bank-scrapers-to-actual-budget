@@ -61,6 +61,18 @@ describe('TelegramCommandFormatters', () => {
       const result = formatBankError(bank);
       expect(result).not.toContain('times in a row');
     });
+
+    it('tells the operator what to do when the one SMS login hid the real failure', () => {
+      const error = 'GENERIC — this scrape has already spent its one cold SMS login; '
+        + 'the session cannot be re-minted in-run — start a new scrape';
+      const bank = { name: 'oneZero', status: 'failure', error, txns: 0 };
+
+      const [, advice] = formatBankError(bank).split('\n');
+
+      expect(advice).toContain('💡 The login failed, and the scraper hid the real reason');
+      expect(advice).toContain('remove otpLongTermToken for this bank and keep twoFactorAuth on');
+      expect(advice).not.toContain('Run the import again');
+    });
   });
 
   describe('formatAuditEntry', () => {

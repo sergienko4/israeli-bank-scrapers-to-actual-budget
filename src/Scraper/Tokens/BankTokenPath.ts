@@ -17,6 +17,12 @@ import ConfigurationError from '../../Errors/ConfigurationError.js';
 /** Default durable bank-token store path inside the container image. */
 export const DEFAULT_BANK_TOKENS_PATH = '/app/data/bank-tokens.json';
 
+/** Extension the token file usually carries. */
+const JSON_EXTENSION = '.json';
+
+/** What the refused-token file adds to the token file's name. */
+const REFUSED_SUFFIX = '.refused.json';
+
 /** The one segment that lexical path handling and the OS can resolve apart. */
 const PARENT_SEGMENT = '..';
 
@@ -135,4 +141,19 @@ export default function resolveBankTokensPath(): string {
   const broken = PATH_RULES.find((rule) => rule.isBroken(override));
   if (broken !== undefined) throw new ConfigurationError(broken.message);
   return override;
+}
+
+/**
+ * Names the file that remembers which long-term tokens were not accepted.
+ *
+ * <p>It sits beside the token file, so it shares that file's volume and any
+ * `BANK_TOKENS_PATH` override, and its name never equals the token file's.
+ * @param bankTokensPath - Resolved path of the token file.
+ * @returns `bank-tokens.refused.json` for `bank-tokens.json`; otherwise the
+ *          path with `.refused.json` appended.
+ */
+export function refusedTokensPathOf(bankTokensPath: string): string {
+  const hasJsonExtension = bankTokensPath.endsWith(JSON_EXTENSION);
+  const stemLength = bankTokensPath.length - (hasJsonExtension ? JSON_EXTENSION.length : 0);
+  return `${bankTokensPath.slice(0, stemLength)}${REFUSED_SUFFIX}`;
 }

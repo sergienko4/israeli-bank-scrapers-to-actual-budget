@@ -9,8 +9,12 @@ import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ILogger } from '../../src/Logger/ILogger.js';
+import tokenDigest from '../../src/Scraper/Tokens/TokenDigest.js';
 import type { IWarmTokenWatch } from '../../src/Scraper/Tokens/WarmTokenWatch.js';
-import { warnIfNotAccepted, watchRetriever } from '../../src/Scraper/Tokens/WarmTokenWatch.js';
+import {
+  NO_TOKEN_SENT, warnIfNotAccepted, watchRetriever,
+} from '../../src/Scraper/Tokens/WarmTokenWatch.js';
+import { fakeToken } from './BankTokenStoreFixture.js';
 
 /**
  * Builds the watch of one attempt, with a logger whose warnings a case can read.
@@ -19,7 +23,10 @@ import { warnIfNotAccepted, watchRetriever } from '../../src/Scraper/Tokens/Warm
  */
 function watchOf(sentToken: boolean): IWarmTokenWatch {
   const logger: ILogger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
-  return { storeKey: 'onezero:oneZero', logger, sentToken };
+  const token = fakeToken();
+  const digest = tokenDigest(token);
+  const decision = sentToken ? { source: 'stored' as const, digest } : NO_TOKEN_SENT;
+  return { storeKey: 'onezero:oneZero', logger, decision };
 }
 
 /**

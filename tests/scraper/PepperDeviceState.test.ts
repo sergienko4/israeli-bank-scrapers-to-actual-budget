@@ -133,7 +133,8 @@ function everythingLogged(logger: SpyLogger): string {
  */
 function stubStore(overrides: Partial<IBankTokenStore> = {}): IBankTokenStore & Record<keyof IBankTokenStore, Mock> {
   return {
-    read: vi.fn(), write: vi.fn(), remove: vi.fn(), sweepStagedLeftovers: vi.fn(),
+    read: vi.fn(), write: vi.fn(), remove: vi.fn(), removeMatching: vi.fn(),
+    sweepStagedLeftovers: vi.fn(),
     ...overrides,
   } as IBankTokenStore & Record<keyof IBankTokenStore, Mock>;
 }
