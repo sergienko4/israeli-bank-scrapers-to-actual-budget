@@ -14,7 +14,7 @@ Thank you for your interest in contributing!
   `npm install -g npm@12.2.1`. Earlier npm runs every dependency install
   script, including a source build of `better-sqlite3` that needs a C++
   toolchain — on macOS, the multi-gigabyte Xcode Command Line Tools. npm 12
-  runs only the scripts listed in [`allowScripts`](#dependency-install-scripts-allowscripts),
+  runs only the scripts listed in [`allowScripts`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#dependency-install-scripts-allowscripts),
   and the `better-sqlite3` that `@actual-app/api` loads ships prebuilt
   binaries, so no compiler is needed.
 - Docker and Docker Compose
@@ -61,6 +61,7 @@ All contributors must follow [GUIDELINES.md](https://github.com/sergienko4/israe
 - **OCP maps over if/else** — use `Record<string, ...>` dispatch
 - **SOLID principles** — single responsibility, open/closed
 - **Security first** — never commit credentials
+- **Absolute links in `docs/`** — link with full GitHub URLs, same-page anchors included, as the `docs/**/*.md` review rule in `.coderabbit.yaml` asks. `tests/docs-links.test.ts` parses every page and fails on a relative link, and on a `blob/main` or `tree/main` link into this repository whose file or heading does not exist
 
 ---
 
@@ -291,7 +292,7 @@ name an older version: keeping `^` while lowering the floor accepts a wider
 range than before, which the diff shows. A range it cannot reproduce exactly,
 such as a compound range or a `git:` specifier, is refused rather than guessed
 at, and a package that appears only in `overrides` has to be edited by hand
-(see [the hand-edit case above](#dependabot-pull-requests-merge-themselves)
+(see [the hand-edit case above](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#dependabot-pull-requests-merge-themselves)
 for how its lockfile is regenerated).
 
 If the new version introduces an install script that has never been approved,

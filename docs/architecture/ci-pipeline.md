@@ -434,7 +434,7 @@ Asia/Jerusalem), bounded by each ecosystem’s `open-pull-requests-limit`:
 Every unattended group is limited to minor/patch, and majors are routed to
 their own `*-major` group or an ungrouped PR, so a major never shares a PR
 with a safe bump. Majors therefore arrive in their own PR, and the
-[auto-merge policy](#dependabot-auto-merge) labels them
+[auto-merge policy](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#dependabot-auto-merge) labels them
 `needs-manual-review` instead of arming them.
 
 ## Lockfile refresh (`lockfile-refresh.yml`)
@@ -465,7 +465,7 @@ opens a PR when anything moved:
 - **The commit type is computed, not hard-coded** —
   `scripts/summarize-refresh.mjs` emits `fix(deps)` when a non-`dev` entry
   moved, `chore(deps)` otherwise. `npm update` never edits `package.json`, so
-  the [release signal guard](#release-signal-guard) cannot see a runtime bump
+  the [release signal guard](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#release-signal-guard) cannot see a runtime bump
   made here; a hard-coded `chore` would ship it to users with no release.
 - **Pushes with `RELEASE_TOKEN`**, because a PR opened with `GITHUB_TOKEN`
   raises no `pull_request` event — every gate in `pr.yml` would be skipped.
@@ -482,7 +482,7 @@ opens a PR when anything moved:
 - **Auto-merge is armed only on a push-locked branch,** with `RELEASE_TOKEN`
   and `--match-head-commit`, so the PR squash-merges once every required
   check passes. The match holds only at arming time, so the run first proves
-  the [lockfile refresh guard](#lockfile-refresh-guard) ruleset is in force.
+  the [lockfile refresh guard](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#lockfile-refresh-guard) ruleset is in force.
   Without that proof, a refresh that would otherwise arm is labelled
   `needs-manual-review`, left unarmed, and the run fails red.
 - **A refresh that crosses a major is not armed.** A loose range (`*`,
