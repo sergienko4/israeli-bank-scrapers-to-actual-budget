@@ -125,6 +125,14 @@ function said(spy: SpyLogger['info']): string {
 }
 
 /**
+ * Names the file the importer records refused tokens in.
+ * @returns Its path, beside the token file.
+ */
+function refusedPath(): string {
+  return join(store.directory, 'bank-tokens.refused.json');
+}
+
+/**
  * Lists the warnings a run gave about a token it sent and the bank did not accept.
  * @param run - The run.
  * @returns Each such warning, in order.
@@ -377,6 +385,21 @@ describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token replay, $name', (row:
     expect(storedTokens(store.tokensPath)[keyOf(FIRST)]).toMatchObject({ token: seed, login: loginOf(entry) });
   });
 
+  it('sends no configured token the store has never seen while the list of refused tokens is damaged', async () => {
+    const entry = bank.customer();
+    const seed = bank.mintElsewhere(entry);
+    writeFileSync(refusedPath(), JSON.stringify({ [keyOf(SECOND)]: 'junk' }), { mode: 0o600 });
+
+    const unvouched = await importOnce(FIRST, { ...entry, otpLongTermToken: seed });
+
+    expect(bank.sent).toEqual([undefined]);
+    expect(unvouched.smsCount).toBe(1);
+    expect(importedAccount(unvouched)).toBe(accountNumberFor(entry));
+    expect(said(unvouched.logger.warn)).toContain(`The configured long-term token for ${keyOf(FIRST)} `
+      + 'is not saved for this login, and the list of tokens that were not accepted could not be fully read, '
+      + 'so it is not sent');
+  });
+
   it.each(brokenStores)('sends no token, not even its own configured one, when the token file $why', async ({
     breakStore, warning,
   }) => {
@@ -446,12 +469,6 @@ describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token replay, $name', (row:
     const codeNotSent = (): Record<string, unknown> => ({
       success: false, errorType: 'GENERIC', errorMessage: codeRequestRefusalOf(row),
     });
-
-    /**
-     * Names the file the importer records refused tokens in.
-     * @returns Its path, beside the token file.
-     */
-    const refusedPath = (): string => join(store.directory, 'bank-tokens.refused.json');
 
     /**
      * Fails a case when any run logged a token the bank minted, or its digest.
@@ -543,6 +560,27 @@ describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token replay, $name', (row:
       expect(said(cold.logger.warn)).toContain(`The configured long-term token for ${keyOf(FIRST)} `
         + 'was not accepted before, so it is not sent');
       expectNoTokenLogged([hidden, cold]);
+    });
+
+    it('never sends a retired token from an entry of another login', async () => {
+      const owner = bank.customer();
+      const first = await importOnce(FIRST, owner);
+      bank.revoke(owner);
+      bank.refuseCodeRequests(1);
+      const hidden = await importOnce(FIRST, owner);
+      const clone = bank.customer({ otpLongTermToken: bank.minted[0] });
+      expect(loginOf(clone)).not.toBe(loginOf(owner));
+
+      const cloned = await importOnce(SECOND, clone);
+
+      expect(hidden.result).toMatchObject(BUDGET_SPENT);
+      expect(storedTokens(store.tokensPath)[keyOf(FIRST)]).toBeUndefined();
+      expect(bank.sent).toEqual([undefined, bank.minted[0], undefined]);
+      expect(cloned.smsCount).toBe(1);
+      expect(importedAccount(cloned)).toBe(accountNumberFor(clone));
+      expect(said(cloned.logger.warn)).toContain(`The configured long-term token for ${keyOf(SECOND)} `
+        + 'was not accepted before, so it is not sent');
+      expectNoTokenLogged([first, hidden, cloned]);
     });
 
     it('never retires a token the bank accepts', async () => {

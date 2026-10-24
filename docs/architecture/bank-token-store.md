@@ -319,12 +319,15 @@ browser banks never read it. The order is:
    the attempt goes on to step 2 as if the store held none;
 2. when the store holds none for the entry, the configured
    `otpLongTermToken`, only if it is non-blank text, the file is intact,
-   `loginOf` binds it to no other login, and it was not retired (INFO
-   `Using the configured long-term token for <key>`). Otherwise a WARN and no
-   token;
+   `loginOf` binds it to no other login, and no entry retired it (INFO
+   `Using the configured long-term token for <key>`). When `loginOf` binds it
+   to no login, the refused-token registry must also have been read in full.
+   Otherwise a WARN and no token;
 3. otherwise no token, so the provider logs in cold with an SMS.
 
-Every doubt fails closed, except over the refused-token registry. No login
+Every doubt fails closed, except over the refused-token registry for a
+token the store binds to this login; see
+[Refused tokens](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens). No login
 fingerprint, and a store that cannot be read or throws, each give a WARN
 naming the key, and no token. A damaged file warns
 whenever it leaves the attempt with no token: when it stops a configured token
@@ -458,6 +461,12 @@ file, with the same owner-only mode, atomic writes, quarantine and size cap.
   newest, and the ninth distinct one evicts the oldest. Nothing else clears a
   digest. A new SMS login mints a token with a new digest, so a retired digest
   never blocks it.
+- **Checked across every entry.** A token logs in to one account, whichever
+  entry sends it, so a digest any entry holds is skipped for every entry.
+  Retiring a stored token removes the record that bound it to its login, so
+  the registry is then the only record of it. Checked per entry, another
+  entry configured with that token for a different login could send it, and
+  a PayBox token would import the first account.
 
 **Retiring.** After each attempt, `settleToken` in `AttemptRunner.ts` calls
 `retireRefusedToken` in `src/Scraper/Tokens/TokenRefusal.ts`. It acts only when
@@ -477,7 +486,7 @@ A token that was still valid, and failed only on a passing error, is retired
 too. That can cost one SMS on the next run, which mints a new token. Pepper
 sends no long-term token, so nothing is retired for it.
 
-**Reading.** The resolver reads the entry's refusals once per attempt, and
+**Reading.** The resolver reads every entry's refusals once per attempt, and
 checks the stored and the configured token against that one snapshot; see
 [Replay](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#replay). The file is in one of three states:
 
@@ -485,17 +494,29 @@ checks the stored and the configured token against that one snapshot; see
   a list of at most 8 distinct digests, each 64 lowercase hex characters;
 - **damaged** (`damaged` or `stripped`, or an entry that is not such a list:
   not a list, or holding a non-digest, a duplicate, or more than 8): the
-  newest 8 distinct valid digests it holds are skipped, with a WARN. The next
-  `refuse` quarantines the file before it replaces it;
+  newest 8 distinct valid digests each entry holds are skipped, with a WARN.
+  The next `refuse` quarantines the file before it replaces it;
 - **unreadable:** nothing is skipped, and a WARN names the cause. `refuse`
   never writes over it.
 
-This is the one doubt that fails open. The registry is a negative cache, not
-a check on who may log in. Sending a retired token by mistake may repeat the
-original failure. Failing closed would send no token at all, which
-costs an SMS on every run, or fails the run when `twoFactorAuth` is off.
-Deleting the file has the same effect as one that cannot be read: retired
-tokens may be sent again.
+A damaged or unreadable registry splits by whose the token is:
+
+- **a token the store binds to this login** (the stored one, or a configured
+  one `loginOf` binds to it) is sent unless the registry still names it. This
+  is the one doubt that fails open. For such a token the registry is a
+  negative cache, not a check on who may log in: sending a retired one by
+  mistake may repeat the original failure. Failing closed would send no
+  token at all, which costs an SMS on every run, or fails the run when
+  `twoFactorAuth` is off;
+- **a configured token `loginOf` binds to no login** is not sent, with a
+  WARN (`The configured long-term token for <key> is not saved for this
+  login, and the list of tokens that were not accepted could not be fully
+  read, so it is not sent`). It may be a token another entry retired, and
+  the registry was the only record of whose it was. The attempt logs in with
+  an SMS instead, and the token it stores is bound to the login.
+
+Deleting the file forgets every retirement: retired tokens may be sent
+again, by any entry.
 
 ## Limits
 
@@ -522,7 +543,9 @@ never seen is trusted as the entry's own, which is how a token from another
 install is brought in. Once a login change has replaced a record, the old
 token is no longer in the file, so pasting it into another entry's
 `otpLongTermToken` cannot be recognised as another login's. The same holds
-after a `SIGKILL` between the two quarantine renames. The configured token is
+after a `SIGKILL` between the two quarantine renames. A retired token is the
+exception: the refused-token registry still names it, so no entry sends it
+while the registry holds its digest. The configured token is
 input the operator asserts for its own entry; tracking every replaced token
 until it expires was judged more machinery than this risk warrants.
 

@@ -42,12 +42,11 @@ function refuseOrThrow(refusals: RefusedTokens, storeKey: string, digest: string
 /**
  * Asks whether a digest is refused, failing the case when the registry is unreadable.
  * @param refusals - Registry under test.
- * @param storeKey - Entry to ask about.
  * @param digest - Digest to look up.
- * @returns True when the digest is refused for the entry.
+ * @returns True when any entry refused the digest.
  */
-function isRefused(refusals: RefusedTokens, storeKey: string, digest: string): boolean {
-  const view = refusals.read(storeKey);
+function isRefused(refusals: RefusedTokens, digest: string): boolean {
+  const view = refusals.read();
   if (!view.success) throw new Error(`read failed: ${view.message}`);
   return view.data.has(digest);
 }
@@ -70,16 +69,15 @@ describe('refusedTokensPathOf', () => {
 });
 
 describe('RefusedTokens', () => {
-  it('remembers a refusal for its own entry and digest only', () => {
+  it('names a refused digest whichever entry refused it, and no other digest', () => {
     const { refusals } = makeRegistry();
     const digest = tokenDigest(fakeToken());
-    refuseOrThrow(refusals, ENTRY, digest);
+    refuseOrThrow(refusals, OTHER_ENTRY, digest);
 
     expect({
-      own: isRefused(refusals, ENTRY, digest),
-      otherEntry: isRefused(refusals, OTHER_ENTRY, digest),
-      otherDigest: isRefused(refusals, ENTRY, tokenDigest(fakeToken())),
-    }).toEqual({ own: true, otherEntry: false, otherDigest: false });
+      refused: isRefused(refusals, digest),
+      otherDigest: isRefused(refusals, tokenDigest(fakeToken())),
+    }).toEqual({ refused: true, otherDigest: false });
   });
 
   it('writes only digests, owner-only, never the token', () => {
@@ -109,17 +107,19 @@ describe('RefusedTokens', () => {
     const digests = Array.from({ length: REFUSALS_PER_ENTRY + 1 }, () => tokenDigest(fakeToken()));
     for (const digest of digests) refuseOrThrow(refusals, ENTRY, digest);
 
-    const kept = digests.map((digest) => isRefused(refusals, ENTRY, digest));
+    const kept = digests.map((digest) => isRefused(refusals, digest));
     expect(kept).toEqual([false, ...Array<boolean>(REFUSALS_PER_ENTRY).fill(true)]);
   });
 
   it('keeps other entries when one entry refuses a token', () => {
-    const { refusals } = makeRegistry();
+    const { refusals, fileSystem } = makeRegistry();
     const [mine, theirs] = [tokenDigest(fakeToken()), tokenDigest(fakeToken())];
     refuseOrThrow(refusals, OTHER_ENTRY, theirs);
     refuseOrThrow(refusals, ENTRY, mine);
 
-    expect(isRefused(refusals, OTHER_ENTRY, theirs)).toBe(true);
+    expect(JSON.parse(fileSystem.contentsOf(REFUSED_PATH))).toEqual({
+      [OTHER_ENTRY]: [theirs], [ENTRY]: [mine],
+    });
   });
 
   it('refuses to record something that is not a digest, so no token is ever written', () => {
@@ -133,10 +133,10 @@ describe('RefusedTokens', () => {
   describe('when the file is absent', () => {
     it('reads as an intact, empty registry', () => {
       const { refusals } = makeRegistry();
-      const view = refusals.read(ENTRY);
+      const view = refusals.read();
 
       expect(view.success && view.data.isIntact).toBe(true);
-      expect(isRefused(refusals, ENTRY, tokenDigest(fakeToken()))).toBe(false);
+      expect(isRefused(refusals, tokenDigest(fakeToken()))).toBe(false);
     });
   });
 
@@ -144,10 +144,10 @@ describe('RefusedTokens', () => {
     it('reads as an empty registry that is not intact', () => {
       const { refusals, fileSystem } = makeRegistry();
       fileSystem.seedFile(REFUSED_PATH, '{ not json', OWNER_ONLY);
-      const view = refusals.read(ENTRY);
+      const view = refusals.read();
 
       expect(view.success && view.data.isIntact).toBe(false);
-      expect(isRefused(refusals, ENTRY, tokenDigest(fakeToken()))).toBe(false);
+      expect(isRefused(refusals, tokenDigest(fakeToken()))).toBe(false);
     });
 
     it('sets the damaged file aside before saving a refusal over it', () => {
@@ -157,7 +157,7 @@ describe('RefusedTokens', () => {
       refuseOrThrow(refusals, ENTRY, digest);
 
       expect(quarantined(fileSystem)).toHaveLength(1);
-      expect(isRefused(refusals, ENTRY, digest)).toBe(true);
+      expect(isRefused(refusals, digest)).toBe(true);
     });
 
     it('honours the valid digests of an entry that also holds junk, and rewrites it clean', () => {
@@ -165,7 +165,7 @@ describe('RefusedTokens', () => {
       const kept = tokenDigest(fakeToken());
       const contents = JSON.stringify({ [ENTRY]: [kept, 'junk', 7], [OTHER_ENTRY]: 'junk' });
       fileSystem.seedFile(REFUSED_PATH, contents, OWNER_ONLY);
-      const view = refusals.read(ENTRY);
+      const view = refusals.read();
       const added = tokenDigest(fakeToken());
       refuseOrThrow(refusals, ENTRY, added);
 
@@ -182,7 +182,7 @@ describe('RefusedTokens', () => {
       fileSystem.seedFile(REFUSED_PATH, '{}', OWNER_ONLY);
       fileSystem.forcedFailures.set('openForRead', 'EACCES');
 
-      expect(refusals.read(ENTRY)).toMatchObject({ success: false, status: 'EACCES' });
+      expect(refusals.read()).toMatchObject({ success: false, status: 'EACCES' });
     });
 
     it('never replaces the file it could not read', () => {

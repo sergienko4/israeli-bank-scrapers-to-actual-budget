@@ -8,8 +8,10 @@
  * configured one while the store holds none for the entry, then none, so the
  * provider logs in cold with an SMS.
  *
- * <p>A token that was not accepted before is never sent again. A stored one is
- * skipped in favour of the configured one, which is checked the same way.
+ * <p>A token that was not accepted before is not sent again, by any entry,
+ * while the list of tokens that were not accepted holds it, since a token logs
+ * in to one account whichever entry sends it. A stored one is skipped in
+ * favour of the configured one, which is checked the same way.
  *
  * <p>Pepper never asks here: its enrolled-device state replaced its long-term
  * token, and `PepperDeviceState` chooses what it sends.
@@ -17,8 +19,12 @@
  * <p>Every doubt about whose a token is fails closed. If the store cannot be
  * read, or the file is damaged, a configured token is never sent, because the
  * store could not say whose it is. The list of tokens that were not accepted
- * is the exception: if it cannot be read, tokens are checked as they were
- * before it existed, with a warning, since losing it costs no more than that.
+ * is the exception for tokens the store binds to this login: if it cannot be
+ * read in full, they are sent unless what it could read names them, with a
+ * warning. Retiring a token
+ * removes the record that bound it to its login, so for a configured token the
+ * store binds to no login, that list is the only record of whose it was; such
+ * a token is not sent unless the list was read in full.
  * Nothing here logs a token or its digest, and the token sent is registered
  * with the value masker, so no other output shows it.
  */
@@ -48,7 +54,7 @@ export interface IWarmTokenRequest {
 export interface ILoginContext {
   /** Account key, login, token store and logger for the attempt. */
   readonly capture: IAuthFlowCaptureParams;
-  /** The tokens each entry sent that were not accepted. */
+  /** The tokens any entry sent that were not accepted. */
   readonly refusals: IRefusedTokens;
 }
 
@@ -58,7 +64,7 @@ export interface IWarmTokenChoice {
   readonly decision: WarmTokenDecision;
 }
 
-/** Account key, login, store and logger for one attempt, and its entry's refusals. */
+/** Account key, login, store and logger for one attempt, and the refusals it honours. */
 type Params = IAuthFlowCaptureParams & { readonly refused: IRefusalView };
 
 /** The token an attempt sends, and where it came from. */
@@ -70,14 +76,14 @@ interface ISentToken {
 /** What an attempt sends when it sends no token. */
 const NOT_SENT: ISentToken = { source: 'none', token: NO_TOKEN };
 
-/** A refusal view that names no token, for a list that could not be read. */
+/** A refusal view that names no token and vouches for none, for a list that could not be read. */
 const NO_REFUSALS: IRefusalView = {
   /**
    * Names no token.
    * @returns False.
    */
   has: (): boolean => false,
-  isIntact: true,
+  isIntact: false,
 };
 
 /**
@@ -115,8 +121,8 @@ function send(params: Params, source: WarmTokenSource, token: string): ISentToke
 }
 
 /**
- * Tells whether a token was not accepted before for this entry.
- * @param params - Attempt parameters carrying the entry's refusals.
+ * Tells whether a token was not accepted before, for any entry.
+ * @param params - Attempt parameters carrying the refusals.
  * @param token - A token the attempt could send.
  * @returns True when the token must not be sent.
  */
@@ -181,6 +187,25 @@ function sendConfigured(params: Params, seed: string): ISentToken {
 }
 
 /**
+ * Sends a configured token the store binds to no login, only when the refusals were read in full.
+ *
+ * <p>Retiring a stored token removes the record that bound it to its login,
+ * so the refusal list is then the only record of it. A list that could not be
+ * read in full cannot say another entry did not retire this token.
+ * @param params - Attempt parameters carrying the key and refusals.
+ * @param seed - The trimmed, non-blank configured token.
+ * @returns The seed, or {@link NOT_SENT}.
+ */
+function fromUnboundSeed(params: Params, seed: string): ISentToken {
+  if (params.refused.isIntact || wasRefused(params, seed)) return sendConfigured(params, seed);
+  return refuse(
+    params,
+    `The ${configuredTokenOf(params)} is not saved for this login, and the list of tokens `
+    + 'that were not accepted could not be fully read, so it is not sent',
+  );
+}
+
+/**
  * Sends a configured token only when the file is intact and binds it to no other login.
  * @param params - Attempt parameters carrying the key and login.
  * @param view - The account's view of the store.
@@ -193,8 +218,8 @@ function fromVouchedSeed(params: Params, view: ITokenView, seed: string): ISentT
     return refuse(params, `The token file is damaged, so the ${configured} is not sent`);
   }
   const bound = view.loginOf(seed);
-  const isElsewhere = bound !== NO_LOGIN && bound !== params.login;
-  if (!isElsewhere) return sendConfigured(params, seed);
+  if (bound === NO_LOGIN) return fromUnboundSeed(params, seed);
+  if (bound === params.login) return sendConfigured(params, seed);
   return refuse(params, `The ${configured} belongs to another login, so it is not sent`);
 }
 
@@ -277,13 +302,13 @@ function chooseToken(params: Params, seed: unknown): ISentToken {
 }
 
 /**
- * Reads the entry's refusals, turning a throw into a failure.
+ * Reads the refusals, turning a throw into a failure.
  * @param context - The attempt's capture parameters and refusal list.
- * @returns The entry's view, or why the list could not be read.
+ * @returns The list's view, or why it could not be read.
  */
 function tryReadRefusals(context: ILoginContext): Procedure<IRefusalView> {
   try {
-    return context.refusals.read(context.capture.storeKey);
+    return context.refusals.read();
   } catch (error: unknown) {
     const detail = errorMessage(error);
     return fail(detail);
@@ -291,11 +316,12 @@ function tryReadRefusals(context: ILoginContext): Procedure<IRefusalView> {
 }
 
 /**
- * Reads the entry's refusals once for the attempt, warning when they cannot be trusted.
+ * Reads the refusals once for the attempt, warning when they cannot be trusted.
  *
- * <p>A list that cannot be read names no token, so every token is sent as it
- * was before the list existed. A damaged list still skips the tokens it can
- * name. Either way the warning says so.
+ * <p>A list that cannot be read names no token, and a damaged one still skips
+ * the tokens it can name. Either way the warning says so, and since the list
+ * was not read in full, a configured token the store binds to no login is
+ * not sent.
  * @param context - The attempt's capture parameters and refusal list.
  * @returns The refusals the attempt honours.
  */
