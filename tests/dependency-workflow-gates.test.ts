@@ -9,8 +9,9 @@
  * no proven push lock, a Dependabot pull request carrying more than one
  * Dependabot commit, a CI verdict read from anything but the newest CI run
  * for the head, a run that cannot name its pull request, a decision lock
- * that lets a stale run cancel the current head's waiting run, and a rebase
- * queue stalled by one pull request it cannot read.
+ * that lets a stale run cancel the current head's waiting run, a rebase
+ * queue stalled by one pull request it cannot read, and a push to main that
+ * regenerates a refresh main has not moved past, or one from a fork.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -566,6 +567,64 @@ describe.skipIf(!CAN_RUN)('lockfile refresh arming', () => {
     expect(run.status).toBe(0);
     expect(labelled(run.ghCalls)).toBe(true);
     expect(armed(run.ghCalls)).toBe(false);
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh behind main', () => {
+  const step = stepOf(REFRESH, 'behind', 'stale');
+  const env = { GH_TOKEN: 'token' };
+  const older = { number: 7, sha: 'c'.repeat(40) };
+  const newer = { number: 8, sha: 'd'.repeat(40) };
+
+  /**
+   * Builds an open refresh pull request as `gh pr list --json` returns it.
+   * @param pr - Its number and head commit.
+   * @param pr.number - Pull request number.
+   * @param pr.sha - Head commit.
+   * @param overrides - Fields to replace.
+   * @returns The listed pull request.
+   */
+  function listed(
+    pr: { readonly number: number; readonly sha: string },
+    overrides: Readonly<Record<string, unknown>> = {},
+  ): Record<string, unknown> {
+    const base = { number: pr.number, headRefName: `chore/lockfile-refresh-${String(pr.number)}`, headRefOid: pr.sha };
+    return { ...base, isCrossRepository: false, ...overrides };
+  }
+
+  /**
+   * Answers the comparison of a pull request's head with main.
+   * @param pr - Its head commit.
+   * @param pr.sha - Head commit.
+   * @param commits - How many commits main is ahead.
+   * @returns The `gh api` fixture.
+   */
+  function behindBy(pr: { readonly sha: string }, commits: number): Record<string, unknown> {
+    return { [`repos/${REPO}/compare/main...${pr.sha}`]: { behind_by: commits } };
+  }
+
+  it.each([
+    ['regenerates a refresh main has moved past', [listed(older)], behindBy(older, 2), 'true'],
+    ['leaves a refresh that is up to date', [listed(older)], behindBy(older, 0), 'false'],
+    ['does nothing when no refresh is open', [], {}, 'false'],
+    ['skips a comparison it cannot read', [listed(older)], {}, 'false'],
+    ['still regenerates when another refresh is behind', [listed(older), listed(newer)], behindBy(newer, 1), 'true'],
+  ])('%s', (_case, prList, gh, stale) => {
+    const run = runStep(step, { env, gh, prList });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ stale });
+  });
+
+  it.each([
+    ['a fork', { isCrossRepository: true }],
+    ['another branch', { headRefName: 'dependabot/npm_and_yarn/katex-0.18.10' }],
+  ])('never regenerates for a pull request from %s', (_case, overrides) => {
+    const run = runStep(step, { env, gh: behindBy(older, 2), prList: [listed(older, overrides)] });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ stale: 'false' });
+    expect(run.ghCalls.filter((call) => call.startsWith('api '))).toEqual([]);
   });
 });
 

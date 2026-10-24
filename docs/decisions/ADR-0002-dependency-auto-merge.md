@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-16
+- **Amended:** 2026-10-24 — see the note under Decision 4
 - **Deciders:** Repository maintainer
 - **Amends:** [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md)
 
@@ -120,6 +121,15 @@ tools that kept producing image alerts.
      As best-effort defence in depth, `lockfile-refresh-guard.yml` withdraws
      auto-merge and applies the same label after any push that gets
      through. It reacts after the push, so a merge can win the race.
+
+   > **Amended 2026-10-24.** Because the branch is push-locked and the
+   > ruleset requires it to be up to date with `main`, any push to `main`
+   > strands an open refresh: it cannot merge, and only the next weekly run
+   > replaced it. The workflow now also runs on push to `main` and
+   > regenerates when an open same-repository refresh is behind `main`; the
+   > new pull request supersedes the stale one as above. A push that leaves
+   > no refresh behind ends after a read-only check, so a refresh's own
+   > merge does not start another.
 
 5. **`.github/dependabot.yml`** splits majors out of every group. The
    development-dependency group, the pino group and each GitHub Actions group

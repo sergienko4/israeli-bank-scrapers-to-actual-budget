@@ -225,8 +225,9 @@ The push re-runs the check, which then passes.
 Fixes that already fit inside existing ranges arrive on their own:
 the Thursday `lockfile-refresh.yml` run applies `npm audit fix` and merges
 itself once CI is green. If that fix moves a pin across a major, the pull
-request is labelled `needs-manual-review` and waits for you instead. Do not
-push to a refresh branch: the "Restrict updates" ruleset described in the
+request is labelled `needs-manual-review` and waits for you instead. A
+refresh that `main` moves past is regenerated on the next push to `main`,
+which closes the stale pull request. Do not push to a refresh branch: the "Restrict updates" ruleset described in the
 [lockfile refresh guard][ci-refresh-guard] blocks it, and the refresh arms
 only once it has confirmed that ruleset is in force. If a push gets
 through anyway, a guard labels the pull request and tries to withdraw
@@ -304,6 +305,57 @@ instead.
 Only the deterministic repairs belong to the workflow. Audit findings, licence
 changes and test failures cannot be fixed by regenerating a file, so they are
 left to CI on the pull request, which reports them accurately.
+
+### When a dependency pull request is red
+
+Read the failing check before changing anything. Each kind of red has its own
+fix, and none of them is a push to the bot's branch.
+
+| What you see | Cause | Fix |
+| --- | --- | --- |
+| A Dependabot pull request is behind `main` or conflicting | `main` moved | Comment `@dependabot rebase`. Armed pull requests are rebased automatically, oldest first. |
+| A `chore/lockfile-refresh-*` pull request is conflicting | `main` changed `package-lock.json` | Run `gh workflow run lockfile-refresh.yml` unless a newer refresh has already replaced it. The new run starts from `main` and closes the stale pull request. |
+| A gate fails on files the pull request did not touch (a lint rule, an ESLint canary, a type-check) | A tool's new major changed what it reports | Fix it forward on `main`, as described below. |
+| `npm run audit` reports an unaddressed advisory | A new advisory reached the tree | Fix it in its own pull request: a lockfile refresh, an `overrides` floor, or a justified entry in `config/audit-policy.mjs`. Then comment `@dependabot rebase` on a Dependabot pull request, or run `gh workflow run lockfile-refresh.yml` for a refresh unless a newer one has already replaced it. |
+| Tests fail in code that uses the package | A real breaking change | Fix it forward when the code can work on both versions. Otherwise run `dependency-bump.yml` for that version (see [Bumping a package on demand](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-a-package-on-demand)) and push the code change to its `deps/…` branch. Dependabot drops the update once `main` carries that version. |
+
+Never push to a bot branch, and never press **Update branch** on one.
+Refresh branches are push-locked. Dependabot stops rebasing a branch
+someone else pushed to, and auto-merge fails closed on a commit it cannot
+prove came from Dependabot or the meta-render workflow.
+
+To fix forward:
+
+1. Reproduce on the bot's branch: `gh pr checkout <number>`, then
+   `npm ci --ignore-scripts`. Its `allowScripts` pins may already approve a
+   new install script nobody has reviewed (see
+   [Dependabot pull requests rotate their own pins](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#dependabot-pull-requests-rotate-their-own-pins)),
+   so run scripts only after reviewing that release, or in a disposable
+   environment with no secrets. Then run the failing script and read the
+   package's release notes for the change that explains it.
+2. On a branch from `main`, make the change work on both versions. When an
+   ESLint canary goes dead, move it to a pattern the new version still
+   reports. Never delete the canary or disable the rule to turn the build
+   green.
+3. Prove both versions: the gate passes on your branch, and again with your
+   change copied onto the bot's checkout (locally only, never pushed).
+4. Once the fix is merged, comment `@dependabot rebase` on a Dependabot pull
+   request. For a refresh, run `gh workflow run lockfile-refresh.yml` unless
+   a newer refresh has already replaced it.
+
+A refresh labelled `needs-manual-review` is left for a human. Its run summary
+says which case it is:
+
+- **It crossed a major.** Review the moved pins and merge it yourself.
+- **Its branch was not proven push-locked** (the run is red). Restore the
+  ruleset described in the
+  [lockfile refresh guard](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#lockfile-refresh-guard)
+  first, then review and merge it.
+- **Its branch moved after it was opened.** Do not merge it: its head is no
+  longer the commit the workflow produced. The guard tries to turn
+  auto-merge off and fails red when it cannot confirm it; if auto-merge is
+  still on, run `gh pr merge <number> --disable-auto`. Then run
+  `gh workflow run lockfile-refresh.yml` to replace it.
 
 ---
 
