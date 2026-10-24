@@ -66,7 +66,7 @@ Then start the portal entry point: `node dist/Portal.js`. Open
 | `port` / `PORTAL_PORT` | `8080` | Listen port. |
 | `authMode` | `password` | `password`, `google`, or `both`. |
 | `secureCookies` / `PORTAL_SECURE_COOKIES` | `false` | Mark cookies `Secure` (enable behind HTTPS). |
-| `PORTAL_TRUST_PROXY` | `false` | Address the reverse proxy connects from, allowed to set `X-Forwarded-For`; `loopback` behind `tailscale serve` so rate limits count the caller. A hop count such as `1` was accepted before 1.42.12 and is now refused — see [Upgrading](../UPGRADING.md). |
+| `PORTAL_TRUST_PROXY` | `false` | Address the reverse proxy connects from, allowed to set `X-Forwarded-For`; `loopback` behind `tailscale serve` so rate limits count the caller. A hop count such as `1` was accepted before 1.42.12 and is now refused — see [Upgrading](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/UPGRADING.md). |
 
 > **Boot requirement:** the snippet above is not enough to start. Every mode
 > needs a strong `sessionSecret` (≥16 characters), and `password`/`both` mode
@@ -529,7 +529,7 @@ curl -s http://127.0.0.1:8080/api/status -H "authorization: Bearer $TOKEN"
 The importer writes the audit log and the portal reads it, so both must agree on
 the file. It defaults to `/app/data/audit-log.json`, on the data volume both
 services mount at `/app/data` (see
-[Least privilege](#least-privilege-importer-reads-portal-writes)). If you set
+[Least privilege](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md#least-privilege-importer-reads-portal-writes)). If you set
 **`AUDIT_LOG_PATH`**, set the same path on both services, on a volume the
 importer can write; `/app/config` does not work, because the importer mounts it
 read-only. The payload is a redacted summary — no

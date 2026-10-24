@@ -203,7 +203,7 @@ non-card bank and says so in its output.
 
 ## 1.42.12 — `PORTAL_TRUST_PROXY` no longer accepts a proxy hop count
 
-**Affects:** deployments that run the [config portal](configuration/portal.md)
+**Affects:** deployments that run the [config portal](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/portal.md)
 behind a reverse proxy **and** set `PORTAL_TRUST_PROXY` (or `portal.trustProxy`)
 to a **number**. The most common case is `PORTAL_TRUST_PROXY=1` behind
 `tailscale serve` — the value this documentation recommended before 1.42.12.
