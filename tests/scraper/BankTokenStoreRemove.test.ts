@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { NO_RECORD } from '../../src/Scraper/Tokens/BankTokenRecords.js';
+import tokenDigest from '../../src/Scraper/Tokens/TokenDigest.js';
 import createTokenRecordCipher from '../../src/Scraper/Tokens/TokenRecordCipher.js';
 import { TEST_ENCRYPTION_KEY } from '../helpers/testCredentials.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
@@ -151,5 +152,66 @@ describe('BankTokenStore remove', () => {
       store.remove(DEVICE_KEY);
       expect(store.read(DEVICE_KEY)).toMatchObject({ success: true, data: { record: { token: device } } });
     });
+  });
+});
+
+/**
+ * A token that was not accepted is retired only if it is still the one stored.
+ * By then another attempt may have minted a new token for the entry, and
+ * deleting that one would cost an extra SMS for nothing.
+ */
+describe('BankTokenStore removeMatching', () => {
+  it('retires the stored token it was asked about, keeping every other entry', () => {
+    const { store, fileSystem, sibling } = seedPair();
+    const device = fakeToken();
+    store.write(DEVICE_KEY, device, ACCOUNT_LOGIN);
+    const result = store.removeMatching(DEVICE_KEY, tokenDigest(device));
+    expect(result).toMatchObject({ success: true, data: 'retired' });
+    expect(storedRecords(fileSystem)).toEqual({ [SIBLING_KEY]: sibling });
+  });
+
+  it('keeps a token that changed since, and writes nothing', () => {
+    const { store, fileSystem } = seedPair();
+    const seeded = fileSystem.contentsOf(STORE_PATH);
+    const result = store.removeMatching(DEVICE_KEY, tokenDigest(fakeToken()));
+    expect({ result, left: fileSystem.contentsOf(STORE_PATH), staged: fileSystem.stagedPaths })
+      .toMatchObject({ result: { success: true, data: 'changed' }, left: seeded, staged: [] });
+  });
+
+  it('reports an entry with no usable token as absent, and creates no file', () => {
+    const { store, fileSystem } = makeStore();
+    const result = store.removeMatching(DEVICE_KEY, tokenDigest(fakeToken()));
+    expect({ result, exists: fileSystem.hasEntry(STORE_PATH) })
+      .toMatchObject({ result: { success: true, data: 'absent' }, exists: false });
+  });
+
+  it('never replaces a store it is not allowed to open', () => {
+    const { store, fileSystem } = seedPair();
+    const seeded = fileSystem.contentsOf(STORE_PATH);
+    fileSystem.forcedFailures.set('openForRead', 'EACCES');
+    const result = store.removeMatching(DEVICE_KEY, tokenDigest(fakeToken()));
+    expect({ result, left: fileSystem.contentsOf(STORE_PATH) })
+      .toMatchObject({ result: { success: false, status: 'EACCES' }, left: seeded });
+  });
+
+  it('sets a damaged store aside before retiring, keeping the usable siblings', () => {
+    const { store, fileSystem } = makeStore();
+    const [device, sibling] = [fakeToken(), recordOf(fakeToken())];
+    seedRecords(fileSystem, { payBox: null, [DEVICE_KEY]: recordOf(device), [SIBLING_KEY]: sibling });
+    const result = store.removeMatching(DEVICE_KEY, tokenDigest(device));
+    expect(result).toMatchObject({ success: true, data: 'retired' });
+    expect({ kept: quarantinedNames(fileSystem).length, stored: storedRecords(fileSystem) })
+      .toEqual({ kept: 1, stored: { [SIBLING_KEY]: sibling } });
+  });
+
+  it('names the account it could not retire, but never a token', () => {
+    const { store, fileSystem } = makeStore();
+    const device = fakeToken();
+    seedRecords(fileSystem, { [DEVICE_KEY]: recordOf(device) });
+    fileSystem.forcedFailures.set('rename', 'EXDEV');
+    const result = store.removeMatching(DEVICE_KEY, tokenDigest(device));
+    expect(!result.success && result.message)
+      .toMatch(/^Could not remove the long-term token for pepper-device:family: /);
+    expect(JSON.stringify(result)).not.toContain(device);
   });
 });

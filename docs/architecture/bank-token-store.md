@@ -71,7 +71,7 @@ missing entry name falls back to `bankId` alone.
 Pepper's device state is stored under its own bank id, `pepper-device`, so it
 never shares a key with the long-term token an earlier release saved under
 `pepper:<entry name>`. That legacy entry stays in the file, unsent; see
-[Pepper device state](#pepper-device-state).
+[Pepper device state](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#pepper-device-state).
 
 The entry name is used verbatim, and the key is stored verbatim: normalising
 either would put two accounts on one entry, and because each mint revokes the
@@ -172,7 +172,7 @@ why a run went cold. Swallowing it would make a broken store
 indistinguishable from a first run.
 
 With a password set, an entry is usable only if it opens
-([At rest](#at-rest)), and the rules below apply to the opened record. An
+([At rest](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#at-rest)), and the rules below apply to the opened record. An
 entry is usable when `token` is an own string that is non-blank once
 trimmed and `login` is a fingerprint. A token bound to two different logins
 makes every entry holding it unusable, since none of the bindings can be
@@ -226,9 +226,18 @@ nothing that account could send, and the next write sets any damage aside. A
 failure names the key and the cause, never the token
 (`Could not remove the long-term token for <key>: <cause>`).
 
-Only Pepper's device state is ever removed, and only after Pepper refused it;
-see [Pepper device state](#pepper-device-state). A long-term token the bank
-refuses is replaced by the next SMS login instead.
+Pepper's device state is removed after Pepper refused it; see
+[Pepper device state](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#pepper-device-state). A long-term token the bank
+refuses is replaced by the next SMS login instead. The exception is a token
+that ends a run with the one-SMS-login error, which is retired; see
+[Refused tokens](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens).
+
+`removeMatching(storeKey, digest)` is the compare-and-remove that retirement
+uses. Within one read of the file, it digests the entry's stored token and
+removes the entry only when that digest matches. It answers `retired`,
+`absent` (no usable entry, nothing written), or `changed` (the entry holds
+another token, such as one minted since the attempt read the store, which is
+kept). A failure is worded as for `remove`.
 
 ## Leftover staging files
 
@@ -242,19 +251,21 @@ also sweep afterwards. [Wiring](https://github.com/sergienko4/israeli-bank-scrap
 ## Wiring
 
 `buildScrapeStrategy` in `src/Importer/PipelineComposition.ts` builds one
-store per import process and hands it to the live strategy.
+store per import process and hands it to the live strategy, together with the
+[refused-token registry](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens).
 `openBankTokenStore` in `src/Importer/BankTokenStoreWiring.ts` reads the
 config password once and gives the store a sealing cipher, or the plain-text
-one when no password is set. Building it touches no file and derives no key,
-so a run that scrapes only browser banks never opens the token file; a
+one when no password is set. Building either touches no file and derives no
+key, so a run that scrapes only browser banks never opens the token file; a
 malformed `BANK_TOKENS_PATH` still fails the run at startup.
 Mock runs (`E2E_MOCK_SCRAPER_DIR` or `E2E_MOCK_SCRAPER_FILE`) build no store.
 
 For each API-direct scrape, `src/Scraper/Tokens/AuthFlowCapture.ts`:
 
-1. sweeps leftover staging files before the first attempt. Every import,
-   scheduled or on demand, is its own child process, so this runs on every
-   run that can stage a token;
+1. sweeps leftover staging files of both files before the first attempt,
+   naming which file in its log lines (`token` or `refused-token`).
+   Every import, scheduled or on demand, is its own child process, so this
+   runs on every run that can stage a token;
 2. attaches `onAuthFlowComplete` to the provider options. The provider calls
    it as soon as a login completes, including a login it repeats mid-run
    because the bank rejected the session, so the new token is stored even if
@@ -304,16 +315,18 @@ browser banks never read it. The order is:
    `Using the stored long-term token for <key>`). When it is bound to another
    login, the entry's email or phone number changed since it was minted: no
    token is sent, and the configured one is not consulted either, since it is
-   at least as old (INFO);
+   at least as old (INFO). When it was [retired](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens), a WARN, and
+   the attempt goes on to step 2 as if the store held none;
 2. when the store holds none for the entry, the configured
-   `otpLongTermToken`, only if it is non-blank text, the file is intact, and
-   `loginOf` binds it to no other login (INFO
+   `otpLongTermToken`, only if it is non-blank text, the file is intact,
+   `loginOf` binds it to no other login, and it was not retired (INFO
    `Using the configured long-term token for <key>`). Otherwise a WARN and no
    token;
 3. otherwise no token, so the provider logs in cold with an SMS.
 
-Every doubt fails closed. No login fingerprint, and a store that cannot be read
-or throws, each give a WARN naming the key, and no token. A damaged file warns
+Every doubt fails closed, except over the refused-token registry. No login
+fingerprint, and a store that cannot be read or throws, each give a WARN
+naming the key, and no token. A damaged file warns
 whenever it leaves the attempt with no token: when it stops a configured token
 from being sent, and when no token is configured and it holds none usable for
 the key. The store's view cannot say whose entry was damaged, so that warning
@@ -337,7 +350,8 @@ token it judges stale before it asks the bank. Neither warns when no token was
 sent, since the resolver has already said why. A stale token takes neither
 path: upstream spends the run's one cold login at once, and when that login
 fails its second one is refused, so the attempt fails as `GENERIC` with
-`already spent its one cold SMS login`, which the error advice explains.
+`already spent its one cold SMS login`, which the error advice explains, and
+`settleToken` [retires](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens) the token.
 
 The attempt's login fingerprint is computed once, in
 `buildTokenCaptureParams`, so the resolver and the capture use the same login,
@@ -408,6 +422,80 @@ that fails warns with the cause, and the next run sends the state again.
 `tests/scraper/PepperStateRefusal.test.ts` checks the wording this rule reads
 against the installed upstream bundle, so a bump that rewords it fails the
 tests.
+
+## Refused tokens
+
+When a login that carries a token fails, upstream falls back to a cold SMS
+login, and its one-cold-login-per-scrape budget refuses that second login. The
+attempt fails as `GENERIC` with `already spent its one cold SMS login`, which
+hides the first failure. The cause is often an error before any SMS is sent:
+an `otp/prepare` rate limit, a device-bind error, or a stale token. Sending the
+same token on the next run is likely to fail the same way, so run after run
+can fail without ever asking for a code.
+
+`src/Scraper/Tokens/RefusedTokens.ts` records such tokens in
+`bank-tokens.refused.json`, beside the token file. `refusedTokensPathOf` in
+`BankTokenPath.ts` replaces the token file's `.json` with `.refused.json`, or
+appends it, so the file shares the token file's volume and any
+`BANK_TOKENS_PATH` override. It goes through `SecureJsonStore` like the token
+file, with the same owner-only mode, atomic writes, quarantine and size cap.
+
+```json
+{
+  "onezero:oneZero": ["9c1e…", "04ab…"]
+}
+```
+
+- **Digests, not tokens.** `tokenDigest` in `TokenDigest.ts` is SHA-256 of a
+  fixed label and version (`refused-long-term-token:v1\0`) followed by the
+  trimmed token, as 64 lowercase hex characters. The registry only compares
+  digests, so the file is not a second copy of a credential, and it is not
+  sealed under the config password. The label keeps it from being a plain
+  SHA-256 of the token. There is no secret salt: a token has far too much
+  entropy for its digest to be reversed.
+- **An ordered set per entry.** Each key holds distinct digests, oldest first,
+  at most `REFUSALS_PER_ENTRY` (8). Retiring a digest already held moves it to
+  newest, and the ninth distinct one evicts the oldest. Nothing else clears a
+  digest. A new SMS login mints a token with a new digest, so a retired digest
+  never blocks it.
+
+**Retiring.** After each attempt, `settleToken` in `AttemptRunner.ts` calls
+`retireRefusedToken` in `src/Scraper/Tokens/TokenRefusal.ts`. It acts only when
+the attempt's `WarmTokenWatch` says a token was sent, and the result is a
+`GENERIC` failure whose message matches `BUDGET_SPENT_PATTERN`. That pattern is
+shared with the error advice in `ScraperErrorMessages.ts`. The watch carries
+the token's source and digest, never the token. Then:
+
+1. `refuse(storeKey, digest)` records the digest;
+2. for a stored token, [`removeMatching`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#removing) removes it, unless the
+   entry now holds a token minted since the attempt read the store;
+3. a WARN says the token is retired, or, when step 1 failed, that it could not
+   be retired and to remove `otpLongTermToken`. Any store failure warns with
+   its cause first. The scrape's result is returned unchanged.
+
+A token that was still valid, and failed only on a passing error, is retired
+too. That can cost one SMS on the next run, which mints a new token. Pepper
+sends no long-term token, so nothing is retired for it.
+
+**Reading.** The resolver reads the entry's refusals once per attempt, and
+checks the stored and the configured token against that one snapshot; see
+[Replay](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#replay). The file is in one of three states:
+
+- **absent or intact:** the recorded digests are skipped. An intact entry is
+  a list of at most 8 distinct digests, each 64 lowercase hex characters;
+- **damaged** (`damaged` or `stripped`, or an entry that is not such a list:
+  not a list, or holding a non-digest, a duplicate, or more than 8): the
+  newest 8 distinct valid digests it holds are skipped, with a WARN. The next
+  `refuse` quarantines the file before it replaces it;
+- **unreadable:** nothing is skipped, and a WARN names the cause. `refuse`
+  never writes over it.
+
+This is the one doubt that fails open. The registry is a negative cache, not
+a check on who may log in. Sending a retired token by mistake may repeat the
+original failure. Failing closed would send no token at all, which
+costs an SMS on every run, or fails the run when `twoFactorAuth` is off.
+Deleting the file has the same effect as one that cannot be read: retired
+tokens may be sent again.
 
 ## Limits
 

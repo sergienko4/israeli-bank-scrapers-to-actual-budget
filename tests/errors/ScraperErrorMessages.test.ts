@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
+  BUDGET_SPENT_PATTERN,
   SCRAPER_ERROR_ADVICE,
   getScraperErrorAdvice,
 } from '../../src/Errors/ScraperErrorMessages.js';
@@ -154,13 +155,18 @@ describe('ScraperErrorMessages', () => {
   });
 
   /**
-   * Scraper 8.7.3 allows one SMS login per scrape. When a run needs a second
-   * one, it fails as GENERIC. Without a signature, the operator is told to look
-   * for a scraper update, but the fix is simply to run the import again.
+   * Scraper 8.7.3 allows one SMS login per scrape. A run that sends a long-term
+   * token can fail its first cold login and then be refused a second one, so the
+   * operator sees the refusal instead of the real failure. Running again with
+   * the same token fails the same way, so the advice must not promise that it
+   * helps.
    */
   describe('one SMS login per scrape (scraper 8.7.3)', () => {
-    const BUDGET_ADVICE = 'This run already used its one SMS login and will not send '
-      + 'a second code. Run the import again — the new run may ask for one new code.';
+    const BUDGET_ADVICE = 'The login failed, and the scraper hid the real reason behind '
+      + 'its one-SMS-login limit. The importer tries to retire any long-term token this run '
+      + 'sent, so the next run logs in without it and either asks for one SMS code or shows '
+      + 'the real reason. If this repeats, remove otpLongTermToken for this bank and keep '
+      + 'twoFactorAuth on.';
     const GENERIC_ADVICE = 'Scraping failed unexpectedly. '
       + 'Bank website may have changed — check for scraper updates.';
 
@@ -176,6 +182,11 @@ describe('ScraperErrorMessages', () => {
 
     it('matches the wording the installed scraper sends', () => {
       expect(getScraperErrorAdvice(`GENERIC ${providerBudgetMessage()}`)).toBe(BUDGET_ADVICE);
+    });
+
+    it('shares its pattern, so token retirement fires on the same wording', () => {
+      expect(BUDGET_SPENT_PATTERN.test(providerBudgetMessage())).toBe(true);
+      expect(BUDGET_SPENT_PATTERN.test('GENERIC cold SMS login timed out')).toBe(false);
     });
   });
 });

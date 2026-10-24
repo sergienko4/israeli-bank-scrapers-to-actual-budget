@@ -11,6 +11,7 @@ import { DEFAULT_RESILIENCE_CONFIG } from '../../../Types/Index.js';
 import { captureResultToken, isApiDirectBank, sweepTokenLeftovers } from '../../Tokens/AuthFlowCapture.js';
 import type { IDeviceStateWatch } from '../../Tokens/PepperDeviceState.js';
 import forgetRefusedState from '../../Tokens/PepperStateRefusal.js';
+import retireRefusedToken from '../../Tokens/TokenRefusal.js';
 import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
 import { warnIfNotAccepted } from '../../Tokens/WarmTokenWatch.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
@@ -48,15 +49,18 @@ export default async function runLiveScrape(
  * Announces the scrape and clears staged token files a killed run left behind.
  *
  * Only API-direct banks sweep, and the sweep only ever warns, so it cannot
- * cost the scrape.
- * @param deps - Strategy dependencies exposing the token store.
+ * cost the scrape. The token file and the refused-token file are both swept.
+ * @param deps - Strategy dependencies exposing the token stores.
  * @param scrapeOpts - Resolved scrape options for the current bank.
- * @returns True when the token store was swept.
+ * @returns True when both stores were swept.
  */
 function startScrape(deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts): boolean {
   scrapeOpts.logger.info(`  🔍 Scraping transactions from ${scrapeOpts.bankId}...`);
   const captureParams = buildTokenCaptureParams(deps, scrapeOpts);
-  return sweepTokenLeftovers(captureParams);
+  const didSweepTokens = sweepTokenLeftovers(captureParams);
+  const refusals = { label: 'refused-token', store: deps.refusedTokens };
+  const didSweepRefusals = sweepTokenLeftovers(captureParams, refusals);
+  return didSweepTokens && didSweepRefusals;
 }
 
 /**
@@ -140,9 +144,11 @@ interface IFinishedAttempt {
  * Acts on what an attempt's result says about its token.
  *
  * Warns when a sent token did not log in and the run could not ask for a
- * code, removes a Pepper device state the result proves refused, then stores
- * any token the result carried.
- * @param deps - Strategy dependencies exposing the token store.
+ * code, removes a Pepper device state the result proves refused, retires a
+ * long-term token that left upstream needing a second cold login, then stores
+ * any token the result carried. Retiring first is safe: it removes a stored
+ * token only while the store still holds it, and that failure carries none.
+ * @param deps - Strategy dependencies exposing the token stores.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @param attempt - The attempt's result and watches.
  * @returns The attempt's result, unchanged.
@@ -152,6 +158,7 @@ function settleToken(
 ): IScraperScrapingResult {
   warnIfNotAccepted(attempt.tokenWatch, attempt.result);
   forgetRefusedState(attempt.deviceWatch, attempt.result);
+  retireRefusedToken(attempt.tokenWatch, attempt.result, deps);
   return keepMintedToken(deps, scrapeOpts, attempt.result);
 }
 

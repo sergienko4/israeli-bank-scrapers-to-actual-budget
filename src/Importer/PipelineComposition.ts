@@ -28,7 +28,7 @@ import type { INamedStep } from '../Scrapers/Pipeline/Types/PipelineStep.js';
 import SpendingWatchService from '../Services/SpendingWatchService.js';
 import type { IImporterConfig, Procedure } from '../Types/Index.js';
 import { succeed } from '../Types/Index.js';
-import openBankTokenStore from './BankTokenStoreWiring.js';
+import openBankTokenStore, { openRefusedTokens } from './BankTokenStoreWiring.js';
 import type { ICoreServices } from './CoreServicesWiring.js';
 import type { IResilienceComponents } from './ResilienceWiring.js';
 
@@ -89,6 +89,7 @@ export function buildScrapeStrategy(inputs: IScrapeStrategyInputs): IBankScrapeS
     twoFactorPrompter: services.twoFactorPrompter,
     notificationService: services.notificationService,
     bankTokens: openBankTokenStore(),
+    refusedTokens: openRefusedTokens(),
   });
 }
 

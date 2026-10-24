@@ -14,17 +14,18 @@
  * for the wrong login shows up as the wrong account, not just a wrong call.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import loginFingerprint from '../../src/Scraper/Tokens/LoginFingerprint.js';
+import tokenDigest from '../../src/Scraper/Tokens/TokenDigest.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
 import type { IApiDirectBank } from '../helpers/apiDirectBanks.js';
 import { accountOf, LONG_TERM_TOKEN_BANKS } from '../helpers/apiDirectBanks.js';
 import type { IFakeApiDirectBank } from './helpers/fakeApiDirectBank.js';
-import { accountNumberOf, openApiDirectBank } from './helpers/fakeApiDirectBank.js';
+import { accountNumberOf, codeRequestRefusalOf, openApiDirectBank } from './helpers/fakeApiDirectBank.js';
 import type { IRun, ITokenStoreDir, SpyLogger } from './helpers/warmStartHarness.js';
 import {
   closeTokenStore, countingPrompter, everythingLogged, openTokenStore, runImport, storedTokens,
@@ -47,6 +48,11 @@ interface IRefusal {
   readonly refuse: (bank: IFakeApiDirectBank, bankConfig: IBankConfig) => void;
   /** How a run ends when the cold login this refusal leads to fails as `errorType`. */
   readonly coldFailure: (errorType: string) => Record<string, unknown>;
+  /**
+   * What that failure does to the stored token: a plain failure keeps it, and
+   * the budget failure retires it, as it hides why the cold login failed.
+   */
+  readonly afterColdFailure: 'keeping the token' | 'retiring the token';
 }
 
 /** A way the token file can fail, and the warning the run gives for it. */
@@ -131,6 +137,7 @@ const revoked: IRefusal = {
   why: 'a revoked',
   refuse: (bank, bankConfig): void => { bank.revoke(bankConfig); },
   coldFailure: (errorType) => ({ success: false, errorType }),
+  afterColdFailure: 'keeping the token',
 };
 
 const refusals: IRefusal[] = [
@@ -139,6 +146,7 @@ const refusals: IRefusal[] = [
     why: 'an expired',
     refuse: (bank, bankConfig): void => { bank.expire(bankConfig); },
     coldFailure: () => BUDGET_SPENT,
+    afterColdFailure: 'retiring the token',
   },
 ];
 
@@ -276,8 +284,16 @@ describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token replay, $name', (row:
     expect([cold, warm, moved].flatMap(notAcceptedWarnings)).toEqual([]);
   });
 
-  it.each(refusals)('fails with no SMS for $why token when twoFactorAuth is off, keeping the token', async ({
-    refuse, coldFailure,
+  /**
+   * Names the token a failed cold login leaves stored.
+   * @param afterColdFailure - What the failure does to the token.
+   * @returns The first minted token when kept, or undefined when retired.
+   */
+  const storedAfter = (afterColdFailure: IRefusal['afterColdFailure']): string | undefined =>
+    (afterColdFailure === 'keeping the token' ? bank.minted[0] : undefined);
+
+  it.each(refusals)('fails with no SMS for $why token when twoFactorAuth is off, $afterColdFailure', async ({
+    refuse, coldFailure, afterColdFailure,
   }) => {
     const entry = bank.customer();
     await importOnce(FIRST, entry);
@@ -288,11 +304,11 @@ describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token replay, $name', (row:
     expect(stuck.outcome).toMatchObject(coldFailure('TWO_FACTOR_RETRIEVER_MISSING'));
     expect(stuck.smsCount).toBe(0);
     expect(bank.sent).toEqual([undefined, bank.minted[0]]);
-    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[0]);
+    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(storedAfter(afterColdFailure));
   });
 
-  it.each(refusals)('fails after one SMS when the code for $why token is rejected, keeping the token', async ({
-    refuse, coldFailure,
+  it.each(refusals)('fails after one SMS when the code for $why token is rejected, $afterColdFailure', async ({
+    refuse, coldFailure, afterColdFailure,
   }) => {
     const entry = bank.customer();
     await importOnce(FIRST, entry);
@@ -304,7 +320,7 @@ describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token replay, $name', (row:
     expect(rejected.outcome).toMatchObject(coldFailure('INVALID_OTP'));
     expect(rejected.smsCount).toBe(1);
     expect(bank.minted).toHaveLength(1);
-    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[0]);
+    expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(storedAfter(afterColdFailure));
   });
 
   it('keeps a token per entry, so two entries of one bank both log in without SMS', async () => {
@@ -415,5 +431,131 @@ describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token replay, $name', (row:
 
     expect(bank.minted).toHaveLength(4);
     for (const token of bank.minted) expect(logged).not.toContain(token);
+  });
+
+  /**
+   * A cold login the bank refuses before it sends the SMS code, after a
+   * token, makes upstream try a second cold login, which its one-login budget
+   * refuses: the budget failure hides the bank's own. Sending the token again
+   * fails the same way, so the run that hits it retires the token and the
+   * next run logs in without one, asking for the code or showing the real
+   * failure.
+   */
+  describe('a cold login refused before the SMS code, after a token', () => {
+    /** What upstream reports once no token hides the bank's refusal. */
+    const codeNotSent = (): Record<string, unknown> => ({
+      success: false, errorType: 'GENERIC', errorMessage: codeRequestRefusalOf(row),
+    });
+
+    /**
+     * Names the file the importer records refused tokens in.
+     * @returns Its path, beside the token file.
+     */
+    const refusedPath = (): string => join(store.directory, 'bank-tokens.refused.json');
+
+    /**
+     * Fails a case when any run logged a token the bank minted, or its digest.
+     * @param runs - The case's runs.
+     * @returns Nothing.
+     */
+    const expectNoTokenLogged = (runs: readonly IRun[]): void => {
+      const logged = runs.map((run) => everythingLogged(run.logger)).join('\n');
+      for (const token of bank.minted) {
+        expect(logged).not.toContain(token);
+        expect(logged).not.toContain(tokenDigest(token));
+      }
+    };
+
+    it('stops sending a configured token, so the next run shows why the code was not sent', async () => {
+      const entry = bank.customer();
+      const seed = bank.mintElsewhere(entry);
+      bank.revoke(entry);
+      bank.refuseCodeRequests();
+      const configured = { ...entry, otpLongTermToken: seed };
+
+      const hidden = await importOnce(FIRST, configured);
+      const shown = await importOnce(FIRST, configured);
+
+      expect(hidden.result).toMatchObject(BUDGET_SPENT);
+      expect(shown.result).toMatchObject(codeNotSent());
+      expect([hidden.smsCount, shown.smsCount]).toEqual([0, 0]);
+      expect(bank.sent).toEqual([seed, undefined]);
+      expect(said(hidden.logger.warn)).toContain(`The configured long-term token for ${keyOf(FIRST)} `
+        + 'was not accepted; it is retired, so the next run logs in without it');
+      expect(said(shown.logger.warn)).toContain(`The configured long-term token for ${keyOf(FIRST)} `
+        + 'was not accepted before, so it is not sent — remove or replace otpLongTermToken');
+      expect(readFileSync(refusedPath(), 'utf8')).not.toContain(seed);
+      expectNoTokenLogged([hidden, shown]);
+    });
+
+    it('logs in with one SMS after retiring a configured token, then warm with the new one', async () => {
+      const entry = bank.customer();
+      const seed = bank.mintElsewhere(entry);
+      bank.revoke(entry);
+      bank.refuseCodeRequests(1);
+      const configured = { ...entry, otpLongTermToken: seed };
+
+      const hidden = await importOnce(FIRST, configured);
+      const cold = await importOnce(FIRST, configured);
+      const warm = await importOnce(FIRST, configured);
+
+      expect(hidden.result).toMatchObject(BUDGET_SPENT);
+      expect([hidden.smsCount, cold.smsCount, warm.smsCount]).toEqual([0, 1, 0]);
+      expect(bank.sent).toEqual([seed, undefined, bank.minted[1]]);
+      expect([cold, warm].map(importedAccount)).toEqual([accountNumberFor(entry), accountNumberFor(entry)]);
+      expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[1]);
+      expectNoTokenLogged([hidden, cold, warm]);
+    });
+
+    it.each(refusals)('removes $why stored token, then logs in with one SMS and warm after', async ({ refuse }) => {
+      const entry = bank.customer();
+      const first = await importOnce(FIRST, entry);
+      refuse(bank, entry);
+      bank.refuseCodeRequests(1);
+
+      const hidden = await importOnce(FIRST, entry);
+      const removed = storedTokens(store.tokensPath)[keyOf(FIRST)];
+      const cold = await importOnce(FIRST, entry);
+      const warm = await importOnce(FIRST, entry);
+
+      expect(hidden.result).toMatchObject(BUDGET_SPENT);
+      expect(removed).toBeUndefined();
+      expect([hidden.smsCount, cold.smsCount, warm.smsCount]).toEqual([0, 1, 0]);
+      expect(bank.sent).toEqual([undefined, bank.minted[0], undefined, bank.minted[1]]);
+      expect(said(hidden.logger.warn)).toContain(`The stored long-term token for ${keyOf(FIRST)} `
+        + 'was not accepted; it is retired, so the next run logs in without it');
+      expectNoTokenLogged([first, hidden, cold, warm]);
+    });
+
+    it('never falls back to a configured token that is the stored one it retired', async () => {
+      const entry = bank.customer();
+      await importOnce(FIRST, entry);
+      const configured = { ...entry, otpLongTermToken: bank.minted[0] };
+      bank.revoke(entry);
+      bank.refuseCodeRequests(1);
+
+      const hidden = await importOnce(FIRST, configured);
+      const cold = await importOnce(FIRST, configured);
+
+      expect(hidden.result).toMatchObject(BUDGET_SPENT);
+      expect(bank.sent).toEqual([undefined, bank.minted[0], undefined]);
+      expect(cold.smsCount).toBe(1);
+      expect(said(cold.logger.warn)).toContain(`The configured long-term token for ${keyOf(FIRST)} `
+        + 'was not accepted before, so it is not sent');
+      expectNoTokenLogged([hidden, cold]);
+    });
+
+    it('never retires a token the bank accepts', async () => {
+      const entry = bank.customer();
+      await importOnce(FIRST, entry);
+      bank.refuseCodeRequests();
+
+      const warm = [await importOnce(FIRST, entry), await importOnce(FIRST, entry)];
+
+      expect(warm.map((run) => run.smsCount)).toEqual([0, 0]);
+      expect(bank.sent).toEqual([undefined, bank.minted[0], bank.minted[0]]);
+      expect(existsSync(refusedPath())).toBe(false);
+      expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[0]);
+    });
   });
 });

@@ -11,6 +11,7 @@ import type { ITwoFactorPrompter } from '../../Services/ITwoFactorPrompter.js';
 import type NotificationService from '../../Services/NotificationService.js';
 import type { IImporterConfig, IRawScrape, Procedure } from '../../Types/Index.js';
 import type { IBankTokenStore } from '../Tokens/BankTokenStore.js';
+import type { IRefusedTokens } from '../Tokens/RefusedTokens.js';
 import type {
   IBankScrapeStrategy,
   IBankScrapeStrategyOpts,
@@ -27,6 +28,8 @@ export interface ILiveScrapeStrategyOpts {
   readonly notificationService: NotificationService;
   /** Where API-direct banks' long-term tokens are kept between runs. */
   readonly bankTokens: IBankTokenStore;
+  /** Digests of long-term tokens that were not accepted, so they are not sent again. */
+  readonly refusedTokens: IRefusedTokens;
 }
 
 /** Strategy driving the real israeli-bank-scrapers package. */

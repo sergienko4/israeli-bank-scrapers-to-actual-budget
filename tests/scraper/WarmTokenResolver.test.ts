@@ -20,12 +20,18 @@ import redactSecrets from '../../src/Logger/SecretRedaction.js';
 import type { IAuthFlowCaptureParams } from '../../src/Scraper/Tokens/AuthFlowCapture.js';
 import { NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
 import type { IBankTokenStore } from '../../src/Scraper/Tokens/BankTokenStore.js';
+import type { IRefusedTokens } from '../../src/Scraper/Tokens/RefusedTokens.js';
+import tokenDigest from '../../src/Scraper/Tokens/TokenDigest.js';
+import type { ILoginContext } from '../../src/Scraper/Tokens/WarmTokenResolver.js';
 import resolveWarmToken from '../../src/Scraper/Tokens/WarmTokenResolver.js';
+import type { WarmTokenDecision } from '../../src/Scraper/Tokens/WarmTokenWatch.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
 import { fail } from '../../src/Types/ProcedureHelpers.js';
 import { fakeBankConfig, fakeLoginFingerprint } from '../helpers/factories.js';
+import FakeFileSystem from '../storage/FakeFileSystem.js';
 import {
-  ACCOUNT_LOGIN, CAPTURED_AT, fakeToken, makeStore, seedRaw, seedRecords,
+  ACCOUNT_LOGIN, CAPTURED_AT, fakeToken, makeRefusals, makeStore, OWNER_ONLY, REFUSED_PATH,
+  seedRaw, seedRecords,
 } from './BankTokenStoreFixture.js';
 
 /** The key a `oneZero` config entry resolves to. */
@@ -37,9 +43,10 @@ const OTHER_LOGIN = fakeLoginFingerprint();
 /** Logger whose every call a case can inspect. */
 type SpyLogger = { readonly [K in keyof ILogger]: Mock<ILogger[K]> };
 
-/** One resolution: the config the attempt logs in with, and what was logged. */
+/** One resolution: the config the attempt logs in with, what it sent, and what was logged. */
 interface IResolved {
   readonly bankConfig: IBankConfig;
+  readonly decision: WarmTokenDecision;
   readonly logger: SpyLogger;
 }
 
@@ -57,6 +64,8 @@ interface IResolveSetup {
   readonly login?: string;
   /** Whether the attempt can ask for an SMS code; true unless given. */
   readonly canAskForOtp?: boolean;
+  /** Tokens that were not accepted before; an empty registry unless given. */
+  readonly refusals?: IRefusedTokens;
 }
 
 /**
@@ -89,12 +98,40 @@ function configWith(seed: unknown): IBankConfig {
  */
 function resolveOver(store: IBankTokenStore, setup: IResolveSetup = {}): IResolved {
   const logger = spyLogger();
-  const params: IAuthFlowCaptureParams = {
+  const capture: IAuthFlowCaptureParams = {
     storeKey: STORE_KEY, companyType: CompanyTypes.OneZero,
     login: setup.login ?? ACCOUNT_LOGIN, store, logger,
   };
+  const context: ILoginContext = { capture, refusals: setup.refusals ?? makeRefusals() };
   const request = { bankConfig: configWith(setup.seed), canAskForOtp: setup.canAskForOtp ?? true };
-  return { bankConfig: resolveWarmToken(params, request), logger };
+  return { ...resolveWarmToken(context, request), logger };
+}
+
+/**
+ * Builds a registry over the store's own volume that refuses the given tokens for the entry.
+ * @param fileSystem - The store's filesystem, so both files share one volume.
+ * @param tokens - Tokens that were not accepted before.
+ * @returns The registry.
+ */
+function refusing(fileSystem: FakeFileSystem, ...tokens: string[]): IRefusedTokens {
+  const refusals = makeRefusals(fileSystem);
+  for (const token of tokens) {
+    const digest = tokenDigest(token);
+    const refused = refusals.refuse(STORE_KEY, digest);
+    if (!refused.success) throw new Error(`refuse failed: ${refused.message}`);
+  }
+  return refusals;
+}
+
+/**
+ * Seeds the entry's stored token, bound to the attempt's login.
+ * @param fileSystem - The store's filesystem.
+ * @returns The stored token.
+ */
+function storedToken(fileSystem: FakeFileSystem): string {
+  const stored = fakeToken();
+  seedRecords(fileSystem, { [STORE_KEY]: { token: stored, capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN } });
+  return stored;
 }
 
 /**
@@ -131,6 +168,7 @@ function storeThatReads(read: IBankTokenStore['read']): IBankTokenStore & { read
     read: vi.fn(read),
     write: vi.fn(),
     remove: vi.fn(),
+    removeMatching: vi.fn(),
     sweepStagedLeftovers: vi.fn(),
   };
 }
@@ -454,13 +492,14 @@ describe('resolveWarmToken', () => {
     ])('returns a new config entry and leaves the given one untouched when $why', ({ login, sendsSeed }) => {
       const { store } = makeStore();
       const logger = spyLogger();
-      const params: IAuthFlowCaptureParams = {
+      const capture: IAuthFlowCaptureParams = {
         storeKey: STORE_KEY, companyType: CompanyTypes.OneZero, login, store, logger,
       };
       const seed = fakeToken();
       const bankConfig = configWith(seed);
+      const context: ILoginContext = { capture, refusals: makeRefusals() };
 
-      const resolved = resolveWarmToken(params, { bankConfig, canAskForOtp: true });
+      const resolved = resolveWarmToken(context, { bankConfig, canAskForOtp: true }).bankConfig;
 
       expect(resolved).not.toBe(bankConfig);
       expect(resolved.otpLongTermToken).toBe(sendsSeed ? seed : undefined);
@@ -470,12 +509,14 @@ describe('resolveWarmToken', () => {
     it('keeps every other field of the config entry', () => {
       const { store } = makeStore();
       const logger = spyLogger();
-      const params: IAuthFlowCaptureParams = {
+      const capture: IAuthFlowCaptureParams = {
         storeKey: STORE_KEY, companyType: CompanyTypes.OneZero, login: ACCOUNT_LOGIN, store, logger,
       };
       const bankConfig = configWith(fakeToken());
+      const context: ILoginContext = { capture, refusals: makeRefusals() };
 
-      const { otpLongTermToken: _sent, ...rest } = resolveWarmToken(params, { bankConfig, canAskForOtp: true });
+      const resolved = resolveWarmToken(context, { bankConfig, canAskForOtp: true });
+      const { otpLongTermToken: _sent, ...rest } = resolved.bankConfig;
 
       const { otpLongTermToken: _configured, ...expected } = bankConfig;
       expect(rest).toEqual(expected);
@@ -489,6 +530,168 @@ describe('resolveWarmToken', () => {
 
       expect(bankConfig.otpLongTermToken).toBe(seed);
       expect(redactSecrets(`provider said ${seed} back`)).not.toContain(seed);
+    });
+
+    it('tags what it sent with the source and the digest of the token, never the token', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = storedToken(fileSystem);
+
+      const { decision } = resolveOver(store);
+
+      expect(decision).toEqual({ source: 'stored', digest: tokenDigest(stored) });
+      expect(JSON.stringify(decision)).not.toContain(stored);
+    });
+
+    it('tags a configured token with the digest of the trimmed token it sent', () => {
+      const { store } = makeStore();
+      const seed = fakeToken();
+
+      const { bankConfig, decision } = resolveOver(store, { seed: `  ${seed}\n` });
+
+      expect(bankConfig.otpLongTermToken).toBe(seed);
+      expect(decision).toEqual({ source: 'configured', digest: tokenDigest(seed) });
+    });
+
+    it('tags an attempt that sends no token as sending none', () => {
+      const { store } = makeStore();
+
+      const { decision } = resolveOver(store);
+
+      expect(decision).toEqual({ source: 'none' });
+    });
+  });
+
+  describe('with a token that was not accepted before', () => {
+    /** What the resolver warns when it skips the entry's stored token. */
+    const STORED_SKIPPED = `  ⚠️  The stored long-term token for ${STORE_KEY} was not accepted before, so it is not sent`;
+
+    /** What the resolver warns when it skips the entry's configured token. */
+    const CONFIGURED_SKIPPED = `  ⚠️  The configured long-term token for ${STORE_KEY} was not accepted before, `
+      + 'so it is not sent — remove or replace otpLongTermToken';
+
+    it('sends nothing when the refused stored token is the only one', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = storedToken(fileSystem);
+
+      const { bankConfig, decision, logger } = resolveOver(store, { refusals: refusing(fileSystem, stored) });
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(decision).toEqual({ source: 'none' });
+      expect(linesLogged(logger)).toEqual([['warn', STORED_SKIPPED]]);
+    });
+
+    it('sends nothing when the configured token is the same refused one', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = storedToken(fileSystem);
+
+      const { bankConfig, logger } = resolveOver(store, { seed: stored, refusals: refusing(fileSystem, stored) });
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(linesLogged(logger)).toEqual([['warn', STORED_SKIPPED], ['warn', CONFIGURED_SKIPPED]]);
+    });
+
+    it('falls through to a different configured token once the stored one is refused', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = storedToken(fileSystem);
+      const seed = fakeToken();
+
+      const { bankConfig, decision, logger } = resolveOver(store, { seed, refusals: refusing(fileSystem, stored) });
+
+      expect(bankConfig.otpLongTermToken).toBe(seed);
+      expect(decision).toEqual({ source: 'configured', digest: tokenDigest(seed) });
+      expect(linesLogged(logger)).toEqual([
+        ['info', `  🔐 Using the configured long-term token for ${STORE_KEY}`], ['warn', STORED_SKIPPED],
+      ]);
+    });
+
+    it('sends nothing for a refused configured token when nothing is stored', () => {
+      const { store, fileSystem } = makeStore();
+      const seed = fakeToken();
+
+      const { bankConfig, logger } = resolveOver(store, { seed: ` ${seed} `, refusals: refusing(fileSystem, seed) });
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(linesLogged(logger)).toEqual([['warn', CONFIGURED_SKIPPED]]);
+    });
+
+    it('still keeps a stored token bound to another login from the configured one', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = fakeToken();
+      seedRecords(fileSystem, { [STORE_KEY]: { token: stored, capturedAt: CAPTURED_AT, login: OTHER_LOGIN } });
+
+      const { bankConfig } = resolveOver(store, { seed: fakeToken(), refusals: refusing(fileSystem, stored) });
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+    });
+
+    it('reads the refusals once for both tokens it checks', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = storedToken(fileSystem);
+      const refusals = refusing(fileSystem, stored);
+      const read = vi.spyOn(refusals, 'read');
+
+      resolveOver(store, { seed: fakeToken(), refusals });
+
+      expect(read).toHaveBeenCalledOnce();
+    });
+
+    it('never logs the token or its digest', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = storedToken(fileSystem);
+
+      const { logger } = resolveOver(store, { seed: stored, refusals: refusing(fileSystem, stored) });
+
+      const logged = everythingLogged(logger);
+      expect(logged).not.toContain(stored);
+      expect(logged).not.toContain(tokenDigest(stored));
+    });
+  });
+
+  describe('when the refusals cannot be trusted', () => {
+    it('warns and sends the stored token as before when the file cannot be read', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = storedToken(fileSystem);
+      const refusalVolume = new FakeFileSystem();
+      const refusals = makeRefusals(refusalVolume);
+      refusalVolume.seedFile(REFUSED_PATH, '{}', OWNER_ONLY);
+      refusalVolume.forcedFailures.set('openForRead', 'EACCES');
+
+      const { bankConfig, logger } = resolveOver(store, { refusals });
+
+      expect(bankConfig.otpLongTermToken).toBe(stored);
+      const [warning] = logger.warn.mock.calls[0] ?? [];
+      expect(String(warning)).toMatch(
+        new RegExp(`^  ⚠️  Could not read which long-term tokens for ${STORE_KEY} were not accepted before, so none is skipped: .*EACCES`, 'u'),
+      );
+    });
+
+    it('warns and sends the stored token as before when reading throws', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = storedToken(fileSystem);
+      const refusals: IRefusedTokens = {
+        read: () => { throw new Error('EIO: i/o error'); },
+        refuse: vi.fn(), sweepStagedLeftovers: vi.fn(),
+      };
+
+      const { bankConfig, logger } = resolveOver(store, { refusals });
+
+      expect(bankConfig.otpLongTermToken).toBe(stored);
+      expect(String(logger.warn.mock.calls[0]?.[0])).toContain('EIO: i/o error');
+    });
+
+    it('warns that the file is damaged and still skips the refusals it holds', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = storedToken(fileSystem);
+      const contents = JSON.stringify({ [STORE_KEY]: [tokenDigest(stored)], 'onezero:other': 'junk' });
+      fileSystem.seedFile(REFUSED_PATH, contents, OWNER_ONLY);
+
+      const { bankConfig, logger } = resolveOver(store, { refusals: makeRefusals(fileSystem) });
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(logger.warn.mock.calls.map(([line]) => line)).toEqual([
+        '  ⚠️  The list of long-term tokens that were not accepted is damaged, so only the ones it still holds are skipped',
+        `  ⚠️  The stored long-term token for ${STORE_KEY} was not accepted before, so it is not sent`,
+      ]);
     });
   });
 });

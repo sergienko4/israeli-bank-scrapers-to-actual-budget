@@ -6,21 +6,33 @@
  * two signs it does see. The attempt's SMS-code retriever is called, which
  * happens only on a cold login. Or, with no retriever, the attempt fails with
  * `TWO_FACTOR_RETRIEVER_MISSING`. An attempt that sent no token never warns
- * here; the resolver already said why it sent none. The watch never holds the
- * token, so no warning can show it.
+ * here; the resolver already said why it sent none. The watch names where the
+ * token came from and holds its digest, never the token, so no warning can
+ * show it.
  */
 
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
 import type { ILogger } from '../../Logger/ILogger.js';
 
+/** Where a long-term token an attempt sent came from. */
+export type WarmTokenSource = 'stored' | 'configured';
+
+/** Which long-term token an attempt sent: none, or its source and digest, never the token. */
+export type WarmTokenDecision =
+  | { readonly source: 'none' }
+  | { readonly source: WarmTokenSource; readonly digest: string };
+
+/** The decision of an attempt that sent no long-term token. */
+export const NO_TOKEN_SENT: WarmTokenDecision = Object.freeze({ source: 'none' });
+
 /** What one attempt sent, so its warnings can tell whether the token was accepted. */
 export interface IWarmTokenWatch {
   /** The account's key in the token store, named in every warning. */
   readonly storeKey: string;
   readonly logger: ILogger;
-  /** True when the attempt sent a long-term token. */
-  readonly sentToken: boolean;
+  /** Which long-term token the attempt sent, if any. */
+  readonly decision: WarmTokenDecision;
 }
 
 /** SMS-code retriever a cold login calls; undefined when the run cannot ask for a code. */
@@ -29,6 +41,15 @@ export type Retriever = (() => Promise<string>) | undefined;
 /** Whether an attempt's watched retriever has warned yet. */
 interface IWarnedBox {
   hasWarned: boolean;
+}
+
+/**
+ * Tells whether an attempt sent a long-term token.
+ * @param watch - The attempt's watch.
+ * @returns True when its credentials carried a token.
+ */
+export function hasSentToken(watch: IWarmTokenWatch): boolean {
+  return watch.decision.source !== 'none';
 }
 
 /**
@@ -60,7 +81,7 @@ function warnOnce(watch: IWarmTokenWatch, box: IWarnedBox): boolean {
  * @returns The watched retriever, or the same one when there is nothing to watch.
  */
 export function watchRetriever(watch: IWarmTokenWatch, retriever: Retriever): Retriever {
-  if (!watch.sentToken || retriever === undefined) return retriever;
+  if (!hasSentToken(watch) || retriever === undefined) return retriever;
   const box: IWarnedBox = { hasWarned: false };
   return async (): Promise<string> => {
     warnOnce(watch, box);
@@ -76,7 +97,7 @@ export function watchRetriever(watch: IWarmTokenWatch, retriever: Retriever): Re
  */
 export function warnIfNotAccepted(watch: IWarmTokenWatch, result: IScraperScrapingResult): boolean {
   const isStuck = String(result.errorType) === 'TWO_FACTOR_RETRIEVER_MISSING';
-  if (!watch.sentToken || !isStuck) return false;
+  if (!hasSentToken(watch) || !isStuck) return false;
   watch.logger.warn(
     `${notAcceptedOf(watch)}, and this run cannot ask for an SMS code: `
     + 'turn on twoFactorAuth for one SMS login',

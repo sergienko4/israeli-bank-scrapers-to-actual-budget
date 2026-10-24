@@ -20,7 +20,7 @@ import { DEFAULT_RESILIENCE_CONFIG } from '../../../src/Types/Index.js';
 import type { IProviderBrowser } from '../../../src/Scraper/Strategies/Live/BrowserRegistry.js';
 import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
-import { makeStore } from '../BankTokenStoreFixture.js';
+import { makeRefusals, makeStore } from '../BankTokenStoreFixture.js';
 
 /** Provider options subset carrying the browser lifecycle hook. */
 interface ICapturedOptions {
@@ -138,7 +138,7 @@ function makeStrategy(
     retryStrategy, noRetryStrategy: retryStrategy, timeoutWrapper,
     twoFactorPrompter: null,
     notificationService: notificationService as never,
-    bankTokens: makeStore().store,
+    bankTokens: makeStore().store, refusedTokens: makeRefusals(),
   });
 }
 

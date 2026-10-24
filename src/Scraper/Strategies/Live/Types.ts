@@ -17,6 +17,7 @@ import type NotificationService from '../../../Services/NotificationService.js';
 import type { IBankConfig, IImporterConfig } from '../../../Types/Index.js';
 import type { IBankTokenStore } from '../../Tokens/BankTokenStore.js';
 import type { IDeviceStateWatch } from '../../Tokens/PepperDeviceState.js';
+import type { IRefusedTokens } from '../../Tokens/RefusedTokens.js';
 import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
 import type { BrowserRegistry } from './BrowserRegistry.js';
@@ -35,6 +36,8 @@ export interface ILiveScrapeDependencies {
   readonly notificationService: NotificationService;
   /** Where API-direct banks' long-term tokens are kept between runs. */
   readonly bankTokens: IBankTokenStore;
+  /** Digests of long-term tokens that were not accepted, so they are not sent again. */
+  readonly refusedTokens: IRefusedTokens;
 }
 
 /** Internal opts after companyType is proven present. */
