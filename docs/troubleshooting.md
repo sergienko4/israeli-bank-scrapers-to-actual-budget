@@ -109,7 +109,8 @@ The next run skips that token. Unless `otpLongTermToken` holds a different
 usable token, it sends none, so it asks for one SMS code and saves the new
 token, or fails with the bank's real error. The importer cannot see the first
 failure, so it may retire a token that was still valid; that may cost one SMS
-login. No other `banks` entry sends a retired token either. Deleting
+login. No other `banks` entry sends a retired token either, while the
+importer keeps its record (the last 8 per entry). Deleting
 `bank-tokens.refused.json` lets a retired token be sent again; a copy that
 cannot be read in full lets only a token saved for the entry's login be
 sent again.

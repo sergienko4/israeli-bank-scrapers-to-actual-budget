@@ -8,9 +8,10 @@
  * configured one while the store holds none for the entry, then none, so the
  * provider logs in cold with an SMS.
  *
- * <p>A token that was not accepted before is never sent again, by any entry,
- * since a token logs in to one account whichever entry sends it. A stored one
- * is skipped in favour of the configured one, which is checked the same way.
+ * <p>A token that was not accepted before is not sent again, by any entry,
+ * while the list of tokens that were not accepted holds it, since a token logs
+ * in to one account whichever entry sends it. A stored one is skipped in
+ * favour of the configured one, which is checked the same way.
  *
  * <p>Pepper never asks here: its enrolled-device state replaced its long-term
  * token, and `PepperDeviceState` chooses what it sends.
@@ -19,7 +20,8 @@
  * read, or the file is damaged, a configured token is never sent, because the
  * store could not say whose it is. The list of tokens that were not accepted
  * is the exception for tokens the store binds to this login: if it cannot be
- * read in full, they are sent as before, with a warning. Retiring a token
+ * read in full, they are sent unless what it could read names them, with a
+ * warning. Retiring a token
  * removes the record that bound it to its login, so for a configured token the
  * store binds to no login, that list is the only record of whose it was; such
  * a token is not sent unless the list was read in full.

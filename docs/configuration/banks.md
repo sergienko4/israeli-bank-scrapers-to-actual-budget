@@ -123,8 +123,8 @@ and the importer saves that device's state in the same file, under
   none is saved yet, or the saved one was retired, the entry's
   `otpLongTermToken`. Otherwise none, and the bank asks for an SMS; the token
   from that login is saved and used from then on. While
-  `bank-tokens.refused.json` can be read, a retired token is not sent, by
-  this entry or any other.
+  `bank-tokens.refused.json` can be read and still holds it, a retired token
+  is not sent, by this entry or any other.
 - **Each token belongs to one login.** The importer records which login
   created each token: the email for OneZero, the phone number for PayBox. A
   PayBox token logs in by itself, so sending it for another login would
@@ -133,9 +133,9 @@ and the importer saves that device's state in the same file, under
   - after you change an entry's email or phone number, the next run logs in
     with one SMS and saves a token for the new login;
   - an `otpLongTermToken` that the file saved for another login is not sent;
-  - an `otpLongTermToken` that any entry retired is not sent. Retiring a saved
-    token removes its record, so the retired list is what still stops another
-    entry from sending it.
+  - an `otpLongTermToken` that any entry retired is not sent, while
+    `bank-tokens.refused.json` holds it. Retiring a saved token removes its
+    record, so that list is what still stops another entry from sending it.
 - **Renaming a `banks` entry** also costs one SMS. Tokens are saved per entry,
   under `<bank id>:<entry name>`, such as `onezero:oneZero`.
 - **Keep `twoFactorAuth: true`.** Each SMS login creates a new token, and the

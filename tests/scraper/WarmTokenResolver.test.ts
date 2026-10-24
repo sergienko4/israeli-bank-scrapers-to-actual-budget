@@ -663,14 +663,20 @@ describe('resolveWarmToken', () => {
     });
 
     it.each([
-      { whose: 'another login', login: OTHER_LOGIN },
-      { whose: 'this login', login: ACCOUNT_LOGIN },
-    ])('never sends a configured token another entry retired, for $whose', ({ login }) => {
+      { whose: 'no login', bind: (): void => undefined },
+      {
+        whose: 'this login',
+        bind: (fileSystem: FakeFileSystem, seed: string): void => {
+          seedRecords(fileSystem, { 'onezero:old': { token: seed, capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN } });
+        },
+      },
+    ])('never sends a configured token another entry retired, when the store binds it to $whose', ({ bind }) => {
       const { store, fileSystem } = makeStore();
       const seed = fakeToken();
+      bind(fileSystem, seed);
 
       const { bankConfig, decision, logger } = resolveOver(
-        store, { seed, login, refusals: refusedElsewhere(fileSystem, seed) },
+        store, { seed, refusals: refusedElsewhere(fileSystem, seed) },
       );
 
       expect(bankConfig.otpLongTermToken).toBeUndefined();
@@ -775,6 +781,22 @@ describe('resolveWarmToken', () => {
       expect(decision).toEqual({ source: 'none' });
       expect(logger.warn.mock.calls.map(([line]) => line).at(-1)).toBe(NOT_VOUCHED);
       expect(logger.info).not.toHaveBeenCalled();
+    });
+
+    it('says a configured token was not accepted before when a damaged list still names it', () => {
+      const { store, fileSystem } = makeStore();
+      const seed = fakeToken();
+      const contents = JSON.stringify({ [OTHER_KEY]: [tokenDigest(seed)], 'onezero:third': 'junk' });
+      fileSystem.seedFile(REFUSED_PATH, contents, OWNER_ONLY);
+
+      const { bankConfig, logger } = resolveOver(store, { seed, refusals: makeRefusals(fileSystem) });
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(logger.warn.mock.calls.map(([line]) => line)).toEqual([
+        '  ⚠️  The list of long-term tokens that were not accepted is damaged, so only the ones it still holds are skipped',
+        `  ⚠️  The configured long-term token for ${STORE_KEY} was not accepted before, `
+        + 'so it is not sent — remove or replace otpLongTermToken',
+      ]);
     });
 
     it.each(untrustedLists)('sends a configured token the store binds to this login when the list $why', ({ open }) => {

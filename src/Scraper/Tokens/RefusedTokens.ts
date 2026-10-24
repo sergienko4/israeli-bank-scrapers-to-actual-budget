@@ -15,8 +15,9 @@
  * every entry.
  *
  * <p>A damaged or unreadable file is not fatal: the caller warns, still sends
- * a token the token store binds to the login, and withholds a configured token
- * it binds to none, since only this file could say another entry retired it.
+ * a token the token store binds to the login unless what it could read names
+ * that token, and withholds a configured token it binds to none, since only
+ * this file could say another entry retired it.
  * A refusal is never written over a file that could not be read, and a damaged
  * file is set aside before it is replaced.
  */
