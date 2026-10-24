@@ -315,7 +315,7 @@ fix, and none of them is a push to the bot's branch.
 | A Dependabot pull request is behind `main` or conflicting | `main` moved | Comment `@dependabot rebase`. Armed pull requests are rebased automatically, oldest first. |
 | A `chore/lockfile-refresh-*` pull request is conflicting | `main` changed `package-lock.json` | Run `gh workflow run lockfile-refresh.yml` unless a newer refresh has already replaced it. The new run starts from `main` and closes the stale pull request. |
 | A gate fails on files the pull request did not touch (a lint rule, an ESLint canary, a type-check) | A tool's new major changed what it reports | Fix it forward on `main`, as described below. |
-| `npm run audit` reports an unaddressed advisory | A new advisory reached the tree | Fix it in its own pull request: a lockfile refresh, an `overrides` floor, or a justified entry in `config/audit-policy.mjs`. Then comment `@dependabot rebase` on a Dependabot pull request, or run `gh workflow run lockfile-refresh.yml` for a refresh. |
+| `npm run audit` reports an unaddressed advisory | A new advisory reached the tree | Fix it in its own pull request: a lockfile refresh, an `overrides` floor, or a justified entry in `config/audit-policy.mjs`. Then comment `@dependabot rebase` on a Dependabot pull request, or run `gh workflow run lockfile-refresh.yml` for a refresh unless a newer one has already replaced it. |
 | Tests fail in code that uses the package | A real breaking change | Fix it forward when the code can work on both versions. Otherwise run `dependency-bump.yml` for that version (see [Bumping a package on demand](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-a-package-on-demand)) and push the code change to its `deps/…` branch. Dependabot drops the update once `main` carries that version. |
 
 Never push to a bot branch, and never press **Update branch** on one.
@@ -338,8 +338,9 @@ To fix forward:
    green.
 3. Prove both versions: the gate passes on your branch, and again with your
    change copied onto the bot's checkout (locally only, never pushed).
-4. Once the fix is merged, comment `@dependabot rebase` on the bot's pull
-   request.
+4. Once the fix is merged, comment `@dependabot rebase` on a Dependabot pull
+   request. For a refresh, run `gh workflow run lockfile-refresh.yml` unless
+   a newer refresh has already replaced it.
 
 A refresh labelled `needs-manual-review` is left for a human. Its run summary
 says which case it is:
