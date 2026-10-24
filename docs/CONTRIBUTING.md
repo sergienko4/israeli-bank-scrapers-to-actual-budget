@@ -225,8 +225,9 @@ The push re-runs the check, which then passes.
 Fixes that already fit inside existing ranges arrive on their own:
 the Thursday `lockfile-refresh.yml` run applies `npm audit fix` and merges
 itself once CI is green. If that fix moves a pin across a major, the pull
-request is labelled `needs-manual-review` and waits for you instead. Do not
-push to a refresh branch: the "Restrict updates" ruleset described in the
+request is labelled `needs-manual-review` and waits for you instead. A
+refresh that `main` moves past is regenerated on the next push to `main`,
+which closes the stale pull request. Do not push to a refresh branch: the "Restrict updates" ruleset described in the
 [lockfile refresh guard][ci-refresh-guard] blocks it, and the refresh arms
 only once it has confirmed that ruleset is in force. If a push gets
 through anyway, a guard labels the pull request and tries to withdraw
