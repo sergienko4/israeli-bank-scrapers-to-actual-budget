@@ -61,6 +61,7 @@ All contributors must follow [GUIDELINES.md](https://github.com/sergienko4/israe
 - **OCP maps over if/else** — use `Record<string, ...>` dispatch
 - **SOLID principles** — single responsibility, open/closed
 - **Security first** — never commit credentials
+- **Absolute links in `docs/`** — link with full GitHub URLs, same-page anchors included, as the `docs/**/*.md` review rule in `.coderabbit.yaml` asks. `tests/docs-links.test.ts` parses every page and fails on a relative link, and on a `blob/main` or `tree/main` link into this repository whose file or heading does not exist
 
 ---
 
