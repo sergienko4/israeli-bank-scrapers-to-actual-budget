@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.44.1](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.44.0...v1.44.1) (2026-10-24)
+
+
+### Fixed
+
+* **deps:** bump @fastify/static from 10.1.6 to 10.1.7 ([#798](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/798)) ([36bfdc0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/36bfdc0c7e5783881e9e31f3da6623db6dbfcb9c))
+* **deps:** patch undici and fast-uri advisories ([#807](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/807)) ([c59a032](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/c59a03221525c53181c2095b447bbf1ec064c4f7))
+
 ## [1.44.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.43.8...v1.44.0) (2026-10-18)
 
 
