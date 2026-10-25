@@ -1,8 +1,7 @@
 /**
  * Canary tests for scripts/coupling-scanner.cjs shared-kernel exemption.
  *
- * These tests lock the metric-correction contract (see
- * plans/decoupling-2026-06/metric-correction-proposal.md): value imports of the
+ * These tests lock the metric-correction contract: value imports of the
  * sanctioned shared kernel (the ST layer + the Logger module) MUST NOT count as
  * cross-layer coupling, while genuine peer-layer value imports MUST still count.
  * They fail if the exemption is removed (kernel cases flip) or over-broadened
