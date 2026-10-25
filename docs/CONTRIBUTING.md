@@ -329,7 +329,9 @@ fix, and none of them is a push to the bot's branch.
 | `npm run audit` reports an unaddressed advisory | A new advisory reached the tree | Fix it in its own pull request: a lockfile refresh, an `overrides` floor, or a justified entry in `config/audit-policy.mjs`. Then comment `@dependabot rebase` on a Dependabot pull request, or run `gh workflow run lockfile-refresh.yml` for a refresh unless a newer one has already replaced it. |
 | Tests fail in code that uses the package | A real breaking change | Fix it forward when the code can work on both versions. Otherwise run `dependency-bump.yml` for that version (see [Bumping a package on demand](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-a-package-on-demand)) and push the code change to its `deps/…` branch. Dependabot drops the update once `main` carries that version. |
 | `tests/deployment/EnginesFloor.test.ts` names a package that `needs Node <range>` | The package raised its Node floor above `engines.node` | Raise `engines.node` in `package.json` to that floor, run `npm run meta:render`, and add a `docs/UPGRADING.md` entry for hosts that run the importer outside Docker. The image already runs a newer Node. |
+| `tests/deployment/BrowserStackPair.test.ts` fails | The scraper was tested with another Camoufox build or Playwright minor | Move the pin to the build the scraper names (see [Bumping the Camoufox browser](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-the-camoufox-browser)), or bring `playwright-core` to the minor it names. |
 | The `Prove the browser patches applied` step, or the image's `npm ci` layer, fails `camoufox:patch-check` | The scraper's postinstall could not patch the `playwright-core` it drives Camoufox with | Install the `playwright-core` minor the scraper was tested with. Never set `SKIP_PLAYWRIGHT_CORE_PATCH` to pass it. |
+| The image build fails with `ERROR: Camoufox font prune` | A new Camoufox build changed its font layout | See the font layout notes in [Bumping the Camoufox browser](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-the-camoufox-browser). Never ship the full font tree to pass it. |
 | A test fails with `The provider no longer ships …` | The scraper renamed or reworded an error the importer matches on | Update the matching code and its test to the new wording. Read the scraper's bundle (`lib/index.mjs`) for the new form; never relax the match. |
 
 Never push to a bot branch, and never press **Update branch** on one.
@@ -394,6 +396,23 @@ applies the same test without installing, and the image build runs it on both
 of its paths.
 `tests/deployment/CamoufoxPin.test.ts` fails if any build file goes back to
 fetching an unpinned build.
+
+The scraper names the Camoufox build and the Playwright minor its release was
+tested with. `tests/deployment/BrowserStackPair.test.ts` fails when the pin or
+the installed `playwright-core` differs, so a scraper bump that moves to a new
+build stays red until the pin follows it.
+
+The image ships only the fonts the Windows fingerprint reads. Camoufox keeps
+each font face once, under a `fonts/` group named for the OSes that read it,
+and `fonts/groups.json` lists the groups per OS. camoufox-js hands the browser
+the whole `fonts` directory, so the image build runs
+`scripts/camoufox-font-prune.mjs`, which deletes every group Windows does not
+read. It deletes nothing and fails the build when `groups.json` is missing,
+names no Windows groups, or names one that is absent, or when the `fonts`
+directory holds an entry that is neither a file nor a directory, such as a
+symlinked group. If a new build changes the font layout, update the prune,
+`src/Scraper/CamoufoxFontGuard.ts` (the startup check) and
+`tests/e2e/image-contents.e2e.test.ts` together.
 
 To move to another build:
 

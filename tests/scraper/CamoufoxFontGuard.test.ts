@@ -4,7 +4,8 @@
  *
  * Camoufox launches without complaint when its OS fonts are missing and then
  * fingerprints with fallback fonts, so a misconfiguration would surface only
- * as unexplained bank-side detection. Each case lays out a real install tree
+ * as unexplained bank-side detection. Each case lays out a real install tree,
+ * font groups plus the groups.json that maps each OS to the groups it reads,
  * and checks the guard reads it exactly as the scraper and camoufox-js do.
  */
 
@@ -13,12 +14,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import checkCamoufoxFonts from '../../src/Scraper/CamoufoxFontGuard.js';
+import checkCamoufoxFonts, { type CamoufoxOs } from '../../src/Scraper/CamoufoxFontGuard.js';
 
 type Env = Record<string, string | undefined>;
 
 /** Stand-in font contents: the guard needs a non-empty file, not a parsable font. */
 const FONT_BYTES = 'not-a-real-font';
+
+/** groups.json's readBy as the pinned Camoufox build ships it. */
+const READ_BY: Readonly<Record<string, readonly string[]>> = {
+  lin: ['L', 'LM', 'LMW', 'LW'],
+  mac: ['LM', 'LMW', 'M', 'MW'],
+  win: ['LMW', 'LW', 'MW', 'W'],
+};
+
+/** Key groups.json lists each OS under. */
+const OS_KEYS: Readonly<Record<CamoufoxOs, string>> = { linux: 'lin', macos: 'mac', windows: 'win' };
 
 describe('checkCamoufoxFonts', () => {
   let home: string;
@@ -32,19 +43,28 @@ describe('checkCamoufoxFonts', () => {
   });
 
   /**
-   * Creates a font set, one non-empty font file in its own directory, for
-   * each given OS under an install directory.
+   * Creates one font group holding one non-empty font file.
+   * @param fontsDir - The install's fonts directory.
+   * @param group - Group directory name.
+   */
+  function addGroup(fontsDir: string, group: string): void {
+    mkdirSync(join(fontsDir, group));
+    writeFileSync(join(fontsDir, group, 'Candara.ttf'), FONT_BYTES);
+  }
+
+  /**
+   * Lays out an install the way the image prune leaves it: the full
+   * groups.json, and only the font groups the given OSes read.
    * @param installDir - Camoufox install directory.
-   * @param oses - OS font sets to create.
+   * @param oses - OSes whose font groups to create.
    * @returns The install's fonts directory.
    */
-  function installFonts(installDir: string, oses: readonly string[]): string {
+  function installFonts(installDir: string, oses: readonly CamoufoxOs[]): string {
     const fontsDir = join(installDir, 'fonts');
     mkdirSync(fontsDir, { recursive: true });
-    for (const os of oses) {
-      mkdirSync(join(fontsDir, os));
-      writeFileSync(join(fontsDir, os, 'Candara.ttf'), FONT_BYTES);
-    }
+    writeFileSync(join(fontsDir, 'groups.json'), JSON.stringify({ readBy: READ_BY }));
+    const groups = new Set(oses.flatMap((os) => READ_BY[OS_KEYS[os]] ?? []));
+    for (const group of groups) addGroup(fontsDir, group);
     return fontsDir;
   }
 
@@ -104,35 +124,29 @@ describe('checkCamoufoxFonts', () => {
       expect(message.endsWith('set it to one of: windows.')).toBe(true);
     });
 
-    it('does not count a regular file named like an OS as an installed font set', () => {
-      writeFileSync(join(fontsDir, 'linux'), '');
-
-      const message = failureOf({ CAMOUFOX_OS: 'linux' });
-
-      expect(message).toContain('has no linux fonts');
-      expect(message.endsWith('one of: windows.')).toBe(true);
-    });
-
-    it.each<[string, (osDir: string) => void]>([
-      ['an empty directory', (osDir) => mkdirSync(osDir)],
-      ['a directory of subdirectories only', (osDir) => mkdirSync(join(osDir, 'nested'), { recursive: true })],
-      ['a directory of zero-byte files only', (osDir) => {
-        mkdirSync(osDir);
-        writeFileSync(join(osDir, 'Ubuntu.ttf'), '');
+    it.each<[string, (groupDir: string) => void]>([
+      ['missing', () => undefined],
+      ['a regular file', (groupDir) => writeFileSync(groupDir, FONT_BYTES)],
+      ['an empty directory', (groupDir) => mkdirSync(groupDir)],
+      ['a directory of subdirectories only', (groupDir) => mkdirSync(join(groupDir, 'nested'), { recursive: true })],
+      ['a directory of zero-byte files only', (groupDir) => {
+        mkdirSync(groupDir);
+        writeFileSync(join(groupDir, 'Ubuntu.ttf'), '');
       }],
-      ['a directory of dangling symlinks only', (osDir) => {
-        mkdirSync(osDir);
-        symlinkSync(join(osDir, 'gone.ttf'), join(osDir, 'Ubuntu.ttf'));
+      ['a directory of dangling symlinks only', (groupDir) => {
+        mkdirSync(groupDir);
+        symlinkSync(join(groupDir, 'gone.ttf'), join(groupDir, 'Ubuntu.ttf'));
       }],
-    ])('does not count %s as an installed font set', (_label, layOut) => {
-      layOut(join(fontsDir, 'linux'));
+    ])('does not count a font set as installed when one of its groups is %s', (_label, layOut) => {
+      addGroup(fontsDir, 'L');
+      layOut(join(fontsDir, 'LM'));
 
       expect(failureOf({ CAMOUFOX_OS: 'linux' }).endsWith('has no linux fonts. Unset CAMOUFOX_OS or set it to one of: windows.'))
         .toBe(true);
     });
 
-    it.skipIf(process.getuid?.() === 0)('stops when its user cannot list the selected font set', () => {
-      const windowsDir = join(fontsDir, 'windows');
+    it.skipIf(process.getuid?.() === 0)('stops when its user cannot list a group of the selected font set', () => {
+      const windowsDir = join(fontsDir, 'W');
       chmodSync(windowsDir, 0o000);
 
       try {
@@ -142,8 +156,8 @@ describe('checkCamoufoxFonts', () => {
       }
     });
 
-    it.skipIf(process.getuid?.() === 0)('stops when its user cannot read any font in the selected set', () => {
-      const font = join(fontsDir, 'windows', 'Candara.ttf');
+    it.skipIf(process.getuid?.() === 0)('stops when its user cannot read any font in a group of the selected set', () => {
+      const font = join(fontsDir, 'W', 'Candara.ttf');
       chmodSync(font, 0o000);
 
       try {
@@ -157,8 +171,9 @@ describe('checkCamoufoxFonts', () => {
       const store = join(home, 'font-store');
       mkdirSync(store);
       writeFileSync(join(store, 'Ubuntu.ttf'), FONT_BYTES);
-      mkdirSync(join(fontsDir, 'linux'));
-      symlinkSync(join(store, 'Ubuntu.ttf'), join(fontsDir, 'linux', 'Ubuntu.ttf'));
+      addGroup(fontsDir, 'L');
+      mkdirSync(join(fontsDir, 'LM'));
+      symlinkSync(join(store, 'Ubuntu.ttf'), join(fontsDir, 'LM', 'Ubuntu.ttf'));
 
       const result = check({ CAMOUFOX_OS: 'linux' });
 
@@ -189,6 +204,27 @@ describe('checkCamoufoxFonts', () => {
       `Camoufox font check failed: CAMOUFOX_OS=(unset) selects the windows fingerprint, but ${fontsDir} has no fonts `
       + 'for any OS. Reinstall the pinned Camoufox build.');
     expect(message).not.toContain('undefined');
+  });
+
+  it.each<[string, (fontsDir: string) => void]>([
+    ['is missing, as in the old per-OS layout', (fontsDir) => {
+      rmSync(join(fontsDir, 'groups.json'));
+      addGroup(fontsDir, 'windows');
+    }],
+    ['is not JSON', (fontsDir) => writeFileSync(join(fontsDir, 'groups.json'), '{')],
+    ['names no Windows groups', (fontsDir) => {
+      writeFileSync(join(fontsDir, 'groups.json'), JSON.stringify({ readBy: { ...READ_BY, win: [] } }));
+    }],
+    ['names a path instead of a Windows group', (fontsDir) => {
+      writeFileSync(join(fontsDir, 'groups.json'), JSON.stringify({ readBy: { ...READ_BY, win: ['W', '../fonts/W'] } }));
+    }],
+  ])('asks for a reinstall when groups.json %s', (_label, damage) => {
+    const fontsDir = installFonts(join(home, '.cache', 'camoufox'), ['windows']);
+    damage(fontsDir);
+
+    expect(failureOf({})).toBe(
+      `Camoufox font check failed: CAMOUFOX_OS=(unset) selects the windows fingerprint, but ${fontsDir} has no fonts `
+      + 'for any OS. Reinstall the pinned Camoufox build.');
   });
 
   it('leaves startup unchanged when no browser is installed', () => {

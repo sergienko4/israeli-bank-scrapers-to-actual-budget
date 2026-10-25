@@ -168,10 +168,10 @@ would race for that tag.
   staging root with fixed owners, modes and timestamps, so a release that
   keeps the same Camoufox pin and base image produces the same layer digest.
   GHCR and Docker Hub then skip that layer on push, and users skip it on
-  pull: it is about 300 MB of the roughly 530 MB compressed image per
+  pull: it is about 600 MB of the roughly 830 MB compressed image per
   architecture.
-- **Only the Windows fonts.** The image ships the Windows font set that the
-  default fingerprint uses; see
+- **Only the Windows font groups.** The image ships only the font groups
+  that the default Windows fingerprint reads; see
   [`CAMOUFOX_OS`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/deployment/docker-run.md#browser-fingerprint-os-camoufox_os).
 
 ---

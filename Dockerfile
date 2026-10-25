@@ -7,8 +7,8 @@
 # Two stages on the same pinned base. The build stage holds npm 12,
 # devDependencies, the TypeScript build and the Camoufox install; the runtime
 # stage copies out only what the app runs. A single-stage build shipped every
-# layer it ever wrote: Camoufox (1.2 GB) three times and the devDependency
-# tree once, about 2.5 GB compressed. Both FROM lines must stay identical
+# layer it ever wrote: Camoufox three times and the devDependency tree once.
+# Both FROM lines must stay identical
 # (tests/deployment/DockerImageLayout.test.ts).
 FROM node:26-slim@sha256:deae974a69e140f44f434ab29cb519fb5f8fe250fd364b8ca446bd0761acdc6a AS build
 
@@ -57,14 +57,19 @@ RUN npm ci && npm run -s camoufox:patch-check
 # would rewrite the whole browser tree into another layer. The RUN ends by
 # moving the install into /camoufox-root, which the runtime stage copies.
 # Only the Windows fonts ship: the scraper spoofs Windows by default, and the
-# macOS and Linux sets (~610 MB) would serve only a CAMOUFOX_OS override,
-# which the startup font check now rejects. The prune runs in this RUN for
-# the same reason as the modes, and the build fails unless fonts/windows
-# remains and both other sets are gone.
+# other font groups (~1.1 GB) would serve only a CAMOUFOX_OS override, which
+# the startup font check now rejects. Camoufox keeps each face once, under a
+# fonts/ group named for the OSes that read it, and fonts/groups.json lists
+# the groups per OS; camoufox-js hands the browser the whole fonts directory,
+# so deleting every group Windows does not read also keeps Linux- and
+# macOS-only faces out of the Windows fingerprint. The prune runs in this RUN
+# for the same reason as the modes, and fails the build unless groups.json
+# names the Windows groups, all of them are present, and every fonts/ entry
+# is a file or a directory.
 ARG SKIP_BROWSER_FETCH=false
 COPY .camoufox-cache/ /tmp/camoufox-precache/
 COPY config/camoufox-pin.json ./config/camoufox-pin.json
-COPY scripts/camoufox-fetch.mjs scripts/camoufox-pin-logic.mjs scripts/camoufox-pinned-fetcher.mjs ./scripts/
+COPY scripts/camoufox-fetch.mjs scripts/camoufox-pin-logic.mjs scripts/camoufox-pinned-fetcher.mjs scripts/camoufox-font-prune.mjs ./scripts/
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN set -e; \
@@ -92,11 +97,7 @@ RUN set -e; \
     if [ "$ACTUAL_MACHINE" != "$EXPECTED_HEX" ]; then \
       echo "ERROR: ELF e_machine mismatch — expected $EXPECTED_HEX ($ARCH) got $ACTUAL_MACHINE"; exit 1; \
     fi; \
-    FONTS="$CAMOUFOX_INSTALL_DIR/fonts"; \
-    rm -rf "$FONTS/macos" "$FONTS/linux"; \
-    if [ ! -d "$FONTS/windows" ] || [ -e "$FONTS/macos" ] || [ -e "$FONTS/linux" ]; then \
-      echo "ERROR: Camoufox font prune left an unexpected tree"; exit 1; \
-    fi; \
+    node scripts/camoufox-font-prune.mjs "$CAMOUFOX_INSTALL_DIR/fonts"; \
     chmod -R 755 "$CAMOUFOX_INSTALL_DIR"; \
     echo "Camoufox binary validated OK ($ARCH, e_machine=$ACTUAL_MACHINE, $(cat "$CAMOUFOX_INSTALL_DIR/version.json"))"; \
     ROOT=/camoufox-root; \

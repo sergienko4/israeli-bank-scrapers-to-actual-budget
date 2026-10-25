@@ -21,8 +21,8 @@ const DOCKER_IMAGE = 'israeli-bank-importer:e2e';
 /** Smallest layer that can hold the Camoufox install, or a copy of it. */
 const CAMOUFOX_LAYER_MIN_BYTES = 100_000_000;
 
-/** The install with only the Windows fonts; with every OS font set it is 1.29 GB. */
-const CAMOUFOX_LAYER_MAX_BYTES = 700_000_000;
+/** The install with only the Windows font groups is ~1.41 GB; with every group it is 2.53 GB. */
+const CAMOUFOX_LAYER_MAX_BYTES = 1_600_000_000;
 
 /** Leading text of the startup font check's failure message. */
 const FONT_GUARD_PREFIX = 'Camoufox font check failed';
@@ -87,11 +87,18 @@ process.stdout.write(JSON.stringify({
 }));
 `;
 
-/** Reports which OS font sets the Camoufox install ships. */
-const FONT_SETS = `
-import { existsSync } from 'node:fs';
+/**
+ * Reports the font groups the Camoufox install ships, and those groups.json
+ * says Windows reads. Every root entry that is not a plain file counts as a
+ * group, so a symlinked group shows up, marked, rather than hiding.
+ */
+const FONT_GROUPS = `
+import { readdirSync, readFileSync } from 'node:fs';
 const fonts = '/home/node/.cache/camoufox/fonts';
-process.stdout.write(JSON.stringify(['windows', 'macos', 'linux'].filter((os) => existsSync(fonts + '/' + os))));
+const shipped = readdirSync(fonts, { withFileTypes: true }).filter((entry) => !entry.isFile())
+  .map((entry) => entry.isDirectory() ? entry.name : entry.name + ' (not a directory)');
+const windows = JSON.parse(readFileSync(fonts + '/groups.json', 'utf8')).readBy.win;
+process.stdout.write(JSON.stringify({ shipped: shipped.sort(), windows: [...windows].sort() }));
 `;
 
 /** Builds a scraper through the public API and reports whether it can scrape. */
@@ -114,6 +121,12 @@ interface ILaunchReport {
   readonly user: string;
   readonly platform: string;
   readonly widths: Readonly<Record<string, number>>;
+}
+
+/** What the font group probe reports. */
+interface IFontGroups {
+  readonly shipped: readonly string[];
+  readonly windows: readonly string[];
 }
 
 /** What the font coverage probe reports. */
@@ -175,10 +188,11 @@ describe.runIf(hasDockerImage())('published image contents E2E', () => {
     expect(Number(camoufoxLayers[0]?.[0])).toBeLessThanOrEqual(CAMOUFOX_LAYER_MAX_BYTES);
   });
 
-  it('ships only the Windows font set', () => {
-    const sets: unknown = JSON.parse(runInImage('node', ['--input-type=module', '-e', FONT_SETS]));
+  it('ships only the font groups the Windows fingerprint reads', () => {
+    const groups = JSON.parse(runInImage('node', ['--input-type=module', '-e', FONT_GROUPS])) as IFontGroups;
 
-    expect(sets).toEqual(['windows']);
+    expect(groups.windows.length).toBeGreaterThan(0);
+    expect(groups.shipped).toEqual(groups.windows);
   });
 
   it('covers the whole Windows font allowlist from the install alone', () => {
