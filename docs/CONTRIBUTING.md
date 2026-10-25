@@ -108,8 +108,9 @@ npm run lint:allow-scripts
 ```
 
 `scripts/check-allow-scripts.mjs` derives the pins the tree actually requires
-from `package-lock.json` — a package needs one exactly when it declares
-`hasInstallScript` and is not `optional` — and compares them against
+from `package-lock.json` — every `<name>@<version>` that declares
+`hasInstallScript` and is not `optional` needs its own pin, so the two
+`better-sqlite3` copies are checked separately — and compares them against
 `allowScripts`. It names every stale, missing, or orphaned pin and prints the
 remedy for each: the `npm approve-scripts` command for a stale or missing pin,
 and the entry to delete for an orphaned one. It runs as a commit-stage gate in
@@ -160,7 +161,10 @@ The exception is deliberately narrow in two directions:
   dependency that has newly gained an install script is a new decision rather
   than a rotation of an existing one, so it is reported as
   `needs human approval` and left to fail the gate until someone runs
-  `npm approve-scripts` themselves.
+  `npm approve-scripts` themselves. The same holds for a second version of an
+  approved package: a pin rotates only when one approved version left the tree
+  and exactly one new version replaced it, so a copy that appears *beside* an
+  approved one is never approved by moving that pin onto it.
 
 ### Dependabot pull requests merge themselves
 
@@ -281,8 +285,12 @@ there moves only the lockfile, which that comparison cannot see.
 [release-pipeline]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/release-pipeline.md
 
 Running it on a runner is also what makes the lockfile trustworthy when your
-own network cannot reach the npm registry: the integrity hash is produced by
-npm from the tarball it actually fetched, rather than typed in by hand.
+own network cannot reach the npm registry: npm resolves it from registry
+metadata with `--package-lock-only`, exactly as Dependabot does, then `npm ci`
+fetches every tarball and checks it against the lockfile, so no hash is typed in
+by hand. A full `npm install` is avoided on purpose: it re-derives
+`hasInstallScript` from the unpacked tarball and flags `better-sqlite3` 13, whose
+`binding.gyp` ships beside prebuilt binaries, as needing a native build.
 
 The result is an ordinary pull request with the full CI suite attached. The
 workflow only bumps a package that is already in `dependencies` or
