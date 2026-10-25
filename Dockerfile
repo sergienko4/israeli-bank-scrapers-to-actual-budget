@@ -37,9 +37,11 @@ RUN npm install -g "npm@${NPM_VERSION}" \
 # Install ALL project dependencies (devDependencies included for build).
 # npm ci installs exact versions from package-lock.json, giving reproducible
 # builds. Dependency updates are managed by Dependabot (weekly grouped PRs
-# with full CI validation before merge).
+# with full CI validation before merge). The provider's postinstall patches
+# the playwright-core that drives Camoufox but exits 0 when a patch cannot
+# apply, so camoufox:patch-check (--strict) fails the build instead.
 COPY package.json package-lock.json tsconfig.json ./
-RUN npm ci
+RUN npm ci && npm run -s camoufox:patch-check
 
 # Install the Camoufox browser (Firefox-based anti-detect): the build pinned
 # in config/camoufox-pin.json, never upstream's newest. CI installs it on the

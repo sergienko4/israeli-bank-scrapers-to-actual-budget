@@ -18,3 +18,10 @@ runs:
     - name: Install dependencies
       shell: bash
       run: npm ci
+
+    # The provider's postinstall patches the playwright-core that drives
+    # Camoufox but exits 0 even when a patch cannot apply. --strict fails
+    # instead, so an install the browser cannot run on stops here.
+    - name: Prove the browser patches applied
+      shell: bash
+      run: npm run -s camoufox:patch-check
