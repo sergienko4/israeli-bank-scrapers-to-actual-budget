@@ -414,12 +414,12 @@ const REFUSAL_PARTS: readonly (readonly [RegExp, string])[] = [
 ];
 
 /**
- * Lists the templates that word a failure from a URL and an HTTP status.
+ * Lists the templates that word a failure from a URL and an HTTP status, on one line or several.
  * @param source - Provider source to search.
  * @returns Each template, backticks included.
  */
 function statusTemplates(source: string): string[] {
-  const templates = source.match(/`[^`\n]*\$\{safeUrl\}[^`\n]*`/gu) ?? [];
+  const templates = source.match(/`[^`]*\$\{safeUrl\}[^`]*`/gu) ?? [];
   return templates.filter((template) => /\$\{[^}]*\bstatus\b[^}]*\}/u.test(template));
 }
 
@@ -449,6 +449,8 @@ const TEMPLATE_CASES = [
   { label: 'a prefix the body is added to', template: '`${failure.verb} ${safeUrl} ${String(failure.status)}: `', removes: true },
   { label: 'a wording with the status first', template: '`${String(response.status)} ${verb} ${safeUrl}: ${snippet}`', removes: false },
   { label: 'a wording without the separator', template: '`${verb} ${safeUrl} ${String(response.status)} ${snippet}`', removes: false },
+  { label: 'a wording that wraps after the status', template: '`${verb} ${safeUrl} ${String(env.status)}: ${snippet}\n${hint}`', removes: true },
+  { label: 'a wording that wraps before the status', template: '`${verb} ${safeUrl}\n${String(env.status)}: ${snippet}`', removes: false },
 ] as const;
 
 describe('the upstream wording the refusal rule reads', () => {
