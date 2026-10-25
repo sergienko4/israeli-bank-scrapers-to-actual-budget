@@ -74,6 +74,7 @@
     "@faker-js/faker": "^10.6.0",
     "@hieutran094/camoufox-js": "^0.11.2",
     "@types/node": "^26.6.5",
+    "@types/semver": "^7.8.0",
     "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
@@ -93,6 +94,7 @@
     "markdownlint-cli2": "^0.24.0",
     "patch-package": "^8.0.1",
     "playwright-core": "~1.64.0",
+    "semver": "^7.8.5",
     "spdx-satisfies": "^6.0.0",
     "typedoc": "^0.28.20",
     "typescript": "^6.0.3",
@@ -118,7 +120,7 @@
     "katex": "^0.18.2"
   },
   "engines": {
-    "node": ">=22.14.0",
+    "node": ">=24.11.0",
     "npm": ">=10.0.0"
   },
   "author": "Israeli Bank Importer Contributors",

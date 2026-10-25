@@ -1,6 +1,6 @@
 # Use Node.js 26 (current release line; LTS from October 2026).
 # Runtime dependencies set a floor, not a ceiling: israeli-bank-scrapers
-# requires >= 22.14.0 and @actual-app/api requires >= 20, so 26 satisfies both.
+# requires >= 24.11.0 and @actual-app/api requires >= 20, so 26 satisfies both.
 # Using slim variant for smaller image size
 # Pin to digest for reproducibility and security
 #

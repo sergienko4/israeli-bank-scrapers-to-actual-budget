@@ -9,6 +9,29 @@ the new image.
 
 ---
 
+## 1.44.2 — Node.js 24.11 or later outside Docker
+
+**Affects:** deployments that run the importer with Node.js directly instead of
+the Docker image. The image runs Node 26 and needs no action.
+
+The scraper now requires Node.js 24.11 or later, so `package.json` accepts
+24.11 and later instead of 22.14. On an older Node, `npm ci` warns
+`EBADENGINE`, or fails when `engine-strict` is set.
+
+**Migration:**
+
+- Install Node.js 24.11 or later, for example `nvm install 24`, before you
+  pull the release.
+- OneZero only: its login needs the TLS profile of its Android app, which
+  OpenSSL 3.5 or later can send. Node 24.11 and later bundle it. A Node built
+  against an older system OpenSSL logs
+  `[tls] runtime OpenSSL cannot emit this TLS profile` and OneZero may block
+  the run. `node -p process.versions.openssl` prints the version Node uses.
+
+**Rollback:** an earlier release runs on the newer Node unchanged.
+
+---
+
 ## 1.43.3 — Pepper enrolls the importer as a device
 
 **Affects:** deployments with a Pepper entry in `banks`.

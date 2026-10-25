@@ -9,7 +9,9 @@ Thank you for your interest in contributing!
 ### Prerequisites
 
 - Node.js 26, the version in `.nvmrc` that CI and the Docker image run
-  (`nvm install && nvm use`). `package.json` accepts 22.14 and later.
+  (`nvm install && nvm use`). `package.json` accepts 24.11 and later, the floor the
+  scraper provider declares. A major newer than `.nvmrc` is untested, and a
+  dependency may not support it yet.
 - npm 12.2.1, the version the Docker image pins:
   `npm install -g npm@12.2.1`. Earlier npm runs every dependency install
   script, including a source build of `better-sqlite3` that needs a C++
@@ -326,6 +328,7 @@ fix, and none of them is a push to the bot's branch.
 | A gate fails on files the pull request did not touch (a lint rule, an ESLint canary, a type-check) | A tool's new major changed what it reports | Fix it forward on `main`, as described below. |
 | `npm run audit` reports an unaddressed advisory | A new advisory reached the tree | Fix it in its own pull request: a lockfile refresh, an `overrides` floor, or a justified entry in `config/audit-policy.mjs`. Then comment `@dependabot rebase` on a Dependabot pull request, or run `gh workflow run lockfile-refresh.yml` for a refresh unless a newer one has already replaced it. |
 | Tests fail in code that uses the package | A real breaking change | Fix it forward when the code can work on both versions. Otherwise run `dependency-bump.yml` for that version (see [Bumping a package on demand](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-a-package-on-demand)) and push the code change to its `deps/…` branch. Dependabot drops the update once `main` carries that version. |
+| `tests/deployment/EnginesFloor.test.ts` names a package that `needs Node <range>` | The package raised its Node floor above `engines.node` | Raise `engines.node` in `package.json` to that floor, run `npm run meta:render`, and add a `docs/UPGRADING.md` entry for hosts that run the importer outside Docker. The image already runs a newer Node. |
 | A test fails with `The provider no longer ships …` | The scraper renamed or reworded an error the importer matches on | Update the matching code and its test to the new wording. Read the scraper's bundle (`lib/index.mjs`) for the new form; never relax the match. |
 
 Never push to a bot branch, and never press **Update branch** on one.
