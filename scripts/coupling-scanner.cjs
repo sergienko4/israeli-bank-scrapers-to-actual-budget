@@ -6,13 +6,13 @@
  * a deterministic JSON report with a per-file decoupling score.
  *
  * Why a scanner exists:
- *   The decoupling initiative (plans/decoupling-2026-06/) needs an objective,
+ *   The decoupling work needs an objective,
  *   reproducible metric for "how coupled is this file?" so we can prove each
  *   PR genuinely reduces coupling. A static walk that does NOT depend on the
  *   .understand-anything/ knowledge graph (which is gitignored and per-dev)
  *   guarantees CI portability.
  *
- * Scoring formula (intentionally simple — see decoupling-report.md §1):
+ * Scoring formula (intentionally simple):
  *   +2 per cross-layer value import     -- the dominant coupling signal,
  *                                          EXCLUDING the sanctioned shared
  *                                          kernel (see KERNEL_LAYERS /
