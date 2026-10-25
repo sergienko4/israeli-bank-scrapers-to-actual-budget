@@ -17,7 +17,7 @@ project:
   license: MIT
 
 runtime:
-  node_engines: ">=22.0.0"
+  node_engines: ">=24.11.0"
   node_ci_version: "26.x"
   npm_engines: ">=10.0.0"
   python_ci_version: "3.12"
@@ -56,7 +56,7 @@ badges:
   release: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg
   license_url: https://opensource.org/licenses/MIT
   docker_pulls: https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer
-  node: https://img.shields.io/badge/node-22%2B-brightgreen
+  node: https://img.shields.io/badge/node-24.11%2B-brightgreen
   typescript: https://img.shields.io/badge/TypeScript-6-blue
   test_count_gist: https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-test-count.json
   e2e_count_gist: https://gist.githubusercontent.com/sergienko4/2860e2ffec3d5919e4b658fed5ce4e5e/raw/actual-budget-importer-e2e-count.json

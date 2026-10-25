@@ -1,11 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   BUDGET_SPENT_PATTERN,
   SCRAPER_ERROR_ADVICE,
   getScraperErrorAdvice,
 } from '../../src/Errors/ScraperErrorMessages.js';
+import { anchored, providerBundle } from '../helpers/UpstreamBundle.js';
 
 describe('ScraperErrorMessages', () => {
   describe('getScraperErrorAdvice', () => {
@@ -191,18 +190,12 @@ describe('ScraperErrorMessages', () => {
   });
 });
 
-/** The provider's ESM bundle, which holds its failure wording. */
-const PROVIDER_BUNDLE = fileURLToPath(new URL(
-  '../../node_modules/@sergienko4/israeli-bank-scrapers/lib/index.mjs', import.meta.url,
-));
-
 /**
  * Reads the provider's one-SMS-login refusal from the installed bundle. The
  * provider exports no constant for it, so the drift check reads the source.
- * @returns The decoded message, or an empty string if the wording is gone.
+ * @returns The decoded message; throws if the wording is gone.
  */
 function providerBudgetMessage(): string {
-  const bundle = readFileSync(PROVIDER_BUNDLE, 'utf8');
-  const literal = /"(?<text>[^"\n]*cold SMS login[^"\n]*)"/u.exec(bundle)?.groups?.text ?? '';
+  const literal = anchored(providerBundle(), /"(?<value>[^"\n]*cold SMS login[^"\n]*)"/u);
   return JSON.parse(`"${literal}"`) as string;
 }

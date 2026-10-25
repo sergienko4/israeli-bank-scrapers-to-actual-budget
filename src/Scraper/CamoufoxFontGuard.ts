@@ -2,7 +2,9 @@
  * Stops startup when the bundled Camoufox lacks the fonts for its spoofed OS.
  *
  * The image ships only the Windows fonts, the set the default fingerprint
- * uses. Camoufox does not fail when the fonts for its OS are missing: it
+ * uses. Camoufox keeps each font face once, under a fonts/ group directory
+ * named for the OSes that read it, and fonts/groups.json lists the groups
+ * each OS reads. Camoufox does not fail when the fonts for its OS are missing: it
  * launches with fallback fonts, and its font fingerprint then contradicts the
  * OS it claims to be. A CAMOUFOX_OS that selects a font set the install lacks
  * must therefore stop the process before any bank login, not degrade it.
@@ -24,6 +26,12 @@ const CAMOUFOX_OSES: readonly CamoufoxOs[] = ['linux', 'macos', 'windows'];
 /** OS fingerprint the scraper spoofs when CAMOUFOX_OS is unset or unknown. */
 const DEFAULT_OS: CamoufoxOs = 'windows';
 
+/** Key fonts/groups.json lists each OS's font groups under. */
+const GROUP_KEYS: Readonly<Record<CamoufoxOs, string>> = { linux: 'lin', macos: 'mac', windows: 'win' };
+
+/** File in the fonts directory that lists the font groups each OS reads. */
+const GROUPS_FILE = 'groups.json';
+
 /** Leading text of every guard failure, for operators and the image E2E. */
 export const FONT_GUARD_PREFIX = 'Camoufox font check failed';
 
@@ -32,6 +40,11 @@ export interface IFontGuardInput {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly homeDir: string;
   readonly platform: NodeJS.Platform;
+}
+
+/** The part of fonts/groups.json the guard reads. */
+interface IFontGroups {
+  readonly readBy?: Readonly<Record<string, unknown>>;
 }
 
 /** What a failure message describes. */
@@ -114,16 +127,59 @@ function hasFile(target: string): boolean {
 }
 
 /**
- * Reports whether an install has the font set for one OS. Camoufox keeps each
- * set as font files directly in `fonts/<os>`, so a directory without a
- * readable, non-empty file is a lost set, not an installed one.
+ * Reports whether a groups.json entry names a font group directory: letters
+ * only, so an entry cannot point the guard outside the fonts directory.
+ * @param value - One entry of an OS's group list.
+ * @returns True for a group name.
+ */
+function isGroupName(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-z]+$/i.test(value);
+}
+
+/**
+ * Reads fonts/groups.json; a file that is missing, unreadable or not a JSON
+ * object reads as empty.
+ * @param fontsDir - The install's fonts directory.
+ * @returns The parsed file.
+ */
+function readGroupsFile(fontsDir: string): IFontGroups {
+  const groupsFile = path.join(fontsDir, GROUPS_FILE);
+  try {
+    const text = fs.readFileSync(groupsFile, 'utf8');
+    const parsed: unknown = JSON.parse(text);
+    const isObject = typeof parsed === 'object' && parsed !== null;
+    return isObject ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Lists the font group directories one OS reads, from fonts/groups.json. A
+ * missing, unreadable or malformed file lists none, so the guard fails closed.
+ * @param fontsDir - The install's fonts directory.
+ * @param os - OS whose font groups to list.
+ * @returns Absolute group directories.
+ */
+function groupDirs(fontsDir: string, os: CamoufoxOs): readonly string[] {
+  const groups = readGroupsFile(fontsDir).readBy?.[GROUP_KEYS[os]];
+  if (!Array.isArray(groups)) return [];
+  const names = groups.filter(isGroupName);
+  if (names.length !== groups.length) return [];
+  return names.map((name) => path.join(fontsDir, name));
+}
+
+/**
+ * Reports whether an install has the font set for one OS: every group that
+ * OS reads must hold a readable, non-empty file, so a pruned or emptied group
+ * is a lost set, not an installed one.
  * @param fontsDir - The install's fonts directory.
  * @param os - OS whose font set to look for.
- * @returns True when the OS font directory holds a font file.
+ * @returns True when each of the OS's font groups holds a font file.
  */
 function hasFontSet(fontsDir: string, os: CamoufoxOs): boolean {
-  const osDir = path.join(fontsDir, os);
-  return hasFile(osDir);
+  const dirs = groupDirs(fontsDir, os);
+  return dirs.length > 0 && dirs.every(hasFile);
 }
 
 /**

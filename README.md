@@ -5,7 +5,7 @@
 [![Release](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml/badge.svg)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker Pulls](https://img.shields.io/docker/pulls/sergienko4/israeli-bank-importer)](https://hub.docker.com/r/sergienko4/israeli-bank-importer)
-[![Node.js](https://img.shields.io/badge/node-22%2B-brightgreen)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-24.11%2B-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-blue)](https://www.typescriptlang.org/)
 [![Tests](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fsergienko4%2F2860e2ffec3d5919e4b658fed5ce4e5e%2Fraw%2Factual-budget-importer-test-count.json)](#contributing)
 [![E2E](https://img.shields.io/endpoint?url=https%3A%2F%2Fgist.githubusercontent.com%2Fsergienko4%2F2860e2ffec3d5919e4b658fed5ce4e5e%2Fraw%2Factual-budget-importer-e2e-count.json)](#contributing)
@@ -236,10 +236,10 @@ The container entrypoint is `node dist/Index.js`. Full Docker options: [Docker r
 <summary><b>Tech stack</b></summary>
 
 <!-- meta:tech-stack:start -->
-- **Node.js** >=22.14.0 (Docker base: `node:26-slim`)
+- **Node.js** >=24.11.0 (Docker base: `node:26-slim`)
 - **TypeScript** ^6.0.3 (strict mode, ES2022)
 - **Vitest** ^5.0.0 (v8 coverage)
-- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^8.8.0
+- **Scraper** [`@sergienko4/israeli-bank-scrapers`](https://github.com/sergienko4/israeli-bank-scrapers) ^9.0.0
 - **Browser** Camoufox (Firefox + C++-level fingerprint masking)
 - **Actual Budget API** `@actual-app/api` ^26.10.0
 <!-- meta:tech-stack:end -->
@@ -286,13 +286,13 @@ To never miss a release, subscribe to signals that are independent of any Docker
 <summary><b>Local development</b></summary>
 
 ```bash
-nvm use                 # Node 26 (.nvmrc included; engines floor is 22)
+nvm use                 # Node 26 (.nvmrc included; engines floor is 24.11)
 npm ci
 npm run build
 npm test                # unit tests + coverage (config/vitest.config.ts)
 npm run test:unit       # explicit unit run
 npm run test:e2e:mock   # Dockerized mocked E2E (no real banks)
-npm run camoufox:install # one-time: install the pinned Camoufox browser (required before portal E2E)
+npm run camoufox:install # install the pinned Camoufox browser; rerun when config/camoufox-pin.json changes (required before portal E2E)
 npm run test:e2e:portal # real-browser portal E2E suite (Camoufox)
 npm run docs:serve      # http://127.0.0.1:8000 — MkDocs Material preview
 ```

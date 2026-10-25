@@ -12,10 +12,10 @@
  * file". This gate turns that into an instant, actionable failure.
  *
  * The required set is derived from package-lock.json rather than hard-coded:
- * a package needs a pin exactly when it declares an install script
- * (`hasInstallScript`) and is not `optional`. Optional packages are excluded
- * because npm tolerates their absence — `fsevents` is darwin-only and is
- * never installed on the CI or container platforms.
+ * every `<name>@<version>` that declares an install script
+ * (`hasInstallScript`) and is not `optional` needs its own pin. The policy
+ * lives in scripts/allow-scripts-logic.mjs; this file only reads, reports and
+ * writes.
  *
  * Modes:
  *   default:  report drift on stderr, exit 1 if any pin is wrong
@@ -39,10 +39,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { approvedPins, diffPins, rebuildAllowScripts, requiredPins } from './allow-scripts-logic.mjs';
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGE_JSON_PATH = resolve(REPO_ROOT, 'package.json');
 const LOCKFILE_PATH = resolve(REPO_ROOT, 'package-lock.json');
-const NODE_MODULES = 'node_modules/';
 
 /**
  * Reads and parses a JSON file from disk.
@@ -52,86 +53,6 @@ const NODE_MODULES = 'node_modules/';
  */
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
-}
-
-/**
- * Extracts the package name from a package-lock.json `packages` key.
- *
- * Keys are tree paths, so a nested copy reads
- * `node_modules/a/node_modules/b`; the name is the segment after the final
- * `node_modules/`.
- *
- * @param {string} key lockfile `packages` key
- * @returns {string} the bare package name, scope included
- */
-function nameFromLockKey(key) {
-  return key.slice(key.lastIndexOf(NODE_MODULES) + NODE_MODULES.length);
-}
-
-/**
- * Splits an allowlist entry into its package name and pinned version.
- *
- * Scoped names contain a leading `@`, so the separator is the final `@`.
- *
- * @param {string} entry allowlist key such as `@scope/name@1.2.3`
- * @returns {{ name: string, version: string }} the split entry
- */
-function splitPin(entry) {
-  const at = entry.lastIndexOf('@');
-  return { name: entry.slice(0, at), version: entry.slice(at + 1) };
-}
-
-/**
- * Derives the pins the installed tree actually requires.
- *
- * @param {object} lockfile parsed package-lock.json
- * @returns {Map<string, string>} package name to required version
- */
-function requiredPins(lockfile) {
-  const required = new Map();
-  for (const [key, entry] of Object.entries(lockfile.packages ?? {})) {
-    if (!key.includes(NODE_MODULES) || !entry.hasInstallScript) continue;
-    if (entry.optional) continue;
-    required.set(nameFromLockKey(key), entry.version);
-  }
-  return required;
-}
-
-/**
- * Reads the current allowlist as a name-to-version map.
- *
- * @param {object} pkg parsed package.json
- * @returns {Map<string, string>} package name to allowlisted version
- */
-function currentPins(pkg) {
-  const current = new Map();
-  for (const entry of Object.keys(pkg.allowScripts ?? {})) {
-    const { name, version } = splitPin(entry);
-    current.set(name, version);
-  }
-  return current;
-}
-
-/**
- * Compares the allowlist against the tree and classifies every difference.
- *
- * @param {Map<string, string>} required pins the tree requires
- * @param {Map<string, string>} current pins the allowlist declares
- * @returns {{ stale: object[], missing: object[], orphan: object[] }} findings
- */
-function diffPins(required, current) {
-  const stale = [];
-  const missing = [];
-  for (const [name, version] of required) {
-    if (!current.has(name)) missing.push({ name, version });
-    else if (current.get(name) !== version) {
-      stale.push({ name, version, was: current.get(name) });
-    }
-  }
-  const orphan = [...current.keys()]
-    .filter(name => !required.has(name))
-    .map(name => ({ name, was: current.get(name) }));
-  return { stale, missing, orphan };
 }
 
 /**
@@ -160,35 +81,15 @@ function report({ stale, missing, orphan }, log) {
 }
 
 /**
- * Rebuilds the allowlist, keeping existing key order to minimise the diff.
- *
- * Rotates the version of packages that are already approved and drops entries
- * the tree no longer needs. A package absent from the allowlist is deliberately
- * *not* added: approving a dependency that has newly gained an install script
- * is a decision a human has to make, so it is left to fail the gate.
- *
- * @param {object} pkg parsed package.json
- * @param {Map<string, string>} required pins the tree requires
- * @returns {Record<string, boolean>} the corrected allowlist
- */
-function rebuildAllowScripts(pkg, required) {
-  const rebuilt = {};
-  for (const entry of Object.keys(pkg.allowScripts ?? {})) {
-    const { name } = splitPin(entry);
-    if (required.has(name)) rebuilt[`${name}@${required.get(name)}`] = true;
-  }
-  return rebuilt;
-}
-
-/**
  * Writes the corrected allowlist back to package.json.
  *
  * @param {object} pkg parsed package.json
- * @param {Map<string, string>} required pins the tree requires
+ * @param {Set<string>} required pins the tree requires
+ * @param {object[]} stale the pins to rotate in place
  * @returns {void}
  */
-function applyFix(pkg, required) {
-  pkg.allowScripts = rebuildAllowScripts(pkg, required);
+function applyFix(pkg, required, stale) {
+  pkg.allowScripts = rebuildAllowScripts(pkg.allowScripts, required, stale);
   writeFileSync(PACKAGE_JSON_PATH, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
@@ -200,7 +101,7 @@ function applyFix(pkg, required) {
  * pins are reported but never written: see {@link rebuildAllowScripts}.
  *
  * @param {object} pkg parsed package.json
- * @param {Map<string, string>} required pins the tree requires
+ * @param {Set<string>} required pins the tree requires
  * @param {{ stale: object[], missing: object[], orphan: object[] }} findings
  * @returns {void}
  */
@@ -208,11 +109,11 @@ function runFix(pkg, required, findings) {
   const { stale, missing, orphan } = findings;
   if (stale.length + orphan.length > 0) {
     report({ stale, missing: [], orphan }, console.log);
-    applyFix(pkg, required);
+    applyFix(pkg, required, stale);
   }
   for (const { name, version } of missing) {
     console.log(
-      `needs human approval: ${name}@${version} is not approved at all — ` +
+      `needs human approval: ${name}@${version} is not approved — ` +
         `run npm approve-scripts ${name}`
     );
   }
@@ -266,12 +167,22 @@ function countFindings({ stale, missing, orphan }) {
 /**
  * Entry point: compares the allowlist and either reports or repairs drift.
  *
+ * An allowlist entry the gate cannot read fails both modes, so `--fix` never
+ * rewrites an allowlist it misread.
+ *
  * @returns {void}
  */
 function main() {
   const pkg = readJson(PACKAGE_JSON_PATH);
   const required = requiredPins(readJson(LOCKFILE_PATH));
-  const findings = diffPins(required, currentPins(pkg));
+  let approved;
+  try {
+    approved = approvedPins(pkg.allowScripts);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  const findings = diffPins(required, approved);
 
   if (process.argv.includes('--fix')) runFix(pkg, required, findings);
   else runCheck(findings);

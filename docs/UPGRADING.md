@@ -9,6 +9,41 @@ the new image.
 
 ---
 
+## 1.44.2 — Node.js 24.11 and a new Camoufox build outside Docker
+
+**Affects:** deployments that run the importer with Node.js directly instead of
+the Docker image. The image runs Node 26 and ships its own browser, so it needs
+no action.
+
+The scraper now requires Node.js 24.11 or later, so `package.json` accepts
+24.11 and later instead of 22.14. On an older Node, `npm ci` warns
+`EBADENGINE`, or fails when `engine-strict` is set.
+
+The pinned Camoufox browser moves from `152.0.4-beta.31` to
+`156.0.1-beta.36`, which keeps its fonts in groups that `fonts/groups.json`
+lists. `npm ci` does not replace the browser an earlier release installed. On
+Linux, the startup font check then stops the importer with
+`Camoufox font check failed` and asks for a reinstall.
+
+**Migration:**
+
+- Install Node.js 24.11 or later, for example `nvm install 24`, before you
+  pull the release.
+- After `npm ci`, run `npm run camoufox:install`. It replaces the installed
+  browser with the pinned build.
+- OneZero only: its login needs the TLS profile of its Android app, which
+  OpenSSL 3.5 or later can send. Node 24.11 and later bundle it. A Node built
+  against an older system OpenSSL logs
+  `[tls] runtime OpenSSL cannot emit this TLS profile` and OneZero may block
+  the run. `node -p process.versions.openssl` prints the version Node uses.
+
+**Rollback:** an earlier release runs on the newer Node unchanged. Its startup
+font check expects the earlier browser's font layout, so run
+`npm run camoufox:install` from the earlier checkout to reinstall its pinned
+build.
+
+---
+
 ## 1.43.3 — Pepper enrolls the importer as a device
 
 **Affects:** deployments with a Pepper entry in `banks`.

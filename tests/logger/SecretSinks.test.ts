@@ -14,7 +14,6 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import pino from 'pino';
@@ -40,6 +39,7 @@ import createNodeFileSystem from '../../src/Storage/NodeFileSystem.js';
 import type { IImporterConfig } from '../../src/Types/Index.js';
 import { fakeBankQuarantineEntry } from '../helpers/factories.js';
 import { TEST_CREDENTIAL } from '../helpers/testCredentials.js';
+import { anchored, providerTypes } from '../helpers/UpstreamBundle.js';
 
 /** Text outside the secret, which every output must still carry. */
 const CANARY = 'import-step-canary';
@@ -428,19 +428,13 @@ describe('a secret under any key spelling reaches no output', () => {
   });
 });
 
-/** The provider package's type declarations, which hold its failure codes. */
-const PROVIDER_TYPES = fileURLToPath(new URL(
-  '../../node_modules/@sergienko4/israeli-bank-scrapers/lib/index.d.ts', import.meta.url,
-));
-
 /**
  * Reads the provider's failure codes from its type declarations: the package
  * declares `ScraperErrorTypes` but exports no value to import.
  * @returns Every wire value the enum declares.
  */
 function providerFailureCodes(): string[] {
-  const declarations = readFileSync(PROVIDER_TYPES, 'utf8');
-  const body = /declare enum ScraperErrorTypes \{(?<body>[^}]*)\}/u.exec(declarations)?.groups?.body ?? '';
+  const body = anchored(providerTypes(), /declare enum ScraperErrorTypes \{(?<value>[^}]*)\}/u);
   return [...body.matchAll(/= "(?<code>[A-Z_]+)"/gu)].map(match => match.groups?.code ?? '');
 }
 

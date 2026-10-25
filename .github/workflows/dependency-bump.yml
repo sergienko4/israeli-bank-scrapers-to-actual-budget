@@ -241,13 +241,27 @@ jobs:
       # it builds nothing and runs no tests, the allowlist rotation below reads
       # `hasInstallScript` out of the lockfile rather than observing a build,
       # and script execution does not affect what npm writes to the lockfile.
+      #
+      # The lockfile is resolved with --package-lock-only, so every entry,
+      # `hasInstallScript` included, comes from registry metadata: the source
+      # Dependabot and the lockfile-sync job resolve from. A full install
+      # re-derives that flag from the unpacked tarball, and npm infers
+      # `node-gyp rebuild` from any `binding.gyp` even when the package sets
+      # `gypfile: false`. better-sqlite3 13 ships its prebuilt binaries that
+      # way, so a full install flagged it and the rotation below approved a
+      # build no image can run. `npm ci` then fetches every tarball, checks it
+      # against the lockfile and installs the tools the gates below run, and it
+      # never writes the lockfile.
       - name: Install the requested version
         env:
           PACKAGE: ${{ inputs.package }}
           RESOLVED: ${{ steps.resolve.outputs.resolved }}
           SAVE_FLAG: ${{ steps.target.outputs.saveFlag }}
           PREFIX_FLAG: ${{ steps.target.outputs.prefixFlag }}
-        run: npm install "${PACKAGE}@${RESOLVED}" "${SAVE_FLAG}" "${PREFIX_FLAG}" --ignore-scripts --no-audit --no-fund
+        run: |
+          set -euo pipefail
+          npm install "${PACKAGE}@${RESOLVED}" "${SAVE_FLAG}" "${PREFIX_FLAG}" --package-lock-only --ignore-scripts --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
 
       # Install scripts stay blocked until the exact name@version is pinned, so
       # a bump that skips this leaves the native bindings unbuilt and fails E2E
@@ -433,8 +447,9 @@ jobs:
 
           ## What ran on the runner
 
-          - \`npm install ${PACKAGE}@${RESOLVED}\` regenerated \`package-lock.json\`,
-            so the integrity hash was produced by npm from the tarball it fetched.
+          - \`npm install ${PACKAGE}@${RESOLVED} --package-lock-only\` regenerated
+            \`package-lock.json\` from registry metadata, and \`npm ci\` then
+            fetched every tarball and checked it against that lockfile.
           - \`check-allow-scripts.mjs --fix\` rotated the install-script pin.
           - \`meta:render\` re-rendered the README marker fragments, which carry
             dependency versions read out of \`package.json\`.

@@ -9,7 +9,9 @@ Thank you for your interest in contributing!
 ### Prerequisites
 
 - Node.js 26, the version in `.nvmrc` that CI and the Docker image run
-  (`nvm install && nvm use`). `package.json` accepts 22.14 and later.
+  (`nvm install && nvm use`). `package.json` accepts 24.11 and later, the floor the
+  scraper provider declares. A major newer than `.nvmrc` is untested, and a
+  dependency may not support it yet.
 - npm 12.2.1, the version the Docker image pins:
   `npm install -g npm@12.2.1`. Earlier npm runs every dependency install
   script, including a source build of `better-sqlite3` that needs a C++
@@ -108,8 +110,9 @@ npm run lint:allow-scripts
 ```
 
 `scripts/check-allow-scripts.mjs` derives the pins the tree actually requires
-from `package-lock.json` — a package needs one exactly when it declares
-`hasInstallScript` and is not `optional` — and compares them against
+from `package-lock.json` — every `<name>@<version>` that declares
+`hasInstallScript` and is not `optional` needs its own pin, so the two
+`better-sqlite3` copies are checked separately — and compares them against
 `allowScripts`. It names every stale, missing, or orphaned pin and prints the
 remedy for each: the `npm approve-scripts` command for a stale or missing pin,
 and the entry to delete for an orphaned one. It runs as a commit-stage gate in
@@ -160,7 +163,10 @@ The exception is deliberately narrow in two directions:
   dependency that has newly gained an install script is a new decision rather
   than a rotation of an existing one, so it is reported as
   `needs human approval` and left to fail the gate until someone runs
-  `npm approve-scripts` themselves.
+  `npm approve-scripts` themselves. The same holds for a second version of an
+  approved package: a pin rotates only when one approved version left the tree
+  and exactly one new version replaced it, so a copy that appears *beside* an
+  approved one is never approved by moving that pin onto it.
 
 ### Dependabot pull requests merge themselves
 
@@ -281,8 +287,12 @@ there moves only the lockfile, which that comparison cannot see.
 [release-pipeline]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/release-pipeline.md
 
 Running it on a runner is also what makes the lockfile trustworthy when your
-own network cannot reach the npm registry: the integrity hash is produced by
-npm from the tarball it actually fetched, rather than typed in by hand.
+own network cannot reach the npm registry: npm resolves it from registry
+metadata with `--package-lock-only`, exactly as Dependabot does, then `npm ci`
+fetches every tarball and checks it against the lockfile, so no hash is typed in
+by hand. A full `npm install` is avoided on purpose: it re-derives
+`hasInstallScript` from the unpacked tarball and flags `better-sqlite3` 13, whose
+`binding.gyp` ships beside prebuilt binaries, as needing a native build.
 
 The result is an ordinary pull request with the full CI suite attached. The
 workflow only bumps a package that is already in `dependencies` or
@@ -318,6 +328,11 @@ fix, and none of them is a push to the bot's branch.
 | A gate fails on files the pull request did not touch (a lint rule, an ESLint canary, a type-check) | A tool's new major changed what it reports | Fix it forward on `main`, as described below. |
 | `npm run audit` reports an unaddressed advisory | A new advisory reached the tree | Fix it in its own pull request: a lockfile refresh, an `overrides` floor, or a justified entry in `config/audit-policy.mjs`. Then comment `@dependabot rebase` on a Dependabot pull request, or run `gh workflow run lockfile-refresh.yml` for a refresh unless a newer one has already replaced it. |
 | Tests fail in code that uses the package | A real breaking change | Fix it forward when the code can work on both versions. Otherwise run `dependency-bump.yml` for that version (see [Bumping a package on demand](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-a-package-on-demand)) and push the code change to its `deps/…` branch. Dependabot drops the update once `main` carries that version. |
+| `tests/deployment/EnginesFloor.test.ts` names a package that `needs Node <range>` | The package raised its Node floor above `engines.node` | Raise `engines.node` in `package.json` to that floor, run `npm run meta:render`, and add a `docs/UPGRADING.md` entry for hosts that run the importer outside Docker. The image already runs a newer Node. |
+| `tests/deployment/BrowserStackPair.test.ts` fails | The scraper was tested with another Camoufox build or Playwright minor | Move the pin to the build the scraper names (see [Bumping the Camoufox browser](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-the-camoufox-browser)), or bring `playwright-core` to the minor it names. |
+| The `Prove the browser patches applied` step, or the image's `npm ci` layer, fails `camoufox:patch-check` | The scraper's postinstall could not patch the `playwright-core` it drives Camoufox with | Install the `playwright-core` minor the scraper was tested with. Never set `SKIP_PLAYWRIGHT_CORE_PATCH` to pass it. |
+| The image build fails with `ERROR: Camoufox font prune` | A new Camoufox build changed its font layout | See the font layout notes in [Bumping the Camoufox browser](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-the-camoufox-browser). Never ship the full font tree to pass it. |
+| A test fails with `The provider no longer ships …` | The scraper renamed or reworded an error the importer matches on | Update the matching code and its test to the new wording. Read the scraper's bundle (`lib/index.mjs`) for the new form; never relax the match. |
 
 Never push to a bot branch, and never press **Update branch** on one.
 Refresh branches are push-locked. Dependabot stops rebasing a branch
@@ -381,6 +396,23 @@ applies the same test without installing, and the image build runs it on both
 of its paths.
 `tests/deployment/CamoufoxPin.test.ts` fails if any build file goes back to
 fetching an unpinned build.
+
+The scraper names the Camoufox build and the Playwright minor its release was
+tested with. `tests/deployment/BrowserStackPair.test.ts` fails when the pin or
+the installed `playwright-core` differs, so a scraper bump that moves to a new
+build stays red until the pin follows it.
+
+The image ships only the fonts the Windows fingerprint reads. Camoufox keeps
+each font face once, under a `fonts/` group named for the OSes that read it,
+and `fonts/groups.json` lists the groups per OS. camoufox-js hands the browser
+the whole `fonts` directory, so the image build runs
+`scripts/camoufox-font-prune.mjs`, which deletes every group Windows does not
+read. It deletes nothing and fails the build when `groups.json` is missing,
+names no Windows groups, or names one that is absent, or when the `fonts`
+directory holds an entry that is neither a file nor a directory, such as a
+symlinked group. If a new build changes the font layout, update the prune,
+`src/Scraper/CamoufoxFontGuard.ts` (the startup check) and
+`tests/e2e/image-contents.e2e.test.ts` together.
 
 To move to another build:
 

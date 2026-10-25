@@ -17,6 +17,7 @@
     "test:e2e:real": "vitest run --config config/vitest.config.e2e-real.ts",
     "test:e2e:portal": "vitest run --config config/vitest.config.e2e.ts portal",
     "camoufox:install": "node scripts/camoufox-fetch.mjs",
+    "camoufox:patch-check": "node node_modules/@sergienko4/israeli-bank-scrapers/scripts/patch-playwright-core.mjs --strict",
     "smoke:google-config": "node scripts/google-oauth-smoke.mjs",
     "type-check": "bash config/tsc-strict-src.sh --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/src.tsbuildinfo",
     "type-check:e2e": "bash config/tsc-strict-src.sh --noEmit --project tsconfig.e2e.json --incremental --tsBuildInfoFile node_modules/.cache/tsc/e2e.tsbuildinfo",
@@ -59,7 +60,7 @@
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/static": "^10.1.7",
     "@fastify/type-provider-typebox": "^6.2.0",
-    "@sergienko4/israeli-bank-scrapers": "^8.8.0",
+    "@sergienko4/israeli-bank-scrapers": "^9.0.0",
     "@sinclair/typebox": "^0.34.52",
     "cron-parser": "^5.10.2",
     "fastify": "^5.12.4",
@@ -74,6 +75,7 @@
     "@faker-js/faker": "^10.6.0",
     "@hieutran094/camoufox-js": "^0.11.2",
     "@types/node": "^26.6.5",
+    "@types/semver": "^7.8.0",
     "@vitest/coverage-v8": "^5.0.5",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
@@ -93,6 +95,7 @@
     "markdownlint-cli2": "^0.24.0",
     "patch-package": "^8.0.1",
     "playwright-core": "~1.64.0",
+    "semver": "^7.8.5",
     "spdx-satisfies": "^6.0.0",
     "typedoc": "^0.28.20",
     "typescript": "^6.0.3",
@@ -118,7 +121,7 @@
     "katex": "^0.18.2"
   },
   "engines": {
-    "node": ">=22.14.0",
+    "node": ">=24.11.0",
     "npm": ">=10.0.0"
   },
   "author": "Israeli Bank Importer Contributors",
@@ -148,6 +151,6 @@
     "better-sqlite3@12.11.1": true,
     "tesseract.js@7.0.0": true,
     "unrs-resolver@1.12.2": true,
-    "@sergienko4/israeli-bank-scrapers@8.8.0": true
+    "@sergienko4/israeli-bank-scrapers@9.0.0": true
   }
 }

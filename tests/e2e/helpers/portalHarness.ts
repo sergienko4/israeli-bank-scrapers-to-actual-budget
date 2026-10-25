@@ -45,27 +45,43 @@ export interface IPortalServer {
   store: PortalConfigStore;
 }
 
+/** Pixels the outer window exceeds the layout by, above any real browser frame. */
+const BROWSER_FRAME_ALLOWANCE = 200;
+
 /**
  * Launches the product's Camoufox (Firefox) browser in headless mode.
  *
  * The binary is the pinned build `scripts/camoufox-fetch.mjs` installs
  * (`npm run camoufox:install` locally, the camoufox-cache action in CI), so
  * this never needs chromium and is never skipped — a missing browser fails
- * the test loudly. A fixed window size is passed because Camoufox derives the
- * CSS layout viewport (and thus responsive breakpoints) from the real window,
- * not from Playwright's per-context viewport;
- * pinning it keeps desktop vs. mobile flows deterministic. Tests therefore open
- * contexts with `viewport: null` (no Playwright viewport emulation): Camoufox
- * uses this window instead, and it avoids the Firefox `Browser.setDefaultViewport`
+ * the test loudly. Camoufox lays the page out at the window's spoofed inner
+ * size, not at Playwright's per-context viewport. camoufox-js derives that
+ * inner size from a random fingerprint's frame, which put about 1 launch in
+ * 200 at 512–760px for a 1280px window, below the 760px breakpoint that hides
+ * the sidebar. So the inner size is pinned to `window` here, which keeps
+ * desktop vs. mobile flows deterministic. The outer size is
+ * {@link BROWSER_FRAME_ALLOWANCE} larger in each dimension: since
+ * v156.0.1-beta.36 Camoufox no longer shrinks the layout to the real content
+ * area, which is the outer size less the browser's own frame. An inner size
+ * the frame does not fit around leaves the bottom of the layout outside the
+ * window, where a click never arrives. Tests open contexts with
+ * `viewport: null` (no Playwright viewport emulation): Camoufox uses this
+ * window instead, and it avoids the Firefox `Browser.setDefaultViewport`
  * call whose `isMobile` field Playwright >=1.61 sends and the Camoufox Juggler
  * rejects ("viewport.isMobile ... not described in this scheme").
- * @param window - Fixed `[width, height]` window size (default desktop).
+ * @param window - Fixed `[width, height]` layout size (default desktop).
  * @returns A Playwright Browser instance ready to open pages.
  */
 export async function launchPortalBrowser(
   window: [number, number] = [1280, 900],
 ): Promise<Browser> {
-  return await Camoufox({ headless: true, window });
+  const [width, height] = window;
+  const outer: [number, number] = [width + BROWSER_FRAME_ALLOWANCE, height + BROWSER_FRAME_ALLOWANCE];
+  const config = {
+    'window.outerWidth': outer[0], 'window.outerHeight': outer[1],
+    'window.innerWidth': width, 'window.innerHeight': height,
+  };
+  return await Camoufox({ headless: true, window: outer, config, i_know_what_im_doing: true });
 }
 
 /**

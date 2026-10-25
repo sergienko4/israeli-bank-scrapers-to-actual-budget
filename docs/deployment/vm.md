@@ -8,7 +8,7 @@ Deploy the importer to a long-running VM (Hetzner, DigitalOcean, AWS EC2, GCP, y
 - SSH access.
 - Optional but recommended: a managed-DNS hostname for the Actual Budget UI.
 
-> **Local development** requires Node.js 22+ (`.nvmrc` is included — run `nvm use` to switch automatically).
+> **Local development** requires Node.js 24.11+ (`.nvmrc` is included — run `nvm use` to switch automatically). CI and the image run the `.nvmrc` major; a newer major is untested, and a dependency may not support it yet.
 
 ## Step 1 — Create the importer directory
 

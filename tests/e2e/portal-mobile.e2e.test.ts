@@ -3,9 +3,10 @@
  * the full edit → save → persist flow works on a phone-sized viewport, exactly
  * as a user on their phone would drive it.
  *
- * The breakpoint is real: Camoufox derives the CSS layout viewport from the
- * browser window, so the harness launches a 390×844 window (not a Playwright
- * emulated viewport, which Camoufox ignores for media queries). Always runs —
+ * The breakpoint is real: Camoufox lays the page out at the window's inner
+ * size, so the harness pins a 390×844 inner layout inside a larger outer
+ * window (not a Playwright emulated viewport, which Camoufox ignores for media
+ * queries). Always runs —
  * never skipped; the browser is the product's own Camoufox build.
  */
 
