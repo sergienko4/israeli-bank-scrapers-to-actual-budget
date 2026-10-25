@@ -12,9 +12,6 @@
  * {@link FakeFileSystem}, except those that need a store which fails.
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 import type { Mock } from 'vitest';
@@ -26,6 +23,7 @@ import type { IDeviceAuthTarget, IDeviceStateWatch } from '../../src/Scraper/Tok
 import { attachDeviceAuth } from '../../src/Scraper/Tokens/PepperDeviceState.js';
 import forgetRefusedState from '../../src/Scraper/Tokens/PepperStateRefusal.js';
 import { fail, succeed } from '../../src/Types/ProcedureHelpers.js';
+import { anchored, providerBundle } from '../helpers/UpstreamBundle.js';
 import {
   ACCOUNT_LOGIN, CAPTURED_AT, fakeToken, makeStore, seedRecords, storedRecords,
 } from './BankTokenStoreFixture.js';
@@ -385,11 +383,6 @@ describe('forgetRefusedState', () => {
   });
 });
 
-/** The installed provider bundle, read as text. */
-const PROVIDER_BUNDLE = fileURLToPath(new URL(
-  '../../node_modules/@sergienko4/israeli-bank-scrapers/lib/index.mjs', import.meta.url,
-));
-
 /**
  * Lists the categories one upstream rule table names.
  * @param bundle - The provider bundle.
@@ -397,7 +390,7 @@ const PROVIDER_BUNDLE = fileURLToPath(new URL(
  * @returns The categories, in order.
  */
 function categoriesOf(bundle: string, table: string): string[] {
-  const block = new RegExp(`var ${table} = \\[(?<body>[^\\]]*)\\];`, 'u').exec(bundle)?.groups?.body ?? '';
+  const block = anchored(bundle, new RegExp(`var ${table} = \\[(?<value>[^\\]]*)\\];`, 'u'));
   return [...block.matchAll(/category: "(?<name>[^"]+)"/gu)].map((match) => match.groups?.name ?? '');
 }
 
@@ -412,18 +405,70 @@ function literalCategories(bundle: string, helper: string): string[] {
   return [...new Set([...calls].map((match) => match.groups?.name ?? ''))];
 }
 
+/** A Pepper login refusal's parts, put into an upstream template in this order; `{}` fills the rest. */
+const REFUSAL_PARTS: readonly (readonly [RegExp, string])[] = [
+  [/\$\{(?:\w+\.)?verb\}/gu, 'POST'],
+  [/\$\{safeUrl\}/gu, LOGIN_URL],
+  [/\$\{String\((?:\w+\.)?status\)\}/gu, '401'],
+  [/\$\{[^}]*\}/gu, '{}'],
+];
+
+/**
+ * Lists the templates that word a failure from a URL and an HTTP status.
+ * @param source - Provider source to search.
+ * @returns Each template, backticks included.
+ */
+function statusTemplates(source: string): string[] {
+  const templates = source.match(/`[^`\n]*\$\{safeUrl\}[^`\n]*`/gu) ?? [];
+  return templates.filter((template) => /\$\{[^}]*\bstatus\b[^}]*\}/u.test(template));
+}
+
+/**
+ * Words a Pepper login refusal through one upstream template.
+ * @param template - The template, backticks included.
+ * @returns The failure message upstream would send.
+ */
+function refusalThrough(template: string): string {
+  return REFUSAL_PARTS.reduce((text, [part, value]) => text.replace(part, value), template.slice(1, -1));
+}
+
+/**
+ * Tells whether a run that sent the state removes it on one generic failure.
+ * @param errorMessage - The failure's message.
+ * @returns True when the state is removed.
+ */
+function removesOn(errorMessage: string): boolean {
+  const { store, fileSystem } = makeStore();
+  seedDeviceState(fileSystem);
+  return forgetRefusedState(attempt(store).watch, failed('GENERIC', errorMessage));
+}
+
+/** Template wordings, and whether the rule reads a refusal sent through each as proof. */
+const TEMPLATE_CASES = [
+  { label: 'the inline wording', template: '`${verb} ${safeUrl} ${String(env.status)}: ${snippet}`', removes: true },
+  { label: 'a prefix the body is added to', template: '`${failure.verb} ${safeUrl} ${String(failure.status)}: `', removes: true },
+  { label: 'a wording with the status first', template: '`${String(response.status)} ${verb} ${safeUrl}: ${snippet}`', removes: false },
+  { label: 'a wording without the separator', template: '`${verb} ${safeUrl} ${String(response.status)} ${snippet}`', removes: false },
+] as const;
+
 describe('the upstream wording the refusal rule reads', () => {
-  const bundle = readFileSync(PROVIDER_BUNDLE, 'utf8');
+  const bundle = providerBundle();
 
   it('names the two renewal steps at the URLs the rule matches', () => {
     expect(bundle).toContain(`"auth.login": "${LOGIN_URL}"`);
     expect(bundle).toContain(`"auth.assert": "${ASSERT_URL}"`);
   });
 
-  it('words a non-2xx answer as verb, origin and path, then the status, on both fetch paths', () => {
+  it('words a non-2xx answer so a login refusal removes the state, on every template', () => {
     expect(bundle).toContain('return mintSafeUrlForLog(`${parsed.origin}${parsed.pathname}`);');
-    const shapes = bundle.match(/`\$\{verb\} \$\{safeUrl\} \$\{String\((?:response|env)\.status\)\}: \$\{snippet\}`/gu);
-    expect(shapes).toHaveLength(2);
+    const templates = statusTemplates(bundle);
+    expect(templates).not.toEqual([]);
+    expect(templates.filter((template) => !removesOn(refusalThrough(template)))).toEqual([]);
+  });
+
+  it.each(TEMPLATE_CASES)('reads $label as removes=$removes', ({ template, removes }) => {
+    expect(statusTemplates(template)).toEqual([template]);
+    expect(removesOn(refusalThrough(template))).toBe(removes);
   });
 
   it('words an invalid state with the prefix the rule matches', () => {
