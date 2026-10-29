@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.44.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.44.3...v1.44.4) (2026-10-29)
+
+
+### Fixed
+
+* **deps:** floor re2js and auto-remediate advisories under exact pins ([#827](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/827)) ([ee297c3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ee297c3d51e3f662f6fbdd53df92e7aeb06bc736))
+* **deps:** refresh 18 runtime and 26 dev lockfile pins ([#830](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/830)) ([934ef99](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/934ef996ba48c553d62b52550833ebaabad21cd8))
+
 ## [1.44.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.44.2...v1.44.3) (2026-10-28)
 
 
