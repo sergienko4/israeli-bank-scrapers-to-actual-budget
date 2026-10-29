@@ -231,8 +231,9 @@ jobs:
       # never edited or closed. It opens only while some advisory has no
       # floor: no pull request can carry that, so nothing else would notify.
       # Once every advisory has a floor, its body says so, replacing a
-      # rejection table that no longer applies, and it stays open until `main`
-      # audits clean.
+      # rejection table that no longer applies, and says whether the refresh
+      # still waits for a maintainer (a fresh or line-leaving floor, or a plan
+      # that does not say). It stays open until `main` audits clean.
       # REST rather than `gh issue`, which goes through GraphQL mutations that
       # also touch deprecated classic projects. The jq filter is a literal, so
       # no API value is ever spliced into shell.
@@ -261,8 +262,13 @@ jobs:
           plan="${RUNNER_TEMP}/plan.json"
           if [ "$(jq '.rejections | length' "${plan}")" -eq 0 ]; then
             [ -n "${number}" ] || exit 0
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/${number}" \
-              -f body="\`main\` still fails \`npm run audit\`, but every advisory now has an \`overrides\` floor that the lockfile refresh carries, so none needs a maintainer. Updated by lockfile-refresh run ${GITHUB_RUN_ID}; this issue closes itself once \`main\` audits clean." > /dev/null
+            body="$(jq -r --arg run "${GITHUB_RUN_ID}" '
+              "`main` still fails `npm run audit`. Every advisory now has an `overrides` floor, "
+              + (if .requiresReview == false
+                 then "and the lockfile refresh carries them without review, so none needs a maintainer."
+                 else "but at least one is fresh or leaves its locked line, so the lockfile refresh pull request is labelled `needs-manual-review` and waits for a maintainer to review and merge it." end)
+              + "\n\nUpdated by lockfile-refresh run \($run); this issue closes itself once `main` audits clean."' "${plan}")"
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/${number}" -f body="${body}" > /dev/null
             echo "::notice::Updated #${number}: no advisory is rejected."
             exit 0
           fi

@@ -132,7 +132,8 @@ recover on their own once `main` is clean.
    advisory, the job keeps one open issue titled
    "Unresolved dependency advisories", labelled `blocked-by-advisory`, whose
    body is the rejection table. Once every advisory has a floor, the body
-   says so instead, and the issue closes once `main` audits
+   says so instead, including whether the refresh still waits for a
+   maintainer, and the issue closes once `main` audits
    clean. That issue is the notification for an advisory no pull request can
    carry. The job uses the workflow token (`contents: read`,
    `issues: write`) and never `RELEASE_TOKEN`. The audit and planner steps
