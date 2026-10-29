@@ -311,6 +311,11 @@ If a security vulnerability is discovered in a released version:
 - ✅ Weekly lockfile refresh updates transitive dependencies and applies
   `npm audit fix` changes within declared ranges, then auto-merges after CI
   unless a pin crossed a major
+- ✅ `main` is audited every four hours. An advisory behind an exact
+  transitive pin gets an `overrides` floor, which is proved to clear it
+  before the pull request opens. Aged same-line floors auto-merge; the rest
+  wait for a human (see
+  [ADR-0003](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0003-automated-override-floors.md))
 - ✅ `npm run audit` runs as blocking CI check (no bypass; exceptions expire)
 
 ---

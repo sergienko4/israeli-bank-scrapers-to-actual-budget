@@ -148,6 +148,7 @@ nav:
       - Decisions:
           - "ADR-0001: Scheduled lockfile refresh": decisions/ADR-0001-scheduled-lockfile-refresh.md
           - "ADR-0002: Dependency auto-merge": decisions/ADR-0002-dependency-auto-merge.md
+          - "ADR-0003: Automated override floors": decisions/ADR-0003-automated-override-floors.md
   - Troubleshooting: troubleshooting.md
   - Upgrading: UPGRADING.md
   - Security: SECURITY.md

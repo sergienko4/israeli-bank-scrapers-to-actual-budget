@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-02-27
-- **Amended:** 2026-09-10, 2026-10-16 — see the notes under Context
+- **Amended:** 2026-09-10, 2026-10-16, 2026-10-29 — see the notes under Context
 - **Deciders:** Repository maintainer
 - **Supersedes:** the retired `dependency-check.yml` workflow
 
@@ -58,6 +58,18 @@ policy file at all. The advisory could only be cleared by moving the pin.
 > claim that `npm update` cannot cross a major: it stays inside each
 > parent's declared range, but a nested entry can still land on a new major
 > when an updated parent asks for one, which is why majors are detected.
+>
+> **Amended 2026-10-29.** [ADR-0003](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0003-automated-override-floors.md)
+> widens the refresh past "within ranges parents already permit" for one
+> case: an advisory on a transitive package that its parent pins exactly. The
+> refresh now raises an `overrides` floor for it under fixed rules, regenerates
+> only the floored packages, proves the advisory cleared, and verifies that
+> `package.json` changed only inside `overrides`. A new `advisory` job audits
+> `main` every four hours and starts the refresh when the audit is red, so the
+> seven-day window in Consequences no longer applies to advisories. Weekly and
+> dispatched runs also drop overrides that no longer change a locked version,
+> which answers the "grows monotonically" objection to floors in Alternatives
+> considered.
 
 The decisive detail is that **the fix was already inside the allowed range**.
 Regeneration alone would have produced `4.28.8`. The lockfile had simply never
