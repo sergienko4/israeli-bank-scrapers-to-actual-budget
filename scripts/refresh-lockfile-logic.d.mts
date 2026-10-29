@@ -4,6 +4,8 @@
  * scripts/release-signal-logic.d.mts precedent.
  */
 
+import type { IPlannedFloor, IRejection } from './override-floor-logic.mjs';
+
 /** A package whose tarball resolves from outside the public npm registry. */
 export interface IForeignRegistryEntry {
   path: string;
@@ -81,5 +83,25 @@ export function summarizeRefresh(beforeText: string, afterText: string): IRefres
  */
 export function findMajorBumps(beforeText: string, afterText: string): IVersionChange[];
 
+/** The `overrides` edits a refresh made, as the floor plan and prune report them. */
+export interface IOverrideChanges {
+  floors?: IPlannedFloor[];
+  rejections?: IRejection[];
+  pruned?: string[];
+}
+
+/** A refresh summary that also accounts for its `overrides` edits. */
+export interface IOverrideAwareSummary extends IRefreshSummary {
+  floors: IPlannedFloor[];
+  rejections: IRejection[];
+  pruned: string[];
+  overridesChanged: boolean;
+}
+
+/** Folds the `overrides` edits of a refresh into its summary. */
+export function applyOverrideChanges(summary: IRefreshSummary, overrides: IOverrideChanges): IOverrideAwareSummary;
+
 /** Renders the pull-request body describing an automated refresh. */
-export function formatRefreshBody(summary: IRefreshSummary & { majorBumps?: IVersionChange[] }): string;
+export function formatRefreshBody(
+  summary: IRefreshSummary & Partial<Omit<IOverrideAwareSummary, keyof IRefreshSummary>> & { majorBumps?: IVersionChange[] },
+): string;

@@ -550,6 +550,12 @@ function changeSection(heading, changes) {
 
 /** Why the chosen commit type is the correct one, stated for the reviewer. */
 const RELEASE_RATIONALE = {
+  overrides: [
+    '`overrides` in `package.json` changed. They pin the transitive versions',
+    'installed into the published Docker image, and',
+    'scripts/release-signal-logic.mjs counts them as shipped, so this opens as',
+    '`fix(deps)` and release-please cuts a release for it.',
+  ].join('\n'),
   fix: [
     'A runtime pin moved. Runtime dependencies are installed into the',
     'published Docker image, so this opens as `fix(deps)` and release-please',
@@ -580,6 +586,140 @@ function majorSection(majorBumps) {
   ];
 }
 
+/** Where the override rules, kinds and rejection reasons are explained. */
+const OVERRIDE_ADR = 'docs/decisions/ADR-0003-automated-override-floors.md';
+
+/** Titles name at most this many advisories; more are counted instead. */
+const MAX_TITLED_ADVISORIES = 3;
+
+/**
+ * Lists every advisory a set of floors clears, once each, in order.
+ *
+ * @param {ReadonlyArray<{ ghsas: string[] }>} floors The applied floors.
+ * @returns {string[]} The sorted, de-duplicated GHSA IDs.
+ */
+function floorAdvisories(floors) {
+  return [...new Set(floors.flatMap((floor) => floor.ghsas))].sort();
+}
+
+/**
+ * Names the override edits a refresh made, for its commit and PR title.
+ *
+ * @param {ReadonlyArray<{ ghsas: string[] }>} floors The applied floors.
+ * @param {readonly string[]} pruned The overrides removed as redundant.
+ * @returns {string} A `fix(deps):` title.
+ */
+function overrideTitle(floors, pruned) {
+  const advisories = floorAdvisories(floors);
+  const named = advisories.length > MAX_TITLED_ADVISORIES ? `${advisories.length} advisories` : advisories.join(', ');
+  const parts = [];
+  if (floors.length > 0) parts.push(`raise override floors for ${named}`);
+  if (pruned.length > 0) parts.push(`drop ${pruned.length} redundant override${pruned.length === 1 ? '' : 's'}`);
+  return `fix(deps): ${parts.join(' and ')}`;
+}
+
+/**
+ * Folds the `overrides` edits of a refresh into its summary.
+ *
+ * Any `overrides` change is shipped (scripts/release-signal-logic.mjs counts
+ * the field), so it forces `fix(deps)` even when no locked version moved — a
+ * prune changes package.json alone. Rejections never change a file; they are
+ * carried only so the body can report them.
+ *
+ * @param {object} summary What summarizeRefresh reported.
+ * @param {{ floors?: object[], rejections?: object[], pruned?: string[] }} overrides The floor plan and prune result.
+ * @returns {object} The summary, with the override lists and `overridesChanged`.
+ */
+export function applyOverrideChanges(summary, overrides) {
+  const floors = overrides.floors ?? [];
+  const pruned = overrides.pruned ?? [];
+  const merged = { ...summary, floors, rejections: overrides.rejections ?? [], pruned, overridesChanged: false };
+  if (floors.length + pruned.length === 0) return merged;
+  const title = overrideTitle(floors, pruned);
+  return { ...merged, commitType: 'fix', title, hasChanges: true, overridesChanged: true };
+}
+
+/**
+ * Lists each applied floor and says when one keeps the refresh from merging
+ * itself. Renders nothing when no floor was applied.
+ *
+ * @param {ReadonlyArray<{ package: string, floor: string, from: string | null, kind: string, ghsas: string[] }> | undefined} floors The applied floors.
+ * @returns {string[]} The section lines.
+ */
+function floorSection(floors) {
+  if (floors === undefined || floors.length === 0) return [];
+  const line = (f) => `- \`${f.package}\` ${f.floor} (${f.kind}; was ${f.from ?? 'none'}) for ${f.ghsas.join(', ')}`;
+  const held = floors.some((floor) => floor.kind !== 'in-line');
+  return [
+    `## Override floors (${floors.length})`,
+    '',
+    ...floors.map(line),
+    '',
+    'An exact or narrow pin held each package below its fixed release, out of reach of',
+    '`npm update` and Dependabot. Each floor was proved to clear its advisories by a',
+    `lockfile-only \`npm update\` and a fresh audit. Rules: ${OVERRIDE_ADR}.`,
+    ...(held ? ['', 'A floor that is not `in-line` needs a human: auto-merge is withheld and the', 'PR is labelled `needs-manual-review`.'] : []),
+    '',
+  ];
+}
+
+/**
+ * Lists every advisory no floor could clear. Renders nothing when there is none.
+ *
+ * @param {ReadonlyArray<{ package: string, reason: string, ghsas: string[] }> | undefined} rejections The planner's rejections.
+ * @returns {string[]} The section lines.
+ */
+function rejectionSection(rejections) {
+  if (rejections === undefined || rejections.length === 0) return [];
+  return [
+    `## Unresolved advisories (${rejections.length})`,
+    '',
+    ...rejections.map((r) => `- \`${r.package}\`: ${r.reason} (${r.ghsas.join(', ')})`),
+    '',
+    'No override floor could clear these, so the audit gate still fails. Auto-merge',
+    'is withheld and the PR is labelled `needs-manual-review`; the open',
+    `"Unresolved dependency advisories" issue tracks them. Reasons: ${OVERRIDE_ADR}.`,
+    '',
+  ];
+}
+
+/**
+ * Lists every override removed as redundant. Renders nothing when none was.
+ *
+ * @param {readonly string[] | undefined} pruned The removed override keys.
+ * @returns {string[]} The section lines.
+ */
+function prunedSection(pruned) {
+  if (pruned === undefined || pruned.length === 0) return [];
+  return [
+    `## Redundant overrides dropped (${pruned.length})`,
+    '',
+    ...pruned.map((name) => `- \`${name}\``),
+    '',
+    'Removing each one and regenerating its lockfile entries locked exactly the same',
+    'versions, so it no longer shaped the tree.',
+    '',
+  ];
+}
+
+/**
+ * States what was regenerated and whether package.json moved.
+ *
+ * @param {boolean | undefined} overridesChanged Whether `overrides` changed.
+ * @returns {string[]} The opening paragraph.
+ */
+function introLines(overridesChanged) {
+  return [
+    'Regenerated `package-lock.json` with `npm update --package-lock-only`, then',
+    '`npm audit fix --package-lock-only` (never `--force`). Both re-resolve',
+    'transitive dependencies inside the ranges their parents already allow.',
+    overridesChanged === true
+      ? '`package.json` changed only inside `overrides`, as listed below; the workflow verified no other field moved.'
+      : '`package.json` is untouched.',
+    '',
+  ];
+}
+
 /**
  * Renders the pull-request body for an automated refresh.
  *
@@ -589,15 +729,14 @@ function majorSection(majorBumps) {
  */
 export function formatRefreshBody(summary) {
   return [
-    'Regenerated `package-lock.json` with `npm update --package-lock-only`, then',
-    '`npm audit fix --package-lock-only` (never `--force`). Both re-resolve',
-    'transitive dependencies inside the ranges their parents already allow.',
-    '`package.json` is untouched.',
-    '',
+    ...introLines(summary.overridesChanged),
     ...majorSection(summary.majorBumps),
+    ...floorSection(summary.floors),
+    ...rejectionSection(summary.rejections),
+    ...prunedSection(summary.pruned),
     ...changeSection('Runtime pins', summary.runtimeChanges),
     ...changeSection('Development pins', summary.devChanges),
-    RELEASE_RATIONALE[summary.commitType],
+    RELEASE_RATIONALE[summary.overridesChanged === true ? 'overrides' : summary.commitType],
   ].join('\n');
 }
 

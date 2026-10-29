@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import type { IPlannedFloor } from '../scripts/override-floor-logic.mjs';
 import {
+  applyOverrideChanges,
   auditLockfile,
   CANONICAL_REGISTRY,
   canonicalizeRegistryUrls,
@@ -499,6 +501,129 @@ describe('formatRefreshBody', () => {
     const summary = summarizeRefresh(runtimeMove, after);
     expect(formatRefreshBody({ ...summary, majorBumps: [] })).not.toContain('Major-version');
     expect(formatRefreshBody(summary)).not.toContain('Major-version');
+  });
+});
+
+describe('applyOverrideChanges', () => {
+  const unchanged = lockfile({ 'node_modules/vitest': { version: '3.0.0', dev: true } });
+  const devMove = lockfile({ 'node_modules/vitest': { version: '3.1.0', dev: true } });
+
+  /**
+   * Builds an in-line floor for one package.
+   *
+   * @param name The floored package.
+   * @param ghsas The advisories it clears.
+   * @returns The planned floor.
+   */
+  function floor(name: string, ghsas: string[]): IPlannedFloor {
+    return { package: name, floor: '^2.8.7', from: null, ghsas, kind: 'in-line', excludeFromAge: false };
+  }
+
+  it('titles a floored refresh fix(deps) after its advisories, even when only dev pins moved', () => {
+    const summary = applyOverrideChanges(summarizeRefresh(unchanged, devMove), {
+      floors: [floor('re2js', ['GHSA-gg6h-894w-4m9c'])],
+      rejections: [],
+    });
+    expect(summary).toMatchObject({
+      commitType: 'fix',
+      title: 'fix(deps): raise override floors for GHSA-gg6h-894w-4m9c',
+      overridesChanged: true,
+      hasChanges: true,
+    });
+  });
+
+  it('counts advisories instead of naming them once the title would grow past three', () => {
+    const ghsas = ['GHSA-aaaa', 'GHSA-bbbb', 'GHSA-cccc', 'GHSA-dddd'];
+    const summary = applyOverrideChanges(summarizeRefresh(unchanged, unchanged), {
+      floors: [floor('a', ghsas.slice(0, 2)), floor('b', ghsas.slice(1))],
+    });
+    expect(summary.title).toBe('fix(deps): raise override floors for 4 advisories');
+  });
+
+  it('reports a manifest-only prune as a change that must release', () => {
+    const summary = applyOverrideChanges(summarizeRefresh(unchanged, unchanged), { pruned: ['uuid'] });
+    expect(summary).toMatchObject({
+      commitType: 'fix',
+      title: 'fix(deps): drop 1 redundant override',
+      hasChanges: true,
+      overridesChanged: true,
+    });
+  });
+
+  it('names floors and a plural prune together in one title', () => {
+    const summary = applyOverrideChanges(summarizeRefresh(unchanged, unchanged), {
+      floors: [floor('re2js', ['GHSA-gg6h-894w-4m9c'])],
+      pruned: ['nanoid', 'uuid'],
+    });
+    expect(summary.title).toBe('fix(deps): raise override floors for GHSA-gg6h-894w-4m9c and drop 2 redundant overrides');
+  });
+
+  it('keeps the lockfile-derived title and type when overrides did not change', () => {
+    const base = summarizeRefresh(unchanged, devMove);
+    const summary = applyOverrideChanges(base, {
+      floors: [],
+      rejections: [{ package: 'foo', ghsas: ['GHSA-x'], reason: 'no-fixed-release' }],
+      pruned: [],
+    });
+    expect(summary).toMatchObject({ commitType: 'chore', title: base.title, hasChanges: true, overridesChanged: false });
+    expect(summary.rejections).toHaveLength(1);
+  });
+
+  it('treats absent override inputs as no change', () => {
+    const summary = applyOverrideChanges(summarizeRefresh(unchanged, unchanged), {});
+    expect(summary).toMatchObject({ hasChanges: false, overridesChanged: false, floors: [], rejections: [], pruned: [] });
+  });
+});
+
+describe('formatRefreshBody with override changes', () => {
+  const lock = lockfile({ 'node_modules/re2js': { version: '2.9.0' } });
+  const base = summarizeRefresh(lock, lock);
+  const inLine: IPlannedFloor = {
+    package: 're2js',
+    floor: '^2.8.7',
+    from: null,
+    ghsas: ['GHSA-gg6h-894w-4m9c'],
+    kind: 'in-line',
+    excludeFromAge: false,
+  };
+
+  it('lists each floor and replaces the untouched-manifest claim', () => {
+    const body = formatRefreshBody(applyOverrideChanges(base, { floors: [inLine] }));
+    expect(body).toContain('## Override floors (1)');
+    expect(body).toContain('- `re2js` ^2.8.7 (in-line; was none) for GHSA-gg6h-894w-4m9c');
+    expect(body).toContain('changed only inside `overrides`');
+    expect(body).not.toContain('`package.json` is untouched.');
+    expect(body).toContain('scripts/release-signal-logic.mjs counts them as shipped');
+    expect(body).not.toContain('needs-manual-review');
+  });
+
+  it('explains why a fresh floor is held for review', () => {
+    const fresh = { ...inLine, kind: 'fresh' as const, excludeFromAge: true, from: '^2.8.0' };
+    const body = formatRefreshBody(applyOverrideChanges(base, { floors: [fresh] }));
+    expect(body).toContain('(fresh; was ^2.8.0)');
+    expect(body).toContain('needs-manual-review');
+  });
+
+  it('lists unresolved advisories and points at the tracking issue', () => {
+    const body = formatRefreshBody(
+      applyOverrideChanges(base, { rejections: [{ package: 'foo', ghsas: ['GHSA-x'], reason: 'no-fixed-release' }] }),
+    );
+    expect(body).toContain('## Unresolved advisories (1)');
+    expect(body).toContain('- `foo`: no-fixed-release (GHSA-x)');
+    expect(body).toContain('Unresolved dependency advisories');
+    expect(body).toContain('`package.json` is untouched.');
+  });
+
+  it('lists every redundant override it dropped', () => {
+    const body = formatRefreshBody(applyOverrideChanges(base, { pruned: ['nanoid', 'uuid'] }));
+    expect(body).toContain('## Redundant overrides dropped (2)');
+    expect(body).toContain('- `nanoid`\n- `uuid`');
+  });
+
+  it('renders no override section when nothing about overrides happened', () => {
+    const body = formatRefreshBody(applyOverrideChanges(base, {}));
+    expect(body).not.toMatch(/Override floors|Unresolved advisories|Redundant overrides/);
+    expect(body).toContain('`package.json` is untouched.');
   });
 });
 
