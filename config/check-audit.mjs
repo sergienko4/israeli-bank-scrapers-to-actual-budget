@@ -10,125 +10,39 @@
  * 2. Any accepted entry covering a package that reaches the production tree
  *    carries explicit evidence and expires inside a short, capped window.
  *
+ * Exit codes: 0 when clean, 1 on policy violations, 2 when npm could not
+ * produce a report (unparseable output, an npm `error` object, a spawn
+ * failure). Callers that act on a red audit treat only 1 as a finding, so a
+ * registry outage never triggers remediation.
+ *
  * Run via: npm run audit
  */
 
-import { execFileSync } from 'node:child_process';
-
 import { AUDIT_LEVEL, classifyAdvisories } from './audit-policy.mjs';
+import { auditCommittedTree } from './audit-report.mjs';
+
+/** Exit code for an audit that ran but found unaddressed advisories. */
+const EXIT_VIOLATIONS = 1;
+
+/** Exit code for an audit that could not run, so nothing was judged. */
+const EXIT_OPERATIONAL = 2;
 
 /**
- * Resolves how to invoke the npm CLI without going through a shell.
+ * Audits the committed tree, failing operationally when npm cannot report.
  *
- * npm scripts expose the CLI entry point as npm_execpath, so it can be run
- * directly with the current Node binary. That keeps the call free of shell
- * interpolation, which the repository's CodeQL rules require.
- *
- * @param {string[]} args Arguments to pass to npm.
- * @returns {{ command: string, args: string[] }} The command and arguments to spawn.
+ * @returns {import('./audit-report.d.mts').ICommittedTreeAudit} Both audit views.
  */
-function npmInvocation(args) {
-  const cli = process.env.npm_execpath;
-  if (cli) return { command: process.execPath, args: [cli, ...args] };
-  return { command: process.platform === 'win32' ? 'npm.cmd' : 'npm', args };
-}
-
-/**
- * Parses an npm audit report and rejects anything that is not one.
- *
- * On operational failures (ENOLOCK, registry auth, network) npm still writes
- * valid JSON to stdout, but it carries an `error` object instead of findings.
- * Returning that would make the gate report success having audited nothing, so
- * a report without a vulnerabilities object is treated as a failed run.
- *
- * Arrays are rejected too: `typeof [] === 'object'`, so an array would satisfy a
- * naive object check while yielding no findings, which is the same silent pass.
- * A real report keys vulnerabilities by package name, never by index.
- *
- * @param {string} stdout Raw stdout captured from npm audit.
- * @param {Error} [cause] The child-process error, when the run exited non-zero.
- * @returns {object} The validated audit report.
- */
-function parseAuditReport(stdout, cause) {
-  const report = JSON.parse(stdout);
-  const findings = report?.vulnerabilities;
-  if (!findings || typeof findings !== 'object' || Array.isArray(findings)) {
-    throw cause ?? new Error('npm audit did not return a vulnerability report');
-  }
-  return report;
-}
-
-/**
- * Runs `npm audit --json` and returns the parsed report.
- *
- * npm exits non-zero whenever it finds advisories, so a thrown error still
- * carries the report on stdout and is not itself a failure signal.
- *
- * @param {string[]} extraArgs Additional npm audit arguments.
- * @returns {object} The parsed audit report.
- */
-function runAudit(extraArgs) {
-  const { command, args } = npmInvocation(['audit', '--json', ...extraArgs]);
+function auditOrExit() {
   try {
-    return parseAuditReport(
-      execFileSync(command, args, {
-        encoding: 'utf8',
-        maxBuffer: 64 * 1024 * 1024,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }),
-    );
+    return auditCommittedTree();
   } catch (error) {
-    const stdout = error?.stdout;
-    if (!stdout) throw error;
-    return parseAuditReport(stdout, error);
+    console.error(`❌ npm audit could not produce a report: ${error instanceof Error ? error.message : String(error)}`);
+    return process.exit(EXIT_OPERATIONAL);
   }
 }
 
-/**
- * Extracts the GitHub advisory identifier from an advisory URL.
- *
- * @param {string} url The advisory URL reported by npm audit.
- * @returns {string} The GHSA identifier, or the URL when it cannot be parsed.
- */
-function toGhsaId(url) {
-  return url?.split('/').pop() ?? url ?? 'unknown';
-}
-
-/**
- * Flattens an npm audit report into one record per distinct advisory.
- *
- * @param {object} report The parsed npm audit report.
- * @returns {Array<{ ghsa: string, package: string, severity: string, title: string }>} The advisories.
- */
-function collectAdvisories(report) {
-  const advisories = new Map();
-  for (const vulnerability of Object.values(report.vulnerabilities ?? {})) {
-    for (const via of vulnerability.via ?? []) {
-      if (typeof via !== 'object') continue;
-      const ghsa = toGhsaId(via.url);
-      advisories.set(`${via.name}::${ghsa}`, {
-        ghsa,
-        package: via.name,
-        severity: via.severity ?? 'unknown',
-        title: via.title ?? 'no title reported',
-      });
-    }
-  }
-  return [...advisories.values()];
-}
-
-/**
- * Lists packages carrying advisories in the production dependency tree.
- *
- * @returns {Set<string>} Names of production packages with advisories.
- */
-function readProductionPackages() {
-  const report = runAudit(['--omit=dev']);
-  return new Set(collectAdvisories(report).map(advisory => advisory.package));
-}
-
-const advisories = collectAdvisories(runAudit([]));
-const { violations, accepted } = classifyAdvisories(advisories, readProductionPackages());
+const { advisories, productionPackages } = auditOrExit();
+const { violations, accepted } = classifyAdvisories(advisories, productionPackages);
 
 for (const entry of accepted) {
   console.log(`⚠️  Accepted ${entry.ghsa} (${entry.package}, ${entry.severity}) until ${entry.expires}`);
@@ -142,7 +56,7 @@ if (violations.length > 0) {
     console.error(`    ${violation.title}`);
   }
   console.error('Fix them, or add a justified entry to config/audit-policy.mjs.');
-  process.exit(1);
+  process.exit(EXIT_VIOLATIONS);
 }
 
 console.log(`✅ No unaddressed advisories at or above "${AUDIT_LEVEL}" (${accepted.length} accepted).`);

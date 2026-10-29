@@ -198,6 +198,12 @@ Auto-merge never updates a branch on its own, so the same workflow posts
 `@dependabot rebase` on the oldest armed pull request that has fallen behind
 `main`, one at a time.
 
+A Dependabot pull request that fails `Audit dependencies` while the `main`
+commit it was built on fails the same audit is labelled `blocked-by-advisory`.
+Once `main` audits clean, the same queue rebases it, and its next green run
+removes the label and arms it. You do not need to comment `@dependabot rebase`
+yourself.
+
 If one package in a major group breaks the build, drop it instead of holding
 the rest of the group back. Comment on the pull request and Dependabot
 regenerates the group without it:
@@ -206,9 +212,15 @@ regenerates the group without it:
 @dependabot ignore <dependency> major version
 ```
 
-A security fix for a transitive package that no parent range reaches yet is
-the one case that still needs a hand edit: add or raise its entry in the
-`overrides` block of `package.json` and open a pull request with only that
+A security fix for a transitive package that no parent range reaches usually
+arrives on its own too. Every four hours `lockfile-refresh.yml` audits `main`.
+When it finds an advisory, it raises a floor in the `overrides` block of
+`package.json` and opens a `fix(deps)` pull request; see
+[ADR-0003][adr-0003] for the rules. A floor on the same major line that has
+been published for at least three days merges itself. Any other floor is
+labelled `needs-manual-review`. An advisory no floor can fix is listed in the
+"Unresolved dependency advisories" issue and still needs a hand edit: add or
+raise its entry in `overrides` and open a pull request with only that
 change. A local registry is not needed:
 `.github/workflows/lockfile-sync.yml` regenerates `package-lock.json` on a
 runner, uploads it as the `package-lock` artifact and fails the check. It
@@ -230,7 +242,9 @@ The push re-runs the check, which then passes.
 
 Fixes that already fit inside existing ranges arrive on their own:
 the Thursday `lockfile-refresh.yml` run applies `npm audit fix` and merges
-itself once CI is green. If that fix moves a pin across a major, the pull
+itself once CI is green. The same run drops any `^x.y.z` or `>=x.y.z` floor
+override that no longer changes a locked version; exact pins and caps are
+kept. If that fix moves a pin across a major, the pull
 request is labelled `needs-manual-review` and waits for you instead. A
 refresh that `main` moves past is regenerated on the next push to `main`,
 which closes the stale pull request. Do not push to a refresh branch: the "Restrict updates" ruleset described in the
@@ -241,12 +255,13 @@ auto-merge (best effort).
 
 Pull requests opened by `dependency-bump.yml`, described next, are never
 merged automatically — they carry your identity, not Dependabot's. The full
-policy is in the [CI pipeline reference][ci-automerge] and
-[ADR-0002][adr-0002].
+policy is in the [CI pipeline reference][ci-automerge],
+[ADR-0002][adr-0002] and [ADR-0003][adr-0003].
 
 [ci-automerge]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#dependabot-auto-merge
 [ci-refresh-guard]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/ci-pipeline.md#lockfile-refresh-guard
 [adr-0002]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md
+[adr-0003]: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0003-automated-override-floors.md
 
 ### Bumping a package on demand
 
@@ -326,7 +341,7 @@ fix, and none of them is a push to the bot's branch.
 | A Dependabot pull request is behind `main` or conflicting | `main` moved | Comment `@dependabot rebase`. Armed pull requests are rebased automatically, oldest first. |
 | A `chore/lockfile-refresh-*` pull request is conflicting | `main` changed `package-lock.json` | Run `gh workflow run lockfile-refresh.yml` unless a newer refresh has already replaced it. The new run starts from `main` and closes the stale pull request. |
 | A gate fails on files the pull request did not touch (a lint rule, an ESLint canary, a type-check) | A tool's new major changed what it reports | Fix it forward on `main`, as described below. |
-| `npm run audit` reports an unaddressed advisory | A new advisory reached the tree | Fix it in its own pull request: a lockfile refresh, an `overrides` floor, or a justified entry in `config/audit-policy.mjs`. Then comment `@dependabot rebase` on a Dependabot pull request, or run `gh workflow run lockfile-refresh.yml` for a refresh unless a newer one has already replaced it. |
+| `npm run audit` reports an unaddressed advisory | A new advisory reached the tree | Check for an open `fix(deps)` lockfile-refresh pull request or the "Unresolved dependency advisories" issue first: the four-hourly refresh floors most transitive advisories itself (`gh workflow run lockfile-refresh.yml` starts one now). Otherwise fix it in its own pull request: an `overrides` floor, or a justified entry in `config/audit-policy.mjs`. Dependabot pull requests labelled `blocked-by-advisory` are rebased automatically once `main` audits clean; comment `@dependabot rebase` by hand only on a red one that carries no label. |
 | Tests fail in code that uses the package | A real breaking change | Fix it forward when the code can work on both versions. Otherwise run `dependency-bump.yml` for that version (see [Bumping a package on demand](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-a-package-on-demand)) and push the code change to its `deps/…` branch. Dependabot drops the update once `main` carries that version. |
 | `tests/deployment/EnginesFloor.test.ts` names a package that `needs Node <range>` | The package raised its Node floor above `engines.node` | Raise `engines.node` in `package.json` to that floor, run `npm run meta:render`, and add a `docs/UPGRADING.md` entry for hosts that run the importer outside Docker. The image already runs a newer Node. |
 | `tests/deployment/BrowserStackPair.test.ts` fails | The scraper was tested with another Camoufox build or Playwright minor | Move the pin to the build the scraper names (see [Bumping the Camoufox browser](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-the-camoufox-browser)), or bring `playwright-core` to the minor it names. |

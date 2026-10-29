@@ -17,7 +17,7 @@
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, posix } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -93,12 +93,40 @@ else jq -c "\${pages}" "\${fixture}"
 fi
 `;
 
+/**
+ * Logs every call. `rev-parse HEAD:<file>` prints that file's blob from
+ * FAKE_MANIFEST_BLOB or FAKE_LOCK_BLOB, any other `rev-parse` the head
+ * commit. FAKE_GIT_DIFF lists the modified files, space-separated:
+ * `diff --name-only` prints them, and `diff --quiet -- <paths>` fails when
+ * any named path is among them.
+ */
 const FAKE_GIT = `#!/usr/bin/env bash
-[ "$1" != rev-parse ] || echo "\${FAKE_HEAD_SHA}"
+printf '%s\\n' "$*" >> "\${FAKE_DIR}/git-calls.log"
+case "$1" in
+  rev-parse)
+    case "\${2:-}" in
+      HEAD:package.json) echo "\${FAKE_MANIFEST_BLOB:-}" ;;
+      HEAD:package-lock.json) echo "\${FAKE_LOCK_BLOB:-}" ;;
+      *) echo "\${FAKE_HEAD_SHA}" ;;
+    esac ;;
+  diff)
+    [ "\${2:-}" != --name-only ] || { printf '%s\\n' \${FAKE_GIT_DIFF:-}; exit 0; }
+    for path in "$@"; do
+      case " \${FAKE_GIT_DIFF:-} " in *" \${path} "*) exit 1 ;; esac
+    done ;;
+esac
+exit 0
 `;
 
+/**
+ * Logs every call and the directory it ran in, prints the staged output and
+ * exits FAKE_NODE_STATUS.
+ */
 const FAKE_NODE = `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "\${FAKE_DIR}/node-calls.log"
+printf '%s\\n' "\${PWD}" >> "\${FAKE_DIR}/node-cwd.log"
 cat "\${FAKE_DIR}/node-output"
+exit "\${FAKE_NODE_STATUS:-0}"
 `;
 
 /**
@@ -132,7 +160,8 @@ interface IConcurrency {
 
 /** Fields of a workflow job this suite reads. */
 interface IJob {
-  readonly needs?: string;
+  readonly needs?: string | readonly string[];
+  readonly env?: Readonly<Record<string, string>>;
   readonly if?: string;
   readonly concurrency?: IConcurrency;
   readonly steps: readonly IStep[];
@@ -144,6 +173,8 @@ interface IRunOptions {
   readonly gh?: Readonly<Record<string, unknown>>;
   readonly nodeOutput?: unknown;
   readonly prList?: readonly unknown[];
+  /** Files to place in RUNNER_TEMP before the step runs, by relative path. */
+  readonly tempFiles?: Readonly<Record<string, unknown>>;
 }
 
 /** What a step run left behind. */
@@ -151,6 +182,9 @@ interface IStepRun {
   readonly status: number | null;
   readonly outputs: Readonly<Record<string, string>>;
   readonly ghCalls: readonly string[];
+  readonly nodeCalls: readonly string[];
+  readonly gitCalls: readonly string[];
+  readonly stepSummary: string;
   readonly temp: string;
 }
 
@@ -380,8 +414,14 @@ function runStep(step: IStep, options: IRunOptions): IStepRun {
   stageFixtures(options);
   const temp = join(work, 'runner-temp');
   mkdirSync(temp, { recursive: true });
+  for (const [name, value] of Object.entries(options.tempFiles ?? {})) {
+    mkdirSync(dirname(join(temp, name)), { recursive: true });
+    writeFileSync(join(temp, name), JSON.stringify(value));
+  }
   const outputFile = join(work, 'github-output');
   writeFileSync(outputFile, '');
+  const summaryFile = join(work, 'step-summary');
+  writeFileSync(summaryFile, '');
   const result = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', step.run ?? 'exit 99'], {
     cwd: work,
     encoding: 'utf8',
@@ -393,18 +433,31 @@ function runStep(step: IStep, options: IRunOptions): IStepRun {
       GITHUB_REPOSITORY: REPO,
       GITHUB_RUN_ID: '1',
       GITHUB_OUTPUT: outputFile,
+      GITHUB_STEP_SUMMARY: summaryFile,
       RUNNER_TEMP: temp,
       ...options.env,
     },
     timeout: 20_000,
   });
-  const callLog = join(work, 'gh-calls.log');
   return {
     status: result.status,
     outputs: parseOutputs(readFileSync(outputFile, 'utf8')),
-    ghCalls: existsSync(callLog) ? readFileSync(callLog, 'utf8').trim().split('\n') : [],
+    ghCalls: callsLogged('gh'),
+    nodeCalls: callsLogged('node'),
+    gitCalls: callsLogged('git'),
+    stepSummary: readFileSync(summaryFile, 'utf8'),
     temp,
   };
+}
+
+/**
+ * Reads the calls one fake logged during the current run.
+ * @param fake - The fake's command name.
+ * @returns One entry per call, oldest first.
+ */
+function callsLogged(fake: string): string[] {
+  const log = join(work, `${fake}-calls.log`);
+  return existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [];
 }
 
 /**
@@ -534,7 +587,7 @@ describe.skipIf(!CAN_RUN)('lockfile refresh push lock', () => {
 
 describe.skipIf(!CAN_RUN)('lockfile refresh arming', () => {
   const step = stepOf(REFRESH, 'refresh', 'pr');
-  const env = { BRANCH, GH_TOKEN: 'token', TITLE, BODY, MAJORS: '0', LOCK_WHY: '' };
+  const env = { BRANCH, GH_TOKEN: 'token', TITLE, BODY, MAJORS: '0', REQUIRES_REVIEW: 'false', LOCK_WHY: '' };
   const armed = (calls: readonly string[]): boolean => calls.some((call) => call.startsWith('pr merge'));
   const labelled = (calls: readonly string[]): boolean =>
     calls.some((call) => call.includes(`repos/${REPO}/issues/42/labels`));
@@ -567,6 +620,25 @@ describe.skipIf(!CAN_RUN)('lockfile refresh arming', () => {
     expect(run.status).toBe(0);
     expect(labelled(run.ghCalls)).toBe(true);
     expect(armed(run.ghCalls)).toBe(false);
+  });
+
+  it('labels a refresh whose override floors need review without arming it', () => {
+    const run = runStep(step, { env: { ...env, REQUIRES_REVIEW: 'true', LOCKED: 'true' } });
+
+    expect(run.status).toBe(0);
+    expect(labelled(run.ghCalls)).toBe(true);
+    expect(armed(run.ghCalls)).toBe(false);
+  });
+
+  it.each([
+    ['missing', ''],
+    ['not a boolean', 'yes'],
+  ])('opens nothing when the review decision is %s', (_case, requiresReview) => {
+    const run = runStep(step, { env: { ...env, REQUIRES_REVIEW: requiresReview, LOCKED: 'true' } });
+
+    expect(run.status).toBe(1);
+    expect(run.ghCalls).toEqual([]);
+    expect(run.gitCalls).toEqual([]);
   });
 });
 
@@ -625,6 +697,420 @@ describe.skipIf(!CAN_RUN)('lockfile refresh behind main', () => {
     expect(run.status).toBe(0);
     expect(run.outputs).toEqual({ stale: 'false' });
     expect(run.ghCalls.filter((call) => call.startsWith('api '))).toEqual([]);
+  });
+});
+
+describe('lockfile refresh four-hourly advisory watch', () => {
+  const WATCH = '23 */4 * * *';
+  const workflow = parse(readFileSync(join(ROOT, REFRESH), 'utf8')) as {
+    on: { schedule: { cron: string }[] };
+    jobs: Record<string, IJob & { permissions?: unknown; outputs?: Record<string, string> }>;
+  };
+
+  it('schedules the watch and gates the refresh on a red audit for that trigger alone', () => {
+    const refresh = workflow.jobs.refresh;
+
+    expect(workflow.on.schedule.map((entry) => entry.cron)).toEqual(['0 5 * * 4', WATCH]);
+    expect(refresh?.needs).toEqual(['behind', 'advisory']);
+    expect(refresh?.if).toContain('!cancelled()');
+    expect(refresh?.if).toContain(`(github.event.schedule != '${WATCH}' || needs.advisory.outputs.red == 'true')`);
+    expect(stepOf(REFRESH, 'refresh', 'same').if).toContain(`github.event.schedule == '${WATCH}'`);
+  });
+
+  it('runs the advisory job with the workflow token only, and only for the issue', () => {
+    const advisory = workflow.jobs.advisory;
+
+    expect(advisory?.permissions).toEqual({ contents: 'read', issues: 'write' });
+    expect(advisory?.outputs).toEqual({ red: '${{ steps.audit.outputs.red }}' });
+    expect(JSON.stringify(advisory)).not.toMatch(/secrets\./);
+    const tokened = (advisory?.steps ?? []).filter((step) => step.env?.GH_TOKEN !== undefined);
+    expect(tokened.map((step) => step.name)).toEqual(['Track unresolved advisories in an issue']);
+  });
+
+  it('prunes only on the weekly or a dispatched run', () => {
+    expect(stepOf(REFRESH, 'refresh', 'prune').if).toBe(
+      "github.event.schedule == '0 5 * * 4' || github.event_name == 'workflow_dispatch'",
+    );
+  });
+
+  it('keeps every token out of the steps that edit the tree', () => {
+    for (const id of ['prune', 'floors']) {
+      expect(JSON.stringify(stepOf(REFRESH, 'refresh', id))).not.toMatch(/secrets\.|github\.token/);
+    }
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh advisory audit', () => {
+  const step = stepOf(REFRESH, 'advisory', 'audit');
+
+  it.each([
+    ['clean', '0', 'false'],
+    ['in violation', '1', 'true'],
+  ])('reports main as red only when its audit is %s', (_case, status, red) => {
+    const run = runStep(step, { env: { FAKE_NODE_STATUS: status } });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ red });
+    expect(run.nodeCalls).toEqual(['config/check-audit.mjs']);
+  });
+
+  it('fails without a verdict when npm audit cannot produce a report', () => {
+    const run = runStep(step, { env: { FAKE_NODE_STATUS: '2' } });
+
+    expect(run.status).toBe(1);
+    expect(run.outputs).toEqual({});
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh advisory plan', () => {
+  const step = stepOf(REFRESH, 'advisory', 'plan');
+  const plan = {
+    floors: [{ package: 're2js', floor: '^2.8.7', kind: 'in-line', ghsas: ['GHSA-gg6h-894w-4m9c'] }],
+    rejections: [{ package: 'foo', reason: 'no-fixed-release', ghsas: ['GHSA-x'] }],
+  };
+
+  it('plans read-only and reports every floor and rejection', () => {
+    const run = runStep(step, { env: {}, nodeOutput: plan });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ planned: 'true' });
+    expect(run.nodeCalls).toEqual(['scripts/plan-override-floors.mjs --apply']);
+    expect(run.stepSummary).toContain('- re2js: ^2.8.7 (in-line) for GHSA-gg6h-894w-4m9c');
+    expect(run.stepSummary).toContain('- foo: rejected (no-fixed-release) for GHSA-x');
+  });
+
+  it.each([
+    ['the planner fails', { FAKE_NODE_STATUS: '1' }, plan],
+    ['the plan lacks its rejections', {}, { floors: [] }],
+  ])('leaves the issue alone when %s', (_case, env, nodeOutput) => {
+    const run = runStep(step, { env, nodeOutput });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ planned: 'false' });
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh advisory issue', () => {
+  const step = stepOf(REFRESH, 'advisory', 'issue');
+  const listPath = `repos/${REPO}/issues?state=open&labels=blocked-by-advisory&per_page=100`;
+  const tracking = { number: 9, title: 'Unresolved dependency advisories', user: { login: 'github-actions[bot]' } };
+  const rejected = { floors: [], rejections: [{ package: 'foo', reason: 'no-fixed-release', ghsas: ['GHSA-x'] }] };
+  const writes = (calls: readonly string[]): string[] => calls.filter((call) => /^(api -X|label create)/.test(call));
+
+  it('closes the tracking issue once main audits clean', () => {
+    const run = runStep(step, { env: { GH_TOKEN: 'token', RED: 'false' }, gh: { [listPath]: [tracking] } });
+
+    expect(run.status).toBe(0);
+    expect(run.ghCalls.some((call) => call.startsWith(`api -X POST repos/${REPO}/issues/9/comments`))).toBe(true);
+    expect(run.ghCalls).toContain(`api -X PATCH repos/${REPO}/issues/9 -f state=closed -f state_reason=completed`);
+  });
+
+  it('writes nothing when main is clean and no tracking issue is open', () => {
+    const run = runStep(step, { env: { GH_TOKEN: 'token', RED: 'false' }, gh: { [listPath]: [] } });
+
+    expect(run.status).toBe(0);
+    expect(writes(run.ghCalls)).toEqual([]);
+  });
+
+  it('opens a labelled issue listing each advisory no floor can clear', () => {
+    const run = runStep(step, {
+      env: { GH_TOKEN: 'token', RED: 'true' },
+      gh: { [listPath]: [] },
+      tempFiles: { 'plan.json': rejected },
+    });
+
+    expect(run.status).toBe(0);
+    expect(run.ghCalls.some((call) => call.startsWith('label create blocked-by-advisory'))).toBe(true);
+    const opened = run.ghCalls.join('\n');
+    expect(opened).toContain(`api -X POST repos/${REPO}/issues -f title=Unresolved dependency advisories`);
+    expect(opened).toContain('| `foo` | GHSA-x | no-fixed-release |');
+    expect(opened).toContain('-f labels[]=blocked-by-advisory');
+  });
+
+  it('updates the open tracking issue instead of opening another', () => {
+    const run = runStep(step, {
+      env: { GH_TOKEN: 'token', RED: 'true' },
+      gh: { [listPath]: [tracking] },
+      tempFiles: { 'plan.json': rejected },
+    });
+
+    expect(run.status).toBe(0);
+    expect(run.ghCalls.some((call) => call.startsWith(`api -X PATCH repos/${REPO}/issues/9 -f body=`))).toBe(true);
+    expect(run.ghCalls.some((call) => call.startsWith(`api -X POST repos/${REPO}/issues `))).toBe(false);
+  });
+
+  it.each([
+    ['a pull request', { ...tracking, pull_request: {} }],
+    ['a human', { ...tracking, user: { login: 'someone' } }],
+    ['another title', { ...tracking, title: 'Something else' }],
+  ])('never edits or closes an item opened by %s', (_case, item) => {
+    const clean = runStep(step, { env: { GH_TOKEN: 'token', RED: 'false' }, gh: { [listPath]: [item] } });
+    expect(writes(clean.ghCalls)).toEqual([]);
+
+    const red = runStep(step, {
+      env: { GH_TOKEN: 'token', RED: 'true' },
+      gh: { [listPath]: [item] },
+      tempFiles: { 'plan.json': rejected },
+    });
+    expect(red.ghCalls.some((call) => call.includes(`issues/${String(item.number)}`))).toBe(false);
+  });
+
+  it('writes nothing while every advisory on a red main has a floor', () => {
+    const run = runStep(step, {
+      env: { GH_TOKEN: 'token', RED: 'true' },
+      gh: { [listPath]: [] },
+      tempFiles: { 'plan.json': { floors: [{ package: 're2js' }], rejections: [] } },
+    });
+
+    expect(run.status).toBe(0);
+    expect(writes(run.ghCalls)).toEqual([]);
+  });
+
+  it.each([
+    ['no review', false, 'no floor needs review; the lockfile refresh pull request carries them, and is held for a maintainer only if another change'],
+    ['a review', true, 'labelled `needs-manual-review` and waits for a maintainer'],
+    ['an unstated review', undefined, 'labelled `needs-manual-review` and waits for a maintainer'],
+  ])('replaces the open issue\'s rejection table, keeping it open, once every advisory has a floor needing %s', (_case, requiresReview, status) => {
+    const run = runStep(step, {
+      env: { GH_TOKEN: 'token', RED: 'true' },
+      gh: { [listPath]: [tracking] },
+      tempFiles: { 'plan.json': { floors: [{ package: 're2js' }], rejections: [], requiresReview } },
+    });
+
+    expect(run.status).toBe(0);
+    const patched = writes(run.ghCalls);
+    expect(patched).toEqual([expect.stringMatching(new RegExp(`^api -X PATCH repos/${REPO}/issues/9 -f body=`))]);
+    expect(patched[0]).toContain('Every advisory now has an `overrides` floor');
+    expect(patched[0]).toContain(status);
+    expect(patched[0]).not.toContain('| Package |');
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh override floors', () => {
+  const step = stepOf(REFRESH, 'refresh', 'floors');
+  const floor = { package: 're2js', floor: '^2.8.7', kind: 'in-line', ghsas: ['GHSA-gg6h-894w-4m9c'] };
+
+  it.each([
+    ['an in-line floor', { floors: [floor], rejections: [], requiresReview: false }, 'true', 'true', 'false'],
+    ['a fresh floor', { floors: [{ ...floor, kind: 'fresh' }], rejections: [], requiresReview: true }, 'true', 'true', 'true'],
+    ['only a rejection', { floors: [], rejections: [{ package: 'foo', reason: 'x', ghsas: ['G'] }], requiresReview: true }, 'false', 'false', 'true'],
+    ['a clean tree', { floors: [], rejections: [], requiresReview: false }, 'true', 'false', 'false'],
+  ])('publishes the verdict for %s', (_case, nodeOutput, complete, changed, review) => {
+    const run = runStep(step, { env: {}, nodeOutput });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ planned: 'true', complete, overrides_changed: changed, requires_review: review });
+    expect(run.nodeCalls).toEqual(['scripts/plan-override-floors.mjs --apply']);
+    expect(existsSync(join(run.temp, 'floors.json'))).toBe(true);
+  });
+
+  it.each([
+    ['the planner fails', { FAKE_NODE_STATUS: '1' }, { floors: [], rejections: [], requiresReview: false }],
+    ['the plan lacks requiresReview', {}, { floors: [floor], rejections: [] }],
+  ])('carries no floor and keeps no plan when %s', (_case, env, nodeOutput) => {
+    const run = runStep(step, { env, nodeOutput });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ planned: 'false', complete: 'false', overrides_changed: 'false', requires_review: 'false' });
+    expect(existsSync(join(run.temp, 'floors.json'))).toBe(false);
+  });
+
+  it('closes stale refreshes on an unchanged tree only once the planner finished with no rejection', () => {
+    const supersede = jobsOf(REFRESH).refresh?.steps.find((candidate) => candidate.name === 'Supersede stale refresh pull requests');
+
+    expect(supersede?.if).toContain("(steps.diff.outputs.changed == 'false' && steps.floors.outputs.complete == 'true')");
+  });
+
+  it('lets a replacement supersede only once the planner finished, rejections or not', () => {
+    const supersede = jobsOf(REFRESH).refresh?.steps.find((candidate) => candidate.name === 'Supersede stale refresh pull requests');
+
+    expect(supersede?.if).toContain("(steps.pr.outputs.opened == 'true' && steps.floors.outputs.planned == 'true')");
+    expect(supersede?.if).not.toMatch(/\|\|\s*steps\.pr\.outputs\.opened == 'true'\)/);
+  });
+
+  it('reports each floor in the step summary', () => {
+    const run = runStep(step, { env: {}, nodeOutput: { floors: [floor], rejections: [], requiresReview: false } });
+
+    expect(run.stepSummary).toContain('- re2js: ^2.8.7 (in-line) for GHSA-gg6h-894w-4m9c');
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh prune', () => {
+  const step = stepOf(REFRESH, 'refresh', 'prune');
+
+  it('keeps the prune result and reports each dropped override', () => {
+    const run = runStep(step, { env: {}, nodeOutput: { pruned: ['uuid'], kept: [] } });
+
+    expect(run.status).toBe(0);
+    expect(run.nodeCalls).toEqual(['scripts/plan-override-floors.mjs --prune']);
+    expect(existsSync(join(run.temp, 'prune.json'))).toBe(true);
+    expect(run.stepSummary).toContain('- uuid: dropped');
+  });
+
+  it.each([
+    ['pruning fails', { FAKE_NODE_STATUS: '1' }, { pruned: [] }],
+    ['the result lacks its list', {}, { kept: [] }],
+  ])('keeps every override when %s', (_case, env, nodeOutput) => {
+    const run = runStep(step, { env, nodeOutput });
+
+    expect(run.status).toBe(0);
+    expect(existsSync(join(run.temp, 'prune.json'))).toBe(false);
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh change detection', () => {
+  const step = stepOf(REFRESH, 'refresh', 'diff');
+
+  it.each([
+    ['nothing', '', 'false'],
+    ['the lockfile', 'package-lock.json', 'true'],
+    ['only package.json, as a prune does', 'package.json', 'true'],
+  ])('reports a change when %s moved', (_case, modified, changed) => {
+    const run = runStep(step, { env: { FAKE_GIT_DIFF: modified } });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ changed });
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh manifest guard', () => {
+  const step = stepOf(REFRESH, 'refresh', 'verify');
+
+  it('accepts a lockfile-only change without consulting the planner', () => {
+    const run = runStep(step, { env: { FAKE_GIT_DIFF: 'package-lock.json' } });
+
+    expect(run.status).toBe(0);
+    expect(run.nodeCalls).toEqual([]);
+  });
+
+  it('vets a package.json change against the plan and prune result it was given', () => {
+    const run = runStep(step, {
+      env: { FAKE_GIT_DIFF: 'package-lock.json package.json' },
+      tempFiles: { 'floors.json': {}, 'prune.json': {} },
+    });
+
+    expect(run.status).toBe(0);
+    expect(run.nodeCalls).toEqual([
+      `scripts/plan-override-floors.mjs --verify-manifest ${run.temp}/package.before.json --plan ${run.temp}/floors.json --prune-result ${run.temp}/prune.json`,
+    ]);
+  });
+
+  it('allows no override key at all when neither step left a result', () => {
+    const run = runStep(step, { env: { FAKE_GIT_DIFF: 'package.json' } });
+
+    expect(run.nodeCalls).toEqual([`scripts/plan-override-floors.mjs --verify-manifest ${run.temp}/package.before.json`]);
+  });
+
+  it('fails when the planner rejects the package.json change', () => {
+    const run = runStep(step, { env: { FAKE_GIT_DIFF: 'package.json', FAKE_NODE_STATUS: '1' } });
+
+    expect(run.status).toBe(1);
+  });
+
+  it('fails on any other modified file before vetting the manifest', () => {
+    const run = runStep(step, { env: { FAKE_GIT_DIFF: 'package.json .npmrc' } });
+
+    expect(run.status).toBe(1);
+    expect(run.nodeCalls).toEqual([]);
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh summary inputs and commit', () => {
+  const summary = stepOf(REFRESH, 'refresh', 'summary');
+  const nodeOutput = { title: TITLE, body: BODY, majorBumps: [] };
+
+  it('summarises the lockfiles alone when neither override step left a result', () => {
+    const run = runStep(summary, { env: {}, nodeOutput });
+
+    expect(run.nodeCalls).toEqual([`scripts/summarize-refresh.mjs ${run.temp}/before.json package-lock.json`]);
+  });
+
+  it('hands the summary the plan and prune result when both exist', () => {
+    const run = runStep(summary, { env: {}, nodeOutput, tempFiles: { 'floors.json': {}, 'prune.json': {} } });
+
+    expect(run.nodeCalls).toEqual([
+      `scripts/summarize-refresh.mjs ${run.temp}/before.json package-lock.json --floors ${run.temp}/floors.json --prune ${run.temp}/prune.json`,
+    ]);
+  });
+
+  it('stages package.json alongside the lockfile', () => {
+    const commit = jobsOf(REFRESH).refresh?.steps.find((step) => step.name === 'Commit the refresh');
+    if (commit === undefined) throw new Error('no commit step');
+
+    const run = runStep(commit, { env: { TITLE, BRANCH } });
+
+    expect(run.status).toBe(0);
+    expect(run.gitCalls).toContain('add package-lock.json package.json');
+  });
+});
+
+describe.skipIf(!CAN_RUN)('lockfile refresh idempotency', () => {
+  const step = stepOf(REFRESH, 'refresh', 'same');
+  const sha = 'e'.repeat(40);
+  const blobs = { FAKE_MANIFEST_BLOB: 'm'.repeat(40), FAKE_LOCK_BLOB: 'l'.repeat(40) };
+  const env = { GH_TOKEN: 'token', MAJORS: '0', REQUIRES_REVIEW: 'false', ...blobs };
+  const tree = (manifest: string, lock: string): Record<string, unknown> => ({
+    [`repos/${REPO}/git/trees/${sha}`]: {
+      tree: [
+        { path: 'README.md', sha: 'r'.repeat(40) },
+        { path: 'package.json', sha: manifest },
+        { path: 'package-lock.json', sha: lock },
+      ],
+    },
+  });
+  const identical = tree(blobs.FAKE_MANIFEST_BLOB, blobs.FAKE_LOCK_BLOB);
+  const upToDate = { [`repos/${REPO}/compare/main...${sha}`]: { behind_by: 0 } };
+
+  /**
+   * Builds an open refresh pull request as `gh pr list --json` returns it.
+   * @param overrides - Fields to replace.
+   * @returns The listed pull request.
+   */
+  function open(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown> {
+    const base = { number: 7, headRefName: 'chore/lockfile-refresh-7', headRefOid: sha, isCrossRepository: false };
+    return { ...base, labels: [], autoMergeRequest: { mergeMethod: 'SQUASH' }, ...overrides };
+  }
+
+  it('opens nothing when an up-to-date refresh carries the same files and review state', () => {
+    const run = runStep(step, { env, gh: { ...identical, ...upToDate }, prList: [open()] });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ skip: 'true' });
+  });
+
+  it('matches a labelled refresh when this run also needs review', () => {
+    const labels = [{ name: 'needs-manual-review' }];
+    const run = runStep(step, {
+      env: { ...env, REQUIRES_REVIEW: 'true' },
+      gh: { ...identical, ...upToDate },
+      prList: [open({ labels, autoMergeRequest: null })],
+    });
+
+    expect(run.outputs).toEqual({ skip: 'true' });
+  });
+
+  it.each([
+    ['its lockfile differs', { prList: [open()], gh: { ...tree(blobs.FAKE_MANIFEST_BLOB, 'x'.repeat(40)), ...upToDate } }],
+    ['its manifest differs', { prList: [open()], gh: { ...tree('x'.repeat(40), blobs.FAKE_LOCK_BLOB), ...upToDate } }],
+    ['main moved past it', { prList: [open()], gh: { ...identical, [`repos/${REPO}/compare/main...${sha}`]: { behind_by: 1 } } }],
+    ['it is labelled but this run would arm', { prList: [open({ labels: [{ name: 'needs-manual-review' }] })], gh: { ...identical, ...upToDate } }],
+    ['this run would arm but its arming failed', { prList: [open({ autoMergeRequest: null })], gh: { ...identical, ...upToDate } }],
+    ['its tree cannot be read', { prList: [open()], gh: upToDate }],
+    ['its comparison cannot be read', { prList: [open()], gh: identical }],
+    ['it comes from a fork', { prList: [open({ isCrossRepository: true })], gh: { ...identical, ...upToDate } }],
+    ['it is not a refresh branch', { prList: [open({ headRefName: 'feature' })], gh: { ...identical, ...upToDate } }],
+    ['none is open', { prList: [], gh: {} }],
+  ])('opens a new refresh when %s', (_case, fixtures) => {
+    const run = runStep(step, { env, ...fixtures });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ skip: 'false' });
+  });
+
+  it('treats a run that crossed a major as needing review', () => {
+    const run = runStep(step, { env: { ...env, MAJORS: '1' }, gh: { ...identical, ...upToDate }, prList: [open()] });
+
+    expect(run.outputs).toEqual({ skip: 'false' });
   });
 });
 
@@ -768,29 +1254,33 @@ describe.skipIf(!CAN_RUN)('Dependabot auto-merge resolve', () => {
       'the newest run passed',
       [ciRun(299, '2026-05-04T08:01:00Z', 'failure'), passed],
       'success',
+      '300',
     ],
     [
       'the newest run failed after a pass',
       [ciRun(299, '2026-05-04T08:01:00Z', 'success'), ciRun(300, '2026-05-04T08:15:00Z', 'failure')],
       'failure',
+      '300',
     ],
     [
       'an older run was re-run last',
       [ciRun(299, '2026-05-04T08:40:00Z', 'success'), ciRun(300, '2026-05-04T08:15:00Z', 'failure')],
       'success',
+      '299',
     ],
     [
       'two runs started the same second',
       [ciRun(301, '2026-05-04T08:15:00Z', 'failure'), ciRun(300, '2026-05-04T08:15:00Z', 'success')],
       'failure',
+      '301',
     ],
-    ['the newest run is in progress', [passed, ciRun(301, '2026-05-04T08:30:00Z', null)], 'pending'],
-    ['no run exists yet', [], 'pending'],
-  ])('publishes the CI verdict when %s', (_case, runs, verdict) => {
+    ['the newest run is in progress', [passed, ciRun(301, '2026-05-04T08:30:00Z', null)], 'pending', '301'],
+    ['no run exists yet', [], 'pending', ''],
+  ])('publishes the CI verdict and the run it came from when %s', (_case, runs, verdict, runId) => {
     const run = runStep(step, { env, gh: pullRequest([dependabotCommit(HEAD_SHA, message)], listing([runs])) });
 
     expect(run.status).toBe(0);
-    expect(run.outputs).toMatchObject({ number: '5', skip: 'false', disarm: 'false', ci: verdict });
+    expect(run.outputs).toMatchObject({ number: '5', skip: 'false', disarm: 'false', ci: verdict, ci_run_id: runId });
   });
 
   it('finds a re-run listed on a later page', () => {
@@ -832,6 +1322,214 @@ describe.skipIf(!CAN_RUN)('Dependabot auto-merge resolve', () => {
   });
 });
 
+describe.skipIf(!CAN_RUN)('Dependabot auto-merge advisory label reconcile', () => {
+  const step = stepOf(AUTOMERGE, 'automerge', 'reconcile');
+  const env = { PR_NUMBER: '5', GH_TOKEN: 'write', READ_TOKEN: 'read' };
+  const pull = `repos/${REPO}/pulls/5`;
+  const removal = `api -X DELETE repos/${REPO}/issues/5/labels/blocked-by-advisory`;
+
+  it('runs on every verdict for a head the run owns', () => {
+    expect(step.if).toBe("steps.resolve.outputs.skip == 'false'");
+  });
+
+  it('removes the label a verdict on an earlier head left', () => {
+    const labels = [{ name: 'dependencies' }, { name: 'blocked-by-advisory' }];
+
+    const run = runStep(step, { env, gh: { [pull]: { labels } } });
+
+    expect(run.status).toBe(0);
+    expect(run.ghCalls).toContain(removal);
+    expect(run.stepSummary).toBe('- #5: blocked-by-advisory label removed\n');
+  });
+
+  it.each([
+    ['carries no such label', { [pull]: { labels: [{ name: 'dependencies' }] } }],
+    ['cannot have its labels read', {}],
+  ])('removes nothing from a pull request that %s', (_case, gh) => {
+    const run = runStep(step, { env, gh });
+
+    expect(run.status).toBe(0);
+    expect(run.ghCalls).not.toContain(removal);
+  });
+});
+
+describe.skipIf(!CAN_RUN)('Dependabot auto-merge advisory triage', () => {
+  const find = stepOf(AUTOMERGE, 'automerge', 'auditfail');
+  const fetch = stepOf(AUTOMERGE, 'automerge', 'base');
+  const audit = stepOf(AUTOMERGE, 'automerge', 'baseaudit');
+  const label = stepOf(AUTOMERGE, 'automerge', 'block');
+  const baseSha = 'd'.repeat(40);
+  const jobsPath = `repos/${REPO}/actions/runs/300/jobs?per_page=100`;
+  const comparePath = `repos/${REPO}/compare/main...${HEAD_SHA}`;
+  const manifestPath = `repos/${REPO}/contents/package.json?ref=${baseSha}`;
+  const lockPath = `repos/${REPO}/contents/package-lock.json?ref=${baseSha}`;
+
+  /**
+   * Builds the jobs of a PR Pipeline run whose audit step concluded as
+   * given, beside another job whose step of the same name failed.
+   * @param conclusion - Conclusion of the Build & Audit job's audit step.
+   * @returns The jobs as the run-jobs API lists them.
+   */
+  function ciJobs(conclusion: string): Record<string, unknown> {
+    return {
+      jobs: [
+        {
+          name: 'Build & Audit',
+          steps: [
+            { name: 'Release signal guard', conclusion: 'success' },
+            { name: 'Audit dependencies', conclusion },
+          ],
+        },
+        { name: 'Unit Tests', steps: [{ name: 'Audit dependencies', conclusion: 'failure' }] },
+      ],
+    };
+  }
+
+  it('triages only a failed verdict on a head it vetted', () => {
+    expect(find.if).toContain("steps.resolve.outputs.skip == 'false'");
+    expect(find.if).toContain("steps.resolve.outputs.disarm != 'true'");
+    expect(find.if).toContain("steps.resolve.outputs.ci == 'failure'");
+  });
+
+  it('looks for the job and step PR Pipeline names', () => {
+    const pipeline = jobsOf('.github/workflows/pr.yml');
+    const build = Object.values(pipeline).find((job) => (job as { name?: string }).name === 'Build & Audit');
+    const step = build?.steps.find((candidate) => candidate.name === 'Audit dependencies');
+
+    expect(step?.run).toBe('npm run audit');
+    expect(find.run).toContain('select(.name == "Build & Audit")');
+    expect(find.run).toContain('select(.name == "Audit dependencies")');
+  });
+
+  it.each([
+    ['failure', { failed: 'true' }],
+    ['success', {}],
+    ['skipped', {}],
+  ])('flags the run only when its own audit step concluded failure (%s)', (conclusion, outputs) => {
+    const run = runStep(find, { env: { PR_NUMBER: '5', CI_RUN_ID: '300' }, gh: { [jobsPath]: ciJobs(conclusion) } });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual(outputs);
+  });
+
+  it.each([
+    ['its jobs cannot be read', '300'],
+    ['no run produced the verdict', ''],
+  ])('flags nothing when %s', (_case, runId) => {
+    const run = runStep(find, { env: { PR_NUMBER: '5', CI_RUN_ID: runId }, gh: {} });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({});
+  });
+
+  const fetchEnv = { PR_NUMBER: '5', HEAD_SHA, BASE_BRANCH: 'main', GH_TOKEN: 'read' };
+  const baseFiles = {
+    [comparePath]: { merge_base_commit: { sha: baseSha } },
+    [manifestPath]: { name: 'importer' },
+    [lockPath]: { lockfileVersion: 3 },
+  };
+
+  it('fetches both manifests at the merge base', () => {
+    const run = runStep(fetch, { env: fetchEnv, gh: baseFiles });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ ready: 'true', sha: baseSha });
+    expect(JSON.parse(readFileSync(join(run.temp, 'base/package-lock.json'), 'utf8'))).toEqual({ lockfileVersion: 3 });
+    expect(run.ghCalls.filter((call) => call.includes('/contents/'))).toEqual([
+      `api -H Accept: application/vnd.github.raw+json ${manifestPath}`,
+      `api -H Accept: application/vnd.github.raw+json ${lockPath}`,
+    ]);
+  });
+
+  it.each([
+    ['the comparison fails', comparePath, undefined],
+    ['the merge base is missing', comparePath, { merge_base_commit: null }],
+    ['the lockfile cannot be read', lockPath, undefined],
+  ])('readies nothing when %s', (_case, path, answer) => {
+    const gh: Record<string, unknown> = { ...baseFiles };
+    if (answer === undefined) delete gh[path];
+    else gh[path] = answer;
+
+    const run = runStep(fetch, { env: fetchEnv, gh });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({});
+  });
+
+  it('audits the merge base with no token in reach', () => {
+    expect(Object.values(audit.env ?? {}).some((value) => SECRET_READ.test(value))).toBe(false);
+  });
+
+  it.each([
+    ['0', {}],
+    ['1', { blocked: 'true' }],
+    ['2', {}],
+  ])('blocks only when the merge-base audit exits 1 (exit %s)', (status, outputs) => {
+    const run = runStep(audit, {
+      env: { PR_NUMBER: '5', BASE_SHA: baseSha, GITHUB_WORKSPACE: '/workspace', FAKE_NODE_STATUS: status },
+      tempFiles: { 'base/package-lock.json': {} },
+    });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual(outputs);
+    expect(run.nodeCalls).toEqual(['/workspace/config/check-audit.mjs']);
+    expect(readFileSync(join(run.temp, '..', 'node-cwd.log'), 'utf8').trim()).toBe(join(run.temp, 'base'));
+  });
+
+  it('labels the pull request blocked by an advisory on its base', () => {
+    const run = runStep(label, { env: { PR_NUMBER: '5', BASE_SHA: baseSha, GH_TOKEN: 'write' } });
+
+    expect(run.status).toBe(0);
+    expect(run.ghCalls).toContain(`api -X POST repos/${REPO}/issues/5/labels -f labels[]=blocked-by-advisory`);
+    expect(run.stepSummary).toBe('- #5: labelled blocked-by-advisory\n');
+  });
+
+  it('labels only on a blocking audit, and a failed label write withdraws any arming', () => {
+    const catchAll = jobsOf(AUTOMERGE).automerge?.steps.find((step) => step.name === 'Withdraw auto-merge when a write step failed');
+
+    expect(label.if).toBe("steps.baseaudit.outputs.blocked == 'true'");
+    expect(catchAll?.if).toContain("steps.block.outcome == 'failure'");
+  });
+
+  it('creates the label exactly as the lockfile refresh does', () => {
+    const creation = (file: string): string[] =>
+      [...readFileSync(join(ROOT, file), 'utf8').matchAll(/gh label create blocked-by-advisory[^']*'[^']*'/g)].map(([text]) =>
+        text.replace(/\s*\\\s*/g, ' '),
+      );
+
+    expect(creation(AUTOMERGE)).toEqual(creation(REFRESH));
+    expect(creation(AUTOMERGE)).toHaveLength(1);
+  });
+});
+
+describe.skipIf(!CAN_RUN)('Dependabot rebase main audit', () => {
+  const job = jobsOf(AUTOMERGE)['rebase-behind'];
+  const step = stepOf(AUTOMERGE, 'rebase-behind', 'audit');
+
+  it.each([
+    ['0', 'true'],
+    ['1', 'false'],
+    ['2', 'false'],
+  ])('reports main clean only when its audit exits 0 (exit %s)', (status, clean) => {
+    const run = runStep(step, { env: { FAKE_NODE_STATUS: status } });
+
+    expect(run.status).toBe(0);
+    expect(run.outputs).toEqual({ clean });
+    expect(run.nodeCalls).toEqual(['config/check-audit.mjs']);
+  });
+
+  it('holds RELEASE_TOKEN in the nudge step alone', () => {
+    const holders = (job?.steps ?? []).filter((candidate) => SECRET_READ.test(JSON.stringify(candidate)));
+
+    expect(SECRET_READ.test(JSON.stringify(job?.env ?? {}))).toBe(false);
+    expect(holders.map((candidate) => candidate.id)).toEqual(['nudge']);
+  });
+
+  it('nudges armed pull requests even when the audit could not run', () => {
+    expect(stepOf(AUTOMERGE, 'rebase-behind', 'nudge').if).toContain('!cancelled()');
+  });
+});
+
 describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
   const step = stepOf(AUTOMERGE, 'rebase-behind', 'nudge');
   const first = { number: 11, sha: 'b'.repeat(40) };
@@ -841,6 +1539,7 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
     { number: first.number, headRefOid: first.sha, autoMergeRequest: armed },
     { number: second.number, headRefOid: second.sha, autoMergeRequest: armed },
   ];
+  const env = { MAIN_CLEAN: 'false' };
 
   /**
    * Fixtures for an armed pull request three commits behind main, never
@@ -870,7 +1569,7 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
   it('nudges the oldest armed pull request behind main', () => {
     const gh = { user: { login: 'owner' }, ...behindMain(first), ...behindMain(second) };
 
-    const run = runStep(step, { env: {}, gh, prList });
+    const run = runStep(step, { env, gh, prList });
 
     expect(run.status).toBe(0);
     expect(nudged(run)).toEqual(['11']);
@@ -906,7 +1605,7 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
     ['moves on after two unanswered nudges', [hoursAgo(5), hoursAgo(3)], ['12']],
     ['ignores nudges made before the head commit', ['2026-05-04T07:00:00Z', '2026-05-04T07:30:00Z'], ['11']],
   ])('%s', (_case, times, expected) => {
-    const run = runStep(step, { env: {}, gh: nudgedAt(times), prList });
+    const run = runStep(step, { env, gh: nudgedAt(times), prList });
 
     expect(run.status).toBe(0);
     expect(nudged(run)).toEqual(expected);
@@ -920,7 +1619,7 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
       [`repos/${REPO}/issues/${first.number}/comments`]: [{ user: { login: 'owner' }, body: null, created_at: '2026-05-04T09:00:00Z' }],
     };
 
-    const run = runStep(step, { env: {}, gh, prList });
+    const run = runStep(step, { env, gh, prList });
 
     expect(run.status).toBe(0);
     expect(nudged(run)).toEqual(['11']);
@@ -953,10 +1652,61 @@ describe.skipIf(!CAN_RUN)('Dependabot rebase nudge', () => {
     if (answer === undefined) delete gh[path];
     else gh[path] = answer;
 
-    const run = runStep(step, { env: {}, gh, prList });
+    const run = runStep(step, { env, gh, prList });
 
     expect(run.status).toBe(0);
     expect(nudged(run)).toEqual(['12']);
+  });
+
+  const blocked = { number: 10, sha: 'd'.repeat(40) };
+
+  /**
+   * Lists an unarmed pull request ahead of the two armed ones.
+   * @param labels - Labels on the unarmed pull request.
+   * @returns The pull request list.
+   */
+  function withUnarmed(labels: readonly string[]): unknown[] {
+    const unarmed = { number: blocked.number, headRefOid: blocked.sha, autoMergeRequest: null, labels: labels.map((name) => ({ name })) };
+    return [unarmed, ...prList];
+  }
+
+  it('nudges a blocked pull request in number order once main audits clean, leaving its label on', () => {
+    const gh = { user: { login: 'owner' }, ...behindMain(blocked), ...behindMain(first), ...behindMain(second) };
+
+    const run = runStep(step, { env: { MAIN_CLEAN: 'true' }, gh, prList: withUnarmed(['blocked-by-advisory']) });
+
+    expect(run.status).toBe(0);
+    expect(nudged(run)).toEqual(['10']);
+    expect(run.ghCalls.filter((call) => /-X (?:POST|DELETE)/.test(call))).toEqual([]);
+    expect(run.stepSummary).toBe('- #10: asked Dependabot to rebase past the advisory main no longer carries\n');
+  });
+
+  it.each([
+    ['a blocked pull request while main audits red', ['blocked-by-advisory'], 'false'],
+    ['a blocked pull request while main went unaudited', ['blocked-by-advisory'], ''],
+    ['an unlabelled unarmed pull request', ['dependencies'], 'true'],
+  ])('leaves %s alone', (_case, labels, clean) => {
+    const gh = { user: { login: 'owner' }, ...behindMain(blocked), ...behindMain(first), ...behindMain(second) };
+
+    const run = runStep(step, { env: { MAIN_CLEAN: clean }, gh, prList: withUnarmed(labels) });
+
+    expect(run.status).toBe(0);
+    expect(nudged(run)).toEqual(['11']);
+  });
+
+  it('skips a blocked pull request that is not behind main and nudges the next', () => {
+    const gh = {
+      user: { login: 'owner' },
+      ...behindMain(blocked),
+      [`repos/${REPO}/compare/main...${blocked.sha}`]: { behind_by: 0 },
+      ...behindMain(first),
+      ...behindMain(second),
+    };
+
+    const run = runStep(step, { env: { MAIN_CLEAN: 'true' }, gh, prList: withUnarmed(['blocked-by-advisory']) });
+
+    expect(run.status).toBe(0);
+    expect(nudged(run)).toEqual(['11']);
   });
 });
 

@@ -10,11 +10,17 @@ name: Dependabot Auto-Merge
 #    (grouped or not), GitHub Actions patch/minor and Docker digest/patch
 #    updates merge; majors, and update types an ecosystem is held back from
 #    (a Docker minor), are labelled `needs-manual-review`; anything the policy
-#    cannot classify is skipped and left for a human.
-# 2. `rebase-behind` nudges one auto-merge-enabled Dependabot PR at a time
-#    with `@dependabot rebase` when main has moved past it. The ruleset
-#    requires branches to be strictly up to date, auto-merge never updates a
-#    branch on its own, and Dependabot only rebases by itself on conflicts.
+#    cannot classify is skipped and left for a human. A red verdict is
+#    triaged: when the "Audit dependencies" step failed and the commit the
+#    PR was built on audits red under main's policy, the PR is labelled
+#    `blocked-by-advisory` (see ADR-0003). Every later verdict clears the
+#    label first.
+# 2. `rebase-behind` nudges one Dependabot PR at a time with
+#    `@dependabot rebase` when main has moved past it: an auto-merge-enabled
+#    PR, or, once main audits clean, a `blocked-by-advisory` one. The
+#    ruleset requires branches to be strictly up to date, auto-merge never
+#    updates a branch on its own, and Dependabot only rebases by itself on
+#    conflicts.
 #
 # Design decisions, each backed by GitHub documentation:
 #
@@ -444,6 +450,9 @@ jobs:
                       | if .status != "completed" then "pending"
                         else .conclusion // "unknown" end' \
             "${RUNNER_TEMP}/ci-runs.json")
+          # The run that verdict came from, so triage reads that run's jobs.
+          ci_run_id=$(jq -r '[.[].workflow_runs[]] | max_by([.run_started_at, .id])
+                             | .id // empty' "${RUNNER_TEMP}/ci-runs.json")
           if [ "${ci}" = 'pending' ]; then
             echo "::notice::#${number}: CI for ${head_sha} has not finished; its completion decides."
           fi
@@ -452,6 +461,7 @@ jobs:
             echo 'skip=false'
             echo 'disarm=false'
             echo "ci=${ci}"
+            echo "ci_run_id=${ci_run_id}"
             echo "head_sha=${head_sha}"
             echo "ecosystem=${ecosystem}"
             echo "repinned=${repinned}"
@@ -509,6 +519,167 @@ jobs:
           echo "::notice::#${PR_NUMBER}: decision inputs could not be gathered; any arming withdrawn."
           echo "- #${PR_NUMBER}: inputs could not be gathered — any arming withdrawn" \
             >> "${GITHUB_STEP_SUMMARY}"
+
+      # A blocked-by-advisory label describes one verdict, and this run is
+      # judging a newer one: every verdict starts from no label, and triage
+      # below adds it back only when this verdict earns it. Best effort: a
+      # stale label only lets the rebase nudge try the pull request once main
+      # audits clean, so a failed read or removal warns instead of failing
+      # the decision.
+      - name: Clear a stale blocked-by-advisory label
+        id: reconcile
+        if: steps.resolve.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          READ_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+        run: |
+          set -euo pipefail
+          labelled() {
+            GH_TOKEN="${READ_TOKEN}" gh api \
+              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+              --jq 'any(.labels[]?; .name == "blocked-by-advisory")'
+          }
+          if ! state=$(labelled); then
+            echo "::warning::#${PR_NUMBER}: could not read its labels; a stale blocked-by-advisory label may remain."
+            exit 0
+          fi
+          [ "${state}" = true ] || exit 0
+          if ! gh api -X DELETE \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels/blocked-by-advisory" \
+            > /dev/null; then
+            # A label someone removed in between answers 404; the re-read
+            # tells that apart from a removal that failed.
+            if [ "$(labelled || true)" != false ]; then
+              echo "::warning::#${PR_NUMBER}: could not remove its blocked-by-advisory label."
+              exit 0
+            fi
+          fi
+          echo "- #${PR_NUMBER}: blocked-by-advisory label removed" >> "${GITHUB_STEP_SUMMARY}"
+
+      # Triage of a red verdict: did the pull request branch from a commit
+      # that already audits red, so its failure is most likely inherited? It
+      # is labelled blocked-by-advisory only when all three hold: the newest
+      # CI run failed, the "Audit dependencies" step is what failed, and the
+      # merge base audits red today under main's trusted policy. Advisory sets
+      # are not compared; a pull request that also adds its own advisory fails
+      # again after its rebase onto a clean main, and that verdict drops the
+      # label. Once main audits clean, the rebase nudge brings it past the
+      # advisory (rebase-behind).
+      # Every read error skips the label with a warning: an unlabelled red
+      # pull request waits for a human, as before.
+      - name: Find the failing audit step
+        id: auditfail
+        if: >-
+          steps.resolve.outputs.skip == 'false' &&
+          steps.resolve.outputs.disarm != 'true' &&
+          steps.resolve.outputs.ci == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+          CI_RUN_ID: ${{ steps.resolve.outputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${CI_RUN_ID}" =~ ^[0-9]+$ ]]; then
+            echo "::warning::#${PR_NUMBER}: no CI run to triage."
+            exit 0
+          fi
+          # The job and step names are fixed in pr.yml; a gate test holds
+          # them to it.
+          if ! gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${CI_RUN_ID}/jobs?per_page=100" \
+            --jq '.jobs[] | select(.name == "Build & Audit") | .steps[]?
+                  | select(.name == "Audit dependencies") | .conclusion' \
+            > "${RUNNER_TEMP}/audit-steps.txt"; then
+            echo "::warning::#${PR_NUMBER}: could not read the jobs of CI run ${CI_RUN_ID}; not triaged."
+            exit 0
+          fi
+          if grep -qxF failure "${RUNNER_TEMP}/audit-steps.txt"; then
+            echo 'failed=true' >> "${GITHUB_OUTPUT}"
+          else
+            echo "::notice::#${PR_NUMBER}: its audit step did not fail; not blocked by an advisory."
+          fi
+
+      # The merge base is the main commit the pull request was built on. If it
+      # audits red too, the failure is most likely inherited; the advisory
+      # sets are not compared (ADR-0003).
+      # Raw media type: the file arrives as-is rather than base64 inside JSON,
+      # and keeps arriving once package-lock.json outgrows the 1 MB JSON limit.
+      - name: Fetch the merge-base manifests
+        id: base
+        if: steps.auditfail.outputs.failed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          give_up() {
+            echo "::warning::#${PR_NUMBER}: $1; not triaged."
+            exit 0
+          }
+          base=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE_BRANCH}...${HEAD_SHA}" \
+            --jq '.merge_base_commit.sha') || give_up 'could not find its merge base'
+          [[ "${base}" =~ ^[0-9a-f]{40}$ ]] || give_up 'its merge base is not a commit SHA'
+          mkdir -p "${RUNNER_TEMP}/base"
+          for file in package.json package-lock.json; do
+            gh api -H 'Accept: application/vnd.github.raw+json' \
+              "repos/${GITHUB_REPOSITORY}/contents/${file}?ref=${base}" \
+              > "${RUNNER_TEMP}/base/${file}" || give_up "could not read ${file} at ${base}"
+          done
+          { echo 'ready=true'; echo "sha=${base}"; } >> "${GITHUB_OUTPUT}"
+
+      # Only a passing verdict reaches the decision's checkout below; triage
+      # needs main's policy for a failing one.
+      - name: Check out the trusted policy for triage
+        if: steps.base.outputs.ready == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up Node.js for triage
+        if: steps.base.outputs.ready == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      # No token in reach. npm audit reads the two fetched files and the
+      # registry's advisory data and runs no script. Exit 1: the merge base
+      # carries an advisory the policy does not accept. Exit 2 (no report)
+      # is evidence of nothing, so nothing is labelled.
+      - name: Audit the merge base
+        id: baseaudit
+        if: steps.base.outputs.ready == 'true'
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          status=0
+          (cd "${RUNNER_TEMP}/base" && node "${GITHUB_WORKSPACE}/config/check-audit.mjs") || status=$?
+          case "${status}" in
+            0) echo "::notice::#${PR_NUMBER}: its merge base ${BASE_SHA} audits clean; its own change fails the audit." ;;
+            1) echo 'blocked=true' >> "${GITHUB_OUTPUT}" ;;
+            *) echo "::warning::#${PR_NUMBER}: the audit of its merge base produced no report; not triaged." ;;
+          esac
+
+      - name: Label when an advisory on the base blocks the PR
+        id: block
+        if: steps.baseaudit.outputs.blocked == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PR_NUMBER: ${{ steps.resolve.outputs.number }}
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        run: |
+          set -euo pipefail
+          gh label create blocked-by-advisory --repo "${GITHUB_REPOSITORY}" --force --color B60205 \
+            --description 'Blocked by a dependency advisory on the base branch'
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" \
+            -f 'labels[]=blocked-by-advisory' > /dev/null
+          echo "::notice::#${PR_NUMBER}: blocked by an advisory its merge base ${BASE_SHA} carries."
+          echo "- #${PR_NUMBER}: labelled blocked-by-advisory" >> "${GITHUB_STEP_SUMMARY}"
 
       # The policy runs from the default branch, never from the PR head: the
       # code that decides whether to merge must not be editable by the change
@@ -691,6 +862,7 @@ jobs:
            steps.gather.outcome == 'failure' ||
            steps.arm.outcome == 'failure' ||
            steps.label.outcome == 'failure' ||
+           steps.block.outcome == 'failure' ||
            steps.skip.outcome == 'failure')
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
@@ -721,11 +893,45 @@ jobs:
       group: dependabot-rebase-nudge
       cancel-in-progress: false
     env:
-      GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
       LC_ALL: C
     steps:
-      - name: Ask Dependabot to rebase the oldest behind, armed PR
+      # Whether main audits clean decides if a pull request held back by an
+      # advisory on its base can now be rebased past it. Main's own policy,
+      # and no token in reach of the audit.
+      - name: Check out the trusted policy from the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Audit main
+        id: audit
+        run: |
+          set -euo pipefail
+          status=0
+          node config/check-audit.mjs || status=$?
+          case "${status}" in
+            0) echo 'clean=true' >> "${GITHUB_OUTPUT}" ;;
+            1) echo 'clean=false' >> "${GITHUB_OUTPUT}" ;;
+            *)
+              echo '::warning::The audit of main produced no report; pull requests blocked by an advisory wait for a later run.'
+              echo 'clean=false' >> "${GITHUB_OUTPUT}"
+              ;;
+          esac
+
+      # Runs even when the audit could not: the armed queue must not stall
+      # on it, and without a clean verdict no blocked pull request joins.
+      - name: Ask Dependabot to rebase the oldest behind PR in the queue
         id: nudge
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          MAIN_CLEAN: ${{ steps.audit.outputs.clean }}
         run: |
           set -euo pipefail
           base=$(gh repo view "${GITHUB_REPOSITORY}" \
@@ -733,19 +939,28 @@ jobs:
           me=$(gh api user --jq .login)
           gh pr list --repo "${GITHUB_REPOSITORY}" --state open \
             --author app/dependabot --base "${base}" --limit 100 \
-            --json number,headRefOid,autoMergeRequest \
+            --json number,headRefOid,autoMergeRequest,labels \
             > "${RUNNER_TEMP}/candidates.json"
-          # Only PRs this workflow armed: unarmed ones wait for a human, and
-          # rebasing them would only burn CI minutes.
-          jq -r 'map(select(.autoMergeRequest != null)) | sort_by(.number)
-                 | .[] | "\(.number)\t\(.headRefOid)"' \
-            "${RUNNER_TEMP}/candidates.json" > "${RUNNER_TEMP}/armed.tsv"
+          # The queue holds PRs this workflow armed and, once main audits
+          # clean, PRs labelled blocked-by-advisory: red only because their
+          # base carried an advisory main no longer has. The label stays on
+          # through the nudge; the verdict on the rebased head clears it.
+          # Other unarmed PRs wait for a human, and rebasing them would only
+          # burn CI minutes.
+          jq -r --arg clean "${MAIN_CLEAN}" \
+            'map(any(.labels[]?; .name == "blocked-by-advisory") as $blocked
+                 | select(.autoMergeRequest != null
+                          or ($blocked and $clean == "true"))
+                 | . + {blocked: $blocked})
+             | sort_by(.number)
+             | .[] | "\(.number)\t\(.headRefOid)\t\(.blocked)"' \
+            "${RUNNER_TEMP}/candidates.json" > "${RUNNER_TEMP}/queue.tsv"
           # A failed read about one PR skips that PR rather than the queue:
           # under errexit a bare `x=$(gh …)` would end the run, so each read
           # carries its own fallback. The nudge itself is a write and still
           # fails the run.
           iso='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$'
-          while IFS=$'\t' read -r number sha <&3; do
+          while IFS=$'\t' read -r number sha blocked <&3; do
             behind=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${base}...${sha}" \
               --jq '.behind_by // empty') || behind=''
             if ! [[ "${behind}" =~ ^[0-9]+$ ]]; then
@@ -753,6 +968,11 @@ jobs:
               continue
             fi
             if [ "${behind}" -eq 0 ]; then
+              # Up to date yet labelled: its verdict predates whatever made
+              # main clean, so only a CI re-run can clear it.
+              if [ "${blocked}" = true ]; then
+                echo "::warning::#${number}: labelled blocked-by-advisory but not behind ${base}; re-run its CI."
+              fi
               continue
             fi
             # Validated before use: a missing date compares as the string
@@ -804,8 +1024,12 @@ jobs:
             gh pr comment "${number}" --repo "${GITHUB_REPOSITORY}" \
               --body '@dependabot rebase'
             echo "::notice::#${number}: ${behind} commit(s) behind ${base}; asked Dependabot to rebase."
+            if [ "${blocked}" = true ]; then
+              echo "- #${number}: asked Dependabot to rebase past the advisory ${base} no longer carries" \
+                >> "${GITHUB_STEP_SUMMARY}"
+            fi
             # One nudge per run: each merge moves main again, so rebasing the
             # whole queue at once would waste every CI run but the first.
             exit 0
-          done 3< "${RUNNER_TEMP}/armed.tsv"
-          echo "::notice::No armed Dependabot PR is behind ${base}."
+          done 3< "${RUNNER_TEMP}/queue.tsv"
+          echo "::notice::No queued Dependabot PR is behind ${base}."

@@ -2,7 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-16
-- **Amended:** 2026-10-24 — see the note under Decision 4
+- **Amended:** 2026-10-24 — see the note under Decision 4; 2026-10-29 — see
+  the notes under Decisions 2 and 4, the overrides runbook and Consequences
 - **Deciders:** Repository maintainer
 - **Amends:** [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md)
 
@@ -78,6 +79,15 @@ tools that kept producing image alerts.
    It runs after every successful PR Pipeline, on every push to `main`, on
    manual dispatch and every six hours as a safety net.
 
+   > **Amended 2026-10-29.** [ADR-0003](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0003-automated-override-floors.md)
+   > adds pull requests an advisory blocked. When a Dependabot pull request
+   > fails its `Audit dependencies` step and its merge base fails the same
+   > audit, the auto-merge job labels it `blocked-by-advisory`. Each run of
+   > `rebase-behind` audits `main`. While that audit is clean, labelled pull
+   > requests join the armed ones in the queue, under the same wait, cap and
+   > one nudge per run. Every later verdict clears the label first.
+   > `RELEASE_TOKEN` moved from the job's environment to the nudge step.
+
 3. **`.github/workflows/lockfile-sync.yml`.** When a same-repository pull
    request edits `package.json`, a runner regenerates the lockfile with
    `npm install --package-lock-only --ignore-scripts` against the pinned
@@ -130,6 +140,13 @@ tools that kept producing image alerts.
    > new pull request supersedes the stale one as above. A push that leaves
    > no refresh behind ends after a read-only check, so a refresh's own
    > merge does not start another.
+   >
+   > **Amended 2026-10-29.** Per [ADR-0003](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0003-automated-override-floors.md),
+   > the refresh also raises and prunes `overrides` floors, and it runs every
+   > four hours while `main`'s audit is red. A refresh that changes
+   > `overrides` is titled `fix(deps)`. It arms only when its floors are
+   > same-line releases at least three days old. Any other floor, and any
+   > advisory it cannot floor, labels it `needs-manual-review` instead.
 
 5. **`.github/dependabot.yml`** splits majors out of every group. The
    development-dependency group, the pino group and each GitHub Actions group
@@ -218,6 +235,12 @@ tools that kept producing image alerts.
 - **Overrides are the runbook for out-of-range advisories.** When a parent
   declares a range that excludes the patched release, add a floor to
   `overrides`. The next lockfile regeneration applies it.
+
+  > **Amended 2026-10-29.** The lockfile refresh now writes that floor itself
+  > when the rules in [ADR-0003](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0003-automated-override-floors.md)
+  > allow it. A hand-written floor remains the runbook for an advisory the
+  > planner rejects, which the "Unresolved dependency advisories" issue
+  > lists.
 - **`dependency-bump.yml` stays the human fallback.** Pull requests opened by
   the manual bump workflow are never auto-merged.
 - **Security updates stay individual.** Dependabot groups apply to version
@@ -277,6 +300,10 @@ tools that kept producing image alerts.
 - An advisory outside the declared ranges still needs a hand-written
   `overrides` floor, and that pull request needs one extra commit: the
   lockfile the runner regenerates.
+
+  > **Amended 2026-10-29.** Only when ADR-0003's planner rejects it. Otherwise
+  > the lockfile refresh raises the floor and regenerates the lockfile in one
+  > pull request.
 
 **Neutral**
 

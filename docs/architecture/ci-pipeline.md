@@ -25,7 +25,7 @@ graph TD
     SCH[release-please.yml<br/>push to main]
     DOCS[docs.yml<br/>tag push v*]
     E2ES[e2e-schedule.yml<br/>weekly]
-    LFR[lockfile-refresh.yml<br/>weekly cron + push to main]
+    LFR[lockfile-refresh.yml<br/>weekly + 4-hourly cron + push to main]
     DMR[dependabot-meta-render.yml<br/>after PR Pipeline]
     DAM[dependabot-auto-merge.yml<br/>after PR Pipeline + push/cron]
     LFS[lockfile-sync.yml<br/>PR edits manifest]
@@ -308,19 +308,41 @@ from.
   when the `RELEASE_TOKEN` owner posted it, since anyone can paste the text.
   A meta-render push also dismisses the stale approval, and the run for the
   new head re-decides.
+- **An advisory on the base is labelled, not abandoned.** When the verdict is a
+  failure, the run reads which step failed. The audit step in `pr.yml` is
+  named `Audit dependencies`, in the `Build & Audit` job, so the jobs API
+  reports it by name. If that step failed, the run fetches the pull
+  request's merge-base `package.json` and `package-lock.json`. It audits them
+  with `main`'s trusted `config/check-audit.mjs` and holds no token while
+  doing so. Exit 1 means the merge base is red too, so the failure is most
+  likely inherited from `main` and the pull request is labelled
+  `blocked-by-advisory`. Exit 0 (the merge base audits clean) and exit 2
+  (npm could not answer) add no label.
+  Triage does not compare advisory sets: a pull request that fixes the
+  base's advisory but adds its own is labelled too. Its rebase then fails on
+  a clean base, which removes the label, so the cost is one nudge. Every
+  verdict first removes the label, best effort, so it never outlives the head
+  it was added for. Any read error skips triage with a warning.
 
 A strict required-check set keeps an armed PR from merging once `main` moves
 ahead of it. The `rebase-behind` job therefore posts `@dependabot rebase` on
-**one** armed, behind PR per run, oldest first; it waits two hours between
-nudges to the same head and warns after two unanswered nudges. A PR whose
+**one** queued, behind PR per run, oldest first; it waits two hours between
+nudges to the same head and warns after two unanswered nudges. The queue
+holds every armed PR. It also holds every `blocked-by-advisory` PR once
+`main` itself audits clean: the job checks out `main` and runs
+`config/check-audit.mjs` with no token first. A labelled PR that is not
+behind is skipped with a warning to re-run its CI. The label stays on
+through the nudge; the rebased head's verdict clears it. A PR whose
 comparison, head commit or comments cannot be read or parsed is skipped
 with a warning so the rest of the queue still moves. Dependabot's own
 rebase is used instead of the "update branch" button so Dependabot keeps
-ownership of the branch.
+ownership of the branch. `RELEASE_TOKEN` is held by the nudge step alone.
 
 Scope is `dependabot[bot]` PRs only. A `dependency-bump.yml` PR is still a
 human merge. Rationale and rejected alternatives:
-[ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md).
+[ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md); advisory triage and
+recovery:
+[ADR-0003](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0003-automated-override-floors.md).
 
 ## Pinning policy
 
@@ -450,12 +472,15 @@ already allowed the patched `4.28.8`. A CVE against `4.28.2` then failed both
 `npm audit` and Trivy on the production tree.
 
 `lockfile-refresh.yml` closes it. Every Thursday 05:00 UTC (also on
-`workflow_dispatch`, and after a push to main that leaves an open refresh
-behind) it runs `npm update --package-lock-only --ignore-scripts`,
-then a best-effort `npm audit fix --package-lock-only --ignore-scripts`, and
+`workflow_dispatch`, after a push to main that leaves an open refresh
+behind, and every four hours while `main`'s audit is red) it runs
+`npm update --package-lock-only --ignore-scripts`,
+then a best-effort `npm audit fix --package-lock-only --ignore-scripts`,
+then raises any `overrides` floor an advisory needs, and
 opens a PR when anything moved:
 
-- **Scope is transitive refresh only**, within ranges parents already permit.
+- **Scope is transitive refresh only**, within ranges parents already permit,
+  plus `overrides` floors for advisories an exact pin keeps out of reach.
   Raising a declared range stays Dependabot's job. This is **not** a
   Dependabot replacement.
 - **No third-party code executes.** `--package-lock-only` ignores
@@ -473,11 +498,65 @@ opens a PR when anything moved:
 - **Audit fixes stay inside declared ranges.** `--force` is never passed, so
   no declared range is raised. If the fix wants to edit `package.json`, both
   files are restored to their post-`npm update` state: raising a declared
-  range is a reviewed change. The step never fails the job; an advisory it
-  cannot fix still fails the PR's own `npm run audit` gate.
+  range is a reviewed change. The step never fails the job.
+- **An exact pin gets an `overrides` floor.** When a parent pins a vulnerable
+  transitive package exactly, neither command above can move it.
+  `scripts/plan-override-floors.mjs --apply` plans one floor per such
+  package under rules R1–R7 (`scripts/override-floor-logic.mjs`):
+  - transitive packages only, on one locked caret line;
+  - advisory ranges it can parse;
+  - the lowest published version that clears every advisory, preferring the
+    same line and releases at least three days old;
+  - an existing override keeps its operator and is only raised.
+
+  It regenerates only the floored packages with `npm update` under the same
+  three-day release-age rule as Dependabot, re-audits, and drops any floor
+  whose package still has an advisory, accepted or not, in at most two
+  passes. It drops every floor in a pass that left a blocking advisory on
+  another package the tree did not have before, and drops any rejection whose
+  package no longer blocks in the floored tree. Every npm call
+  passes an allow-list, so no install, `ci`, `exec` or `npx` runs. A failure
+  restores both files and the refresh carries no floor. The next step fails
+  the job if `package.json` differs anywhere outside the override keys the
+  floor and prune steps reported. A refresh that changes `overrides` is titled
+  `fix(deps): raise override floors for <GHSAs>`, so it releases. It arms
+  only when every floor is an aged same-line release and no advisory is left
+  without one. Any other result is labelled `needs-manual-review`. An advisory
+  still unfixed after this step fails the PR's own `npm run audit` gate.
+- **The weekly and dispatched runs prune.** Before planning floors, they try
+  removing each plain floor override (`^x.y.z` or `>=x.y.z`); any other shape
+  may encode a cap and is kept. The removal stands only when the regenerated
+  lockfile locks exactly the same version of every package. The PR is titled
+  `fix(deps): drop <n> redundant overrides`.
+- **An `advisory` job watches `main` every four hours.** It runs
+  `config/check-audit.mjs` on `main`, which exits 0 when clean, 1 on an
+  advisory and 2 when npm could not produce a report. On the four-hourly
+  trigger the refresh runs only after exit 1. Exit 2 fails the job, so
+  nothing is remediated while the registry is down. The job applies the
+  floor plan in its own throwaway checkout, so a floor that proves
+  ineffective counts as a rejection. When the planner rejects
+  an advisory, the job keeps one open issue, "Unresolved dependency
+  advisories" (label `blocked-by-advisory`), listing each package and its
+  reason. Once every advisory has a floor, the body says so instead, and
+  whether a floor holds the refresh for a maintainer. It
+  closes the issue once `main` audits clean. The job holds the
+  workflow token with `issues: write` only; its audit and planner steps hold
+  no token.
+- **The four-hourly run opens each change once.** While `main` stays red,
+  each run computes the same change. The run opens nothing when an open
+  refresh PR already carries byte-identical `package.json` and
+  `package-lock.json`, is not behind `main`, and has the same review label —
+  and, when this run would arm, already has auto-merge armed. A refresh whose
+  arming failed is replaced, which re-arms it. A fresh floor that ages past
+  three days changes the label, so it is reopened armed and supersedes the
+  labelled PR.
 - **A newer run supersedes the open refresh PR.** Once this run has opened
   its own PR, or proved main already carries every pin, any other open
   same-repository `chore/lockfile-refresh-*` PR is closed (branch deleted).
+  The proof needs the floor planner to have finished with no rejection: a
+  run whose planner failed or rejected an advisory never closes an open
+  floor PR this way. A replacement supersedes only when its floor planner
+  finished, so a run whose planner failed leaves the older PR open.
   The close runs last, so a failed run never leaves the week without a
   refresh, and a stuck PR never blocks the next week.
 - **A refresh that main moves past is regenerated.** The ruleset requires a
@@ -531,7 +610,9 @@ registry can restore the hash (the Lockfile refresh's `npm update` does).
 Rationale and rejected alternatives:
 [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md). The
 auto-merge decision is recorded in
-[ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md).
+[ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md), and the override floors, prune and
+advisory watch in
+[ADR-0003](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0003-automated-override-floors.md).
 
 ## Lockfile refresh guard
 

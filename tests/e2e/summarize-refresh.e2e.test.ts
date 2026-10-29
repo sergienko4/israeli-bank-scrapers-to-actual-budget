@@ -42,6 +42,18 @@ function writeLockfile(packages: Record<string, unknown>): string {
 }
 
 /**
+ * Writes a JSON document to a fresh file.
+ *
+ * @param value The document.
+ * @returns The path of the written file.
+ */
+function writeJson(value: unknown): string {
+  const path = join(root, `result-${++fileCount}.json`);
+  writeFileSync(path, JSON.stringify(value));
+  return path;
+}
+
+/**
  * Runs the summary CLI.
  *
  * @param args The command-line arguments.
@@ -114,6 +126,61 @@ describe('summarize-refresh CLI', () => {
     expect(run.status).toBe(1);
     expect(run.stdout).toBe('');
     expect(run.stderr).toContain('Unable to read');
+  });
+
+  it('turns a floor plan and a prune result into a fix(deps) override refresh', () => {
+    const lockfile = writeLockfile({ 'node_modules/re2js': { version: '2.9.0' } });
+    const plan = writeJson({
+      floors: [{ package: 're2js', floor: '^2.8.7', from: null, ghsas: ['GHSA-gg6h-894w-4m9c'], kind: 'in-line', excludeFromAge: false }],
+      rejections: [],
+      requiresReview: false,
+    });
+    const pruned = writeJson({ pruned: ['uuid'], kept: [] });
+
+    const run = runCli([lockfile, lockfile, '--floors', plan, '--prune', pruned]);
+
+    expect(run.status).toBe(0);
+    const summary = JSON.parse(run.stdout);
+    expect(summary).toMatchObject({
+      hasChanges: true,
+      commitType: 'fix',
+      overridesChanged: true,
+      title: 'fix(deps): raise override floors for GHSA-gg6h-894w-4m9c and drop 1 redundant override',
+    });
+    expect(summary.body).toContain('## Override floors (1)');
+    expect(summary.body).toContain('## Redundant overrides dropped (1)');
+  });
+
+  it('fails without output when a floor plan lacks its lists', () => {
+    const lockfile = writeLockfile({});
+
+    const run = runCli([lockfile, lockfile, '--floors', writeJson({ floors: [] })]);
+
+    expect(run.status).toBe(1);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toContain('lacks the rejections list');
+  });
+
+  it('fails without output when a prune result is not JSON', () => {
+    const lockfile = writeLockfile({});
+    const broken = join(root, 'broken.json');
+    writeFileSync(broken, '{"pruned": [');
+
+    const run = runCli([lockfile, lockfile, '--prune', broken]);
+
+    expect(run.status).toBe(1);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toContain('is not valid JSON');
+  });
+
+  it('fails without output on an unknown flag', () => {
+    const lockfile = writeLockfile({});
+
+    const run = runCli([lockfile, lockfile, '--plan', lockfile]);
+
+    expect(run.status).toBe(1);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toContain('Usage:');
   });
 
   it('fails without output when a lockfile path is missing', () => {

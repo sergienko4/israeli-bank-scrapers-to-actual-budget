@@ -47,7 +47,10 @@ jobs:
       # package that reaches the production tree is held to a stricter bar:
       # it must admit the exposure, state that no upstream fix exists, link
       # the tracking work, and expire within 30 days of being added.
-      - run: npm run audit
+      # Dependabot Auto-Merge finds this step by name to tell a pull request
+      # that is red only because its base carries an advisory.
+      - name: Audit dependencies
+        run: npm run audit
       # Stale `allowScripts` pins do not fail install — npm just silently
       # skips the blocked postinstall, so the break only surfaces ~14min
       # later as a missing native binding in E2E. Catch it here in seconds.
