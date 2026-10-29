@@ -213,9 +213,11 @@ recover on their own once `main` is clean.
   close: the supersede step retires open refreshes on an unchanged tree only
   once the planner finished with no rejection, so neither a planner failure
   nor a transient rejection (for example `missing-publish-times`) closes an
-  open floor pull request. A run that opens a replacement still supersedes:
-  gating that path too would let stale refreshes pile up for as long as an
-  advisory has no fixed release.
+  open floor pull request. A run that opens a replacement supersedes only
+  when its planner finished, rejections or not: a replacement from a failed
+  planner carries no floor and must not retire a refresh that may, so both
+  stay open until a run plans again. Gating on rejections too would let
+  stale refreshes pile up for as long as an advisory has no fixed release.
 - **Merge base, not head or `main`.** Auditing the pull request's head cannot
   tell an inherited advisory from one it introduced. Auditing `main` cannot
   tell whether the pull request was built before or after a fix.

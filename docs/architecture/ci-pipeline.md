@@ -555,7 +555,8 @@ opens a PR when anything moved:
   same-repository `chore/lockfile-refresh-*` PR is closed (branch deleted).
   The proof needs the floor planner to have finished with no rejection: a
   run whose planner failed or rejected an advisory never closes an open
-  floor PR this way.
+  floor PR this way. A replacement supersedes only when its floor planner
+  finished, so a run whose planner failed leaves the older PR open.
   The close runs last, so a failed run never leaves the week without a
   refresh, and a stuck PR never blocks the next week.
 - **A refresh that main moves past is regenerated.** The ruleset requires a

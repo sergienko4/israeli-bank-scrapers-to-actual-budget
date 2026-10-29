@@ -434,10 +434,11 @@ jobs:
                   and (.requiresReview | type == "boolean")' "${plan}" > /dev/null; then
             echo '::warning::The override-floor planner failed; both files were restored and this refresh carries no floor.'
             rm -f "${plan}"
-            { echo 'complete=false'; echo 'overrides_changed=false'; echo 'requires_review=false'; } >> "${GITHUB_OUTPUT}"
+            { echo 'planned=false'; echo 'complete=false'; echo 'overrides_changed=false'; echo 'requires_review=false'; } >> "${GITHUB_OUTPUT}"
             exit 0
           fi
           {
+            echo 'planned=true'
             echo "complete=$(jq '.rejections | length == 0' "${plan}")"
             echo "overrides_changed=$(jq '.floors | length > 0' "${plan}")"
             echo "requires_review=$(jq '.requiresReview' "${plan}")"
@@ -785,8 +786,11 @@ jobs:
       # (`complete`): a planner that failed, or rejected an advisory, carried
       # no floor for it, so `changed == 'false'` would say nothing about an
       # open refresh that carries one, and closing it would leave main red
-      # with no remedy in flight. The replacement path needs no such proof:
-      # gating it too would let stale refreshes pile up for as long as an
+      # with no remedy in flight. The replacement path needs only a planner
+      # that finished (`planned`), rejections or not: a replacement from a
+      # failed planner carries no floor, so it must not retire a refresh that
+      # may carry one — both stay open until a run plans again. Gating on
+      # rejections too would let stale refreshes pile up for as long as an
       # advisory has no fixed release.
       # `!cancelled()` keeps the close after a replacement whose arming failed:
       # the new pull request still supersedes the old one.
@@ -796,7 +800,7 @@ jobs:
         if: >-
           !cancelled()
           && ((steps.diff.outputs.changed == 'false' && steps.floors.outputs.complete == 'true')
-              || steps.pr.outputs.opened == 'true')
+              || (steps.pr.outputs.opened == 'true' && steps.floors.outputs.planned == 'true'))
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           BRANCH: chore/lockfile-refresh-${{ github.run_id }}

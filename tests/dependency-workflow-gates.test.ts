@@ -899,7 +899,7 @@ describe.skipIf(!CAN_RUN)('lockfile refresh override floors', () => {
     const run = runStep(step, { env: {}, nodeOutput });
 
     expect(run.status).toBe(0);
-    expect(run.outputs).toEqual({ complete, overrides_changed: changed, requires_review: review });
+    expect(run.outputs).toEqual({ planned: 'true', complete, overrides_changed: changed, requires_review: review });
     expect(run.nodeCalls).toEqual(['scripts/plan-override-floors.mjs --apply']);
     expect(existsSync(join(run.temp, 'floors.json'))).toBe(true);
   });
@@ -911,7 +911,7 @@ describe.skipIf(!CAN_RUN)('lockfile refresh override floors', () => {
     const run = runStep(step, { env, nodeOutput });
 
     expect(run.status).toBe(0);
-    expect(run.outputs).toEqual({ complete: 'false', overrides_changed: 'false', requires_review: 'false' });
+    expect(run.outputs).toEqual({ planned: 'false', complete: 'false', overrides_changed: 'false', requires_review: 'false' });
     expect(existsSync(join(run.temp, 'floors.json'))).toBe(false);
   });
 
@@ -919,6 +919,13 @@ describe.skipIf(!CAN_RUN)('lockfile refresh override floors', () => {
     const supersede = jobsOf(REFRESH).refresh?.steps.find((candidate) => candidate.name === 'Supersede stale refresh pull requests');
 
     expect(supersede?.if).toContain("(steps.diff.outputs.changed == 'false' && steps.floors.outputs.complete == 'true')");
+  });
+
+  it('lets a replacement supersede only once the planner finished, rejections or not', () => {
+    const supersede = jobsOf(REFRESH).refresh?.steps.find((candidate) => candidate.name === 'Supersede stale refresh pull requests');
+
+    expect(supersede?.if).toContain("(steps.pr.outputs.opened == 'true' && steps.floors.outputs.planned == 'true')");
+    expect(supersede?.if).not.toMatch(/\|\|\s*steps\.pr\.outputs\.opened == 'true'\)/);
   });
 
   it('reports each floor in the step summary', () => {
