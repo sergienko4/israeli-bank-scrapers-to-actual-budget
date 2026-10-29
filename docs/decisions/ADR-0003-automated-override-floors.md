@@ -93,8 +93,9 @@ recover on their own once `main` is clean.
      `npm update <pkgs> --package-lock-only --ignore-scripts --min-release-age=3 --min-release-age-exclude=@sergienko4/israeli-bank-scrapers`,
      adding one `--min-release-age-exclude` per fresh floor;
    - re-audits;
-   - drops any floor that did not clear its advisory as `floor-ineffective`,
-     retrying the rest at most twice.
+   - drops any floor whose package still has an advisory, accepted or not, as
+     `floor-ineffective` — `npm update` may resolve above the floor into a
+     version that is still affected — retrying the rest at most twice.
 
    Every npm call passes an allow-list (`assertAllowedNpmArgs`): lockfile-only
    `audit`, `view <pkg> time` and `update --ignore-scripts`, through
@@ -118,8 +119,10 @@ recover on their own once `main` is clean.
 4. **A four-hourly advisory watch.** A new `advisory` job audits `main` on
    every trigger, plus a new cron, `23 */4 * * *`. On that trigger the
    `refresh` job runs only when the audit exits 1. Exit 2 fails the
-   `advisory` job, so GitHub notifies and nothing is regenerated. When the
-   planner rejects any advisory, the job keeps one open issue titled
+   `advisory` job, so GitHub notifies and nothing is regenerated. The job runs
+   the same `--apply` in its own throwaway checkout, because only applying
+   reveals a `floor-ineffective` floor. When the planner rejects any
+   advisory, the job keeps one open issue titled
    "Unresolved dependency advisories", labelled `blocked-by-advisory`, whose
    body is the rejection table. It closes that issue once `main` audits
    clean. That issue is the notification for an advisory no pull request can

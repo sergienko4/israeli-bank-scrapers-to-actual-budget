@@ -774,7 +774,7 @@ describe.skipIf(!CAN_RUN)('lockfile refresh advisory plan', () => {
 
     expect(run.status).toBe(0);
     expect(run.outputs).toEqual({ planned: 'true' });
-    expect(run.nodeCalls).toEqual(['scripts/plan-override-floors.mjs --check']);
+    expect(run.nodeCalls).toEqual(['scripts/plan-override-floors.mjs --apply']);
     expect(run.stepSummary).toContain('- re2js: ^2.8.7 (in-line) for GHSA-gg6h-894w-4m9c');
     expect(run.stepSummary).toContain('- foo: rejected (no-fixed-release) for GHSA-x');
   });

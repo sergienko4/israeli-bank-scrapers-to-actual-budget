@@ -511,7 +511,8 @@ opens a PR when anything moved:
 
   It regenerates only the floored packages with `npm update` under the same
   three-day release-age rule as Dependabot, re-audits, and drops any floor
-  that did not clear its advisory, in at most two passes. Every npm call
+  whose package still has an advisory, accepted or not, in at most two
+  passes. Every npm call
   passes an allow-list, so no install, `ci`, `exec` or `npx` runs. A failure
   restores both files and the refresh carries no floor. The next step fails
   the job if `package.json` differs anywhere outside the override keys the
@@ -529,7 +530,9 @@ opens a PR when anything moved:
   `config/check-audit.mjs` on `main`, which exits 0 when clean, 1 on an
   advisory and 2 when npm could not produce a report. On the four-hourly
   trigger the refresh runs only after exit 1. Exit 2 fails the job, so
-  nothing is remediated while the registry is down. When the planner rejects
+  nothing is remediated while the registry is down. The job applies the
+  floor plan in its own throwaway checkout, so a floor that proves
+  ineffective counts as a rejection. When the planner rejects
   an advisory, the job keeps one open issue, "Unresolved dependency
   advisories" (label `blocked-by-advisory`), listing each package and its
   reason. It closes the issue once `main` audits clean. The job holds the

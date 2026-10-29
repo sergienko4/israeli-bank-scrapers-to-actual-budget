@@ -31,7 +31,8 @@ name: Lockfile refresh
 # re2js (exact-pinned by markdownlint) turned main and every Dependabot pull
 # request red at once. The floor step raises an `overrides` floor for such an
 # advisory under rules R1–R7 (scripts/override-floor-logic.mjs), regenerates
-# only the floored packages and proves each floor cleared its advisory.
+# only the floored packages and proves each floor left its package with no
+# advisory.
 # `package.json` may change only inside `overrides`, which a dedicated step
 # verifies before anything is committed. The weekly and dispatched runs also
 # drop overrides that no longer change a single locked version. A floor that
@@ -163,7 +164,9 @@ jobs:
   advisory:
     name: Audit main for unresolved advisories
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The plan step regenerates the lockfile for the floored packages, up to
+    # twice, which a cold npm cache can stretch past a few minutes.
+    timeout-minutes: 20
     permissions:
       contents: read
       issues: write
@@ -198,16 +201,21 @@ jobs:
               ;;
           esac
 
-      # A read-only plan: --check writes nothing. It feeds the tracking issue
-      # below; the refresh job plans again from its own tree. A planner failure
-      # leaves the issue as it is rather than claiming every advisory is fine.
+      # The same --apply the refresh runs, in this job's throwaway checkout:
+      # only applying finds a floor that leaves its package with an advisory
+      # (`floor-ineffective`), and a read-only plan would miss it, so the
+      # issue below could stay silent while every run rolls that floor back.
+      # Nothing is installed or executed; the npm allow-list holds here too.
+      # The refresh job applies again on its own, further-updated tree. A
+      # planner failure leaves the issue as it is rather than claiming every
+      # advisory is fine.
       - name: Plan override floors
         id: plan
         if: steps.audit.outputs.red == 'true'
         run: |
           set -euo pipefail
           plan="${RUNNER_TEMP}/plan.json"
-          if ! node scripts/plan-override-floors.mjs --check > "${plan}" \
+          if ! node scripts/plan-override-floors.mjs --apply > "${plan}" \
             || ! jq -e '(.floors | type == "array") and (.rejections | type == "array")' "${plan}" > /dev/null; then
             echo '::warning::The override-floor planner failed; the tracking issue is left as it is.'
             echo 'planned=false' >> "${GITHUB_OUTPUT}"
@@ -392,8 +400,8 @@ jobs:
       # then regenerates the floored packages alone with
       #   npm update <pkgs> --package-lock-only --ignore-scripts
       #     --min-release-age=3 --min-release-age-exclude=@sergienko4/israeli-bank-scrapers
-      # (plus an exclude per fresh floor), re-audits, and drops any floor that
-      # did not clear its advisory, in at most two passes. Every npm call goes
+      # (plus an exclude per fresh floor), re-audits, and drops any floor whose
+      # package still has an advisory, in at most two passes. Every npm call goes
       # through the CLI's allow-list, so no install, `ci`, `exec` or `npx` can
       # run. `requires_review` is true when a floor is fresh or leaves its
       # locked line, or an advisory has no floor at all; the pull request step
