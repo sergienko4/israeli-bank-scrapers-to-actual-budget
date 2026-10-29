@@ -865,6 +865,20 @@ describe.skipIf(!CAN_RUN)('lockfile refresh advisory issue', () => {
     expect(run.status).toBe(0);
     expect(writes(run.ghCalls)).toEqual([]);
   });
+
+  it('replaces the open issue\'s rejection table, keeping it open, once every advisory has a floor', () => {
+    const run = runStep(step, {
+      env: { GH_TOKEN: 'token', RED: 'true' },
+      gh: { [listPath]: [tracking] },
+      tempFiles: { 'plan.json': { floors: [{ package: 're2js' }], rejections: [] } },
+    });
+
+    expect(run.status).toBe(0);
+    const patched = writes(run.ghCalls);
+    expect(patched).toEqual([expect.stringMatching(new RegExp(`^api -X PATCH repos/${REPO}/issues/9 -f body=`))]);
+    expect(patched[0]).toContain('every advisory now has an `overrides` floor');
+    expect(patched[0]).not.toContain('| Package |');
+  });
 });
 
 describe.skipIf(!CAN_RUN)('lockfile refresh override floors', () => {

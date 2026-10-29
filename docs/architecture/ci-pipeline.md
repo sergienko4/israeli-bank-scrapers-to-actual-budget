@@ -537,7 +537,8 @@ opens a PR when anything moved:
   ineffective counts as a rejection. When the planner rejects
   an advisory, the job keeps one open issue, "Unresolved dependency
   advisories" (label `blocked-by-advisory`), listing each package and its
-  reason. It closes the issue once `main` audits clean. The job holds the
+  reason. Once every advisory has a floor, the body says so instead. It
+  closes the issue once `main` audits clean. The job holds the
   workflow token with `issues: write` only; its audit and planner steps hold
   no token.
 - **The four-hourly run opens each change once.** While `main` stays red,

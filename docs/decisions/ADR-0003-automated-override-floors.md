@@ -131,7 +131,8 @@ recover on their own once `main` is clean.
    reveals a `floor-ineffective` floor. When the planner rejects any
    advisory, the job keeps one open issue titled
    "Unresolved dependency advisories", labelled `blocked-by-advisory`, whose
-   body is the rejection table. It closes that issue once `main` audits
+   body is the rejection table. Once every advisory has a floor, the body
+   says so instead, and the issue closes once `main` audits
    clean. That issue is the notification for an advisory no pull request can
    carry. The job uses the workflow token (`contents: read`,
    `issues: write`) and never `RELEASE_TOKEN`. The audit and planner steps

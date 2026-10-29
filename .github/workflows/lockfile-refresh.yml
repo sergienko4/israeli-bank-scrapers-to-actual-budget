@@ -228,8 +228,11 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       # One open issue, found by label, title and author so a human's issue is
-      # never edited or closed. It exists only while some advisory has no
+      # never edited or closed. It opens only while some advisory has no
       # floor: no pull request can carry that, so nothing else would notify.
+      # Once every advisory has a floor, its body says so, replacing a
+      # rejection table that no longer applies, and it stays open until `main`
+      # audits clean.
       # REST rather than `gh issue`, which goes through GraphQL mutations that
       # also touch deprecated classic projects. The jq filter is a literal, so
       # no API value is ever spliced into shell.
@@ -256,7 +259,13 @@ jobs:
             exit 0
           fi
           plan="${RUNNER_TEMP}/plan.json"
-          [ "$(jq '.rejections | length' "${plan}")" -gt 0 ] || exit 0
+          if [ "$(jq '.rejections | length' "${plan}")" -eq 0 ]; then
+            [ -n "${number}" ] || exit 0
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/${number}" \
+              -f body="\`main\` still fails \`npm run audit\`, but every advisory now has an \`overrides\` floor that the lockfile refresh carries, so none needs a maintainer. Updated by lockfile-refresh run ${GITHUB_RUN_ID}; this issue closes itself once \`main\` audits clean." > /dev/null
+            echo "::notice::Updated #${number}: no advisory is rejected."
+            exit 0
+          fi
           body="$(jq -r --arg run "${GITHUB_RUN_ID}" '
             "`main` fails `npm run audit`, and the lockfile refresh cannot raise an `overrides` floor for the advisories below. Each needs a maintainer: a declared-range bump, a reviewed override, or an accepted-risk entry in `config/audit-policy.mjs`.\n\n"
             + "| Package | Advisories | Reason |\n| --- | --- | --- |\n"
