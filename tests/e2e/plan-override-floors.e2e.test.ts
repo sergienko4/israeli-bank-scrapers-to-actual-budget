@@ -206,6 +206,26 @@ describe('plan-override-floors --apply', () => {
     expect(JSON.parse(run.stdout)).toMatchObject({ floors: [], rejections: [{ reason: 'floor-ineffective' }] });
     expect({ manifest: read('package.json'), lock: read('package-lock.json') }).toEqual(before);
   });
+
+  it('drops a floor that npm resolves above, into an advisory the plan never saw', () => {
+    const drift = vulnerablePackage('drift', 'GHSA-drft-drft-drft');
+    writeProject({}, { drift: '1.0.0' }, {
+      advisories: [...drift.advisories, { name: 'drift', ghsa: 'GHSA-newr-newr-newr', range: '>=1.0.2 <1.0.3', vulnerable: ['1.0.2'] }],
+      times: { drift: { ...drift.times.drift, '1.0.2': OLD } },
+      resolve: { drift: { withOverride: '1.0.2', withoutOverride: '1.0.0' } },
+    });
+    const before = { manifest: read('package.json'), lock: read('package-lock.json') };
+
+    const run = runCli(['--apply']);
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toEqual({
+      floors: [],
+      rejections: [{ package: 'drift', ghsas: ['GHSA-drft-drft-drft'], reason: 'floor-ineffective' }],
+      requiresReview: true,
+    });
+    expect({ manifest: read('package.json'), lock: read('package-lock.json') }).toEqual(before);
+  });
 });
 
 describe('plan-override-floors --check', () => {

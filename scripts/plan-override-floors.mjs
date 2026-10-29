@@ -10,8 +10,8 @@
  *     Print the floor plan for the committed tree. Writes nothing.
  *   node scripts/plan-override-floors.mjs --apply
  *     Write the planned floors, regenerate the lockfile, re-audit, and drop any
- *     floor that did not clear its advisory (at most two passes). Prints the
- *     final plan.
+ *     floor whose package still has an advisory (at most two passes). Prints
+ *     the final plan.
  *   node scripts/plan-override-floors.mjs --prune [--check]
  *     Remove every override whose removal locks exactly the same versions.
  *     With --check, report without keeping any removal.
@@ -185,17 +185,21 @@ function updateArgs(floors) {
 
 /**
  * Writes floors onto the snapshot, regenerates the lockfile and re-audits.
+ * A floor counts only when its package is left with no advisory at all,
+ * accepted or not — the same bar R3 planned it against. `npm update` may
+ * resolve above the floor, into a version that is still in a range or that
+ * carries an advisory the planner never saw.
  *
  * @param {{ manifest: string, lock: string }} base The pre-floor files.
  * @param {ReadonlyArray<object>} floors The floors to try.
- * @returns {string[]} Packages whose floor left one of its advisories in place.
+ * @returns {string[]} Packages that still have an advisory after their floor.
  */
 function tryFloors(base, floors) {
   restore(base);
   writeManifest(applyFloors(JSON.parse(base.manifest), floors));
   runNpm(updateArgs(floors));
-  const remaining = new Set(auditTree().violations.map(violation => `${violation.package}::${violation.ghsa}`));
-  return floors.filter(floor => floor.ghsas.some(ghsa => remaining.has(`${floor.package}::${ghsa}`))).map(floor => floor.package);
+  const flagged = new Set(auditTree().advisories.map(advisory => advisory.package));
+  return floors.filter(floor => flagged.has(floor.package)).map(floor => floor.package);
 }
 
 /**
@@ -212,9 +216,10 @@ function finalPlan(floors, rejections) {
 }
 
 /**
- * Applies the plan, proving each floor cleared its advisories. A floor that did
- * not becomes `floor-ineffective` and the rest are retried; after the last
- * pass every unproven floor is rejected and both files are left untouched.
+ * Applies the plan, proving each floor left its package with no advisory. A
+ * floor that did not becomes `floor-ineffective` and the rest are retried;
+ * after the last pass every unproven floor is rejected and both files are left
+ * untouched.
  *
  * @param {{ manifest: string, lock: string }} base The pre-floor files.
  * @returns {import('./override-floor-logic.d.mts').IFloorPlan} The final plan.
