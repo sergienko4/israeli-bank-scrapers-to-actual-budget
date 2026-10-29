@@ -867,7 +867,7 @@ describe.skipIf(!CAN_RUN)('lockfile refresh advisory issue', () => {
   });
 
   it.each([
-    ['no review', false, 'none needs a maintainer'],
+    ['no review', false, 'no floor needs review; the lockfile refresh pull request carries them, and is held for a maintainer only if another change'],
     ['a review', true, 'labelled `needs-manual-review` and waits for a maintainer'],
     ['an unstated review', undefined, 'labelled `needs-manual-review` and waits for a maintainer'],
   ])('replaces the open issue\'s rejection table, keeping it open, once every advisory has a floor needing %s', (_case, requiresReview, status) => {

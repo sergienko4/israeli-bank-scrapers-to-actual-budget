@@ -231,9 +231,10 @@ jobs:
       # never edited or closed. It opens only while some advisory has no
       # floor: no pull request can carry that, so nothing else would notify.
       # Once every advisory has a floor, its body says so, replacing a
-      # rejection table that no longer applies, and says whether the refresh
-      # still waits for a maintainer (a fresh or line-leaving floor, or a plan
-      # that does not say). It stays open until `main` audits clean.
+      # rejection table that no longer applies, and says whether a floor
+      # holds the refresh for a maintainer (a fresh or line-leaving floor, or
+      # a plan that does not say); the refresh's own verdict can still hold it
+      # for other reasons. It stays open until `main` audits clean.
       # REST rather than `gh issue`, which goes through GraphQL mutations that
       # also touch deprecated classic projects. The jq filter is a literal, so
       # no API value is ever spliced into shell.
@@ -265,7 +266,7 @@ jobs:
             body="$(jq -r --arg run "${GITHUB_RUN_ID}" '
               "`main` still fails `npm run audit`. Every advisory now has an `overrides` floor, "
               + (if .requiresReview == false
-                 then "and the lockfile refresh carries them without review, so none needs a maintainer."
+                 then "and no floor needs review; the lockfile refresh pull request carries them, and is held for a maintainer only if another change in it needs review."
                  else "but at least one is fresh or leaves its locked line, so the lockfile refresh pull request is labelled `needs-manual-review` and waits for a maintainer to review and merge it." end)
               + "\n\nUpdated by lockfile-refresh run \($run); this issue closes itself once `main` audits clean."' "${plan}")"
             gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/${number}" -f body="${body}" > /dev/null

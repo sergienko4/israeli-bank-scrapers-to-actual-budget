@@ -538,7 +538,7 @@ opens a PR when anything moved:
   an advisory, the job keeps one open issue, "Unresolved dependency
   advisories" (label `blocked-by-advisory`), listing each package and its
   reason. Once every advisory has a floor, the body says so instead, and
-  whether the refresh still waits for a maintainer. It
+  whether a floor holds the refresh for a maintainer. It
   closes the issue once `main` audits clean. The job holds the
   workflow token with `issues: write` only; its audit and planner steps hold
   no token.
