@@ -95,7 +95,11 @@ recover on their own once `main` is clean.
    - re-audits;
    - drops any floor whose package still has an advisory, accepted or not, as
      `floor-ineffective` — `npm update` may resolve above the floor into a
-     version that is still affected — retrying the rest at most twice.
+     version that is still affected — retrying the rest at most twice;
+   - drops every floor in the pass the same way when the regenerated tree
+     has a blocking advisory on any other package that the tree before the
+     floors did not have: a floored release brought it in, and npm cannot say
+     which one.
 
    Every npm call passes an allow-list (`assertAllowedNpmArgs`): lockfile-only
    `audit`, `view <pkg> time` and `update --ignore-scripts`, through

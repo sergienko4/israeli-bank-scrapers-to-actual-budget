@@ -28,7 +28,8 @@ const OLD = '2026-01-01T00:00:00.000Z';
  * The npm stand-in. State comes from fake-npm-state.json in the project:
  * `advisories` (name, ghsa, range, vulnerable versions), `times` per package,
  * and `resolve` per package (the version `update` locks with and without an
- * override). A package listed in `ineffective` ignores its override.
+ * override, plus `also`: other packages the overridden release relocks). A
+ * package listed in `ineffective` ignores its override.
  */
 const FAKE_NPM = `
 const fs = require('node:fs');
@@ -59,6 +60,7 @@ const commands = {
       if ((state.ineffective ?? []).includes(name)) continue;
       const pick = state.resolve[name];
       lock.packages['node_modules/' + name].version = overrides[name] ? pick.withOverride : pick.withoutOverride;
+      for (const [dep, version] of Object.entries(overrides[name] ? pick.also ?? {} : {})) lock.packages['node_modules/' + dep].version = version;
     }
     fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\\n');
     return 0;
@@ -78,7 +80,7 @@ interface ICliRun {
 interface IFakeState {
   advisories: Array<{ name: string; ghsa: string; range: string; vulnerable: string[] }>;
   times: Record<string, Record<string, string>>;
-  resolve: Record<string, { withOverride: string; withoutOverride: string }>;
+  resolve: Record<string, { withOverride: string; withoutOverride: string; also?: Record<string, string> }>;
   ineffective?: string[];
 }
 
@@ -225,6 +227,45 @@ describe('plan-override-floors --apply', () => {
       requiresReview: true,
     });
     expect({ manifest: read('package.json'), lock: read('package-lock.json') }).toEqual(before);
+  });
+
+  it('drops a floor whose release pulls a new blocking advisory onto another package', () => {
+    const host = vulnerablePackage('host', 'GHSA-host-host-host');
+    writeProject({}, { host: '1.0.0', dep: '1.0.0' }, {
+      advisories: [...host.advisories, { name: 'dep', ghsa: 'GHSA-depp-depp-depp', range: '>=2.0.0', vulnerable: ['2.0.0'] }],
+      times: host.times,
+      resolve: { host: { ...host.resolve.host, also: { dep: '2.0.0' } } },
+    });
+    const before = { manifest: read('package.json'), lock: read('package-lock.json') };
+
+    const run = runCli(['--apply']);
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toEqual({
+      floors: [],
+      rejections: [{ package: 'host', ghsas: ['GHSA-host-host-host'], reason: 'floor-ineffective' }],
+      requiresReview: true,
+    });
+    expect({ manifest: read('package.json'), lock: read('package-lock.json') }).toEqual(before);
+  });
+
+  it('keeps a floor when the only other blocking advisory was already in the tree', () => {
+    const good = vulnerablePackage('good', 'GHSA-good-good-good');
+    const gone = vulnerablePackage('gone', 'GHSA-gone-gone-gone');
+    writeProject({}, { good: '1.0.0', gone: '1.0.0' }, {
+      advisories: [...good.advisories, ...gone.advisories],
+      times: good.times,
+      resolve: good.resolve,
+    });
+
+    const run = runCli(['--apply']);
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toMatchObject({
+      floors: [{ package: 'good' }],
+      rejections: [{ package: 'gone', reason: 'missing-publish-times' }],
+    });
+    expect(JSON.parse(read('package.json')).overrides).toEqual({ good: '^1.0.1' });
   });
 });
 

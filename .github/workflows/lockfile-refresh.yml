@@ -401,7 +401,8 @@ jobs:
       #   npm update <pkgs> --package-lock-only --ignore-scripts
       #     --min-release-age=3 --min-release-age-exclude=@sergienko4/israeli-bank-scrapers
       # (plus an exclude per fresh floor), re-audits, and drops any floor whose
-      # package still has an advisory, in at most two passes. Every npm call goes
+      # package still has an advisory, in at most two passes; a pass that adds
+      # a blocking advisory to any other package drops every floor. Every npm call goes
       # through the CLI's allow-list, so no install, `ci`, `exec` or `npx` can
       # run. `requires_review` is true when a floor is fresh or leaves its
       # locked line, or an advisory has no floor at all; the pull request step

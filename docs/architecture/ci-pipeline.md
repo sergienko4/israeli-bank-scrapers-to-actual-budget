@@ -512,7 +512,8 @@ opens a PR when anything moved:
   It regenerates only the floored packages with `npm update` under the same
   three-day release-age rule as Dependabot, re-audits, and drops any floor
   whose package still has an advisory, accepted or not, in at most two
-  passes. Every npm call
+  passes. It drops every floor in a pass that left a blocking advisory on
+  another package the tree did not have before. Every npm call
   passes an allow-list, so no install, `ci`, `exec` or `npx` runs. A failure
   restores both files and the refresh carries no floor. The next step fails
   the job if `package.json` differs anywhere outside the override keys the

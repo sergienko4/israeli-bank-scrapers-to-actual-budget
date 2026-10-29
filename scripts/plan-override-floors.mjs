@@ -147,10 +147,11 @@ function fetchPublishTimes(names) {
 /**
  * Plans floors for the tree on disk.
  *
+ * @param {{ advisories: object[], violations: object[] }} [audit] The tree's audit, when already run.
  * @returns {import('./override-floor-logic.d.mts').IFloorPlan} The plan.
  */
-function planCurrentTree() {
-  const { advisories, violations } = auditTree();
+function planCurrentTree(audit = auditTree()) {
+  const { advisories, violations } = audit;
   const names = [...new Set(violations.map(violation => violation.package))];
   return planOverrideFloors({
     violations,
@@ -184,22 +185,49 @@ function updateArgs(floors) {
 }
 
 /**
+ * Identifies one blocking advisory on one package.
+ *
+ * @param {{ package: string, ghsa: string }} violation The violation.
+ * @returns {string} Its key.
+ */
+function violationKey(violation) {
+  return `${violation.package}::${violation.ghsa}`;
+}
+
+/**
+ * Judges a regenerated tree. A floor counts only when its package is left with
+ * no advisory at all, accepted or not — the same bar R3 planned it against:
+ * `npm update` may resolve above the floor, into a version that is still in a
+ * range or carries an advisory the planner never saw. A blocking advisory new
+ * on any other package came in with a floored release; npm cannot say which,
+ * so every floor in the pass is unproven.
+ *
+ * @param {{ advisories: object[], violations: object[] }} audit The regenerated tree's audit.
+ * @param {ReadonlyArray<object>} floors The floors tried.
+ * @param {ReadonlySet<string>} known Violation keys of the tree before any floor.
+ * @returns {string[]} Packages whose floor is unproven.
+ */
+function unprovenFloors(audit, floors, known) {
+  const floored = new Set(floors.map(floor => floor.package));
+  const introduced = audit.violations.some(violation => !floored.has(violation.package) && !known.has(violationKey(violation)));
+  if (introduced) return [...floored];
+  const flagged = new Set(audit.advisories.map(advisory => advisory.package));
+  return floors.filter(floor => flagged.has(floor.package)).map(floor => floor.package);
+}
+
+/**
  * Writes floors onto the snapshot, regenerates the lockfile and re-audits.
- * A floor counts only when its package is left with no advisory at all,
- * accepted or not — the same bar R3 planned it against. `npm update` may
- * resolve above the floor, into a version that is still in a range or that
- * carries an advisory the planner never saw.
  *
  * @param {{ manifest: string, lock: string }} base The pre-floor files.
  * @param {ReadonlyArray<object>} floors The floors to try.
- * @returns {string[]} Packages that still have an advisory after their floor.
+ * @param {ReadonlySet<string>} known Violation keys of the tree before any floor.
+ * @returns {string[]} Packages whose floor is unproven.
  */
-function tryFloors(base, floors) {
+function tryFloors(base, floors, known) {
   restore(base);
   writeManifest(applyFloors(JSON.parse(base.manifest), floors));
   runNpm(updateArgs(floors));
-  const flagged = new Set(auditTree().advisories.map(advisory => advisory.package));
-  return floors.filter(floor => flagged.has(floor.package)).map(floor => floor.package);
+  return unprovenFloors(auditTree(), floors, known);
 }
 
 /**
@@ -216,20 +244,22 @@ function finalPlan(floors, rejections) {
 }
 
 /**
- * Applies the plan, proving each floor left its package with no advisory. A
- * floor that did not becomes `floor-ineffective` and the rest are retried;
- * after the last pass every unproven floor is rejected and both files are left
- * untouched.
+ * Applies the plan, proving each floor left its package with no advisory and
+ * brought no new blocking advisory onto any other package. An unproven floor
+ * becomes `floor-ineffective` and the rest are retried; after the last pass
+ * every unproven floor is rejected and both files are left untouched.
  *
  * @param {{ manifest: string, lock: string }} base The pre-floor files.
  * @returns {import('./override-floor-logic.d.mts').IFloorPlan} The final plan.
  */
 function applyPlan(base) {
-  const plan = planCurrentTree();
+  const audit = auditTree();
+  const known = new Set(audit.violations.map(violationKey));
+  const plan = planCurrentTree(audit);
   let floors = plan.floors;
   const rejections = [...plan.rejections];
   for (let pass = 1; floors.length > 0; pass++) {
-    const ineffective = tryFloors(base, floors);
+    const ineffective = tryFloors(base, floors, known);
     if (ineffective.length === 0) break;
     restore(base);
     const stuck = floors.filter(floor => pass >= MAX_PASSES || ineffective.includes(floor.package));
