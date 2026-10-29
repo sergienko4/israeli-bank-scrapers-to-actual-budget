@@ -99,7 +99,10 @@ recover on their own once `main` is clean.
    - drops every floor in the pass the same way when the regenerated tree
      has a blocking advisory on any other package that the tree before the
      floors did not have: a floored release brought it in, and npm cannot say
-     which one.
+     which one;
+   - when floors survive, keeps only the rejections whose package still has a
+     blocking advisory in the floored tree, since a floored release may have
+     relocked or dropped a package the plan rejected.
 
    Every npm call passes an allow-list (`assertAllowedNpmArgs`): lockfile-only
    `audit`, `view <pkg> time` and `update --ignore-scripts`, through

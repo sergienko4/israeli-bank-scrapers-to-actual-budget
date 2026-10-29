@@ -513,7 +513,8 @@ opens a PR when anything moved:
   three-day release-age rule as Dependabot, re-audits, and drops any floor
   whose package still has an advisory, accepted or not, in at most two
   passes. It drops every floor in a pass that left a blocking advisory on
-  another package the tree did not have before. Every npm call
+  another package the tree did not have before, and drops any rejection whose
+  package no longer blocks in the floored tree. Every npm call
   passes an allow-list, so no install, `ci`, `exec` or `npx` runs. A failure
   restores both files and the refresh carries no floor. The next step fails
   the job if `package.json` differs anywhere outside the override keys the

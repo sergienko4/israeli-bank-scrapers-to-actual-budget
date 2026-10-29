@@ -267,6 +267,22 @@ describe('plan-override-floors --apply', () => {
     });
     expect(JSON.parse(read('package.json')).overrides).toEqual({ good: '^1.0.1' });
   });
+
+  it('clears a rejection once a surviving floor relocks that package past its advisory', () => {
+    const host = vulnerablePackage('host', 'GHSA-host-host-host');
+    const dep = vulnerablePackage('dep', 'GHSA-depp-depp-depp');
+    writeProject({}, { host: '1.0.0', dep: '1.0.0' }, {
+      advisories: [...host.advisories, ...dep.advisories],
+      times: host.times,
+      resolve: { host: { ...host.resolve.host, also: { dep: '1.0.1' } } },
+    });
+
+    const run = runCli(['--apply']);
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toMatchObject({ floors: [{ package: 'host' }], rejections: [], requiresReview: false });
+    expect(JSON.parse(read('package-lock.json')).packages['node_modules/dep'].version).toBe('1.0.1');
+  });
 });
 
 describe('plan-override-floors --check', () => {

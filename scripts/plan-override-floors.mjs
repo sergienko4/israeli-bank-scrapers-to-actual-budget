@@ -221,13 +221,28 @@ function unprovenFloors(audit, floors, known) {
  * @param {{ manifest: string, lock: string }} base The pre-floor files.
  * @param {ReadonlyArray<object>} floors The floors to try.
  * @param {ReadonlySet<string>} known Violation keys of the tree before any floor.
- * @returns {string[]} Packages whose floor is unproven.
+ * @returns {{ audit: { advisories: object[], violations: object[] }, unproven: string[] }} The regenerated tree's audit and the packages whose floor is unproven.
  */
 function tryFloors(base, floors, known) {
   restore(base);
   writeManifest(applyFloors(JSON.parse(base.manifest), floors));
   runNpm(updateArgs(floors));
-  return unprovenFloors(auditTree(), floors, known);
+  const audit = auditTree();
+  return { audit, unproven: unprovenFloors(audit, floors, known) };
+}
+
+/**
+ * Keeps the rejections whose package still has a blocking advisory in the
+ * floored tree. A surviving floor's release may have relocked or dropped a
+ * package the plan rejected; holding the refresh for it would be stale.
+ *
+ * @param {object[]} rejections The rejections so far.
+ * @param {{ violations: object[] }} audit The floored tree's audit.
+ * @returns {object[]} The rejections that still stand.
+ */
+function stillBlocking(rejections, audit) {
+  const blocking = new Set(audit.violations.map(violation => violation.package));
+  return rejections.filter(rejection => blocking.has(rejection.package));
 }
 
 /**
@@ -247,7 +262,8 @@ function finalPlan(floors, rejections) {
  * Applies the plan, proving each floor left its package with no advisory and
  * brought no new blocking advisory onto any other package. An unproven floor
  * becomes `floor-ineffective` and the rest are retried; after the last pass
- * every unproven floor is rejected and both files are left untouched.
+ * every unproven floor is rejected and both files are left untouched. When
+ * floors survive, only rejections still blocking in the floored tree remain.
  *
  * @param {{ manifest: string, lock: string }} base The pre-floor files.
  * @returns {import('./override-floor-logic.d.mts').IFloorPlan} The final plan.
@@ -257,12 +273,15 @@ function applyPlan(base) {
   const known = new Set(audit.violations.map(violationKey));
   const plan = planCurrentTree(audit);
   let floors = plan.floors;
-  const rejections = [...plan.rejections];
+  let rejections = [...plan.rejections];
   for (let pass = 1; floors.length > 0; pass++) {
-    const ineffective = tryFloors(base, floors, known);
-    if (ineffective.length === 0) break;
+    const trial = tryFloors(base, floors, known);
+    if (trial.unproven.length === 0) {
+      rejections = stillBlocking(rejections, trial.audit);
+      break;
+    }
     restore(base);
-    const stuck = floors.filter(floor => pass >= MAX_PASSES || ineffective.includes(floor.package));
+    const stuck = floors.filter(floor => pass >= MAX_PASSES || trial.unproven.includes(floor.package));
     rejections.push(...stuck.map(floor => ({ package: floor.package, ghsas: floor.ghsas, reason: 'floor-ineffective' })));
     floors = floors.filter(floor => !stuck.includes(floor));
   }
