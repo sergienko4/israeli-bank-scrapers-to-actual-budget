@@ -56,7 +56,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@actual-app/api": "^26.10.0",
+    "@actual-app/api": "^26.11.0",
     "@fastify/cookie": "^11.1.5",
     "@fastify/rate-limit": "^11.2.1",
     "@fastify/static": "^10.1.8",
