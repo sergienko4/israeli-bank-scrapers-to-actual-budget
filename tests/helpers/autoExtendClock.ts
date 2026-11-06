@@ -41,28 +41,17 @@ export function pastExpiryMs(expires: string): number {
 /**
  * Lists the shipped acceptances that opted in to auto-extension.
  *
+ * Suites derive their past-expiry fixtures from this list, so renaming a
+ * package or moving its fix version cannot leave one exercising a stale copy.
+ * A suite built with `describe.each` over it registers nothing when the list
+ * is empty, which is the state after the last opt-in is removed.
+ *
  * @returns The entries of `ACCEPTED_ADVISORIES` carrying `autoExtend`, in order.
  */
 export function autoExtendingEntries(): IAutoExtendingEntry[] {
   return ACCEPTED_ADVISORIES.filter(
     (entry): entry is IAutoExtendingEntry => entry.autoExtend !== undefined,
   );
-}
-
-/**
- * Returns the first shipped acceptance that auto-extends.
- *
- * Deriving the past-expiry fixtures from shipped data keeps them honest:
- * renaming the package or moving its fix version cannot leave a suite
- * exercising a stale copy.
- *
- * @returns The first auto-extending entry.
- * @throws Error when no shipped acceptance auto-extends.
- */
-export function shippedAutoExtendingEntry(): IAutoExtendingEntry {
-  const [entry] = autoExtendingEntries();
-  if (entry === undefined) throw new Error('no shipped acceptance auto-extends');
-  return entry;
 }
 
 /**

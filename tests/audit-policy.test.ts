@@ -923,6 +923,7 @@ describe('classifyCommittedAudit, the entries that actually ship', () => {
         package: entry.package,
         severity: 'high',
         title: `Shipped acceptance for ${entry.package}`,
+        range: REPORTED_RANGES[entry.package],
       };
 
       // The tree comes from the fixture above, never from the entry under
@@ -935,7 +936,11 @@ describe('classifyCommittedAudit, the entries that actually ship', () => {
         treeFor(entry.package) === 'production' ? new Set([entry.package]) : new Set<string>();
 
       // No third argument, so the default ACCEPTED_ADVISORIES path is
-      // exercised, against the committed lockfile and today's date.
+      // exercised, against the committed lockfile and today's date. The
+      // advisory carries npm's reported range: past an auto-extending entry's
+      // expiry the planner reads blockers from it, and without one this
+      // would start failing on the expiry date however many tools still
+      // block the fix.
       const { violations, accepted } = classifyCommittedAudit({ advisories: [live], productionPackages }, shippedLock);
 
       expect(violations, `${entry.package} must not block the build`).toEqual([]);
@@ -947,11 +952,14 @@ describe('classifyCommittedAudit, the entries that actually ship', () => {
     // The entry is a development-tree deferral because the glob override fixes
     // the production copy. If minimatch ever returns to the published image,
     // the gate has to stop honouring the entry instead of shipping the advisory.
+    // The advisory carries npm's range, as in the case above, so the entry
+    // still finds its blockers once it is past its expiry.
     const live = {
       ghsa: 'GHSA-g3hv-75wg-m249',
       package: 'minimatch',
       severity: 'moderate',
       title: 'Shipped acceptance for minimatch',
+      range: REPORTED_RANGES.minimatch,
     };
 
     const development = classifyCommittedAudit({ advisories: [live], productionPackages: notInProductionTree }, shippedLock);
@@ -973,6 +981,10 @@ describe('classifyCommittedAudit, the entries that actually ship', () => {
       .map(entry => [entry.package, entry.autoExtend?.fixedIn]);
 
     expect(optedIn).toEqual([['minimatch', '11.0.1']]);
+
+    // The clock suites loop over this helper, and a helper that saw none
+    // would pass them all vacuously.
+    expect(autoExtendingEntries().map(entry => [entry.package, entry.autoExtend.fixedIn])).toEqual(optedIn);
   });
 
   it('ships no entry with blockers already attached', () => {
@@ -985,10 +997,7 @@ describe('classifyCommittedAudit, the entries that actually ship', () => {
   });
 
   it('keeps each auto-extending entry past its expiry only while a locked package blocks the fix', () => {
-    const extending = autoExtendingEntries();
-    expect(extending, 'at least one shipped entry must auto-extend').not.toEqual([]);
-
-    for (const entry of extending) {
+    for (const entry of autoExtendingEntries()) {
       const { fixedIn } = entry.autoExtend;
       const audit = {
         advisories: [{

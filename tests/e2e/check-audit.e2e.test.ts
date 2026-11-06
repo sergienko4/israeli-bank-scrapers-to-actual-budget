@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import { ACCEPTED_ADVISORIES } from '../../config/audit-policy.mjs';
-import { pastExpiryMs, shippedAutoExtendingEntry, writeFrozenClock } from '../helpers/autoExtendClock.js';
+import { autoExtendingEntries, pastExpiryMs, writeFrozenClock } from '../helpers/autoExtendClock.js';
 
 const CLI = fileURLToPath(new URL('../../config/check-audit.mjs', import.meta.url));
 
@@ -155,11 +155,12 @@ describe('check-audit warnings', () => {
   });
 });
 
-describe("check-audit past an auto-extending acceptance's expiry", () => {
+describe.each(autoExtendingEntries())("check-audit past the $package acceptance's expiry", entry => {
   // The clock is frozen inside the gate's process, a day and a half past the
   // shipped entry's expiry, so these cases run the date the gate will
-  // actually face rather than today's.
-  const entry = shippedAutoExtendingEntry();
+  // actually face rather than today's. The suite is built from a table, so
+  // a tree that ships no auto-extending entry registers none instead of
+  // failing the whole file.
   const { ghsa, package: pkg, expires } = entry;
   const { fixedIn } = entry.autoExtend;
   const full = {

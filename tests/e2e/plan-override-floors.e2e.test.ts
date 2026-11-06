@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { pastExpiryMs, shippedAutoExtendingEntry, writeFrozenClock } from '../helpers/autoExtendClock.js';
+import { autoExtendingEntries, pastExpiryMs, writeFrozenClock } from '../helpers/autoExtendClock.js';
 
 const CLI = fileURLToPath(new URL('../../scripts/plan-override-floors.mjs', import.meta.url));
 const OLD = '2026-01-01T00:00:00.000Z';
@@ -348,11 +348,12 @@ describe('plan-override-floors --check', () => {
   });
 });
 
-describe("plan-override-floors --check past an auto-extending acceptance's expiry", () => {
+describe.each(autoExtendingEntries())("plan-override-floors --check past the $package acceptance's expiry", entry => {
   // The planner only plans floors for what the gate would block. Past the
   // shipped entry's expiry, a locked package that still blocks the fix keeps
-  // the advisory accepted, so the planner must leave it alone.
-  const entry = shippedAutoExtendingEntry();
+  // the advisory accepted, so the planner must leave it alone. The suite is
+  // built from a table, so a tree that ships no auto-extending entry
+  // registers none instead of failing the whole file.
   const { ghsa, package: pkg, expires } = entry;
   const { fixedIn } = entry.autoExtend;
 
