@@ -6,6 +6,7 @@
 
 import type { ExecFileSyncOptionsWithStringEncoding } from 'node:child_process';
 
+import type { LockPackages } from './audit-blockers.mjs';
 import type { IAdvisory } from './audit-policy.mjs';
 
 /** An advisory flattened from `npm audit --json`, with its vulnerable range. */
@@ -45,3 +46,6 @@ export function collectAdvisories(report: IAuditReport): IAuditAdvisory[];
 
 /** Audits the committed tree, including the production-only view. */
 export function auditCommittedTree(exec?: NpmExec): ICommittedTreeAudit;
+
+/** Reads the committed lockfile's `packages` map, or an empty map when it cannot. */
+export function readLockPackages(cwd?: string): LockPackages;

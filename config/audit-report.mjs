@@ -6,10 +6,14 @@
  * planner (scripts/plan-override-floors.mjs), so both read the same findings.
  * Every run passes `--package-lock-only`: the audit reads package-lock.json, not
  * node_modules, so it can run in a job that installs nothing and it always
- * judges exactly what is committed.
+ * judges exactly what is committed. For the same reason the lockfile's
+ * `packages` map, which auto-extending acceptances are resolved against, is
+ * read from the same directory the audit reads.
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Resolves how to invoke the npm CLI without going through a shell.
@@ -126,4 +130,24 @@ export function auditCommittedTree(exec = execFileSync) {
   const advisories = collectAdvisories(runAudit([], exec));
   const production = collectAdvisories(runAudit(['--omit=dev'], exec));
   return { advisories, productionPackages: new Set(production.map(advisory => advisory.package)) };
+}
+
+/**
+ * Reads the committed lockfile's `packages` map from a project directory.
+ *
+ * A missing or malformed lockfile yields an empty map instead of an error. An
+ * empty map has no blockers, so an expired auto-extending acceptance simply
+ * expires and the gate fails closed; it can never extend on a lockfile that
+ * was not read.
+ *
+ * @param {string} [cwd] Directory holding package-lock.json, the one npm audit reads.
+ * @returns {Record<string, object>} The lockfile's packages, or an empty map.
+ */
+export function readLockPackages(cwd = process.cwd()) {
+  try {
+    const packages = JSON.parse(readFileSync(join(cwd, 'package-lock.json'), 'utf8'))?.packages;
+    return packages && typeof packages === 'object' && !Array.isArray(packages) ? packages : {};
+  } catch {
+    return {};
+  }
 }

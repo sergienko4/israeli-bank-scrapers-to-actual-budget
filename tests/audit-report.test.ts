@@ -8,9 +8,13 @@
  * clean report.
  */
 
-import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { auditCommittedTree, collectAdvisories, runAudit } from '../config/audit-report.mjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { auditCommittedTree, collectAdvisories, readLockPackages, runAudit } from '../config/audit-report.mjs';
 import type { IAuditReport, NpmExec } from '../config/audit-report.mjs';
 
 const RE2JS_URL = 'https://github.com/advisories/GHSA-gg6h-894w-4m9c';
@@ -119,5 +123,64 @@ describe('auditCommittedTree', () => {
     expect(calls).toHaveLength(2);
     expect(audit.advisories.map(advisory => advisory.package)).toEqual(['re2js', 'sax']);
     expect([...audit.productionPackages]).toEqual(['sax']);
+  });
+});
+
+describe('readLockPackages', () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'read-lock-packages-'));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  /**
+   * Writes the test directory's package-lock.json verbatim.
+   *
+   * @param text The file content.
+   */
+  function writeLock(text: string): void {
+    writeFileSync(join(dir, 'package-lock.json'), text);
+  }
+
+  it('returns the packages map of a well-formed lockfile', () => {
+    const packages = {
+      '': { version: '1.0.0', dependencies: { holder: '^1.0.0' } },
+      'node_modules/holder': { version: '1.0.0', dependencies: { 'demo-pkg': '^1.0.0' } },
+    };
+    writeLock(JSON.stringify({ lockfileVersion: 3, packages }));
+
+    expect(readLockPackages(dir)).toEqual(packages);
+  });
+
+  it('returns an empty map when the lockfile is missing', () => {
+    expect(readLockPackages(dir)).toEqual({});
+  });
+
+  // An empty map has no blockers, so an expired auto-extending acceptance
+  // expires instead of extending on a lockfile that could not be read.
+  it.each([
+    ['the file is not JSON', '{ "packages": '],
+    ['the packages key is missing', JSON.stringify({ lockfileVersion: 3 })],
+    ['packages is null', JSON.stringify({ packages: null })],
+    ['packages is an array', JSON.stringify({ packages: [{ version: '1.0.0' }] })],
+    ['packages is a string', JSON.stringify({ packages: 'node_modules/holder' })],
+    ['the document is null', 'null'],
+  ])('returns an empty map when %s', (_case, text) => {
+    writeLock(text);
+
+    expect(readLockPackages(dir)).toEqual({});
+  });
+
+  it('reads the lockfile in the working directory by default', () => {
+    const packages = { 'node_modules/holder': { version: '1.0.0' } };
+    writeLock(JSON.stringify({ packages }));
+    vi.spyOn(process, 'cwd').mockReturnValue(dir);
+
+    expect(readLockPackages()).toEqual(packages);
   });
 });

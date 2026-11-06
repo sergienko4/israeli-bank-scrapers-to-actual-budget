@@ -29,8 +29,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
-import { classifyAdvisories } from '../config/audit-policy.mjs';
-import { auditCommittedTree, npmInvocation } from '../config/audit-report.mjs';
+import { classifyCommittedAudit } from '../config/audit-policy.mjs';
+import { auditCommittedTree, npmInvocation, readLockPackages } from '../config/audit-report.mjs';
 import {
   applyFloors,
   assertAllowedNpmArgs,
@@ -119,11 +119,15 @@ function restore(files) {
  * Audits the committed tree and classifies it against the accepted-advisory
  * policy, exactly as `npm run audit` does.
  *
+ * Acceptances are resolved against the lockfile on disk, so an entry the gate
+ * keeps auto-extended is honoured here too, and no floor is planned for an
+ * advisory the gate already accepts.
+ *
  * @returns {{ advisories: object[], violations: object[] }} Every advisory and the blocking ones.
  */
 function auditTree() {
-  const { advisories, productionPackages } = auditCommittedTree(guardedExec);
-  return { advisories, violations: classifyAdvisories(advisories, productionPackages).violations };
+  const audit = auditCommittedTree(guardedExec);
+  return { advisories: audit.advisories, violations: classifyCommittedAudit(audit, readLockPackages()).violations };
 }
 
 /**

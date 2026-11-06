@@ -8,6 +8,7 @@ import {
 } from '../config/audit-blockers.mjs';
 import {
   ACCEPTED_ADVISORIES,
+  auditWarnings,
   classifyAdvisories,
   classifyCommittedAudit,
   expiringSoon,
@@ -775,6 +776,91 @@ describe('unusedEntries, acceptances npm audit no longer needs', () => {
     ];
 
     expect(unusedEntries([kept], advisories)).toEqual([kept]);
+  });
+});
+
+describe('auditWarnings, non-blocking annotations for the gate', () => {
+  beforeEach(freezeClockAtAnchor);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A second reported development advisory, for the ordering case. */
+  const soonAdvisory = { ...advisory, ghsa: 'GHSA-soon-0000-0000', package: 'soon-pkg' };
+
+  /**
+   * Builds an ordinary development-tree entry for an advisory.
+   *
+   * @param target The advisory the entry covers.
+   * @param expiresInDays Offset of the expiry from today.
+   * @returns The entry.
+   */
+  function plainEntry(target: { ghsa: string; package: string }, expiresInDays: number): IRawAcceptedAdvisory {
+    return { ghsa: target.ghsa, package: target.package, expires: isoDaysFromToday(expiresInDays), reason: 'Dev-only.' };
+  }
+
+  it('stays quiet for an acceptance in use and outside the warning window', () => {
+    const classification = classifyCommittedAudit(DEV_AUDIT, {}, [plainEntry(advisory, EXPIRY_WARNING_DAYS + 1)]);
+
+    expect(classification.accepted).toHaveLength(1);
+    expect(auditWarnings(classification, DEV_AUDIT.advisories)).toEqual([]);
+  });
+
+  it('names the blockers of an acceptance running past its expiry', () => {
+    const entry = autoExtendingEntry(-1);
+    const classification = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [entry]);
+
+    expect(auditWarnings(classification, DEV_AUDIT.advisories)).toEqual([
+      `::warning::${advisory.ghsa} (demo-pkg) acceptance expired on ${entry.expires}; `
+        + 'auto-extended while holder@1.0.0 cannot take demo-pkg 2.0.0.',
+    ]);
+  });
+
+  it('warns about an acceptance inside the expiry window', () => {
+    const entry = plainEntry(advisory, 5);
+    const classification = classifyCommittedAudit(DEV_AUDIT, {}, [entry]);
+
+    expect(auditWarnings(classification, DEV_AUDIT.advisories)).toEqual([
+      `::warning::${advisory.ghsa} (demo-pkg) acceptance expires on ${entry.expires}; `
+        + 'fix the advisory, or renew or remove the entry, before then.',
+    ]);
+  });
+
+  // A still-blocked entry will extend rather than lapse, so warning before its
+  // expiry would only ask for a renewal the policy no longer needs.
+  it('stays quiet inside the expiry window while the fix is still blocked', () => {
+    const classification = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [autoExtendingEntry(5)]);
+
+    expect(classification.accepted).toHaveLength(1);
+    expect(auditWarnings(classification, DEV_AUDIT.advisories)).toEqual([]);
+  });
+
+  it('asks for the removal of an entry npm audit no longer reports', () => {
+    const cleanAudit = { advisories: [], productionPackages: notInProductionTree };
+    const classification = classifyCommittedAudit(cleanAudit, {}, [plainEntry(advisory, EXPIRY_WARNING_DAYS + 1)]);
+
+    expect(auditWarnings(classification, cleanAudit.advisories)).toEqual([
+      `::warning::${advisory.ghsa} (demo-pkg) is no longer reported by npm audit; `
+        + 'remove its entry from config/audit-policy.mjs.',
+    ]);
+  });
+
+  it('lists extended, then expiring, then unused, whatever the entry order', () => {
+    const unused = plainEntry({ ghsa: 'GHSA-gone-0000-0000', package: 'gone-pkg' }, EXPIRY_WARNING_DAYS + 1);
+    const audit = { advisories: [DEMO_ADVISORY, soonAdvisory], productionPackages: notInProductionTree };
+    const classification = classifyCommittedAudit(audit, DEMO_BLOCKING_LOCK, [
+      unused,
+      plainEntry(soonAdvisory, 5),
+      autoExtendingEntry(-1),
+    ]);
+
+    const warnings = auditWarnings(classification, audit.advisories);
+
+    expect(warnings.map(line => line.split(' ')[0])).toEqual([
+      `::warning::${advisory.ghsa}`,
+      `::warning::${soonAdvisory.ghsa}`,
+      '::warning::GHSA-gone-0000-0000',
+    ]);
   });
 });
 

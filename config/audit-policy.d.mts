@@ -134,3 +134,9 @@ export function unusedEntries<T extends Pick<IRawAcceptedAdvisory, 'ghsa' | 'pac
   entries: readonly T[],
   advisories: ReadonlyArray<Pick<IAdvisory, 'ghsa' | 'package'>>,
 ): T[];
+
+/** Builds the gate's non-blocking warnings for one classified audit. */
+export function auditWarnings(
+  classification: Pick<ICommittedAuditClassification, 'accepted' | 'resolvedEntries'>,
+  advisories: ReadonlyArray<Pick<IAdvisory, 'ghsa' | 'package'>>,
+): string[];

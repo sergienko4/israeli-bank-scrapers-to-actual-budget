@@ -466,3 +466,60 @@ export function unusedEntries(entries, advisories) {
     advisory => advisory.ghsa === entry.ghsa && advisory.package === entry.package,
   ));
 }
+
+/**
+ * Formats the warning for an acceptance running past its expiry.
+ *
+ * @param {{ ghsa: string, package: string, expires: string, fixedIn: string, blockers: string[] }} record
+ *   An accepted record from an auto-extending entry.
+ * @returns {string} A GitHub Actions warning annotation.
+ */
+function extendedWarning(record) {
+  return `::warning::${record.ghsa} (${record.package}) acceptance expired on ${record.expires}; `
+    + `auto-extended while ${record.blockers.join(', ')} cannot take ${record.package} ${record.fixedIn}.`;
+}
+
+/**
+ * Formats the warning for an acceptance about to lapse.
+ *
+ * @param {{ ghsa: string, package: string, expires: string }} entry An entry inside the warning window.
+ * @returns {string} A GitHub Actions warning annotation.
+ */
+function expiringWarning(entry) {
+  return `::warning::${entry.ghsa} (${entry.package}) acceptance expires on ${entry.expires}; `
+    + 'fix the advisory, or renew or remove the entry, before then.';
+}
+
+/**
+ * Formats the warning for an entry whose advisory is no longer reported.
+ *
+ * @param {{ ghsa: string, package: string }} entry An entry matching no reported advisory.
+ * @returns {string} A GitHub Actions warning annotation.
+ */
+function unusedWarning(entry) {
+  return `::warning::${entry.ghsa} (${entry.package}) is no longer reported by npm audit; `
+    + 'remove its entry from config/audit-policy.mjs.';
+}
+
+/**
+ * Builds the gate's non-blocking warnings for one classified audit.
+ *
+ * Three states need a person before they turn into a failure or into clutter:
+ * an acceptance running past its expiry because its fix is still blocked, an
+ * acceptance about to lapse, and an entry whose advisory npm audit no longer
+ * reports. Each line is a GitHub Actions `::warning::` annotation, so CI
+ * surfaces it on the run summary and a local run prints it as plain text. The
+ * warnings never change the gate's verdict.
+ *
+ * @param {{ accepted: Array<object>, resolvedEntries: Array<object> }} classification
+ *   The result of {@link classifyCommittedAudit}.
+ * @param {Array<{ ghsa: string, package: string }>} advisories Every advisory the audit reported, at any severity.
+ * @returns {string[]} The warning lines: extended first, then expiring, then unused.
+ */
+export function auditWarnings({ accepted, resolvedEntries }, advisories) {
+  return [
+    ...accepted.filter(record => record.extended).map(extendedWarning),
+    ...expiringSoon(resolvedEntries).map(expiringWarning),
+    ...unusedEntries(resolvedEntries, advisories).map(unusedWarning),
+  ];
+}

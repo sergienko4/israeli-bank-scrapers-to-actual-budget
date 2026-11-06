@@ -18,6 +18,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+import { ACCEPTED_ADVISORIES } from '../../config/audit-policy.mjs';
+
 const CLI = fileURLToPath(new URL('../../config/check-audit.mjs', import.meta.url));
 
 /**
@@ -110,5 +112,18 @@ describe('check-audit exit codes', () => {
     expect(run.status).toBe(2);
     expect(run.stderr).toContain('npm audit could not produce a report');
     expect(run.stdout).not.toContain('✅');
+  });
+});
+
+describe('check-audit warnings', () => {
+  it('flags every acceptance a clean tree no longer needs, and still exits 0', () => {
+    const run = runGate({ vulnerabilities: {} }, { vulnerabilities: {} });
+    const unusedLines = run.stdout.split(/\r?\n/).filter(line => line.includes('is no longer reported by npm audit'));
+
+    expect(run.status).toBe(0);
+    expect(unusedLines).toEqual(ACCEPTED_ADVISORIES.map(
+      entry => `::warning::${entry.ghsa} (${entry.package}) is no longer reported by npm audit; `
+        + 'remove its entry from config/audit-policy.mjs.',
+    ));
   });
 });
