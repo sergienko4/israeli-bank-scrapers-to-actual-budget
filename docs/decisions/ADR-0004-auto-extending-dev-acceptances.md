@@ -176,8 +176,10 @@ record the result here.
    `Audit dependencies` on `main` stays green and prints
    `::warning::GHSA-g3hv-75wg-m249 (minimatch) acceptance expired on 2027-01-29; auto-extended while …`,
    naming the tools.
-2. When the last of those tools takes `minimatch` 11 and the advisory leaves
-   the tree, the gate warns that the entry is no longer reported; remove it.
-   If, after 2027-01-29, a `minimatch` 10 copy lingers although nothing blocks
-   the fix, the gate fails with `… and none does`; `npm update minimatch` or a
-   floor clears it.
+2. When the last of those tools takes `minimatch` 11, the unit suite fails
+   with `… has no blocker left; remove its entry`. Remove the entry and its
+   pin in that same pull request. Once npm stops reporting the advisory, the
+   gate also warns that the entry is no longer reported. If, after
+   2027-01-29, a `minimatch` 10 copy lingers although nothing blocks the fix,
+   the gate fails with `… and none does`; `npm update minimatch` or a floor
+   clears it.
