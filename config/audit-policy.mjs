@@ -195,8 +195,10 @@ function isWithinAcceptanceCap(entry, todayMs) {
 /**
  * Reads today's date as epoch milliseconds at UTC midnight.
  *
- * Read once per run and passed down, so a run that crosses UTC midnight never
- * judges two entries against different days.
+ * Each call reads the clock afresh. One classification reads it once, so a run
+ * that crosses UTC midnight never judges two entries against different days;
+ * the warnings the gate prints afterwards read it again, which can move only
+ * an annotation, never the verdict.
  *
  * @returns {number} Epoch milliseconds for today at UTC midnight.
  */

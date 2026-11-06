@@ -177,9 +177,13 @@ record the result here.
    `::warning::GHSA-g3hv-75wg-m249 (minimatch) acceptance expired on 2027-01-29; auto-extended while …`,
    naming the tools.
 2. When the last of those tools takes `minimatch` 11, the unit suite fails
-   with `… has no blocker left; remove its entry`. Remove the entry and its
-   pin in that same pull request. Once npm stops reporting the advisory, the
-   gate also warns that the entry is no longer reported. If, after
-   2027-01-29, a `minimatch` 10 copy lingers although nothing blocks the fix,
-   the gate fails with `… and none does`; `npm update minimatch` or a floor
-   clears it.
+   with `… has no blocker left; remove its entry`. Take the fix first
+   (`npm update minimatch`, or a floor), because the lock may still hold a
+   10 copy that npm audit reports, and removing the entry before then turns
+   the gate red. Then remove the entry, its pin, and the test `honours the
+   minimatch acceptance only while minimatch stays out of the production
+   tree`, which asserts that entry, in that same pull request. Once npm stops
+   reporting the advisory, the gate also warns that the entry is no longer
+   reported. If, after 2027-01-29, a `minimatch` 10 copy lingers although
+   nothing blocks the fix, the gate fails with `… and none does`;
+   `npm update minimatch` or a floor clears it.
