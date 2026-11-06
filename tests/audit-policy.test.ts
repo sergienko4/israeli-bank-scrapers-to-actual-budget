@@ -585,7 +585,15 @@ describe('classifyCommittedAudit, auto-extending development entries', () => {
     expect(violations[0]?.why).toMatch(/^exception expired on /);
   });
 
-  it.each([null, true, {}, { fixedIn: 'bogus' }, { fixedIn: '^2.0.0' }, { fixedIn: 2 }])(
+  it.each([
+    null,
+    true,
+    {},
+    { fixedIn: 'bogus' },
+    { fixedIn: '^2.0.0' },
+    { fixedIn: 2 },
+    { fixedIn: [DEMO_FIXED_IN] },
+  ])(
     'rejects the unusable autoExtend %j even before the expiry',
     (shape) => {
       const entry = autoExtendingEntry(7, shape as unknown as IAutoExtend);
@@ -593,6 +601,20 @@ describe('classifyCommittedAudit, auto-extending development entries', () => {
       const { violations, accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [
         entry,
       ]);
+
+      expect(accepted).toEqual([]);
+      expect(violations[0]?.why).toBe('exception has an invalid autoExtend.fixedIn version');
+    },
+  );
+
+  it.each([null, true, {}, { fixedIn: 'bogus' }])(
+    'names the unusable autoExtend %j, not an expiry, once the entry is past its date',
+    (shape) => {
+      // The malformed opt-in is reported before the expiry is judged. Judging
+      // the expiry first would read the fix version out of the broken value.
+      const entry = autoExtendingEntry(-1, shape as unknown as IAutoExtend);
+
+      const { violations, accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [entry]);
 
       expect(accepted).toEqual([]);
       expect(violations[0]?.why).toBe('exception has an invalid autoExtend.fixedIn version');
@@ -820,6 +842,22 @@ describe('auditWarnings, non-blocking annotations for the gate', () => {
     expect(auditWarnings(classification, DEV_AUDIT.advisories)).toEqual([
       `::warning::${advisory.ghsa} (demo-pkg) acceptance expired on ${entry.expires}; `
         + 'auto-extended while holder@1.0.0 cannot take demo-pkg 2.0.0.',
+    ]);
+  });
+
+  it('lists every blocker of an acceptance running past its expiry, separated by commas', () => {
+    const lock: LockPackages = {
+      '': { version: '1.0.0', dependencies: { alpha: '^1.0.0', beta: '^2.0.0' } },
+      'node_modules/alpha': { version: '1.0.0', dependencies: { 'demo-pkg': '^1.0.0' } },
+      'node_modules/beta': { version: '2.0.0', dependencies: { 'demo-pkg': '^1.2.0' } },
+      'node_modules/demo-pkg': { version: '1.4.0' },
+    };
+    const entry = autoExtendingEntry(-1);
+    const classification = classifyCommittedAudit(DEV_AUDIT, lock, [entry]);
+
+    expect(auditWarnings(classification, DEV_AUDIT.advisories)).toEqual([
+      `::warning::${advisory.ghsa} (demo-pkg) acceptance expired on ${entry.expires}; `
+        + 'auto-extended while alpha@1.0.0, beta@2.0.0 cannot take demo-pkg 2.0.0.',
     ]);
   });
 

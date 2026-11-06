@@ -192,6 +192,9 @@ describe.each(autoExtendingEntries())("check-audit past the $package acceptance'
     expect(run.stdout).toContain(
       `::warning::${ghsa} (${pkg}) acceptance expired on ${expires}; auto-extended while holds-${pkg}@1.0.0 cannot take ${pkg} ${fixedIn}.`,
     );
+    // The advisory is still reported, so the acceptance is in use. Warning that
+    // it is gone would send someone to delete the entry that keeps the gate green.
+    expect(run.stdout).not.toContain(`::warning::${ghsa} (${pkg}) is no longer reported by npm audit`);
   });
 
   it('exits 1 once no locked package blocks the fix', () => {
