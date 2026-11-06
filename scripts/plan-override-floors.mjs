@@ -35,6 +35,7 @@ import {
   applyFloors,
   assertAllowedNpmArgs,
   isFloorOverride,
+  needsReview,
   planOverrideFloors,
   sameLockedVersions,
   verifyOverrideOnlyChange,
@@ -254,7 +255,7 @@ function stillBlocking(rejections, audit) {
  */
 function finalPlan(floors, rejections) {
   const byPackage = (a, b) => (a.package < b.package ? -1 : 1);
-  const requiresReview = rejections.length > 0 || floors.some(floor => floor.kind !== 'in-line');
+  const requiresReview = needsReview(floors, rejections);
   return { floors: [...floors].sort(byPackage), rejections: [...rejections].sort(byPackage), requiresReview };
 }
 

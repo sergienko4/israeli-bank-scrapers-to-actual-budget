@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-29
+- **Amended:** 2026-11-06 — see the note under Decision 2
 - **Deciders:** Repository maintainer
 - **Amends:** [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md),
   [ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md)
@@ -64,25 +65,36 @@ recover on their own once `main` is clean.
    | Rule | Check | Rejection | Why |
    | --- | --- | --- | --- |
    | R1 | The package is not declared in `dependencies`, `devDependencies`, `optionalDependencies` or `peerDependencies`. | `direct-dependency` | A declared range is Dependabot's to raise. An override on a direct dependency fights it. |
-   | R2 | The package is in the lockfile, and every locked copy sits on one caret line (`^1.2.0` admits it). | `not-in-lockfile`, `multiple-lines` | One floor across two lines would force one copy over a breaking boundary. |
+   | R2 | The package is in the lockfile, every locked copy has a version the planner can parse, the locked copies an advisory reaches sit on one caret line (`^1.2.0` admits it), and the floor leaves every other copy where it is. | `not-in-lockfile`, `unparseable-version`, `multiple-lines` | One floor across two lines would force one copy over a breaking boundary, and an override applies to every copy, including the ones no advisory reaches. A copy whose version cannot be read could sit below the floor or on another line unseen. |
    | R3 | Every advisory range for the package parses in a narrow comparator grammar (`*`, `>=`, `>`, `<=`, `<`, `=`, `\|\|`); `^`, `~`, `x` and hyphen ranges do not. | `unparseable-range` | A range the planner cannot read cannot prove a version safe. |
    | R4 | npm reported publish times. A failed or timed-out `npm view` counts as none. | `missing-publish-times` | The age rule below needs them. |
-   | R5 | Some published stable version at or above the highest locked copy matches no advisory range. | `no-fixed-release` | There is nothing to move to. |
+   | R5 | Some published stable version at or above the highest locked copy an advisory reaches matches no advisory range. | `no-fixed-release` | There is nothing to move to. |
    | R6 | Any existing override is a plain `^x.y.z` or `>=x.y.z` whose minimum is below the floor. It keeps its operator and is only raised. | `unsupported-override`, `override-already-satisfies` | A `>=` floor never gains an upper bound, and a hand-written object override is never rewritten. |
-   | R7 | — | — | Anything but an `in-line` floor, and any rejection, needs a human. |
+   | R7 | — | — | Anything but an `in-line` `^` floor, and any rejection, needs a human. A kept `>=` override admits every later major, so it needs one even on the locked line. |
 
    R5 picks the lowest fixed version from the first non-empty tier. Each tier
    sets the floor's kind:
 
    | Kind | Candidates | Auto-merge | Excluded from the release-age wait |
    | --- | --- | --- | --- |
-   | `in-line` | Same caret line, published at least three days ago | yes | no |
+   | `in-line` | Same caret line, published at least three days ago | yes, unless it keeps a `>=` override | no |
    | `fresh` | Same caret line, younger than three days | no | yes |
    | `breaking-line` | Another line, published at least three days ago | no | no |
    | `breaking-line-fresh` | Another line, younger than three days | no | yes |
 
    The three days match Dependabot's default cooldown, so an automatic floor
    never adopts a release sooner than Dependabot would.
+
+   > **Amended 2026-11-06.** R2 first required every locked copy to share one
+   > caret line. In November 2026, after `npm update`, `glob` and `minimatch`
+   > each had a vulnerable copy on one line and an already-fixed copy on the
+   > next, so the planner rejected both as `multiple-lines` and `main` stayed
+   > red. R2 now looks
+   > only at the copies an advisory reaches, or at every copy when its ranges
+   > reach none, and rejects as `multiple-lines` a floor that would move any
+   > other copy. Which copies an advisory reaches depends on its ranges, so
+   > the line check runs after R3: a package whose range does not parse is
+   > rejected as `unparseable-range` first.
 
 3. **The refresh applies floors and proves them.** After `npm update` and
    `npm audit fix`, the step "Raise override floors for out-of-range

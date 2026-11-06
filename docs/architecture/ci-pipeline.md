@@ -503,7 +503,8 @@ opens a PR when anything moved:
   transitive package exactly, neither command above can move it.
   `scripts/plan-override-floors.mjs --apply` plans one floor per such
   package under rules R1–R7 (`scripts/override-floor-logic.mjs`):
-  - transitive packages only, on one locked caret line;
+  - transitive packages only, whose copies an advisory reaches share one
+    locked caret line, with a floor that moves no other copy;
   - advisory ranges it can parse;
   - the lowest published version that clears every advisory, preferring the
     same line and releases at least three days old;

@@ -151,6 +151,20 @@ function vulnerablePackage(name: string, ghsa: string): Pick<IFakeState, 'adviso
   };
 }
 
+/**
+ * Adds a nested dev copy of a package to the scratch lockfile, after
+ * {@link writeProject} has written it.
+ *
+ * @param path The lockfile key, such as `node_modules/host/node_modules/pkg`.
+ * @param version The locked version.
+ * @returns Nothing; the lockfile is rewritten in place.
+ */
+function addLockedCopy(path: string, version: string): void {
+  const lock = JSON.parse(read('package-lock.json')) as { packages: Record<string, { version: string; dev: boolean }> };
+  lock.packages[path] = { version, dev: true };
+  writeFileSync(join(root, 'package-lock.json'), `${JSON.stringify(lock, null, 2)}\n`);
+}
+
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'plan-override-floors-e2e-'));
 });
@@ -171,6 +185,40 @@ describe('plan-override-floors --apply', () => {
     expect(JSON.parse(read('package-lock.json')).packages['node_modules/re2js'].version).toBe('1.0.1');
     expect(npmCalls()).toContain('update re2js --package-lock-only --ignore-scripts --min-release-age=3 --min-release-age-exclude=@sergienko4/israeli-bank-scrapers');
     expect(npmCalls().every(call => /^(audit|view|update) /.test(call))).toBe(true);
+  });
+
+  it('floors the affected copy past an unaffected copy on a higher line and leaves that copy alone', () => {
+    writeProject({}, { pkg: '1.0.0' }, {
+      advisories: [{ name: 'pkg', ghsa: 'GHSA-3g3m-2fjr-6pw4', range: '>=1.0.0 <2.0.1', vulnerable: ['1.0.0'] }],
+      times: { pkg: { created: OLD, '1.0.0': OLD, '2.0.1': OLD, '2.0.2': OLD } },
+      resolve: { pkg: { withOverride: '2.0.1', withoutOverride: '1.0.0' } },
+    });
+    addLockedCopy('node_modules/host/node_modules/pkg', '2.0.2');
+
+    const run = runCli(['--apply']);
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toMatchObject({
+      floors: [{ package: 'pkg', floor: '^2.0.1', kind: 'breaking-line' }],
+      rejections: [],
+      requiresReview: true,
+    });
+    expect(JSON.parse(read('package.json')).overrides).toEqual({ pkg: '^2.0.1' });
+    const { packages } = JSON.parse(read('package-lock.json'));
+    expect(packages['node_modules/pkg'].version).toBe('2.0.1');
+    expect(packages['node_modules/host/node_modules/pkg'].version).toBe('2.0.2');
+  });
+
+  it('rejects and writes nothing when the floor would move a copy no advisory reaches', () => {
+    writeProject({}, { pkg: '1.0.0' }, vulnerablePackage('pkg', 'GHSA-3g3m-2fjr-6pw4'));
+    addLockedCopy('node_modules/host/node_modules/pkg', '2.0.0');
+    const before = { manifest: read('package.json'), lock: read('package-lock.json') };
+
+    const run = runCli(['--apply']);
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toMatchObject({ floors: [], rejections: [{ package: 'pkg', reason: 'multiple-lines' }], requiresReview: true });
+    expect({ manifest: read('package.json'), lock: read('package-lock.json') }).toEqual(before);
   });
 
   it('drops a floor that leaves its advisory in place and keeps the one that works', () => {

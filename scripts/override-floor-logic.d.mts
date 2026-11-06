@@ -79,6 +79,7 @@ export interface IPlannedFloor {
 export type RejectionReason =
   | 'direct-dependency'
   | 'not-in-lockfile'
+  | 'unparseable-version'
   | 'multiple-lines'
   | 'unparseable-range'
   | 'missing-publish-times'
@@ -129,6 +130,9 @@ export function findLockedInstances(lockPackages: Record<string, ILockEntry>, na
 
 /** Plans an override floor or a typed rejection for every vulnerable package. */
 export function planOverrideFloors(input: IPlannerInput): IFloorPlan;
+
+/** Reports whether a plan needs a human: any rejection, or any floor but an in-line `^` floor. */
+export function needsReview(floors: ReadonlyArray<Pick<IPlannedFloor, 'kind' | 'floor'>>, rejections: readonly IRejection[]): boolean;
 
 /** Proves a package.json edit touched nothing but the allowed `overrides` keys. */
 export function verifyOverrideOnlyChange(

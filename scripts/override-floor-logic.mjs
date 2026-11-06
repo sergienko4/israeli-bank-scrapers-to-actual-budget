@@ -10,7 +10,8 @@
  *
  * Rules, evaluated per package in order (see the ADR for the rationale):
  * R1 a declared dependency is Dependabot's job, not an override's;
- * R2 every locked copy must sit on one caret line;
+ * R2 the locked copies an advisory reaches must sit on one caret line, and the
+ *    override must leave every other copy where it is;
  * R3 every advisory range for the package must parse in the narrow grammar;
  * R4 npm must have reported publish times;
  * R5 pick the lowest fixed version, preferring same-line and aged releases;
@@ -152,8 +153,20 @@ export function caretLine({ major, minor, patch }) {
 }
 
 /**
- * Lists every locked copy of a package; a scoped name matches its two
- * segments because the key's last `node_modules/` segment is compared whole.
+ * Reports whether a lockfile key installs the named package; a scoped name
+ * matches its two segments because the key's last `node_modules/` segment is
+ * compared whole.
+ *
+ * @param {string} path The lockfile `packages` key.
+ * @param {string} name The package name.
+ * @returns {boolean} True when the key is a copy of the package.
+ */
+function isPackageKey(path, name) {
+  return path.includes('node_modules/') && path.split('node_modules/').pop() === name;
+}
+
+/**
+ * Lists every locked copy of a package whose version parses.
  *
  * @param {Record<string, { version?: string, dev?: boolean }>} lockPackages The lockfile `packages` map.
  * @param {string} name The package name.
@@ -161,7 +174,7 @@ export function caretLine({ major, minor, patch }) {
  */
 export function findLockedInstances(lockPackages, name) {
   return Object.entries(lockPackages)
-    .filter(([path]) => path.includes('node_modules/') && path.split('node_modules/').pop() === name)
+    .filter(([path]) => isPackageKey(path, name))
     .map(([path, entry]) => ({ path, version: parseVersion(entry?.version), dev: entry?.dev === true }))
     .filter(instance => instance.version !== null);
 }
@@ -187,19 +200,35 @@ function lowest(versions) {
 }
 
 /**
- * R1–R2: refuses declared dependencies and packages that are absent or span
- * more than one caret line.
+ * R1, R2: refuses declared dependencies, absent packages, and packages with a
+ * copy whose version does not parse. An unread copy could sit below the floor
+ * or on another line without any rule seeing it.
  *
  * @param {string} name The package name.
  * @param {object} input The planner input.
- * @returns {{ reason: string } | { max: object }} A rejection, or the highest locked version.
+ * @returns {{ reason: string } | { versions: object[] }} A rejection, or every locked version.
  */
 function checkInstances(name, input) {
   if (DEPENDENCY_FIELDS.some(field => Object.hasOwn(input.manifest[field] ?? {}, name))) return { reason: 'direct-dependency' };
+  const copies = Object.keys(input.lockPackages).filter(path => isPackageKey(path, name)).length;
+  if (copies === 0) return { reason: 'not-in-lockfile' };
   const versions = findLockedInstances(input.lockPackages, name).map(instance => instance.version);
-  if (versions.length === 0) return { reason: 'not-in-lockfile' };
-  if (new Set(versions.map(caretLine)).size > 1) return { reason: 'multiple-lines' };
-  return { max: highest(versions) };
+  return versions.length < copies ? { reason: 'unparseable-version' } : { versions };
+}
+
+/**
+ * R2: requires the copies an advisory reaches to share one caret line, so a
+ * single floor can fix them all. A copy no advisory reaches is not part of the
+ * question; when none is reached the whole tree is considered.
+ *
+ * @param {{ versions: object[], ranges: object[][] }} facts What R1 and R3 established.
+ * @returns {{ reason: string } | { max: object, scope: object[] }} A rejection, or the highest in-scope version and the scope.
+ */
+function checkLines({ versions, ranges }) {
+  const affected = versions.filter(version => ranges.some(range => satisfies(version, range)));
+  const scope = affected.length > 0 ? affected : versions;
+  if (new Set(scope.map(caretLine)).size > 1) return { reason: 'multiple-lines' };
+  return { max: highest(scope), scope };
 }
 
 /**
@@ -274,6 +303,40 @@ function reconcileOverride(name, version, input) {
 }
 
 /**
+ * Reports whether an override leaves a locked copy where it is: `>=` admits
+ * any version not below it, and `^` also requires the same caret line.
+ *
+ * A prerelease copy is never admitted. The override is always a plain
+ * release, and npm ranges skip prereleases of any other release, so the
+ * override would move that copy.
+ *
+ * @param {string} floor The override text, `^x.y.z` or `>=x.y.z`.
+ * @param {object} version The parsed locked version.
+ * @returns {boolean} True when the override would not move the copy.
+ */
+function admitsOverride(floor, version) {
+  if (version.prerelease.length > 0) return false;
+  const [, operator, text] = SIMPLE_OVERRIDE.exec(floor);
+  const bound = parseVersion(text);
+  const notBelow = compareVersions(version, bound) >= 0;
+  return operator === '>=' ? notBelow : notBelow && caretLine(version) === caretLine(bound);
+}
+
+/**
+ * R2 guard: an override applies to every copy of the package, so a copy no
+ * advisory reaches must already satisfy it, or the override would silently
+ * move that copy across a breaking boundary and no audit would notice.
+ *
+ * @param {{ versions: object[], scope: object[] }} facts What R2 established.
+ * @param {{ floor: string, from: string | null }} override The reconciled override.
+ * @returns {{ reason: string } | { floor: string, from: string | null }} A rejection, or the override unchanged.
+ */
+function guardBystanders({ versions, scope }, override) {
+  const bystanders = versions.filter(version => !scope.includes(version));
+  return bystanders.every(version => admitsOverride(override.floor, version)) ? override : { reason: 'multiple-lines' };
+}
+
+/**
  * Plans one package through R1–R6, stopping at the first rejection.
  *
  * @param {string} name The package name.
@@ -284,9 +347,11 @@ function reconcileOverride(name, version, input) {
 function planPackage(name, ghsas, input) {
   const instances = checkInstances(name, input);
   const ranges = instances.reason ? instances : checkRanges(name, input);
-  const published = ranges.reason ? ranges : checkPublished(name, input);
-  const pick = published.reason ? published : pickFloor({ ...instances, ...ranges, ...published }, input);
-  const override = pick.reason ? pick : reconcileOverride(name, pick.version, input);
+  const lines = ranges.reason ? ranges : checkLines({ ...instances, ...ranges });
+  const published = lines.reason ? lines : checkPublished(name, input);
+  const pick = published.reason ? published : pickFloor({ ...lines, ...ranges, ...published }, input);
+  const reconciled = pick.reason ? pick : reconcileOverride(name, pick.version, input);
+  const override = reconciled.reason ? reconciled : guardBystanders({ ...instances, ...lines }, reconciled);
   if (override.reason) return { rejection: { package: name, ghsas, reason: override.reason } };
   const excludeFromAge = pick.kind === 'fresh' || pick.kind === 'breaking-line-fresh';
   return { floor: { package: name, floor: override.floor, from: override.from, ghsas, kind: pick.kind, excludeFromAge } };
@@ -307,6 +372,19 @@ function groupViolations(violations) {
 }
 
 /**
+ * R7: reports whether a plan needs a human. Only an aged same-line caret
+ * floor merges unattended; a kept `>=` override admits every later major, so
+ * it needs review even when its floor is on the locked line.
+ *
+ * @param {ReadonlyArray<{ kind: string, floor: string }>} floors The planned floors.
+ * @param {ReadonlyArray<object>} rejections The rejections.
+ * @returns {boolean} True when any rejection or any floor but an in-line `^` floor exists.
+ */
+export function needsReview(floors, rejections) {
+  return rejections.length > 0 || floors.some(floor => floor.kind !== 'in-line' || !floor.floor.startsWith('^'));
+}
+
+/**
  * Plans an override floor or a typed rejection for every vulnerable package.
  *
  * @param {import('./override-floor-logic.d.mts').IPlannerInput} input Everything the rules read.
@@ -320,8 +398,7 @@ export function planOverrideFloors(input) {
     if (floor) floors.push(floor);
     else rejections.push(rejection);
   }
-  const requiresReview = rejections.length > 0 || floors.some(floor => floor.kind !== 'in-line');
-  return { floors, rejections, requiresReview };
+  return { floors, rejections, requiresReview: needsReview(floors, rejections) };
 }
 
 /**
