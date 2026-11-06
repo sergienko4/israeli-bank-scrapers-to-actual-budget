@@ -146,6 +146,7 @@ interface IStep {
   readonly id?: string;
   readonly name?: string;
   readonly if?: string;
+  readonly 'continue-on-error'?: boolean | string;
   readonly uses?: string;
   readonly run?: string;
   readonly env?: Readonly<Record<string, string>>;
@@ -164,6 +165,7 @@ interface IJob {
   readonly needs?: string | readonly string[];
   readonly env?: Readonly<Record<string, string>>;
   readonly if?: string;
+  readonly 'continue-on-error'?: boolean | string;
   readonly outputs?: Readonly<Record<string, string>>;
   readonly secrets?: Readonly<Record<string, string>>;
   readonly concurrency?: IConcurrency;
@@ -1915,6 +1917,15 @@ describe('PR Pipeline audit decoupling', () => {
     expect(build.outputs?.dist_ready).toBe('${{ steps.dist.outputs.ready }}');
   });
 
+  it('lets a failing audit fail the build job: no condition, no continue-on-error', () => {
+    const audit = build.steps.at(-1);
+
+    expect(audit?.run).toBe('npm run audit');
+    expect(audit?.if).toBeUndefined();
+    expect(audit?.['continue-on-error']).toBeUndefined();
+    expect(build['continue-on-error']).toBeUndefined();
+  });
+
   it.each(['validate', 'e2e'])('runs %s once dist is ready, even when the audit fails', (id) => {
     expect(pipeline[id].needs).toBe('build');
     expect(pipeline[id].if).toBe(distReady);
@@ -1935,8 +1946,26 @@ describe('PR Pipeline audit decoupling', () => {
     expect(pipeline.sonar.if).toBe("${{ !cancelled() && needs.validate.result == 'success' }}");
   });
 
-  it('keeps CI Pass red while the audit fails', () => {
+  it('feeds CI Pass the build result on every run', () => {
     expect(pipeline['ci-pass'].if).toBe('always()');
     expect(pipeline['ci-pass'].needs).toContain('build');
+    expect(pipeline['ci-pass'].steps[0].env?.R_BUILD).toBe('${{ needs.build.result }}');
+  });
+
+  it.skipIf(!CAN_RUN)('turns CI Pass red when the build job fails, audit included', () => {
+    const verdict = pipeline['ci-pass'].steps[0];
+    const passing = {
+      R_VALIDATE: 'success',
+      R_DOCS: 'success',
+      R_SECURITY: 'success',
+      R_SEMGREP: 'success',
+      R_TRIVY: 'success',
+      R_LICENSES: 'success',
+      R_SONAR: 'success',
+      R_E2E: 'success',
+    };
+
+    expect(runStep(verdict, { env: { ...passing, R_BUILD: 'success' } }).status).toBe(0);
+    expect(runStep(verdict, { env: { ...passing, R_BUILD: 'failure' } }).status).toBe(1);
   });
 });
