@@ -216,12 +216,13 @@ A security fix for a transitive package that no parent range reaches usually
 arrives on its own too. Every four hours `lockfile-refresh.yml` audits `main`.
 When it finds an advisory, it raises a floor in the `overrides` block of
 `package.json` and opens a `fix(deps)` pull request; see
-[ADR-0003][adr-0003] for the rules. A floor on the same major line that has
-been published for at least three days merges itself. Any other floor is
-labelled `needs-manual-review`. An advisory no floor can fix is listed in the
-"Unresolved dependency advisories" issue and still needs a hand edit: add or
-raise its entry in `overrides` and open a pull request with only that
-change. A local registry is not needed:
+[ADR-0003][adr-0003] for the rules. A floor on the same caret line that has
+been published for at least three days merges itself, unless it keeps an
+existing `>=` override. Any other floor is labelled `needs-manual-review`,
+and the "Unresolved dependency advisories" issue says it waits for review.
+An advisory no floor can fix is listed in that issue and still needs a hand
+edit: add or raise its entry in `overrides` and open a pull request with only
+that change. A local registry is not needed:
 `.github/workflows/lockfile-sync.yml` regenerates `package-lock.json` on a
 runner, uploads it as the `package-lock` artifact and fails the check. It
 resolves against the public registry with the npm version the Docker image

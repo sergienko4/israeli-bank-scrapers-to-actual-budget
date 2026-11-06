@@ -604,13 +604,23 @@ describe('formatRefreshBody with override changes', () => {
     expect(body).toContain('needs-manual-review');
   });
 
-  it('lists unresolved advisories and points at the tracking issue', () => {
+  it('holds an aged in-line floor that keeps a >= override, as the planner does', () => {
+    const kept = { ...inLine, floor: '>=2.8.7', from: '>=2.8.0' };
+    const body = formatRefreshBody(applyOverrideChanges(base, { floors: [kept] }));
+    expect(body).toContain('- `re2js` >=2.8.7 (in-line; was >=2.8.0) for GHSA-gg6h-894w-4m9c');
+    expect(body).toContain('or that keeps a `>=` override, needs a human');
+    expect(body).toContain('needs-manual-review');
+  });
+
+  it('lists unresolved advisories and withholds auto-merge without promising an issue', () => {
     const body = formatRefreshBody(
       applyOverrideChanges(base, { rejections: [{ package: 'foo', ghsas: ['GHSA-x'], reason: 'no-fixed-release' }] }),
     );
     expect(body).toContain('## Unresolved advisories (1)');
     expect(body).toContain('- `foo`: no-fixed-release (GHSA-x)');
-    expect(body).toContain('Unresolved dependency advisories');
+    expect(body).toContain('Auto-merge\nis withheld and the PR is labelled `needs-manual-review`.');
+    expect(body).toContain('issue, when one is open, lists them too');
+    expect(body).not.toContain('the open\n');
     expect(body).toContain('`package.json` is untouched.');
   });
 

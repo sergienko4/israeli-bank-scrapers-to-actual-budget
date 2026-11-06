@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-29
+- **Amended:** 2026-11-06 — see the notes under Decisions 2 and 4
 - **Deciders:** Repository maintainer
 - **Amends:** [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md),
   [ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md)
@@ -64,25 +65,39 @@ recover on their own once `main` is clean.
    | Rule | Check | Rejection | Why |
    | --- | --- | --- | --- |
    | R1 | The package is not declared in `dependencies`, `devDependencies`, `optionalDependencies` or `peerDependencies`. | `direct-dependency` | A declared range is Dependabot's to raise. An override on a direct dependency fights it. |
-   | R2 | The package is in the lockfile, and every locked copy sits on one caret line (`^1.2.0` admits it). | `not-in-lockfile`, `multiple-lines` | One floor across two lines would force one copy over a breaking boundary. |
+   | R2 | The package is in the lockfile, every locked copy has a version the planner can parse, the locked copies an advisory reaches sit on one caret line (`^1.2.0` admits it), and every other copy satisfies the floor: it sits on the floor's caret line under `^`, or not below the floor under `>=`. | `not-in-lockfile`, `unparseable-version`, `multiple-lines` | One floor across two lines would force one copy over a breaking boundary, and an override applies to every copy, including the ones no advisory reaches. A copy whose version cannot be read could sit on another line, or below a `>=` floor, unseen. |
    | R3 | Every advisory range for the package parses in a narrow comparator grammar (`*`, `>=`, `>`, `<=`, `<`, `=`, `\|\|`); `^`, `~`, `x` and hyphen ranges do not. | `unparseable-range` | A range the planner cannot read cannot prove a version safe. |
    | R4 | npm reported publish times. A failed or timed-out `npm view` counts as none. | `missing-publish-times` | The age rule below needs them. |
-   | R5 | Some published stable version at or above the highest locked copy matches no advisory range. | `no-fixed-release` | There is nothing to move to. |
+   | R5 | Some published stable version at or above the highest locked copy an advisory reaches matches no advisory range. | `no-fixed-release` | There is nothing to move to. |
    | R6 | Any existing override is a plain `^x.y.z` or `>=x.y.z` whose minimum is below the floor. It keeps its operator and is only raised. | `unsupported-override`, `override-already-satisfies` | A `>=` floor never gains an upper bound, and a hand-written object override is never rewritten. |
-   | R7 | — | — | Anything but an `in-line` floor, and any rejection, needs a human. |
+   | R7 | — | — | Anything but an `in-line` `^` floor, and any rejection, needs a human. A kept `>=` override admits every later major, so it needs one even on the locked line. |
 
    R5 picks the lowest fixed version from the first non-empty tier. Each tier
    sets the floor's kind:
 
    | Kind | Candidates | Auto-merge | Excluded from the release-age wait |
    | --- | --- | --- | --- |
-   | `in-line` | Same caret line, published at least three days ago | yes | no |
+   | `in-line` | Same caret line, published at least three days ago | yes, unless it keeps a `>=` override | no |
    | `fresh` | Same caret line, younger than three days | no | yes |
    | `breaking-line` | Another line, published at least three days ago | no | no |
    | `breaking-line-fresh` | Another line, younger than three days | no | yes |
 
    The three days match Dependabot's default cooldown, so an automatic floor
    never adopts a release sooner than Dependabot would.
+
+   > **Amended 2026-11-06.** R2 first required every locked copy to share one
+   > caret line. In November 2026, after `npm update`, `glob` and `minimatch`
+   > each had a vulnerable copy on one line and an already-fixed copy on the
+   > next, so the planner rejected both as `multiple-lines` and `main` stayed
+   > red. R2 now looks only at the copies an advisory reaches, or at every
+   > copy when its ranges reach none, and rejects as `multiple-lines` a floor
+   > that another copy does not satisfy: a copy on a different caret line
+   > under `^`, or a copy below the floor under `>=`. A copy below a `^` floor
+   > on the floor's own line is accepted, and `npm update` raises it within
+   > that line; below a `>=` floor it would be raised without an upper bound.
+   > Which copies an advisory reaches depends on its ranges, so the line check
+   > runs after R3: a package whose range does not parse is rejected as
+   > `unparseable-range` first.
 
 3. **The refresh applies floors and proves them.** After `npm update` and
    `npm audit fix`, the step "Raise override floors for out-of-range
@@ -129,15 +144,23 @@ recover on their own once `main` is clean.
    `advisory` job, so GitHub notifies and nothing is regenerated. The job runs
    the same `--apply` in its own throwaway checkout, because only applying
    reveals a `floor-ineffective` floor. When the planner rejects any
-   advisory, the job keeps one open issue titled
-   "Unresolved dependency advisories", labelled `blocked-by-advisory`, whose
-   body is the rejection table. Once every advisory has a floor, the body
-   says so instead, including whether a floor holds the refresh for a
-   maintainer, and the issue closes once `main` audits
-   clean. That issue is the notification for an advisory no pull request can
-   carry. The job uses the workflow token (`contents: read`,
+   advisory, or a floor holds the refresh for a maintainer, the job keeps one
+   open issue titled "Unresolved dependency advisories", labelled
+   `blocked-by-advisory`. While an advisory is rejected, the body is the
+   rejection table. Once every advisory has a floor, the body says so
+   instead, including whether a floor holds the refresh for a maintainer, and
+   the issue closes once `main` audits clean. That issue is the notification
+   for an advisory no pull request can carry, and for a floor that waits for
+   review. The job uses the workflow token (`contents: read`,
    `issues: write`) and never `RELEASE_TOKEN`. The audit and planner steps
    hold no token at all.
+
+   > **Amended 2026-11-06.** The issue first opened only when the planner
+   > rejected an advisory. In November 2026 the advisory job planned
+   > `breaking-line` floors for `glob` and `minimatch` with no rejection, so
+   > it opened no issue while the refresh pull request waited for a
+   > maintainer and every other pull request failed the audit. A floor that
+   > holds the refresh for review now opens the issue too.
 
 5. **One refresh per change on the four-hourly trigger.** While `main` stays
    red, every four-hourly run computes the same change. Before pushing, the
@@ -150,9 +173,10 @@ recover on their own once `main` is clean.
    - when the new run would arm, auto-merge is armed on it.
 
    If one exists, it opens nothing. A refresh whose arming failed is
-   replaced, which re-arms it. A fresh floor that ages past three days
+   replaced, which re-arms it. A fresh `^` floor that ages past three days
    changes the review state, so it is reopened as an armed `in-line` floor
-   and supersedes the labelled one. Weekly, push and dispatched runs always
+   and supersedes the labelled one. A raised `>=` override is never armed,
+   so aging changes nothing for it. Weekly, push and dispatched runs always
    regenerate, as before.
 
 6. **A weekly prune.** On the weekly and dispatched runs, before the floor
@@ -197,9 +221,9 @@ recover on their own once `main` is clean.
 
 - **Same-line and aged first.** By semver a caret line is non-breaking, and the
   three-day wait is the window in which a compromised or broken release is
-  usually caught. A floor that meets both is as safe as a Dependabot patch
-  bump, so it auto-merges like one. Anything else is still planned, applied
-  and proved, but waits for a human.
+  usually caught. A `^` floor that meets both is as safe as a Dependabot
+  patch bump, so it auto-merges like one. Anything else, including a raised
+  `>=` override, is still planned, applied and proved, but waits for a human.
 - **The planner is pure, and the CLI owns side effects.** Every rule is
   unit-tested against fixed inputs, including the `re2js` incident itself.
   The CLI is covered end to end.
@@ -253,8 +277,9 @@ recover on their own once `main` is clean.
 **Positive**
 
 - An advisory whose fix sits on the same line, behind an exact pin, and is at
-  least three days old is fixed with no human: a pull request within four
-  hours, merged once its checks pass.
+  least three days old is fixed with no human (a `^` floor; an existing `>=`
+  override waits for review): a pull request within four hours, merged once
+  its checks pass.
 - Dependabot pull requests that an advisory on `main` blocked recover on
   their own once `main` is clean.
 - An advisory the pipeline cannot fix opens one issue that names the reason,

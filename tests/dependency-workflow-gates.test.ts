@@ -146,6 +146,7 @@ interface IStep {
   readonly id?: string;
   readonly name?: string;
   readonly if?: string;
+  readonly 'continue-on-error'?: boolean | string;
   readonly uses?: string;
   readonly run?: string;
   readonly env?: Readonly<Record<string, string>>;
@@ -160,9 +161,13 @@ interface IConcurrency {
 
 /** Fields of a workflow job this suite reads. */
 interface IJob {
+  readonly name?: string;
   readonly needs?: string | readonly string[];
   readonly env?: Readonly<Record<string, string>>;
   readonly if?: string;
+  readonly 'continue-on-error'?: boolean | string;
+  readonly outputs?: Readonly<Record<string, string>>;
+  readonly secrets?: Readonly<Record<string, string>>;
   readonly concurrency?: IConcurrency;
   readonly steps: readonly IStep[];
 }
@@ -855,15 +860,35 @@ describe.skipIf(!CAN_RUN)('lockfile refresh advisory issue', () => {
     expect(red.ghCalls.some((call) => call.includes(`issues/${String(item.number)}`))).toBe(false);
   });
 
-  it('writes nothing while every advisory on a red main has a floor', () => {
+  it('writes nothing while every advisory on a red main has a floor the refresh merges itself', () => {
     const run = runStep(step, {
       env: { GH_TOKEN: 'token', RED: 'true' },
       gh: { [listPath]: [] },
-      tempFiles: { 'plan.json': { floors: [{ package: 're2js' }], rejections: [] } },
+      tempFiles: { 'plan.json': { floors: [{ package: 're2js' }], rejections: [], requiresReview: false } },
     });
 
     expect(run.status).toBe(0);
     expect(writes(run.ghCalls)).toEqual([]);
+  });
+
+  it.each([
+    ['a review', true],
+    ['an unstated review', undefined],
+  ])('opens a labelled issue when every advisory has a floor needing %s and none is open', (_case, requiresReview) => {
+    const run = runStep(step, {
+      env: { GH_TOKEN: 'token', RED: 'true' },
+      gh: { [listPath]: [] },
+      tempFiles: { 'plan.json': { floors: [{ package: 'glob' }], rejections: [], requiresReview } },
+    });
+
+    expect(run.status).toBe(0);
+    expect(run.ghCalls.some((call) => call.startsWith('label create blocked-by-advisory'))).toBe(true);
+    const opened = run.ghCalls.join('\n');
+    expect(opened).toContain(`api -X POST repos/${REPO}/issues -f title=Unresolved dependency advisories`);
+    expect(opened).toContain('-f labels[]=blocked-by-advisory');
+    expect(opened).toContain('Every advisory now has an `overrides` floor');
+    expect(opened).toContain('labelled `needs-manual-review` and waits for a maintainer');
+    expect(opened).not.toContain('| Package |');
   });
 
   it.each([
@@ -1872,5 +1897,76 @@ describe.skipIf(!CAN_RUN)('npm pin for lockfile writers', () => {
 
     expect(refuseAt).toBeGreaterThanOrEqual(0);
     expect(refuseAt).toBeLessThan(steps.findIndex(usesPinNpm));
+  });
+});
+
+describe('PR Pipeline audit decoupling', () => {
+  const pipeline = jobsOf('.github/workflows/pr.yml');
+  const build = pipeline.build;
+  const distReady = "${{ !cancelled() && needs.build.outputs.dist_ready == 'true' }}";
+
+  it('audits last, after dist is uploaded and marked ready', () => {
+    const names = build.steps.map((step) => step.name ?? step.uses ?? step.run ?? '');
+    const uploadAt = build.steps.findIndex((step) => step.uses?.startsWith('actions/upload-artifact@'));
+    const markAt = build.steps.findIndex((step) => step.id === 'dist');
+
+    expect(names.at(-1)).toBe('Audit dependencies');
+    expect(uploadAt).toBeGreaterThanOrEqual(0);
+    expect(markAt).toBe(uploadAt + 1);
+    expect(build.steps[markAt].run).toBe('echo "ready=true" >> "$GITHUB_OUTPUT"');
+    expect(build.steps[markAt].if).toBeUndefined();
+    expect(build.outputs?.dist_ready).toBe('${{ steps.dist.outputs.ready }}');
+  });
+
+  it('lets a failing audit fail the build job: no condition, no continue-on-error', () => {
+    const audit = build.steps.at(-1);
+
+    expect(audit?.run).toBe('npm run audit');
+    expect(audit?.if).toBeUndefined();
+    expect(audit?.['continue-on-error']).toBeUndefined();
+    expect(build['continue-on-error']).toBeUndefined();
+  });
+
+  it.each(['validate', 'e2e'])('runs %s once dist is ready, even when the audit fails', (id) => {
+    expect(pipeline[id].needs).toBe('build');
+    expect(pipeline[id].if).toBe(distReady);
+  });
+
+  it('passes E2E its secrets only when the whole build passed, audit included', () => {
+    const secrets = Object.entries(pipeline.e2e.secrets ?? {});
+    const gated = (name: string): string => `\${{ needs.build.result == 'success' && secrets.${name} || '' }}`;
+
+    expect(secrets.length).toBeGreaterThan(0);
+    for (const [name, value] of secrets) {
+      expect(value).toBe(gated(name));
+    }
+  });
+
+  it('runs SonarCloud Analysis on a passing Test & Lint whatever the audit says', () => {
+    expect(pipeline.sonar.needs).toBe('validate');
+    expect(pipeline.sonar.if).toBe("${{ !cancelled() && needs.validate.result == 'success' }}");
+  });
+
+  it('feeds CI Pass the build result on every run', () => {
+    expect(pipeline['ci-pass'].if).toBe('always()');
+    expect(pipeline['ci-pass'].needs).toContain('build');
+    expect(pipeline['ci-pass'].steps[0].env?.R_BUILD).toBe('${{ needs.build.result }}');
+  });
+
+  it.skipIf(!CAN_RUN)('turns CI Pass red when the build job fails, audit included', () => {
+    const verdict = pipeline['ci-pass'].steps[0];
+    const passing = {
+      R_VALIDATE: 'success',
+      R_DOCS: 'success',
+      R_SECURITY: 'success',
+      R_SEMGREP: 'success',
+      R_TRIVY: 'success',
+      R_LICENSES: 'success',
+      R_SONAR: 'success',
+      R_E2E: 'success',
+    };
+
+    expect(runStep(verdict, { env: { ...passing, R_BUILD: 'success' } }).status).toBe(0);
+    expect(runStep(verdict, { env: { ...passing, R_BUILD: 'failure' } }).status).toBe(1);
   });
 });

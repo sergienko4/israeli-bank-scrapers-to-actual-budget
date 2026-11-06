@@ -115,6 +115,20 @@ describe('planOverrideFloors: spec fixtures', () => {
     expect(plan.requiresReview).toBe(true);
   });
 
+  it('glob-2026-10: floors the lower line past a fixed higher copy and needs review', () => {
+    const plan = planOverrideFloors(
+      plannerInput({
+        locked: { 'node_modules/a/node_modules/pkg': '13.0.6', 'node_modules/pkg': '14.0.3' },
+        ranges: ['>=9.0.0 <=14.0.1'],
+        times: { '13.0.6': OLD, '14.0.2': OLD, '14.0.3': OLD },
+      }),
+    );
+
+    expect(plan.floors).toMatchObject([{ package: 'pkg', floor: '^14.0.2', from: null, kind: 'breaking-line' }]);
+    expect(plan.rejections).toEqual([]);
+    expect(plan.requiresReview).toBe(true);
+  });
+
   it('fresh-only: a same-line fix younger than the age window is exempted from it and needs review', () => {
     const plan = planOverrideFloors(plannerInput({ times: { '1.2.3': OLD, '1.2.4': '2026-10-28T04:07:00Z' } }));
 
@@ -126,12 +140,14 @@ describe('planOverrideFloors: spec fixtures', () => {
     const plan = planOverrideFloors(plannerInput({ manifest: { overrides: { pkg: '^1.0.0' } } }));
 
     expect(plan.floors).toMatchObject([{ floor: '^1.2.4', from: '^1.0.0' }]);
+    expect(plan.requiresReview).toBe(false);
   });
 
   it('existing-gte: keeps an open >= override open', () => {
     const plan = planOverrideFloors(plannerInput({ manifest: { overrides: { pkg: '>=1.0.1' } } }));
 
     expect(plan.floors).toMatchObject([{ floor: '>=1.2.4', from: '>=1.0.1' }]);
+    expect(plan.requiresReview).toBe(true);
   });
 
   it.each<[string, IFixture, string]>([
@@ -140,9 +156,16 @@ describe('planOverrideFloors: spec fixtures', () => {
     ['two-lines', { locked: { 'node_modules/pkg': '1.4.0', 'node_modules/a/node_modules/pkg': '2.1.0' } }, 'multiple-lines'],
     ['existing-object', { manifest: { overrides: { pkg: { '.': '1.0.0' } } } }, 'unsupported-override'],
     ['odd-range', { ranges: ['~1.2.0'] }, 'unparseable-range'],
+    [
+      'odd-range-two-lines',
+      { ranges: ['~1.2.0'], locked: { 'node_modules/pkg': '1.4.0', 'node_modules/a/node_modules/pkg': '2.1.0' } },
+      'unparseable-range',
+    ],
     ['null-range', { ranges: [null] }, 'unparseable-range'],
     ['already-satisfied', { manifest: { overrides: { pkg: '^1.3.0' } } }, 'override-already-satisfies'],
     ['not-locked', { locked: { 'node_modules/other': '1.0.0' } }, 'not-in-lockfile'],
+    ['build-metadata', { locked: { 'node_modules/pkg': '1.2.3+build' } }, 'unparseable-version'],
+    ['one-copy-unreadable', { locked: { 'node_modules/pkg': '1.2.3', 'node_modules/a/node_modules/pkg': '1.2.0+local' } }, 'unparseable-version'],
     ['no-times', { times: { created: OLD, '1.2.4': 'not a date' } }, 'missing-publish-times'],
   ])('%s: rejects as %s', (_name, fixture, reason) => {
     const plan = planOverrideFloors(plannerInput(fixture));
@@ -171,10 +194,68 @@ describe('planOverrideFloors: edge cases', () => {
     expect(plan.floors).toMatchObject([{ floor: '^1.3.0', kind: 'in-line' }]);
   });
 
+  it('admits a copy below a caret floor on the same line, which npm raises within it', () => {
+    const plan = planOverrideFloors(
+      plannerInput({
+        name: 're2js',
+        locked: { 'node_modules/markdownlint/node_modules/re2js': '2.8.6', 'node_modules/other/node_modules/re2js': '2.1.0' },
+        ranges: ['>=2.2.0 <2.8.7'],
+        times: { '2.8.6': OLD, '2.8.7': OLD },
+      }),
+    );
+
+    expect(plan.floors).toMatchObject([{ package: 're2js', floor: '^2.8.7', kind: 'in-line' }]);
+    expect(plan.rejections).toEqual([]);
+    expect(plan.requiresReview).toBe(false);
+  });
+
   it('matches a scoped package by both name segments', () => {
     const plan = planOverrideFloors(plannerInput({ name: '@scope/pkg', locked: { 'node_modules/a/node_modules/@scope/pkg': '1.2.3' } }));
 
     expect(plan.floors).toMatchObject([{ package: '@scope/pkg', floor: '^1.2.4' }]);
+  });
+
+  it('keeps an open >= override over a fixed higher-line copy, which it admits', () => {
+    const plan = planOverrideFloors(
+      plannerInput({
+        locked: { 'node_modules/pkg': '1.2.0', 'node_modules/a/node_modules/pkg': '2.1.0' },
+        manifest: { overrides: { pkg: '>=1.0.0' } },
+      }),
+    );
+
+    expect(plan.floors).toMatchObject([{ floor: '>=1.2.4', from: '>=1.0.0', kind: 'in-line' }]);
+    expect(plan.requiresReview).toBe(true);
+  });
+
+  it.each<[string, IFixture]>([
+    ['affected-on-two-lines', { locked: { 'node_modules/pkg': '1.1.0', 'node_modules/a/node_modules/pkg': '2.1.0' }, ranges: ['<3.0.0'], times: { '1.1.0': OLD, '3.0.0': OLD } }],
+    ['higher-copy-would-be-downgraded', { locked: { 'node_modules/pkg': '1.2.0', 'node_modules/a/node_modules/pkg': '2.1.0' } }],
+    [
+      'gte-floor-would-raise-a-lower-copy',
+      {
+        locked: { 'node_modules/pkg': '1.2.3', 'node_modules/a/node_modules/pkg': '1.1.0' },
+        ranges: ['>=1.2.0 <1.2.4'],
+        manifest: { overrides: { pkg: '>=1.0.0' } },
+      },
+    ],
+    [
+      'lower-copy-would-be-upgraded',
+      { locked: { 'node_modules/pkg': '13.0.6', 'node_modules/a/node_modules/pkg': '8.1.0' }, ranges: ['>=9.0.0 <=14.0.1'], times: { '13.0.6': OLD, '14.0.2': OLD } },
+    ],
+    [
+      'zero-minor-copy-would-cross-a-line',
+      { locked: { 'node_modules/pkg': '0.2.3', 'node_modules/a/node_modules/pkg': '0.3.1' }, ranges: ['<0.2.5'], times: { '0.2.3': OLD, '0.2.5': OLD } },
+    ],
+    ['prerelease-copy-under-a-caret-floor', { locked: { 'node_modules/pkg': '1.2.3', 'node_modules/a/node_modules/pkg': '1.3.0-rc.1' } }],
+    [
+      'prerelease-copy-under-a-gte-floor',
+      { locked: { 'node_modules/pkg': '1.2.3', 'node_modules/a/node_modules/pkg': '1.3.0-rc.1' }, manifest: { overrides: { pkg: '>=1.0.0' } } },
+    ],
+  ])('%s: rejects as multiple-lines', (_name, fixture) => {
+    const plan = planOverrideFloors(plannerInput(fixture));
+
+    expect(plan.floors).toEqual([]);
+    expect(plan.rejections).toEqual([{ package: 'pkg', ghsas: expect.any(Array), reason: 'multiple-lines' }]);
   });
 });
 

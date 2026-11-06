@@ -83,8 +83,8 @@ graph LR
   e2e[E2E Tests]
   pass[CI Pass aggregator]
 
-  build --> validate
-  build --> e2e
+  build -->|dist ready| validate
+  build -->|dist ready| e2e
   validate --> sonar
   build --> pass
   validate --> pass
@@ -98,6 +98,21 @@ graph LR
 ```
 
 9 parallel jobs at peak (well under GitHub Free's 20-concurrent limit).
+
+`Audit dependencies` is the last step of `Build & Audit`. Right after `dist`
+is uploaded, the `Mark dist ready` step sets the job's `dist_ready` output.
+`Test & Lint` and `E2E Tests` wait for that output, not for the job result.
+An advisory therefore fails `Build & Audit` and `CI Pass`, and the tests
+still run and report. `SonarCloud Analysis` runs whenever `Test & Lint`
+passes.
+
+`E2E Tests` receives its secrets only when the whole build passed, audit
+included. A tree with a known advisory never runs next to them. Without
+them the Telegram suites and the Google OAuth smoke skip themselves, so
+on a red audit a green `E2E Tests` covers only the suites that need no
+secret. Re-running the workflow audits again against the live advisory
+database, so `E2E Tests` gets its secrets back only when that audit
+passes. A new push or a rebase works the same way.
 
 ## Required check-name preservation
 
@@ -311,13 +326,14 @@ from.
 - **An advisory on the base is labelled, not abandoned.** When the verdict is a
   failure, the run reads which step failed. The audit step in `pr.yml` is
   named `Audit dependencies`, in the `Build & Audit` job, so the jobs API
-  reports it by name. If that step failed, the run fetches the pull
-  request's merge-base `package.json` and `package-lock.json`. It audits them
-  with `main`'s trusted `config/check-audit.mjs` and holds no token while
-  doing so. Exit 1 means the merge base is red too, so the failure is most
-  likely inherited from `main` and the pull request is labelled
-  `blocked-by-advisory`. Exit 0 (the merge base audits clean) and exit 2
-  (npm could not answer) add no label.
+  reports it by name. It is the job's last step, so a failure earlier in
+  the job skips it and adds no label. If that step failed, the run fetches
+  the pull request's merge-base `package.json` and `package-lock.json`. It
+  audits them with `main`'s trusted `config/check-audit.mjs` and holds no
+  token while doing so. Exit 1 means the merge base is red too, so the
+  failure is most likely inherited from `main` and the pull request is
+  labelled `blocked-by-advisory`. Exit 0 (the merge base audits clean) and
+  exit 2 (npm could not answer) add no label.
   Triage does not compare advisory sets: a pull request that fixes the
   base's advisory but adds its own is labelled too. Its rebase then fails on
   a clean base, which removes the label, so the cost is one nudge. Every
@@ -503,7 +519,9 @@ opens a PR when anything moved:
   transitive package exactly, neither command above can move it.
   `scripts/plan-override-floors.mjs --apply` plans one floor per such
   package under rules R1–R7 (`scripts/override-floor-logic.mjs`):
-  - transitive packages only, on one locked caret line;
+  - transitive packages only, whose copies an advisory reaches share one
+    locked caret line, and every other copy satisfies the floor: it sits on
+    the floor's caret line under `^`, or not below the floor under `>=`;
   - advisory ranges it can parse;
   - the lowest published version that clears every advisory, preferring the
     same line and releases at least three days old;
@@ -520,9 +538,10 @@ opens a PR when anything moved:
   the job if `package.json` differs anywhere outside the override keys the
   floor and prune steps reported. A refresh that changes `overrides` is titled
   `fix(deps): raise override floors for <GHSAs>`, so it releases. It arms
-  only when every floor is an aged same-line release and no advisory is left
-  without one. Any other result is labelled `needs-manual-review`. An advisory
-  still unfixed after this step fails the PR's own `npm run audit` gate.
+  only when every floor is an aged same-line release that does not keep a
+  `>=` override and no advisory is left without one. Any other result is
+  labelled `needs-manual-review`. An advisory still unfixed after this step
+  fails the PR's own `npm run audit` gate.
 - **The weekly and dispatched runs prune.** Before planning floors, they try
   removing each plain floor override (`^x.y.z` or `>=x.y.z`); any other shape
   may encode a cap and is kept. The removal stands only when the regenerated
@@ -535,8 +554,9 @@ opens a PR when anything moved:
   nothing is remediated while the registry is down. The job applies the
   floor plan in its own throwaway checkout, so a floor that proves
   ineffective counts as a rejection. When the planner rejects
-  an advisory, the job keeps one open issue, "Unresolved dependency
-  advisories" (label `blocked-by-advisory`), listing each package and its
+  an advisory, or a floor holds the refresh for a maintainer, the job keeps
+  one open issue, "Unresolved dependency advisories" (label
+  `blocked-by-advisory`), listing each rejected package and its
   reason. Once every advisory has a floor, the body says so instead, and
   whether a floor holds the refresh for a maintainer. It
   closes the issue once `main` audits clean. The job holds the
@@ -547,9 +567,10 @@ opens a PR when anything moved:
   refresh PR already carries byte-identical `package.json` and
   `package-lock.json`, is not behind `main`, and has the same review label —
   and, when this run would arm, already has auto-merge armed. A refresh whose
-  arming failed is replaced, which re-arms it. A fresh floor that ages past
-  three days changes the label, so it is reopened armed and supersedes the
-  labelled PR.
+  arming failed is replaced, which re-arms it. A fresh `^` floor that ages
+  past three days changes the label, so it is reopened armed and supersedes
+  the labelled PR. A raised `>=` override is never armed, so aging changes
+  nothing for it.
 - **A newer run supersedes the open refresh PR.** Once this run has opened
   its own PR, or proved main already carries every pin, any other open
   same-repository `chore/lockfile-refresh-*` PR is closed (branch deleted).
