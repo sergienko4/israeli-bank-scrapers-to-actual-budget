@@ -45,7 +45,9 @@ describe('parseTriple', () => {
     expect(parseTriple(text)).toBeNull();
   });
 
-  it.each([undefined, null, 11, {}])('rejects the non-string %j', (value) => {
+  // An array of one version string reads as that string once coerced, so it
+  // is the case that only an explicit type check turns away.
+  it.each([undefined, null, 11, {}, ['11.0.1']])('rejects the non-string %j', (value) => {
     expect(parseTriple(value)).toBeNull();
   });
 });
@@ -131,6 +133,14 @@ describe('rangeHoldsBelow', () => {
     expect(rangeHoldsBelow('~10.2.0', '10.2.9')).toBe(false);
     expect(rangeHoldsBelow('^10.2.0', '10.3.0')).toBe(false);
   });
+
+  it('ends a tilde range at the next minor whatever its patch', () => {
+    // The ceiling is 10.3.0 for ~10.2.3 as for ~10.2.0. A ceiling that kept
+    // the patch would sit at 10.3.3 and let the range reach 10.3.0 and 10.3.1.
+    expect(rangeHoldsBelow('~10.2.3', '10.3.0')).toBe(true);
+    expect(rangeHoldsBelow('~10.2.3', '10.3.1')).toBe(true);
+    expect(rangeHoldsBelow('~10.2.3', '10.2.9')).toBe(false);
+  });
 });
 
 describe('satisfies', () => {
@@ -160,6 +170,8 @@ describe('satisfies', () => {
     [[11, 0, 0], '>=7.0.0 <11.0.1'],
     [[10, 2, 0], '~10.2.0'],
     [[10, 2, 9], '~10.2.0'],
+    [[10, 2, 3], '~10.2.3'],
+    [[10, 2, 9], '~10.2.3'],
     [[10, 2, 5], '^10.2.5'],
     [[10, 2, 6], '>=10.2.6'],
     [[10, 2, 6], '<=10.2.6'],
@@ -174,6 +186,9 @@ describe('satisfies', () => {
     [[11, 0, 1], '>=7.0.0 <11.0.1'],
     [[10, 1, 9], '~10.2.0'],
     [[10, 3, 0], '~10.2.0'],
+    [[10, 2, 2], '~10.2.3'],
+    [[10, 3, 0], '~10.2.3'],
+    [[10, 3, 1], '~10.2.3'],
     [[10, 2, 4], '^10.2.5'],
     [[11, 0, 0], '^10.2.5'],
     [[10, 2, 5], '>=10.2.6'],
@@ -388,6 +403,89 @@ describe('findBlockers', () => {
 
     expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual(['b@2.0.0']);
   });
+
+  it('skips a dependent whose copy lies outside its own declared tilde range', () => {
+    // ~10.2.3 stops short of 10.3.0, so a 10.3.1 copy, pinned there by an
+    // override, is not the copy the dependent asked for and holds nothing
+    // back. The same dependent counts while its copy sits inside the range.
+    const holder = { version: '1.0.0', dependencies: { minimatch: '~10.2.3' } };
+    const pinnedPastIt: LockPackages = {
+      'node_modules/holder': holder,
+      'node_modules/minimatch': { version: '10.3.1' },
+    };
+    const insideIt: LockPackages = {
+      'node_modules/holder': holder,
+      'node_modules/minimatch': { version: '10.2.9' },
+    };
+
+    expect(findBlockers(MINIMATCH, FIXED_IN, pinnedPastIt)).toEqual([]);
+    expect(findBlockers(MINIMATCH, FIXED_IN, insideIt)).toEqual(['holder@1.0.0']);
+  });
+
+  it('resolves a dependent three levels deep to the nearest copy, not the outermost nested one', () => {
+    // c sits under a and b; the copy it loads is the one beside it under b,
+    // which is fixed. The vulnerable copy under a is farther away, so it must
+    // not make c a blocker.
+    const lock: LockPackages = {
+      'node_modules/a': { version: '1.0.0' },
+      'node_modules/a/node_modules/minimatch': { version: '10.2.6' },
+      'node_modules/a/node_modules/b': { version: '1.0.0' },
+      'node_modules/a/node_modules/b/node_modules/minimatch': { version: '11.0.1' },
+      'node_modules/a/node_modules/b/node_modules/c': { version: '2.0.0', dependencies: { minimatch: '^10.2.0' } },
+      'node_modules/minimatch': { version: '11.0.1' },
+    };
+
+    expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual([]);
+  });
+
+  it('names a deeply nested blocker by its own package, not by its install path', () => {
+    const lock: LockPackages = {
+      'node_modules/a': { version: '1.0.0' },
+      'node_modules/a/node_modules/b': { version: '1.0.0' },
+      'node_modules/a/node_modules/b/node_modules/minimatch': { version: '10.2.6' },
+      'node_modules/a/node_modules/b/node_modules/c': { version: '2.0.0', dependencies: { minimatch: '^10.2.0' } },
+      'node_modules/minimatch': { version: '11.0.1' },
+    };
+
+    expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual(['c@2.0.0']);
+  });
+
+  it.each([1, null, {}, ['1.0.0']])('skips a dependent whose record carries the unreadable version %j', (version) => {
+    // A record without a string version is not an installed package, so what
+    // it declares says nothing about what the tree can take.
+    const declared = { dependencies: { minimatch: '^10.2.0' } };
+    const lock = {
+      'node_modules/holder': { version, ...declared },
+      'node_modules/minimatch': { version: '10.2.6' },
+    } as unknown as LockPackages;
+    const control = { ...lock, 'node_modules/holder': { version: '1.0.0', ...declared } } as unknown as LockPackages;
+
+    expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual([]);
+    expect(findBlockers(MINIMATCH, FIXED_IN, control)).toEqual(['holder@1.0.0']);
+  });
+
+  it.each([{ resolved: 'https://registry.example.invalid/minimatch.tgz' }, { version: 10 }, null])(
+    'lets a malformed nested copy %j shadow the top-level one, which then holds nothing back',
+    (nested) => {
+      // The nested record is the nearest copy npm would load, so the
+      // vulnerable top-level copy beyond it is not the one holder resolves to.
+      // A damaged record is no reason to look past it and count a copy the
+      // holder never loads.
+      const holder = { version: '1.0.0', dependencies: { minimatch: '^10.2.0' } };
+      const lock = {
+        'node_modules/holder': holder,
+        'node_modules/holder/node_modules/minimatch': nested,
+        'node_modules/minimatch': { version: '10.2.6' },
+      } as unknown as LockPackages;
+      const control = {
+        ...lock,
+        'node_modules/holder/node_modules/minimatch': { version: '10.2.6' },
+      } as unknown as LockPackages;
+
+      expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual([]);
+      expect(findBlockers(MINIMATCH, FIXED_IN, control)).toEqual(['holder@1.0.0']);
+    },
+  );
 
   it('reads the range npm uses when a package declares the dependency twice', () => {
     const lock: LockPackages = {
