@@ -83,8 +83,8 @@ graph LR
   e2e[E2E Tests]
   pass[CI Pass aggregator]
 
-  build --> validate
-  build --> e2e
+  build -->|dist ready| validate
+  build -->|dist ready| e2e
   validate --> sonar
   build --> pass
   validate --> pass
@@ -98,6 +98,20 @@ graph LR
 ```
 
 9 parallel jobs at peak (well under GitHub Free's 20-concurrent limit).
+
+`Audit dependencies` is the last step of `Build & Audit`. Right after `dist`
+is uploaded, the `Mark dist ready` step sets the job's `dist_ready` output.
+`Test & Lint` and `E2E Tests` wait for that output, not for the job result.
+An advisory therefore fails `Build & Audit` and `CI Pass`, and the tests
+still run and report. `SonarCloud Analysis` runs whenever `Test & Lint`
+passes.
+
+`E2E Tests` receives its secrets only when the whole build passed, audit
+included. A tree with a known advisory never runs next to them. Without
+them the Telegram suites and the Google OAuth smoke skip themselves, so
+on a red audit a green `E2E Tests` covers only the suites that need no
+secret. A new push or a rebase runs E2E with secrets again; re-running the
+same run does not, since the audit result is unchanged.
 
 ## Required check-name preservation
 
@@ -311,13 +325,14 @@ from.
 - **An advisory on the base is labelled, not abandoned.** When the verdict is a
   failure, the run reads which step failed. The audit step in `pr.yml` is
   named `Audit dependencies`, in the `Build & Audit` job, so the jobs API
-  reports it by name. If that step failed, the run fetches the pull
-  request's merge-base `package.json` and `package-lock.json`. It audits them
-  with `main`'s trusted `config/check-audit.mjs` and holds no token while
-  doing so. Exit 1 means the merge base is red too, so the failure is most
-  likely inherited from `main` and the pull request is labelled
-  `blocked-by-advisory`. Exit 0 (the merge base audits clean) and exit 2
-  (npm could not answer) add no label.
+  reports it by name. It is the job's last step, so a failure earlier in
+  the job skips it and adds no label. If that step failed, the run fetches
+  the pull request's merge-base `package.json` and `package-lock.json`. It
+  audits them with `main`'s trusted `config/check-audit.mjs` and holds no
+  token while doing so. Exit 1 means the merge base is red too, so the
+  failure is most likely inherited from `main` and the pull request is
+  labelled `blocked-by-advisory`. Exit 0 (the merge base audits clean) and
+  exit 2 (npm could not answer) add no label.
   Triage does not compare advisory sets: a pull request that fixes the
   base's advisory but adds its own is labelled too. Its rebase then fails on
   a clean base, which removes the label, so the cost is one nudge. Every

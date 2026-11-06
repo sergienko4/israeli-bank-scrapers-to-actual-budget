@@ -27,6 +27,11 @@ jobs:
       contents: read
       # actions/upload-artifact@v4+ uses the actions namespace.
       actions: write
+    # Test & Lint and E2E Tests wait for `dist`, not for the audit, so an
+    # advisory on main fails this job without hiding a pull request's own
+    # test, lint and E2E results.
+    outputs:
+      dist_ready: ${{ steps.dist.outputs.ready }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/ci/setup
@@ -42,15 +47,6 @@ jobs:
         run: |
           git fetch --depth=1 origin "$BASE_SHA"
           node scripts/check-release-signal.mjs --title "$PR_TITLE" --base "$BASE_SHA"
-      # Fails on any advisory at or above "moderate" unless it carries a
-      # justified, expiring entry in config/audit-policy.mjs. An entry for a
-      # package that reaches the production tree is held to a stricter bar:
-      # it must admit the exposure, state that no upstream fix exists, link
-      # the tracking work, and expire within 30 days of being added.
-      # Dependabot Auto-Merge finds this step by name to tell a pull request
-      # that is red only because its base carries an advisory.
-      - name: Audit dependencies
-        run: npm run audit
       # Stale `allowScripts` pins do not fail install — npm just silently
       # skips the blocked postinstall, so the break only surfaces ~14min
       # later as a missing native binding in E2E. Catch it here in seconds.
@@ -63,11 +59,26 @@ jobs:
           name: dist
           path: dist/
           retention-days: 1
+      - name: Mark dist ready
+        id: dist
+        run: echo "ready=true" >> "$GITHUB_OUTPUT"
+      # Fails on any advisory at or above "moderate" unless it carries a
+      # justified, expiring entry in config/audit-policy.mjs. An entry for a
+      # package that reaches the production tree is held to a stricter bar:
+      # it must admit the exposure, state that no upstream fix exists, link
+      # the tracking work, and expire within 30 days of being added.
+      # Dependabot Auto-Merge finds this step by name to tell a pull request
+      # that is red only because its base carries an advisory. It runs last,
+      # after `dist` is uploaded, so a red audit skips no other job.
+      - name: Audit dependencies
+        run: npm run audit
 
   # ─── TEST & LINT ───────────────────────────────────
   validate:
     name: Test & Lint
     needs: build
+    # Runs once `dist` is uploaded, even when the audit after it fails.
+    if: ${{ !cancelled() && needs.build.outputs.dist_ready == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -199,6 +210,9 @@ jobs:
   sonar:
     name: SonarCloud Analysis
     needs: validate
+    # The default success() also reads build, so a failed audit would skip
+    # this job; it needs only a passing Test & Lint.
+    if: ${{ !cancelled() && needs.validate.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -240,15 +254,20 @@ jobs:
   e2e:
     name: E2E Tests
     needs: build
+    # Runs once `dist` is uploaded, even when the audit after it fails.
+    if: ${{ !cancelled() && needs.build.outputs.dist_ready == 'true' }}
     uses: ./.github/workflows/_e2e-suite.yml
     with:
       timeout-minutes: 25
+    # Secrets reach E2E only when the whole build passed, audit included,
+    # so a tree with a known advisory never runs next to them. Without
+    # them the Telegram suites and the Google smoke skip themselves.
     secrets:
-      E2E_TELEGRAM_BOT_TOKEN: ${{ secrets.E2E_TELEGRAM_BOT_TOKEN }}
-      E2E_TELEGRAM_CHAT_ID: ${{ secrets.E2E_TELEGRAM_CHAT_ID }}
-      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-      GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+      E2E_TELEGRAM_BOT_TOKEN: ${{ needs.build.result == 'success' && secrets.E2E_TELEGRAM_BOT_TOKEN || '' }}
+      E2E_TELEGRAM_CHAT_ID: ${{ needs.build.result == 'success' && secrets.E2E_TELEGRAM_CHAT_ID || '' }}
+      GOOGLE_CLIENT_ID: ${{ needs.build.result == 'success' && secrets.GOOGLE_CLIENT_ID || '' }}
+      GOOGLE_CLIENT_SECRET: ${{ needs.build.result == 'success' && secrets.GOOGLE_CLIENT_SECRET || '' }}
+      GOOGLE_REDIRECT_URI: ${{ needs.build.result == 'success' && secrets.GOOGLE_REDIRECT_URI || '' }}
 
   # ─── AGGREGATOR ────────────────────────────────────
   # Single status that reflects the entire DAG. Not in the required

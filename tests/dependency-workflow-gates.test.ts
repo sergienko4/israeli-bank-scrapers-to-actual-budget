@@ -160,9 +160,12 @@ interface IConcurrency {
 
 /** Fields of a workflow job this suite reads. */
 interface IJob {
+  readonly name?: string;
   readonly needs?: string | readonly string[];
   readonly env?: Readonly<Record<string, string>>;
   readonly if?: string;
+  readonly outputs?: Readonly<Record<string, string>>;
+  readonly secrets?: Readonly<Record<string, string>>;
   readonly concurrency?: IConcurrency;
   readonly steps: readonly IStep[];
 }
@@ -1892,5 +1895,48 @@ describe.skipIf(!CAN_RUN)('npm pin for lockfile writers', () => {
 
     expect(refuseAt).toBeGreaterThanOrEqual(0);
     expect(refuseAt).toBeLessThan(steps.findIndex(usesPinNpm));
+  });
+});
+
+describe('PR Pipeline audit decoupling', () => {
+  const pipeline = jobsOf('.github/workflows/pr.yml');
+  const build = pipeline.build;
+  const distReady = "${{ !cancelled() && needs.build.outputs.dist_ready == 'true' }}";
+
+  it('audits last, after dist is uploaded and marked ready', () => {
+    const names = build.steps.map((step) => step.name ?? step.uses ?? step.run ?? '');
+    const uploadAt = build.steps.findIndex((step) => step.uses?.startsWith('actions/upload-artifact@'));
+    const markAt = build.steps.findIndex((step) => step.id === 'dist');
+
+    expect(names.at(-1)).toBe('Audit dependencies');
+    expect(uploadAt).toBeGreaterThanOrEqual(0);
+    expect(markAt).toBe(uploadAt + 1);
+    expect(build.steps[markAt].run).toBe('echo "ready=true" >> "$GITHUB_OUTPUT"');
+    expect(build.outputs?.dist_ready).toBe('${{ steps.dist.outputs.ready }}');
+  });
+
+  it.each(['validate', 'e2e'])('runs %s once dist is ready, even when the audit fails', (id) => {
+    expect(pipeline[id].needs).toBe('build');
+    expect(pipeline[id].if).toBe(distReady);
+  });
+
+  it('passes E2E its secrets only when the whole build passed, audit included', () => {
+    const secrets = Object.entries(pipeline.e2e.secrets ?? {});
+    const gated = (name: string): string => `\${{ needs.build.result == 'success' && secrets.${name} || '' }}`;
+
+    expect(secrets.length).toBeGreaterThan(0);
+    for (const [name, value] of secrets) {
+      expect(value).toBe(gated(name));
+    }
+  });
+
+  it('runs SonarCloud Analysis on a passing Test & Lint whatever the audit says', () => {
+    expect(pipeline.sonar.needs).toBe('validate');
+    expect(pipeline.sonar.if).toBe("${{ !cancelled() && needs.validate.result == 'success' }}");
+  });
+
+  it('keeps CI Pass red while the audit fails', () => {
+    expect(pipeline['ci-pass'].if).toBe('always()');
+    expect(pipeline['ci-pass'].needs).toContain('build');
   });
 });
