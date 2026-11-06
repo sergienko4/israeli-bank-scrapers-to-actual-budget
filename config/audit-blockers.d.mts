@@ -6,6 +6,11 @@
 
 /** One record in package-lock.json's `packages` map; only the fields read here. */
 export interface ILockPackage {
+  /**
+   * Present when the package's own name differs from the one in its install path, as for an `npm:` alias.
+   * A record whose name differs, or is unreadable, is never counted as the package its path names.
+   */
+  name?: string;
   version?: string;
   /** True for a symlink to a folder outside node_modules; any value marks the record as not installed. */
   link?: boolean;

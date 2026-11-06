@@ -297,21 +297,42 @@ function resolveCopy(key, query) {
 }
 
 /**
+ * Reports whether an installed record is an alias for a different package than its install path names.
+ *
+ * npm records a `name` when the package's own name differs from the one in
+ * its install path, as it does for an `npm:` alias such as
+ * `"minimatch": "npm:minimatch-fork@^1.0.0"`. The version then belongs to the
+ * other package, so no advisory for the path's name covers it. A `name` that
+ * is not a string matching the path's package is treated the same way, so a
+ * damaged record never counts as the vulnerable package.
+ *
+ * @param {object} record One installed lockfile record.
+ * @param {string} name The package that the install path names.
+ * @returns {boolean} True when the record carries a name other than `name`.
+ */
+function isAliased(record, name) {
+  return Object.hasOwn(record, 'name') && record.name !== name;
+}
+
+/**
  * Reports whether a resolved copy is still vulnerable and was placed by the dependent's own range.
  *
- * The copy must be installed, below the fix, and inside the advisory's
- * vulnerable range. It must also lie inside the range the dependent declares:
- * a copy outside it was placed by something else, such as an override this
+ * The copy must be installed, be the package itself rather than an alias for
+ * another one, sit below the fix, and lie inside the advisory's vulnerable
+ * range. It must also lie inside the range the dependent declares: a copy
+ * outside it was placed by something else, such as an override this
  * repository controls, so it proves nothing about the dependent.
  *
  * @param {unknown} record The resolved lockfile record.
  * @param {unknown} declared The range the dependent declares.
- * @param {{ fixed: number[], range: unknown }} query The fixed version triple and the advisory range.
- * @returns {boolean} True only for an installed, plain-version copy that meets every condition.
+ * @param {{ name: string, fixed: number[], range: unknown }} query
+ *   The package, the fixed version triple and the advisory range.
+ * @returns {boolean} True only for an installed, plain-version copy of the package that meets every condition.
  */
 function isAffectedCopy(record, declared, query) {
   const version = isInstalled(record) ? parseTriple(record.version) : null;
-  if (version === null || compareTriples(version, query.fixed) >= 0) return false;
+  if (version === null || isAliased(record, query.name)) return false;
+  if (compareTriples(version, query.fixed) >= 0) return false;
   return satisfies(version, query.range) && satisfies(version, declared);
 }
 
@@ -334,11 +355,12 @@ function holdsBack(query, key, record) {
 /**
  * Lists the installed packages whose declared range cannot take the fixed version.
  *
- * A package counts only while the copy it resolves is installed, still below
- * the fix, inside the advisory's vulnerable range, and inside the package's
- * own declared range: a copy that an override already moved to the fix, one
- * that the advisory does not cover, or one that is not installed at all,
- * blocks nothing. A missing or unreadable advisory range blocks nothing. Only
+ * A package counts only while the copy it resolves is installed, the package
+ * itself rather than an alias for another one, still below the fix, inside
+ * the advisory's vulnerable range, and inside the package's own declared
+ * range: a copy that an override already moved to the fix, one that the
+ * advisory does not cover, or one that is not installed at all, blocks
+ * nothing. A missing or unreadable advisory range blocks nothing. Only
  * records under `node_modules/` count. The root record and workspace folders
  * are skipped because this repository controls their manifests and can
  * always take the fix itself. Links and records without a version are skipped

@@ -276,6 +276,33 @@ describe('findBlockers', () => {
     expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual([]);
   });
 
+  it('skips a copy that is an alias for another package', () => {
+    // npm records a `name` when the package's own name differs from the one in
+    // its install path, as it does for an `npm:` alias, so a copy named
+    // otherwise is not the package that the path names.
+    const holder = { version: '10.2.0', dependencies: { minimatch: '^10.2.5' } };
+    const aliased: LockPackages = {
+      'node_modules/eslint': holder,
+      'node_modules/minimatch': { name: 'minimatch-fork', version: '10.2.6' },
+    };
+    const named: LockPackages = {
+      'node_modules/eslint': holder,
+      'node_modules/minimatch': { name: 'minimatch', version: '10.2.6' },
+    };
+
+    expect(findBlockers(MINIMATCH, FIXED_IN, aliased)).toEqual([]);
+    expect(findBlockers(MINIMATCH, FIXED_IN, named)).toEqual(['eslint@10.2.0']);
+  });
+
+  it.each([null, '', 5, {}])('treats the unreadable copy name %j as an alias', (name) => {
+    const lock = {
+      'node_modules/eslint': { version: '10.2.0', dependencies: { minimatch: '^10.2.5' } },
+      'node_modules/minimatch': { name, version: '10.2.6' },
+    } as unknown as LockPackages;
+
+    expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual([]);
+  });
+
   it.each([
     ['is not installed', {}],
     ['already carries the fix', { 'node_modules/minimatch': { version: '11.0.1' } }],
