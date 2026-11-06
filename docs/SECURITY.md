@@ -284,7 +284,12 @@ If a security vulnerability is discovered in a released version:
   tree is an accepted risk rather than a deferral, so it must additionally set
   `productionReachable` and `noUpstreamFix`, carry an `added` date no later
   than today, give an HTTPS `upstream` link to the work being tracked, and
-  expire within 30 days of `added`.
+  expire within 30 days of `added`. A development-tree entry may instead set
+  `autoExtend: { fixedIn }`: from its `expires` date on, it stands only
+  while a package in the committed lockfile declares a range that cannot
+  reach `fixedIn`, and every audit run warns about it (see
+  [ADR-0004](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0004-auto-extending-dev-acceptances.md)).
+  An auto-extending entry is never honoured in the production tree.
 - ✅ Automated dependency updates via Dependabot (npm, Actions, Docker).
   Safe patch and minor updates merge on their own after every required
   check passes; majors, Docker minors and script-pin rotations wait for a
@@ -313,10 +318,12 @@ If a security vulnerability is discovered in a released version:
   unless a pin crossed a major
 - ✅ `main` is audited every four hours. An advisory behind an exact
   transitive pin gets an `overrides` floor, which is proved to clear it
-  before the pull request opens. Aged same-line floors auto-merge; the rest
-  wait for a human (see
+  before the pull request opens. Aged same-line `^` floors auto-merge; the
+  rest, including any raised `>=` override, wait for a human (see
   [ADR-0003](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0003-automated-override-floors.md))
-- ✅ `npm run audit` runs as blocking CI check (no bypass; exceptions expire)
+- ✅ `npm run audit` runs as blocking CI check (no bypass; exceptions
+  expire, and an opted-in development-tree exception outlives its date only
+  while the committed lockfile blocks the fix)
 
 ---
 
