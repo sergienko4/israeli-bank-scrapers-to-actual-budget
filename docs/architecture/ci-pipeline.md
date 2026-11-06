@@ -520,8 +520,8 @@ opens a PR when anything moved:
   `scripts/plan-override-floors.mjs --apply` plans one floor per such
   package under rules R1–R7 (`scripts/override-floor-logic.mjs`):
   - transitive packages only, whose copies an advisory reaches share one
-    locked caret line, with a floor that admits the locked version of every
-    other copy;
+    locked caret line, and every other copy satisfies the floor: it sits on
+    the floor's caret line under `^`, or not below the floor under `>=`;
   - advisory ranges it can parse;
   - the lowest published version that clears every advisory, preferring the
     same line and releases at least three days old;

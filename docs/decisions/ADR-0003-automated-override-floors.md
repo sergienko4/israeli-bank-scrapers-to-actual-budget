@@ -65,7 +65,7 @@ recover on their own once `main` is clean.
    | Rule | Check | Rejection | Why |
    | --- | --- | --- | --- |
    | R1 | The package is not declared in `dependencies`, `devDependencies`, `optionalDependencies` or `peerDependencies`. | `direct-dependency` | A declared range is Dependabot's to raise. An override on a direct dependency fights it. |
-   | R2 | The package is in the lockfile, every locked copy has a version the planner can parse, the locked copies an advisory reaches sit on one caret line (`^1.2.0` admits it), and the floor admits the locked version of every other copy. | `not-in-lockfile`, `unparseable-version`, `multiple-lines` | One floor across two lines would force one copy over a breaking boundary, and an override applies to every copy, including the ones no advisory reaches. A copy whose version cannot be read could sit below the floor or on another line unseen. |
+   | R2 | The package is in the lockfile, every locked copy has a version the planner can parse, the locked copies an advisory reaches sit on one caret line (`^1.2.0` admits it), and every other copy satisfies the floor: it sits on the floor's caret line under `^`, or not below the floor under `>=`. | `not-in-lockfile`, `unparseable-version`, `multiple-lines` | One floor across two lines would force one copy over a breaking boundary, and an override applies to every copy, including the ones no advisory reaches. A copy whose version cannot be read could sit on another line, or below a `>=` floor, unseen. |
    | R3 | Every advisory range for the package parses in a narrow comparator grammar (`*`, `>=`, `>`, `<=`, `<`, `=`, `\|\|`); `^`, `~`, `x` and hyphen ranges do not. | `unparseable-range` | A range the planner cannot read cannot prove a version safe. |
    | R4 | npm reported publish times. A failed or timed-out `npm view` counts as none. | `missing-publish-times` | The age rule below needs them. |
    | R5 | Some published stable version at or above the highest locked copy an advisory reaches matches no advisory range. | `no-fixed-release` | There is nothing to move to. |
@@ -89,12 +89,15 @@ recover on their own once `main` is clean.
    > caret line. In November 2026, after `npm update`, `glob` and `minimatch`
    > each had a vulnerable copy on one line and an already-fixed copy on the
    > next, so the planner rejected both as `multiple-lines` and `main` stayed
-   > red. R2 now looks
-   > only at the copies an advisory reaches, or at every copy when its ranges
-   > reach none, and rejects as `multiple-lines` a floor that does not admit
-   > the locked version of any other copy. Which copies an advisory reaches
-   > depends on its ranges, so the line check runs after R3: a package whose
-   > range does not parse is rejected as `unparseable-range` first.
+   > red. R2 now looks only at the copies an advisory reaches, or at every
+   > copy when its ranges reach none, and rejects as `multiple-lines` a floor
+   > that another copy does not satisfy: a copy on a different caret line
+   > under `^`, or a copy below the floor under `>=`. A copy below a `^` floor
+   > on the floor's own line is accepted, and `npm update` raises it within
+   > that line; below a `>=` floor it would be raised without an upper bound.
+   > Which copies an advisory reaches depends on its ranges, so the line check
+   > runs after R3: a package whose range does not parse is rejected as
+   > `unparseable-range` first.
 
 3. **The refresh applies floors and proves them.** After `npm update` and
    `npm audit fix`, the step "Raise override floors for out-of-range

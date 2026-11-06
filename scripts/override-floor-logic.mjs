@@ -10,8 +10,9 @@
  *
  * Rules, evaluated per package in order (see the ADR for the rationale):
  * R1 a declared dependency is Dependabot's job, not an override's;
- * R2 the locked copies an advisory reaches must sit on one caret line, and the
- *    override must admit the locked version of every other copy;
+ * R2 the locked copies an advisory reaches must sit on one caret line, and
+ *    every other copy must satisfy the override: sit on the floor's caret
+ *    line under `^`, or not below the floor under `>=`;
  * R3 every advisory range for the package must parse in the narrow grammar;
  * R4 npm must have reported publish times;
  * R5 pick the lowest fixed version, preferring same-line and aged releases;
@@ -303,8 +304,15 @@ function reconcileOverride(name, version, input) {
 }
 
 /**
- * Reports whether an override leaves a locked copy where it is: `>=` admits
- * any version not below it, and `^` also requires the same caret line.
+ * Reports whether a locked copy satisfies an override: `>=` admits any
+ * version not below it, and `^` admits any version on the floor's caret line,
+ * below the floor or above it.
+ *
+ * Admitting a copy does not pin it. `npm update <pkg>` re-resolves every
+ * copy, admitted ones included, to the newest release the override allows:
+ * within the copy's caret line under `^`, without an upper bound under `>=`.
+ * A copy below a `>=` floor is therefore rejected, because the override would
+ * force it onto that unbounded newest release.
  *
  * A prerelease copy is never admitted. The override is always a plain
  * release, and npm ranges skip prereleases of any other release, so the
@@ -312,20 +320,22 @@ function reconcileOverride(name, version, input) {
  *
  * @param {string} floor The override text, `^x.y.z` or `>=x.y.z`.
  * @param {object} version The parsed locked version.
- * @returns {boolean} True when the override would not move the copy.
+ * @returns {boolean} True when the copy satisfies the override.
  */
 function admitsOverride(floor, version) {
   if (version.prerelease.length > 0) return false;
   const [, operator, text] = SIMPLE_OVERRIDE.exec(floor);
   const bound = parseVersion(text);
-  const notBelow = compareVersions(version, bound) >= 0;
-  return operator === '>=' ? notBelow : notBelow && caretLine(version) === caretLine(bound);
+  if (operator === '>=') return compareVersions(version, bound) >= 0;
+  return caretLine(version) === caretLine(bound);
 }
 
 /**
  * R2 guard: an override applies to every copy of the package, so a copy no
- * advisory reaches must already satisfy it, or the override would silently
- * move that copy across a breaking boundary and no audit would notice.
+ * advisory reaches must already satisfy it, or the override would force that
+ * copy across a breaking boundary and no audit would notice. A copy that does
+ * satisfy it may still be raised by `npm update`, within its caret line under
+ * `^`.
  *
  * @param {{ versions: object[], scope: object[] }} facts What R2 established.
  * @param {{ floor: string, from: string | null }} override The reconciled override.

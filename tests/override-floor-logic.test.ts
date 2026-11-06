@@ -194,6 +194,21 @@ describe('planOverrideFloors: edge cases', () => {
     expect(plan.floors).toMatchObject([{ floor: '^1.3.0', kind: 'in-line' }]);
   });
 
+  it('admits a copy below a caret floor on the same line, which npm raises within it', () => {
+    const plan = planOverrideFloors(
+      plannerInput({
+        name: 're2js',
+        locked: { 'node_modules/markdownlint/node_modules/re2js': '2.8.6', 'node_modules/other/node_modules/re2js': '2.1.0' },
+        ranges: ['>=2.2.0 <2.8.7'],
+        times: { '2.8.6': OLD, '2.8.7': OLD },
+      }),
+    );
+
+    expect(plan.floors).toMatchObject([{ package: 're2js', floor: '^2.8.7', kind: 'in-line' }]);
+    expect(plan.rejections).toEqual([]);
+    expect(plan.requiresReview).toBe(false);
+  });
+
   it('matches a scoped package by both name segments', () => {
     const plan = planOverrideFloors(plannerInput({ name: '@scope/pkg', locked: { 'node_modules/a/node_modules/@scope/pkg': '1.2.3' } }));
 
@@ -215,6 +230,14 @@ describe('planOverrideFloors: edge cases', () => {
   it.each<[string, IFixture]>([
     ['affected-on-two-lines', { locked: { 'node_modules/pkg': '1.1.0', 'node_modules/a/node_modules/pkg': '2.1.0' }, ranges: ['<3.0.0'], times: { '1.1.0': OLD, '3.0.0': OLD } }],
     ['higher-copy-would-be-downgraded', { locked: { 'node_modules/pkg': '1.2.0', 'node_modules/a/node_modules/pkg': '2.1.0' } }],
+    [
+      'gte-floor-would-raise-a-lower-copy',
+      {
+        locked: { 'node_modules/pkg': '1.2.3', 'node_modules/a/node_modules/pkg': '1.1.0' },
+        ranges: ['>=1.2.0 <1.2.4'],
+        manifest: { overrides: { pkg: '>=1.0.0' } },
+      },
+    ],
     [
       'lower-copy-would-be-upgraded',
       { locked: { 'node_modules/pkg': '13.0.6', 'node_modules/a/node_modules/pkg': '8.1.0' }, ranges: ['>=9.0.0 <=14.0.1'], times: { '13.0.6': OLD, '14.0.2': OLD } },
