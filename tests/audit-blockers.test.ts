@@ -123,6 +123,14 @@ describe('rangeHoldsBelow', () => {
     expect(rangeHoldsBelow('^0.0.3', '0.0.4')).toBe(true);
     expect(rangeHoldsBelow('^0.0.3', '0.0.3')).toBe(false);
   });
+
+  it('stops a tilde range at the next minor, not the next major', () => {
+    // From 1.0.0 on a caret range runs to the next major and a tilde range
+    // does not, so ~10.2.0 cannot take 10.3.0 while ^10.2.0 can.
+    expect(rangeHoldsBelow('~10.2.0', '10.3.0')).toBe(true);
+    expect(rangeHoldsBelow('~10.2.0', '10.2.9')).toBe(false);
+    expect(rangeHoldsBelow('^10.2.0', '10.3.0')).toBe(false);
+  });
 });
 
 describe('satisfies', () => {
@@ -190,9 +198,17 @@ describe('findBlockers', () => {
   });
 
   it('ignores the root manifest, which this repository can always bump itself', () => {
-    const lock = { '': { version: '1.0.0', dependencies: { minimatch: '^10.2.2' } } };
+    // The copy is installed, inside the range the manifest declares, and
+    // covered by the advisory, so only the root check keeps the manifest out.
+    // The same record counts when an installed package declares it, which
+    // shows the fixture is not vacuous.
+    const manifest = { version: '1.0.0', dependencies: { minimatch: '^10.2.2' } };
+    const copy = { version: '10.2.6' };
+    const asRoot: LockPackages = { '': manifest, 'node_modules/minimatch': copy };
+    const asHolder: LockPackages = { 'node_modules/holder': manifest, 'node_modules/minimatch': copy };
 
-    expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual([]);
+    expect(findBlockers(MINIMATCH, FIXED_IN, asRoot)).toEqual([]);
+    expect(findBlockers(MINIMATCH, FIXED_IN, asHolder)).toEqual(['holder@1.0.0']);
   });
 
   it('finds nothing once every dependent can take the fix', () => {
@@ -370,10 +386,23 @@ describe('resolveAutoExtensions', () => {
   it.each([
     ['the audit reports no advisories', []],
     ['only another GHSA ID is reported', [{ ...ADVISORIES[0], ghsa: 'GHSA-other' }]],
-    ['the GHSA ID is reported for another package', [{ ...ADVISORIES[0], package: 'glob' }]],
   ])('attaches no blockers when %s', (_case, advisories) => {
     const [resolved] = resolveAutoExtensions([autoExtending], LOCK, advisories);
 
     expect(resolved?.[BLOCKERS]).toEqual([]);
+  });
+
+  it('attaches no blockers when the GHSA ID is reported for another package', () => {
+    // glob is held back here. An entry matched on its GHSA ID alone would
+    // pick up glob's blockers for the wrong package, which LOCK cannot show
+    // because nothing in it depends on glob.
+    const lock: LockPackages = {
+      'node_modules/holder': { version: '1.0.0', dependencies: { glob: '^10.0.0' } },
+      'node_modules/glob': { version: '10.4.0' },
+    };
+    const other = { ...ADVISORIES[0], package: 'glob' };
+
+    expect(findBlockers(other, FIXED_IN, lock)).toEqual(['holder@1.0.0']);
+    expect(resolveAutoExtensions([autoExtending], lock, [other])[0]?.[BLOCKERS]).toEqual([]);
   });
 });
