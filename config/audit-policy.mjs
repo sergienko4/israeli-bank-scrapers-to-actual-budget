@@ -19,9 +19,19 @@
  * so it expires into a build failure long before it can be forgotten. It
  * suppresses only the named advisory, never a severity or a scope.
  *
- * Both classes stop working on their `expires` date. Prefer upgrading,
- * overriding, or removing the dependency over writing either one.
+ * Both classes stop working on their `expires` date, with one narrow exception.
+ * A development-tree entry may opt into `autoExtend: { fixedIn }`. It then keeps
+ * working past `expires` for as long as some package in the committed lockfile
+ * declares a range for the vulnerable package that cannot reach `fixedIn`
+ * (config/audit-blockers.mjs finds them). Once nothing blocks the fix, the
+ * expired entry fails the build like any other. A production-tree entry can
+ * never auto-extend.
+ *
+ * Prefer upgrading, overriding, or removing the dependency over writing any
+ * entry at all.
  */
+
+import { BLOCKERS, parseTriple, resolveAutoExtensions } from './audit-blockers.mjs';
 
 /** Severity floor the gate enforces, matching `npm audit --audit-level`. */
 export const AUDIT_LEVEL = 'moderate';
@@ -37,6 +47,14 @@ export const SEVERITY_RANK = ['info', 'low', 'moderate', 'high', 'critical'];
  */
 export const MAX_PRODUCTION_ACCEPTANCE_DAYS = 30;
 
+/**
+ * How many days before its expiry an acceptance starts to warn.
+ *
+ * Three weeks spans a weekly dependency cycle plus review time, so the warning
+ * arrives while the advisory can still be fixed rather than renewed in a hurry.
+ */
+export const EXPIRY_WARNING_DAYS = 21;
+
 /** Milliseconds in a day, used to measure an acceptance window. */
 const MS_PER_DAY = 86_400_000;
 
@@ -45,7 +63,7 @@ const MS_PER_DAY = 86_400_000;
  *
  * @type {Array<{ ghsa: string, package: string, expires: string, reason: string,
  *   added?: string, productionReachable?: boolean, noUpstreamFix?: boolean,
- *   upstream?: string }>}
+ *   upstream?: string, autoExtend?: { fixedIn: string } }>}
  */
 export const ACCEPTED_ADVISORIES = [
   {
@@ -174,12 +192,89 @@ function isWithinAcceptanceCap(entry, todayMs) {
 }
 
 /**
+ * Reads today's date as epoch milliseconds at UTC midnight.
+ *
+ * Read once per run and passed down, so a run that crosses UTC midnight never
+ * judges two entries against different days.
+ *
+ * @returns {number} Epoch milliseconds for today at UTC midnight.
+ */
+function todayUtcMs() {
+  return parseIsoDate(new Date().toISOString().slice(0, 10));
+}
+
+/**
+ * Reports whether an entry opts into auto-extension, validly or not.
+ *
+ * Presence of the key alone decides, so a malformed `autoExtend`, even an
+ * explicit `undefined`, is held to the auto-extension rules and rejected
+ * rather than quietly read as absent.
+ *
+ * @param {object} entry Accepted-advisory entry under consideration.
+ * @returns {boolean} True when the entry has its own `autoExtend` key.
+ */
+function hasAutoExtend(entry) {
+  return Object.hasOwn(entry, 'autoExtend');
+}
+
+/**
+ * Reports whether an entry opts into auto-extension without a usable fixed version.
+ *
+ * @param {object} entry Accepted-advisory entry under consideration.
+ * @returns {boolean} True when `autoExtend.fixedIn` is not a plain `MAJOR.MINOR.PATCH`.
+ */
+function hasInvalidAutoExtend(entry) {
+  return hasAutoExtend(entry) && parseTriple(entry.autoExtend?.fixedIn) === null;
+}
+
+/**
+ * Reads the locked packages that block an entry's fix, as resolution recorded them.
+ *
+ * @param {object} entry Accepted-advisory entry, possibly resolved.
+ * @returns {Array<string>} The blockers, or an empty list when none were recorded.
+ */
+function blockersOf(entry) {
+  const blockers = entry[BLOCKERS];
+  return Array.isArray(blockers) ? blockers : [];
+}
+
+/**
+ * Reports whether an auto-extending entry is still blocked from taking its fix.
+ *
+ * The blockers are read from the BLOCKERS symbol, which only
+ * resolveAutoExtensions writes. Neither a `blockers` field in the policy data
+ * nor a caller that skipped resolution can therefore extend an entry: both
+ * read as "not blocked", which fails closed into an ordinary expiry.
+ *
+ * @param {object} entry Accepted-advisory entry, possibly resolved.
+ * @returns {boolean} True when the entry opts in and at least one locked package blocks the fix.
+ */
+function isStillBlocked(entry) {
+  return parseTriple(entry.autoExtend?.fixedIn) !== null && blockersOf(entry).length > 0;
+}
+
+/**
+ * Explains an expiry, naming the missing blocker for an auto-extending entry.
+ *
+ * @param {object} entry The expired entry.
+ * @returns {string} The blocking reason.
+ */
+function expiredReason(entry) {
+  const expired = `exception expired on ${entry.expires}`;
+  if (!hasAutoExtend(entry)) return expired;
+  return `${expired}; it auto-extends only while a locked package blocks ${entry.package} ${entry.autoExtend.fixedIn}, and none does`;
+}
+
+/**
  * Reports why an entry cannot be honoured regardless of which tree it sits in.
  *
  * Every acceptance must carry a rationale. The type allows the field to be
  * absent so malformed input can be classified rather than crash, which means
  * the runtime has to reject it here; otherwise a waiver with no justification
  * is honoured and `check-audit.mjs` reports `undefined` as its reason.
+ *
+ * An expired entry stands only when it auto-extends and a locked package still
+ * blocks its fix.
  *
  * @param {object} entry Accepted-advisory entry under consideration.
  * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
@@ -191,18 +286,25 @@ function universalBlockingReason(entry, todayMs) {
   }
   const expiresMs = parseIsoDate(entry.expires);
   if (expiresMs === null) return 'exception has an invalid expires date';
-  if (expiresMs <= todayMs) return `exception expired on ${entry.expires}`;
+  if (hasInvalidAutoExtend(entry)) return 'exception has an invalid autoExtend.fixedIn version';
+  if (expiresMs <= todayMs && !isStillBlocked(entry)) return expiredReason(entry);
   return null;
 }
 
 /**
  * Reports why an entry fails the stricter bar applied to the production tree.
  *
+ * An auto-extending entry is refused outright. Shipping a known vulnerability
+ * has to stay capped and dated, so it can never run on past its expiry.
+ *
  * @param {object} entry Accepted-advisory entry under consideration.
  * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
  * @returns {string | null} The blocking reason, or null when the entry stands.
  */
 function productionBlockingReason(entry, todayMs) {
+  if (hasAutoExtend(entry)) {
+    return 'reaches the production tree; an auto-extending exception is development-only';
+  }
   if (!hasProductionEvidence(entry)) {
     return 'reaches the production tree; exception lacks the required evidence';
   }
@@ -236,11 +338,37 @@ function blockingReason(advisory, entry, policy) {
 }
 
 /**
+ * Builds the record reported for an advisory that an entry accepts.
+ *
+ * An ordinary entry keeps the exact record shape callers have always read. An
+ * auto-extending entry also reports its fixed version, the locked packages
+ * that block it, and whether it is already running past its expiry, so the
+ * gate can warn about every extension it grants.
+ *
+ * @param {object} advisory Advisory the entry accepts.
+ * @param {object} entry The accepting entry, possibly resolved.
+ * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
+ * @returns {object} The accepted record.
+ */
+function acceptedRecord(advisory, entry, todayMs) {
+  const record = { ...advisory, expires: entry.expires, reason: entry.reason };
+  if (!hasAutoExtend(entry)) return record;
+  return {
+    ...record,
+    fixedIn: entry.autoExtend.fixedIn,
+    blockers: [...blockersOf(entry)],
+    extended: parseIsoDate(entry.expires) <= todayMs,
+  };
+}
+
+/**
  * Classifies advisories into blocking violations and accepted suppressions.
  *
  * An entry is honoured only when it has not expired, and, when the package
  * reaches the production tree, only when it carries production evidence and a
- * window within MAX_PRODUCTION_ACCEPTANCE_DAYS.
+ * window within MAX_PRODUCTION_ACCEPTANCE_DAYS. An expired development-tree
+ * entry also stands when it auto-extends and its resolved blockers are not
+ * empty; entries that were never resolved have no blockers, so they expire.
  *
  * The policy date is read once here and reused for every advisory, so a run
  * that crosses UTC midnight cannot judge two entries against different days.
@@ -253,10 +381,7 @@ function blockingReason(advisory, entry, policy) {
 export function classifyAdvisories(advisories, productionPackages, entries = ACCEPTED_ADVISORIES) {
   const violations = [];
   const accepted = [];
-  const policy = {
-    productionPackages,
-    todayMs: parseIsoDate(new Date().toISOString().slice(0, 10)),
-  };
+  const policy = { productionPackages, todayMs: todayUtcMs() };
 
   for (const advisory of advisories.filter(a => isInScope(a.severity))) {
     const entry = findAcceptedEntry(advisory, entries);
@@ -264,9 +389,80 @@ export function classifyAdvisories(advisories, productionPackages, entries = ACC
     if (why) {
       violations.push({ ...advisory, why });
     } else {
-      accepted.push({ ...advisory, expires: entry.expires, reason: entry.reason });
+      accepted.push(acceptedRecord(advisory, entry, policy.todayMs));
     }
   }
 
   return { violations, accepted };
+}
+
+/**
+ * Classifies a committed-tree audit after resolving auto-extensions from the lockfile.
+ *
+ * This is the entry point the gates use. Resolving and classifying in one call
+ * means no caller can judge an auto-extending entry against blockers from a
+ * different lockfile or audit, or forget to resolve it and lose the extension.
+ * The audit's advisory ranges decide which locked copies are still affected.
+ *
+ * @param {{ advisories: Array<object>, productionPackages: Set<string> }} audit The committed-tree audit.
+ * @param {Record<string, object>} lockPackages The committed lockfile's `packages` map.
+ * @param {Array<object>} [entries] Entries to apply, defaulting to the policy.
+ * @returns {{ violations: Array<object>, accepted: Array<object>, resolvedEntries: Array<object> }}
+ *   The classification, plus the resolved entries for the follow-up warnings.
+ */
+export function classifyCommittedAudit(audit, lockPackages, entries = ACCEPTED_ADVISORIES) {
+  const resolvedEntries = resolveAutoExtensions(entries, lockPackages, audit.advisories);
+  const result = classifyAdvisories(audit.advisories, audit.productionPackages, resolvedEntries);
+  return { ...result, resolvedEntries };
+}
+
+/**
+ * Counts the days from today until an ISO date.
+ *
+ * @param {unknown} isoDate Candidate `YYYY-MM-DD` date.
+ * @param {number} todayMs Epoch milliseconds for today at UTC midnight.
+ * @returns {number | null} Whole days until the date, or null when it is invalid.
+ */
+function daysUntil(isoDate, todayMs) {
+  const dateMs = parseIsoDate(isoDate);
+  return dateMs === null ? null : (dateMs - todayMs) / MS_PER_DAY;
+}
+
+/**
+ * Lists the acceptances that lapse within the warning window.
+ *
+ * An auto-extending entry whose fix is still blocked is left out, because it
+ * will not lapse on its date; once past it, the entry reports as extended
+ * instead. An entry with an invalid date is left out too, because the gate
+ * already rejects it.
+ *
+ * @param {Array<object>} [entries] Entries to inspect, defaulting to the policy.
+ * @param {number} [days] Width of the warning window in days.
+ * @returns {Array<object>} Entries that expire after today and at most `days` days from now.
+ */
+export function expiringSoon(entries = ACCEPTED_ADVISORIES, days = EXPIRY_WARNING_DAYS) {
+  const todayMs = todayUtcMs();
+  return entries.filter((entry) => {
+    if (isStillBlocked(entry)) return false;
+    const daysLeft = daysUntil(entry.expires, todayMs);
+    return daysLeft !== null && daysLeft > 0 && daysLeft <= days;
+  });
+}
+
+/**
+ * Lists the entries that match no advisory the audit reported.
+ *
+ * An entry has outlived its purpose once npm audit stops reporting its
+ * advisory, whether the fix landed or the advisory was withdrawn. Advisories of
+ * every severity count as a match, so an entry is not called unused merely
+ * because its advisory sits below the gate's floor.
+ *
+ * @param {Array<{ ghsa: string, package: string }>} entries Entries to inspect.
+ * @param {Array<{ ghsa: string, package: string }>} advisories Advisories reported, at any severity.
+ * @returns {Array<object>} Entries with no matching advisory.
+ */
+export function unusedEntries(entries, advisories) {
+  return entries.filter(entry => !advisories.some(
+    advisory => advisory.ghsa === entry.ghsa && advisory.package === entry.package,
+  ));
 }

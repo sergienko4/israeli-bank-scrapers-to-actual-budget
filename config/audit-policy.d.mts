@@ -4,12 +4,16 @@
  * precedent.
  */
 
+import type { IAutoExtend, LockPackages, ResolvedEntry } from './audit-blockers.mjs';
+
 /** An advisory as flattened from `npm audit --json` by config/check-audit.mjs. */
 export interface IAdvisory {
   ghsa: string;
   package: string;
   severity: string;
   title: string;
+  /** npm's vulnerable range, such as `>=7.0.0 <11.0.1`; null when the report has none. */
+  range?: string | null;
 }
 
 /**
@@ -30,6 +34,11 @@ export interface IRawAcceptedAdvisory {
   productionReachable?: boolean;
   noUpstreamFix?: boolean;
   upstream?: string;
+  /**
+   * Opt-in that keeps a development-tree entry working past `expires` while a
+   * locked package still declares a range that cannot reach `fixedIn`.
+   */
+  autoExtend?: IAutoExtend;
 }
 
 /**
@@ -44,17 +53,36 @@ export interface IAcceptedAdvisory extends IRawAcceptedAdvisory {
   reason: string;
 }
 
-/** An advisory annotated with the outcome of classification. */
+/**
+ * An advisory annotated with the outcome of classification.
+ *
+ * `fixedIn`, `blockers` and `extended` appear only on a record accepted by an
+ * auto-extending entry; every other record keeps the original shape.
+ */
 export interface IClassifiedAdvisory extends IAdvisory {
   why?: string;
   expires?: string;
   reason?: string;
+  fixedIn?: string;
+  blockers?: string[];
+  extended?: boolean;
 }
 
 /** The split of advisories into blocking and accepted. */
 export interface IAdvisoryClassification {
   violations: IClassifiedAdvisory[];
   accepted: IClassifiedAdvisory[];
+}
+
+/** A classification of the committed tree, with the entries it resolved. */
+export interface ICommittedAuditClassification extends IAdvisoryClassification {
+  resolvedEntries: Array<ResolvedEntry<IRawAcceptedAdvisory>>;
+}
+
+/** The parts of a committed-tree audit that classification reads. */
+export interface ICommittedAudit {
+  advisories: readonly IAdvisory[];
+  productionPackages: ReadonlySet<string>;
 }
 
 /** Severity floor the gate enforces, matching `npm audit --audit-level`. */
@@ -65,6 +93,9 @@ export const SEVERITY_RANK: readonly string[];
 
 /** Longest window a production-reachable acceptance may cover, in days. */
 export const MAX_PRODUCTION_ACCEPTANCE_DAYS: number;
+
+/** How many days before its expiry an acceptance starts to warn. */
+export const EXPIRY_WARNING_DAYS: number;
 
 /** Advisories the gate does not block on. */
 export const ACCEPTED_ADVISORIES: readonly IAcceptedAdvisory[];
@@ -82,5 +113,24 @@ export function findAcceptedEntry(
 export function classifyAdvisories(
   advisories: readonly IAdvisory[],
   productionPackages: ReadonlySet<string>,
-  entries?: readonly IRawAcceptedAdvisory[],
+  entries?: ReadonlyArray<ResolvedEntry<IRawAcceptedAdvisory>>,
 ): IAdvisoryClassification;
+
+/** Classifies a committed-tree audit after resolving auto-extensions from the lockfile. */
+export function classifyCommittedAudit(
+  audit: ICommittedAudit,
+  lockPackages: LockPackages,
+  entries?: readonly IRawAcceptedAdvisory[],
+): ICommittedAuditClassification;
+
+/** Lists the acceptances that lapse within the warning window. */
+export function expiringSoon<T extends ResolvedEntry<IRawAcceptedAdvisory>>(
+  entries?: readonly T[],
+  days?: number,
+): T[];
+
+/** Lists the entries that match no advisory the audit reported. */
+export function unusedEntries<T extends Pick<IRawAcceptedAdvisory, 'ghsa' | 'package'>>(
+  entries: readonly T[],
+  advisories: ReadonlyArray<Pick<IAdvisory, 'ghsa' | 'package'>>,
+): T[];

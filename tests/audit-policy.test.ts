@@ -1,6 +1,20 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ACCEPTED_ADVISORIES, classifyAdvisories } from '../config/audit-policy.mjs';
+import {
+  BLOCKERS,
+  type IAutoExtend,
+  type LockPackages,
+  resolveAutoExtensions,
+} from '../config/audit-blockers.mjs';
+import {
+  ACCEPTED_ADVISORIES,
+  classifyAdvisories,
+  classifyCommittedAudit,
+  expiringSoon,
+  EXPIRY_WARNING_DAYS,
+  type IRawAcceptedAdvisory,
+  unusedEntries,
+} from '../config/audit-policy.mjs';
 
 /**
  * Anchors every fixture date to one UTC instant.
@@ -427,6 +441,340 @@ describe('classifyAdvisories, policy-date consistency', () => {
 
     expect(violations).toEqual([]);
     expect(accepted).toHaveLength(2);
+  });
+});
+
+/** First demo-pkg version that fixes the demo advisory. */
+const DEMO_FIXED_IN = '2.0.0';
+
+/** A committed tree in which `holder` pins demo-pkg below its fix. */
+const DEMO_BLOCKING_LOCK: LockPackages = {
+  '': { version: '1.0.0', dependencies: { holder: '^1.0.0' } },
+  'node_modules/holder': { version: '1.0.0', dependencies: { 'demo-pkg': '^1.0.0' } },
+  'node_modules/demo-pkg': { version: '1.4.0' },
+};
+
+/**
+ * The same tree after `holder` widened its range to admit the fix.
+ *
+ * demo-pkg is still on the vulnerable version, so npm audit keeps reporting the
+ * advisory, but nothing stops the fix from being installed any more.
+ */
+const DEMO_UNBLOCKED_LOCK: LockPackages = {
+  '': { version: '1.0.0', dependencies: { holder: '^1.1.0' } },
+  'node_modules/holder': { version: '1.1.0', dependencies: { 'demo-pkg': '^1.0.0 || ^2.0.0' } },
+  'node_modules/demo-pkg': { version: '1.4.0' },
+};
+
+/** The demo advisory with the vulnerable range npm reports for it. */
+const DEMO_ADVISORY = { ...advisory, range: '<2.0.0' };
+
+/** A committed-tree audit that reports the demo advisory outside the production tree. */
+const DEV_AUDIT = { advisories: [DEMO_ADVISORY], productionPackages: notInProductionTree };
+
+/**
+ * Builds a development-tree entry for the demo advisory that opts into auto-extension.
+ *
+ * @param expiresInDays Offset of the expiry from today, negative for the past.
+ * @param autoExtend The opt-in under test; a usable one by default.
+ * @returns The entry.
+ */
+function autoExtendingEntry(
+  expiresInDays: number,
+  autoExtend: IAutoExtend = { fixedIn: DEMO_FIXED_IN },
+): IRawAcceptedAdvisory {
+  return {
+    ghsa: advisory.ghsa,
+    package: advisory.package,
+    expires: isoDaysFromToday(expiresInDays),
+    reason: 'Dev-only; holder pins demo-pkg below its fix.',
+    autoExtend,
+  };
+}
+
+/**
+ * Pins the clock the policy reads to the instant the fixtures are anchored to.
+ *
+ * The fixtures derive their dates from CLOCK_ANCHOR while the policy reads the
+ * clock itself, so a run crossing UTC midnight could otherwise move a boundary
+ * case, such as an entry that expires today, by one day.
+ */
+function freezeClockAtAnchor(): void {
+  vi.useFakeTimers({ toFake: ['Date'], now: CLOCK_ANCHOR });
+}
+
+describe('classifyCommittedAudit, auto-extending development entries', () => {
+  beforeEach(freezeClockAtAnchor);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps an expired entry working while a locked package still blocks the fix', () => {
+    const entry = autoExtendingEntry(-1);
+
+    const { violations, accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [entry]);
+
+    expect(violations).toEqual([]);
+    expect(accepted).toStrictEqual([
+      {
+        ...DEMO_ADVISORY,
+        expires: entry.expires,
+        reason: entry.reason,
+        fixedIn: DEMO_FIXED_IN,
+        blockers: ['holder@1.0.0'],
+        extended: true,
+      },
+    ]);
+  });
+
+  it('counts the expiry day itself as running on an extension', () => {
+    // An entry stops working on its expiry date, so on that day it already
+    // stands only because of the blocker, and the warning has to say so.
+    const { accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [
+      autoExtendingEntry(0),
+    ]);
+
+    expect(accepted[0]?.extended).toBe(true);
+  });
+
+  it('reports an unexpired entry as not yet extended', () => {
+    const { accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [
+      autoExtendingEntry(7),
+    ]);
+
+    expect(accepted[0]).toMatchObject({ extended: false, blockers: ['holder@1.0.0'] });
+  });
+
+  it('honours an unexpired entry even when nothing blocks the fix', () => {
+    // Opting in only ever lengthens an entry's life; before its date it stands
+    // like any other entry.
+    const { violations, accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_UNBLOCKED_LOCK, [
+      autoExtendingEntry(7),
+    ]);
+
+    expect(violations).toEqual([]);
+    expect(accepted[0]).toMatchObject({ extended: false, blockers: [] });
+  });
+
+  it('expires the entry once no locked package blocks the fix', () => {
+    const entry = autoExtendingEntry(-1);
+
+    const { violations, accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_UNBLOCKED_LOCK, [entry]);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toBe(
+      `exception expired on ${entry.expires}; it auto-extends only while a locked package blocks demo-pkg ${DEMO_FIXED_IN}, and none does`,
+    );
+  });
+
+  it('expires an entry that was never resolved against a lockfile', () => {
+    // A caller that skips resolution has to lose the extension, not keep it.
+    const { violations, accepted } = classifyAdvisories([advisory], notInProductionTree, [
+      autoExtendingEntry(-1),
+    ]);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toMatch(/^exception expired on /);
+  });
+
+  it.each([null, true, {}, { fixedIn: 'bogus' }, { fixedIn: '^2.0.0' }, { fixedIn: 2 }])(
+    'rejects the unusable autoExtend %j even before the expiry',
+    (shape) => {
+      const entry = autoExtendingEntry(7, shape as unknown as IAutoExtend);
+
+      const { violations, accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [
+        entry,
+      ]);
+
+      expect(accepted).toEqual([]);
+      expect(violations[0]?.why).toBe('exception has an invalid autoExtend.fixedIn version');
+    },
+  );
+
+  it('rejects an explicit undefined autoExtend instead of reading it as absent', () => {
+    const entry = { ...autoExtendingEntry(7), autoExtend: undefined };
+
+    const { violations, accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [entry]);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toBe('exception has an invalid autoExtend.fixedIn version');
+  });
+
+  it('refuses an auto-extending entry for the production tree, whatever its evidence', () => {
+    // Shipping a known vulnerability has to stay capped and dated, so the
+    // production evidence that would otherwise carry this entry does not help.
+    const entry = {
+      ...autoExtendingEntry(7),
+      productionReachable: true,
+      noUpstreamFix: true,
+      upstream: 'https://github.com/example/repo/issues/1',
+      added: isoDaysFromToday(-1),
+    };
+    const audit = { advisories: [advisory], productionPackages: inProductionTree };
+
+    const { violations, accepted } = classifyCommittedAudit(audit, DEMO_BLOCKING_LOCK, [entry]);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toBe(
+      'reaches the production tree; an auto-extending exception is development-only',
+    );
+  });
+
+  it('ignores a blockers list written into the policy data', () => {
+    // Only resolution may record blockers. A plain field is something anyone
+    // editing the policy file could type, so it must not extend anything.
+    const forged = { ...autoExtendingEntry(-1), blockers: ['holder@1.0.0'] };
+
+    const { violations, accepted } = classifyAdvisories([advisory], notInProductionTree, [forged]);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toMatch(/^exception expired on /);
+  });
+
+  it('does not extend an ordinary entry that carries resolved blockers', () => {
+    // Blockers alone extend nothing; the entry must also opt in.
+    const entry = {
+      ghsa: advisory.ghsa,
+      package: advisory.package,
+      expires: isoDaysFromToday(-1),
+      reason: 'Dev-only.',
+      [BLOCKERS]: ['holder@1.0.0'],
+    };
+
+    const { violations, accepted } = classifyAdvisories([advisory], notInProductionTree, [entry]);
+
+    expect(accepted).toEqual([]);
+    expect(violations[0]?.why).toBe(`exception expired on ${entry.expires}`);
+  });
+
+  it('keeps the exact record shape for an ordinary accepted entry', () => {
+    // Existing readers of `accepted` must see no new fields, not even
+    // undefined ones, for an entry that never opted in.
+    const entry = {
+      ghsa: advisory.ghsa,
+      package: advisory.package,
+      expires: isoDaysFromToday(7),
+      reason: 'Dev-only.',
+    };
+
+    const { accepted } = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [entry]);
+
+    expect(accepted).toStrictEqual([{ ...DEMO_ADVISORY, expires: entry.expires, reason: entry.reason }]);
+  });
+
+  it('returns the resolved entries and leaves the policy data untouched', () => {
+    const optedIn = autoExtendingEntry(7);
+    const ordinary = {
+      ghsa: 'GHSA-aaaa-bbbb-cccc',
+      package: advisory.package,
+      expires: isoDaysFromToday(7),
+      reason: 'Dev-only.',
+    };
+
+    const { resolvedEntries } = classifyCommittedAudit(DEV_AUDIT, DEMO_BLOCKING_LOCK, [
+      optedIn,
+      ordinary,
+    ]);
+
+    expect(resolvedEntries[0]?.[BLOCKERS]).toEqual(['holder@1.0.0']);
+    expect(resolvedEntries[1]?.[BLOCKERS]).toBeUndefined();
+    // ACCEPTED_ADVISORIES is module state, so resolution writing into it would
+    // carry one run's blockers into the next.
+    expect(Object.getOwnPropertySymbols(optedIn)).toEqual([]);
+  });
+});
+
+describe('expiringSoon, the pre-expiry warning', () => {
+  beforeEach(freezeClockAtAnchor);
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * Builds an ordinary entry that expires a given number of days from today.
+   *
+   * @param days Offset of the expiry from today, negative for the past.
+   * @returns The entry.
+   */
+  function expiringIn(days: number): IRawAcceptedAdvisory {
+    return {
+      ghsa: advisory.ghsa,
+      package: advisory.package,
+      expires: isoDaysFromToday(days),
+      reason: 'Dev-only.',
+    };
+  }
+
+  it('warns about an entry inside the window, through its last day', () => {
+    const entries = [expiringIn(5), expiringIn(EXPIRY_WARNING_DAYS)];
+
+    expect(expiringSoon(entries)).toEqual(entries);
+  });
+
+  it('stays quiet beyond the window, on the expiry day, and after it', () => {
+    // From its expiry day on, the gate already rejects the entry, so a warning
+    // would only repeat the failure.
+    const entries = [expiringIn(EXPIRY_WARNING_DAYS + 1), expiringIn(0), expiringIn(-3)];
+
+    expect(expiringSoon(entries)).toEqual([]);
+  });
+
+  it('skips an auto-extending entry whose fix is still blocked', () => {
+    // It will not lapse on its date; once past it, it reports as extended.
+    const resolved = resolveAutoExtensions([autoExtendingEntry(5)], DEMO_BLOCKING_LOCK, DEV_AUDIT.advisories);
+
+    expect(expiringSoon(resolved)).toEqual([]);
+  });
+
+  it('warns about an auto-extending entry that nothing blocks', () => {
+    const resolved = resolveAutoExtensions([autoExtendingEntry(5)], DEMO_UNBLOCKED_LOCK, DEV_AUDIT.advisories);
+
+    expect(expiringSoon(resolved)).toEqual(resolved);
+  });
+
+  it('skips an entry whose expiry is not a valid date', () => {
+    // The gate rejects such an entry outright, so there is nothing to warn about.
+    const entries = [
+      { ...expiringIn(5), expires: '2026-02-31' },
+      { ghsa: advisory.ghsa, package: advisory.package, reason: 'Dev-only.' },
+    ];
+
+    expect(expiringSoon(entries)).toEqual([]);
+  });
+
+  it('honours a narrower window', () => {
+    const entry = expiringIn(5);
+
+    expect(expiringSoon([entry], 4)).toEqual([]);
+    expect(expiringSoon([entry], 5)).toEqual([entry]);
+  });
+});
+
+describe('unusedEntries, acceptances npm audit no longer needs', () => {
+  const kept = { ghsa: 'GHSA-aaaa-bbbb-cccc', package: 'dev-a' };
+  const stale = { ghsa: 'GHSA-dddd-eeee-ffff', package: 'dev-b' };
+
+  it('flags an entry whose advisory npm audit no longer reports', () => {
+    const advisories = [{ ...advisory, ...kept }];
+
+    expect(unusedEntries([kept, stale], advisories)).toEqual([stale]);
+  });
+
+  it('counts an advisory below the severity floor as still in use', () => {
+    // npm audit still reports the advisory, so the entry names a live one even
+    // though the gate ignores that severity today.
+    const advisories = [{ ...advisory, ...kept, severity: 'low' }];
+
+    expect(unusedEntries([kept], advisories)).toEqual([]);
+  });
+
+  it('needs both the GHSA id and the package to match', () => {
+    const advisories = [
+      { ...advisory, ghsa: kept.ghsa, package: 'other-pkg' },
+      { ...advisory, ghsa: 'GHSA-zzzz-zzzz-zzzz', package: kept.package },
+    ];
+
+    expect(unusedEntries([kept], advisories)).toEqual([kept]);
   });
 });
 
