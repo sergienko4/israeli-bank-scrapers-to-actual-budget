@@ -43,7 +43,7 @@ name: Lockfile refresh
 # advisory published mid-week is remediated within hours instead of on
 # Thursday. On that trigger the refresh runs only when main's audit is red,
 # and the job keeps one "Unresolved dependency advisories" issue open while
-# any advisory has no floor.
+# any advisory has no floor or a floor waits for a maintainer.
 #
 # This supersedes the retired `dependency-check.yml`, whose two recorded
 # failure modes are addressed rather than inherited:
@@ -228,12 +228,13 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       # One open issue, found by label, title and author so a human's issue is
-      # never edited or closed. It opens only while some advisory has no
-      # floor: no pull request can carry that, so nothing else would notify.
-      # Once every advisory has a floor, its body says so, replacing a
-      # rejection table that no longer applies, and says whether a floor
-      # holds the refresh for a maintainer (a fresh or line-leaving floor, or
-      # a plan that does not say); the refresh's own verdict can still hold it
+      # never edited or closed. It opens while some advisory has no floor (no
+      # pull request can carry that) and while a floor holds the refresh for
+      # a maintainer (a fresh or line-leaving floor, or a plan that does not
+      # say), so a pull request that waits for review is not missed. A floor
+      # the refresh merges by itself opens nothing. Once every advisory has a
+      # floor, its body says so, replacing a rejection table that no longer
+      # applies; the refresh's own verdict can still hold the pull request
       # for other reasons. It stays open until `main` audits clean.
       # REST rather than `gh issue`, which goes through GraphQL mutations that
       # also touch deprecated classic projects. The jq filter is a literal, so
@@ -262,22 +263,25 @@ jobs:
           fi
           plan="${RUNNER_TEMP}/plan.json"
           if [ "$(jq '.rejections | length' "${plan}")" -eq 0 ]; then
-            [ -n "${number}" ] || exit 0
+            # A floor the refresh merges by itself needs no maintainer, so
+            # only a floor held for review opens an issue. An unstated verdict
+            # counts as held. An issue that is already open is still updated.
+            if [ -z "${number}" ] && jq -e '.requiresReview == false' "${plan}" > /dev/null; then
+              exit 0
+            fi
             body="$(jq -r --arg run "${GITHUB_RUN_ID}" '
               "`main` still fails `npm run audit`. Every advisory now has an `overrides` floor, "
               + (if .requiresReview == false
                  then "and no floor needs review; the lockfile refresh pull request carries them, and is held for a maintainer only if another change in it needs review."
                  else "but at least one is fresh or leaves its locked line, so the lockfile refresh pull request is labelled `needs-manual-review` and waits for a maintainer to review and merge it." end)
               + "\n\nUpdated by lockfile-refresh run \($run); this issue closes itself once `main` audits clean."' "${plan}")"
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/${number}" -f body="${body}" > /dev/null
-            echo "::notice::Updated #${number}: no advisory is rejected."
-            exit 0
+          else
+            body="$(jq -r --arg run "${GITHUB_RUN_ID}" '
+              "`main` fails `npm run audit`, and the lockfile refresh cannot raise an `overrides` floor for the advisories below. Each needs a maintainer: a declared-range bump, a reviewed override, or an accepted-risk entry in `config/audit-policy.mjs`.\n\n"
+              + "| Package | Advisories | Reason |\n| --- | --- | --- |\n"
+              + ([.rejections[] | "| `\(.package)` | \(.ghsas | join(", ")) | \(.reason) |"] | join("\n"))
+              + "\n\nReasons are defined in `docs/decisions/ADR-0003-automated-override-floors.md`. Updated by lockfile-refresh run \($run); this issue closes itself once `main` audits clean."' "${plan}")"
           fi
-          body="$(jq -r --arg run "${GITHUB_RUN_ID}" '
-            "`main` fails `npm run audit`, and the lockfile refresh cannot raise an `overrides` floor for the advisories below. Each needs a maintainer: a declared-range bump, a reviewed override, or an accepted-risk entry in `config/audit-policy.mjs`.\n\n"
-            + "| Package | Advisories | Reason |\n| --- | --- | --- |\n"
-            + ([.rejections[] | "| `\(.package)` | \(.ghsas | join(", ")) | \(.reason) |"] | join("\n"))
-            + "\n\nReasons are defined in `docs/decisions/ADR-0003-automated-override-floors.md`. Updated by lockfile-refresh run \($run); this issue closes itself once `main` audits clean."' "${plan}")"
           if [ -n "${number}" ]; then
             gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/${number}" -f body="${body}" > /dev/null
             echo "::notice::Updated #${number}."

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-29
-- **Amended:** 2026-11-06 — see the note under Decision 2
+- **Amended:** 2026-11-06 — see the notes under Decisions 2 and 4
 - **Deciders:** Repository maintainer
 - **Amends:** [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md),
   [ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md)
@@ -141,15 +141,23 @@ recover on their own once `main` is clean.
    `advisory` job, so GitHub notifies and nothing is regenerated. The job runs
    the same `--apply` in its own throwaway checkout, because only applying
    reveals a `floor-ineffective` floor. When the planner rejects any
-   advisory, the job keeps one open issue titled
-   "Unresolved dependency advisories", labelled `blocked-by-advisory`, whose
-   body is the rejection table. Once every advisory has a floor, the body
-   says so instead, including whether a floor holds the refresh for a
-   maintainer, and the issue closes once `main` audits
-   clean. That issue is the notification for an advisory no pull request can
-   carry. The job uses the workflow token (`contents: read`,
+   advisory, or a floor holds the refresh for a maintainer, the job keeps one
+   open issue titled "Unresolved dependency advisories", labelled
+   `blocked-by-advisory`. While an advisory is rejected, the body is the
+   rejection table. Once every advisory has a floor, the body says so
+   instead, including whether a floor holds the refresh for a maintainer, and
+   the issue closes once `main` audits clean. That issue is the notification
+   for an advisory no pull request can carry, and for a floor that waits for
+   review. The job uses the workflow token (`contents: read`,
    `issues: write`) and never `RELEASE_TOKEN`. The audit and planner steps
    hold no token at all.
+
+   > **Amended 2026-11-06.** The issue first opened only when the planner
+   > rejected an advisory. In November 2026 the advisory job planned
+   > `breaking-line` floors for `glob` and `minimatch` with no rejection, so
+   > it opened no issue while the refresh pull request waited for a
+   > maintainer and every other pull request failed the audit. A floor that
+   > holds the refresh for review now opens the issue too.
 
 5. **One refresh per change on the four-hourly trigger.** While `main` stays
    red, every four-hourly run computes the same change. Before pushing, the

@@ -536,8 +536,9 @@ opens a PR when anything moved:
   nothing is remediated while the registry is down. The job applies the
   floor plan in its own throwaway checkout, so a floor that proves
   ineffective counts as a rejection. When the planner rejects
-  an advisory, the job keeps one open issue, "Unresolved dependency
-  advisories" (label `blocked-by-advisory`), listing each package and its
+  an advisory, or a floor holds the refresh for a maintainer, the job keeps
+  one open issue, "Unresolved dependency advisories" (label
+  `blocked-by-advisory`), listing each rejected package and its
   reason. Once every advisory has a floor, the body says so instead, and
   whether a floor holds the refresh for a maintainer. It
   closes the issue once `main` audits clean. The job holds the

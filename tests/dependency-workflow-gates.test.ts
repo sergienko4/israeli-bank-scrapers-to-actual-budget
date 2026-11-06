@@ -855,15 +855,35 @@ describe.skipIf(!CAN_RUN)('lockfile refresh advisory issue', () => {
     expect(red.ghCalls.some((call) => call.includes(`issues/${String(item.number)}`))).toBe(false);
   });
 
-  it('writes nothing while every advisory on a red main has a floor', () => {
+  it('writes nothing while every advisory on a red main has a floor the refresh merges itself', () => {
     const run = runStep(step, {
       env: { GH_TOKEN: 'token', RED: 'true' },
       gh: { [listPath]: [] },
-      tempFiles: { 'plan.json': { floors: [{ package: 're2js' }], rejections: [] } },
+      tempFiles: { 'plan.json': { floors: [{ package: 're2js' }], rejections: [], requiresReview: false } },
     });
 
     expect(run.status).toBe(0);
     expect(writes(run.ghCalls)).toEqual([]);
+  });
+
+  it.each([
+    ['a review', true],
+    ['an unstated review', undefined],
+  ])('opens a labelled issue when every advisory has a floor needing %s and none is open', (_case, requiresReview) => {
+    const run = runStep(step, {
+      env: { GH_TOKEN: 'token', RED: 'true' },
+      gh: { [listPath]: [] },
+      tempFiles: { 'plan.json': { floors: [{ package: 'glob' }], rejections: [], requiresReview } },
+    });
+
+    expect(run.status).toBe(0);
+    expect(run.ghCalls.some((call) => call.startsWith('label create blocked-by-advisory'))).toBe(true);
+    const opened = run.ghCalls.join('\n');
+    expect(opened).toContain(`api -X POST repos/${REPO}/issues -f title=Unresolved dependency advisories`);
+    expect(opened).toContain('-f labels[]=blocked-by-advisory');
+    expect(opened).toContain('Every advisory now has an `overrides` floor');
+    expect(opened).toContain('labelled `needs-manual-review` and waits for a maintainer');
+    expect(opened).not.toContain('| Package |');
   });
 
   it.each([

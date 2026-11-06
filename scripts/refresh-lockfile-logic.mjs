@@ -677,8 +677,8 @@ function rejectionSection(rejections) {
     ...rejections.map((r) => `- \`${r.package}\`: ${r.reason} (${r.ghsas.join(', ')})`),
     '',
     'No override floor could clear these, so the audit gate still fails. Auto-merge',
-    'is withheld and the PR is labelled `needs-manual-review`; the open',
-    `"Unresolved dependency advisories" issue tracks them. Reasons: ${OVERRIDE_ADR}.`,
+    'is withheld and the PR is labelled `needs-manual-review`. The',
+    `"Unresolved dependency advisories" issue, when one is open, lists them too. Reasons: ${OVERRIDE_ADR}.`,
     '',
   ];
 }
