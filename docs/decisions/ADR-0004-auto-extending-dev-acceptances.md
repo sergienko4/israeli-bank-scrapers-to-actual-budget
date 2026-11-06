@@ -44,11 +44,13 @@ as long as the committed lockfile proves its fix cannot be installed, and make
 every such extension visible on every audit run.
 
 1. **Opt-in, development tree only.** An entry in `ACCEPTED_ADVISORIES` may set
-   `autoExtend: { fixedIn }`, the first version that fixes the advisory, as a
-   plain `MAJOR.MINOR.PATCH`. Any other value fails the gate with
-   `exception has an invalid autoExtend.fixedIn version`. When the advisory
-   reaches the production tree, an auto-extending entry is refused outright,
-   with `an auto-extending exception is development-only`: shipping a known
+   `autoExtend: { fixedIn }`, the lowest version that fixes the advisory, as a
+   plain `MAJOR.MINOR.PATCH`. The gate checks an entry when the audit reports
+   its advisory at or above `AUDIT_LEVEL`; any other `fixedIn` value then
+   fails the gate with `exception has an invalid autoExtend.fixedIn version`.
+   An entry that matches no such advisory is inert. When the advisory reaches
+   the production tree, an auto-extending entry is refused outright, with
+   `an auto-extending exception is development-only`: shipping a known
    vulnerability stays capped at 30 days and dated.
 
 2. **Blockers come from the committed lockfile.** `config/audit-blockers.mjs`
@@ -60,11 +62,12 @@ every such extension visible on every audit run.
    `dependencies` over `peerDependencies`, and every `||` alternative must stay
    below the fix. The copy is the nearest `node_modules/<package>` on the
    package's install path, as Node resolves it. It is affected only while it is
-   installed, below `fixedIn`, inside the vulnerable range `npm audit` reports
-   for the advisory, and inside the range the package declares; a copy that
-   fails any of these, such as one an override placed, blocks nothing, even
-   when the range would. A missing or unreadable advisory range, or an
-   advisory the audit no longer reports, blocks nothing. It reads only
+   installed, is the package itself rather than an `npm:` alias for another
+   one, is below `fixedIn`, and lies inside both the vulnerable range
+   `npm audit` reports for the advisory and the range the package declares; a
+   copy that fails any of these, such as one an override placed, blocks
+   nothing, even when the range would. A missing or unreadable advisory range,
+   or an advisory the audit no longer reports, blocks nothing. It reads only
    comparators made of an optional operator and a plain version; an x-range,
    hyphen range, prerelease, `*` or dist-tag counts as not blocking. A range or
    version it cannot read therefore fails closed into a build failure, never
@@ -96,12 +99,14 @@ every such extension visible on every audit run.
 
 6. **The shipped data is tested, not only the rules.** The unit suite pins the
    list of opted-in entries, so opting another entry in, or moving its
-   `fixedIn`, is a reviewed change to that test. It classifies each shipped
-   entry against the committed lockfile and the vulnerable range npm reports
-   for it, which the test pins too, so once an auto-extending entry is
-   past its expiry and the last blocker is gone, the suite fails and forces the
-   entry's removal. A frozen clock exercises each entry past its expiry in the
-   gate and the planner as child processes, before the calendar gets there.
+   `fixedIn`, is a reviewed change to that test. On a date past each entry's
+   expiry, it classifies the entry against the committed lockfile and the
+   vulnerable range npm reports for it, which the test pins too. The suite
+   therefore fails as soon as the last blocker leaves the committed lockfile,
+   before the expiry date, and forces the entry's removal; removing the entry
+   means updating the pin as well. A frozen clock exercises each entry past
+   its expiry in the gate and the planner as child processes, before the
+   calendar gets there.
 
 ## Alternatives considered
 
@@ -121,9 +126,10 @@ every such extension visible on every audit run.
 
 - An expiry no longer turns `main` and every pull request red while the fix
   still cannot be installed.
-- The day no locked package provably blocks the fix, the gate and the unit
-  suite fail and ask for the entry's removal, instead of a date someone picked
-  months before.
+- The day no locked package provably blocks the fix, the unit suite fails and
+  asks for the entry's removal, and from the expiry on the gate fails too,
+  instead of a date someone picked months before. While the fix stays blocked,
+  the date alone never fails the gate.
 - Every audit run names the packages that hold an extended acceptance open,
   warns three weeks before an ordinary expiry, and flags entries that have
   outlived their advisory.
@@ -141,11 +147,18 @@ every such extension visible on every audit run.
   `config/audit-report.mjs` keeps one range per package and advisory, so if
   npm ever reports several, an entry can lapse early. That fails closed into a
   red build, never into a longer waiver.
-- Past the expiry there is no grace period: the first audit run that finds no
-  blocker fails the gate. That run is usually the Dependabot or lockfile
-  refresh pull request that removed the last blocker, so a bump can turn red
-  for a package it does not name. The remedy is to remove the entry, and take
-  the fix, in that same pull request.
+- `fixedIn` is a reviewed pin. The gate neither derives it from the advisory
+  nor checks it against the range `npm audit` reports, so it has to be the
+  lowest version that fixes the advisory. Set too high, or left behind when a
+  fix is later backported onto an older line, it makes a locked package that
+  can already take a fix count as a blocker, and the acceptance keeps
+  extending until someone lowers it.
+- There is no grace period. The unit suite fails the first time the committed
+  lockfile has no blocker left, and the audit gate fails from the expiry on.
+  The failing run is usually the Dependabot or lockfile refresh pull request
+  that removed the last blocker, so a bump can turn red for a package it does
+  not name. The remedy is to remove the entry, and its pin in the unit suite,
+  and take the fix, in that same pull request.
 
 **Neutral**
 

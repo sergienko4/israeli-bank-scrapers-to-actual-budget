@@ -24,7 +24,11 @@ export type LockPackages = Readonly<Record<string, ILockPackage>>;
 
 /** The opt-in an accepted advisory carries to auto-extend past its expiry. */
 export interface IAutoExtend {
-  /** The first version that fixes the advisory, as plain `MAJOR.MINOR.PATCH`. */
+  /**
+   * The lowest version that fixes the advisory, as plain `MAJOR.MINOR.PATCH`.
+   * A reviewed pin: the gate does not check it against the range npm reports, so a value above the
+   * lowest fix keeps a package that could already take the fix counted as a blocker.
+   */
   fixedIn: string;
 }
 

@@ -160,7 +160,7 @@ function alternativeHoldsBelow(alternative, fixed) {
  * it means the dependent could take the fix, so it does not block.
  *
  * @param {unknown} range The range a dependent declares.
- * @param {unknown} fixedIn The first version that fixes the advisory.
+ * @param {unknown} fixedIn The lowest version that fixes the advisory.
  * @returns {boolean} True only when the range is readable and cannot take the fix.
  */
 export function rangeHoldsBelow(range, fixedIn) {
@@ -367,7 +367,7 @@ function holdsBack(query, key, record) {
  * too.
  *
  * @param {{ package: string, range?: unknown }} advisory The vulnerable package and its vulnerable range.
- * @param {string} fixedIn The first version that fixes the advisory.
+ * @param {string} fixedIn The lowest version that fixes the advisory.
  * @param {Record<string, object>} lockPackages The lockfile's `packages` map.
  * @returns {string[]} Sorted, de-duplicated `name@version` labels.
  */

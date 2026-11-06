@@ -285,7 +285,7 @@ If a security vulnerability is discovered in a released version:
   `productionReachable` and `noUpstreamFix`, carry an `added` date no later
   than today, give an HTTPS `upstream` link to the work being tracked, and
   expire within 30 days of `added`. A development-tree entry may instead set
-  `autoExtend: { fixedIn }`: once its `expires` date passes, it stands only
+  `autoExtend: { fixedIn }`: from its `expires` date on, it stands only
   while a package in the committed lockfile declares a range that cannot
   reach `fixedIn`, and every audit run warns about it (see
   [ADR-0004](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0004-auto-extending-dev-acceptances.md)).
