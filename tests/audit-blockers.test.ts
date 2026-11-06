@@ -155,6 +155,38 @@ describe('satisfies', () => {
     },
   );
 
+  it.each([
+    [[7, 0, 0], '>=7.0.0 <11.0.1'],
+    [[11, 0, 0], '>=7.0.0 <11.0.1'],
+    [[10, 2, 0], '~10.2.0'],
+    [[10, 2, 9], '~10.2.0'],
+    [[10, 2, 5], '^10.2.5'],
+    [[10, 2, 6], '>=10.2.6'],
+    [[10, 2, 6], '<=10.2.6'],
+    [[10, 2, 6], '10.2.6'],
+    [[10, 2, 6], '=10.2.6'],
+  ])('admits %j at the edge of %j', (version, range) => {
+    expect(satisfies(version, range)).toBe(true);
+  });
+
+  it.each([
+    [[6, 9, 9], '>=7.0.0 <11.0.1'],
+    [[11, 0, 1], '>=7.0.0 <11.0.1'],
+    [[10, 1, 9], '~10.2.0'],
+    [[10, 3, 0], '~10.2.0'],
+    [[10, 2, 4], '^10.2.5'],
+    [[11, 0, 0], '^10.2.5'],
+    [[10, 2, 5], '>=10.2.6'],
+    [[10, 2, 5], '>10.2.5'],
+    [[10, 2, 7], '<=10.2.6'],
+    [[10, 2, 5], '10.2.6'],
+    [[10, 2, 7], '10.2.6'],
+    [[10, 2, 5], '=10.2.6'],
+    [[10, 2, 7], '=10.2.6'],
+  ])('shuts %j out of %j, just past its bound', (version, range) => {
+    expect(satisfies(version, range)).toBe(false);
+  });
+
   it.each(['', '*', '1.x', '>= 7.0.0', '^10.2.6-beta', '^10.2.2 ||', '^10.2.2 || 1.x', null, undefined, 10])(
     'admits nothing in the unreadable range %j',
     (range) => {
@@ -258,6 +290,20 @@ describe('findBlockers', () => {
 
     expect(findBlockers({ package: 'minimatch', range: '>=7.0.0 <10.2.6' }, FIXED_IN, lock)).toEqual([]);
     expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual(['eslint@10.2.0']);
+  });
+
+  it('skips a copy that predates the advisory range', () => {
+    // 3.1.2 lies below the first affected version, so it is not vulnerable and
+    // its dependent holds nothing back. The same lock counts the dependent once
+    // the advisory reaches back far enough to cover 3.1.2.
+    const lock: LockPackages = {
+      'node_modules/old-tool': { version: '1.0.0', dependencies: { minimatch: '^3.1.2' } },
+      'node_modules/minimatch': { version: '3.1.2' },
+    };
+    const reachingBack = { package: 'minimatch', range: '>=3.0.0 <11.0.1' };
+
+    expect(findBlockers(MINIMATCH, FIXED_IN, lock)).toEqual([]);
+    expect(findBlockers(reachingBack, FIXED_IN, lock)).toEqual(['old-tool@1.0.0']);
   });
 
   it.each([null, undefined, '', '1.x', '>=7.0.0 <11.0.1 ||'])(
