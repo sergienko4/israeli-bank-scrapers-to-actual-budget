@@ -567,9 +567,10 @@ opens a PR when anything moved:
   refresh PR already carries byte-identical `package.json` and
   `package-lock.json`, is not behind `main`, and has the same review label —
   and, when this run would arm, already has auto-merge armed. A refresh whose
-  arming failed is replaced, which re-arms it. A fresh floor that ages past
-  three days changes the label, so it is reopened armed and supersedes the
-  labelled PR.
+  arming failed is replaced, which re-arms it. A fresh `^` floor that ages
+  past three days changes the label, so it is reopened armed and supersedes
+  the labelled PR. A raised `>=` override is never armed, so aging changes
+  nothing for it.
 - **A newer run supersedes the open refresh PR.** Once this run has opened
   its own PR, or proved main already carries every pin, any other open
   same-repository `chore/lockfile-refresh-*` PR is closed (branch deleted).

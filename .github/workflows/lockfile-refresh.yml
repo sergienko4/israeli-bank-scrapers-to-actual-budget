@@ -418,7 +418,8 @@ jobs:
       # its parent declares. A parent that pins *exactly* leaves no room, so a
       # fix outside that pin needs an `overrides` floor. The planner applies
       # rules R1–R7 (ADR-0003, scripts/override-floor-logic.mjs): transitive
-      # packages only, one locked line, a fixed release in the registry. It
+      # packages only, the copies an advisory reaches on one locked line, a
+      # fixed release in the registry. It
       # then regenerates the floored packages alone with
       #   npm update <pkgs> --package-lock-only --ignore-scripts
       #     --min-release-age=3 --min-release-age-exclude=@sergienko4/israeli-bank-scrapers

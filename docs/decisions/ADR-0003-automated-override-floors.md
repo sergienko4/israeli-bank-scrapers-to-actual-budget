@@ -173,9 +173,10 @@ recover on their own once `main` is clean.
    - when the new run would arm, auto-merge is armed on it.
 
    If one exists, it opens nothing. A refresh whose arming failed is
-   replaced, which re-arms it. A fresh floor that ages past three days
+   replaced, which re-arms it. A fresh `^` floor that ages past three days
    changes the review state, so it is reopened as an armed `in-line` floor
-   and supersedes the labelled one. Weekly, push and dispatched runs always
+   and supersedes the labelled one. A raised `>=` override is never armed,
+   so aging changes nothing for it. Weekly, push and dispatched runs always
    regenerate, as before.
 
 6. **A weekly prune.** On the weekly and dispatched runs, before the floor
@@ -220,9 +221,9 @@ recover on their own once `main` is clean.
 
 - **Same-line and aged first.** By semver a caret line is non-breaking, and the
   three-day wait is the window in which a compromised or broken release is
-  usually caught. A floor that meets both is as safe as a Dependabot patch
-  bump, so it auto-merges like one. Anything else is still planned, applied
-  and proved, but waits for a human.
+  usually caught. A `^` floor that meets both is as safe as a Dependabot
+  patch bump, so it auto-merges like one. Anything else, including a raised
+  `>=` override, is still planned, applied and proved, but waits for a human.
 - **The planner is pure, and the CLI owns side effects.** Every rule is
   unit-tested against fixed inputs, including the `re2js` incident itself.
   The CLI is covered end to end.
@@ -276,8 +277,9 @@ recover on their own once `main` is clean.
 **Positive**
 
 - An advisory whose fix sits on the same line, behind an exact pin, and is at
-  least three days old is fixed with no human: a pull request within four
-  hours, merged once its checks pass.
+  least three days old is fixed with no human (a `^` floor; an existing `>=`
+  override waits for review): a pull request within four hours, merged once
+  its checks pass.
 - Dependabot pull requests that an advisory on `main` blocked recover on
   their own once `main` is clean.
 - An advisory the pipeline cannot fix opens one issue that names the reason,

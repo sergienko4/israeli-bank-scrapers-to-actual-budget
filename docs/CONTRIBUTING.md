@@ -216,7 +216,7 @@ A security fix for a transitive package that no parent range reaches usually
 arrives on its own too. Every four hours `lockfile-refresh.yml` audits `main`.
 When it finds an advisory, it raises a floor in the `overrides` block of
 `package.json` and opens a `fix(deps)` pull request; see
-[ADR-0003][adr-0003] for the rules. A floor on the same major line that has
+[ADR-0003][adr-0003] for the rules. A floor on the same caret line that has
 been published for at least three days merges itself, unless it keeps an
 existing `>=` override. Any other floor is labelled `needs-manual-review`,
 and the "Unresolved dependency advisories" issue says it waits for review.
