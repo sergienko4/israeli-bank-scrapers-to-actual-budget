@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -16,6 +18,11 @@ import {
   type IRawAcceptedAdvisory,
   unusedEntries,
 } from '../config/audit-policy.mjs';
+import { readLockPackages } from '../config/audit-report.mjs';
+import { autoExtendingEntries, pastExpiryMs } from './helpers/autoExtendClock.js';
+
+/** The repository root, so the committed lockfile is read whatever the cwd. */
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /**
  * Anchors every fixture date to one UTC instant.
@@ -864,9 +871,23 @@ describe('auditWarnings, non-blocking annotations for the gate', () => {
   });
 });
 
-describe('classifyAdvisories, the entries that actually ship', () => {
+describe('classifyCommittedAudit, the entries that actually ship', () => {
   // Every other case supplies synthetic entries, which proves the rules but
-  // never the data. These two load ACCEPTED_ADVISORIES itself.
+  // never the data. These load ACCEPTED_ADVISORIES itself and classify it the
+  // way `npm run audit` does: against the committed lockfile.
+  //
+  // The lockfile matters once an auto-extending entry is past its expiry: it
+  // then survives only while a locked package still blocks the fix. When the
+  // last blocker goes, these tests fail and force the entry's removal.
+  const shippedLock = readLockPackages(REPO_ROOT);
+
+  /**
+   * npm's vulnerable range for each auto-extending acceptance, as `npm audit` reports it.
+   *
+   * Pinned beside the opt-in list below and updated with it. A range wider
+   * than npm's would count blockers the gate never sees.
+   */
+  const REPORTED_RANGES: Readonly<Record<string, string>> = { minimatch: '>=7.0.0 <11.0.1' };
 
   it('gives every shipped entry a well-formed identity and rationale', () => {
     for (const entry of ACCEPTED_ADVISORIES) {
@@ -913,8 +934,9 @@ describe('classifyAdvisories, the entries that actually ship', () => {
       const productionPackages =
         treeFor(entry.package) === 'production' ? new Set([entry.package]) : new Set<string>();
 
-      // No third argument, so the default ACCEPTED_ADVISORIES path is exercised.
-      const { violations, accepted } = classifyAdvisories([live], productionPackages);
+      // No third argument, so the default ACCEPTED_ADVISORIES path is
+      // exercised, against the committed lockfile and today's date.
+      const { violations, accepted } = classifyCommittedAudit({ advisories: [live], productionPackages }, shippedLock);
 
       expect(violations, `${entry.package} must not block the build`).toEqual([]);
       expect(accepted).toHaveLength(1);
@@ -932,13 +954,104 @@ describe('classifyAdvisories, the entries that actually ship', () => {
       title: 'Shipped acceptance for minimatch',
     };
 
-    const development = classifyAdvisories([live], notInProductionTree);
+    const development = classifyCommittedAudit({ advisories: [live], productionPackages: notInProductionTree }, shippedLock);
     expect(development.violations).toEqual([]);
     expect(development.accepted).toHaveLength(1);
 
-    const production = classifyAdvisories([live], new Set(['minimatch']));
+    const production = classifyCommittedAudit({ advisories: [live], productionPackages: new Set(['minimatch']) }, shippedLock);
     expect(production.accepted).toEqual([]);
     expect(production.violations).toHaveLength(1);
     expect(production.violations[0]?.why).toContain('reaches the production tree');
+  });
+
+  it('lets only the reviewed acceptances auto-extend', () => {
+    // Auto-extension removes the expiry date's forcing function, so opting an
+    // entry in is a reviewed decision. Adding one, or moving its fix version,
+    // has to update this pin in the same change.
+    const optedIn = ACCEPTED_ADVISORIES
+      .filter(entry => Object.hasOwn(entry, 'autoExtend'))
+      .map(entry => [entry.package, entry.autoExtend?.fixedIn]);
+
+    expect(optedIn).toEqual([['minimatch', '11.0.1']]);
+  });
+
+  it('ships no entry with blockers already attached', () => {
+    // Only resolveAutoExtensions may attach blockers, computed from the
+    // lockfile. An entry shipped with its own would vouch for itself whenever
+    // a caller classifies without resolving.
+    for (const entry of ACCEPTED_ADVISORIES) {
+      expect(Object.getOwnPropertySymbols(entry), `${entry.package} must not carry symbol keys`).toEqual([]);
+    }
+  });
+
+  it('keeps each auto-extending entry past its expiry only while a locked package blocks the fix', () => {
+    const extending = autoExtendingEntries();
+    expect(extending, 'at least one shipped entry must auto-extend').not.toEqual([]);
+
+    for (const entry of extending) {
+      const { fixedIn } = entry.autoExtend;
+      const audit = {
+        advisories: [{
+          ghsa: entry.ghsa,
+          package: entry.package,
+          severity: 'moderate',
+          title: `Expired acceptance for ${entry.package}`,
+          range: `<${fixedIn}`,
+        }],
+        productionPackages: notInProductionTree,
+      };
+      const holder: LockPackages = {
+        [`node_modules/holds-${entry.package}`]: { version: '1.0.0', dependencies: { [entry.package]: `<${fixedIn}` } },
+        // The copy the holder resolves to. A declared range alone blocks
+        // nothing; the holder counts only while the copy it loads is below
+        // the fix.
+        [`node_modules/${entry.package}`]: { version: '0.0.0' },
+      };
+
+      vi.useFakeTimers({ toFake: ['Date'], now: pastExpiryMs(entry.expires) });
+      try {
+        const blocked = classifyCommittedAudit(audit, holder);
+        expect(blocked.violations, `${entry.package} must extend while held`).toEqual([]);
+        expect(blocked.accepted[0]?.extended).toBe(true);
+
+        const unblocked = classifyCommittedAudit(audit, {});
+        expect(unblocked.accepted, `${entry.package} must lapse once nothing holds it`).toEqual([]);
+        expect(unblocked.violations[0]?.why).toContain('and none does');
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  });
+
+  it('keeps each auto-extending entry alive past its expiry against the committed lockfile', () => {
+    // The synthetic holder above proves the rule; this proves the data. It
+    // runs the date the gate will face after the expiry, against the lockfile
+    // that ships and the range npm reports. A failure means no locked package
+    // blocks the fix any more, so the entry must be removed before the gate
+    // starts failing builds.
+    for (const entry of autoExtendingEntries()) {
+      const range = REPORTED_RANGES[entry.package];
+      expect(range, `pin npm's reported range for ${entry.package} in REPORTED_RANGES`).toBeDefined();
+      const audit = {
+        advisories: [{
+          ghsa: entry.ghsa,
+          package: entry.package,
+          severity: 'moderate',
+          title: `Shipped acceptance for ${entry.package}`,
+          range,
+        }],
+        productionPackages: notInProductionTree,
+      };
+
+      vi.useFakeTimers({ toFake: ['Date'], now: pastExpiryMs(entry.expires) });
+      try {
+        const { violations, accepted } = classifyCommittedAudit(audit, shippedLock);
+        expect(violations, `${entry.package} has no blocker left; remove its entry`).toEqual([]);
+        expect(accepted[0]?.extended).toBe(true);
+        expect(accepted[0]?.blockers).not.toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
   });
 });

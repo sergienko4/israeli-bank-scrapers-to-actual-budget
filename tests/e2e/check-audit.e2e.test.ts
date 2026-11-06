@@ -13,12 +13,13 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import { ACCEPTED_ADVISORIES } from '../../config/audit-policy.mjs';
+import { pastExpiryMs, shippedAutoExtendingEntry, writeFrozenClock } from '../helpers/autoExtendClock.js';
 
 const CLI = fileURLToPath(new URL('../../config/check-audit.mjs', import.meta.url));
 
@@ -58,24 +59,50 @@ interface IGateRun {
   npmCalls: string[];
 }
 
+/** How one gate run departs from the defaults. */
+interface IGateOptions {
+  /** The `package-lock.json` the gate reads; omitted means no lockfile. */
+  lock?: object;
+  /** Extra `node` arguments placed before the CLI, such as a clock preload. */
+  nodeArgs?: string[];
+}
+
 let root: string;
 let runCount = 0;
+
+/**
+ * Creates the working directory for one gate run.
+ *
+ * Each run gets its own directory, so a lockfile written for one case never
+ * leaks into another. Without a lockfile the gate sees no locked packages.
+ *
+ * @param id The run number.
+ * @param lock The `package-lock.json` to write, if any.
+ * @returns The directory's path.
+ */
+function makeRunDir(id: number, lock?: object): string {
+  const dir = join(root, `run-${id}`);
+  mkdirSync(dir);
+  if (lock !== undefined) writeFileSync(join(dir, 'package-lock.json'), JSON.stringify(lock));
+  return dir;
+}
 
 /**
  * Runs the gate against canned full and production reports.
  *
  * @param full The report the full audit prints.
  * @param production The report the `--omit=dev` audit prints.
+ * @param options The lockfile and extra `node` arguments for this run.
  * @returns The exit status, both streams and the npm arguments seen.
  */
-function runGate(full: object, production: object): IGateRun {
+function runGate(full: object, production: object, options: IGateOptions = {}): IGateRun {
   const id = ++runCount;
   const paths = { full: join(root, `full-${id}.json`), prod: join(root, `prod-${id}.json`), log: join(root, `npm-${id}.log`) };
   writeFileSync(paths.full, JSON.stringify(full));
   writeFileSync(paths.prod, JSON.stringify(production));
   writeFileSync(paths.log, '');
   const env = { ...process.env, npm_execpath: join(root, 'fake-npm.cjs'), FAKE_NPM_FULL: paths.full, FAKE_NPM_PROD: paths.prod, FAKE_NPM_LOG: paths.log };
-  const res = spawnSync(process.execPath, [CLI], { cwd: root, env, encoding: 'utf8', timeout: 30_000 });
+  const res = spawnSync(process.execPath, [...(options.nodeArgs ?? []), CLI], { cwd: makeRunDir(id, options.lock), env, encoding: 'utf8', timeout: 30_000 });
   if (res.error) throw res.error;
   const npmCalls = readFileSync(paths.log, 'utf8').trim().split('\n');
   return { status: res.status, stdout: res.stdout, stderr: res.stderr, npmCalls };
@@ -125,5 +152,53 @@ describe('check-audit warnings', () => {
       entry => `::warning::${entry.ghsa} (${entry.package}) is no longer reported by npm audit; `
         + 'remove its entry from config/audit-policy.mjs.',
     ));
+  });
+});
+
+describe("check-audit past an auto-extending acceptance's expiry", () => {
+  // The clock is frozen inside the gate's process, a day and a half past the
+  // shipped entry's expiry, so these cases run the date the gate will
+  // actually face rather than today's.
+  const entry = shippedAutoExtendingEntry();
+  const { ghsa, package: pkg, expires } = entry;
+  const { fixedIn } = entry.autoExtend;
+  const full = {
+    vulnerabilities: {
+      [pkg]: { via: [{ name: pkg, url: `https://github.com/advisories/${ghsa}`, severity: 'moderate', title: 'Expired acceptance', range: `<${fixedIn}` }] },
+    },
+  };
+  const holderLock = {
+    lockfileVersion: 3,
+    packages: {
+      '': {},
+      [`node_modules/holds-${pkg}`]: { version: '1.0.0', dev: true, dependencies: { [pkg]: `<${fixedIn}` } },
+      // The copy the holder resolves to. Without an installed copy below the
+      // fix, the holder blocks nothing.
+      [`node_modules/${pkg}`]: { version: '0.0.0', dev: true },
+    },
+  };
+  let pastExpiry: string[];
+
+  beforeAll(() => {
+    pastExpiry = writeFrozenClock(root, pastExpiryMs(expires));
+  });
+
+  it('accepts the advisory and warns while a locked package still blocks the fix', () => {
+    const run = runGate(full, { vulnerabilities: {} }, { lock: holderLock, nodeArgs: pastExpiry });
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain(`Accepted ${ghsa} (${pkg}, moderate) past ${expires} (auto-extended)`);
+    expect(run.stdout).toContain(
+      `::warning::${ghsa} (${pkg}) acceptance expired on ${expires}; auto-extended while holds-${pkg}@1.0.0 cannot take ${pkg} ${fixedIn}.`,
+    );
+  });
+
+  it('exits 1 once no locked package blocks the fix', () => {
+    const run = runGate(full, { vulnerabilities: {} }, { nodeArgs: pastExpiry });
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(
+      `${ghsa} ${pkg} (moderate) — exception expired on ${expires}; it auto-extends only while a locked package blocks ${pkg} ${fixedIn}, and none does`,
+    );
   });
 });

@@ -21,6 +21,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+import { pastExpiryMs, shippedAutoExtendingEntry, writeFrozenClock } from '../helpers/autoExtendClock.js';
+
 const CLI = fileURLToPath(new URL('../../scripts/plan-override-floors.mjs', import.meta.url));
 const OLD = '2026-01-01T00:00:00.000Z';
 
@@ -108,11 +110,12 @@ function writeProject(overrides: Record<string, string>, locked: Record<string, 
  * Runs the CLI in the scratch project.
  *
  * @param args The command-line arguments.
+ * @param nodeArgs Extra `node` arguments placed before the CLI, such as a clock preload.
  * @returns The exit status and both streams.
  */
-function runCli(args: string[]): ICliRun {
+function runCli(args: string[], nodeArgs: string[] = []): ICliRun {
   const env = { ...process.env, npm_execpath: join(root, 'fake-npm.cjs') };
-  const res = spawnSync(process.execPath, [CLI, ...args], { cwd: root, env, encoding: 'utf8', timeout: 30_000 });
+  const res = spawnSync(process.execPath, [...nodeArgs, CLI, ...args], { cwd: root, env, encoding: 'utf8', timeout: 30_000 });
   if (res.error) throw res.error;
   return { status: res.status, stdout: res.stdout, stderr: res.stderr };
 }
@@ -342,6 +345,53 @@ describe('plan-override-floors --check', () => {
     expect(JSON.parse(run.stdout).rejections).toEqual([{ package: 'gone', ghsas: ['GHSA-gone-gone-gone'], reason: 'missing-publish-times' }]);
     expect(read('package.json')).toBe(manifest);
     expect(npmCalls().some(call => call.startsWith('update'))).toBe(false);
+  });
+});
+
+describe("plan-override-floors --check past an auto-extending acceptance's expiry", () => {
+  // The planner only plans floors for what the gate would block. Past the
+  // shipped entry's expiry, a locked package that still blocks the fix keeps
+  // the advisory accepted, so the planner must leave it alone.
+  const entry = shippedAutoExtendingEntry();
+  const { ghsa, package: pkg, expires } = entry;
+  const { fixedIn } = entry.autoExtend;
+
+  /**
+   * Writes a project whose only advisory is the shipped auto-extending one.
+   * npm reports no publish times, so planning a floor for it is a rejection.
+   *
+   * @returns Nothing; the project is written into the scratch root.
+   */
+  function writeExpiredProject(): void {
+    writeProject({}, { [pkg]: '1.0.0' }, {
+      advisories: [{ name: pkg, ghsa, range: `<${fixedIn}`, vulnerable: ['1.0.0'] }],
+      times: {},
+      resolve: {},
+    });
+  }
+
+  it('plans nothing while a locked package still blocks the fix', () => {
+    writeExpiredProject();
+    const lock = JSON.parse(read('package-lock.json')) as { packages: Record<string, object> };
+    lock.packages[`node_modules/holds-${pkg}`] = { version: '1.0.0', dev: true, dependencies: { [pkg]: `<${fixedIn}` } };
+    writeFileSync(join(root, 'package-lock.json'), `${JSON.stringify(lock, null, 2)}\n`);
+    const manifest = read('package.json');
+
+    const run = runCli(['--check'], writeFrozenClock(root, pastExpiryMs(expires)));
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout)).toEqual({ floors: [], rejections: [], requiresReview: false });
+    expect(npmCalls().filter(call => !call.startsWith('audit '))).toEqual([]);
+    expect(read('package.json')).toBe(manifest);
+  });
+
+  it('rejects the advisory once no locked package blocks the fix', () => {
+    writeExpiredProject();
+
+    const run = runCli(['--check'], writeFrozenClock(root, pastExpiryMs(expires)));
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout).rejections).toEqual([{ package: pkg, ghsas: [ghsa], reason: 'missing-publish-times' }]);
   });
 });
 

@@ -70,6 +70,7 @@ export const ACCEPTED_ADVISORIES = [
     ghsa: 'GHSA-g3hv-75wg-m249',
     package: 'minimatch',
     expires: '2027-01-29',
+    autoExtend: { fixedIn: '11.0.1' },
     reason:
       'Dev-only: the remaining minimatch 10.2.6 copies sit under eslint, '
       + '@eslint/config-array, typescript-estree, eslint-plugin-import-x, '
@@ -81,9 +82,9 @@ export const ACCEPTED_ADVISORIES = [
       + 'and makes matchOne private, which typedoc 0.28.20 calls in node-utils, so '
       + 'a global override would break npm run lint and npm run docs. The '
       + 'attack needs a hostile glob pattern, and every pattern these tools '
-      + 'match is written in this repository. At expiry either import-x and '
-      + 'typedoc support minimatch 11 and we take the bump, or these paths '
-      + 'are re-checked before renewing.',
+      + 'match is written in this repository. Past 2027-01-29 the entry '
+      + 'auto-extends while a locked dev tool still pins minimatch below '
+      + '11.0.1, and lapses, failing the gate, once none does.',
   },
 ];
 
