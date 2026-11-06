@@ -1912,6 +1912,10 @@ describe('PR Pipeline audit decoupling', () => {
 
     expect(names.at(-1)).toBe('Audit dependencies');
     expect(uploadAt).toBeGreaterThanOrEqual(0);
+    // A skipped or tolerated upload would still let the marker run, so the jobs
+    // that download `dist` would start without it.
+    expect(build.steps[uploadAt].if).toBeUndefined();
+    expect(build.steps[uploadAt]['continue-on-error']).toBeUndefined();
     expect(markAt).toBe(uploadAt + 1);
     expect(build.steps[markAt].run).toBe('echo "ready=true" >> "$GITHUB_OUTPUT"');
     expect(build.steps[markAt].if).toBeUndefined();
