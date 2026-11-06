@@ -71,6 +71,25 @@ export const ACCEPTED_ADVISORIES = [
       + 'shipped and we take the bump, or these paths are re-checked before '
       + 'renewing.',
   },
+  {
+    ghsa: 'GHSA-g3hv-75wg-m249',
+    package: 'minimatch',
+    expires: '2027-01-29',
+    reason:
+      'Dev-only: the remaining minimatch 10.2.6 copies sit under eslint, '
+      + '@eslint/config-array, typescript-estree, eslint-plugin-import-x, '
+      + 'eslint-plugin-sonarjs and typedoc, and none of them reaches the '
+      + 'published image. The production tree is fixed through the glob '
+      + 'override, because glob 14 depends on minimatch 11. The advisory is '
+      + 'patched only in minimatch 11.0.1, and minimatch 11 removes makeRe, '
+      + 'which eslint-plugin-import-x 4.17.1 imports in no-internal-modules, '
+      + 'and matchOne and set, which typedoc 0.28.20 calls in node-utils, so '
+      + 'a global override would break npm run lint and npm run docs. The '
+      + 'attack needs a hostile glob pattern, and every pattern these tools '
+      + 'match is written in this repository. At expiry either import-x and '
+      + 'typedoc support minimatch 11 and we take the bump, or these paths '
+      + 'are re-checked before renewing.',
+  },
 ];
 
 /**

@@ -52,6 +52,7 @@ const notInProductionTree = new Set<string>();
  */
 const PACKAGE_TREE: Readonly<Record<string, 'production' | 'development' | undefined>> = {
   braces: 'development',
+  minimatch: 'development',
 };
 
 /**
@@ -485,5 +486,26 @@ describe('classifyAdvisories, the entries that actually ship', () => {
       expect(violations, `${entry.package} must not block the build`).toEqual([]);
       expect(accepted).toHaveLength(1);
     }
+  });
+
+  it('honours the minimatch acceptance only while minimatch stays out of the production tree', () => {
+    // The entry is a development-tree deferral because the glob override fixes
+    // the production copy. If minimatch ever returns to the published image,
+    // the gate has to stop honouring the entry instead of shipping the advisory.
+    const live = {
+      ghsa: 'GHSA-g3hv-75wg-m249',
+      package: 'minimatch',
+      severity: 'moderate',
+      title: 'Shipped acceptance for minimatch',
+    };
+
+    const development = classifyAdvisories([live], notInProductionTree);
+    expect(development.violations).toEqual([]);
+    expect(development.accepted).toHaveLength(1);
+
+    const production = classifyAdvisories([live], new Set(['minimatch']));
+    expect(production.accepted).toEqual([]);
+    expect(production.violations).toHaveLength(1);
+    expect(production.violations[0]?.why).toContain('reaches the production tree');
   });
 });
