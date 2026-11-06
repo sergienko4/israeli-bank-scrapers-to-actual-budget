@@ -60,7 +60,7 @@ export const ACCEPTED_ADVISORIES = [
       + 'override, because glob 14 depends on minimatch 11. The advisory is '
       + 'patched only in minimatch 11.0.1, and minimatch 11 removes makeRe, '
       + 'which eslint-plugin-import-x 4.17.1 imports in no-internal-modules, '
-      + 'and matchOne and set, which typedoc 0.28.20 calls in node-utils, so '
+      + 'and makes matchOne private, which typedoc 0.28.20 calls in node-utils, so '
       + 'a global override would break npm run lint and npm run docs. The '
       + 'attack needs a hostile glob pattern, and every pattern these tools '
       + 'match is written in this repository. At expiry either import-x and '
