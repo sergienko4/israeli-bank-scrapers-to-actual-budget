@@ -204,11 +204,7 @@ describe('plan-override-floors --apply', () => {
       requiresReview: true,
     });
     expect(JSON.parse(read('package.json')).overrides).toEqual({ pkg: '^2.0.1' });
-    const { packages } = JSON.parse(read('package-lock.json'));
-    expect(packages['node_modules/pkg'].version).toBe('2.0.1');
-    // The fake `npm update` rewrites only the top-level copy, so this line cannot
-    // fail; what keeps the other copy in line is the plan: `^2.0.1` admits 2.0.2.
-    expect(packages['node_modules/host/node_modules/pkg'].version).toBe('2.0.2');
+    expect(JSON.parse(read('package-lock.json')).packages['node_modules/pkg'].version).toBe('2.0.1');
   });
 
   it('rejects and writes nothing when the floor does not admit a copy no advisory reaches', () => {

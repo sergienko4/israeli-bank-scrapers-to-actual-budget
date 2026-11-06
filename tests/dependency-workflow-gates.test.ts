@@ -1914,6 +1914,7 @@ describe('PR Pipeline audit decoupling', () => {
     expect(uploadAt).toBeGreaterThanOrEqual(0);
     expect(markAt).toBe(uploadAt + 1);
     expect(build.steps[markAt].run).toBe('echo "ready=true" >> "$GITHUB_OUTPUT"');
+    expect(build.steps[markAt].if).toBeUndefined();
     expect(build.outputs?.dist_ready).toBe('${{ steps.dist.outputs.ready }}');
   });
 
