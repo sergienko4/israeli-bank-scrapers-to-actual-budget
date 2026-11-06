@@ -49,27 +49,23 @@ const MS_PER_DAY = 86_400_000;
  */
 export const ACCEPTED_ADVISORIES = [
   {
-    ghsa: 'GHSA-vfj7-8cjw-p6xm',
-    package: 'braces',
-    expires: '2027-01-01',
+    ghsa: 'GHSA-g3hv-75wg-m249',
+    package: 'minimatch',
+    expires: '2027-01-29',
     reason:
-      'Dev-only: three devDependencies reach braces through micromatch '
-      + '4.0.8 (eslint-plugin-check-file; markdownlint-cli2 directly and '
-      + 'through globby, which also uses fast-glob; patch-package via '
-      + 'find-yarn-workspace-root). It is absent from the production tree and '
-      + 'npm prune --omit=dev deletes it from the image node_modules, so '
-      + 'nothing at runtime loads it. micromatch calls braces only from '
-      + 'parse, braces and braceExpand, and micromatch.braces skips it unless '
-      + 'the pattern contains a brace. check-file, markdownlint-cli2, globby '
-      + 'and find-yarn-workspace-root match through picomatch alone; only '
-      + 'fast-glob expands brace patterns. Every pattern that can get there '
-      + 'is a glob written in this repository, never outside input, and a '
-      + 'full eslint src run and npm run lint:docs make zero braces calls. '
-      + 'No fix is available: braces 3.0.3 and each package on these paths '
-      + 'is already its newest release, and the upstream fix is open but '
-      + 'unreleased (braces issue 70, PR 72). At expiry either braces has '
-      + 'shipped and we take the bump, or these paths are re-checked before '
-      + 'renewing.',
+      'Dev-only: the remaining minimatch 10.2.6 copies sit under eslint, '
+      + '@eslint/config-array, typescript-estree, eslint-plugin-import-x, '
+      + 'eslint-plugin-sonarjs and typedoc, and none of them reaches the '
+      + 'published image. The production tree is fixed through the glob '
+      + 'override, because glob 14 depends on minimatch 11. The advisory is '
+      + 'patched only in minimatch 11.0.1, and minimatch 11 removes makeRe, '
+      + 'which eslint-plugin-import-x 4.17.1 imports in no-internal-modules, '
+      + 'and makes matchOne private, which typedoc 0.28.20 calls in node-utils, so '
+      + 'a global override would break npm run lint and npm run docs. The '
+      + 'attack needs a hostile glob pattern, and every pattern these tools '
+      + 'match is written in this repository. At expiry either import-x and '
+      + 'typedoc support minimatch 11 and we take the bump, or these paths '
+      + 'are re-checked before renewing.',
   },
 ];
 
