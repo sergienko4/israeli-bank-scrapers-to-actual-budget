@@ -187,7 +187,7 @@ describe('plan-override-floors --apply', () => {
     expect(npmCalls().every(call => /^(audit|view|update) /.test(call))).toBe(true);
   });
 
-  it('floors the affected copy past an unaffected copy on a higher line and leaves that copy alone', () => {
+  it('floors the affected copy past an unaffected copy on a higher line that the floor admits', () => {
     writeProject({}, { pkg: '1.0.0' }, {
       advisories: [{ name: 'pkg', ghsa: 'GHSA-3g3m-2fjr-6pw4', range: '>=1.0.0 <2.0.1', vulnerable: ['1.0.0'] }],
       times: { pkg: { created: OLD, '1.0.0': OLD, '2.0.1': OLD, '2.0.2': OLD } },
@@ -206,10 +206,12 @@ describe('plan-override-floors --apply', () => {
     expect(JSON.parse(read('package.json')).overrides).toEqual({ pkg: '^2.0.1' });
     const { packages } = JSON.parse(read('package-lock.json'));
     expect(packages['node_modules/pkg'].version).toBe('2.0.1');
+    // The fake `npm update` rewrites only the top-level copy, so this line cannot
+    // fail; what keeps the other copy in line is the plan: `^2.0.1` admits 2.0.2.
     expect(packages['node_modules/host/node_modules/pkg'].version).toBe('2.0.2');
   });
 
-  it('rejects and writes nothing when the floor would move a copy no advisory reaches', () => {
+  it('rejects and writes nothing when the floor does not admit a copy no advisory reaches', () => {
     writeProject({}, { pkg: '1.0.0' }, vulnerablePackage('pkg', 'GHSA-3g3m-2fjr-6pw4'));
     addLockedCopy('node_modules/host/node_modules/pkg', '2.0.0');
     const before = { manifest: read('package.json'), lock: read('package-lock.json') };

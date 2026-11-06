@@ -110,8 +110,9 @@ passes.
 included. A tree with a known advisory never runs next to them. Without
 them the Telegram suites and the Google OAuth smoke skip themselves, so
 on a red audit a green `E2E Tests` covers only the suites that need no
-secret. A new push or a rebase runs E2E with secrets again; re-running the
-same run does not, since the audit result is unchanged.
+secret. Re-running the workflow audits again against the live advisory
+database, so `E2E Tests` gets its secrets back only when that audit
+passes. A new push or a rebase works the same way.
 
 ## Required check-name preservation
 
@@ -519,7 +520,8 @@ opens a PR when anything moved:
   `scripts/plan-override-floors.mjs --apply` plans one floor per such
   package under rules R1–R7 (`scripts/override-floor-logic.mjs`):
   - transitive packages only, whose copies an advisory reaches share one
-    locked caret line, with a floor that moves no other copy;
+    locked caret line, with a floor that admits the locked version of every
+    other copy;
   - advisory ranges it can parse;
   - the lowest published version that clears every advisory, preferring the
     same line and releases at least three days old;
@@ -536,9 +538,10 @@ opens a PR when anything moved:
   the job if `package.json` differs anywhere outside the override keys the
   floor and prune steps reported. A refresh that changes `overrides` is titled
   `fix(deps): raise override floors for <GHSAs>`, so it releases. It arms
-  only when every floor is an aged same-line release and no advisory is left
-  without one. Any other result is labelled `needs-manual-review`. An advisory
-  still unfixed after this step fails the PR's own `npm run audit` gate.
+  only when every floor is an aged same-line release that does not keep a
+  `>=` override and no advisory is left without one. Any other result is
+  labelled `needs-manual-review`. An advisory still unfixed after this step
+  fails the PR's own `npm run audit` gate.
 - **The weekly and dispatched runs prune.** Before planning floors, they try
   removing each plain floor override (`^x.y.z` or `>=x.y.z`); any other shape
   may encode a cap and is kept. The removal stands only when the regenerated

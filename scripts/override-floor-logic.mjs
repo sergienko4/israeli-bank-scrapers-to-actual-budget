@@ -11,12 +11,12 @@
  * Rules, evaluated per package in order (see the ADR for the rationale):
  * R1 a declared dependency is Dependabot's job, not an override's;
  * R2 the locked copies an advisory reaches must sit on one caret line, and the
- *    override must leave every other copy where it is;
+ *    override must admit the locked version of every other copy;
  * R3 every advisory range for the package must parse in the narrow grammar;
  * R4 npm must have reported publish times;
  * R5 pick the lowest fixed version, preferring same-line and aged releases;
  * R6 an existing override keeps its operator and is only ever raised;
- * R7 anything other than an aged same-line floor needs human review.
+ * R7 anything other than an aged same-line caret floor needs human review.
  */
 
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;

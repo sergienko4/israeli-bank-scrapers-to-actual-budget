@@ -36,8 +36,9 @@ name: Lockfile refresh
 # `package.json` may change only inside `overrides`, which a dedicated step
 # verifies before anything is committed. The weekly and dispatched runs also
 # drop overrides that no longer change a single locked version. A floor that
-# is younger than the release-age window or leaves the locked line, and an
-# advisory no floor can clear, route the pull request to a human instead.
+# is younger than the release-age window, leaves the locked line or keeps a
+# `>=` override, and an advisory no floor can clear, route the pull request
+# to a human instead.
 #
 # ADVISORY WATCH: the `advisory` job audits main every four hours, so an
 # advisory published mid-week is remediated within hours instead of on
@@ -230,12 +231,13 @@ jobs:
       # One open issue, found by label, title and author so a human's issue is
       # never edited or closed. It opens while some advisory has no floor (no
       # pull request can carry that) and while a floor holds the refresh for
-      # a maintainer (a fresh or line-leaving floor, or a plan that does not
-      # say), so a pull request that waits for review is not missed. A floor
-      # the refresh merges by itself opens nothing. Once every advisory has a
-      # floor, its body says so, replacing a rejection table that no longer
-      # applies; the refresh's own verdict can still hold the pull request
-      # for other reasons. It stays open until `main` audits clean.
+      # a maintainer (a fresh or line-leaving floor, one that keeps a `>=`
+      # override, or a plan that does not say), so a pull request that waits
+      # for review is not missed. A floor the refresh merges by itself opens
+      # nothing. Once every advisory has a floor, its body says so, replacing
+      # a rejection table that no longer applies; the refresh's own verdict
+      # can still hold the pull request for other reasons. It stays open
+      # until `main` audits clean.
       # REST rather than `gh issue`, which goes through GraphQL mutations that
       # also touch deprecated classic projects. The jq filter is a literal, so
       # no API value is ever spliced into shell.
@@ -273,7 +275,7 @@ jobs:
               "`main` still fails `npm run audit`. Every advisory now has an `overrides` floor, "
               + (if .requiresReview == false
                  then "and no floor needs review; the lockfile refresh pull request carries them, and is held for a maintainer only if another change in it needs review."
-                 else "but at least one is fresh or leaves its locked line, so the lockfile refresh pull request is labelled `needs-manual-review` and waits for a maintainer to review and merge it." end)
+                 else "but at least one is fresh, leaves its locked line or keeps a `>=` override, so the lockfile refresh pull request is labelled `needs-manual-review` and waits for a maintainer to review and merge it." end)
               + "\n\nUpdated by lockfile-refresh run \($run); this issue closes itself once `main` audits clean."' "${plan}")"
           else
             body="$(jq -r --arg run "${GITHUB_RUN_ID}" '
@@ -424,10 +426,11 @@ jobs:
       # package still has an advisory, in at most two passes; a pass that adds
       # a blocking advisory to any other package drops every floor. Every npm call goes
       # through the CLI's allow-list, so no install, `ci`, `exec` or `npx` can
-      # run. `requires_review` is true when a floor is fresh or leaves its
-      # locked line, or an advisory has no floor at all; the pull request step
-      # then labels instead of arming. Best effort like the audit-fix step: a
-      # failure restores both files and the refresh carries no floor. No token.
+      # run. `requires_review` is true when a floor is fresh, leaves its
+      # locked line or keeps a `>=` override, or an advisory has no floor at
+      # all; the pull request step then labels instead of arming. Best effort
+      # like the audit-fix step: a failure restores both files and the refresh
+      # carries no floor. No token.
       - name: Raise override floors for out-of-range advisories
         id: floors
         run: |
@@ -729,9 +732,10 @@ jobs:
             exit 0
           fi
 
-          # A floor younger than the release-age window or outside its locked
-          # line, or an advisory no floor could clear, is a reviewed change
-          # too (ADR-0003). The body says which; the label routes it.
+          # A floor younger than the release-age window, outside its locked
+          # line or keeping a `>=` override, or an advisory no floor could
+          # clear, is a reviewed change too (ADR-0003). The body says which;
+          # the label routes it.
           if [ "${REQUIRES_REVIEW}" = true ]; then
             label_for_review
             echo "::notice::An override floor needs review or an advisory is unresolved; #${number} is labelled needs-manual-review and not armed."

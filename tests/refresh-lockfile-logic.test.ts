@@ -604,6 +604,14 @@ describe('formatRefreshBody with override changes', () => {
     expect(body).toContain('needs-manual-review');
   });
 
+  it('holds an aged in-line floor that keeps a >= override, as the planner does', () => {
+    const kept = { ...inLine, floor: '>=2.8.7', from: '>=2.8.0' };
+    const body = formatRefreshBody(applyOverrideChanges(base, { floors: [kept] }));
+    expect(body).toContain('- `re2js` >=2.8.7 (in-line; was >=2.8.0) for GHSA-gg6h-894w-4m9c');
+    expect(body).toContain('or that keeps a `>=` override, needs a human');
+    expect(body).toContain('needs-manual-review');
+  });
+
   it('lists unresolved advisories and withholds auto-merge without promising an issue', () => {
     const body = formatRefreshBody(
       applyOverrideChanges(base, { rejections: [{ package: 'foo', ghsas: ['GHSA-x'], reason: 'no-fixed-release' }] }),

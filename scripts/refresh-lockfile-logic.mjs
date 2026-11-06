@@ -20,6 +20,8 @@
  * reject the answer "no" mechanically instead of relying on review.
  */
 
+import { needsReview } from './override-floor-logic.mjs';
+
 /**
  * The only registry a tarball in this repository may resolve from.
  *
@@ -641,7 +643,9 @@ export function applyOverrideChanges(summary, overrides) {
 
 /**
  * Lists each applied floor and says when one keeps the refresh from merging
- * itself. Renders nothing when no floor was applied.
+ * itself. The verdict comes from the planner's own rule, so the body can never
+ * disagree with the label the workflow applies. Renders nothing when no floor
+ * was applied.
  *
  * @param {ReadonlyArray<{ package: string, floor: string, from: string | null, kind: string, ghsas: string[] }> | undefined} floors The applied floors.
  * @returns {string[]} The section lines.
@@ -649,7 +653,7 @@ export function applyOverrideChanges(summary, overrides) {
 function floorSection(floors) {
   if (floors === undefined || floors.length === 0) return [];
   const line = (f) => `- \`${f.package}\` ${f.floor} (${f.kind}; was ${f.from ?? 'none'}) for ${f.ghsas.join(', ')}`;
-  const held = floors.some((floor) => floor.kind !== 'in-line');
+  const held = needsReview(floors, []);
   return [
     `## Override floors (${floors.length})`,
     '',
@@ -658,7 +662,7 @@ function floorSection(floors) {
     'An exact or narrow pin held each package below its fixed release, out of reach of',
     '`npm update` and Dependabot. Each floor was proved to clear its advisories by a',
     `lockfile-only \`npm update\` and a fresh audit. Rules: ${OVERRIDE_ADR}.`,
-    ...(held ? ['', 'A floor that is not `in-line` needs a human: auto-merge is withheld and the', 'PR is labelled `needs-manual-review`.'] : []),
+    ...(held ? ['', 'A floor that is not `in-line`, or that keeps a `>=` override, needs a human:', 'auto-merge is withheld and the PR is labelled `needs-manual-review`.'] : []),
     '',
   ];
 }
