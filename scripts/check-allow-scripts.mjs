@@ -24,10 +24,16 @@
  *             listing every change on stdout so the Dependabot workflow can
  *             quote it into the comment that asks a human to review the newly
  *             approved install scripts
+ *   --drop-orphans:
+ *             delete only the entries the tree no longer needs, listing each
+ *             on stdout, exit 0 even if stale or missing pins remain; the
+ *             lockfile refresh uses it because withdrawing an approval can
+ *             never let a script run, so no review is owed
  *
  * `--fix` never approves a package that is not on the allowlist already. A
  * dependency that has newly gained an install script is a new decision, not a
  * rotation of an existing one, so it is left to fail the gate for a human.
+ * `--drop-orphans` goes further and never rotates either.
  *
  * Contract:
  *   - Idempotent: running twice produces identical bytes
@@ -39,7 +45,13 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { approvedPins, diffPins, rebuildAllowScripts, requiredPins } from './allow-scripts-logic.mjs';
+import {
+  approvedPins,
+  diffPins,
+  dropOrphanPins,
+  rebuildAllowScripts,
+  requiredPins,
+} from './allow-scripts-logic.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGE_JSON_PATH = resolve(REPO_ROOT, 'package.json');
@@ -81,6 +93,16 @@ function report({ stale, missing, orphan }, log) {
 }
 
 /**
+ * Writes the manifest back to package.json in the repository's own format.
+ *
+ * @param {object} pkg parsed package.json
+ * @returns {void}
+ */
+function writePackage(pkg) {
+  writeFileSync(PACKAGE_JSON_PATH, `${JSON.stringify(pkg, null, 2)}\n`);
+}
+
+/**
  * Writes the corrected allowlist back to package.json.
  *
  * @param {object} pkg parsed package.json
@@ -90,7 +112,7 @@ function report({ stale, missing, orphan }, log) {
  */
 function applyFix(pkg, required, stale) {
   pkg.allowScripts = rebuildAllowScripts(pkg.allowScripts, required, stale);
-  writeFileSync(PACKAGE_JSON_PATH, `${JSON.stringify(pkg, null, 2)}\n`);
+  writePackage(pkg);
 }
 
 /**
@@ -118,6 +140,28 @@ function runFix(pkg, required, findings) {
     );
   }
   if (countFindings(findings) === 0) console.log('allowScripts pins already correct.');
+}
+
+/**
+ * Withdraws approvals the tree no longer needs and nothing else.
+ *
+ * Removing an approval can never let an install script run, so this is the
+ * one repair an unattended workflow may apply. Stale and missing pins stay as
+ * they are for a human to decide, and do not fail this mode: the gate itself
+ * still reports them.
+ *
+ * @param {object} pkg parsed package.json
+ * @param {{ stale: object[], missing: object[], orphan: object[] }} findings
+ * @returns {void}
+ */
+function runDropOrphans(pkg, { orphan }) {
+  if (orphan.length === 0) {
+    console.log('No orphan allowScripts pins to drop.');
+    return;
+  }
+  report({ stale: [], missing: [], orphan }, console.log);
+  pkg.allowScripts = dropOrphanPins(pkg.allowScripts, orphan);
+  writePackage(pkg);
 }
 
 /**
@@ -164,10 +208,16 @@ function countFindings({ stale, missing, orphan }) {
   return stale.length + missing.length + orphan.length;
 }
 
+/** One repair handler per flag; the first flag present wins, none means check. */
+const MODES = [
+  ['--fix', (pkg, required, findings) => runFix(pkg, required, findings)],
+  ['--drop-orphans', (pkg, _required, findings) => runDropOrphans(pkg, findings)],
+];
+
 /**
  * Entry point: compares the allowlist and either reports or repairs drift.
  *
- * An allowlist entry the gate cannot read fails both modes, so `--fix` never
+ * An allowlist entry the gate cannot read fails every mode, so a repair never
  * rewrites an allowlist it misread.
  *
  * @returns {void}
@@ -184,8 +234,9 @@ function main() {
   }
   const findings = diffPins(required, approved);
 
-  if (process.argv.includes('--fix')) runFix(pkg, required, findings);
-  else runCheck(findings);
+  const mode = MODES.find(([flag]) => process.argv.includes(flag));
+  if (mode === undefined) runCheck(findings);
+  else mode[1](pkg, required, findings);
 }
 
 main();

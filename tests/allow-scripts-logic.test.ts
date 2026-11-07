@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   approvedPins,
   diffPins,
+  dropOrphanPins,
   type ILockfile,
   rebuildAllowScripts,
   requiredPins,
+  verifyOrphanPinDrop,
 } from '../scripts/allow-scripts-logic.mjs';
 
 /** better-sqlite3 as the tree holds it: a nested copy with a script, and a top-level one. */
@@ -84,5 +86,71 @@ describe('diffPins and rebuildAllowScripts', () => {
   it('accepts the tree when every scripted version is approved', () => {
     const required = requiredPins(sqliteTree(false));
     expect(diffPins(required, new Set(['better-sqlite3@12.11.1']))).toEqual({ stale: [], missing: [], orphan: [] });
+  });
+});
+
+describe('dropOrphanPins', () => {
+  it('removes only the orphaned approvals and keeps the key order of the rest', () => {
+    const allowScripts = { 'a@1.0.0': true, 'gone@2.0.0': true, 'b@1.0.0': true };
+    const result = dropOrphanPins(allowScripts, [{ name: 'gone', was: '2.0.0' }]);
+    expect(Object.entries(result)).toEqual([
+      ['a@1.0.0', true],
+      ['b@1.0.0', true],
+    ]);
+  });
+
+  it('keeps a scoped package pin whose name merely contains the orphan name', () => {
+    const allowScripts = { '@scope/gone@1.0.0': true, 'gone@1.0.0': true };
+    expect(dropOrphanPins(allowScripts, [{ name: 'gone', was: '1.0.0' }])).toEqual({ '@scope/gone@1.0.0': true });
+  });
+
+  it('leaves a stale pin in place, since rotating it is a human decision', () => {
+    const required = new Set(['a@2.0.0']);
+    const allowScripts = { 'a@1.0.0': true };
+    const { orphan } = diffPins(required, approvedPins(allowScripts));
+    expect(dropOrphanPins(allowScripts, orphan)).toEqual(allowScripts);
+  });
+
+  it('returns an empty allowlist when there is none to edit', () => {
+    expect(dropOrphanPins(undefined, [{ name: 'gone', was: '1.0.0' }])).toEqual({});
+  });
+});
+
+describe('verifyOrphanPinDrop', () => {
+  const required = new Set(['kept@1.0.0']);
+
+  it.each([
+    { label: 'nothing changed', before: { 'kept@1.0.0': true }, after: { 'kept@1.0.0': true } },
+    { label: 'an orphaned approval removed', before: { 'kept@1.0.0': true, 'gone@1.0.0': true }, after: { 'kept@1.0.0': true } },
+    { label: 'the same pins in another order', before: { 'kept@1.0.0': true, 'gone@1.0.0': true }, after: { 'gone@1.0.0': true, 'kept@1.0.0': true } },
+    { label: 'no allowlist on either side', before: undefined, after: undefined },
+  ])('accepts $label', ({ before, after }) => {
+    expect(verifyOrphanPinDrop(before, after, required)).toEqual({ ok: true });
+  });
+
+  it.each([
+    { label: 'a pin added', before: { 'kept@1.0.0': true }, after: { 'kept@1.0.0': true, 'new@1.0.0': true } },
+    { label: 'a pin rotated to a new version', before: { 'kept@1.0.0': true, 'a@1.0.0': true }, after: { 'kept@1.0.0': true, 'a@2.0.0': true } },
+    { label: 'an approval flipped to a denial', before: { 'kept@1.0.0': true }, after: { 'kept@1.0.0': false } },
+    { label: 'a pin created from no allowlist', before: undefined, after: { 'new@1.0.0': true } },
+  ])('rejects $label as a change beyond dropping orphans', ({ before, after }) => {
+    const verdict = verifyOrphanPinDrop(before, after, required);
+    expect(verdict.ok).toBe(false);
+    expect(verdict).toMatchObject({ reason: expect.stringMatching(/gained or changed/u) });
+  });
+
+  it.each([
+    { label: 'a pin the tree still requires', before: { 'kept@1.0.0': true }, after: {} },
+    { label: 'a denial', before: { 'kept@1.0.0': true, 'gone@1.0.0': false }, after: { 'kept@1.0.0': true } },
+    { label: 'a name-only entry', before: { kept: true, 'kept@1.0.0': true }, after: { 'kept@1.0.0': true } },
+  ])('rejects dropping $label', ({ before, after }) => {
+    const verdict = verifyOrphanPinDrop(before, after, required);
+    expect(verdict.ok).toBe(false);
+    expect(verdict).toMatchObject({ reason: expect.stringMatching(/not an orphaned approval/u) });
+  });
+
+  it('names every offending entry in sorted order', () => {
+    const before = { 'kept@1.0.0': true, 'b@1.0.0': false, 'a@1.0.0': false };
+    expect(verifyOrphanPinDrop(before, {}, required)).toMatchObject({ reason: expect.stringContaining('a@1.0.0, b@1.0.0, kept@1.0.0') });
   });
 });

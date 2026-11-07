@@ -168,6 +168,24 @@ The exception is deliberately narrow in two directions:
   and exactly one new version replaced it, so a copy that appears *beside* an
   approved one is never approved by moving that pin onto it.
 
+### The lockfile refresh drops orphaned pins
+
+The scheduled lockfile refresh (`.github/workflows/lockfile-refresh.yml`) can
+move a package to a release that no longer ships an install script. Its pin is
+then an orphan, and `lint:allow-scripts` fails the refresh pull request on an
+entry no human has any reason to keep. The refresh branch is protected, so a
+maintainer cannot push the fix there. The refresh therefore runs
+`node scripts/check-allow-scripts.mjs --drop-orphans`, which removes those
+entries in the same commit as the bump that orphaned them.
+
+The mode is narrower than `--fix` on purpose. It **only removes** an orphan: it
+never rotates a pin to a new version and never adds one, because either would
+approve an install script that nobody reviewed. A package that moved from one
+scripted version to another, or that newly gained a script, is left for
+`lint:allow-scripts` to fail until a maintainer decides. The workflow then
+checks that the only change to `allowScripts` is the removal of orphans, and a
+pin the lockfile still needs is never removed.
+
 ### Dependabot pull requests merge themselves
 
 `.github/workflows/dependabot-auto-merge.yml` judges every Dependabot pull

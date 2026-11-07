@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-29
-- **Amended:** 2026-11-06 — see the notes under Decisions 2 and 4
+- **Amended:** 2026-11-07 — see the notes under Decisions 2 and 4, and the note after the manifest guard
 - **Deciders:** Repository maintainer
 - **Amends:** [ADR-0001](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0001-scheduled-lockfile-refresh.md),
   [ADR-0002](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0002-dependency-auto-merge.md)
@@ -125,10 +125,19 @@ recover on their own once `main` is clean.
    cannot run, and no third-party code executes. The step is best effort: a
    failure restores both files and the refresh carries no floor.
 
-   The next step, "Verify only the lockfile and overrides changed", runs
-   `--verify-manifest`. It fails the job before anything is committed if
-   `package.json` differs anywhere outside the override keys the floor and
-   prune steps reported.
+   The next step, "Verify only the lockfile, overrides and orphan pins
+   changed", runs `--verify-manifest`. It fails the job before anything is
+   committed if `package.json` differs anywhere outside the override keys the
+   floor and prune steps reported, apart from removed orphan `allowScripts`
+   pins.
+
+   > **Amended 2026-11-07.** A scripted dependency can move to a release
+   > without an install script, which orphans its `allowScripts` pin and fails
+   > `npm run lint:allow-scripts` on a refresh branch nobody can push to. The
+   > refresh now runs `check-allow-scripts.mjs --drop-orphans` after the floor
+   > step, and the guard accepts a change to `allowScripts` only when it
+   > removes exact pins the lockfile no longer needs. Rotating or adding a pin
+   > stays a human decision, because it approves an install script.
 
    A refresh that changes `overrides` is titled
    `fix(deps): raise override floors for <GHSAs>`, because `overrides` is a

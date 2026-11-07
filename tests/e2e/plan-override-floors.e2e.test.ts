@@ -443,4 +443,82 @@ describe('plan-override-floors --verify-manifest', () => {
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('a field outside "overrides" changed');
   });
+
+  describe('allowScripts pins', () => {
+    const NO_STATE: IFakeState = { advisories: [], times: {}, resolve: {} };
+
+    /**
+     * Stages a refresh whose lockfile runs an install script for `kept@1.0.0` only:
+     * `before.json` holds the committed manifest, `package.json` the edited one.
+     *
+     * @param before The committed `allowScripts`.
+     * @param after The edited `allowScripts`.
+     * @param extra Extra manifest fields applied to the edited manifest.
+     * @returns Nothing; the project is written into the scratch root.
+     */
+    function stagePinEdit(before: Record<string, boolean>, after: Record<string, boolean>, extra: object = {}): void {
+      writeProject({}, {}, NO_STATE);
+      const manifest = JSON.parse(read('package.json')) as object;
+      const lock = JSON.parse(read('package-lock.json')) as { packages: Record<string, object> };
+      lock.packages['node_modules/kept'] = { version: '1.0.0', hasInstallScript: true };
+      writeFileSync(join(root, 'package-lock.json'), `${JSON.stringify(lock, null, 2)}\n`);
+      writeFileSync(join(root, 'before.json'), JSON.stringify({ ...manifest, allowScripts: before }));
+      writeFileSync(join(root, 'package.json'), JSON.stringify({ ...manifest, allowScripts: after, ...extra }));
+    }
+
+    it('accepts a refresh that only withdrew an approval the tree no longer needs', () => {
+      stagePinEdit({ 'kept@1.0.0': true, 'gone@2.0.0': true }, { 'kept@1.0.0': true });
+
+      const run = runCli(['--verify-manifest', 'before.json']);
+
+      expect(run.status).toBe(0);
+      expect(JSON.parse(run.stdout)).toEqual({ ok: true });
+    });
+
+    it('accepts an orphan drop beside a planned override floor', () => {
+      stagePinEdit({ 'kept@1.0.0': true, 'gone@2.0.0': true }, { 'kept@1.0.0': true }, { overrides: { re2js: '^1.0.1' } });
+      writeFileSync(join(root, 'plan.json'), JSON.stringify({ floors: [{ package: 're2js' }] }));
+
+      const run = runCli(['--verify-manifest', 'before.json', '--plan', 'plan.json']);
+
+      expect(run.status).toBe(0);
+    });
+
+    it.each<{ label: string; before: Record<string, boolean>; after: Record<string, boolean>; message: string }>([
+      {
+        label: 'a pin rotated to a new version',
+        before: { 'kept@1.0.0': true, 'old@1.0.0': true },
+        after: { 'kept@1.0.0': true, 'old@2.0.0': true },
+        message: 'allowScripts gained or changed: old@2.0.0',
+      },
+      {
+        label: 'an approval added for a script nobody reviewed',
+        before: { 'kept@1.0.0': true },
+        after: { 'kept@1.0.0': true, 'fresh@1.0.0': true },
+        message: 'allowScripts gained or changed: fresh@1.0.0',
+      },
+      {
+        label: 'a pin the tree still requires dropped',
+        before: { 'kept@1.0.0': true },
+        after: {},
+        message: 'allowScripts dropped an entry that is not an orphaned approval: kept@1.0.0',
+      },
+    ])('fails on $label', ({ before, after, message }) => {
+      stagePinEdit(before, after);
+
+      const run = runCli(['--verify-manifest', 'before.json']);
+
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain(message);
+    });
+
+    it('still fails when a pin drop travels with an edit to another field', () => {
+      stagePinEdit({ 'kept@1.0.0': true, 'gone@2.0.0': true }, { 'kept@1.0.0': true }, { scripts: { postinstall: 'node evil.js' } });
+
+      const run = runCli(['--verify-manifest', 'before.json']);
+
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain('a field outside "overrides" changed');
+    });
+  });
 });

@@ -17,7 +17,9 @@
  *     With --check, report without keeping any removal.
  *   node scripts/plan-override-floors.mjs --verify-manifest <before.json> [--plan <file>] [--prune-result <file>]
  *     Exit 1 unless package.json differs from <before.json> only in the
- *     override keys the plan floored or the prune removed.
+ *     override keys the plan floored or the prune removed, and in
+ *     `allowScripts` approvals the refreshed lockfile no longer requires
+ *     (removed, never added or re-versioned).
  *
  * Every npm call goes through `assertAllowedNpmArgs`: only lockfile-only
  * `audit`, `view <pkg> time` and `update --ignore-scripts` can run, via
@@ -31,6 +33,7 @@ import { parseArgs } from 'node:util';
 
 import { classifyCommittedAudit } from '../config/audit-policy.mjs';
 import { auditCommittedTree, npmInvocation, readLockPackages } from '../config/audit-report.mjs';
+import { requiredPins, verifyOrphanPinDrop } from './allow-scripts-logic.mjs';
 import {
   applyFloors,
   assertAllowedNpmArgs,
@@ -352,7 +355,12 @@ function prune(base, checkOnly) {
 }
 
 /**
- * Checks package.json changed only where the plan and prune said it would.
+ * Checks package.json changed only where the plan and prune said it would,
+ * plus the install-script approvals the refreshed lockfile no longer needs.
+ *
+ * `allowScripts` is judged apart from `overrides`: it may only shrink, and
+ * only by orphaned approvals, so an unattended refresh can never approve a
+ * script nobody reviewed. Any other field still fails.
  *
  * @param {{ 'verify-manifest': string, plan?: string, 'prune-result'?: string }} values The parsed flags.
  * @returns {import('./override-floor-logic.d.mts').IManifestVerdict} The verdict.
@@ -360,7 +368,11 @@ function prune(base, checkOnly) {
 function verifyManifest(values) {
   const floored = values.plan ? readJson(values.plan).floors.map(floor => floor.package) : [];
   const pruned = values['prune-result'] ? readJson(values['prune-result']).pruned : [];
-  return verifyOverrideOnlyChange(readJson(values['verify-manifest']), readJson(MANIFEST), [...floored, ...pruned]);
+  const { allowScripts: pinsBefore, ...before } = readJson(values['verify-manifest']);
+  const { allowScripts: pinsAfter, ...after } = readJson(MANIFEST);
+  const overrides = verifyOverrideOnlyChange(before, after, [...floored, ...pruned]);
+  if (!overrides.ok) return overrides;
+  return verifyOrphanPinDrop(pinsBefore, pinsAfter, requiredPins(readJson(LOCKFILE)));
 }
 
 /**

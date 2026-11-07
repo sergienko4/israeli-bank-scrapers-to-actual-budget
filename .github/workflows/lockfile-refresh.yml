@@ -33,8 +33,11 @@ name: Lockfile refresh
 # advisory under rules R1–R7 (scripts/override-floor-logic.mjs), regenerates
 # only the floored packages and proves each floor left its package with no
 # advisory.
-# `package.json` may change only inside `overrides`, which a dedicated step
-# verifies before anything is committed. The weekly and dispatched runs also
+# `package.json` may change only inside `overrides`, plus the removal of
+# `allowScripts` pins whose install script no longer exists (an orphan pin
+# fails `npm run lint:allow-scripts`, so the refresh drops it in the same
+# commit as the bump that orphaned it). A dedicated step verifies both before
+# anything is committed. The weekly and dispatched runs also
 # drop overrides that no longer change a single locked version. A floor that
 # is younger than the release-age window, leaves the locked line or keeps a
 # `>=` override, and an advisory no floor can clear, route the pull request
@@ -456,8 +459,35 @@ jobs:
             jq -r '.rejections[] | "- \(.package): rejected (\(.reason)) for \(.ghsas | join(", "))"' "${plan}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-      # A prune changes package.json alone, so the manifest counts as a change
-      # too; the next step vets it before anything is committed.
+      # An approval in `package.json`'s `allowScripts` outlives the install
+      # script it approved: when `npm update` moves a package to a release
+      # without one, the pin is orphaned and `npm run lint:allow-scripts`
+      # fails the pull request, which a bot cannot repair because the refresh
+      # branch is locked. This drops those orphans in the same commit as the
+      # lockfile bump that created them, and nothing else. It never rotates a
+      # pin to a new version and never approves a package: either would grant
+      # an install script no human reviewed, and removing an approval cannot
+      # grant anything. A rotated or missing pin is left for the gate to fail.
+      # Best effort: a failure restores package.json and the gate decides.
+      # Runs on every trigger, after the floors so the lockfile is final. No
+      # token.
+      - name: Drop orphan allowScripts pins
+        id: orphans
+        run: |
+          set -euo pipefail
+          cp package.json "${RUNNER_TEMP}/package.pre-orphans.json"
+          if ! result="$(node scripts/check-allow-scripts.mjs --drop-orphans)"; then
+            echo '::warning::Dropping orphan allowScripts pins failed; package.json was restored and the pull request gate decides.'
+            cp "${RUNNER_TEMP}/package.pre-orphans.json" package.json
+            exit 0
+          fi
+          { grep '^orphan pin: ' <<< "${result}" || true; } \
+            | sed -E 's/^orphan pin: ([^ ]+) no longer needs an install script$/- \1: dropped, it no longer needs an install script/' \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+      # A prune or an orphan-pin drop changes package.json alone, so the
+      # manifest counts as a change too; the next step vets it before anything
+      # is committed.
       - name: Detect whether anything moved
         id: diff
         run: |
@@ -471,13 +501,15 @@ jobs:
 
       # `npm update` is documented not to touch package.json, and the audit
       # step above undoes any package.json edit of its own. The floor and prune
-      # steps may edit `overrides`, and only the keys they reported. This
-      # asserts the result rather than trusting any of them: anything else in
-      # the tree changing means npm did something this workflow has not
+      # steps may edit `overrides`, and only the keys they reported; the orphan
+      # step may remove `allowScripts` pins that no installed package needs.
+      # This asserts the result rather than trusting any of them: anything else
+      # in the tree changing means npm did something this workflow has not
       # reasoned about, and the commit below would silently carry it. A plan or
       # prune result is passed only when its step left one; without it no
-      # override key may change at all.
-      - name: Verify only the lockfile and overrides changed
+      # override key may change at all. A pin may only ever be removed, and
+      # only when the lockfile no longer needs it.
+      - name: Verify only the lockfile, overrides and orphan pins changed
         id: verify
         if: steps.diff.outputs.changed == 'true'
         run: |
@@ -554,8 +586,9 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -b "${BRANCH}"
           # The guard above proved these two are the only modifications, and
-          # that package.json moved only inside the reported overrides, so
-          # naming them stages exactly the intended change.
+          # that package.json moved only inside the reported overrides or by
+          # dropping orphan allowScripts pins, so naming them stages exactly
+          # the intended change.
           git add package-lock.json package.json
           git commit -m "${TITLE}" \
             -m "Opened by the lockfile-refresh workflow (run ${GITHUB_RUN_ID})." \
