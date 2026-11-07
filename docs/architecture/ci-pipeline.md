@@ -536,12 +536,32 @@ opens a PR when anything moved:
   passes an allow-list, so no install, `ci`, `exec` or `npx` runs. A failure
   restores both files and the refresh carries no floor. The next step fails
   the job if `package.json` differs anywhere outside the override keys the
-  floor and prune steps reported. A refresh that changes `overrides` is titled
+  floor and prune steps reported, apart from removed orphan pins (below). A
+  refresh that changes `overrides` is titled
   `fix(deps): raise override floors for <GHSAs>`, so it releases. It arms
   only when every floor is an aged same-line release that does not keep a
   `>=` override and no advisory is left without one. Any other result is
   labelled `needs-manual-review`. An advisory still unfixed after this step
   fails the PR's own `npm run audit` gate.
+- **An orphaned `allowScripts` pin is dropped, never rotated.** When
+  `npm update` moves a package to a release without an install script, its
+  pin no longer matches anything and `npm run lint:allow-scripts` fails the
+  pull request, on a branch protected against pushes.
+  `scripts/check-allow-scripts.mjs --drop-orphans` removes such pins in the
+  same commit. It never rotates a pin to a new version and never approves a
+  package, since either would approve an install script nobody reviewed. A
+  package that still has another unapproved version in the tree keeps its
+  pins (`withdrawableOrphans`).
+  `--verify-manifest` accepts the result only when every difference in
+  `allowScripts` is the removal of an exact pin the lockfile no longer needs.
+  The step records the removed pins in `orphans.json`, which the summary step
+  passes to `summarize-refresh.mjs --orphans`, so the pull request body lists
+  each one under "allowScripts approvals withdrawn". A refresh that only
+  withdraws pins is titled `chore(deps): withdraw <n> orphaned allowScripts
+  approval(s)`.
+  The step is best effort: a failure restores `package.json` and the gate
+  decides. `allowScripts` is not a shipped manifest field, so it does not
+  change the commit type.
 - **The weekly and dispatched runs prune.** Before planning floors, they try
   removing each plain floor override (`^x.y.z` or `>=x.y.z`); any other shape
   may encode a cap and is kept. The removal stands only when the regenerated

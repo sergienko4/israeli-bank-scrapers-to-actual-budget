@@ -161,6 +161,70 @@ describe('summarize-refresh CLI', () => {
     expect(run.stderr).toContain('lacks the rejections list');
   });
 
+  it('turns a withdrawn-only refresh into a chore that names the pins', () => {
+    const lockfile = writeLockfile({ 'node_modules/vitest': { version: '3.0.0', dev: true } });
+    const orphans = writeJson({ dropped: ['unrs-resolver@1.12.2', 'fsevents@2.3.3'] });
+
+    const run = runCli([lockfile, lockfile, '--orphans', orphans]);
+
+    expect(run.status).toBe(0);
+    const summary = JSON.parse(run.stdout);
+    expect(summary).toMatchObject({
+      hasChanges: true,
+      commitType: 'chore',
+      overridesChanged: false,
+      title: 'chore(deps): withdraw 2 orphaned allowScripts approvals',
+    });
+    expect(summary.body).toContain('## allowScripts approvals withdrawn (2)');
+    expect(summary.body).toContain('- `unrs-resolver@1.12.2`\n- `fsevents@2.3.3`');
+    expect(summary.body).not.toContain('`package.json` is untouched.');
+  });
+
+  it('keeps the lockfile title and still lists the pins when the lockfile moved too', () => {
+    const before = writeLockfile({ 'node_modules/sax': { version: '1.4.0' } });
+    const after = writeLockfile({ 'node_modules/sax': { version: '1.4.1' } });
+
+    const run = runCli([before, after, '--orphans', writeJson({ dropped: ['unrs-resolver@1.12.2'] })]);
+
+    expect(run.status).toBe(0);
+    const summary = JSON.parse(run.stdout);
+    expect(summary).toMatchObject({ commitType: 'fix', title: 'fix(deps): refresh 1 runtime and 0 dev lockfile pins' });
+    expect(summary.body).toContain('## allowScripts approvals withdrawn (1)');
+  });
+
+  it('treats an empty dropped list as no withdrawal', () => {
+    const lockfile = writeLockfile({});
+
+    const run = runCli([lockfile, lockfile, '--orphans', writeJson({ dropped: [] })]);
+
+    expect(run.status).toBe(0);
+    const summary = JSON.parse(run.stdout);
+    expect(summary.hasChanges).toBe(false);
+    expect(summary.body).not.toContain('approvals withdrawn');
+  });
+
+  it('fails without output when an orphans file lacks its list', () => {
+    const lockfile = writeLockfile({});
+
+    const run = runCli([lockfile, lockfile, '--orphans', writeJson({ names: ['a@1.0.0'] })]);
+
+    expect(run.status).toBe(1);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toContain('lacks the dropped list');
+  });
+
+  it('fails without output when an orphans file is not JSON', () => {
+    const lockfile = writeLockfile({});
+    const broken = join(root, 'broken-orphans.json');
+    writeFileSync(broken, '{"dropped": [');
+
+    const run = runCli([lockfile, lockfile, '--orphans', broken]);
+
+    expect(run.status).toBe(1);
+    expect(run.stdout).toBe('');
+    expect(run.stderr).toContain('is not valid JSON');
+  });
+
   it('fails without output when a prune result is not JSON', () => {
     const lockfile = writeLockfile({});
     const broken = join(root, 'broken.json');

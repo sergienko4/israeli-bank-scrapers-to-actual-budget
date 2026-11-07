@@ -174,3 +174,103 @@ export function rebuildAllowScripts(allowScripts, required, stale) {
   }
   return rebuilt;
 }
+
+/**
+ * Picks the orphaned approvals an unattended job may withdraw.
+ *
+ * A package that still has an unapproved version in the tree is moving between
+ * scripted releases, not losing its script. Its approvals stay, so the gate
+ * keeps failing until a human re-approves the release they have read.
+ *
+ * @param {{ stale: { name: string }[], missing: { name: string }[], orphan: { name: string, was: string }[] }} findings
+ *   the findings from {@link diffPins}
+ * @returns {{ name: string, was: string }[]} the orphans whose package has no required pin left
+ */
+export function withdrawableOrphans({ stale, missing, orphan }) {
+  const undecided = new Set([...stale, ...missing].map(({ name }) => name));
+  return orphan.filter(({ name }) => !undecided.has(name));
+}
+
+/**
+ * Removes orphaned approvals from the allowlist and changes nothing else.
+ *
+ * Unlike {@link rebuildAllowScripts} it never rotates a pin to a new version,
+ * so it cannot approve code nobody reviewed. Withdrawing an approval can only
+ * narrow what npm may run, which makes it safe for an unattended job.
+ *
+ * @param {Record<string, boolean> | undefined} allowScripts the current allowlist, already
+ *   accepted by {@link approvedPins}
+ * @param {{ name: string, was: string }[]} orphan the orphan findings from {@link diffPins}
+ * @returns {Record<string, boolean>} the allowlist without the orphaned pins, in its original order
+ */
+export function dropOrphanPins(allowScripts, orphan) {
+  const gone = new Set(orphan.map(({ name, was }) => `${name}@${was}`));
+  return Object.fromEntries(Object.entries(allowScripts ?? {}).filter(([pin]) => !gone.has(pin)));
+}
+
+/**
+ * Tells whether an allowlist entry is an exact approval the tree no longer requires.
+ *
+ * @param {string} pin the allowlist key
+ * @param {unknown} allowed the entry's value
+ * @param {Set<string>} required pins the lockfile requires
+ * @returns {boolean} true when dropping the entry withdraws a now-unused approval
+ */
+function isOrphanedApproval(pin, allowed, required) {
+  return allowed === true && isExactPin(pin) && !required.has(pin);
+}
+
+/**
+ * Tells whether a parsed JSON value is a plain object.
+ *
+ * @param {unknown} value the parsed value
+ * @returns {boolean} false for `null`, arrays and every scalar
+ */
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Finds a way an allowlist edit changed the field itself, not its entries.
+ *
+ * Dropping pins never deletes or creates the field, and a field that is not an
+ * object is one {@link approvedPins} reads as empty, so the gate would not
+ * notice it.
+ *
+ * @param {unknown} before the committed allowlist
+ * @param {unknown} after the edited allowlist
+ * @returns {string | undefined} why the edit is not a pin removal, or undefined when it may be one
+ */
+function fieldProblem(before, after) {
+  if ([before, after].some(value => value !== undefined && !isPlainObject(value))) {
+    return 'allowScripts is not an object';
+  }
+  if ((before === undefined) !== (after === undefined)) return 'allowScripts was added or removed as a whole';
+  return undefined;
+}
+
+/**
+ * Proves an allowlist edit only withdrew approvals the tree no longer needs.
+ *
+ * An automated refresh may shrink the allowlist and must never grow or alter
+ * it: an added or re-versioned pin would approve an install script no human
+ * read. Every removed entry must also be an exact approval the lockfile no
+ * longer requires, so a pin that still guards a script cannot be dropped.
+ *
+ * @param {unknown} before the committed allowlist
+ * @param {unknown} after the edited allowlist
+ * @param {Set<string>} required pins the refreshed lockfile requires
+ * @returns {{ ok: true } | { ok: false, reason: string }} the verdict
+ */
+export function verifyOrphanPinDrop(before, after, required) {
+  const problem = fieldProblem(before, after);
+  if (problem !== undefined) return { ok: false, reason: problem };
+  const old = before ?? {};
+  const next = after ?? {};
+  const changed = Object.keys(next).filter(pin => !Object.hasOwn(old, pin) || old[pin] !== next[pin]);
+  if (changed.length > 0) return { ok: false, reason: `allowScripts gained or changed: ${changed.sort().join(', ')}` };
+  const removed = Object.keys(old).filter(pin => !Object.hasOwn(next, pin));
+  const illegal = removed.filter(pin => !isOrphanedApproval(pin, old[pin], required));
+  if (illegal.length === 0) return { ok: true };
+  return { ok: false, reason: `allowScripts dropped an entry that is not an orphaned approval: ${illegal.sort().join(', ')}` };
+}

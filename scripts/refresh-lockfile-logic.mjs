@@ -568,6 +568,10 @@ const RELEASE_RATIONALE = {
     'Only development pins moved. Nothing here reaches the published Docker image,',
     'so this opens as `chore(deps)` and cuts no release.',
   ].join('\n'),
+  withdrawn: [
+    'Only `allowScripts` approvals were withdrawn. `allowScripts` is not a shipped',
+    'manifest field, so this opens as `chore(deps)` and cuts no release.',
+  ].join('\n'),
 };
 
 /**
@@ -642,6 +646,27 @@ export function applyOverrideChanges(summary, overrides) {
 }
 
 /**
+ * Folds the `allowScripts` approvals a refresh withdrew into its summary.
+ *
+ * Withdrawing an approval ships nothing, so it never changes the commit type.
+ * It only names the refresh when nothing else moved, because a refresh whose
+ * sole edit is a withdrawn pin would otherwise read as "refresh 0 runtime and
+ * 0 dev lockfile pins".
+ *
+ * @template {{ hasChanges: boolean }} T
+ * @param {T} summary What summarizeRefresh and applyOverrideChanges reported.
+ * @param {readonly string[]} withdrawn The `<name>@<version>` pins that were removed.
+ * @returns {T & { withdrawnPins: string[] }} The summary, with the withdrawn pins listed.
+ */
+export function applyWithdrawnPins(summary, withdrawn) {
+  const withdrawnPins = [...withdrawn];
+  if (withdrawnPins.length === 0 || summary.hasChanges) return { ...summary, withdrawnPins };
+  const plural = withdrawnPins.length === 1 ? '' : 's';
+  const title = `chore(deps): withdraw ${withdrawnPins.length} orphaned allowScripts approval${plural}`;
+  return { ...summary, withdrawnPins, commitType: 'chore', title, hasChanges: true };
+}
+
+/**
  * Lists each applied floor and says when one keeps the refresh from merging
  * itself. The verdict comes from the planner's own rule, so the body can never
  * disagree with the label the workflow applies. Renders nothing when no floor
@@ -707,21 +732,58 @@ function prunedSection(pruned) {
 }
 
 /**
+ * Lists every `allowScripts` approval the refresh withdrew. Renders nothing
+ * when none was.
+ *
+ * @param {readonly string[] | undefined} withdrawn The removed `<name>@<version>` pins.
+ * @returns {string[]} The section lines.
+ */
+function withdrawnSection(withdrawn) {
+  if (withdrawn === undefined || withdrawn.length === 0) return [];
+  return [
+    `## allowScripts approvals withdrawn (${withdrawn.length})`,
+    '',
+    ...withdrawn.map((pin) => `- \`${pin}\``),
+    '',
+    'Each approval guarded an install script the refreshed lockfile no longer requires.',
+    'Removing one can never let a script run, so no review is owed. The workflow never',
+    `rotates or adds an approval: that stays a human decision. Rules: ${OVERRIDE_ADR}.`,
+    '',
+  ];
+}
+
+/**
  * States what was regenerated and whether package.json moved.
  *
- * @param {boolean | undefined} overridesChanged Whether `overrides` changed.
+ * @param {{ overridesChanged?: boolean, withdrawnPins?: readonly string[] }} summary What the refresh changed in package.json.
  * @returns {string[]} The opening paragraph.
  */
-function introLines(overridesChanged) {
+function introLines({ overridesChanged, withdrawnPins }) {
+  const edits = [];
+  if (overridesChanged === true) edits.push('inside `overrides`');
+  if (withdrawnPins !== undefined && withdrawnPins.length > 0) edits.push('by withdrawing `allowScripts` approvals');
   return [
     'Regenerated `package-lock.json` with `npm update --package-lock-only`, then',
     '`npm audit fix --package-lock-only` (never `--force`). Both re-resolve',
     'transitive dependencies inside the ranges their parents already allow.',
-    overridesChanged === true
-      ? '`package.json` changed only inside `overrides`, as listed below; the workflow verified no other field moved.'
+    edits.length > 0
+      ? `\`package.json\` changed only ${edits.join(' and ')}, as listed below; the workflow verified no other field moved.`
       : '`package.json` is untouched.',
     '',
   ];
+}
+
+/**
+ * Picks the sentence that says why the commit type is the right one.
+ *
+ * @param {object} summary The refresh summary.
+ * @returns {keyof typeof RELEASE_RATIONALE} The rationale to print.
+ */
+function rationaleKey(summary) {
+  if (summary.overridesChanged === true) return 'overrides';
+  const pinsMoved = (summary.runtimeChanges?.length ?? 0) + (summary.devChanges?.length ?? 0) > 0;
+  const withdrawn = (summary.withdrawnPins?.length ?? 0) > 0;
+  return withdrawn && !pinsMoved ? 'withdrawn' : summary.commitType;
 }
 
 /**
@@ -733,14 +795,15 @@ function introLines(overridesChanged) {
  */
 export function formatRefreshBody(summary) {
   return [
-    ...introLines(summary.overridesChanged),
+    ...introLines(summary),
     ...majorSection(summary.majorBumps),
     ...floorSection(summary.floors),
     ...rejectionSection(summary.rejections),
     ...prunedSection(summary.pruned),
+    ...withdrawnSection(summary.withdrawnPins),
     ...changeSection('Runtime pins', summary.runtimeChanges),
     ...changeSection('Development pins', summary.devChanges),
-    RELEASE_RATIONALE[summary.overridesChanged === true ? 'overrides' : summary.commitType],
+    RELEASE_RATIONALE[rationaleKey(summary)],
   ].join('\n');
 }
 

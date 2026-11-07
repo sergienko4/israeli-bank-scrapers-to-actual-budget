@@ -120,11 +120,13 @@ exit 0
 
 /**
  * Logs every call and the directory it ran in, prints the staged output and
- * exits FAKE_NODE_STATUS.
+ * exits FAKE_NODE_STATUS. FAKE_NODE_MANIFEST, when set, first overwrites
+ * package.json the way a script that half-wrote the manifest would.
  */
 const FAKE_NODE = `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "\${FAKE_DIR}/node-calls.log"
 printf '%s\\n' "\${PWD}" >> "\${FAKE_DIR}/node-cwd.log"
+[ -z "\${FAKE_NODE_MANIFEST:-}" ] || printf '%s' "\${FAKE_NODE_MANIFEST}" > package.json
 cat "\${FAKE_DIR}/node-output"
 exit "\${FAKE_NODE_STATUS:-0}"
 `;
@@ -177,6 +179,8 @@ interface IRunOptions {
   readonly env: Readonly<Record<string, string>>;
   readonly gh?: Readonly<Record<string, unknown>>;
   readonly nodeOutput?: unknown;
+  /** Raw text the fake `node` prints instead of the JSON of `nodeOutput`. */
+  readonly nodeText?: string;
   readonly prList?: readonly unknown[];
   /** Files to place in RUNNER_TEMP before the step runs, by relative path. */
   readonly tempFiles?: Readonly<Record<string, unknown>>;
@@ -383,7 +387,7 @@ function stageFixtures(options: IRunOptions): void {
   for (const [path, value] of Object.entries(options.gh ?? {})) {
     writeFileSync(join(work, 'gh', fixtureName(path)), JSON.stringify(value));
   }
-  writeFileSync(join(work, 'node-output'), JSON.stringify(options.nodeOutput ?? null));
+  writeFileSync(join(work, 'node-output'), options.nodeText ?? JSON.stringify(options.nodeOutput ?? null));
   if (options.prList !== undefined) writeFileSync(join(work, 'pr-list'), JSON.stringify(options.prList));
 }
 
@@ -983,6 +987,88 @@ describe.skipIf(!CAN_RUN)('lockfile refresh prune', () => {
   });
 });
 
+describe.skipIf(!CAN_RUN)('lockfile refresh orphan pins', () => {
+  const step = stepOf(REFRESH, 'refresh', 'orphans');
+  const manifest = '{"allowScripts":{"unrs-resolver@1.12.2":true}}';
+  const dropped = 'orphan pin: unrs-resolver@1.12.2 no longer needs an install script\n';
+
+  /**
+   * Runs the step against a package.json holding the committed pins.
+   * @param env - Step environment.
+   * @param nodeText - What the fake `node` prints.
+   * @returns The run, and the package.json the step left behind.
+   */
+  function runOrphans(env: Readonly<Record<string, string>>, nodeText: string): { run: IStepRun; left: string } {
+    writeFileSync(join(work, 'package.json'), manifest);
+    const run = runStep(step, { env, nodeText });
+    return { run, left: readFileSync(join(work, 'package.json'), 'utf8') };
+  }
+
+  it('runs on every trigger, after the floors and before change detection, and never fails the job', () => {
+    const ids = (jobsOf(REFRESH).refresh?.steps ?? []).map((candidate) => candidate.id);
+
+    expect(step.if).toBeUndefined();
+    expect(step['continue-on-error']).toBeUndefined();
+    expect(ids.indexOf('orphans')).toBeGreaterThan(ids.indexOf('floors'));
+    expect(ids.indexOf('orphans')).toBeLessThan(ids.indexOf('diff'));
+  });
+
+  it('drops only orphans through the checker and reports each in the step summary', () => {
+    const { run } = runOrphans({}, dropped);
+
+    expect(run.status).toBe(0);
+    expect(run.nodeCalls).toEqual(['scripts/check-allow-scripts.mjs --drop-orphans']);
+    expect(run.stepSummary).toContain('- unrs-resolver@1.12.2: dropped, it no longer needs an install script');
+  });
+
+  it('reports nothing when no pin is orphaned', () => {
+    const { run } = runOrphans({}, 'No orphan allowScripts pins to drop.\n');
+
+    expect(run.status).toBe(0);
+    expect(run.stepSummary).toBe('');
+    expect(existsSync(join(run.temp, 'orphans.json'))).toBe(false);
+  });
+
+  it('hands every withdrawn pin to the summary, scoped names included', () => {
+    const lines = `${dropped}orphan pin: @scope/pkg@2.0.0 no longer needs an install script\n`;
+    const { run } = runOrphans({}, lines);
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(readFileSync(join(run.temp, 'orphans.json'), 'utf8'))).toEqual({
+      dropped: ['unrs-resolver@1.12.2', '@scope/pkg@2.0.0'],
+    });
+    expect(run.stepSummary).toContain('- unrs-resolver@1.12.2: dropped, it no longer needs an install script');
+    expect(run.stepSummary).toContain('- @scope/pkg@2.0.0: dropped, it no longer needs an install script');
+  });
+
+  it('records only lines in the gate wording, so stray output never becomes a pin', () => {
+    const { run } = runOrphans({}, `Checking pins...\n${dropped}orphan pin: broken line\nstale pin: a@1.0.0 -> a@2.0.0\n`);
+
+    expect(JSON.parse(readFileSync(join(run.temp, 'orphans.json'), 'utf8'))).toEqual({ dropped: ['unrs-resolver@1.12.2'] });
+  });
+
+  it('discards a result an earlier run left behind', () => {
+    writeFileSync(join(work, 'package.json'), manifest);
+    const run = runStep(step, {
+      env: {},
+      nodeText: 'No orphan allowScripts pins to drop.\n',
+      tempFiles: { 'orphans.json': { dropped: ['stale@1.0.0'] } },
+    });
+
+    expect(run.status).toBe(0);
+    expect(existsSync(join(run.temp, 'orphans.json'))).toBe(false);
+  });
+
+  it('restores package.json, warns and carries on when the checker fails', () => {
+    const { run, left } = runOrphans({ FAKE_NODE_STATUS: '1', FAKE_NODE_MANIFEST: '{"half":' }, dropped);
+
+    expect(run.status).toBe(0);
+    expect(left).toBe(manifest);
+    expect(run.stepSummary).toBe('');
+    expect(existsSync(join(run.temp, 'orphans.json'))).toBe(false);
+  });
+});
+
 describe.skipIf(!CAN_RUN)('lockfile refresh change detection', () => {
   const step = stepOf(REFRESH, 'refresh', 'diff');
 
@@ -1055,6 +1141,26 @@ describe.skipIf(!CAN_RUN)('lockfile refresh summary inputs and commit', () => {
 
     expect(run.nodeCalls).toEqual([
       `scripts/summarize-refresh.mjs ${run.temp}/before.json package-lock.json --floors ${run.temp}/floors.json --prune ${run.temp}/prune.json`,
+    ]);
+  });
+
+  it('hands the summary the withdrawn pins when the orphans step recorded any', () => {
+    const run = runStep(summary, { env: {}, nodeOutput, tempFiles: { 'orphans.json': { dropped: ['a@1.0.0'] } } });
+
+    expect(run.nodeCalls).toEqual([
+      `scripts/summarize-refresh.mjs ${run.temp}/before.json package-lock.json --orphans ${run.temp}/orphans.json`,
+    ]);
+  });
+
+  it('passes all three results in a fixed order when every step left one', () => {
+    const run = runStep(summary, {
+      env: {},
+      nodeOutput,
+      tempFiles: { 'floors.json': {}, 'prune.json': {}, 'orphans.json': { dropped: ['a@1.0.0'] } },
+    });
+
+    expect(run.nodeCalls).toEqual([
+      `scripts/summarize-refresh.mjs ${run.temp}/before.json package-lock.json --floors ${run.temp}/floors.json --prune ${run.temp}/prune.json --orphans ${run.temp}/orphans.json`,
     ]);
   });
 

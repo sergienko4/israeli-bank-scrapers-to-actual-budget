@@ -53,3 +53,15 @@ export function rebuildAllowScripts(
   required: Set<string>,
   stale: IStalePin[],
 ): Record<string, boolean>;
+
+/** The verdict on an allowlist edit: accepted, or refused with the reason. */
+export type IOrphanDropVerdict = { ok: true } | { ok: false; reason: string };
+
+export function withdrawableOrphans(findings: IPinFindings): IOrphanPin[];
+
+export function dropOrphanPins(
+  allowScripts: Record<string, boolean> | undefined,
+  orphan: IOrphanPin[],
+): Record<string, boolean>;
+
+export function verifyOrphanPinDrop(before: unknown, after: unknown, required: Set<string>): IOrphanDropVerdict;
