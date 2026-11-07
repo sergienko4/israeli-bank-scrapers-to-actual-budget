@@ -34,7 +34,8 @@ let root: string;
  * given packages only.
  *
  * @param allowScripts The manifest's `allowScripts`, in the key order to keep.
- * @param scripted Locked `<name>@<version>` pairs that declare an install script.
+ * @param scripted Locked `<name>@<version>` pairs that declare an install script;
+ *   a second version of one package is written as a nested copy.
  * @returns Nothing; the files are written into the scratch root.
  */
 function writeRepo(allowScripts: Record<string, boolean>, scripted: string[]): void {
@@ -42,10 +43,15 @@ function writeRepo(allowScripts: Record<string, boolean>, scripted: string[]): v
   for (const file of SCRIPTS) {
     copyFileSync(fileURLToPath(new URL(`../../scripts/${file}`, import.meta.url)), join(root, 'scripts', file));
   }
+  const copies = new Map<string, number>();
   const packages = Object.fromEntries(
     scripted.map(pin => {
       const at = pin.lastIndexOf('@');
-      return [`node_modules/${pin.slice(0, at)}`, { version: pin.slice(at + 1), hasInstallScript: true }];
+      const name = pin.slice(0, at);
+      const seen = copies.get(name) ?? 0;
+      copies.set(name, seen + 1);
+      const host = seen === 0 ? '' : `node_modules/host-${seen}/`;
+      return [`${host}node_modules/${name}`, { version: pin.slice(at + 1), hasInstallScript: true }];
     })
   );
   const manifest = { name: 'root', version: '1.0.0', allowScripts };
@@ -128,6 +134,27 @@ describe('check-allow-scripts --drop-orphans', () => {
     expect(JSON.parse(manifestText()).allowScripts).toEqual({});
   });
 
+  it('keeps every approval of a package that moved to an unapproved scripted version', () => {
+    writeRepo({ 'b@12.0.0': true, 'b@13.0.0': true, 'gone@2.0.0': true }, ['b@12.1.0', 'b@13.1.0']);
+
+    const run = runCli(['--drop-orphans']);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).not.toContain('orphan pin: b@');
+    expect(JSON.parse(manifestText()).allowScripts).toEqual({ 'b@12.0.0': true, 'b@13.0.0': true });
+  });
+
+  it('keeps an approval whose package gained a second scripted version', () => {
+    writeRepo({ 'a@1.0.0': true }, ['a@1.0.1', 'a@2.0.0']);
+    const before = manifestText();
+
+    const run = runCli(['--drop-orphans']);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('No orphan allowScripts pins to drop.');
+    expect(manifestText()).toBe(before);
+  });
+
   it('is idempotent', () => {
     writeRepo({ 'a@1.0.0': true, 'gone@2.0.0': true }, ['a@1.0.0']);
     runCli(['--drop-orphans']);
@@ -146,6 +173,20 @@ describe('check-allow-scripts --drop-orphans', () => {
 
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('allowScripts entry "gone@^2.0.0"');
+    expect(manifestText()).toBe(before);
+  });
+
+  it.each([
+    ['--fix', '--drop-orphans'],
+    ['--drop-orphans', '--fix'],
+  ])('refuses %s together with %s and writes nothing', (first, second) => {
+    writeRepo({ 'a@1.0.0': true, 'gone@2.0.0': true }, ['a@1.1.0']);
+    const before = manifestText();
+
+    const run = runCli([first, second]);
+
+    expect(run.status).toBe(2);
+    expect(run.stderr).toContain('Pass at most one of: --fix, --drop-orphans');
     expect(manifestText()).toBe(before);
   });
 });

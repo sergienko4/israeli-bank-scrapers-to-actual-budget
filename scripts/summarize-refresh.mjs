@@ -12,11 +12,14 @@
  *
  * Usage:
  *   node scripts/summarize-refresh.mjs <before-lockfile> <after-lockfile>
- *     [--floors <plan.json>] [--prune <prune.json>]
+ *     [--floors <plan.json>] [--prune <prune.json>] [--orphans <orphans.json>]
  *
  * `--floors` takes the plan `plan-override-floors.mjs --apply` printed and
  * `--prune` the result of its `--prune` mode; both are optional, and either
  * one that changed `overrides` turns the refresh into `fix(deps)`.
+ * `--orphans` takes `{ "dropped": ["<name>@<version>", ...] }`, the
+ * `allowScripts` approvals the workflow withdrew; it only adds a section to
+ * the body, because an `allowScripts` edit ships nothing.
  *
  * Prints one JSON object to stdout:
  *   { hasChanges, commitType, title, majorBumps, overridesChanged, body }.
@@ -29,12 +32,14 @@ import { parseArgs } from 'node:util';
 
 import {
   applyOverrideChanges,
+  applyWithdrawnPins,
   findMajorBumps,
   formatRefreshBody,
   summarizeRefresh,
 } from './refresh-lockfile-logic.mjs';
 
-const USAGE = 'Usage: node scripts/summarize-refresh.mjs <before> <after> [--floors <plan.json>] [--prune <prune.json>]';
+const USAGE =
+  'Usage: node scripts/summarize-refresh.mjs <before> <after> [--floors <plan.json>] [--prune <prune.json>] [--orphans <orphans.json>]';
 
 /**
  * Stops the run with a message on stderr.
@@ -89,13 +94,13 @@ function readResult(path, lists) {
 /**
  * Parses the command line.
  *
- * @returns {{ positionals: string[], values: { floors?: string, prune?: string } }} The parsed arguments.
+ * @returns {{ positionals: string[], values: { floors?: string, prune?: string, orphans?: string } }} The parsed arguments.
  */
 function parseCommandLine() {
   try {
     return parseArgs({
       allowPositionals: true,
-      options: { floors: { type: 'string' }, prune: { type: 'string' } },
+      options: { floors: { type: 'string' }, prune: { type: 'string' }, orphans: { type: 'string' } },
       strict: true,
     });
   } catch (error) {
@@ -108,11 +113,15 @@ const beforeText = readInput(positionals[0]);
 const afterText = readInput(positionals[1]);
 const plan = readResult(values.floors, ['floors', 'rejections']);
 const pruneResult = readResult(values.prune, ['pruned']);
-const summary = applyOverrideChanges(summarizeRefresh(beforeText, afterText), {
-  floors: plan.floors,
-  rejections: plan.rejections,
-  pruned: pruneResult.pruned,
-});
+const orphanResult = readResult(values.orphans, ['dropped']);
+const summary = applyWithdrawnPins(
+  applyOverrideChanges(summarizeRefresh(beforeText, afterText), {
+    floors: plan.floors,
+    rejections: plan.rejections,
+    pruned: pruneResult.pruned,
+  }),
+  orphanResult.dropped ?? [],
+);
 const majorBumps = findMajorBumps(beforeText, afterText);
 
 process.stdout.write(

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { IPlannedFloor } from '../scripts/override-floor-logic.mjs';
 import {
   applyOverrideChanges,
+  applyWithdrawnPins,
   auditLockfile,
   CANONICAL_REGISTRY,
   canonicalizeRegistryUrls,
@@ -633,6 +634,94 @@ describe('formatRefreshBody with override changes', () => {
   it('renders no override section when nothing about overrides happened', () => {
     const body = formatRefreshBody(applyOverrideChanges(base, {}));
     expect(body).not.toMatch(/Override floors|Unresolved advisories|Redundant overrides/);
+    expect(body).toContain('`package.json` is untouched.');
+  });
+});
+
+describe('applyWithdrawnPins', () => {
+  const unchanged = lockfile({ 'node_modules/vitest': { version: '3.0.0', dev: true } });
+  const devMove = lockfile({ 'node_modules/vitest': { version: '3.1.0', dev: true } });
+  const runtimeMove = lockfile({ 'node_modules/browserslist': { version: '4.28.9' } });
+  const runtimeBase = lockfile({ 'node_modules/browserslist': { version: '4.28.8' } });
+
+  it('names a refresh whose only edit is a withdrawn pin, and releases nothing', () => {
+    const summary = applyWithdrawnPins(summarizeRefresh(unchanged, unchanged), ['unrs-resolver@1.12.2']);
+    expect(summary).toMatchObject({
+      commitType: 'chore',
+      title: 'chore(deps): withdraw 1 orphaned allowScripts approval',
+      hasChanges: true,
+      withdrawnPins: ['unrs-resolver@1.12.2'],
+    });
+  });
+
+  it('pluralises the title for several withdrawn pins', () => {
+    const summary = applyWithdrawnPins(summarizeRefresh(unchanged, unchanged), ['a@1.0.0', 'b@2.0.0']);
+    expect(summary.title).toBe('chore(deps): withdraw 2 orphaned allowScripts approvals');
+  });
+
+  it('keeps the lockfile-derived title and type when the lockfile moved too', () => {
+    const base = summarizeRefresh(unchanged, devMove);
+    expect(applyWithdrawnPins(base, ['a@1.0.0'])).toMatchObject({
+      commitType: 'chore',
+      title: base.title,
+      withdrawnPins: ['a@1.0.0'],
+    });
+    const runtime = summarizeRefresh(runtimeBase, runtimeMove);
+    expect(applyWithdrawnPins(runtime, ['a@1.0.0'])).toMatchObject({ commitType: 'fix', title: runtime.title });
+  });
+
+  it('keeps the override title and type when overrides changed too', () => {
+    const overridden = applyOverrideChanges(summarizeRefresh(unchanged, unchanged), { pruned: ['uuid'] });
+    expect(applyWithdrawnPins(overridden, ['a@1.0.0'])).toMatchObject({
+      commitType: 'fix',
+      title: 'fix(deps): drop 1 redundant override',
+    });
+  });
+
+  it('changes nothing when no pin was withdrawn', () => {
+    const base = summarizeRefresh(unchanged, unchanged);
+    expect(applyWithdrawnPins(base, [])).toEqual({ ...base, withdrawnPins: [] });
+  });
+});
+
+describe('formatRefreshBody with withdrawn pins', () => {
+  const lock = lockfile({ 'node_modules/vitest': { version: '3.0.0', dev: true } });
+  const devMove = lockfile({ 'node_modules/vitest': { version: '3.1.0', dev: true } });
+  const base = summarizeRefresh(lock, lock);
+
+  it('lists each withdrawn pin and no longer claims package.json is untouched', () => {
+    const body = formatRefreshBody(applyWithdrawnPins(base, ['unrs-resolver@1.12.2', 'fsevents@2.3.3']));
+    expect(body).toContain('## allowScripts approvals withdrawn (2)');
+    expect(body).toContain('- `unrs-resolver@1.12.2`\n- `fsevents@2.3.3`');
+    expect(body).toContain('`package.json` changed only by withdrawing `allowScripts` approvals');
+    expect(body).not.toContain('`package.json` is untouched.');
+    expect(body).toContain('rotates or adds an approval');
+  });
+
+  it('says a withdrawn-only refresh ships nothing', () => {
+    const body = formatRefreshBody(applyWithdrawnPins(base, ['unrs-resolver@1.12.2']));
+    expect(body).toContain('Only `allowScripts` approvals were withdrawn.');
+    expect(body).not.toContain('Only development pins moved');
+  });
+
+  it('keeps the lockfile rationale when pins moved as well', () => {
+    const body = formatRefreshBody(applyWithdrawnPins(summarizeRefresh(lock, devMove), ['unrs-resolver@1.12.2']));
+    expect(body).toContain('Only development pins moved.');
+    expect(body).toContain('## allowScripts approvals withdrawn (1)');
+  });
+
+  it('names both edits when overrides changed as well', () => {
+    const overridden = applyOverrideChanges(base, { pruned: ['uuid'] });
+    const body = formatRefreshBody(applyWithdrawnPins(overridden, ['unrs-resolver@1.12.2']));
+    expect(body).toContain(
+      '`package.json` changed only inside `overrides` and by withdrawing `allowScripts` approvals',
+    );
+    expect(body).toContain('## Redundant overrides dropped (1)');
+  });
+
+  it('renders no withdrawn section when none were withdrawn', () => {
+    const body = formatRefreshBody(applyWithdrawnPins(base, []));
+    expect(body).not.toContain('approvals withdrawn');
     expect(body).toContain('`package.json` is untouched.');
   });
 });

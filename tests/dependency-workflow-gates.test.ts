@@ -1026,6 +1026,37 @@ describe.skipIf(!CAN_RUN)('lockfile refresh orphan pins', () => {
 
     expect(run.status).toBe(0);
     expect(run.stepSummary).toBe('');
+    expect(existsSync(join(run.temp, 'orphans.json'))).toBe(false);
+  });
+
+  it('hands every withdrawn pin to the summary, scoped names included', () => {
+    const lines = `${dropped}orphan pin: @scope/pkg@2.0.0 no longer needs an install script\n`;
+    const { run } = runOrphans({}, lines);
+
+    expect(run.status).toBe(0);
+    expect(JSON.parse(readFileSync(join(run.temp, 'orphans.json'), 'utf8'))).toEqual({
+      dropped: ['unrs-resolver@1.12.2', '@scope/pkg@2.0.0'],
+    });
+    expect(run.stepSummary).toContain('- unrs-resolver@1.12.2: dropped, it no longer needs an install script');
+    expect(run.stepSummary).toContain('- @scope/pkg@2.0.0: dropped, it no longer needs an install script');
+  });
+
+  it('records only lines in the gate wording, so stray output never becomes a pin', () => {
+    const { run } = runOrphans({}, `Checking pins...\n${dropped}orphan pin: broken line\nstale pin: a@1.0.0 -> a@2.0.0\n`);
+
+    expect(JSON.parse(readFileSync(join(run.temp, 'orphans.json'), 'utf8'))).toEqual({ dropped: ['unrs-resolver@1.12.2'] });
+  });
+
+  it('discards a result an earlier run left behind', () => {
+    writeFileSync(join(work, 'package.json'), manifest);
+    const run = runStep(step, {
+      env: {},
+      nodeText: 'No orphan allowScripts pins to drop.\n',
+      tempFiles: { 'orphans.json': { dropped: ['stale@1.0.0'] } },
+    });
+
+    expect(run.status).toBe(0);
+    expect(existsSync(join(run.temp, 'orphans.json'))).toBe(false);
   });
 
   it('restores package.json, warns and carries on when the checker fails', () => {
@@ -1034,6 +1065,7 @@ describe.skipIf(!CAN_RUN)('lockfile refresh orphan pins', () => {
     expect(run.status).toBe(0);
     expect(left).toBe(manifest);
     expect(run.stepSummary).toBe('');
+    expect(existsSync(join(run.temp, 'orphans.json'))).toBe(false);
   });
 });
 
@@ -1109,6 +1141,26 @@ describe.skipIf(!CAN_RUN)('lockfile refresh summary inputs and commit', () => {
 
     expect(run.nodeCalls).toEqual([
       `scripts/summarize-refresh.mjs ${run.temp}/before.json package-lock.json --floors ${run.temp}/floors.json --prune ${run.temp}/prune.json`,
+    ]);
+  });
+
+  it('hands the summary the withdrawn pins when the orphans step recorded any', () => {
+    const run = runStep(summary, { env: {}, nodeOutput, tempFiles: { 'orphans.json': { dropped: ['a@1.0.0'] } } });
+
+    expect(run.nodeCalls).toEqual([
+      `scripts/summarize-refresh.mjs ${run.temp}/before.json package-lock.json --orphans ${run.temp}/orphans.json`,
+    ]);
+  });
+
+  it('passes all three results in a fixed order when every step left one', () => {
+    const run = runStep(summary, {
+      env: {},
+      nodeOutput,
+      tempFiles: { 'floors.json': {}, 'prune.json': {}, 'orphans.json': { dropped: ['a@1.0.0'] } },
+    });
+
+    expect(run.nodeCalls).toEqual([
+      `scripts/summarize-refresh.mjs ${run.temp}/before.json package-lock.json --floors ${run.temp}/floors.json --prune ${run.temp}/prune.json --orphans ${run.temp}/orphans.json`,
     ]);
   });
 

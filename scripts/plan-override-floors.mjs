@@ -425,7 +425,7 @@ try {
   const result = main();
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (result.ok === false) {
-    console.error(`::error::package.json changed beyond the planned overrides: ${result.reason}`);
+    console.error(`::error::package.json changed beyond the planned overrides and orphaned allowScripts pins: ${result.reason}`);
     process.exitCode = 1;
   }
 } catch (error) {

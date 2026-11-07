@@ -57,13 +57,11 @@ export function rebuildAllowScripts(
 /** The verdict on an allowlist edit: accepted, or refused with the reason. */
 export type IOrphanDropVerdict = { ok: true } | { ok: false; reason: string };
 
+export function withdrawableOrphans(findings: IPinFindings): IOrphanPin[];
+
 export function dropOrphanPins(
   allowScripts: Record<string, boolean> | undefined,
   orphan: IOrphanPin[],
 ): Record<string, boolean>;
 
-export function verifyOrphanPinDrop(
-  before: Record<string, unknown> | undefined,
-  after: Record<string, unknown> | undefined,
-  required: Set<string>,
-): IOrphanDropVerdict;
+export function verifyOrphanPinDrop(before: unknown, after: unknown, required: Set<string>): IOrphanDropVerdict;

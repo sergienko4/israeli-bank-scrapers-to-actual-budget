@@ -182,9 +182,16 @@ The mode is narrower than `--fix` on purpose. It **only removes** an orphan: it
 never rotates a pin to a new version and never adds one, because either would
 approve an install script that nobody reviewed. A package that moved from one
 scripted version to another, or that newly gained a script, is left for
-`lint:allow-scripts` to fail until a maintainer decides. The workflow then
-checks that the only change to `allowScripts` is the removal of orphans, and a
-pin the lockfile still needs is never removed.
+`lint:allow-scripts` to fail until a maintainer decides. So is a package that
+still has another unapproved version in the tree: it keeps every pin it has.
+The workflow then checks that the only change to `allowScripts` is the removal
+of exact pins the lockfile no longer requires, and a pin the lockfile still
+needs is never removed.
+
+Every withdrawn pin is named in the refresh pull request body under
+"allowScripts approvals withdrawn", so a reviewer sees what was removed. A
+refresh that only withdraws pins is titled
+`chore(deps): withdraw <n> orphaned allowScripts approval(s)`.
 
 ### Dependabot pull requests merge themselves
 

@@ -101,7 +101,17 @@ export interface IOverrideAwareSummary extends IRefreshSummary {
 /** Folds the `overrides` edits of a refresh into its summary. */
 export function applyOverrideChanges(summary: IRefreshSummary, overrides: IOverrideChanges): IOverrideAwareSummary;
 
+/** Folds the withdrawn `allowScripts` approvals into a summary, naming a refresh that changed nothing else. */
+export function applyWithdrawnPins<T extends IRefreshSummary>(
+  summary: T,
+  withdrawn: readonly string[],
+): T & { withdrawnPins: string[] };
+
 /** Renders the pull-request body describing an automated refresh. */
 export function formatRefreshBody(
-  summary: IRefreshSummary & Partial<Omit<IOverrideAwareSummary, keyof IRefreshSummary>> & { majorBumps?: IVersionChange[] },
+  summary: IRefreshSummary &
+    Partial<Omit<IOverrideAwareSummary, keyof IRefreshSummary>> & {
+      majorBumps?: IVersionChange[];
+      withdrawnPins?: readonly string[];
+    },
 ): string;

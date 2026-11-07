@@ -467,23 +467,29 @@ jobs:
       # lockfile bump that created them, and nothing else. It never rotates a
       # pin to a new version and never approves a package: either would grant
       # an install script no human reviewed, and removing an approval cannot
-      # grant anything. A rotated or missing pin is left for the gate to fail.
-      # Best effort: a failure restores package.json and the gate decides.
-      # Runs on every trigger, after the floors so the lockfile is final. No
-      # token.
+      # grant anything. A package that still has an unapproved version keeps
+      # its pins, and a rotated or missing pin is left for the gate to fail.
+      # The pins it removed are saved for the summary, so the pull request
+      # body names them. Best effort: a failure restores package.json and the
+      # gate decides. Runs on every trigger, after the floors so the lockfile
+      # is final. No token.
       - name: Drop orphan allowScripts pins
         id: orphans
         run: |
           set -euo pipefail
+          rm -f "${RUNNER_TEMP}/orphans.json"
           cp package.json "${RUNNER_TEMP}/package.pre-orphans.json"
           if ! result="$(node scripts/check-allow-scripts.mjs --drop-orphans)"; then
             echo '::warning::Dropping orphan allowScripts pins failed; package.json was restored and the pull request gate decides.'
             cp "${RUNNER_TEMP}/package.pre-orphans.json" package.json
             exit 0
           fi
-          { grep '^orphan pin: ' <<< "${result}" || true; } \
-            | sed -E 's/^orphan pin: ([^ ]+) no longer needs an install script$/- \1: dropped, it no longer needs an install script/' \
-            >> "${GITHUB_STEP_SUMMARY}"
+          names="$({ grep '^orphan pin: ' <<< "${result}" || true; } \
+            | sed -nE 's/^orphan pin: ([^ ]+) no longer needs an install script$/\1/p')"
+          if [ -n "${names}" ]; then
+            jq -Rn '{dropped: [inputs]}' <<< "${names}" > "${RUNNER_TEMP}/orphans.json"
+            sed -E 's/^(.*)$/- \1: dropped, it no longer needs an install script/' <<< "${names}" >> "${GITHUB_STEP_SUMMARY}"
+          fi
 
       # A prune or an orphan-pin drop changes package.json alone, so the
       # manifest counts as a change too; the next step vets it before anything
@@ -517,7 +523,7 @@ jobs:
           modified="$(git diff --name-only)"
           unexpected="$(grep -vxE 'package-lock\.json|package\.json' <<< "${modified}" || true)"
           if [ -n "${unexpected}" ]; then
-            echo '::error::Expected only package-lock.json and package.json overrides to change. Got:'
+            echo '::error::Expected only package-lock.json and package.json (overrides and orphan allowScripts pins) to change. Got:'
             echo "${modified}"
             exit 1
           fi
@@ -539,8 +545,9 @@ jobs:
       # were never counted would be armed, and a missing title or body would
       # surface as the literal text "null". The check is its own command:
       # a jq failure inside `echo "$(...)"` would not trip errexit. The floor
-      # plan and prune result are passed only when their steps left one; an
-      # `overrides` change makes the title `fix(deps)`.
+      # plan and prune result are passed only when their steps left one, and
+      # so is the list of withdrawn pins; an `overrides` change makes the title
+      # `fix(deps)`, while a withdrawn pin only adds a section to the body.
       - name: Summarise the refresh
         id: summary
         if: steps.diff.outputs.changed == 'true'
@@ -550,6 +557,7 @@ jobs:
           args=("${RUNNER_TEMP}/before.json" package-lock.json)
           [ ! -f "${RUNNER_TEMP}/floors.json" ] || args+=(--floors "${RUNNER_TEMP}/floors.json")
           [ ! -f "${RUNNER_TEMP}/prune.json" ] || args+=(--prune "${RUNNER_TEMP}/prune.json")
+          [ ! -f "${RUNNER_TEMP}/orphans.json" ] || args+=(--orphans "${RUNNER_TEMP}/orphans.json")
           node scripts/summarize-refresh.mjs "${args[@]}" > "${summary}"
           if ! jq -e '(.title | type == "string" and length > 0)
                 and (.body | type == "string" and length > 0)
