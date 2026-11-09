@@ -111,27 +111,17 @@ describe('ScraperSetup', () => {
   });
 
   /**
-   * Regression guard for the scrapers 8.7.0 upgrade.
+   * Regression guard for the scrapers 8.7.0 and 10.0.0 upgrades.
    *
    * 8.7.0 marked `navigationRetryCount` and `storeFailureScreenShotPath`
-   * as deprecated: the Pipeline ignores both, and only the sunset legacy
-   * scrapers ever read them. We stopped forwarding them entirely, so these
-   * tests fail the moment someone reintroduces either key — including via
-   * a bank config that still carries the old settings.
+   * as deprecated, and 10.0.0 removed browser-era options (`args`,
+   * `defaultTimeout`, `prepareBrowser`). We stopped forwarding them entirely,
+   * so these tests fail the moment someone reintroduces any removed key —
+   * including via a bank config that still carries the old settings.
    */
-  describe('buildBaseScraperOptions (provider 8.7.0 deprecations)', () => {
+  describe('buildBaseScraperOptions (provider 8.7.0 and 10.0.0 removals)', () => {
     /**
-     * Builds the minimal dependency stub the option builder reads.
-     * @param level - Optional log level; omitting it leaves `logConfig` undefined.
-     * @returns A partial dependency object cast to the full strategy interface.
-     */
-    const makeDeps = (level?: string): ILiveScrapeDependencies =>
-      ({
-        config: { logConfig: level === undefined ? undefined : { level } },
-      }) as unknown as ILiveScrapeDependencies;
-
-    /**
-     * Builds scrape options whose bank config still carries both deprecated keys.
+     * Builds scrape options whose bank config still carries legacy keys.
      * @returns Resolved live options shared by every case in this block.
      */
     const makeOpts = (): IResolvedLiveOpts =>
@@ -146,37 +136,30 @@ describe('ScraperSetup', () => {
       }) as unknown as IResolvedLiveOpts;
 
     it('does not forward navigationRetryCount even when the bank config sets it', () => {
-      const options = buildBaseScraperOptions(makeDeps(), makeOpts());
+      const options = buildBaseScraperOptions(makeOpts());
 
       expect(options).not.toHaveProperty('navigationRetryCount');
     });
 
-    it('does not attach storeFailureScreenShotPath at debug level', () => {
-      const options = buildBaseScraperOptions(makeDeps('debug'), makeOpts());
+    it('does not attach storeFailureScreenShotPath', () => {
+      const options = buildBaseScraperOptions(makeOpts());
 
       expect(options).not.toHaveProperty('storeFailureScreenShotPath');
     });
 
-    it('does not attach storeFailureScreenShotPath at trace level', () => {
-      const options = buildBaseScraperOptions(makeDeps('trace'), makeOpts());
+    it('does not attach browser-era options removed in 10.0.0 (args, defaultTimeout, prepareBrowser)', () => {
+      const options = buildBaseScraperOptions(makeOpts());
 
-      expect(options).not.toHaveProperty('storeFailureScreenShotPath');
+      expect(options).not.toHaveProperty('args');
+      expect(options).not.toHaveProperty('defaultTimeout');
+      expect(options).not.toHaveProperty('prepareBrowser');
     });
 
     it('still forwards the options the provider does support', () => {
-      const options = buildBaseScraperOptions(makeDeps(), makeOpts());
+      const options = buildBaseScraperOptions(makeOpts());
 
       expect(options.companyId).toBe(CompanyTypes.Mizrahi);
-      expect(options.defaultTimeout).toBe(45_000);
       expect(options.startDate).toEqual(new Date('2024-01-01T00:00:00.000Z'));
-    });
-
-    it('falls back to the default timeout when the bank config omits it', () => {
-      const opts = { ...makeOpts(), bankConfig: {} } as unknown as IResolvedLiveOpts;
-
-      const options = buildBaseScraperOptions(makeDeps(), opts);
-
-      expect(options.defaultTimeout).toBe(60_000);
     });
   });
   describe('buildTokenCaptureParams', () => {

@@ -34,12 +34,11 @@ const ACCOUNT_KEY = 'primary';
 /** The device state's key for that entry, written out rather than built by the code under test. */
 const DEVICE_KEY = `pepper-device:${ACCOUNT_KEY}`;
 
-/** Pepper's renewal steps, as upstream names them in a failure. */
+/** Pepper's renewal URLs and step names, as upstream names them in a failure. */
 const LOGIN_URL = 'https://sa.pepper.co.il/api/v2/auth/login';
 const ASSERT_URL = 'https://sa.pepper.co.il/api/v2/auth/assert';
-
-/** The body Pepper's live server answered a synthetic device's login with. */
-const SESSION_REJECTED = '{"error_code":4001,"error_message":"Session rejected","headers":[]}';
+const LOGIN_STEP = 'login';
+const ASSERT_STEP = 'assertPassword';
 
 /** The one line a removal logs. */
 const REMOVED_LINE = `  ⚠️  Removed the Pepper device state for ${DEVICE_KEY}; the next run asks for one SMS code`;
@@ -48,18 +47,18 @@ const REMOVED_LINE = `  ⚠️  Removed the Pepper device state for ${DEVICE_KEY
 const PASSWORD_REFUSED_LINE =
   `  ⚠️  Kept the Pepper device state for ${DEVICE_KEY}; Pepper refused the password, so check the password in the config`;
 
-/** Every category upstream 8.7.4 rejects a state's contents with. */
+/** Every category upstream rejects a state's contents with. */
 const STATE_CATEGORIES = [
   'encoding', 'json', 'shape', 'version', 'provider', 'account',
   'clientInstanceId', 'deviceId', 'accessToken', 'ecPrivateKey',
 ] as const;
 
-/** Every category upstream 8.7.4 fails a durable login with after the state decoded. */
+/** Every category upstream fails a durable login with after the state decoded. */
 const DURABLE_CATEGORIES = [
-  'callback', 'enrollment-identity', 'enrollment-key', 'enrollment-budget', 'in-run-renewal',
+  'callback', 'device-id', 'enrollment-identity', 'enrollment-key', 'enrollment-budget', 'in-run-renewal',
 ] as const;
 
-/** Every category upstream 8.7.4 refuses a set of device options with before any request. */
+/** Every category upstream refuses a set of device options with before any request. */
 const OPTION_CATEGORIES = [
   'malformed', 'state-with-legacy-token', 'callback-with-legacy-token',
   'state-without-callback', 'account',
@@ -154,8 +153,9 @@ const REMOVING_CASES: readonly IVerdictCase[] = [
     label: `the state is invalid: ${category}`, errorType: 'GENERIC',
     errorMessage: `persistent auth state invalid: ${category}`,
   })),
-  { label: 'Pepper rejects the session at login', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} 401: ${SESSION_REJECTED}` },
-  { label: 'Pepper forbids the login', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} 403: {"error_code":403}` },
+  { label: 'Pepper rejects the session at login', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} HTTP 401` },
+  { label: 'Pepper forbids the login', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} HTTP 403` },
+  { label: 'Pepper rejects the session with a policy refusal suffix', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} HTTP 401 text body refused` },
 ];
 
 /**
@@ -165,7 +165,7 @@ const REMOVING_CASES: readonly IVerdictCase[] = [
  */
 const PASSWORD_REFUSED_CASES: readonly IVerdictCase[] = ['400', '401', '403', '404', '422'].map((status) => ({
   label: `Pepper answers the password step ${status}`, errorType: 'GENERIC',
-  errorMessage: `POST ${ASSERT_URL} ${status}: ${SESSION_REJECTED}`,
+  errorMessage: `${ASSERT_STEP} HTTP ${status}`,
 }));
 
 /** Results that may pass, or say nothing about the state, so it is kept. */
@@ -178,24 +178,24 @@ const KEEPING_CASES: readonly IVerdictCase[] = [
     label: `the options are invalid: ${category}`, errorType: 'GENERIC',
     errorMessage: `persistent auth options invalid: ${category}`,
   })),
-  { label: 'Pepper answers the login 400', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} 400: {}` },
-  { label: 'Pepper answers the login 404', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} 404: {}` },
-  { label: 'the password step times out at 408', errorType: 'GENERIC', errorMessage: `POST ${ASSERT_URL} 408: {}` },
-  { label: 'the password step is rate limited', errorType: 'GENERIC', errorMessage: `POST ${ASSERT_URL} 429: {}` },
-  { label: 'the password step meets a server error', errorType: 'GENERIC', errorMessage: `POST ${ASSERT_URL} 500: {}` },
+  { label: 'Pepper answers the login 400', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} HTTP 400` },
+  { label: 'Pepper answers the login 404', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} HTTP 404` },
+  { label: 'the password step times out at 408', errorType: 'GENERIC', errorMessage: `${ASSERT_STEP} HTTP 408` },
+  { label: 'the password step is rate limited', errorType: 'GENERIC', errorMessage: `${ASSERT_STEP} HTTP 429` },
+  { label: 'the password step meets a server error', errorType: 'GENERIC', errorMessage: `${ASSERT_STEP} HTTP 500` },
   { label: 'a Cloudflare page answers the password step', errorType: 'WAF_BLOCKED', errorMessage: `POST ${ASSERT_URL} 403: <html>cloudflare` },
-  { label: 'the login times out at 408', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} 408: {}` },
-  { label: 'the login is rate limited', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} 429: {}` },
-  { label: 'the login meets a server error', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} 500: {}` },
-  { label: 'the login meets a bad gateway', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} 502: <html>` },
-  { label: 'the login meets a network error', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} network error: connect ECONNREFUSED` },
-  { label: 'the login times out in the browser', errorType: 'TIMEOUT', errorMessage: `POST ${LOGIN_URL} network error: Timeout 30000ms exceeded` },
-  { label: 'the login answer is not JSON', errorType: 'GENERIC', errorMessage: `POST ${LOGIN_URL} parse error: Unexpected token <` },
+  { label: 'the login times out at 408', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} HTTP 408` },
+  { label: 'the login is rate limited', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} HTTP 429` },
+  { label: 'the login meets a server error', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} HTTP 500` },
+  { label: 'the login meets a bad gateway', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} HTTP 502` },
+  { label: 'the login meets a network error', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} GENERIC` },
+  { label: 'the login times out', errorType: 'TIMEOUT', errorMessage: `${LOGIN_STEP} TIMEOUT` },
+  { label: 'the login answer is not JSON', errorType: 'GENERIC', errorMessage: `${LOGIN_STEP} text body refused` },
   { label: 'a Cloudflare page answers the login', errorType: 'WAF_BLOCKED', errorMessage: `POST ${LOGIN_URL} 403: <html>cloudflare` },
   { label: 'the bank refuses a data request', errorType: 'GENERIC', errorMessage: 'POST https://fe-sec.pepper.co.il/graphql 401: {"error":"unauthorized"}' },
-  { label: 'the enrollment bind is refused', errorType: 'GENERIC', errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/bind 401: {}' },
-  { label: 'a look-alike host refuses the login', errorType: 'GENERIC', errorMessage: 'POST https://sa.pepper.co.il.example/api/v2/auth/login 401: {}' },
-  { label: 'a refusal is quoted inside another failure', errorType: 'GENERIC', errorMessage: `retry: POST ${LOGIN_URL} 401: {}` },
+  { label: 'the enrollment bind is refused', errorType: 'GENERIC', errorMessage: 'bind HTTP 401' },
+  { label: 'the OTP step is refused', errorType: 'GENERIC', errorMessage: 'assertOtp HTTP 401' },
+  { label: 'a refusal is quoted inside another failure', errorType: 'GENERIC', errorMessage: `retry: ${LOGIN_STEP} HTTP 401` },
   { label: 'a rejected state is quoted inside another failure', errorType: 'GENERIC', errorMessage: 'retry: persistent auth state invalid: shape' },
   { label: 'a login answer misses its field', errorType: 'GENERIC', errorMessage: 'envelope selector miss: token at /data' },
   { label: 'the password is wrong', errorType: 'INVALID_PASSWORD', errorMessage: 'invalid password' },
@@ -263,7 +263,7 @@ describe('forgetRefusedState', () => {
       const seeded = seedDeviceState(fileSystem);
       const { watch } = attempt(store);
 
-      forgetRefusedState(watch, failed('GENERIC', `POST ${LOGIN_URL} 401: ${SESSION_REJECTED}`));
+      forgetRefusedState(watch, failed('GENERIC', `${LOGIN_STEP} HTTP 401`));
 
       const { [DEVICE_KEY]: removed, ...others } = seeded;
       expect(removed).toBeDefined();
@@ -285,7 +285,7 @@ describe('forgetRefusedState', () => {
       const { store, fileSystem } = makeStore();
       seedDeviceState(fileSystem);
       const { watch } = attempt(store);
-      forgetRefusedState(watch, failed('GENERIC', `POST ${LOGIN_URL} 401: ${SESSION_REJECTED}`));
+      forgetRefusedState(watch, failed('GENERIC', `${LOGIN_STEP} HTTP 401`));
 
       const next = attempt(store);
 
@@ -314,7 +314,7 @@ describe('forgetRefusedState', () => {
       const { watch, logger } = attempt(store);
       seedDeviceState(fileSystem);
 
-      const isRemoved = forgetRefusedState(watch, failed('GENERIC', `POST ${ASSERT_URL} 401: {}`));
+      const isRemoved = forgetRefusedState(watch, failed('GENERIC', `${ASSERT_STEP} HTTP 401`));
 
       expect(isRemoved).toBe(false);
       expect(linesLogged(logger)).toEqual([]);
@@ -330,7 +330,7 @@ describe('forgetRefusedState', () => {
         didSendState: false,
       };
 
-      expect(forgetRefusedState(watch, failed('GENERIC', `POST ${LOGIN_URL} 401: {}`))).toBe(false);
+      expect(forgetRefusedState(watch, failed('GENERIC', `${LOGIN_STEP} HTTP 401`))).toBe(false);
       expect(remove).not.toHaveBeenCalled();
     });
   });
@@ -354,7 +354,7 @@ describe('forgetRefusedState', () => {
       const reason = `Could not remove the long-term token for ${DEVICE_KEY}: disk full`;
       const { watch, logger } = sentOver(vi.fn<IBankTokenStore['remove']>(() => fail(reason)));
 
-      const isRemoved = forgetRefusedState(watch, failed('GENERIC', `POST ${LOGIN_URL} 401: {}`));
+      const isRemoved = forgetRefusedState(watch, failed('GENERIC', `${LOGIN_STEP} HTTP 401`));
 
       expect(isRemoved).toBe(false);
       expect(linesLogged(logger)).toEqual([['warn', `  ⚠️  ${reason}`]]);
@@ -365,7 +365,7 @@ describe('forgetRefusedState', () => {
         throw new Error('EACCES');
       }));
 
-      const isRemoved = forgetRefusedState(watch, failed('GENERIC', `POST ${LOGIN_URL} 401: {}`));
+      const isRemoved = forgetRefusedState(watch, failed('GENERIC', `${LOGIN_STEP} HTTP 401`));
 
       expect(isRemoved).toBe(false);
       expect(linesLogged(logger)).toEqual([
@@ -377,7 +377,7 @@ describe('forgetRefusedState', () => {
       const remove = vi.fn<IBankTokenStore['remove']>(() => succeed({ written: false }));
       const { watch, logger } = sentOver(remove);
 
-      expect(forgetRefusedState(watch, failed('GENERIC', `POST ${LOGIN_URL} 401: {}`))).toBe(false);
+      expect(forgetRefusedState(watch, failed('GENERIC', `${LOGIN_STEP} HTTP 401`))).toBe(false);
       expect(linesLogged(logger)).toEqual([]);
     });
   });
@@ -405,33 +405,6 @@ function literalCategories(bundle: string, helper: string): string[] {
   return [...new Set([...calls].map((match) => match.groups?.name ?? ''))];
 }
 
-/** A Pepper login refusal's parts, put into an upstream template in this order; `{}` fills the rest. */
-const REFUSAL_PARTS: readonly (readonly [RegExp, string])[] = [
-  [/\$\{(?:\w+\.)?verb\}/gu, 'POST'],
-  [/\$\{safeUrl\}/gu, LOGIN_URL],
-  [/\$\{String\((?:\w+\.)?status\)\}/gu, '401'],
-  [/\$\{[^}]*\}/gu, '{}'],
-];
-
-/**
- * Lists the templates that word a failure from a URL and an HTTP status, on one line or several.
- * @param source - Provider source to search.
- * @returns Each template, backticks included.
- */
-function statusTemplates(source: string): string[] {
-  const templates = source.match(/`[^`]*\$\{safeUrl\}[^`]*`/gu) ?? [];
-  return templates.filter((template) => /\$\{[^}]*\bstatus\b[^}]*\}/u.test(template));
-}
-
-/**
- * Words a Pepper login refusal through one upstream template.
- * @param template - The template, backticks included.
- * @returns The failure message upstream would send.
- */
-function refusalThrough(template: string): string {
-  return REFUSAL_PARTS.reduce((text, [part, value]) => text.replace(part, value), template.slice(1, -1));
-}
-
 /**
  * Tells whether a run that sent the state removes it on one generic failure.
  * @param errorMessage - The failure's message.
@@ -443,34 +416,33 @@ function removesOn(errorMessage: string): boolean {
   return forgetRefusedState(attempt(store).watch, failed('GENERIC', errorMessage));
 }
 
-/** Template wordings, and whether the rule reads a refusal sent through each as proof. */
-const TEMPLATE_CASES = [
-  { label: 'the inline wording', template: '`${verb} ${safeUrl} ${String(env.status)}: ${snippet}`', removes: true },
-  { label: 'a prefix the body is added to', template: '`${failure.verb} ${safeUrl} ${String(failure.status)}: `', removes: true },
-  { label: 'a wording with the status first', template: '`${String(response.status)} ${verb} ${safeUrl}: ${snippet}`', removes: false },
-  { label: 'a wording without the separator', template: '`${verb} ${safeUrl} ${String(response.status)} ${snippet}`', removes: false },
-  { label: 'a wording that wraps after the status', template: '`${verb} ${safeUrl} ${String(env.status)}: ${snippet}\n${hint}`', removes: true },
-  { label: 'a wording that wraps before the status', template: '`${verb} ${safeUrl}\n${String(env.status)}: ${snippet}`', removes: false },
-] as const;
+/**
+ * Formats a Pepper login refusal through upstream's `sanitiseStepFailure` wording.
+ * @param stepName - The step's `name`.
+ * @param status - The HTTP status code.
+ * @returns The sanitised failure message upstream emits.
+ */
+function sanitisedStepFailure(stepName: string, status: string): string {
+  return `${stepName} HTTP ${status}`;
+}
 
 describe('the upstream wording the refusal rule reads', () => {
   const bundle = providerBundle();
 
-  it('names the two renewal steps at the URLs the rule matches', () => {
+  it('names the two renewal steps at the URLs and step names the rule matches', () => {
     expect(bundle).toContain(`"auth.login": "${LOGIN_URL}"`);
     expect(bundle).toContain(`"auth.assert": "${ASSERT_URL}"`);
+    expect(bundle).toMatch(/name:\s*"login",\s*urlTag:\s*"auth\.login"/u);
+    expect(bundle).toMatch(/name:\s*"assertPassword",\s*urlTag:\s*"auth\.assert"/u);
+    expect(bundle).toMatch(/var PEPPER_RESUME_STEPS = \[LOGIN_STEP\d*, RESUME_ASSERT_STEP\];/u);
   });
 
-  it('words a non-2xx answer so a login refusal removes the state, on every template', () => {
-    expect(bundle).toContain('return mintSafeUrlForLog(`${parsed.origin}${parsed.pathname}`);');
-    const templates = statusTemplates(bundle);
-    expect(templates).not.toEqual([]);
-    expect(templates.filter((template) => !removesOn(refusalThrough(template)))).toEqual([]);
-  });
-
-  it.each(TEMPLATE_CASES)('reads $label as removes=$removes', ({ template, removes }) => {
-    expect(statusTemplates(template)).toEqual([template]);
-    expect(removesOn(refusalThrough(template))).toBe(removes);
+  it('words a non-2xx step answer as `<step.name> HTTP <status>`, so a login refusal removes the state', () => {
+    expect(bundle).toContain('if (status.length > 0) return `HTTP ${status}`;');
+    expect(bundle).toContain('return { ...failure, errorType, errorMessage: `${step.name} ${detail}` };');
+    expect(removesOn(sanitisedStepFailure(LOGIN_STEP, '401'))).toBe(true);
+    expect(removesOn(sanitisedStepFailure(LOGIN_STEP, '403'))).toBe(true);
+    expect(removesOn(sanitisedStepFailure(ASSERT_STEP, '401'))).toBe(false);
   });
 
   it('words an invalid state with the prefix the rule matches', () => {
@@ -478,7 +450,7 @@ describe('the upstream wording the refusal rule reads', () => {
   });
 
   it('rejects a state for exactly the categories the table removes on', () => {
-    const fromBundle = [...categoriesOf(bundle, 'STATE_RULES'), ...literalCategories(bundle, 'invalid')];
+    const fromBundle = [...categoriesOf(bundle, 'STATE_RULES'), ...literalCategories(bundle, 'invalidState')];
     expect(new Set(fromBundle)).toEqual(new Set(STATE_CATEGORIES));
   });
 

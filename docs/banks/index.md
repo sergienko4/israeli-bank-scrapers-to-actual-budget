@@ -1,6 +1,6 @@
 # Supported Banks
 
-Nineteen Israeli financial institutions are supported — major banks and credit cards.
+Seventeen Israeli financial institutions are supported — major banks and credit cards.
 
 | # | Institution | Config key | Login fields | 2FA / OTP |
 |---|-------------|-----------|--------------|-----------|
@@ -13,16 +13,14 @@ Nineteen Israeli financial institutions are supported — major banks and credit
 | 7 | Beinleumi | [`beinleumi`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/beinleumi.md) | username, password | optional |
 | 8 | Massad | [`massad`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/massad.md) | username, password | optional |
 | 9 | Yahav | [`yahav`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/yahav.md) | username, nationalID, password | optional |
-| 10 | Beyahad Bishvilha | [`beyahadBishvilha`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/beyahadBishvilha.md) | id, password | optional |
-| 11 | Behatsdaa | [`behatsdaa`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/behatsdaa.md) | id, password | optional |
-| 12 | Pagi | [`pagi`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pagi.md) | username, password | optional |
-| 13 | One Zero | [`oneZero`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/oneZero.md) | email, password, phoneNumber | **required** |
-| 14 | Visa Cal | [`visaCal`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/visaCal.md) | username, password | optional |
-| 15 | Max (Leumi Card) | [`max`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/max.md) | username, password, id | optional |
-| 16 | Isracard | [`isracard`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/isracard.md) | id, card6Digits, password | optional |
-| 17 | Amex | [`amex`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/amex.md) | id, card6Digits, password | optional |
-| 18 | PayBox (by Discount Bank) | [`paybox`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md) | phoneNumber | **required** |
-| 19 | Pepper (by Bank Leumi) | [`pepper`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md) | phoneNumber, password | **required** |
+| 10 | Pagi | [`pagi`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pagi.md) | username, password | optional |
+| 11 | One Zero | [`oneZero`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/oneZero.md) | email, password, phoneNumber | **required** |
+| 12 | Visa Cal | [`visaCal`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/visaCal.md) | username, password | optional |
+| 13 | Max (Leumi Card) | [`max`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/max.md) | username, password, id | optional |
+| 14 | Isracard | [`isracard`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/isracard.md) | id, card6Digits, password | optional |
+| 15 | Amex | [`amex`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/amex.md) | id, card6Digits, password | optional |
+| 16 | PayBox (by Discount Bank) | [`paybox`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/paybox.md) | phoneNumber | **required** |
+| 17 | Pepper (by Bank Leumi) | [`pepper`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md) | phoneNumber, password | **required** |
 
 Use the **Config key** as the bank name in your `config.json`.
 

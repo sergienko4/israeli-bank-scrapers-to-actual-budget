@@ -48,13 +48,6 @@ vi.mock('../../src/Scheduler/TelegramSchedulerWiring.js', () => ({
 import { bootScheduler, runScheduler } from '../../src/Scheduler/SchedulerBootstrap.js';
 import type { ISchedulerProcessLifecycle } from '../../src/Scheduler/Process/SchedulerProcessLifecycle.js';
 
-const { mockCheckCamoufoxFonts } = vi.hoisted(() => ({
-  mockCheckCamoufoxFonts: vi.fn(),
-}));
-vi.mock('../../src/Scraper/CamoufoxFontGuard.js', () => ({
-  default: mockCheckCamoufoxFonts,
-}));
-
 type FakeLifecycle = { [K in keyof ISchedulerProcessLifecycle]: ReturnType<typeof vi.fn> };
 
 /**
@@ -170,8 +163,7 @@ describe('SchedulerBootstrap.runScheduler', () => {
   });
 });
 
-describe('SchedulerBootstrap.bootScheduler browser font check', () => {
-  const fontFailure = 'Camoufox font check failed: CAMOUFOX_OS=macos selects the macos fingerprint';
+describe('SchedulerBootstrap.bootScheduler', () => {
   const originalSchedule = process.env.SCHEDULE;
 
   beforeEach(() => {
@@ -185,23 +177,18 @@ describe('SchedulerBootstrap.bootScheduler browser font check', () => {
     else process.env.SCHEDULE = originalSchedule;
   });
 
-  it('exits through the fatal-error path before the scheduler starts when the fonts are missing', async () => {
-    mockCheckCamoufoxFonts.mockReturnValue(fail(fontFailure));
+  it('exits through the fatal-error path when the scheduler throws', async () => {
+    const boom = new Error('scheduler boom');
+    mockStartTelegramCommands.mockRejectedValue(boom);
     const lifecycle = makeLifecycle();
 
     await bootScheduler(lifecycle as unknown as ISchedulerProcessLifecycle);
 
-    expect(lifecycle.exitOnFatalError).toHaveBeenCalledTimes(1);
-    const [error] = lifecycle.exitOnFatalError.mock.calls[0] ?? [];
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe(fontFailure);
-    expect(mockLoadLogConfig).not.toHaveBeenCalled();
-    expect(mockStartTelegramCommands).not.toHaveBeenCalled();
+    expect(lifecycle.exitOnFatalError).toHaveBeenCalledWith(boom);
     expect(lifecycle.exitClean).not.toHaveBeenCalled();
   });
 
-  it('starts the scheduler when the fonts are present', async () => {
-    mockCheckCamoufoxFonts.mockReturnValue(succeed({ os: 'windows' }));
+  it('starts the scheduler and exits through the lifecycle', async () => {
     mockStartTelegramCommands.mockResolvedValue(succeed(makeMediator()));
     const lifecycle = makeLifecycle();
 

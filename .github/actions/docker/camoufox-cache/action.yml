@@ -5,8 +5,7 @@ description: >
   the pin, the installer and the runner architecture, so a cache never serves
   another build.
   scripts/camoufox-fetch.mjs downloads the pinned asset URL directly (no
-  GitHub API call, so no rate limit) and checks its SHA-256. It is then
-  copied into .camoufox-cache/ for the Docker build context.
+  GitHub API call, so no rate limit) and checks its SHA-256.
 
 runs:
   using: composite
@@ -42,7 +41,3 @@ runs:
       if: steps.check.outputs.installed != 'true'
       shell: bash
       run: CAMOUFOX_INSTALL_DIR="$HOME/.cache/camoufox" node scripts/camoufox-fetch.mjs
-
-    - name: Inject Camoufox into Docker build context
-      shell: bash
-      run: cp -r ~/.cache/camoufox/* .camoufox-cache/

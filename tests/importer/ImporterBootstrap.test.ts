@@ -51,27 +51,11 @@ vi.mock('../../src/Scrapers/Pipeline/Index.js', () => ({
   execute: mockExecute,
 }));
 
-const { mockDescribeBrowserVersion } = vi.hoisted(() => ({
-  mockDescribeBrowserVersion: vi.fn(
-    () => ({ success: false, status: 'not-found', message: 'unset' }) as unknown,
-  ),
-}));
-vi.mock('../../src/Scraper/BrowserVersion.js', () => ({
-  default: mockDescribeBrowserVersion,
-}));
-
 const { mockSweepImportStores } = vi.hoisted(() => ({
   mockSweepImportStores: vi.fn(() => 4),
 }));
 vi.mock('../../src/Importer/RuntimeStoreSweep.js', () => ({
   default: mockSweepImportStores,
-}));
-
-const { mockCheckCamoufoxFonts } = vi.hoisted(() => ({
-  mockCheckCamoufoxFonts: vi.fn(),
-}));
-vi.mock('../../src/Scraper/CamoufoxFontGuard.js', () => ({
-  default: mockCheckCamoufoxFonts,
 }));
 
 import { bootImporter, buildImporterBootHandle } from '../../src/Importer/ImporterBootstrap.js';
@@ -135,7 +119,6 @@ describe('ImporterBootstrap', () => {
     mockBuildResilience.mockReturnValue(makeResilience());
     mockBuildImporter.mockReturnValue(makeWiring());
     mockBuildLifecycle.mockReturnValue(makeLifecycle());
-    mockCheckCamoufoxFonts.mockReturnValue(succeed({ os: 'windows' }));
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`__exit:${String(code ?? 0)}`);
     }) as never);
@@ -247,77 +230,6 @@ describe('ImporterBootstrap', () => {
       const banners = mockLogger.info.mock.calls.map((c) => c[0] as string);
       expect(banners.some((b) => b.includes('DRY RUN'))).toBe(true);
       expect(banners.some((b) => b.includes('proxy'))).toBe(true);
-    });
-
-    it('reports the bundled browser build in the startup banner', async () => {
-      mockExecute.mockResolvedValue(succeed({ state: {} }));
-      mockBuildImporter.mockReturnValue(makeWiring({}));
-      mockDescribeBrowserVersion.mockReturnValue(succeed('152.0.4 (beta.28)'));
-
-      await expect(bootImporter()).rejects.toThrow('__exit:0');
-
-      const banners = mockLogger.info.mock.calls.map((c) => c[0] as string);
-      expect(banners.some((b) => b.includes('Camoufox 152.0.4 (beta.28)'))).toBe(true);
-    });
-
-    it('omits the browser line when the build cannot be determined', async () => {
-      mockExecute.mockResolvedValue(succeed({ state: {} }));
-      mockBuildImporter.mockReturnValue(makeWiring({}));
-      mockDescribeBrowserVersion.mockReturnValue(fail('Camoufox manifest unavailable'));
-
-      await expect(bootImporter()).rejects.toThrow('__exit:0');
-
-      const banners = mockLogger.info.mock.calls.map((c) => c[0] as string);
-      expect(banners.some((b) => b.includes('Camoufox'))).toBe(false);
-    });
-  });
-
-  describe('bootImporter browser font check', () => {
-    const fontFailure = 'Camoufox font check failed: CAMOUFOX_OS=linux selects the linux fingerprint';
-    let stderrSpy: ReturnType<typeof vi.spyOn>;
-
-    beforeEach(() => {
-      stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    });
-
-    afterEach(() => {
-      stderrSpy.mockRestore();
-    });
-
-    it('exits 1 with the reason on stderr before loading config when the fonts are missing', async () => {
-      mockCheckCamoufoxFonts.mockReturnValue(fail(fontFailure));
-
-      await expect(bootImporter()).rejects.toThrow('__exit:1');
-
-      expect(stderrSpy).toHaveBeenCalledWith(`${fontFailure}\n`);
-      expect(mockBootConfigAndLogger).not.toHaveBeenCalled();
-      expect(mockExecute).not.toHaveBeenCalled();
-    });
-
-    it('runs after the CLI short-circuits and before the config load when the fonts are present', async () => {
-      const order: string[] = [];
-      mockHandleCardRefundCleanupMode.mockImplementationOnce(async () => { order.push('cleanup'); });
-      mockCheckCamoufoxFonts.mockImplementationOnce(() => { order.push('fonts'); return succeed({ os: 'windows' }); });
-      mockBootConfigAndLogger.mockImplementationOnce(() => { order.push('config'); return fakeConfig; });
-      mockExecute.mockResolvedValue(succeed({ state: {} }));
-
-      await expect(bootImporter()).rejects.toThrow('__exit:0');
-
-      expect(order).toEqual(['cleanup', 'fonts', 'config']);
-      expect(stderrSpy).not.toHaveBeenCalled();
-    });
-
-    it.each<[string, ReturnType<typeof vi.fn>]>([
-      ['--validate', mockHandleValidateMode],
-      ['--cleanup-card-refunds', mockHandleCardRefundCleanupMode],
-    ])('lets %s finish without the font check', async (_flag, cliMode) => {
-      mockCheckCamoufoxFonts.mockReturnValue(fail(fontFailure));
-      cliMode.mockImplementationOnce(async () => { throw new Error('__exit:0'); });
-
-      await expect(bootImporter()).rejects.toThrow('__exit:0');
-
-      expect(mockCheckCamoufoxFonts).not.toHaveBeenCalled();
-      expect(mockBootConfigAndLogger).not.toHaveBeenCalled();
     });
   });
 });

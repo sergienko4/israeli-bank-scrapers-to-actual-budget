@@ -29,7 +29,7 @@ import {
 const STORE_KEY = 'onezero:oneZero';
 
 /** Upstream's failure when a run needs a second cold login (`BUDGET_SPENT_MESSAGE`). */
-const BUDGET_SPENT = 'this scrape has already spent its one cold SMS login; '
+const BUDGET_SPENT = 'this scrape has already spent its one cold login; '
   + 'the session cannot be re-minted in-run \u2014 start a new scrape';
 
 /** A watch over a sent token, and the token it digests. */

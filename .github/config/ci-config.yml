@@ -30,8 +30,6 @@ docker:
   platforms_release:
     - linux/amd64
     - linux/arm64
-  build_args_default:
-    SKIP_BROWSER_FETCH: "true"
 
 ci:
   runner_os: ubuntu-latest
@@ -117,8 +115,6 @@ readme:
     - { id: beinleumi,        name: Beinleumi,         key: beinleumi,        login: "username, password" }
     - { id: massad,           name: Massad,            key: massad,           login: "username, password" }
     - { id: yahav,            name: Yahav,             key: yahav,            login: "username, nationalID, password" }
-    - { id: beyahadBishvilha, name: Beyahad Bishvilha, key: beyahadBishvilha, login: "id, password" }
-    - { id: behatsdaa,        name: Behatsdaa,         key: behatsdaa,        login: "id, password" }
     - { id: pagi,             name: Pagi,              key: pagi,             login: "username, password" }
     - { id: oneZero,          name: One Zero,          key: oneZero,          login: "email, password, phoneNumber" }
     - { id: visaCal,          name: Visa Cal,          key: visaCal,          login: "username, password" }

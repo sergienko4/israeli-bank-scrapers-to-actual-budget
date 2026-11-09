@@ -40,9 +40,8 @@ import {
 } from '../../helpers/apiDirectBanks.js';
 import { fakeBankTransactions, fakeCanonicalAccount, fakeUuid } from '../../helpers/factories.js';
 
-/** What the real `auth/login` answered a device it no longer knows. */
-export const LOGIN_REFUSED = 'POST https://sa.pepper.co.il/api/v2/auth/login 401: '
-  + '{"error_code":4001,"error_message":"Session rejected","headers":[]}';
+/** What upstream's `sanitiseStepFailure` reports when `auth/login` refuses a device with 401. */
+export const LOGIN_REFUSED = 'login HTTP 401';
 
 /** What the real GraphQL endpoint answered a data request it refused. */
 export const DATA_REFUSED = 'POST https://fe-sec.pepper.co.il/graphql 401: {"error":"unauthorized"}';
@@ -157,7 +156,8 @@ function textIn(credentials: ScraperCredentials, field: string): string | undefi
  * @returns The retriever, or undefined when the login cannot ask for a code.
  */
 function retrieverIn(credentials: ScraperCredentials): (() => Promise<string>) | undefined {
-  return 'otpCodeRetriever' in credentials ? credentials.otpCodeRetriever : undefined;
+  const candidate = 'otpCodeRetriever' in credentials ? credentials.otpCodeRetriever : undefined;
+  return candidate === undefined ? undefined : () => candidate('');
 }
 
 /**

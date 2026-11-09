@@ -8,7 +8,6 @@ import { faker } from '@faker-js/faker';
 import type { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as fs from 'node:fs';
 
 import buildCredentials from '../../../src/Scraper/CredentialsBuilder.js';
 import { LiveScrapeStrategy } from '../../../src/Scraper/Strategies/LiveScrapeStrategy.js';
@@ -27,18 +26,11 @@ import { fakeBankConfig, fakeImporterConfig } from '../../helpers/factories.js';
 import { TEST_CREDENTIAL_SHORT } from '../../helpers/testCredentials.js';
 import { fakeToken, makeRefusals, makeStore } from '../BankTokenStoreFixture.js';
 
-vi.mock('node:fs');
-
 const mockScraper = { scrape: vi.fn() };
 vi.mock('@sergienko4/israeli-bank-scrapers', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@sergienko4/israeli-bank-scrapers')>();
   return { ...actual, createScraper: vi.fn(() => mockScraper) };
 });
-
-vi.mock('../../../src/Scraper/ScraperOptionsBuilder.js', () => ({
-  buildChromeArgs: vi.fn(() => []),
-  getChromeDataDir: vi.fn(() => '/mock/chrome'),
-}));
 
 vi.mock('../../../src/Scraper/CredentialsBuilder.js', () => ({
   default: vi.fn(() => ({ username: 'u', password: TEST_CREDENTIAL_SHORT })),
@@ -300,7 +292,7 @@ describe('LiveScrapeStrategy', () => {
     it('removes the state when Pepper refuses it at login', async () => {
       const kept = await scrapeWithState({
         success: false, errorType: 'GENERIC',
-        errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/login 401: {"error_code":4001}',
+        errorMessage: 'login HTTP 401',
       });
       expect(kept).toEqual(['pepper:primary']);
       expect(logger.warn).toHaveBeenCalledWith(
@@ -311,7 +303,7 @@ describe('LiveScrapeStrategy', () => {
     it('keeps the state when the login only timed out', async () => {
       const kept = await scrapeWithState({
         success: false, errorType: 'TIMEOUT',
-        errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/login network error: Timeout 30000ms exceeded',
+        errorMessage: 'login TIMEOUT',
       });
       expect(kept).toEqual(['pepper-device:primary', 'pepper:primary']);
     });
@@ -319,7 +311,7 @@ describe('LiveScrapeStrategy', () => {
     it('removes the state when the shipped single-try policy spends its budget', async () => {
       const kept = await scrapeWithState({
         success: false, errorType: 'GENERIC',
-        errorMessage: 'POST https://sa.pepper.co.il/api/v2/auth/login 401: {"error_code":4001}',
+        errorMessage: 'login HTTP 401',
       }, (store) => shippedStrategy(store));
       expect(kept).toEqual(['pepper:primary']);
     });
@@ -334,7 +326,7 @@ describe('LiveScrapeStrategy', () => {
     const oneZero = API_DIRECT_BANKS.find((bank) => bank.bankId === 'onezero');
     const budgetSpent = {
       success: false, errorType: 'GENERIC',
-      errorMessage: 'this scrape has already spent its one cold SMS login; '
+      errorMessage: 'this scrape has already spent its one cold login; '
         + 'the session cannot be re-minted in-run \u2014 start a new scrape',
     };
 
@@ -402,14 +394,6 @@ describe('LiveScrapeStrategy', () => {
       retryStrategy.execute.mockRejectedValue('policy gave up');
       await expect(makeStrategy().scrape(makeOpts())).rejects.toBe('policy gave up');
     });
-  });
-
-  it('clears bank session when clearSession is set', async () => {
-    mockScraper.scrape.mockResolvedValue({ success: true, accounts: [] });
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.rmSync).mockReturnValue(undefined);
-    await makeStrategy().scrape(makeOpts({ clearSession: true }));
-    expect(fs.rmSync).toHaveBeenCalled();
   });
 
   it('reports attemptCount=1 when the first attempt succeeds', async () => {

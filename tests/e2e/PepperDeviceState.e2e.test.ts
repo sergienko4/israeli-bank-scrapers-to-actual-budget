@@ -229,9 +229,9 @@ describe('E2E: Pepper device login', () => {
   it.each([
     { name: 'a timeout', errorType: 'TIMEOUT', message: 'timed out' },
     { name: 'a WAF page', errorType: 'WAF_BLOCKED', message: 'POST https://sa.pepper.co.il/api/v2/auth/login 403: <html>' },
-    { name: 'rate limiting', errorType: 'GENERIC', message: 'POST https://sa.pepper.co.il/api/v2/auth/login 429: {}' },
-    { name: 'a server error', errorType: 'GENERIC', message: 'POST https://sa.pepper.co.il/api/v2/auth/login 502: {}' },
-    { name: 'a network error', errorType: 'GENERIC', message: 'network error' },
+    { name: 'rate limiting', errorType: 'GENERIC', message: 'login HTTP 429' },
+    { name: 'a server error', errorType: 'GENERIC', message: 'login HTTP 502' },
+    { name: 'a network error', errorType: 'GENERIC', message: 'login GENERIC' },
   ])('keeps the state through $name, and the next run needs no SMS code', async ({ errorType, message }) => {
     const entry = pepper.customer();
     await importOnce(FIRST, entry);
@@ -250,7 +250,7 @@ describe('E2E: Pepper device login', () => {
   it('keeps the state when Pepper refuses the password, and says to check the password', async () => {
     const entry = pepper.customer();
     await importOnce(FIRST, entry);
-    pepper.failNextLogin('GENERIC', 'POST https://sa.pepper.co.il/api/v2/auth/assert 401: {}');
+    pepper.failNextLogin('GENERIC', 'assertPassword HTTP 401');
 
     const failed = await importOnce(FIRST, entry);
     const next = await importOnce(FIRST, entry);

@@ -18,11 +18,12 @@
  *
  * <p>A timeout, a Cloudflare page, a network, parse or server error, any other
  * status, a refused data request, a failed save and any other failure may
- * pass, so the state is kept. Both of upstream's fetch paths word a refusal as
- * `POST <origin><path> <status>: <body>` under `GENERIC`; a Cloudflare page is
- * `WAF_BLOCKED` and a timeout `TIMEOUT`, so only `GENERIC` is read. Upstream
- * spots only Cloudflare's page, so another proxy's 401 or 403 on `auth/login`
- * reads as Pepper's own and costs one SMS code.
+ * pass, so the state is kept. Upstream's `sanitiseStepFailure` words a step's
+ * non-2xx answer as `<step.name> HTTP <status>` under `GENERIC` (where
+ * Pepper's two resume steps are `login` and `assertPassword`); a Cloudflare
+ * page is `WAF_BLOCKED` and a timeout `TIMEOUT`, so only `GENERIC` is read.
+ * Upstream spots only Cloudflare's page, so another proxy's 401 or 403 on
+ * `auth/login` reads as Pepper's own and costs one SMS code.
  */
 
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
@@ -37,9 +38,9 @@ import type { IDeviceStateWatch } from './PepperDeviceState.js';
 /** How the provider words a state whose contents it rejects. */
 const STATE_INVALID = 'persistent auth state invalid: ';
 
-/** A renewal step's 4xx, as both of upstream's fetch paths word it. */
+/** A renewal step's 4xx, as upstream's `sanitiseStepFailure` words it. */
 const RENEWAL_REFUSAL =
-  /^POST https:\/\/sa\.pepper\.co\.il\/api\/v2\/auth\/(?<step>login|assert) (?<status>4\d\d): /u;
+  /^(?<step>login|assertPassword) HTTP (?<status>4\d\d)(?: |$)/u;
 
 /** Login statuses that say Pepper no longer accepts the device. */
 const DEVICE_REFUSED_STATUSES: ReadonlySet<string> = new Set(['401', '403']);
@@ -53,14 +54,14 @@ type StateVerdict = 'dead' | 'password-refused' | 'may-pass';
 /**
  * Reads a renewal step's refusal.
  * @param message - The failure's message.
- * @returns `dead` for a 401 or 403 on `auth/login`, `password-refused` for a
- *   4xx other than 408 or 429 on `auth/assert`, and `may-pass` otherwise.
+ * @returns `dead` for a 401 or 403 on `login`, `password-refused` for a
+ *   4xx other than 408 or 429 on `assertPassword`, and `may-pass` otherwise.
  */
 function renewalVerdict(message: string): StateVerdict {
   const groups = RENEWAL_REFUSAL.exec(message)?.groups;
   const status = groups?.status ?? '';
   if (groups?.step === 'login') return DEVICE_REFUSED_STATUSES.has(status) ? 'dead' : 'may-pass';
-  if (groups?.step !== 'assert' || TRY_LATER_STATUSES.has(status)) return 'may-pass';
+  if (groups?.step !== 'assertPassword' || TRY_LATER_STATUSES.has(status)) return 'may-pass';
   return 'password-refused';
 }
 

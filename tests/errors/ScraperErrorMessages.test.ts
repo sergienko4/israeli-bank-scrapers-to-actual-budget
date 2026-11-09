@@ -171,12 +171,12 @@ describe('ScraperErrorMessages', () => {
 
     it('says the run used its one SMS login when a second login is refused', () => {
       const advice = getScraperErrorAdvice('GENERIC this scrape has already spent its one '
-        + 'cold SMS login; the session cannot be re-minted in-run — start a new scrape');
+        + 'cold login; the session cannot be re-minted in-run — start a new scrape');
       expect(advice).toBe(BUDGET_ADVICE);
     });
 
     it('keeps the catch-all advice for other SMS login failures', () => {
-      expect(getScraperErrorAdvice('GENERIC cold SMS login timed out')).toBe(GENERIC_ADVICE);
+      expect(getScraperErrorAdvice('GENERIC cold login timed out')).toBe(GENERIC_ADVICE);
     });
 
     it('matches the wording the installed scraper sends', () => {
@@ -185,7 +185,7 @@ describe('ScraperErrorMessages', () => {
 
     it('shares its pattern, so token retirement fires on the same wording', () => {
       expect(BUDGET_SPENT_PATTERN.test(providerBudgetMessage())).toBe(true);
-      expect(BUDGET_SPENT_PATTERN.test('GENERIC cold SMS login timed out')).toBe(false);
+      expect(BUDGET_SPENT_PATTERN.test('GENERIC cold login timed out')).toBe(false);
     });
   });
 });
@@ -196,6 +196,6 @@ describe('ScraperErrorMessages', () => {
  * @returns The decoded message; throws if the wording is gone.
  */
 function providerBudgetMessage(): string {
-  const literal = anchored(providerBundle(), /"(?<value>[^"\n]*cold SMS login[^"\n]*)"/u);
+  const literal = anchored(providerBundle(), /"(?<value>[^"\n]*already spent its one cold login[^"\n]*)"/u);
   return JSON.parse(`"${literal}"`) as string;
 }

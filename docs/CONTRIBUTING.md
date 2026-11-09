@@ -371,9 +371,6 @@ fix, and none of them is a push to the bot's branch.
 | `npm run audit` fails with `exception expired on …, and none does`, or `tests/audit-policy.test.ts` fails with `… has no blocker left; remove its entry` | An auto-extending acceptance has no provable blocker left: no locked package still holds an affected copy of the vulnerable package below the fix | Take the fix (`npm update <package>`, or an `overrides` floor), then remove the entry from `config/audit-policy.mjs` and from the pin in `tests/audit-policy.test.ts` that lists the reviewed auto-extending acceptances, and drop the minimatch test there (`honours the minimatch acceptance only while minimatch stays out of the production tree`) that asserts the entry. Never move its `expires` date to pass the gate. See [ADR-0004](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/decisions/ADR-0004-auto-extending-dev-acceptances.md). |
 | Tests fail in code that uses the package | A real breaking change | Fix it forward when the code can work on both versions. Otherwise run `dependency-bump.yml` for that version (see [Bumping a package on demand](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-a-package-on-demand)) and push the code change to its `deps/…` branch. Dependabot drops the update once `main` carries that version. |
 | `tests/deployment/EnginesFloor.test.ts` names a package that `needs Node <range>` | The package raised its Node floor above `engines.node` | Raise `engines.node` in `package.json` to that floor, run `npm run meta:render`, and add a `docs/UPGRADING.md` entry for hosts that run the importer outside Docker. The image already runs a newer Node. |
-| `tests/deployment/BrowserStackPair.test.ts` fails | The scraper was tested with another Camoufox build or Playwright minor | Move the pin to the build the scraper names (see [Bumping the Camoufox browser](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-the-camoufox-browser)), or bring `playwright-core` to the minor it names. |
-| The `Prove the browser patches applied` step, or the image's `npm ci` layer, fails `camoufox:patch-check` | The scraper's postinstall could not patch the `playwright-core` it drives Camoufox with | Install the `playwright-core` minor the scraper was tested with. Never set `SKIP_PLAYWRIGHT_CORE_PATCH` to pass it. |
-| The image build fails with `ERROR: Camoufox font prune` | A new Camoufox build changed its font layout | See the font layout notes in [Bumping the Camoufox browser](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/CONTRIBUTING.md#bumping-the-camoufox-browser). Never ship the full font tree to pass it. |
 | A test fails with `The provider no longer ships …` | The scraper renamed or reworded an error the importer matches on | Update the matching code and its test to the new wording. Read the scraper's bundle (`lib/index.mjs`) for the new form; never relax the match. |
 
 The `Audit dependencies` step also prints `::warning::` annotations. They
@@ -425,43 +422,25 @@ says which case it is:
 
 ## Bumping the Camoufox browser
 
-The scraper drives Camoufox, a Firefox build that is downloaded separately from
-`@hieutran094/camoufox-js`, the npm package that launches it. Every install
-site used to download whichever build upstream published last, so an upstream
-release could break the image without any change here: v156.0.1-beta.34
+The Portal UI E2E suite drives Camoufox, a Firefox build that is downloaded
+separately from `@hieutran094/camoufox-js`, the npm package that launches it.
+Every install site used to download whichever build upstream published last, so
+an upstream release could break CI without any change here: v156.0.1-beta.34
 dropped config properties that camoufox-js 0.11.2 still sets on every launch,
 and every browser launch failed with `UnknownProperty`.
 
 `config/camoufox-pin.json` now decides the build. It names one version and
 release, and for each platform the release asset URL and its SHA-256.
-`scripts/camoufox-fetch.mjs` is the only installer: the Dockerfile, the
-`docker/camoufox-cache` CI action and `npm run camoufox:install` all run it. It
-downloads the pinned URL directly, refuses an archive whose digest differs, and
-records the installed asset and its digest in `pinned-asset.json` beside
-`version.json`. It skips the download only when `version.json` names the pinned
-build, that record names this platform's asset and digest, and the executable
-camoufox-js launches is a regular file the current user can run. `--verify`
-applies the same test without installing, and the image build runs it on both
-of its paths.
+`scripts/camoufox-fetch.mjs` is the only installer: the `docker/camoufox-cache`
+CI action and `npm run camoufox:install` both run it. It downloads the pinned
+URL directly, refuses an archive whose digest differs, and records the
+installed asset and its digest in `pinned-asset.json` beside `version.json`. It
+skips the download only when `version.json` names the pinned build, that record
+names this platform's asset and digest, and the executable camoufox-js launches
+is a regular file the current user can run. `--verify` applies the same test
+without installing.
 `tests/deployment/CamoufoxPin.test.ts` fails if any build file goes back to
 fetching an unpinned build.
-
-The scraper names the Camoufox build and the Playwright minor its release was
-tested with. `tests/deployment/BrowserStackPair.test.ts` fails when the pin or
-the installed `playwright-core` differs, so a scraper bump that moves to a new
-build stays red until the pin follows it.
-
-The image ships only the fonts the Windows fingerprint reads. Camoufox keeps
-each font face once, under a `fonts/` group named for the OSes that read it,
-and `fonts/groups.json` lists the groups per OS. camoufox-js hands the browser
-the whole `fonts` directory, so the image build runs
-`scripts/camoufox-font-prune.mjs`, which deletes every group Windows does not
-read. It deletes nothing and fails the build when `groups.json` is missing,
-names no Windows groups, or names one that is absent, or when the `fonts`
-directory holds an entry that is neither a file nor a directory, such as a
-symlinked group. If a new build changes the font layout, update the prune,
-`src/Scraper/CamoufoxFontGuard.ts` (the startup check) and
-`tests/e2e/image-contents.e2e.test.ts` together.
 
 To move to another build:
 
@@ -476,10 +455,7 @@ To move to another build:
    the real browser.
 4. Open a pull request. The CI cache key includes the hashes of the pin file and
    the installer scripts, so CI downloads the new build instead of reusing the
-   old one, the image build
-   verifies it, and the E2E suite launches it. Pull requests build only the
-   amd64 image, so the arm64 asset is first installed by the release build;
-   its digest check is what guards it.
+   old one, and the E2E suite launches it.
 
 A camoufox-js upgrade is a separate change that needs the same E2E proof: it
 installs into the same directory and launches whatever build is there.

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Release](https://img.shields.io/github/v/release/sergienko4/israeli-bank-scrapers-to-actual-budget)](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/releases)
 
-**Automatically import transactions from 19 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
+**Automatically import transactions from 17 Israeli banks and credit cards into [Actual Budget](https://actualbudget.org/).**
 
 ---
 
@@ -26,11 +26,10 @@ docker compose logs -f
 ```bash
 docker pull sergienko4/israeli-bank-importer
 
-docker run --rm --cap-add SYS_ADMIN \
+docker run --rm \
   -v $(pwd)/config.json:/app/config.json:ro \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/cache:/app/cache \
-  -v $(pwd)/chrome-data:/app/chrome-data \
   -v $(pwd)/logs:/app/logs \
   -e TZ=Asia/Jerusalem \
   -e SCHEDULE="0 */8 * * *" \
@@ -83,7 +82,7 @@ docker pull ghcr.io/sergienko4/israeli-bank-importer:<tag>
 | `SCHEDULE` | _(none)_ | Cron expression; omit to run once and exit |
 | `CREDENTIALS_ENCRYPTION_PASSWORD` | _(none)_ | Decryption password for encrypted `config.json` / `credentials.json` |
 | `DRY_RUN` | `false` | When `true`, scrape banks but skip Actual Budget writes |
-| `PROXY_SERVER` | _(none)_ | `socks5://`, `socks4://`, `http://`, `https://` — kept for future use (not yet wired to Camoufox) |
+| `PROXY_SERVER` | _(none)_ | `socks5://`, `socks4://`, `http://`, `https://` — kept for future use |
 
 ---
 
@@ -94,21 +93,20 @@ docker pull ghcr.io/sergienko4/israeli-bank-importer:<tag>
 | `/app/config.json` | Bank credentials + Actual Budget connection | Required. Mount read-only (`:ro`) |
 | `/app/data` | Actual Budget local sync data | Required for the Actual Budget API client |
 | `/app/cache` | Scraper run cache | Recommended for faster re-runs |
-| `/app/chrome-data` | Legacy browser session (no-op with Camoufox v7.9.0+) | Optional |
 | `/app/logs` | Rotating log files (10 MB max, 3-day retention) | Required for the `/logs` Telegram command |
 
 ---
 
-## Capabilities
+## Security
 
-- `--cap-add SYS_ADMIN` is required for the Camoufox/Firefox sandbox.
+- Runs with no extra Linux capabilities (`--cap-drop ALL`).
 - Container runs as the non-root `node` user (UID 1000).
 
 ---
 
 ## What You Get
 
-- 19 institutions (major Israeli banks + credit cards)
+- 17 institutions (major Israeli banks + credit cards)
 - Telegram bot (`/scan`, `/preview`, `/status`, `/logs`, `/import_receipt` OCR)
 - Webhook delivery (Slack, Discord, generic JSON)
 - Auto-categorization (`history` or Hebrew → English `translate`)

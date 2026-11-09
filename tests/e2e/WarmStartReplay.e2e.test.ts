@@ -76,7 +76,7 @@ const NO_RETRIEVER = { success: false, errorType: 'TWO_FACTOR_RETRIEVER_MISSING'
  */
 const BUDGET_SPENT = {
   success: false, errorType: 'GENERIC',
-  errorMessage: expect.stringContaining('already spent its one cold SMS login'),
+  errorMessage: expect.stringContaining('already spent its one cold login'),
 };
 
 let store: ITokenStoreDir;

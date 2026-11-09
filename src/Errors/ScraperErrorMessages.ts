@@ -79,13 +79,13 @@ export interface IFailureSignature {
 }
 
 /**
- * The scraper's refusal of a second cold SMS login in one scrape (8.7.3+).
+ * The scraper's refusal of a second cold login in one scrape (8.7.3+).
  *
  * Shared with token retirement, so the operator advice and the retirement
  * decision always match the same wording. It has no `g` flag, so `test()`
  * keeps no state between calls.
  */
-export const BUDGET_SPENT_PATTERN = /already spent its one cold SMS login/iu;
+export const BUDGET_SPENT_PATTERN = /already spent its one cold login/iu;
 
 /**
  * Upstream failures whose own message points the reader at the wrong cause.

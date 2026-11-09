@@ -1,5 +1,5 @@
 site_name: Israeli Bank Importer
-site_description: Automatically import transactions from 19 Israeli banks and credit cards into Actual Budget.
+site_description: Automatically import transactions from 17 Israeli banks and credit cards into Actual Budget.
 site_url: https://sergienko4.github.io/israeli-bank-scrapers-to-actual-budget/
 repo_url: https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget
 repo_name: sergienko4/israeli-bank-scrapers-to-actual-budget
@@ -108,8 +108,6 @@ nav:
       - Beinleumi: banks/beinleumi.md
       - Massad: banks/massad.md
       - Yahav: banks/yahav.md
-      - Beyahad Bishvilha: banks/beyahadBishvilha.md
-      - Behatsdaa: banks/behatsdaa.md
       - Pagi: banks/pagi.md
       - One Zero: banks/oneZero.md
       - PayBox: banks/paybox.md

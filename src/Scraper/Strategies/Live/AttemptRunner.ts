@@ -129,7 +129,7 @@ async function executeAttempt(
   const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig, hasTokenCapture);
   const label = `Scraping ${scrapeOpts.bankId}`;
   const params = { deps, ...prepared, logger: scrapeOpts.logger, label };
-  const result = await runAttemptThenSeal(retryStrategy, params);
+  const result = await runRetries(retryStrategy, params);
   return settleToken(deps, scrapeOpts, { result, tokenWatch, deviceWatch });
 }
 
@@ -184,34 +184,13 @@ function keepMintedToken(
 }
 
 /**
- * Runs the retry loop, then seals the registry because no retry can follow.
- *
- * Every retry reclaims its own browsers, but a scrape abandoned by the timeout
- * keeps running and can launch one after the final reclaim has already
- * happened. Sealing closes what the attempt still holds and closes anything
- * arriving later on the spot, so nothing outlives the attempt.
- * @param retryStrategy - Retry policy applied around the timed scrape.
- * @param params - Timeout wrapper inputs carrying the browser registry.
- * @returns Provider scrape result returned by israeli-bank-scrapers.
- */
-async function runAttemptThenSeal(
-  retryStrategy: IRetryStrategy, params: ITimeoutScrapeParams,
-): Promise<IScraperScrapingResult> {
-  try {
-    return await runRetries(retryStrategy, params);
-  } finally {
-    await sealBrowsers(params);
-  }
-}
-
-/**
  * Runs the retry loop and restores the provider result once it is exhausted.
  *
  * Transient provider failures are thrown so the retry strategy counts them;
  * when the budget runs out the original result is returned here, keeping the
  * envelope contract identical to a failure that never retried.
  * @param retryStrategy - Retry policy applied around the timed scrape.
- * @param params - Timeout wrapper inputs carrying the browser registry.
+ * @param params - Timeout wrapper inputs for the provider call.
  * @returns Provider scrape result returned by israeli-bank-scrapers.
  */
 async function runRetries(
@@ -275,54 +254,14 @@ function buildTimeoutWrappedScrape(
 
 /**
  * Applies the configured timeout deadline around provider scraping.
- * Every attempt reclaims its own browsers, so a timed-out or failed retry
- * cannot strand a Camoufox process and exhaust container memory.
  * @param params - Timeout wrapper inputs for the provider call.
  * @returns Provider scrape result subject to the configured timeout.
  */
 async function wrapScrapePromise(params: ITimeoutScrapeParams): Promise<IScraperScrapingResult> {
   const timeoutMs = DEFAULT_RESILIENCE_CONFIG.scrapingTimeoutMs;
-  try {
-    const scraping = params.scraper.scrape(params.credentials);
-    const result = await params.deps.timeoutWrapper.wrap(scraping, timeoutMs, params.label);
-    return throwIfRetryable(result);
-  } finally {
-    await reclaimBrowsers(params);
-  }
-}
-
-/**
- * Closes browsers the provider left running after the attempt settled.
- * @param params - Timeout wrapper inputs carrying the browser registry.
- * @returns Number of still-running browsers reclaimed by this attempt.
- */
-async function reclaimBrowsers(params: ITimeoutScrapeParams): Promise<number> {
-  const reclaimed = await params.browsers.closeAll(params.logger);
-  return reportReclaimed(reclaimed, params);
-}
-
-/**
- * Closes browsers still held once the attempt can no longer retry.
- * @param params - Timeout wrapper inputs carrying the browser registry.
- * @returns Number of still-running browsers reclaimed by the seal.
- */
-async function sealBrowsers(params: ITimeoutScrapeParams): Promise<number> {
-  const reclaimed = await params.browsers.seal(params.logger);
-  return reportReclaimed(reclaimed, params);
-}
-
-/**
- * Reports how many browsers a reclaim closed, staying silent when none did.
- * @param reclaimed - Number of browsers the reclaim had to close.
- * @param params - Timeout wrapper inputs carrying the logger and label.
- * @returns The reclaimed count, unchanged, for the caller to surface.
- */
-function reportReclaimed(reclaimed: number, params: ITimeoutScrapeParams): number {
-  if (reclaimed > 0) {
-    const count = String(reclaimed);
-    params.logger.info(`  🧹 Reclaimed ${count} abandoned browser(s) after ${params.label}`);
-  }
-  return reclaimed;
+  const scraping = params.scraper.scrape(params.credentials);
+  const result = await params.deps.timeoutWrapper.wrap(scraping, timeoutMs, params.label);
+  return throwIfRetryable(result);
 }
 
 /**

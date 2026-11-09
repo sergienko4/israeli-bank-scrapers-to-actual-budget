@@ -4,7 +4,7 @@
  * <p>A login that carries a long-term token and fails before the SMS step
  * makes upstream try a second, cold login. Upstream allows one cold login per
  * scrape, so it refuses that one and reports `this scrape has already spent
- * its one cold SMS login` instead of the first failure. Sending the same token
+ * its one cold login` instead of the first failure. Sending the same token
  * again fails the same way on every run, and the cold login it needs never
  * happens.
  *

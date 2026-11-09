@@ -20,7 +20,6 @@ import type { IDeviceStateWatch } from '../../Tokens/PepperDeviceState.js';
 import type { IRefusedTokens } from '../../Tokens/RefusedTokens.js';
 import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
-import type { BrowserRegistry } from './BrowserRegistry.js';
 
 /** Dependencies captured once by the public LiveScrapeStrategy facade. */
 export interface ILiveScrapeDependencies {
@@ -66,7 +65,6 @@ export type ILiveProviderScraper = ReturnType<typeof createScraper>;
 export interface IInitializedLiveScrape {
   readonly scraper: ILiveProviderScraper;
   readonly credentials: ScraperCredentials;
-  readonly browsers: BrowserRegistry;
   /** True when the login callback stores the durable token each login mints. */
   readonly hasTokenCapture: boolean;
   /** Whether the credentials carry a long-term token, so a refusal can warn. */
@@ -80,7 +78,6 @@ export interface ITimeoutScrapeParams {
   readonly deps: ILiveScrapeDependencies;
   readonly scraper: ILiveProviderScraper;
   readonly credentials: ScraperCredentials;
-  readonly browsers: BrowserRegistry;
   readonly logger: ILogger;
   readonly label: string;
 }

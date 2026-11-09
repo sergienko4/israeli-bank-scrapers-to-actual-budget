@@ -132,7 +132,7 @@ const CODE_NOT_SENT = 'code-not-sent';
 type ColdFailure = typeof CODE_REJECTED | typeof CODE_NOT_SENT | undefined;
 
 /** Upstream's failure when a run needs a second cold login (`BUDGET_SPENT_MESSAGE`). */
-const BUDGET_SPENT_MESSAGE = 'this scrape has already spent its one cold SMS login; '
+const BUDGET_SPENT_MESSAGE = 'this scrape has already spent its one cold login; '
   + 'the session cannot be re-minted in-run \u2014 start a new scrape';
 
 /**
@@ -203,7 +203,8 @@ function tokenIn(credentials: ScraperCredentials): string | undefined {
  * @returns The retriever, or undefined when the login cannot ask for a code.
  */
 function retrieverIn(credentials: ScraperCredentials): (() => Promise<string>) | undefined {
-  return 'otpCodeRetriever' in credentials ? credentials.otpCodeRetriever : undefined;
+  const candidate = 'otpCodeRetriever' in credentials ? credentials.otpCodeRetriever : undefined;
+  return candidate === undefined ? undefined : () => candidate('');
 }
 
 /**

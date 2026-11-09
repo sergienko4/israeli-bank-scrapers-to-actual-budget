@@ -353,7 +353,7 @@ token it judges stale before it asks the bank. Neither warns when no token was
 sent, since the resolver has already said why. A stale token takes neither
 path: upstream spends the run's one cold login at once, and when that login
 fails its second one is refused, so the attempt fails as `GENERIC` with
-`already spent its one cold SMS login`, which the error advice explains, and
+`already spent its one cold login`, which the error advice explains, and
 `settleToken` [retires](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/architecture/bank-token-store.md#refused-tokens) the token.
 
 The attempt's login fingerprint is computed once, in
@@ -402,13 +402,14 @@ After an attempt that sent the state, `settleToken` calls
 removes the state only when the result is a `GENERIC` failure that says Pepper
 refused the state itself:
 
-- `persistent auth state invalid: <category>`; or
-- a 401 or 403 from `https://sa.pepper.co.il/api/v2/auth/login`.
+- `persistent auth state invalid: <category>` (or `persistent auth failed: device-id`); or
+- `login HTTP 401` or `login HTTP 403` from the Pepper renewal login step.
 
 Every renewal request is signed with the state's device key, and
-`auth/login` goes first, so a device Pepper no longer knows is refused there.
-The `/api/v2/auth/assert` step that follows adds the entry's password, so its
-4xx other than 408 or 429 keeps the state and warns
+the `login` step (`/api/v2/auth/login`) goes first, so a device Pepper no
+longer knows is refused there. The `assertPassword` step
+(`/api/v2/auth/assert`) that follows adds the entry's password, so its
+`assertPassword HTTP 4xx` other than 408 or 429 keeps the state and warns
 `Kept the Pepper device state for <key>; Pepper refused the password, so check the password in the config`.
 Removing it would cost an SMS once the password is fixed.
 
@@ -430,7 +431,7 @@ tests.
 
 When a login that carries a token fails, upstream falls back to a cold SMS
 login, and its one-cold-login-per-scrape budget refuses that second login. The
-attempt fails as `GENERIC` with `already spent its one cold SMS login`, which
+attempt fails as `GENERIC` with `already spent its one cold login`, which
 hides the first failure. The cause is often an error before any SMS is sent:
 an `otp/prepare` rate limit, a device-bind error, or a stale token. Sending the
 same token on the next run is likely to fail the same way, so run after run
