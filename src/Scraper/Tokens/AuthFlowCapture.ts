@@ -24,8 +24,10 @@ import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 import type { ILogger } from '../../Logger/ILogger.js';
 import type { ISweepReport } from '../../Storage/StoreTypes.js';
 import { errorMessage } from '../../Utils/Index.js';
-import { NO_TOKEN } from './BankTokenRecords.js';
+import { NO_TOKEN, requiresColdOtp } from './BankTokenRecords.js';
 import type { IBankTokenStore } from './BankTokenStore.js';
+
+export { requiresColdOtp };
 
 /**
  * Banks whose login mints a durable long-term token.
@@ -38,13 +40,6 @@ const API_DIRECT_BANKS: ReadonlySet<string> = new Set<string>([
   CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox,
   CompanyTypes.Hapoalim, CompanyTypes.Yahav, CompanyTypes.VisaCal,
   CompanyTypes.Isracard, CompanyTypes.Amex,
-]);
-
-/**
- * Banks whose cold login always requires an SMS code from `otpCodeRetriever`.
- */
-const COLD_OTP_BANKS: ReadonlySet<string> = new Set<string>([
-  CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox,
 ]);
 
 /** Provider callback invoked once an API-direct login completes. */
@@ -100,15 +95,6 @@ export function buildTokenStoreKey(bankId: string, accountKey = ''): string {
  */
 export function isApiDirectBank(companyType: string): boolean {
   return API_DIRECT_BANKS.has(companyType);
-}
-
-/**
- * Tells whether a bank's cold login always requires an SMS code.
- * @param companyType - Provider company id of the bank being scraped.
- * @returns True for OneZero, Pepper and PayBox.
- */
-export function requiresColdOtp(companyType: string): boolean {
-  return COLD_OTP_BANKS.has(companyType);
 }
 
 /**

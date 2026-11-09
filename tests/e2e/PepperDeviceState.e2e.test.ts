@@ -315,7 +315,7 @@ describe('E2E: Pepper device login', () => {
         return { success: true, accounts: [] };
       },
     }));
-    const targets = [{ actualAccountId: fakeUuid(), accountNumbers: 'all' as const }];
+    const targets = [{ actualAccountId: fakeUuid(), reconcile: false, accounts: 'all' as const }];
     const bankConfig: IBankConfig = { username: 'fibi-user', password: 'fibi-password', targets };
     const [first, second] = [await runImport({ entry: 'beinleumi', bankConfig }), await runImport({ entry: 'beinleumi', bankConfig })];
     expect([first.result.success, second.result.success]).toEqual([true, true]);

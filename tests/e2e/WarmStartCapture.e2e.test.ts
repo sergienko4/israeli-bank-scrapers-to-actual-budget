@@ -252,7 +252,7 @@ describe('E2E: long-term token capture', () => {
         return { ...scrapedAccount(), persistentOtpToken: token };
       },
     }));
-    const targets = [{ actualAccountId: fakeUuid(), accountNumbers: 'all' as const }];
+    const targets = [{ actualAccountId: fakeUuid(), reconcile: false, accounts: 'all' as const }];
     const bankConfig = { userCode: 'POALIM99', password: 'secret-password', targets };
     const first = await runImport({ entry: 'hapoalim', bankConfig });
     const second = await runImport({ entry: 'hapoalim', bankConfig });
