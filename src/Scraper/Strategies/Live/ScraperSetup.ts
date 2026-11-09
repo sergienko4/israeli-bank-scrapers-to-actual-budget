@@ -8,7 +8,7 @@ import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 
 import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
 import {
-  attachAuthFlowCapture, buildTokenStoreKey, isApiDirectBank,
+  attachAuthFlowCapture, buildTokenStoreKey, requiresColdOtp,
 } from '../../Tokens/AuthFlowCapture.js';
 import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
 import loginFingerprint from '../../Tokens/LoginFingerprint.js';
@@ -174,7 +174,7 @@ export function buildBaseScraperOptions(scrapeOpts: LiveOpts): ScraperOptions {
 export function attachOtpRetriever(
   target: ScraperOptions, otpRetriever: OtpRetriever, companyId: string,
 ): boolean {
-  if (!otpRetriever || isApiDirectBank(companyId)) return false;
+  if (!otpRetriever || requiresColdOtp(companyId)) return false;
   target.otpCodeRetriever = otpRetriever;
   return true;
 }

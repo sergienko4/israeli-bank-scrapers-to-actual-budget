@@ -7,7 +7,7 @@ import type { IBankConfig } from '../../../Types/Index.js';
 import buildCredentials from '../../CredentialsBuilder.js';
 import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
 import { isApiDirectBank } from '../../Tokens/AuthFlowCapture.js';
-import { isPepper, withoutLongTermToken } from '../../Tokens/PepperDeviceState.js';
+import { isDeviceAuthBank, withoutLongTermToken } from '../../Tokens/PepperDeviceState.js';
 import type { ILoginContext } from '../../Tokens/WarmTokenResolver.js';
 import resolveWarmToken from '../../Tokens/WarmTokenResolver.js';
 import type { IWarmTokenWatch, WarmTokenDecision } from '../../Tokens/WarmTokenWatch.js';
@@ -97,7 +97,7 @@ function deviceLogin(
  *   banks, and `plainLogin` for browser banks.
  */
 function loginBuilderFor(companyType: string): LoginBuilder {
-  if (isPepper(companyType)) return deviceLogin;
+  if (isDeviceAuthBank(companyType)) return deviceLogin;
   if (isApiDirectBank(companyType)) return warmLogin;
   return plainLogin;
 }

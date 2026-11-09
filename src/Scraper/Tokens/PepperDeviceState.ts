@@ -31,8 +31,49 @@ import { buildTokenStoreKey } from './AuthFlowCapture.js';
 import { isLoginFingerprint, NO_TOKEN } from './BankTokenRecords.js';
 import type { IBankTokenWrite, ITokenView } from './BankTokenStore.js';
 
-/** The store's bank id for Pepper's device state, apart from its legacy token's `pepper`. */
-const PEPPER_DEVICE_BANK = 'pepper-device';
+/** Pepper's provider company id, as text so any company id compares with it. */
+const PEPPER_COMPANY: string = CompanyTypes.Pepper;
+
+/** Banks that persist device state (`bound-device` for Pepper, `device-memory` for FIBI). */
+const DEVICE_AUTH_BANKS: ReadonlySet<string> = new Set<string>([
+  CompanyTypes.Pepper,
+  CompanyTypes.Beinleumi,
+  CompanyTypes.Massad,
+  CompanyTypes.OtsarHahayal,
+  CompanyTypes.Pagi,
+]);
+
+/**
+ * Tells whether a bank is Pepper (`bound-device`, which always requires SMS on cold enrollment).
+ * @param companyType - Provider company id of the bank being scraped.
+ * @returns True for Pepper.
+ */
+export function isPepper(companyType: string): boolean {
+  return companyType === PEPPER_COMPANY;
+}
+
+/**
+ * Tells whether a bank persists device authentication state (`persistentAuthState`).
+ * @param companyType - Provider company id of the bank being scraped.
+ * @returns True for Pepper and FIBI family banks (Beinleumi, Massad, OtsarHahayal, Pagi).
+ */
+export function isDeviceAuthBank(companyType: string): boolean {
+  return DEVICE_AUTH_BANKS.has(companyType);
+}
+
+/**
+ * Re-keys an attempt's capture parameters onto its device state.
+ * @param captureParams - Capture parameters keyed on the legacy token.
+ * @param accountKey - Name of the `banks` config entry, when known.
+ * @returns The same parameters keyed on `<bank>-device:<entry>`.
+ */
+function deviceParams(
+  captureParams: IAuthFlowCaptureParams, accountKey?: string,
+): IAuthFlowCaptureParams {
+  const prefix = `${captureParams.companyType.toLowerCase()}-device`;
+  const storeKey = buildTokenStoreKey(prefix, accountKey);
+  return { ...captureParams, storeKey };
+}
 
 /** Provider callback invoked with each device state Pepper issues. */
 type StateUpdateHook = NonNullable<ScraperOptions['onPersistentAuthStateUpdate']>;
@@ -77,31 +118,6 @@ const LEGACY_START: IDeviceStart = { mode: 'legacy', state: NO_TOKEN };
 
 /** Enrolls this device with one SMS code. */
 const ENROLL_START: IDeviceStart = { mode: 'enroll', state: NO_TOKEN };
-
-/** Pepper's provider company id, as text so any company id compares with it. */
-const PEPPER_COMPANY: string = CompanyTypes.Pepper;
-
-/**
- * Tells whether a bank logs in as an enrolled device.
- * @param companyType - Provider company id of the bank being scraped.
- * @returns True for Pepper.
- */
-export function isPepper(companyType: string): boolean {
-  return companyType === PEPPER_COMPANY;
-}
-
-/**
- * Re-keys an attempt's capture parameters onto its device state.
- * @param captureParams - Capture parameters keyed on the legacy token.
- * @param accountKey - Name of the `banks` config entry, when known.
- * @returns The same parameters keyed on `pepper-device:<entry>`.
- */
-function deviceParams(
-  captureParams: IAuthFlowCaptureParams, accountKey?: string,
-): IAuthFlowCaptureParams {
-  const storeKey = buildTokenStoreKey(PEPPER_DEVICE_BANK, accountKey);
-  return { ...captureParams, storeKey };
-}
 
 /**
  * Logs a warning in the importer's format.
@@ -255,9 +271,9 @@ export function attachDeviceAuth(
   target: IDeviceAuthTarget, captureParams: IAuthFlowCaptureParams, request: IDeviceAuthRequest,
 ): IDeviceStateWatch {
   const params = deviceParams(captureParams, request.accountKey);
-  if (!isPepper(captureParams.companyType)) return { params, didSendState: false };
+  if (!isDeviceAuthBank(captureParams.companyType)) return { params, didSendState: false };
   const start = chooseStart(params);
-  if (start.mode !== 'resume' && !request.canAskForOtp) {
+  if (start.mode !== 'resume' && !request.canAskForOtp && isPepper(captureParams.companyType)) {
     warnOf(
       params,
       `No Pepper device state for ${params.storeKey}, and this run cannot ask for an SMS code: `

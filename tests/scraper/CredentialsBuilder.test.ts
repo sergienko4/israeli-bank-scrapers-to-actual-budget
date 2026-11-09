@@ -108,6 +108,30 @@ describe('buildCredentials', () => {
       expect(creds.phoneNumber).toBe('972500000001');
       expect(creds.password).toBe(TEST_CREDENTIAL);
     });
+
+    it('preserves bank-specific login fields (id, num, username, userCode, nationalID, card6Digits) with token', () => {
+      const config = {
+        id: '123456789',
+        num: 'SUB1',
+        username: 'visacal-user',
+        userCode: 'poalim-code',
+        nationalID: '987654321',
+        card6Digits: '654321',
+        password: TEST_CREDENTIAL,
+        otpLongTermToken: 'warm-tok',
+      } as IBankConfig;
+      const creds = buildCredentials(config) as Record<string, unknown>;
+      expect(creds).toMatchObject({
+        id: '123456789',
+        num: 'SUB1',
+        username: 'visacal-user',
+        userCode: 'poalim-code',
+        nationalID: '987654321',
+        card6Digits: '654321',
+        password: TEST_CREDENTIAL,
+        otpLongTermToken: 'warm-tok',
+      });
+    });
   });
 
   describe('phoneNumber normalisation', () => {

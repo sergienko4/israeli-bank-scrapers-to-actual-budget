@@ -297,4 +297,30 @@ describe('E2E: Pepper device login', () => {
     expect(pepper.issued).toHaveLength(2);
     expect(storedUnder(deviceKey(FIRST))).toBe(pepper.issued[0]);
   });
+
+  it('captures and resumes device-memory state for a FIBI bank (beinleumi)', async () => {
+    const deviceState = `v1.${fakeUuid()}`;
+    const sentStates: (string | undefined)[] = [];
+    provider.createScraper.mockImplementation((options: {
+      persistentAuthState?: string;
+      onPersistentAuthStateUpdate?: (state: string) => Promise<void>;
+    }) => ({
+      /**
+       * Records the sent device-memory state and enrolls on cold start.
+       * @returns Empty successful scrape result.
+       */
+      scrape: async (): Promise<IScraperScrapingResult> => {
+        sentStates.push(options.persistentAuthState);
+        if (options.persistentAuthState === undefined) await options.onPersistentAuthStateUpdate?.(deviceState);
+        return { success: true, accounts: [] };
+      },
+    }));
+    const targets = [{ actualAccountId: fakeUuid(), accountNumbers: 'all' as const }];
+    const bankConfig: IBankConfig = { username: 'fibi-user', password: 'fibi-password', targets };
+    const [first, second] = [await runImport({ entry: 'beinleumi', bankConfig }), await runImport({ entry: 'beinleumi', bankConfig })];
+    expect([first.result.success, second.result.success]).toEqual([true, true]);
+    expect(sentStates).toEqual([undefined, deviceState]);
+    expect(storedUnder('beinleumi-device:beinleumi')).toBe(deviceState);
+    expect(warningsOf(first)).toBe('[]');
+  });
 });

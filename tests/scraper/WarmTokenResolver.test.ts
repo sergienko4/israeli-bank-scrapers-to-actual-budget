@@ -61,6 +61,8 @@ interface ISeedArrangement {
 
 /** How a case wires one resolution. */
 interface IResolveSetup {
+  /** The bank; OneZero unless given. */
+  readonly companyType?: CompanyTypes;
   /** The configured `otpLongTermToken`; none unless given. */
   readonly seed?: unknown;
   /** The attempt's login; {@link ACCOUNT_LOGIN} unless given. */
@@ -102,7 +104,7 @@ function configWith(seed: unknown): IBankConfig {
 function resolveOver(store: IBankTokenStore, setup: IResolveSetup = {}): IResolved {
   const logger = spyLogger();
   const capture: IAuthFlowCaptureParams = {
-    storeKey: STORE_KEY, companyType: CompanyTypes.OneZero,
+    storeKey: STORE_KEY, companyType: setup.companyType ?? CompanyTypes.OneZero,
     login: setup.login ?? ACCOUNT_LOGIN, store, logger,
   };
   const context: ILoginContext = { capture, refusals: setup.refusals ?? makeRefusals() };
@@ -508,6 +510,17 @@ describe('resolveWarmToken', () => {
       const { store } = makeStore();
 
       const { logger } = resolveOver(store, { canAskForOtp: true });
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      CompanyTypes.Hapoalim, CompanyTypes.Yahav, CompanyTypes.VisaCal,
+      CompanyTypes.Isracard, CompanyTypes.Amex,
+    ])('does not warn about the fix for %s, whose cold login does not require an SMS code', (companyType) => {
+      const { store } = makeStore();
+
+      const { logger } = resolveOver(store, { companyType, canAskForOtp: false });
 
       expect(logger.warn).not.toHaveBeenCalled();
     });

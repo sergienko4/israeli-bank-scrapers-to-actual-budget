@@ -47,9 +47,8 @@ export default function buildCredentials(
   const phone = phoneNumber ? coerceCredsPhone(phoneNumber, bankId ?? '') : '';
   if (otpLongTermToken) {
     return {
-      email: email ?? '', password: password ?? '',
-      ...(phone ? { phoneNumber: phone } : {}),
-      otpLongTermToken,
+      id: bankId, num, username, userCode, nationalID, card6Digits, email: email ?? '',
+      password: password ?? '', ...(phone ? { phoneNumber: phone } : {}), otpLongTermToken,
       ...(otpRetriever ? { otpCodeRetriever: otpRetriever } : {}),
     };
   }

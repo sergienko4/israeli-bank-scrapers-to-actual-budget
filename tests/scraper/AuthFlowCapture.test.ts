@@ -131,8 +131,14 @@ describe('buildTokenStoreKey', () => {
   });
 });
 
+const WARM_START_BANKS = [
+  CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox,
+  CompanyTypes.Hapoalim, CompanyTypes.Yahav, CompanyTypes.VisaCal,
+  CompanyTypes.Isracard, CompanyTypes.Amex,
+] as const;
+
 describe('attachAuthFlowCapture', () => {
-  it.each([CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox])(
+  it.each(WARM_START_BANKS)(
     'stores the token %s hands back',
     async (companyType) => {
       const { store, fileSystem } = makeStore();

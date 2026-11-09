@@ -380,6 +380,18 @@ describe('forgetRefusedState', () => {
       expect(forgetRefusedState(watch, failed('GENERIC', `${LOGIN_STEP} HTTP 401`))).toBe(false);
       expect(linesLogged(logger)).toEqual([]);
     });
+
+    it('removes a rejected FIBI device-memory state so the next run re-enrolls', () => {
+      const { store, fileSystem } = makeStore();
+      const fibiKey = `beinleumi-device:${ACCOUNT_KEY}`;
+      seedRecords(fileSystem, { [fibiKey]: { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN } });
+      const { watch } = attempt(store, CompanyTypes.Beinleumi);
+
+      const isRemoved = forgetRefusedState(watch, failed('GENERIC', 'persistent auth state invalid: deviceId'));
+
+      expect(isRemoved).toBe(true);
+      expect(storedRecords(fileSystem)).not.toHaveProperty([fibiKey]);
+    });
   });
 });
 

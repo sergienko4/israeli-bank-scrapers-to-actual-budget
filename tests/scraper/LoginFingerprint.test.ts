@@ -90,4 +90,12 @@ describe('loginFingerprint', () => {
   it('refuses a bank the scraper does not know', () => {
     expect(loginFingerprint('noSuchBank', configWith()).success).toBe(false);
   });
+
+  it('fingerprints yahav identically whether num or its legacy username alias is set', () => {
+    const withNum = fingerprintOf('yahav', { num: 'YAHAV123', nationalID: '012345678' });
+    const withUsername = fingerprintOf('yahav', { num: undefined, username: 'YAHAV123', nationalID: '012345678' });
+
+    expect(withUsername).toBe(withNum);
+    expect(fingerprintOf('yahav', { num: undefined, username: 'OTHER123', nationalID: '012345678' })).not.toBe(withNum);
+  });
 });

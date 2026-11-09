@@ -107,13 +107,17 @@ For automated handling, see [OTP auto-forward](https://github.com/sergienko4/isr
 
 ### Long-term token
 
-OneZero and PayBox return a long-term token after an SMS login. The
-importer saves it and sends it on later logins, so they skip the SMS. You do
-not need to set anything.
+OneZero, PayBox, Hapoalim, Yahav, Visa Cal, Isracard and Amex return a
+long-term token or session bundle after login. The importer saves it and sends
+it on later logins (skipping SMS for OneZero, PayBox and Hapoalim, skipping
+device re-registration for Yahav, and resuming key/biometric login for
+Visa Cal, Isracard and Amex). You do not need to set anything.
 
-Pepper keeps its login another way: one SMS enrolls the importer as a device,
-and the importer saves that device's state in the same file, under
-`pepper-device:<entry name>`. It never sends Pepper a long-term token. See
+Pepper and the FIBI family (Beinleumi, Massad, Otsar Hahayal and Pagi) keep
+their login another way: the importer saves a bound-device or device-memory
+state in the same file, under `<bank id>-device:<entry name>` (for example
+`pepper-device:<entry name>` or `beinleumi-device:<entry name>`), and never
+sends `otpLongTermToken`. See
 [Pepper](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md#2fa--otp).
 
 - **Where it is saved:** `bank-tokens.json` on the data volume (`/app/data`,

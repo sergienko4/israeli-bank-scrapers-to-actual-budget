@@ -237,6 +237,30 @@ describe('E2E: long-term token capture', () => {
     expect(existsSync(store.tokensPath)).toBe(false);
   });
 
+  it('captures and replays a warm-start token for hapoalim while preserving userCode on the warm run', async () => {
+    const token = `v1.${fakeUuid()}`;
+    const sentCreds: Record<string, unknown>[] = [];
+    provider.createScraper.mockImplementation((options: ScraperOptions) => ({
+      /**
+       * Records credentials and emits the warm token.
+       * @param creds - Scraper credentials sent by the importer.
+       * @returns Successful scrape result with persistentOtpToken.
+       */
+      scrape: async (creds: Record<string, unknown>): Promise<IScraperScrapingResult> => {
+        sentCreds.push(creds);
+        await options.onAuthFlowComplete?.({ longTermToken: token, bearer: '' });
+        return { ...scrapedAccount(), persistentOtpToken: token };
+      },
+    }));
+    const targets = [{ actualAccountId: fakeUuid(), accountNumbers: 'all' as const }];
+    const bankConfig = { userCode: 'POALIM99', password: 'secret-password', targets };
+    const first = await runImport({ entry: 'hapoalim', bankConfig });
+    const second = await runImport({ entry: 'hapoalim', bankConfig });
+    expect([first.result.success, second.result.success]).toEqual([true, true]);
+    expect(sentCreds[0]?.otpLongTermToken).toBeUndefined();
+    expect(sentCreds[1]).toMatchObject({ userCode: 'POALIM99', password: 'secret-password', otpLongTermToken: token });
+  });
+
   describe('when a login outlasts its try', () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });

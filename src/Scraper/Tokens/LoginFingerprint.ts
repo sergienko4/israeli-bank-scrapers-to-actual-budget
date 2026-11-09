@@ -29,6 +29,11 @@ const PROVIDER_FORM: Readonly<Record<string, (raw: string) => string>> = {
   phoneNumber: toProviderPhone,
 };
 
+/** Legacy config field aliases upstream resolves at login time (e.g., Yahav `num` <- `username`). */
+const FIELD_ALIASES: Readonly<Record<string, keyof IBankConfig>> = {
+  num: 'username',
+};
+
 /**
  * The login fields that identify an account at a bank.
  * @param companyType - Provider company id of the bank.
@@ -41,15 +46,28 @@ function identityFieldsOf(companyType: string): readonly string[] {
 }
 
 /**
+ * Reads a login field from the config, falling back to its legacy alias when empty.
+ * @param bankConfig - The account's config entry.
+ * @param field - Name of the login field.
+ * @returns The raw string value, or '' when missing or not a string.
+ */
+function rawFieldOf(bankConfig: IBankConfig, field: string): string {
+  const direct: unknown = bankConfig[field as keyof IBankConfig];
+  if (typeof direct === 'string' && direct !== '') return direct;
+  const alias = Object.hasOwn(FIELD_ALIASES, field) ? FIELD_ALIASES[field] : undefined;
+  const fallback: unknown = alias === undefined ? undefined : bankConfig[alias];
+  return typeof fallback === 'string' ? fallback : '';
+}
+
+/**
  * One identity field in the form the provider receives it.
  * @param bankConfig - The account's config entry.
  * @param field - Name of the login field.
  * @returns The provider-facing value, or '' when the field is not a string.
  */
 function providerValueOf(bankConfig: IBankConfig, field: string): string {
-  const raw: unknown = bankConfig[field as keyof IBankConfig];
-  if (typeof raw !== 'string') return '';
-  if (!Object.hasOwn(PROVIDER_FORM, field)) return raw;
+  const raw = rawFieldOf(bankConfig, field);
+  if (raw === '' || !Object.hasOwn(PROVIDER_FORM, field)) return raw;
   return PROVIDER_FORM[field](raw);
 }
 

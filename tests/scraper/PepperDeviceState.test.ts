@@ -309,6 +309,36 @@ describe('attachDeviceAuth', () => {
       expect(linesLogged(logger)).toEqual([]);
     },
   );
+
+  describe.each([
+    [CompanyTypes.Beinleumi, 'beinleumi-device:primary'],
+    [CompanyTypes.Massad, 'massad-device:primary'],
+    [CompanyTypes.OtsarHahayal, 'otsarhahayal-device:primary'],
+    [CompanyTypes.Pagi, 'pagi-device:primary'],
+  ])('FIBI device-memory bank %s (%s)', (companyType, fibiDeviceKey) => {
+    it('attaches the save callback without warning when canAskForOtp is false on cold start', () => {
+      const { store } = makeStore();
+
+      const { target, stateWasSent, logger } = attachOver(store, { companyType, canAskForOtp: false });
+
+      expect(target.onPersistentAuthStateUpdate).toBeTypeOf('function');
+      expect(target).not.toHaveProperty('persistentAuthState');
+      expect(stateWasSent).toBe(false);
+      expect(linesLogged(logger)).toEqual([]);
+    });
+
+    it('sends the stored device-memory state and saves a new state under its own device key', async () => {
+      const { store, fileSystem } = makeStore();
+      const enrolled = fakeToken();
+
+      await saveHookOf(attachOver(store, { companyType }).target)(enrolled);
+
+      expect(storedRecords(fileSystem)[fibiDeviceKey]).toMatchObject({ token: enrolled, login: ACCOUNT_LOGIN });
+      const resumed = attachOver(store, { companyType, canAskForOtp: false });
+      expect(resumed.target.persistentAuthState).toBe(enrolled);
+      expect(resumed.stateWasSent).toBe(true);
+    });
+  });
 });
 
 describe('the save callback', () => {
