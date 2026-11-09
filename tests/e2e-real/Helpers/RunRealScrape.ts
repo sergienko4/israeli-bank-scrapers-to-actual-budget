@@ -9,7 +9,6 @@ import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 
 import buildCredentials from '../../../src/Scraper/CredentialsBuilder.js';
 import type { IBankConfig } from '../../../src/Types/Index.js';
-import captureApiFailures from './CaptureApiFailures.js';
 
 const DAYS_BACK = 7;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -32,9 +31,6 @@ export async function runRealScrape(
   const options = {
     companyId: companyType,
     startDate,
-    args: [],
-    defaultTimeout: 120_000,
-    preparePage: captureApiFailures(),
   };
   const scraper = createScraper(options);
   const credentials = buildCredentials(bankConfig, otpRetriever);

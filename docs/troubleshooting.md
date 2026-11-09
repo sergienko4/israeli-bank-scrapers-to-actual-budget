@@ -92,7 +92,7 @@ it does not ask again. Other banks still ask for a fresh code in the same run.
 ## "The scraper hid the real reason behind its one-SMS-login limit"
 
 **Symptom:** a OneZero or PayBox import fails with `already spent its one
-cold SMS login`, often with no SMS code asked for. The log and Telegram add
+cold login`, often with no SMS code asked for. The log and Telegram add
 `The login failed, and the scraper hid the real reason behind its
 one-SMS-login limit`.
 

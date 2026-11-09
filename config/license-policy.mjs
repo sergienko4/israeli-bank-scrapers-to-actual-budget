@@ -46,6 +46,7 @@ export const ALLOWED_DEPENDENCY_LICENSES = [
   'CC0-1.0',
   'CC-BY-4.0',
   'Python-2.0',
+  'PolyForm-Noncommercial-1.0.0',
   'MPL-2.0',
   'AGPL-3.0-or-later',
   'GPL-3.0-only',

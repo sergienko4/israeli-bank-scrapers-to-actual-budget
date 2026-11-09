@@ -10,5 +10,5 @@ This page is retained only to preserve deep links from older documentation.
 
 ## See also
 
-- [Banks index](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) - all 19 banks
+- [Banks index](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/index.md) - all 17 banks
 - [Mizrahi Tefahot](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/mizrahi.md)

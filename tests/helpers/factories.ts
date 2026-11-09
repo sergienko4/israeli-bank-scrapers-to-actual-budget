@@ -482,7 +482,7 @@ export function assertProcedureSuccess<T>(
 /** Ordered list of bank ids that have explicit credential specs. */
 export const SPEC_BANK_IDS: readonly string[] = Object.freeze(Object.keys(CREDENTIAL_SPECS));
 
-/** Every canonical bank id in the default registry (19 entries today). */
+/** Every canonical bank id in the default registry (17 entries today). */
 export const ALL_REGISTRY_BANK_IDS: readonly string[] = Object.freeze(
   DEFAULT_BANK_REGISTRY.list().map(entry => entry.bankId),
 );

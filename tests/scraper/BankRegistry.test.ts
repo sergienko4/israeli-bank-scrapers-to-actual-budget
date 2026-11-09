@@ -15,8 +15,7 @@ const ALIAS_TO_BANK_ID: Record<string, string> = {
   beinleumi: 'beinleumi', massad: 'massad', yahav: 'yahav',
   visaCal: 'visacal', visacal: 'visacal',
   max: 'max', isracard: 'isracard', amex: 'amex',
-  beyahadBishvilha: 'beyahadbishvilha', beyahadbishvilha: 'beyahadbishvilha',
-  behatsdaa: 'behatsdaa', pagi: 'pagi',
+  pagi: 'pagi',
   oneZero: 'onezero', onezero: 'onezero',
   payBox: 'paybox', paybox: 'paybox',
   pepper: 'pepper',
@@ -25,8 +24,8 @@ const ALIAS_TO_BANK_ID: Record<string, string> = {
 describe('createBankRegistry', () => {
   const registry = createBankRegistry();
 
-  it('exposes 19 canonical bank entries', () => {
-    expect(registry.list()).toHaveLength(19);
+  it('exposes 17 canonical bank entries', () => {
+    expect(registry.list()).toHaveLength(17);
   });
 
   it.each(Object.entries(ALIAS_TO_BANK_ID))(

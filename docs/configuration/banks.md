@@ -150,7 +150,7 @@ and the importer saves that device's state in the same file, under
   otherwise the run warns and logs in with an SMS. A damaged file is set aside
   before the next token is saved.
 - **A token that ends a run with the one-SMS-login error is retired.** When a
-  run sends a token and fails with `already spent its one cold SMS login`, the
+  run sends a token and fails with `already spent its one cold login`, the
   bank library has hidden the real reason, and the same token may fail the
   same way on every run. So the importer records the token as not accepted,
   removes it from `bank-tokens.json` if it was the saved one, and skips it
@@ -205,7 +205,7 @@ the `<bank id>:<entry name>` above):
 | `Could not read the long-term token for <key>` | The file could not be read, so no token was sent; the warning names the cause. |
 | `No usable long-term token for <key>, and this run cannot ask for an SMS code` | Turn on `twoFactorAuth` for one SMS login, or restore the token file. |
 | `Could not store the long-term token for <key>` | The next run needs an SMS; check that `/app/data` is writable. |
-| `The stored long-term token for <key> was not accepted; it is retired, so the next run logs in without it` | The run failed with `already spent its one cold SMS login` after sending the saved token. The token was recorded as retired, and its saved copy removed unless a warning before this one says otherwise; later runs skip it. The next run may still send `otpLongTermToken`, if it holds a different usable token; otherwise it asks for one SMS code, or shows the real error. |
+| `The stored long-term token for <key> was not accepted; it is retired, so the next run logs in without it` | The run failed with `already spent its one cold login` after sending the saved token. The token was recorded as retired, and its saved copy removed unless a warning before this one says otherwise; later runs skip it. The next run may still send `otpLongTermToken`, if it holds a different usable token; otherwise it asks for one SMS code, or shows the real error. |
 | `The configured long-term token for <key> was not accepted; it is retired, so the next run logs in without it` | As above, for `otpLongTermToken`. Later runs skip it, so remove or replace it. |
 | `The <stored or configured> long-term token for <key> was not accepted and could not be retired, so the next run may repeat this — remove otpLongTermToken` | The run could not record the token as retired; a warning before it names the cause. Check that `/app/data` is writable, and remove `otpLongTermToken`. |
 | `Could not record the refused long-term token for <key>` / `Could not remove the long-term token for <key>` | A step of retiring a token failed; the warning names the cause. The `was not accepted` warning that follows says whether the token is retired. A token that is retired but could not be removed stays in the file and is skipped. |

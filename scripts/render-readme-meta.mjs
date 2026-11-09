@@ -168,7 +168,6 @@ function renderTechStack(config, pkg) {
     `- **TypeScript** ${tsVer} (strict mode, ES2022)`,
     `- **Vitest** ${vitestVer} (v8 coverage)`,
     `- **Scraper** [\`@sergienko4/israeli-bank-scrapers\`](https://github.com/sergienko4/israeli-bank-scrapers) ${scraperVer}`,
-    '- **Browser** Camoufox (Firefox + C++-level fingerprint masking)',
     `- **Actual Budget API** \`@actual-app/api\` ${pkg.dependencies?.['@actual-app/api'] ?? 'unknown'}`,
   ].join('\n');
 }

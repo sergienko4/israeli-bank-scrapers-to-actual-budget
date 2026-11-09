@@ -11,24 +11,10 @@ exports[`portal payload identity > serves the manifest unchanged, to full nestin
         "password",
       ],
     },
-    "behatsdaa": {
-      "displayName": "Behatsdaa",
-      "required": [
-        "id",
-        "password",
-      ],
-    },
     "beinleumi": {
       "displayName": "Beinleumi",
       "required": [
         "username",
-        "password",
-      ],
-    },
-    "beyahadbishvilha": {
-      "displayName": "Beyahad Bishvilha",
-      "required": [
-        "id",
         "password",
       ],
     },
@@ -156,8 +142,6 @@ exports[`portal payload identity > serves the manifest unchanged, to full nestin
     "max",
     "isracard",
     "amex",
-    "beyahadbishvilha",
-    "behatsdaa",
     "pagi",
     "onezero",
     "paybox",

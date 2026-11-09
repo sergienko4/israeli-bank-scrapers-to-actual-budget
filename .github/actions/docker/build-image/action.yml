@@ -3,10 +3,9 @@ description: |
   Composite that consolidates the Docker build sequence used by pr.yml (trivy),
   release.yml (one native build per architecture, pushed by digest), and
   _e2e-suite.yml. Steps:
-    1. Restore Camoufox cache (composite)
-    2. Set up Buildx
-    3. Build (and optionally push) the image
-    4. Report the runner's free disk, even when the build fails
+    1. Set up Buildx
+    2. Build (and optionally push) the image
+    3. Report the runner's free disk, even when the build fails
   The runner starts with ~86 GB free and a release build leg still has
   ~78 GB left after its build, so no step deletes preinstalled toolchains
   to make room.
@@ -61,7 +60,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/docker/camoufox-cache
     - uses: docker/setup-buildx-action@v4
 
     - name: Build Docker image
@@ -78,7 +76,6 @@ runs:
         provenance: ${{ inputs.provenance }}
         sbom: ${{ inputs.sbom }}
         build-args: |
-          SKIP_BROWSER_FETCH=true
           APT_CACHE_BUST=${{ github.run_id }}
 
     - name: Report free disk

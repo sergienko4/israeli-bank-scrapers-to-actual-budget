@@ -8,13 +8,7 @@
 !package-lock.json
 !tsconfig.json
 !src/
-!config/camoufox-pin.json
 !config/tsc-strict-src.sh
-!scripts/camoufox-fetch.mjs
-!scripts/camoufox-pin-logic.mjs
-!scripts/camoufox-pinned-fetcher.mjs
-!scripts/camoufox-font-prune.mjs
-!.camoufox-cache/
 
 # OS litter inside the re-included directories.
 **/.DS_Store

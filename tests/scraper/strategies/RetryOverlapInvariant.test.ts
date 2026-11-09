@@ -34,11 +34,6 @@ vi.mock('@sergienko4/israeli-bank-scrapers', async (importOriginal) => {
   return { ...actual, createScraper: provider.createScraper };
 });
 
-vi.mock('../../../src/Scraper/ScraperOptionsBuilder.js', () => ({
-  buildChromeArgs: vi.fn(() => []),
-  getChromeDataDir: vi.fn(() => '/mock/chrome'),
-}));
-
 /** Config entry every case scrapes; its store key is `<bankId>:<ENTRY>`. */
 const ENTRY = 'primary';
 

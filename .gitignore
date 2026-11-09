@@ -66,10 +66,6 @@ docs/api/
 # MkDocs build output (docs site is published from CI, not committed)
 site/
 
-# Camoufox cache (CI-injected, only .gitkeep committed)
-.camoufox-cache/*
-!.camoufox-cache/.gitkeep
-
 # understand-anything plugin local state (per-developer knowledge graph)
 # https://github.com/Lum1104/Understand-Anything
 .understand-anything/
@@ -78,7 +74,7 @@ site/
 .eslintcache
 
 # npm config is per-developer. A committed .npmrc overrides every
-# contributor's ~/.npmrc, because project config outranks user config —
+# contributor's ~/.npmrc, because project config outranks user config ï¿½
 # so pinning the default registry here is a no-op in CI while breaking
 # installs behind a corporate proxy. Registry provenance is enforced by
 # the resolved URLs and integrity hashes in package-lock.json instead.

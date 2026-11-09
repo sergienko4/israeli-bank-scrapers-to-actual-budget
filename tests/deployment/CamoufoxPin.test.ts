@@ -72,16 +72,6 @@ function githubYamlFiles(): string[] {
 }
 
 /**
- * Lists the installer modules the Docker build must copy.
- * @returns Repository-relative paths of scripts/camoufox-*.mjs.
- */
-function installerModules(): string[] {
-  return readdirSync(join(ROOT, 'scripts'))
-    .filter((file) => /^camoufox-.+\.mjs$/.test(file))
-    .map((file) => `scripts/${file}`);
-}
-
-/**
  * Reads the steps of the CI Camoufox cache action.
  * @returns The composite action steps.
  */
@@ -134,51 +124,11 @@ describe('Camoufox install sites', () => {
   });
 });
 
-describe('Dockerfile Camoufox step', () => {
-  const lines = read('Dockerfile').split('\n');
-  const installLine = lines.findIndex(
-    (line) => line.includes(`node ${INSTALLER}`) && !line.includes('--verify'),
-  );
-  const verifyLine = lines.findIndex(
-    (line) =>
-      line.includes(`node ${INSTALLER} --verify`) && !line.includes('/tmp/camoufox-precache'),
-  );
-  const precacheLine = lines.findIndex((line) => line.includes('cp -r /tmp/camoufox-precache/'));
-  const branchStart = lines.findIndex((line) => line.includes('if [ "$SKIP_BROWSER_FETCH"'));
-  const branchEnd = lines.findIndex((line, index) => index >= branchStart && /;\s*then/.test(line));
-  const precacheCondition = lines.slice(branchStart, branchEnd + 1).join('\n');
+describe('Dockerfile browser exclusion', () => {
+  const dockerfile = read('Dockerfile');
 
-  it('installs through the pinned installer when no precached binary is used', () => {
-    expect(installLine).toBeGreaterThanOrEqual(0);
-  });
-
-  it('verifies the pin after both the precache and the install path', () => {
-    const verifiedAfter = [precacheLine, installLine].map((line) => line >= 0 && line < verifyLine);
-
-    expect(verifiedAfter).toEqual([true, true]);
-  });
-
-  it('uses the precache only when --verify accepts it, whatever the architecture', () => {
-    expect({
-      verified: precacheCondition.includes(
-        `CAMOUFOX_INSTALL_DIR=/tmp/camoufox-precache node ${INSTALLER} --verify`,
-      ),
-      archGated: /\$ARCH|x86_64|aarch64/.test(precacheCondition),
-      beforeCopy: branchEnd >= 0 && branchEnd < precacheLine,
-    }).toEqual({ verified: true, archGated: false, beforeCopy: true });
-  });
-
-  it('copies the pin and every installer module before installing', () => {
-    const required = [PIN_FILE, ...installerModules()];
-
-    const notCopiedInTime = required.filter((file) => {
-      const copyLine = lines.findIndex(
-        (line) => /^COPY\s/.test(line) && line.split(/\s+/).includes(file),
-      );
-      return copyLine < 0 || installLine < 0 || copyLine > installLine;
-    });
-
-    expect(notCopiedInTime).toEqual([]);
+  it('does not install Camoufox or copy browser installer scripts into the production image', () => {
+    expect(dockerfile).not.toMatch(/camoufox|SKIP_BROWSER_FETCH|playwright/iu);
   });
 });
 

@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-06-17",
-  "totalFiles": 242,
+  "generatedAt": "2026-11-09",
+  "totalFiles": 363,
   "scoreDistribution": {
     "critical8plus": 0,
     "high5to7": 1,
-    "medium3to4": 0,
-    "low1to2": 27,
-    "clean0": 214
+    "medium3to4": 24,
+    "low1to2": 43,
+    "clean0": 295
   },
   "wrongDirectionDeps": 0,
   "files": [
@@ -42,46 +42,413 @@
       "score": 6
     },
     {
+      "path": "src/Config/ConfigWriter.ts",
+      "layer": "CC",
+      "lines": 256,
+      "valueImports": 11,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Portal/AppTokenStore.ts",
+      "layer": "(none)",
+      "lines": 415,
+      "valueImports": 5,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "SecureJsonStore",
+        "StorageError"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Portal/PortalAuthRoutes.ts",
+      "layer": "(none)",
+      "lines": 320,
+      "valueImports": 9,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Portal/PortalRuntime.ts",
+      "layer": "(none)",
+      "lines": 434,
+      "valueImports": 5,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Scheduler/Config/ConfigFileReader.ts",
+      "layer": "SC",
+      "lines": 88,
+      "valueImports": 5,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Config/ConfigEncryption.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        },
+        {
+          "to": "src/Config/Loaders/ConfigFileText.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        }
+      ],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Scheduler/Config/ConfigLoaderFactory.ts",
+      "layer": "SC",
+      "lines": 21,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Config/ConfigLoader.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        },
+        {
+          "to": "src/Config/ConfigPath.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        }
+      ],
+      "newClasses": [
+        "ConfigLoader"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Scraper/Tokens/BankTokenStore.ts",
+      "layer": "BP",
+      "lines": 449,
+      "valueImports": 6,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date",
+        "Map",
+        "SecureJsonStore"
+      ],
+      "newCount": 5,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Scraper/Tokens/PepperDeviceState.ts",
+      "layer": "BP",
+      "lines": 302,
+      "valueImports": 7,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "StorageError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Scraper/Tokens/TokenRecordCipher.ts",
+      "layer": "BP",
+      "lines": 300,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Config/ConfigEncryption.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        }
+      ],
+      "newClasses": [
+        "SealingTokenCipher"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Scraper/Tokens/WarmTokenResolver.ts",
+      "layer": "BP",
+      "lines": 408,
+      "valueImports": 6,
+      "typeImports": 6,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/AuditLogService.ts",
+      "layer": "IS",
+      "lines": 301,
+      "valueImports": 7,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date",
+        "Error",
+        "IAuditEntry",
+        "SecureJsonStore",
+        "StorageError"
+      ],
+      "newCount": 6,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/ReceiptApiAdapter.ts",
+      "layer": "IS",
+      "lines": 51,
+      "valueImports": 5,
+      "typeImports": 2,
+      "crossLayerValueDeps": [
+        {
+          "to": "src/Config/ConfigLoader.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        },
+        {
+          "to": "src/Config/ConfigPath.ts",
+          "toLayer": "CC",
+          "dynamic": false,
+          "direction": "inward"
+        }
+      ],
+      "newClasses": [
+        "ConfigLoader",
+        "ConfigurationError"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpRequestStore.ts",
+      "layer": "IS",
+      "lines": 383,
+      "valueImports": 9,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "OtpFileNames",
+        "OtpFileRemoval",
+        "SecureJsonStore",
+        "StorageError"
+      ],
+      "newCount": 5,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Storage/NodeFileSystem.ts",
+      "layer": "(none)",
+      "lines": 419,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "TextDecoder"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
+      "path": "src/Storage/SecureJsonStore.ts",
+      "layer": "(none)",
+      "lines": 431,
+      "valueImports": 6,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 4
+    },
+    {
       "path": "src/Config/ConfigLoader.ts",
       "layer": "CC",
-      "lines": 168,
-      "valueImports": 10,
+      "lines": 245,
+      "valueImports": 12,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
       "ocpRisks": [],
-      "score": 2
+      "score": 3
+    },
+    {
+      "path": "src/Logger/SecretRedaction.ts",
+      "layer": "CC",
+      "lines": 330,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "RegExp"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
+      "path": "src/Logger/SecretValues.ts",
+      "layer": "CC",
+      "lines": 390,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "RegExp",
+        "SecretValues",
+        "Set"
+      ],
+      "newCount": 4,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
+      "path": "src/Portal/AppTokenRoutes.ts",
+      "layer": "(none)",
+      "lines": 261,
+      "valueImports": 8,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/AttemptRunner.ts",
+      "layer": "BP",
+      "lines": 292,
+      "valueImports": 8,
+      "typeImports": 7,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
+      "layer": "BP",
+      "lines": 332,
+      "valueImports": 6,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
+      "path": "src/Services/Transaction/CardRefundCleanup.ts",
+      "layer": "IS",
+      "lines": 328,
+      "valueImports": 5,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
+      "path": "src/Services/Transaction/TransactionBatchImporter.ts",
+      "layer": "IS",
+      "lines": 332,
+      "valueImports": 4,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map",
+        "Set"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 3
+    },
+    {
+      "path": "src/Storage/StoreRecords.ts",
+      "layer": "(none)",
+      "lines": 311,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map",
+        "Set"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 3
     },
     {
       "path": "src/Importer/CoreServicesWiring.ts",
       "layer": "(none)",
       "lines": 130,
-      "valueImports": 14,
-      "typeImports": 4,
+      "valueImports": 13,
+      "typeImports": 5,
       "crossLayerValueDeps": [],
       "newClasses": [
         "AccountImporter",
-        "AuditLogService",
         "DryRunCollector",
         "HistoryCategoryResolver",
         "MetricsService",
         "NotificationService",
+        "OtpPrompterWiring",
         "ReconciliationService",
-        "TelegramNotifier",
         "TransactionService",
-        "TranslateCategoryResolver",
-        "TwoFactorService"
+        "TranslateCategoryResolver"
       ],
-      "newCount": 13,
+      "newCount": 11,
       "ocpRisks": [],
       "score": 2
     },
     {
       "path": "src/Importer/PipelineComposition.ts",
       "layer": "(none)",
-      "lines": 125,
-      "valueImports": 11,
+      "lines": 131,
+      "valueImports": 12,
       "typeImports": 6,
       "crossLayerValueDeps": [],
       "newClasses": [
@@ -95,42 +462,42 @@
       "score": 2
     },
     {
-      "path": "src/Scheduler/Config/ConfigFileReader.ts",
-      "layer": "SC",
-      "lines": 89,
-      "valueImports": 4,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Config/ConfigEncryption.ts",
-          "toLayer": "CC",
-          "dynamic": false,
-          "direction": "inward"
-        }
+      "path": "src/Portal/AppAuthRoutes.ts",
+      "layer": "(none)",
+      "lines": 203,
+      "valueImports": 7,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "URLSearchParams"
       ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Portal/PortalApiRoutes.ts",
+      "layer": "(none)",
+      "lines": 203,
+      "valueImports": 8,
+      "typeImports": 6,
+      "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
       "ocpRisks": [],
       "score": 2
     },
     {
-      "path": "src/Scheduler/Config/ConfigLoaderFactory.ts",
-      "layer": "SC",
-      "lines": 20,
-      "valueImports": 1,
-      "typeImports": 1,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Config/ConfigLoader.ts",
-          "toLayer": "CC",
-          "dynamic": false,
-          "direction": "inward"
-        }
-      ],
+      "path": "src/Portal/PortalServer.ts",
+      "layer": "(none)",
+      "lines": 172,
+      "valueImports": 14,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
       "newClasses": [
-        "ConfigLoader"
+        "PortalConfigStore"
       ],
-      "newCount": 2,
+      "newCount": 1,
       "ocpRisks": [],
       "score": 2
     },
@@ -218,44 +585,38 @@
       "score": 2
     },
     {
-      "path": "src/Scrapers/Pipeline/Steps/ProcessAllBanksStep.ts",
-      "layer": "BP",
-      "lines": 277,
+      "path": "src/Services/TelegramPoller.ts",
+      "layer": "IS",
+      "lines": 267,
+      "valueImports": 6,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "TelegramPollHttp",
+        "TelegramPollRun",
+        "TelegramUpdateDispatcher"
+      ],
+      "newCount": 4,
+      "ocpRisks": [],
+      "score": 2
+    },
+    {
+      "path": "src/Config/BankConfigValidators.ts",
+      "layer": "CC",
+      "lines": 220,
       "valueImports": 5,
-      "typeImports": 5,
+      "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
       "ocpRisks": [],
-      "score": 2
-    },
-    {
-      "path": "src/Services/ReceiptApiAdapter.ts",
-      "layer": "IS",
-      "lines": 50,
-      "valueImports": 4,
-      "typeImports": 2,
-      "crossLayerValueDeps": [
-        {
-          "to": "src/Config/ConfigLoader.ts",
-          "toLayer": "CC",
-          "dynamic": false,
-          "direction": "inward"
-        }
-      ],
-      "newClasses": [
-        "ConfigLoader",
-        "ConfigurationError"
-      ],
-      "newCount": 2,
-      "ocpRisks": [],
-      "score": 2
+      "score": 1
     },
     {
       "path": "src/Config/ConfigValidator.ts",
       "layer": "CC",
-      "lines": 106,
-      "valueImports": 8,
+      "lines": 111,
+      "valueImports": 9,
       "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [
@@ -267,9 +628,51 @@
       "score": 1
     },
     {
+      "path": "src/Config/ManifestGate.ts",
+      "layer": "CC",
+      "lines": 215,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Config/Validators/BanksOfflineChecker.ts",
+      "layer": "CC",
+      "lines": 225,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Config/Validators/ConfigOnlineChecker.ts",
+      "layer": "CC",
+      "lines": 204,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "NetworkError"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
       "path": "src/Config/Validators/NotificationChannelValidators.ts",
       "layer": "CC",
-      "lines": 150,
+      "lines": 163,
       "valueImports": 1,
       "typeImports": 2,
       "crossLayerValueDeps": [],
@@ -281,14 +684,46 @@
       "score": 1
     },
     {
+      "path": "src/Importer/ConfigBootstrap.ts",
+      "layer": "(none)",
+      "lines": 94,
+      "valueImports": 7,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigLoader"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
       "path": "src/Importer/ImporterBootstrap.ts",
       "layer": "(none)",
-      "lines": 122,
-      "valueImports": 7,
+      "lines": 128,
+      "valueImports": 8,
       "typeImports": 4,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Importer/OtpPrompterWiring.ts",
+      "layer": "(none)",
+      "lines": 59,
+      "valueImports": 8,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AppOtpPrompter",
+        "ExpoPushNotifier",
+        "FallbackOtpPrompter",
+        "TelegramNotifier",
+        "TwoFactorService"
+      ],
+      "newCount": 5,
       "ocpRisks": [],
       "score": 1
     },
@@ -324,6 +759,116 @@
       "score": 1
     },
     {
+      "path": "src/Portal/AppRefreshRoutes.ts",
+      "layer": "(none)",
+      "lines": 193,
+      "valueImports": 7,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Portal/ConfigMutations.ts",
+      "layer": "(none)",
+      "lines": 232,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Portal/PortalBootstrap.ts",
+      "layer": "(none)",
+      "lines": 39,
+      "valueImports": 7,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigLoader"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Portal/PortalConfigStore.ts",
+      "layer": "(none)",
+      "lines": 188,
+      "valueImports": 8,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigLoader",
+        "ConfigurationError",
+        "Set"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Portal/PortalStores.ts",
+      "layer": "(none)",
+      "lines": 86,
+      "valueImports": 7,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/ScraperSetup.ts",
+      "layer": "BP",
+      "lines": 191,
+      "valueImports": 7,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Scraper/Tokens/AuthFlowCapture.ts",
+      "layer": "BP",
+      "lines": 241,
+      "valueImports": 3,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Scraper/Tokens/RefusedTokens.ts",
+      "layer": "BP",
+      "lines": 221,
+      "valueImports": 3,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map",
+        "SecureJsonStore",
+        "Set"
+      ],
+      "newCount": 5,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
       "path": "src/Scrapers/Pipeline/Steps/FinalizeImportStep.ts",
       "layer": "BP",
       "lines": 234,
@@ -336,10 +881,22 @@
       "score": 1
     },
     {
+      "path": "src/Services/Account/LiveAccountWriter.ts",
+      "layer": "IS",
+      "lines": 229,
+      "valueImports": 2,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
       "path": "src/Services/AccountImporter.ts",
       "layer": "IS",
-      "lines": 183,
-      "valueImports": 7,
+      "lines": 193,
+      "valueImports": 8,
       "typeImports": 7,
       "crossLayerValueDeps": [],
       "newClasses": [
@@ -352,9 +909,25 @@
       "score": 1
     },
     {
+      "path": "src/Services/Import/BatchFactory.ts",
+      "layer": "IS",
+      "lines": 203,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "IBatchTracker",
+        "IImportJob",
+        "Promise"
+      ],
+      "newCount": 4,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
       "path": "src/Services/ImportMediator.ts",
       "layer": "IS",
-      "lines": 168,
+      "lines": 189,
       "valueImports": 7,
       "typeImports": 3,
       "crossLayerValueDeps": [],
@@ -391,8 +964,8 @@
     {
       "path": "src/Services/Notifications/NotifierRegistry.ts",
       "layer": "IS",
-      "lines": 25,
-      "valueImports": 2,
+      "lines": 27,
+      "valueImports": 3,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -429,6 +1002,34 @@
       "score": 1
     },
     {
+      "path": "src/Services/Telegram/BatchFailureReply.ts",
+      "layer": "IS",
+      "lines": 205,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
+      "path": "src/Services/TelegramCommandFormatters.ts",
+      "layer": "IS",
+      "lines": 217,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 1
+    },
+    {
       "path": "src/Services/TelegramCommandHandler.ts",
       "layer": "IS",
       "lines": 187,
@@ -459,52 +1060,24 @@
       "score": 1
     },
     {
-      "path": "src/Services/TelegramPoller.ts",
-      "layer": "IS",
-      "lines": 242,
-      "valueImports": 5,
+      "path": "src/Storage/OwnedValues.ts",
+      "layer": "(none)",
+      "lines": 201,
+      "valueImports": 1,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [
-        "AbortController",
-        "Promise",
-        "TelegramPollHttp",
-        "TelegramPollRecovery",
-        "TelegramUpdateDispatcher"
+        "Set"
       ],
-      "newCount": 7,
+      "newCount": 2,
       "ocpRisks": [],
       "score": 1
-    },
-    {
-      "path": "src/Services/Transaction/TransactionBatchImporter.ts",
-      "layer": "IS",
-      "lines": 210,
-      "valueImports": 3,
-      "typeImports": 4,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 1
-    },
-    {
-      "path": "src/Config/BankConfigValidators.ts",
-      "layer": "CC",
-      "lines": 196,
-      "valueImports": 4,
-      "typeImports": 1,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 0
     },
     {
       "path": "src/Config/BankCredentialSpecs.ts",
       "layer": "CC",
-      "lines": 45,
-      "valueImports": 0,
+      "lines": 42,
+      "valueImports": 1,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -515,7 +1088,7 @@
     {
       "path": "src/Config/ConfigEncryption.ts",
       "layer": "CC",
-      "lines": 148,
+      "lines": 172,
       "valueImports": 3,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -529,8 +1102,8 @@
     {
       "path": "src/Config/ConfigLoaderValidator.ts",
       "layer": "CC",
-      "lines": 138,
-      "valueImports": 3,
+      "lines": 150,
+      "valueImports": 4,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -539,16 +1112,97 @@
       "score": 0
     },
     {
-      "path": "src/Config/Loaders/ConfigMerger.ts",
+      "path": "src/Config/ConfigManifest.ts",
       "layer": "CC",
-      "lines": 55,
-      "valueImports": 0,
+      "lines": 73,
+      "valueImports": 4,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [
-        "IImporterConfig"
+        "Set"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/ConfigPath.ts",
+      "layer": "CC",
+      "lines": 26,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/ConfigSecretValues.ts",
+      "layer": "CC",
+      "lines": 91,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/ConfigWriterWiring.ts",
+      "layer": "CC",
+      "lines": 18,
+      "valueImports": 2,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigWriter"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/CredentialsBackup.ts",
+      "layer": "CC",
+      "lines": 145,
+      "valueImports": 4,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "CredentialsBackup"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Loaders/ConfigFileText.ts",
+      "layer": "CC",
+      "lines": 193,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "TextDecoder"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Loaders/ConfigMerger.ts",
+      "layer": "CC",
+      "lines": 83,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigRecord",
+        "IImporterConfig"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -567,9 +1221,97 @@
     {
       "path": "src/Config/Loaders/JsonFileReader.ts",
       "layer": "CC",
-      "lines": 52,
-      "valueImports": 4,
+      "lines": 83,
+      "valueImports": 6,
       "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Manifest/AlertManifest.ts",
+      "layer": "CC",
+      "lines": 97,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Manifest/BankManifest.ts",
+      "layer": "CC",
+      "lines": 148,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Manifest/CoreManifest.ts",
+      "layer": "CC",
+      "lines": 89,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Manifest/ManifestTypes.ts",
+      "layer": "CC",
+      "lines": 85,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/Manifest/PortalManifest.ts",
+      "layer": "CC",
+      "lines": 61,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/ManifestPaths.ts",
+      "layer": "CC",
+      "lines": 158,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/SaveMarker.ts",
+      "layer": "CC",
+      "lines": 134,
+      "valueImports": 5,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [
         "ConfigurationError"
@@ -579,9 +1321,35 @@
       "score": 0
     },
     {
+      "path": "src/Config/SecretKeys.ts",
+      "layer": "CC",
+      "lines": 19,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Config/SecretSplitter.ts",
+      "layer": "CC",
+      "lines": 116,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Config/Validators/ActualOfflineChecker.ts",
       "layer": "CC",
-      "lines": 65,
+      "lines": 67,
       "valueImports": 1,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -593,40 +1361,14 @@
     {
       "path": "src/Config/Validators/BankDateValidators.ts",
       "layer": "CC",
-      "lines": 127,
+      "lines": 136,
       "valueImports": 1,
       "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [
         "Date"
       ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 0
-    },
-    {
-      "path": "src/Config/Validators/BanksOfflineChecker.ts",
-      "layer": "CC",
-      "lines": 160,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [],
-      "newClasses": [
-        "Set"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 0
-    },
-    {
-      "path": "src/Config/Validators/ConfigOnlineChecker.ts",
-      "layer": "CC",
-      "lines": 125,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
+      "newCount": 4,
       "ocpRisks": [],
       "score": 0
     },
@@ -643,10 +1385,22 @@
       "score": 0
     },
     {
+      "path": "src/Config/Validators/NotificationChannel.ts",
+      "layer": "CC",
+      "lines": 21,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Config/Validators/NotificationsOfflineChecker.ts",
       "layer": "CC",
-      "lines": 80,
-      "valueImports": 1,
+      "lines": 96,
+      "valueImports": 2,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -669,7 +1423,7 @@
     {
       "path": "src/Config/Validators/ReportFormatter.ts",
       "layer": "CC",
-      "lines": 43,
+      "lines": 49,
       "valueImports": 0,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -683,6 +1437,102 @@
       "layer": "CC",
       "lines": 63,
       "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Contract/AppAuth.ts",
+      "layer": "(none)",
+      "lines": 54,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Contract/Common.ts",
+      "layer": "(none)",
+      "lines": 47,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Contract/Config.ts",
+      "layer": "(none)",
+      "lines": 63,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Contract/Devices.ts",
+      "layer": "(none)",
+      "lines": 28,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Contract/Index.ts",
+      "layer": "(none)",
+      "lines": 17,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Contract/Manifest.ts",
+      "layer": "(none)",
+      "lines": 115,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Contract/Otp.ts",
+      "layer": "(none)",
+      "lines": 71,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Contract/Status.ts",
+      "layer": "(none)",
+      "lines": 67,
+      "valueImports": 1,
       "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -729,8 +1579,8 @@
     {
       "path": "src/Errors/ErrorFormatter.ts",
       "layer": "ST",
-      "lines": 88,
-      "valueImports": 0,
+      "lines": 99,
+      "valueImports": 1,
       "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -741,7 +1591,7 @@
     {
       "path": "src/Errors/ErrorTypes.ts",
       "layer": "ST",
-      "lines": 12,
+      "lines": 13,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -765,7 +1615,7 @@
     {
       "path": "src/Errors/ScraperErrorMessages.ts",
       "layer": "ST",
-      "lines": 60,
+      "lines": 198,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -776,6 +1626,18 @@
     },
     {
       "path": "src/Errors/ShutdownError.ts",
+      "layer": "ST",
+      "lines": 13,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Errors/StorageError.ts",
       "layer": "ST",
       "lines": 12,
       "valueImports": 0,
@@ -811,16 +1673,17 @@
       "score": 0
     },
     {
-      "path": "src/Importer/ConfigBootstrap.ts",
+      "path": "src/Importer/BankTokenStoreWiring.ts",
       "layer": "(none)",
-      "lines": 64,
-      "valueImports": 4,
-      "typeImports": 1,
+      "lines": 42,
+      "valueImports": 6,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [
-        "ConfigLoader"
+        "BankTokenStore",
+        "RefusedTokens"
       ],
-      "newCount": 1,
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -852,6 +1715,18 @@
         "TimeoutWrapper"
       ],
       "newCount": 5,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Importer/RuntimeStoreSweep.ts",
+      "layer": "(none)",
+      "lines": 32,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },
@@ -925,8 +1800,8 @@
     {
       "path": "src/Logger/LogFileReader.ts",
       "layer": "CC",
-      "lines": 90,
-      "valueImports": 2,
+      "lines": 97,
+      "valueImports": 3,
       "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [
@@ -939,9 +1814,9 @@
     {
       "path": "src/Logger/LoggerOptions.ts",
       "layer": "CC",
-      "lines": 24,
-      "valueImports": 0,
-      "typeImports": 1,
+      "lines": 171,
+      "valueImports": 1,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -987,6 +1862,18 @@
       "score": 0
     },
     {
+      "path": "src/Logger/MaskSpans.ts",
+      "layer": "CC",
+      "lines": 88,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Logger/PinoAdapter.ts",
       "layer": "CC",
       "lines": 101,
@@ -1013,9 +1900,251 @@
       "score": 0
     },
     {
+      "path": "src/Portal.ts",
+      "layer": "(none)",
+      "lines": 21,
+      "valueImports": 3,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/AppAuthCodes.ts",
+      "layer": "(none)",
+      "lines": 180,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/AppConsent.ts",
+      "layer": "(none)",
+      "lines": 106,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/AppRoutes.ts",
+      "layer": "(none)",
+      "lines": 50,
+      "valueImports": 5,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AppAuthCodes"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/AppSessionRoutes.ts",
+      "layer": "(none)",
+      "lines": 131,
+      "valueImports": 4,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/AppTokenRecords.ts",
+      "layer": "(none)",
+      "lines": 200,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map",
+        "Set"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/AppTokenStoreWiring.ts",
+      "layer": "(none)",
+      "lines": 20,
+      "valueImports": 2,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AppTokenStore"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/GoogleOAuth.ts",
+      "layer": "(none)",
+      "lines": 158,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set",
+        "URLSearchParams"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/Pkce.ts",
+      "layer": "(none)",
+      "lines": 53,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalAppConfig.ts",
+      "layer": "(none)",
+      "lines": 134,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalAuthPolicy.ts",
+      "layer": "(none)",
+      "lines": 67,
+      "valueImports": 0,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalGoogleRoutes.ts",
+      "layer": "(none)",
+      "lines": 167,
+      "valueImports": 6,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalOtpRoutes.ts",
+      "layer": "(none)",
+      "lines": 130,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalPassword.ts",
+      "layer": "(none)",
+      "lines": 80,
+      "valueImports": 2,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "RegExp"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalRateLimit.ts",
+      "layer": "(none)",
+      "lines": 24,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalRouteSchemas.ts",
+      "layer": "(none)",
+      "lines": 102,
+      "valueImports": 6,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalSession.ts",
+      "layer": "(none)",
+      "lines": 131,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalTokenAuth.ts",
+      "layer": "(none)",
+      "lines": 61,
+      "valueImports": 3,
+      "typeImports": 4,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Portal/PortalValidationError.ts",
+      "layer": "(none)",
+      "lines": 92,
+      "valueImports": 2,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Resilience/GracefulShutdown.ts",
       "layer": "CC",
-      "lines": 94,
+      "lines": 103,
       "valueImports": 3,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -1027,8 +2156,8 @@
     {
       "path": "src/Resilience/RetryStrategy.ts",
       "layer": "CC",
-      "lines": 130,
-      "valueImports": 3,
+      "lines": 190,
+      "valueImports": 4,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [
@@ -1043,7 +2172,7 @@
     {
       "path": "src/Resilience/TimeoutWrapper.ts",
       "layer": "CC",
-      "lines": 39,
+      "lines": 52,
       "valueImports": 1,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -1069,8 +2198,8 @@
     {
       "path": "src/Scheduler/ConfigBootstrap.ts",
       "layer": "SC",
-      "lines": 58,
-      "valueImports": 4,
+      "lines": 60,
+      "valueImports": 5,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -1095,7 +2224,7 @@
     {
       "path": "src/Scheduler/ImportProcessRunner.ts",
       "layer": "SC",
-      "lines": 108,
+      "lines": 154,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [],
@@ -1153,10 +2282,9 @@
       "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [
-        "AuditLogService",
         "TelegramCommandHandler"
       ],
-      "newCount": 2,
+      "newCount": 1,
       "ocpRisks": [],
       "score": 0
     },
@@ -1190,9 +2318,9 @@
     {
       "path": "src/Scraper/BankRegistry.ts",
       "layer": "BP",
-      "lines": 121,
+      "lines": 86,
       "valueImports": 2,
-      "typeImports": 1,
+      "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [
         "DefaultBankRegistry",
@@ -1205,8 +2333,8 @@
     {
       "path": "src/Scraper/BankScraper.ts",
       "layer": "BP",
-      "lines": 122,
-      "valueImports": 1,
+      "lines": 124,
+      "valueImports": 2,
       "typeImports": 7,
       "crossLayerValueDeps": [],
       "newClasses": [
@@ -1219,7 +2347,7 @@
     {
       "path": "src/Scraper/CredentialsBuilder.ts",
       "layer": "BP",
-      "lines": 61,
+      "lines": 62,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [],
@@ -1257,8 +2385,8 @@
     {
       "path": "src/Scraper/FailureLogShim.ts",
       "layer": "BP",
-      "lines": 40,
-      "valueImports": 3,
+      "lines": 50,
+      "valueImports": 4,
       "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -1345,7 +2473,7 @@
     {
       "path": "src/Scraper/Mappers/ToLegacy.ts",
       "layer": "BP",
-      "lines": 38,
+      "lines": 79,
       "valueImports": 0,
       "typeImports": 3,
       "crossLayerValueDeps": [],
@@ -1381,21 +2509,9 @@
       "score": 0
     },
     {
-      "path": "src/Scraper/ScraperOptionsBuilder.ts",
-      "layer": "BP",
-      "lines": 36,
-      "valueImports": 0,
-      "typeImports": 1,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 0
-    },
-    {
       "path": "src/Scraper/Strategies/IBankScrapeStrategy.ts",
       "layer": "BP",
-      "lines": 36,
+      "lines": 45,
       "valueImports": 0,
       "typeImports": 3,
       "crossLayerValueDeps": [],
@@ -1405,10 +2521,10 @@
       "score": 0
     },
     {
-      "path": "src/Scraper/Strategies/Live/AttemptRunner.ts",
+      "path": "src/Scraper/Strategies/Live/AttemptLogin.ts",
       "layer": "BP",
-      "lines": 147,
-      "valueImports": 3,
+      "lines": 118,
+      "valueImports": 5,
       "typeImports": 5,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -1429,14 +2545,43 @@
       "score": 0
     },
     {
+      "path": "src/Scraper/Strategies/Live/OtpReplayCache.ts",
+      "layer": "BP",
+      "lines": 128,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Scraper/Strategies/Live/OtpRetriever.ts",
       "layer": "BP",
-      "lines": 65,
-      "valueImports": 0,
+      "lines": 71,
+      "valueImports": 1,
       "typeImports": 1,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Strategies/Live/ProviderFailure.ts",
+      "layer": "BP",
+      "lines": 124,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "RetryableProviderFailure",
+        "Set"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -1453,23 +2598,11 @@
       "score": 0
     },
     {
-      "path": "src/Scraper/Strategies/Live/ScraperSetup.ts",
-      "layer": "BP",
-      "lines": 133,
-      "valueImports": 6,
-      "typeImports": 2,
-      "crossLayerValueDeps": [],
-      "newClasses": [],
-      "newCount": 0,
-      "ocpRisks": [],
-      "score": 0
-    },
-    {
       "path": "src/Scraper/Strategies/Live/Types.ts",
       "layer": "BP",
-      "lines": 65,
+      "lines": 84,
       "valueImports": 0,
-      "typeImports": 8,
+      "typeImports": 12,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -1479,9 +2612,9 @@
     {
       "path": "src/Scraper/Strategies/LiveScrapeStrategy.ts",
       "layer": "BP",
-      "lines": 46,
+      "lines": 53,
       "valueImports": 1,
-      "typeImports": 6,
+      "typeImports": 8,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -1501,16 +2634,117 @@
       "score": 0
     },
     {
-      "path": "src/Scraper/TransactionNormalizer.ts",
+      "path": "src/Scraper/Tokens/BankTokenPath.ts",
       "layer": "BP",
-      "lines": 73,
+      "lines": 160,
+      "valueImports": 2,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Tokens/BankTokenRecords.ts",
+      "layer": "BP",
+      "lines": 182,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [
+        "Map",
         "Set"
       ],
-      "newCount": 1,
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Tokens/LoginFingerprint.ts",
+      "layer": "BP",
+      "lines": 79,
+      "valueImports": 4,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Tokens/PepperStateRefusal.ts",
+      "layer": "BP",
+      "lines": 147,
+      "valueImports": 2,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Tokens/TokenDigest.ts",
+      "layer": "BP",
+      "lines": 37,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Tokens/TokenRefusal.ts",
+      "layer": "BP",
+      "lines": 156,
+      "valueImports": 3,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/Tokens/WarmTokenWatch.ts",
+      "layer": "BP",
+      "lines": 107,
+      "valueImports": 0,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/TransactionNormalizer.ts",
+      "layer": "BP",
+      "lines": 74,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scraper/WindowCoverageReporter.ts",
+      "layer": "BP",
+      "lines": 92,
+      "valueImports": 0,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },
@@ -1555,7 +2789,7 @@
     {
       "path": "src/Scrapers/Pipeline/Index.ts",
       "layer": "BP",
-      "lines": 21,
+      "lines": 24,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -1579,8 +2813,8 @@
     {
       "path": "src/Scrapers/Pipeline/Runner/PipelineRunner.ts",
       "layer": "BP",
-      "lines": 53,
-      "valueImports": 1,
+      "lines": 86,
+      "valueImports": 2,
       "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -1641,7 +2875,7 @@
     {
       "path": "src/Scrapers/Pipeline/Steps/Bank/ScrapeStage.ts",
       "layer": "BP",
-      "lines": 45,
+      "lines": 72,
       "valueImports": 2,
       "typeImports": 3,
       "crossLayerValueDeps": [],
@@ -1663,6 +2897,18 @@
         "Error"
       ],
       "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Scrapers/Pipeline/Steps/BanksFailedMessage.ts",
+      "layer": "BP",
+      "lines": 115,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },
@@ -1781,14 +3027,15 @@
     {
       "path": "src/Services/Account/AccountReconciler.ts",
       "layer": "IS",
-      "lines": 104,
-      "valueImports": 2,
+      "lines": 186,
+      "valueImports": 3,
       "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [
-        "Map"
+        "Map",
+        "Set"
       ],
-      "newCount": 1,
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -1817,11 +3064,11 @@
       "score": 0
     },
     {
-      "path": "src/Services/Account/LiveAccountWriter.ts",
+      "path": "src/Services/AuditLogPath.ts",
       "layer": "IS",
-      "lines": 171,
-      "valueImports": 2,
-      "typeImports": 4,
+      "lines": 18,
+      "valueImports": 0,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -1829,18 +3076,16 @@
       "score": 0
     },
     {
-      "path": "src/Services/AuditLogService.ts",
+      "path": "src/Services/AuditLogWiring.ts",
       "layer": "IS",
-      "lines": 169,
-      "valueImports": 2,
-      "typeImports": 2,
+      "lines": 20,
+      "valueImports": 3,
+      "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [
-        "Date",
-        "Error",
-        "IAuditEntry"
+        "AuditLogService"
       ],
-      "newCount": 3,
+      "newCount": 1,
       "ocpRisks": [],
       "score": 0
     },
@@ -1957,25 +3202,9 @@
       "score": 0
     },
     {
-      "path": "src/Services/Import/BatchFactory.ts",
-      "layer": "IS",
-      "lines": 150,
-      "valueImports": 2,
-      "typeImports": 1,
-      "crossLayerValueDeps": [],
-      "newClasses": [
-        "IBatchTracker",
-        "IImportJob",
-        "Promise"
-      ],
-      "newCount": 3,
-      "ocpRisks": [],
-      "score": 0
-    },
-    {
       "path": "src/Services/Import/BatchSummaryNotifier.ts",
       "layer": "IS",
-      "lines": 66,
+      "lines": 71,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [],
@@ -1999,7 +3228,7 @@
     {
       "path": "src/Services/Import/JobProcessor.ts",
       "layer": "IS",
-      "lines": 111,
+      "lines": 137,
       "valueImports": 2,
       "typeImports": 3,
       "crossLayerValueDeps": [],
@@ -2011,7 +3240,7 @@
     {
       "path": "src/Services/Import/PollerLifecycle.ts",
       "layer": "IS",
-      "lines": 75,
+      "lines": 82,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [],
@@ -2023,7 +3252,7 @@
     {
       "path": "src/Services/ImportQueue.ts",
       "layer": "IS",
-      "lines": 109,
+      "lines": 125,
       "valueImports": 3,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -2061,8 +3290,8 @@
     {
       "path": "src/Services/Metrics/Registry.ts",
       "layer": "IS",
-      "lines": 165,
-      "valueImports": 3,
+      "lines": 160,
+      "valueImports": 4,
       "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [
@@ -2117,6 +3346,73 @@
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/DeviceTokenPath.ts",
+      "layer": "IS",
+      "lines": 18,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/DeviceTokenStore.ts",
+      "layer": "IS",
+      "lines": 145,
+      "valueImports": 3,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "SecureJsonStore",
+        "StorageError"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/DeviceTokenStoreWiring.ts",
+      "layer": "IS",
+      "lines": 20,
+      "valueImports": 3,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "DeviceTokenStore"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/ExpoPushNotifier.ts",
+      "layer": "IS",
+      "lines": 122,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Notifications/ExpoPushNotifierFactory.ts",
+      "layer": "IS",
+      "lines": 45,
+      "valueImports": 2,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ExpoPushNotifier"
+      ],
+      "newCount": 2,
       "ocpRisks": [],
       "score": 0
     },
@@ -2310,9 +3606,9 @@
     {
       "path": "src/Services/Notifications/TelegramOtpPoller.ts",
       "layer": "IS",
-      "lines": 122,
-      "valueImports": 4,
-      "typeImports": 2,
+      "lines": 136,
+      "valueImports": 5,
+      "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [
         "Promise",
@@ -2414,8 +3710,8 @@
     {
       "path": "src/Services/NotificationService.ts",
       "layer": "IS",
-      "lines": 71,
-      "valueImports": 3,
+      "lines": 76,
+      "valueImports": 4,
       "typeImports": 3,
       "crossLayerValueDeps": [],
       "newClasses": [],
@@ -2703,9 +3999,21 @@
       "score": 0
     },
     {
+      "path": "src/Services/StoreSweep.ts",
+      "layer": "IS",
+      "lines": 91,
+      "valueImports": 1,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/Telegram/AuditQuery.ts",
       "layer": "IS",
-      "lines": 136,
+      "lines": 172,
       "valueImports": 2,
       "typeImports": 2,
       "crossLayerValueDeps": [],
@@ -2729,7 +4037,7 @@
     {
       "path": "src/Services/Telegram/CommandRouter.ts",
       "layer": "IS",
-      "lines": 55,
+      "lines": 65,
       "valueImports": 2,
       "typeImports": 2,
       "crossLayerValueDeps": [],
@@ -2753,7 +4061,7 @@
     {
       "path": "src/Services/Telegram/ReceiptCommandRoutes.ts",
       "layer": "IS",
-      "lines": 62,
+      "lines": 81,
       "valueImports": 2,
       "typeImports": 3,
       "crossLayerValueDeps": [],
@@ -2765,7 +4073,7 @@
     {
       "path": "src/Services/Telegram/ReplyBuilders.ts",
       "layer": "IS",
-      "lines": 129,
+      "lines": 121,
       "valueImports": 1,
       "typeImports": 2,
       "crossLayerValueDeps": [],
@@ -2787,23 +4095,9 @@
       "score": 0
     },
     {
-      "path": "src/Services/TelegramCommandFormatters.ts",
-      "layer": "IS",
-      "lines": 198,
-      "valueImports": 1,
-      "typeImports": 2,
-      "crossLayerValueDeps": [],
-      "newClasses": [
-        "Date"
-      ],
-      "newCount": 1,
-      "ocpRisks": [],
-      "score": 0
-    },
-    {
       "path": "src/Services/TelegramImportExecutor.ts",
       "layer": "IS",
-      "lines": 159,
+      "lines": 160,
       "valueImports": 2,
       "typeImports": 6,
       "crossLayerValueDeps": [],
@@ -2844,12 +4138,28 @@
     {
       "path": "src/Services/TelegramPollRecovery.ts",
       "layer": "IS",
-      "lines": 126,
+      "lines": 118,
       "valueImports": 3,
       "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TelegramPollRun.ts",
+      "layer": "IS",
+      "lines": 98,
+      "valueImports": 2,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "AbortController",
+        "Promise",
+        "TelegramPollRecovery"
+      ],
+      "newCount": 4,
       "ocpRisks": [],
       "score": 0
     },
@@ -2870,8 +4180,8 @@
     {
       "path": "src/Services/TelegramUpdateDispatcher.ts",
       "layer": "IS",
-      "lines": 198,
-      "valueImports": 2,
+      "lines": 195,
+      "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [],
       "newClasses": [
@@ -2885,7 +4195,7 @@
     {
       "path": "src/Services/Transaction/AccountResolver.ts",
       "layer": "IS",
-      "lines": 106,
+      "lines": 142,
       "valueImports": 3,
       "typeImports": 2,
       "crossLayerValueDeps": [],
@@ -2899,7 +4209,7 @@
     {
       "path": "src/Services/Transaction/DedupQuery.ts",
       "layer": "IS",
-      "lines": 50,
+      "lines": 63,
       "valueImports": 1,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -2913,7 +4223,7 @@
     {
       "path": "src/Services/Transaction/ImportedIdBuilder.ts",
       "layer": "IS",
-      "lines": 67,
+      "lines": 131,
       "valueImports": 2,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -2925,12 +4235,26 @@
     {
       "path": "src/Services/Transaction/Index.ts",
       "layer": "IS",
-      "lines": 23,
+      "lines": 25,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/Transaction/StaleRefundFinder.ts",
+      "layer": "IS",
+      "lines": 195,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Map"
+      ],
+      "newCount": 1,
       "ocpRisks": [],
       "score": 0
     },
@@ -2963,6 +4287,157 @@
       "score": 0
     },
     {
+      "path": "src/Services/TwoFactor/AppOtpPrompter.ts",
+      "layer": "IS",
+      "lines": 121,
+      "valueImports": 3,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Promise",
+        "TimeoutError"
+      ],
+      "newCount": 2,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/FallbackOtpPrompter.ts",
+      "layer": "IS",
+      "lines": 49,
+      "valueImports": 3,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpFileNames.ts",
+      "layer": "IS",
+      "lines": 161,
+      "valueImports": 4,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpFileRemoval.ts",
+      "layer": "IS",
+      "lines": 73,
+      "valueImports": 0,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpFileSweep.ts",
+      "layer": "IS",
+      "lines": 89,
+      "valueImports": 4,
+      "typeImports": 5,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpRecords.ts",
+      "layer": "IS",
+      "lines": 151,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "RegExp",
+        "Set"
+      ],
+      "newCount": 4,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpRequestPath.ts",
+      "layer": "IS",
+      "lines": 33,
+      "valueImports": 2,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpRequestStoreWiring.ts",
+      "layer": "IS",
+      "lines": 20,
+      "valueImports": 3,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "OtpRequestStore"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpSettingsPath.ts",
+      "layer": "IS",
+      "lines": 31,
+      "valueImports": 2,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "ConfigurationError"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpSettingsStore.ts",
+      "layer": "IS",
+      "lines": 135,
+      "valueImports": 4,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "SecureJsonStore",
+        "StorageError"
+      ],
+      "newCount": 3,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Services/TwoFactor/OtpSettingsStoreWiring.ts",
+      "layer": "IS",
+      "lines": 20,
+      "valueImports": 3,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "OtpSettingsStore"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Services/TwoFactorService.ts",
       "layer": "IS",
       "lines": 111,
@@ -2973,6 +4448,104 @@
         "TwoFactorAuthError"
       ],
       "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Storage/EntryPath.ts",
+      "layer": "(none)",
+      "lines": 25,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Storage/FileSystemPort.ts",
+      "layer": "(none)",
+      "lines": 188,
+      "valueImports": 0,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Storage/OpenFileScope.ts",
+      "layer": "(none)",
+      "lines": 58,
+      "valueImports": 1,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Storage/OwnedRecords.ts",
+      "layer": "(none)",
+      "lines": 187,
+      "valueImports": 3,
+      "typeImports": 2,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Storage/ProtoFreeJson.ts",
+      "layer": "(none)",
+      "lines": 38,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Storage/StagingPaths.ts",
+      "layer": "(none)",
+      "lines": 86,
+      "valueImports": 2,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Date"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Storage/StagingSweep.ts",
+      "layer": "(none)",
+      "lines": 155,
+      "valueImports": 3,
+      "typeImports": 3,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
+      "path": "src/Storage/StoreTypes.ts",
+      "layer": "(none)",
+      "lines": 115,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
       "ocpRisks": [],
       "score": 0
     },
@@ -2991,7 +4564,7 @@
     {
       "path": "src/Types/Bank.ts",
       "layer": "ST",
-      "lines": 70,
+      "lines": 75,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -3001,9 +4574,23 @@
       "score": 0
     },
     {
+      "path": "src/Types/BankCatalog.ts",
+      "layer": "ST",
+      "lines": 79,
+      "valueImports": 1,
+      "typeImports": 1,
+      "crossLayerValueDeps": [],
+      "newClasses": [
+        "Set"
+      ],
+      "newCount": 1,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Types/Categorization.ts",
       "layer": "ST",
-      "lines": 23,
+      "lines": 27,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -3015,7 +4602,7 @@
     {
       "path": "src/Types/Import.ts",
       "layer": "ST",
-      "lines": 67,
+      "lines": 69,
       "valueImports": 0,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -3027,9 +4614,9 @@
     {
       "path": "src/Types/Importer.ts",
       "layer": "ST",
-      "lines": 40,
+      "lines": 42,
       "valueImports": 0,
-      "typeImports": 5,
+      "typeImports": 6,
       "crossLayerValueDeps": [],
       "newClasses": [],
       "newCount": 0,
@@ -3039,7 +4626,7 @@
     {
       "path": "src/Types/Index.ts",
       "layer": "ST",
-      "lines": 90,
+      "lines": 101,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -3051,7 +4638,7 @@
     {
       "path": "src/Types/Logging.ts",
       "layer": "ST",
-      "lines": 12,
+      "lines": 26,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -3063,7 +4650,7 @@
     {
       "path": "src/Types/Notifications.ts",
       "layer": "ST",
-      "lines": 37,
+      "lines": 50,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -3085,9 +4672,21 @@
       "score": 0
     },
     {
+      "path": "src/Types/Portal.ts",
+      "layer": "ST",
+      "lines": 42,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Types/Procedure.ts",
       "layer": "ST",
-      "lines": 27,
+      "lines": 34,
       "valueImports": 0,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -3099,7 +4698,7 @@
     {
       "path": "src/Types/ProcedureHelpers.ts",
       "layer": "ST",
-      "lines": 73,
+      "lines": 78,
       "valueImports": 0,
       "typeImports": 1,
       "crossLayerValueDeps": [],
@@ -3135,6 +4734,18 @@
       "score": 0
     },
     {
+      "path": "src/Utils/AsyncSequence.ts",
+      "layer": "ST",
+      "lines": 48,
+      "valueImports": 1,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Utils/Currency.ts",
       "layer": "ST",
       "lines": 25,
@@ -3162,9 +4773,21 @@
       "score": 0
     },
     {
+      "path": "src/Utils/IdPatterns.ts",
+      "layer": "ST",
+      "lines": 15,
+      "valueImports": 0,
+      "typeImports": 0,
+      "crossLayerValueDeps": [],
+      "newClasses": [],
+      "newCount": 0,
+      "ocpRisks": [],
+      "score": 0
+    },
+    {
       "path": "src/Utils/Index.ts",
       "layer": "ST",
-      "lines": 27,
+      "lines": 28,
       "valueImports": 1,
       "typeImports": 0,
       "crossLayerValueDeps": [],
@@ -3188,7 +4811,7 @@
     {
       "path": "src/Utils/PhoneNumberNormaliser.ts",
       "layer": "ST",
-      "lines": 62,
+      "lines": 78,
       "valueImports": 2,
       "typeImports": 1,
       "crossLayerValueDeps": [],

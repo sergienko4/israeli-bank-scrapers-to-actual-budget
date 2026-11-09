@@ -27,6 +27,7 @@ describe('License policy allow-list', () => {
 describe('isLicenseAllowed', () => {
   it('accepts a plain allowed identifier', () => {
     expect(isLicenseAllowed('MIT')).toBe(true);
+    expect(isLicenseAllowed('PolyForm-Noncommercial-1.0.0')).toBe(true);
   });
 
   it('rejects a plain identifier that is not allowed', () => {

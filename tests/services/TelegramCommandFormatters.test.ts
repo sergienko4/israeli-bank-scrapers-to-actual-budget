@@ -63,7 +63,7 @@ describe('TelegramCommandFormatters', () => {
     });
 
     it('tells the operator what to do when the one SMS login hid the real failure', () => {
-      const error = 'GENERIC — this scrape has already spent its one cold SMS login; '
+      const error = 'GENERIC — this scrape has already spent its one cold login; '
         + 'the session cannot be re-minted in-run — start a new scrape';
       const bank = { name: 'oneZero', status: 'failure', error, txns: 0 };
 
