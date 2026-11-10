@@ -38,6 +38,16 @@ import type { IDeviceStateWatch } from './PepperDeviceState.js';
 /** How the provider words a state whose contents it rejects. */
 const STATE_INVALID = 'persistent auth state invalid: ';
 
+/** How the provider words a device-memory flow failure. */
+const FLOW_FAILED = 'persistent auth failed: flow';
+
+/** Error types on a device-memory flow failure that prove the remembered device was not accepted. */
+const DEAD_FLOW_ERROR_TYPES: ReadonlySet<string> = new Set([
+  'GENERIC',
+  'TWO_FACTOR_RETRIEVER_MISSING',
+  'INVALID_OTP',
+]);
+
 /** A renewal step's 4xx, as upstream's `sanitiseStepFailure` words it. */
 const RENEWAL_REFUSAL =
   /^(?<step>login|assertPassword) HTTP (?<status>4\d\d)(?: |$)/u;
@@ -66,14 +76,29 @@ function renewalVerdict(message: string): StateVerdict {
 }
 
 /**
+ * Reads a device-memory flow failure (`persistent auth failed: flow`).
+ * @param errorType - Provider error type on the failed result.
+ * @returns `password-refused` when the password was rejected, `dead` when the
+ *   remembered device was rejected or fell back to OTP, and `may-pass` for
+ *   transient or account-status failures.
+ */
+function flowVerdict(errorType: string): StateVerdict {
+  if (errorType === 'INVALID_PASSWORD') return 'password-refused';
+  return DEAD_FLOW_ERROR_TYPES.has(errorType) ? 'dead' : 'may-pass';
+}
+
+/**
  * Reads what an attempt's result says about the state it sent.
  * @param result - The attempt's provider result.
  * @returns `dead` only when the state was rejected or the device refused,
  *   never on a failure that may pass.
  */
 function verdictOf(result: IScraperScrapingResult): StateVerdict {
-  if (result.success || String(result.errorType) !== 'GENERIC') return 'may-pass';
+  if (result.success) return 'may-pass';
   const message = result.errorMessage ?? '';
+  const errorType = String(result.errorType);
+  if (message === FLOW_FAILED) return flowVerdict(errorType);
+  if (errorType !== 'GENERIC') return 'may-pass';
   if (message.startsWith(STATE_INVALID)) return 'dead';
   return renewalVerdict(message);
 }

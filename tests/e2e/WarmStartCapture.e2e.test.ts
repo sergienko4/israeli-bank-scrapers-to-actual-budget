@@ -23,7 +23,7 @@ import { ExponentialBackoffRetry } from '../../src/Resilience/RetryStrategy.js';
 import loginFingerprint from '../../src/Scraper/Tokens/LoginFingerprint.js';
 import { STALE_STAGING_AGE_MS } from '../../src/Storage/SecureJsonStore.js';
 import { DEFAULT_RESILIENCE_CONFIG } from '../../src/Types/Index.js';
-import { fakeUuid } from '../helpers/factories.js';
+import { fakeUuid, fakeValidBankConfigFor } from '../helpers/factories.js';
 import type { ITokenStoreDir } from './helpers/warmStartHarness.js';
 import {
   closeTokenStore, everythingLogged, OWNER_ONLY, openTokenStore, PERMISSION_BITS, providerWill,
@@ -237,29 +237,40 @@ describe('E2E: long-term token capture', () => {
     expect(existsSync(store.tokensPath)).toBe(false);
   });
 
-  it('captures and replays a warm-start token for hapoalim while preserving userCode on the warm run', async () => {
-    const token = `v1.${fakeUuid()}`;
-    const sentCreds: Record<string, unknown>[] = [];
-    provider.createScraper.mockImplementation((options: ScraperOptions) => ({
-      /**
-       * Records credentials and emits the warm token.
-       * @param creds - Scraper credentials sent by the importer.
-       * @returns Successful scrape result with persistentOtpToken.
-       */
-      scrape: async (creds: Record<string, unknown>): Promise<IScraperScrapingResult> => {
-        sentCreds.push(creds);
-        await options.onAuthFlowComplete?.({ longTermToken: token, bearer: '' });
-        return { ...scrapedAccount(), persistentOtpToken: token };
-      },
-    }));
-    const targets = [{ actualAccountId: fakeUuid(), reconcile: false, accounts: 'all' as const }];
-    const bankConfig = { userCode: 'POALIM99', password: 'secret-password', targets };
-    const first = await runImport({ entry: 'hapoalim', bankConfig });
-    const second = await runImport({ entry: 'hapoalim', bankConfig });
-    expect([first.result.success, second.result.success]).toEqual([true, true]);
-    expect(sentCreds[0]?.otpLongTermToken).toBeUndefined();
-    expect(sentCreds[1]).toMatchObject({ userCode: 'POALIM99', password: 'secret-password', otpLongTermToken: token });
-  });
+  it.each([
+    ['hapoalim', {}],
+    ['yahav', { num: 'YAHAV-NUM' }],
+    ['yahav', { num: undefined, username: 'YAHAV-LEGACY' }],
+    ['visacal', {}],
+    ['isracard', {}],
+    ['amex', {}],
+  ] as const)(
+    'captures and replays a warm-start token for %s (%o) while preserving login identifiers on the warm run',
+    async (entry, overrides) => {
+      const token = `v1.${fakeUuid()}`;
+      const sentCreds: Record<string, unknown>[] = [];
+      provider.createScraper.mockImplementation((options: ScraperOptions) => ({
+        /**
+         * Records credentials and emits the warm token.
+         * @param creds - Scraper credentials sent by the importer.
+         * @returns Successful scrape result with persistentOtpToken.
+         */
+        scrape: async (creds: Record<string, unknown>): Promise<IScraperScrapingResult> => {
+          sentCreds.push(creds);
+          await options.onAuthFlowComplete?.({ longTermToken: token, bearer: '' });
+          return { ...scrapedAccount(), persistentOtpToken: token };
+        },
+      }));
+      const bankConfig = fakeValidBankConfigFor(entry, overrides);
+      const [first, second] = [await runImport({ entry, bankConfig }), await runImport({ entry, bankConfig })];
+      const definedColdFields = Object.fromEntries(
+        Object.entries(sentCreds[0] ?? {}).filter(([, value]) => value !== undefined),
+      );
+      expect([first.result.success, second.result.success]).toEqual([true, true]);
+      expect(sentCreds[0]?.otpLongTermToken).toBeUndefined();
+      expect(sentCreds[1]).toMatchObject({ ...definedColdFields, otpLongTermToken: token });
+    },
+  );
 
   describe('when a login outlasts its try', () => {
     beforeEach(() => {

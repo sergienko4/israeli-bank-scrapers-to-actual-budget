@@ -303,6 +303,18 @@ describe('sweepTokenLeftovers', () => {
     expect(params.logger.info).not.toHaveBeenCalled();
   });
 
+  it.each([
+    CompanyTypes.Beinleumi, CompanyTypes.Massad, CompanyTypes.OtsarHahayal, CompanyTypes.Pagi,
+  ])('sweeps abandoned staged files for FIBI device-auth bank %s', (companyType) => {
+    const { store, fileSystem } = makeStore();
+    const abandoned = `${STORE_PATH}.${fakeUuid()}.tmp`;
+    fileSystem.seedFile(abandoned, '{}', 0o600);
+    fileSystem.setModifiedAt(abandoned, Date.now() - STALE_STAGING_AGE_MS - 1);
+    const params = captureFor(store, companyType);
+    expect(sweepTokenLeftovers(params)).toBe(true);
+    expect(fileSystem.hasEntry(abandoned)).toBe(false);
+  });
+
   it('does not touch the store for a browser bank', () => {
     const { store, fileSystem } = makeStore();
     expect(sweepTokenLeftovers(captureFor(store, CompanyTypes.Discount))).toBe(false);

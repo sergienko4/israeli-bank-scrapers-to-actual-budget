@@ -24,7 +24,7 @@ import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 import type { ILogger } from '../../Logger/ILogger.js';
 import type { ISweepReport } from '../../Storage/StoreTypes.js';
 import { errorMessage } from '../../Utils/Index.js';
-import { NO_TOKEN, requiresColdOtp } from './BankTokenRecords.js';
+import { isDeviceAuthBank, NO_TOKEN, requiresColdOtp } from './BankTokenRecords.js';
 import type { IBankTokenStore } from './BankTokenStore.js';
 
 export { requiresColdOtp };
@@ -217,13 +217,23 @@ function tokenFilesOf(params: IAuthFlowCaptureParams): IStagedFileOwner {
 }
 
 /**
- * Deletes staged token files a killed run left behind, before an API-direct scrape.
+ * Tells whether a bank reads or writes the token store (long-term tokens or device state).
+ * @param companyType - Provider company id of the bank being scraped.
+ * @returns True for API-direct token banks and device-auth banks.
+ */
+function usesTokenStore(companyType: string): boolean {
+  return isApiDirectBank(companyType) || isDeviceAuthBank(companyType);
+}
+
+/**
+ * Deletes staged token files a killed run left behind, before a token-store scrape.
  *
  * <p>Each leftover holds a live credential. Every import runs in its own
- * process, so sweeping when an API-direct scrape starts covers every run that
- * can stage one. Browser banks never touch the store, so their runs skip it.
- * The refused-token file sits beside the token file and is swept the same way,
- * under its own label, so a log line says which file it means.
+ * process, so sweeping when a token-store scrape starts covers every run that
+ * can stage one. Banks that neither capture tokens nor persist device state
+ * never touch the store, so their runs skip it. The refused-token file sits
+ * beside the token file and is swept the same way, under its own label, so a
+ * log line says which file it means.
  * @param params - Account key, store and logger for this scrape.
  * @param owner - Store to sweep and its label; the token store unless another is given.
  * @returns True when the sweep ran; a failure is a warning, never an error.
@@ -231,7 +241,7 @@ function tokenFilesOf(params: IAuthFlowCaptureParams): IStagedFileOwner {
 export function sweepTokenLeftovers(
   params: IAuthFlowCaptureParams, owner: IStagedFileOwner = tokenFilesOf(params),
 ): boolean {
-  if (!isApiDirectBank(params.companyType)) return false;
+  if (!usesTokenStore(params.companyType)) return false;
   const failed = `Could not sweep staged ${owner.label} files`;
   try {
     const swept = owner.store.sweepStagedLeftovers();

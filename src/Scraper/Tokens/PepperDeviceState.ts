@@ -28,20 +28,13 @@ import { fail } from '../../Types/ProcedureHelpers.js';
 import { errorMessage } from '../../Utils/Index.js';
 import type { IAuthFlowCaptureParams } from './AuthFlowCapture.js';
 import { buildTokenStoreKey } from './AuthFlowCapture.js';
-import { isLoginFingerprint, NO_TOKEN } from './BankTokenRecords.js';
+import { isDeviceAuthBank, isLoginFingerprint, NO_TOKEN } from './BankTokenRecords.js';
 import type { IBankTokenWrite, ITokenView } from './BankTokenStore.js';
+
+export { isDeviceAuthBank };
 
 /** Pepper's provider company id, as text so any company id compares with it. */
 const PEPPER_COMPANY: string = CompanyTypes.Pepper;
-
-/** Banks that persist device state (`bound-device` for Pepper, `device-memory` for FIBI). */
-const DEVICE_AUTH_BANKS: ReadonlySet<string> = new Set<string>([
-  CompanyTypes.Pepper,
-  CompanyTypes.Beinleumi,
-  CompanyTypes.Massad,
-  CompanyTypes.OtsarHahayal,
-  CompanyTypes.Pagi,
-]);
 
 /**
  * Tells whether a bank is Pepper (`bound-device`, which always requires SMS on cold enrollment).
@@ -50,15 +43,6 @@ const DEVICE_AUTH_BANKS: ReadonlySet<string> = new Set<string>([
  */
 export function isPepper(companyType: string): boolean {
   return companyType === PEPPER_COMPANY;
-}
-
-/**
- * Tells whether a bank persists device authentication state (`persistentAuthState`).
- * @param companyType - Provider company id of the bank being scraped.
- * @returns True for Pepper and FIBI family banks (Beinleumi, Massad, OtsarHahayal, Pagi).
- */
-export function isDeviceAuthBank(companyType: string): boolean {
-  return DEVICE_AUTH_BANKS.has(companyType);
 }
 
 /**

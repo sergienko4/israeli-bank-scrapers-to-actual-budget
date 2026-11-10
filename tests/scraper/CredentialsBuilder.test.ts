@@ -110,7 +110,7 @@ describe('buildCredentials', () => {
     });
 
     it('preserves bank-specific login fields (id, num, username, userCode, nationalID, card6Digits) with token', () => {
-      const config = {
+      const config = fakeBankConfig({
         id: '123456789',
         num: 'SUB1',
         username: 'visacal-user',
@@ -119,7 +119,7 @@ describe('buildCredentials', () => {
         card6Digits: '654321',
         password: TEST_CREDENTIAL,
         otpLongTermToken: 'warm-tok',
-      } as IBankConfig;
+      });
       const creds = buildCredentials(config) as Record<string, unknown>;
       expect(creds).toMatchObject({
         id: '123456789',
