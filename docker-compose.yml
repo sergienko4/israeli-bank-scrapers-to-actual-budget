@@ -93,7 +93,10 @@ services:
   # credentials.json or it refuses to boot (cookie-forgery guard). Generate one:
   #   node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
   # To expose over HTTPS, front it with a TLS reverse proxy (Caddy/Traefik) and
-  # set PORTAL_SECURE_COOKIES=true. See docs/configuration/portal.md.
+  # set PORTAL_SECURE_COOKIES=true. When that proxy runs in another container,
+  # set PORTAL_TRUST_PROXY to the proxy's fixed container address (or its
+  # dedicated network's CIDR) — never a hop count such as 1. See
+  # docs/configuration/portal.md for a complete Caddy + network example.
   # portal:
   #   image: sergienko4/israeli-bank-importer:latest
   #   container_name: israeli-bank-portal
@@ -114,6 +117,7 @@ services:
   #     - PORTAL_CONFIG_PATH=/app/config/config.json
   #     # - PORTAL_PORT=8080
   #     # - PORTAL_SECURE_COOKIES=true        # only behind HTTPS (TLS reverse proxy)
+  #     # - PORTAL_TRUST_PROXY=172.28.0.10    # the proxy's container address or CIDR, never 1
   #     # - CREDENTIALS_ENCRYPTION_PASSWORD=your_encryption_password
   #   volumes:
   #     # Same ./config DIRECTORY as the importer, but READ-WRITE (the portal is
