@@ -288,7 +288,7 @@ Replace the hop count with the address the proxy connects from:
 | Your topology | Before | After |
 | --- | --- | --- |
 | Proxy on the same host (`tailscale serve`, host-network sidecar) | `PORTAL_TRUST_PROXY=1` | `PORTAL_TRUST_PROXY=loopback` |
-| Proxy in another container on the Docker network | `PORTAL_TRUST_PROXY=1` | `PORTAL_TRUST_PROXY=172.18.0.0/16` (that network's subnet) |
+| Proxy in another container on the Docker network | `PORTAL_TRUST_PROXY=1` | `PORTAL_TRUST_PROXY=172.18.0.0/16` (that network's subnet), or the proxy's fixed container address (tighter) |
 | Proxy on another machine | `PORTAL_TRUST_PROXY=1` | `PORTAL_TRUST_PROXY=10.0.0.5` (its address) |
 | Two chained proxies | `PORTAL_TRUST_PROXY=2` | `PORTAL_TRUST_PROXY=loopback,10.0.0.5` (one entry per hop) |
 | No reverse proxy | unset or `false` | leave as is |
