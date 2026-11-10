@@ -19,21 +19,24 @@
  * </ul>
  */
 
-import { chmodSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import openBankTokenStore from '../../src/Importer/BankTokenStoreWiring.js';
 import loginFingerprint from '../../src/Scraper/Tokens/LoginFingerprint.js';
+import { STALE_STAGING_AGE_MS } from '../../src/Storage/SecureJsonStore.js';
 import type { IBankConfig } from '../../src/Types/Index.js';
-import { fakeUuid } from '../helpers/factories.js';
+import { fakeUuid, fakeValidBankConfigFor } from '../helpers/factories.js';
 import { TEST_ENCRYPTION_KEY } from '../helpers/testCredentials.js';
 import type { IFakePepper } from './helpers/fakePepperBank.js';
 import { DATA_REFUSED, LOGIN_REFUSED, openPepper, PEPPER } from './helpers/fakePepperBank.js';
 import type { IRun, ITokenStoreDir } from './helpers/warmStartHarness.js';
 import {
-  closeTokenStore, countingPrompter, everythingLogged, openTokenStore, runImport, spyLogger,
+  closeTokenStore, countingPrompter, everythingLogged, OWNER_ONLY, openTokenStore, runImport,
+  spyLogger,
 } from './helpers/warmStartHarness.js';
 
 const provider = vi.hoisted(() => ({ createScraper: vi.fn() }));
@@ -296,5 +299,83 @@ describe('E2E: Pepper device login', () => {
     expect(warningsOf(run)).toContain(`Could not store the long-term token for ${deviceKey(FIRST)}`);
     expect(pepper.issued).toHaveLength(2);
     expect(storedUnder(deviceKey(FIRST))).toBe(pepper.issued[0]);
+  });
+
+  it('captures and resumes device-memory state for a FIBI bank (beinleumi)', async () => {
+    const deviceState = `v1.${fakeUuid()}`;
+    const sentStates: (string | undefined)[] = [];
+    provider.createScraper.mockImplementation((options: {
+      persistentAuthState?: string;
+      onPersistentAuthStateUpdate?: (state: string) => Promise<void>;
+    }) => ({
+      /**
+       * Records the sent device-memory state and enrolls on cold start.
+       * @returns Empty successful scrape result.
+       */
+      scrape: async (): Promise<IScraperScrapingResult> => {
+        sentStates.push(options.persistentAuthState);
+        if (options.persistentAuthState === undefined) await options.onPersistentAuthStateUpdate?.(deviceState);
+        return { success: true, accounts: [] };
+      },
+    }));
+    const bankConfig = fakeValidBankConfigFor('beinleumi');
+    const [first, second] = [await runImport({ entry: 'beinleumi', bankConfig }), await runImport({ entry: 'beinleumi', bankConfig })];
+    expect([first.result.success, second.result.success]).toEqual([true, true]);
+    expect(sentStates).toEqual([undefined, deviceState]);
+    expect(storedUnder('beinleumi-device:beinleumi')).toBe(deviceState);
+    expect(warningsOf(first)).toBe('[]');
+  });
+
+  it('sweeps a stale staging file on a warm FIBI run even when no state is written', async () => {
+    const deviceState = `v1.${fakeUuid()}`;
+    provider.createScraper.mockImplementation((options: {
+      persistentAuthState?: string;
+      onPersistentAuthStateUpdate?: (state: string) => Promise<void>;
+    }) => ({
+      /**
+       * Enrolls on cold start and resumes without publishing on warm start.
+       * @returns Empty successful scrape result.
+       */
+      scrape: async (): Promise<IScraperScrapingResult> => {
+        if (options.persistentAuthState === undefined) await options.onPersistentAuthStateUpdate?.(deviceState);
+        return { success: true, accounts: [] };
+      },
+    }));
+    const bankConfig = fakeValidBankConfigFor('beinleumi');
+    await runImport({ entry: 'beinleumi', bankConfig });
+    const leftover = join(store.directory, `bank-tokens.json.${fakeUuid()}.tmp`);
+    writeFileSync(leftover, '{}', { mode: OWNER_ONLY });
+    const staleSeconds = (Date.now() - STALE_STAGING_AGE_MS) / 1000 - 60;
+    utimesSync(leftover, staleSeconds, staleSeconds);
+    const warm = await runImport({ entry: 'beinleumi', bankConfig });
+    expect(warm.result.success).toBe(true);
+    expect(existsSync(leftover)).toBe(false);
+  });
+
+  it('removes a rejected FIBI device-memory state after an upstream flow failure and re-enrolls on the next run', async () => {
+    const [firstState, secondState] = [`v1.${fakeUuid()}`, `v1.${fakeUuid()}`];
+    const sentStates: (string | undefined)[] = [];
+    provider.createScraper.mockImplementation((options: {
+      persistentAuthState?: string;
+      onPersistentAuthStateUpdate?: (state: string) => Promise<void>;
+    }) => ({
+      /**
+       * Enrolls on cold runs and rejects the first state with upstream's flow failure.
+       * @returns Scrape result for each run.
+       */
+      scrape: async (): Promise<IScraperScrapingResult> => {
+        sentStates.push(options.persistentAuthState);
+        if (options.persistentAuthState === firstState) {
+          return { success: false, errorType: 'TWO_FACTOR_RETRIEVER_MISSING' as never, errorMessage: 'persistent auth failed: flow' };
+        }
+        await options.onPersistentAuthStateUpdate?.(sentStates.length === 1 ? firstState : secondState);
+        return { success: true, accounts: [] };
+      },
+    }));
+    const bankConfig = fakeValidBankConfigFor('beinleumi');
+    const runs = [await runImport({ entry: 'beinleumi', bankConfig }), await runImport({ entry: 'beinleumi', bankConfig }), await runImport({ entry: 'beinleumi', bankConfig })];
+    expect(runs.map((run) => run.result.success)).toEqual([true, false, true]);
+    expect(sentStates).toEqual([undefined, firstState, undefined]);
+    expect(storedUnder('beinleumi-device:beinleumi')).toBe(secondState);
   });
 });

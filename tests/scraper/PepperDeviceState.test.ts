@@ -255,6 +255,23 @@ describe('attachDeviceAuth', () => {
         + 'enrolling this device with an SMS code',
       ]]);
     });
+
+    it('names the FIBI bank and its conditional SMS hint when a stored FIBI state belongs to another login', () => {
+      const { store, fileSystem } = makeStore();
+      const fibiKey = `beinleumi-device:${ACCOUNT_KEY}`;
+      seedRecords(fileSystem, { [fibiKey]: { token: fakeToken(), capturedAt: CAPTURED_AT, login: OTHER_LOGIN } });
+
+      const { target, stateWasSent, logger } = attachOver(store, { companyType: CompanyTypes.Beinleumi });
+
+      expect(target).not.toHaveProperty('persistentAuthState');
+      expect(target.onPersistentAuthStateUpdate).toBeTypeOf('function');
+      expect(stateWasSent).toBe(false);
+      expect(linesLogged(logger)).toEqual([[
+        'info',
+        `  🔐 The stored beinleumi device state for ${fibiKey} belongs to another login; `
+        + 'enrolling this device again and may ask for an SMS code',
+      ]]);
+    });
   });
 
   describe('when the store cannot carry a device login', () => {
@@ -309,6 +326,36 @@ describe('attachDeviceAuth', () => {
       expect(linesLogged(logger)).toEqual([]);
     },
   );
+
+  describe.each([
+    [CompanyTypes.Beinleumi, 'beinleumi-device:primary'],
+    [CompanyTypes.Massad, 'massad-device:primary'],
+    [CompanyTypes.OtsarHahayal, 'otsarhahayal-device:primary'],
+    [CompanyTypes.Pagi, 'pagi-device:primary'],
+  ])('FIBI device-memory bank %s (%s)', (companyType, fibiDeviceKey) => {
+    it('attaches the save callback without warning when canAskForOtp is false on cold start', () => {
+      const { store } = makeStore();
+
+      const { target, stateWasSent, logger } = attachOver(store, { companyType, canAskForOtp: false });
+
+      expect(target.onPersistentAuthStateUpdate).toBeTypeOf('function');
+      expect(target).not.toHaveProperty('persistentAuthState');
+      expect(stateWasSent).toBe(false);
+      expect(linesLogged(logger)).toEqual([]);
+    });
+
+    it('sends the stored device-memory state and saves a new state under its own device key', async () => {
+      const { store, fileSystem } = makeStore();
+      const enrolled = fakeToken();
+
+      await saveHookOf(attachOver(store, { companyType }).target)(enrolled);
+
+      expect(storedRecords(fileSystem)[fibiDeviceKey]).toMatchObject({ token: enrolled, login: ACCOUNT_LOGIN });
+      const resumed = attachOver(store, { companyType, canAskForOtp: false });
+      expect(resumed.target.persistentAuthState).toBe(enrolled);
+      expect(resumed.stateWasSent).toBe(true);
+    });
+  });
 });
 
 describe('the save callback', () => {

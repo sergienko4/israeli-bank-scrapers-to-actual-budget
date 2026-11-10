@@ -34,9 +34,19 @@ import { errorMessage } from '../../Utils/Index.js';
 import type { IAuthFlowCaptureParams } from './AuthFlowCapture.js';
 import type { IBankTokenWrite } from './BankTokenStore.js';
 import type { IDeviceStateWatch } from './PepperDeviceState.js';
+import { deviceBankLabel, isPepper } from './PepperDeviceState.js';
 
 /** How the provider words a state whose contents it rejects. */
 const STATE_INVALID = 'persistent auth state invalid: ';
+
+/** How the provider words a device-memory flow failure. */
+const FLOW_FAILED = 'persistent auth failed: flow';
+
+/** Error types on a device-memory flow failure that prove the remembered device fell back to OTP. */
+const DEAD_FLOW_ERROR_TYPES: ReadonlySet<string> = new Set([
+  'TWO_FACTOR_RETRIEVER_MISSING',
+  'INVALID_OTP',
+]);
 
 /** A renewal step's 4xx, as upstream's `sanitiseStepFailure` words it. */
 const RENEWAL_REFUSAL =
@@ -66,14 +76,29 @@ function renewalVerdict(message: string): StateVerdict {
 }
 
 /**
+ * Reads a device-memory flow failure (`persistent auth failed: flow`).
+ * @param errorType - Provider error type on the failed result.
+ * @returns `password-refused` when the password was rejected, `dead` when the
+ *   remembered device was rejected or fell back to OTP, and `may-pass` for
+ *   transient or account-status failures.
+ */
+function flowVerdict(errorType: string): StateVerdict {
+  if (errorType === 'INVALID_PASSWORD') return 'password-refused';
+  return DEAD_FLOW_ERROR_TYPES.has(errorType) ? 'dead' : 'may-pass';
+}
+
+/**
  * Reads what an attempt's result says about the state it sent.
  * @param result - The attempt's provider result.
  * @returns `dead` only when the state was rejected or the device refused,
  *   never on a failure that may pass.
  */
 function verdictOf(result: IScraperScrapingResult): StateVerdict {
-  if (result.success || String(result.errorType) !== 'GENERIC') return 'may-pass';
+  if (result.success) return 'may-pass';
   const message = result.errorMessage ?? '';
+  const errorType = String(result.errorType);
+  if (message === FLOW_FAILED) return flowVerdict(errorType);
+  if (errorType !== 'GENERIC') return 'may-pass';
   if (message.startsWith(STATE_INVALID)) return 'dead';
   return renewalVerdict(message);
 }
@@ -88,21 +113,34 @@ function removeState(params: IAuthFlowCaptureParams): Procedure<IBankTokenWrite>
     return params.store.remove(params.storeKey);
   } catch (error: unknown) {
     const detail = errorMessage(error);
-    return fail(`Could not remove the Pepper device state for ${params.storeKey}: ${detail}`);
+    const label = deviceBankLabel(params.companyType);
+    return fail(`Could not remove the ${label} device state for ${params.storeKey}: ${detail}`);
   }
 }
 
 /**
- * Keeps a state whose password step Pepper refused, and says to check the password.
+ * Keeps a state whose password step the bank refused, and says to check the password.
  * @param params - Device parameters carrying the key and logger; the warning names the key, never the state.
  * @returns False: nothing was removed.
  */
 function keepAfterRefusedPassword(params: IAuthFlowCaptureParams): boolean {
+  const label = deviceBankLabel(params.companyType);
   params.logger.warn(
-    `  ⚠️  Kept the Pepper device state for ${params.storeKey}; `
-    + 'Pepper refused the password, so check the password in the config',
+    `  ⚠️  Kept the ${label} device state for ${params.storeKey}; `
+    + `${label} refused the password, so check the password in the config`,
   );
   return false;
+}
+
+/**
+ * Describes what the next run will do after a dead device state is removed.
+ * @param companyType - Provider company id of the bank being scraped.
+ * @returns Recovery hint matching the bank's enrollment flow.
+ */
+function nextRunHint(companyType: string): string {
+  return isPepper(companyType)
+    ? 'the next run asks for one SMS code'
+    : 'the next run can enroll the device again and may ask for an SMS code';
 }
 
 /**
@@ -117,10 +155,10 @@ function removeDeadState(params: IAuthFlowCaptureParams): boolean {
     return false;
   }
   if (!removed.data.written) return false;
-  const { storeKey, logger } = params;
+  const { storeKey, companyType, logger } = params;
+  const label = deviceBankLabel(companyType);
   logger.warn(
-    `  ⚠️  Removed the Pepper device state for ${storeKey}; `
-    + 'the next run asks for one SMS code',
+    `  ⚠️  Removed the ${label} device state for ${storeKey}; ${nextRunHint(companyType)}`,
   );
   return true;
 }

@@ -35,7 +35,7 @@ import type { Procedure } from '../../Types/Procedure.js';
 import { fail } from '../../Types/ProcedureHelpers.js';
 import { errorMessage } from '../../Utils/Index.js';
 import type { IAuthFlowCaptureParams } from './AuthFlowCapture.js';
-import { isLoginFingerprint, NO_LOGIN, NO_TOKEN } from './BankTokenRecords.js';
+import { isLoginFingerprint, NO_LOGIN, NO_TOKEN, requiresColdOtp } from './BankTokenRecords.js';
 import type { ITokenView } from './BankTokenStore.js';
 import type { IRefusalView, IRefusedTokens } from './RefusedTokens.js';
 import tokenDigest from './TokenDigest.js';
@@ -354,7 +354,7 @@ function readRefusals(context: ILoginContext): IRefusalView {
  * @returns True when the warning was logged.
  */
 function warnIfStuck(params: Params, canAskForOtp: boolean): boolean {
-  if (canAskForOtp) return false;
+  if (canAskForOtp || !requiresColdOtp(params.companyType)) return false;
   return warn(
     params,
     `No usable long-term token for ${params.storeKey}, and this run cannot ask for an SMS code: `

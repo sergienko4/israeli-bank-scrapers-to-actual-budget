@@ -101,19 +101,23 @@ Any bank that shows an SMS verification screen supports `twoFactorAuth`. The Tel
 |--------|---------|-------------|
 | `twoFactorAuth` | `false` | Enable 2FA flow for this bank |
 | `twoFactorTimeout` | `300` | Seconds to wait for OTP reply before failing |
-| `otpLongTermToken` | — | Optional (OneZero and PayBox; Pepper ignores it and warns, see [Pepper](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md#2fa--otp)). The importer saves and reuses the long-term token by itself; set this only to bring one from another install. See [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) |
+| `otpLongTermToken` | — | Optional (OneZero, PayBox, Hapoalim, Yahav, Visa Cal, Isracard and Amex; Pepper ignores it and warns, see [Pepper](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md#2fa--otp)). The importer saves and reuses the long-term token by itself; set this only to bring one from another install. See [Long-term token](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/configuration/banks.md#long-term-token) |
 
 For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ### Long-term token
 
-OneZero and PayBox return a long-term token after an SMS login. The
-importer saves it and sends it on later logins, so they skip the SMS. You do
-not need to set anything.
+OneZero, PayBox, Hapoalim, Yahav, Visa Cal, Isracard and Amex return a
+long-term token or session bundle after login. The importer saves it and sends
+it on later logins (skipping SMS for OneZero, PayBox and Hapoalim, skipping
+device re-registration for Yahav, and resuming key/biometric login for
+Visa Cal, Isracard and Amex). You do not need to set anything.
 
-Pepper keeps its login another way: one SMS enrolls the importer as a device,
-and the importer saves that device's state in the same file, under
-`pepper-device:<entry name>`. It never sends Pepper a long-term token. See
+Pepper and the FIBI family (Beinleumi, Massad, Otsar Hahayal and Pagi) keep
+their login another way: the importer saves a bound-device or device-memory
+state in the same file, under `<bank id>-device:<entry name>` (for example
+`pepper-device:<entry name>` or `beinleumi-device:<entry name>`), and never
+sends `otpLongTermToken`. See
 [Pepper](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/pepper.md#2fa--otp).
 
 - **Where it is saved:** `bank-tokens.json` on the data volume (`/app/data`,
@@ -138,12 +142,16 @@ and the importer saves that device's state in the same file, under
     record, so that list is what still stops another entry from sending it.
 - **Renaming a `banks` entry** also costs one SMS. Tokens are saved per entry,
   under `<bank id>:<entry name>`, such as `onezero:oneZero`.
-- **Keep `twoFactorAuth: true`.** Each SMS login creates a new token, and the
-  bank stops accepting the one before it. When the bank refuses a token, the
-  importer logs in with an SMS and saves the new one. With `twoFactorAuth:
-  false` it cannot ask for a code: a run with no usable token, or whose token
-  the bank refuses, fails with `TWO_FACTOR_RETRIEVER_MISSING` and logs how to
-  fix it.
+- **Keep `twoFactorAuth: true` for SMS-OTP banks.** For OneZero and PayBox
+  (and for Hapoalim or Yahav accounts that prompt for SMS), each SMS login
+  creates a new token and the bank stops accepting the one before it; when a
+  token is refused on OneZero or PayBox with `twoFactorAuth: false`, the run
+  cannot ask for a code and fails with `TWO_FACTOR_RETRIEVER_MISSING`, logging
+  how to re-enable `twoFactorAuth` for one SMS login. When a saved token is
+  refused or missing for Yahav (without SMS), the scraper automatically
+  re-registers the device and saves a new device bundle; for Visa Cal, Isracard
+  and Amex, the scraper falls back to its key/biometric login flow and saves
+  the refreshed token.
 - **If the file is damaged or cannot be read**, the configured
   `otpLongTermToken` is not sent, because the file cannot say whose it is.
   Tokens the importer can still read from a damaged file keep working;

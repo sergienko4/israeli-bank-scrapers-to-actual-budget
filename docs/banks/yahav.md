@@ -52,11 +52,11 @@
 }
 ```
 
-The Telegram bot prompts for the code on each run. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
+The Telegram bot prompts for a code when Yahav requests one. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ## Known gotchas
 
-`nationalID` is your full 9-digit Israeli ID - separate from `username`.
+`nationalID` is your full 9-digit Israeli ID - separate from `username` (or `num`). The importer automatically saves Yahav's device bundle in `bank-tokens.json` after the first login so later runs reuse the enrolled device instead of registering a new device on every run.
 
 ## See also
 

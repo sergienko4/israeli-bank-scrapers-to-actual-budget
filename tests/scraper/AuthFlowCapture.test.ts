@@ -131,8 +131,14 @@ describe('buildTokenStoreKey', () => {
   });
 });
 
+const WARM_START_BANKS = [
+  CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox,
+  CompanyTypes.Hapoalim, CompanyTypes.Yahav, CompanyTypes.VisaCal,
+  CompanyTypes.Isracard, CompanyTypes.Amex,
+] as const;
+
 describe('attachAuthFlowCapture', () => {
-  it.each([CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox])(
+  it.each(WARM_START_BANKS)(
     'stores the token %s hands back',
     async (companyType) => {
       const { store, fileSystem } = makeStore();
@@ -295,6 +301,18 @@ describe('sweepTokenLeftovers', () => {
     const params = captureFor(store);
     expect(sweepTokenLeftovers(params)).toBe(true);
     expect(params.logger.info).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    CompanyTypes.Beinleumi, CompanyTypes.Massad, CompanyTypes.OtsarHahayal, CompanyTypes.Pagi,
+  ])('sweeps abandoned staged files for FIBI device-auth bank %s', (companyType) => {
+    const { store, fileSystem } = makeStore();
+    const abandoned = `${STORE_PATH}.${fakeUuid()}.tmp`;
+    fileSystem.seedFile(abandoned, '{}', 0o600);
+    fileSystem.setModifiedAt(abandoned, Date.now() - STALE_STAGING_AGE_MS - 1);
+    const params = captureFor(store, companyType);
+    expect(sweepTokenLeftovers(params)).toBe(true);
+    expect(fileSystem.hasEntry(abandoned)).toBe(false);
   });
 
   it('does not touch the store for a browser bank', () => {

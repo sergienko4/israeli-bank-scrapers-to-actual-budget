@@ -49,11 +49,11 @@
 }
 ```
 
-The Telegram bot prompts for the code on each run. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
+The Telegram bot prompts for a code when Hapoalim requests one. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ## Known gotchas
 
-No known gotchas for this bank - open an issue if you hit one.
+After a successful login, the importer automatically saves Hapoalim's warm-start cookie bundle in `bank-tokens.json` and reuses it on later runs to skip SMS verification while the session remains valid.
 
 ## See also
 

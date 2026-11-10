@@ -380,6 +380,61 @@ describe('forgetRefusedState', () => {
       expect(forgetRefusedState(watch, failed('GENERIC', `${LOGIN_STEP} HTTP 401`))).toBe(false);
       expect(linesLogged(logger)).toEqual([]);
     });
+
+    it.each([
+      ['local decoding rejection', 'GENERIC', 'persistent auth state invalid: deviceId'],
+      ['upstream missing-OTP flow fallback', 'TWO_FACTOR_RETRIEVER_MISSING', 'persistent auth failed: flow'],
+      ['upstream rejected-OTP flow failure', 'INVALID_OTP', 'persistent auth failed: flow'],
+    ] as const)('removes a rejected FIBI device-memory state on %s (%s)', (_label, errorType, errorMessage) => {
+      const { store, fileSystem } = makeStore();
+      const fibiKey = `beinleumi-device:${ACCOUNT_KEY}`;
+      seedRecords(fileSystem, { [fibiKey]: { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN } });
+      const { watch, logger } = attempt(store, CompanyTypes.Beinleumi);
+
+      const isRemoved = forgetRefusedState(watch, failed(errorType, errorMessage));
+
+      expect(isRemoved).toBe(true);
+      expect(storedRecords(fileSystem)).not.toHaveProperty([fibiKey]);
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  Removed the beinleumi device state for ${fibiKey}; `
+        + 'the next run can enroll the device again and may ask for an SMS code',
+      ]]);
+    });
+
+    it.each([
+      'GENERIC', 'TIMEOUT', 'WAF_BLOCKED', 'ACCOUNT_BLOCKED', 'CHANGE_PASSWORD',
+    ] as const)('preserves a FIBI device-memory state on ambiguous, transient, or account error %s', (errorType) => {
+      const { store, fileSystem } = makeStore();
+      const fibiKey = `beinleumi-device:${ACCOUNT_KEY}`;
+      const record = { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN };
+      seedRecords(fileSystem, { [fibiKey]: record });
+      const { watch, logger } = attempt(store, CompanyTypes.Beinleumi);
+
+      const isRemoved = forgetRefusedState(watch, failed(errorType, 'persistent auth failed: flow'));
+
+      expect(isRemoved).toBe(false);
+      expect(storedRecords(fileSystem)).toEqual({ [fibiKey]: record });
+      expect(linesLogged(logger)).toEqual([]);
+    });
+
+    it('preserves a FIBI device-memory state and warns to check password on INVALID_PASSWORD flow failure', () => {
+      const { store, fileSystem } = makeStore();
+      const fibiKey = `beinleumi-device:${ACCOUNT_KEY}`;
+      const record = { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN };
+      seedRecords(fileSystem, { [fibiKey]: record });
+      const { watch, logger } = attempt(store, CompanyTypes.Beinleumi);
+
+      const isRemoved = forgetRefusedState(watch, failed('INVALID_PASSWORD', 'persistent auth failed: flow'));
+
+      expect(isRemoved).toBe(false);
+      expect(storedRecords(fileSystem)).toEqual({ [fibiKey]: record });
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  Kept the beinleumi device state for ${fibiKey}; `
+        + 'beinleumi refused the password, so check the password in the config',
+      ]]);
+    });
   });
 });
 
@@ -447,6 +502,7 @@ describe('the upstream wording the refusal rule reads', () => {
 
   it('words an invalid state with the prefix the rule matches', () => {
     expect(bundle).toContain('`persistent auth state invalid: ${category}`');
+    expect(bundle).toContain('errorMessage: "persistent auth failed: flow"');
   });
 
   it('rejects a state for exactly the categories the table removes on', () => {

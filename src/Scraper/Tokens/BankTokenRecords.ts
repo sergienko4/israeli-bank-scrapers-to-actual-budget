@@ -21,6 +21,36 @@ export const NO_TOKEN = '';
 /** Absence of a login, for a token nothing binds. */
 export const NO_LOGIN = '';
 
+/** Warm-start banks whose cold login always requires an SMS code (`oneZero`, `pepper`, `payBox`). */
+const COLD_OTP_BANKS: ReadonlySet<string> = new Set<string>(['oneZero', 'pepper', 'payBox']);
+
+/** Banks that persist device authentication state (`bound-device` for Pepper, `device-memory` for FIBI). */
+const DEVICE_AUTH_BANKS: ReadonlySet<string> = new Set<string>([
+  'pepper',
+  'beinleumi',
+  'massad',
+  'otsarHahayal',
+  'pagi',
+]);
+
+/**
+ * Tells whether a bank's cold login always requires an SMS code.
+ * @param companyType - Provider company id of the bank being scraped.
+ * @returns True for OneZero, Pepper and PayBox.
+ */
+export function requiresColdOtp(companyType: string): boolean {
+  return COLD_OTP_BANKS.has(companyType);
+}
+
+/**
+ * Tells whether a bank persists device authentication state (`persistentAuthState`).
+ * @param companyType - Provider company id of the bank being scraped.
+ * @returns True for Pepper and FIBI family banks (Beinleumi, Massad, OtsarHahayal, Pagi).
+ */
+export function isDeviceAuthBank(companyType: string): boolean {
+  return DEVICE_AUTH_BANKS.has(companyType);
+}
+
 /** A login fingerprint: SHA-256 as 64 lowercase hex characters. */
 const LOGIN_FINGERPRINT = /^[\da-f]{64}$/u;
 

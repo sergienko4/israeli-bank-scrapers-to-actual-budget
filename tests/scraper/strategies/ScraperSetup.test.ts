@@ -41,8 +41,17 @@ describe('ScraperSetup', () => {
   describe('attachOtpRetriever (fix for paybox-double-otp)', () => {
     const mockOtpRetriever = async () => '123456';
 
-    describe('credentials-only banks (OneZero, Pepper, PayBox)', () => {
-      const credsBanks = [CompanyTypes.OneZero, CompanyTypes.Pepper, CompanyTypes.PayBox];
+    describe('credentials-only banks (API-direct warm-start banks)', () => {
+      const credsBanks = [
+        CompanyTypes.OneZero,
+        CompanyTypes.Pepper,
+        CompanyTypes.PayBox,
+        CompanyTypes.Hapoalim,
+        CompanyTypes.Yahav,
+        CompanyTypes.VisaCal,
+        CompanyTypes.Isracard,
+        CompanyTypes.Amex,
+      ];
 
       credsBanks.forEach((companyId) => {
         it(`should NOT attach to ScraperOptions for ${companyId}`, () => {
@@ -82,7 +91,7 @@ describe('ScraperSetup', () => {
       it('should attach to ScraperOptions for any non-credentials-only bank', () => {
         const opts = {} as any;
 
-        const attached = attachOtpRetriever(opts, mockOtpRetriever, 'hapoalim');
+        const attached = attachOtpRetriever(opts, mockOtpRetriever, 'discount');
 
         expect(attached).toBe(true);
         expect(opts).toHaveProperty('otpCodeRetriever', mockOtpRetriever);
