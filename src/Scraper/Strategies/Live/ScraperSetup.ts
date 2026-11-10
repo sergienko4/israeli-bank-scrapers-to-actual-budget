@@ -7,10 +7,8 @@ import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
 import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 
 import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
-import {
-  attachAuthFlowCapture, buildTokenStoreKey, requiresColdOtp,
-} from '../../Tokens/AuthFlowCapture.js';
-import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
+import { attachAuthFlowCapture, buildTokenStoreKey } from '../../Tokens/AuthFlowCapture.js';
+import { NO_LOGIN, requiresColdOtp } from '../../Tokens/BankTokenRecords.js';
 import loginFingerprint from '../../Tokens/LoginFingerprint.js';
 import { attachDeviceAuth } from '../../Tokens/PepperDeviceState.js';
 import type { AttemptLogin } from './AttemptLogin.js';

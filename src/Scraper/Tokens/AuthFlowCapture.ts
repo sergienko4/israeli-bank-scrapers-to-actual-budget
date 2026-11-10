@@ -24,10 +24,8 @@ import { CompanyTypes } from '@sergienko4/israeli-bank-scrapers';
 import type { ILogger } from '../../Logger/ILogger.js';
 import type { ISweepReport } from '../../Storage/StoreTypes.js';
 import { errorMessage } from '../../Utils/Index.js';
-import { isDeviceAuthBank, NO_TOKEN, requiresColdOtp } from './BankTokenRecords.js';
+import { isDeviceAuthBank, NO_TOKEN } from './BankTokenRecords.js';
 import type { IBankTokenStore } from './BankTokenStore.js';
-
-export { requiresColdOtp };
 
 /**
  * Banks whose login mints a durable long-term token.
