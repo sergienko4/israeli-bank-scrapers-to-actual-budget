@@ -66,7 +66,7 @@ Then start the portal entry point: `node dist/Portal.js`. Open
 | `port` / `PORTAL_PORT` | `8080` | Listen port. |
 | `authMode` | `password` | `password`, `google`, or `both`. |
 | `secureCookies` / `PORTAL_SECURE_COOKIES` | `false` | Mark cookies `Secure` (enable behind HTTPS). |
-| `PORTAL_TRUST_PROXY` | `false` | Address the reverse proxy connects from, allowed to set `X-Forwarded-For`; `loopback` behind `tailscale serve` so rate limits count the caller. A hop count such as `1` was accepted before 1.42.12 and is now refused — see [Upgrading](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/UPGRADING.md). |
+| `PORTAL_TRUST_PROXY` | `false` | Address the reverse proxy connects from, allowed to set `X-Forwarded-For`; `loopback` behind `tailscale serve`, or the proxy container's IP/network CIDR when the proxy runs in Docker, so rate limits count the caller. A hop count such as `1` was accepted before 1.42.12 and is now refused — see [Upgrading](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/UPGRADING.md). |
 
 > **Boot requirement:** the snippet above is not enough to start. Every mode
 > needs a strong `sessionSecret` (≥16 characters), and `password`/`both` mode
@@ -199,37 +199,88 @@ Two common patterns:
   and set `PORTAL_SECURE_COOKIES=true` so session cookies are only sent over
   HTTPS.
 
-A minimal Caddy example (`Caddyfile`) that fronts the portal with an automatic
-Let's Encrypt certificate:
+A complete Caddy example for the common Docker Compose topology. Caddy and the
+portal share a **dedicated network**, Caddy gets a **fixed address**, and the
+portal is never published directly:
 
 ```text
+# Caddyfile
 portal.example.com {
     reverse_proxy portal:8080
 }
 ```
 
 ```yaml
-# add to docker-compose.yml alongside the `portal` service
-caddy:
-  image: caddy:2
-  restart: unless-stopped
-  ports:
-    - "443:443"
-    - "80:80"
-  volumes:
-    - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    - caddy-data:/data
-  depends_on:
-    - portal
+services:
+  portal:
+    # ... the rest of the portal service from Run in Docker ...
+    # No `ports:` mapping: Caddy is the only way in.
+    environment:
+      - PORTAL_ENABLED=true
+      - PORTAL_HOST=0.0.0.0                  # accept Caddy's connections in the container
+      - PORTAL_CONFIG_PATH=/app/config/config.json
+      - PORTAL_SECURE_COOKIES=true           # the browser speaks HTTPS to Caddy
+      - PORTAL_TRUST_PROXY=172.28.0.10       # Caddy's fixed address, set below
+    networks:
+      - portal-net
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks:
+      portal-net:
+        ipv4_address: 172.28.0.10
+    depends_on:
+      - portal
+
+# Merge these into your existing top-level sections.
+networks:
+  portal-net:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  caddy-data:
 ```
+
+Inside Docker the portal does not see the browser's address; it sees the address
+of the container that opened the socket — Caddy. `PORTAL_TRUST_PROXY` must name
+**that** address, so the portal believes `X-Forwarded-For` only from Caddy and
+the per-IP rate limits count the real caller. Pin it, as above: that trusts
+exactly one container.
+
+If you cannot pin the address, trusting the dedicated subnet (for example
+`PORTAL_TRUST_PROXY=172.28.0.0/24`) is the fallback, but it is weaker. Every
+container on that network is trusted — and so is a process on the Docker host
+that reaches the portal through the network's bridge address, which is also
+inside the subnet. Such a process could set `X-Forwarded-For` itself and bypass
+the per-IP limits. Keep the network limited to the proxy and the portal, and
+prefer the fixed address wherever you can. Pick a subnet that does not overlap
+your LAN or another Docker network.
+
+> A hop count is not an option. `PORTAL_TRUST_PROXY=1` is refused since 1.42.12
+> because Fastify removed that form ([GHSA-3m5p-2c4r-xxw2][fastify-proxy-advisory]).
+> The portal logs a warning at boot and trusts nothing until it is given an
+> address.
 
 With this in place:
 
-- Keep the portal **unpublished** (drop its `ports:` mapping) so only Caddy can
-  reach it on the internal Docker network.
+- Keep the portal **unpublished** (no `ports:` on the portal service) so Caddy
+  is the only route in. A published port would let LAN clients bypass TLS and
+  the rate-limit attribution.
 - Set `PORTAL_SECURE_COOKIES=true` on the `portal` service (TLS is terminated by
   Caddy, so cookies must be marked `Secure`).
 - Browse to `https://portal.example.com`.
+- The portal still logs its "bound to non-loopback host" boot warning, because
+  it must listen on `0.0.0.0` inside the container for Caddy to reach it. That
+  warning is expected here: the port is reachable only on the Docker network.
 
 > Set `secureCookies`/`PORTAL_SECURE_COOKIES=true` **only** when the browser
 > reaches the portal over HTTPS. Over plain HTTP the browser drops `Secure`
@@ -269,9 +320,11 @@ Set it to the **address the proxy connects from**, so `X-Forwarded-For` is
 believed only on connections that genuinely came through it. `tailscale serve`
 runs on the same machine, so `loopback` is the right value; a proxy on another
 host takes its IP or a CIDR range such as `10.0.0.0/8`, and several may be
-listed comma-separated. Leave it unset when nothing is in front, because
-trusting `X-Forwarded-For` with no proxy to rewrite it lets any caller invent an
-address and walk past the limits entirely.
+listed comma-separated. A proxy in another container takes its container address
+or that dedicated network's subnet — see the Caddy example under *Expose over
+HTTPS* above. Leave it unset when nothing is in front, because trusting
+`X-Forwarded-For` with no proxy to rewrite it lets any caller invent an address
+and walk past the limits entirely.
 
 > **Changed with Fastify 5.12.1:** this used to be a count of proxy hops (`1`).
 > Fastify removed that form because it trusted the header on every connection,
