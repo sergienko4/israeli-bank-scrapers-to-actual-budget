@@ -46,6 +46,26 @@ export function isPepper(companyType: string): boolean {
 }
 
 /**
+ * Formats the display name of a device-auth bank for log and error messages.
+ * @param companyType - Provider company id of the bank being scraped.
+ * @returns `'Pepper'` for Pepper, or the provider company id for FIBI banks.
+ */
+export function deviceBankLabel(companyType: string): string {
+  return isPepper(companyType) ? 'Pepper' : companyType;
+}
+
+/**
+ * Describes how a device-auth bank re-enrolls when its stored state belongs to another login.
+ * @param companyType - Provider company id of the bank being scraped.
+ * @returns Enrollment hint matching the bank's login flow.
+ */
+function enrollHint(companyType: string): string {
+  return isPepper(companyType)
+    ? 'enrolling this device with an SMS code'
+    : 'enrolling this device again and may ask for an SMS code';
+}
+
+/**
  * Re-keys an attempt's capture parameters onto its device state.
  * @param captureParams - Capture parameters keyed on the legacy token.
  * @param accountKey - Name of the `banks` config entry, when known.
@@ -140,7 +160,8 @@ function readView(params: IAuthFlowCaptureParams): Procedure<ITokenView> {
 function enrollUnstored(params: IAuthFlowCaptureParams, view: ITokenView): IDeviceStart {
   if (view.isIntact) return ENROLL_START;
   const key = params.storeKey;
-  warnOf(params, `The token file is damaged and holds no usable Pepper device state for ${key}`);
+  const label = deviceBankLabel(params.companyType);
+  warnOf(params, `The token file is damaged and holds no usable ${label} device state for ${key}`);
   return ENROLL_START;
 }
 
@@ -156,15 +177,16 @@ function enrollUnstored(params: IAuthFlowCaptureParams, view: ITokenView): IDevi
 function startFromView(params: IAuthFlowCaptureParams, view: ITokenView): IDeviceStart {
   const { record } = view;
   const key = params.storeKey;
+  const label = deviceBankLabel(params.companyType);
   if (record.token === NO_TOKEN) return enrollUnstored(params, view);
   if (record.login !== params.login) {
     params.logger.info(
-      `  🔐 The stored Pepper device state for ${key} belongs to another login; `
-      + 'enrolling this device with an SMS code',
+      `  🔐 The stored ${label} device state for ${key} belongs to another login; `
+      + enrollHint(params.companyType),
     );
     return ENROLL_START;
   }
-  params.logger.info(`  🔐 Using the stored Pepper device state for ${key}`);
+  params.logger.info(`  🔐 Using the stored ${label} device state for ${key}`);
   return { mode: 'resume', state: record.token };
 }
 
@@ -175,12 +197,13 @@ function startFromView(params: IAuthFlowCaptureParams, view: ITokenView): IDevic
  */
 function chooseStart(params: IAuthFlowCaptureParams): IDeviceStart {
   const key = params.storeKey;
+  const label = deviceBankLabel(params.companyType);
   if (!isLoginFingerprint(params.login)) {
-    return warnOf(params, `No login identity for ${key}, so the Pepper device login is not kept`);
+    return warnOf(params, `No login identity for ${key}, so the ${label} device login is not kept`);
   }
   const view = readView(params);
   if (!view.success) {
-    return warnOf(params, `Could not read the Pepper device state for ${key}: ${view.message}`);
+    return warnOf(params, `Could not read the ${label} device state for ${key}: ${view.message}`);
   }
   return startFromView(params, view.data);
 }
@@ -196,7 +219,8 @@ function writeState(params: IAuthFlowCaptureParams, state: string): Procedure<IB
     return params.store.write(params.storeKey, state, params.login);
   } catch (error: unknown) {
     const detail = errorMessage(error);
-    return fail(`Could not store the Pepper device state for ${params.storeKey}: ${detail}`);
+    const label = deviceBankLabel(params.companyType);
+    return fail(`Could not store the ${label} device state for ${params.storeKey}: ${detail}`);
   }
 }
 
@@ -216,7 +240,8 @@ function buildSaveHook(params: IAuthFlowCaptureParams): StateUpdateHook {
       return Promise.reject(new StorageError(saved.message));
     }
     if (saved.data.written) {
-      params.logger.info(`  🔐 Stored the Pepper device state for ${params.storeKey}`);
+      const label = deviceBankLabel(params.companyType);
+      params.logger.info(`  🔐 Stored the ${label} device state for ${params.storeKey}`);
     }
     return Promise.resolve();
   };
@@ -291,9 +316,10 @@ export function withoutLongTermToken(
   params: IAuthFlowCaptureParams, bankConfig: IBankConfig,
 ): IBankConfig {
   if (isConfigured(bankConfig.otpLongTermToken)) {
+    const label = deviceBankLabel(params.companyType);
     warnOf(
       params,
-      `The configured long-term token for ${params.storeKey} is not sent: Pepper now logs in `
+      `The configured long-term token for ${params.storeKey} is not sent: ${label} now logs in `
       + 'as an enrolled device, so remove otpLongTermToken from this entry',
     );
   }

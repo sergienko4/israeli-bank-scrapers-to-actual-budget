@@ -255,6 +255,23 @@ describe('attachDeviceAuth', () => {
         + 'enrolling this device with an SMS code',
       ]]);
     });
+
+    it('names the FIBI bank and its conditional SMS hint when a stored FIBI state belongs to another login', () => {
+      const { store, fileSystem } = makeStore();
+      const fibiKey = `beinleumi-device:${ACCOUNT_KEY}`;
+      seedRecords(fileSystem, { [fibiKey]: { token: fakeToken(), capturedAt: CAPTURED_AT, login: OTHER_LOGIN } });
+
+      const { target, stateWasSent, logger } = attachOver(store, { companyType: CompanyTypes.Beinleumi });
+
+      expect(target).not.toHaveProperty('persistentAuthState');
+      expect(target.onPersistentAuthStateUpdate).toBeTypeOf('function');
+      expect(stateWasSent).toBe(false);
+      expect(linesLogged(logger)).toEqual([[
+        'info',
+        `  🔐 The stored beinleumi device state for ${fibiKey} belongs to another login; `
+        + 'enrolling this device again and may ask for an SMS code',
+      ]]);
+    });
   });
 
   describe('when the store cannot carry a device login', () => {

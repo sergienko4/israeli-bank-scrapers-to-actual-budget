@@ -389,12 +389,17 @@ describe('forgetRefusedState', () => {
       const { store, fileSystem } = makeStore();
       const fibiKey = `beinleumi-device:${ACCOUNT_KEY}`;
       seedRecords(fileSystem, { [fibiKey]: { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN } });
-      const { watch } = attempt(store, CompanyTypes.Beinleumi);
+      const { watch, logger } = attempt(store, CompanyTypes.Beinleumi);
 
       const isRemoved = forgetRefusedState(watch, failed(errorType, errorMessage));
 
       expect(isRemoved).toBe(true);
       expect(storedRecords(fileSystem)).not.toHaveProperty([fibiKey]);
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  Removed the beinleumi device state for ${fibiKey}; `
+        + 'the next run can enroll the device again and may ask for an SMS code',
+      ]]);
     });
 
     it.each([
@@ -424,7 +429,11 @@ describe('forgetRefusedState', () => {
 
       expect(isRemoved).toBe(false);
       expect(storedRecords(fileSystem)).toEqual({ [fibiKey]: record });
-      expect(linesLogged(logger)).toHaveLength(1);
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  Kept the beinleumi device state for ${fibiKey}; `
+        + 'beinleumi refused the password, so check the password in the config',
+      ]]);
     });
   });
 });

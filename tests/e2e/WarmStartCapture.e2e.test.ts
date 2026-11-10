@@ -26,8 +26,8 @@ import { DEFAULT_RESILIENCE_CONFIG } from '../../src/Types/Index.js';
 import { fakeUuid, fakeValidBankConfigFor } from '../helpers/factories.js';
 import type { ITokenStoreDir } from './helpers/warmStartHarness.js';
 import {
-  closeTokenStore, everythingLogged, OWNER_ONLY, openTokenStore, PERMISSION_BITS, providerWill,
-  runImport, STORE_KEY, scrapedAccount, storedTokens,
+  closeTokenStore, countingPrompter, everythingLogged, OWNER_ONLY, openTokenStore, PERMISSION_BITS,
+  providerWill, runImport, STORE_KEY, scrapedAccount, storedTokens,
 } from './helpers/warmStartHarness.js';
 
 const provider = vi.hoisted(() => ({ createScraper: vi.fn() }));
@@ -271,6 +271,32 @@ describe('E2E: long-term token capture', () => {
       expect(sentCreds[1]).toMatchObject({ ...definedColdFields, otpLongTermToken: token });
     },
   );
+
+  it('preserves the watched OTP retriever when a warm hapoalim run falls back to SMS after mergeOptionsIntoCreds', async () => {
+    const [firstToken, secondToken] = [`v1.${fakeUuid()}`, `v1.${fakeUuid()}`];
+    provider.createScraper.mockImplementation((options: ScraperOptions) => ({
+      /**
+       * Simulates upstream mergeOptionsIntoCreds ({ ...creds, ...options }) and triggers OTP on stale token.
+       * @param creds - Scraper credentials sent by the importer.
+       * @returns Successful scrape result with refreshed token.
+       */
+      scrape: async (creds: Record<string, unknown>): Promise<IScraperScrapingResult> => {
+        const merged = { ...creds, ...options } as { otpLongTermToken?: string; otpCodeRetriever?: () => Promise<string> };
+        if (merged.otpLongTermToken === firstToken) await merged.otpCodeRetriever?.();
+        const minted = merged.otpLongTermToken === firstToken ? secondToken : firstToken;
+        await options.onAuthFlowComplete?.({ longTermToken: minted, bearer: '' });
+        return { ...scrapedAccount(), persistentOtpToken: minted };
+      },
+    }));
+    const bankConfig = fakeValidBankConfigFor('hapoalim', { twoFactorAuth: true });
+    const prompter = countingPrompter().prompter;
+    await runImport({ entry: 'hapoalim', bankConfig, prompter });
+    const warm = await runImport({ entry: 'hapoalim', bankConfig, prompter });
+    expect(warm.result.success).toBe(true);
+    expect(everythingLogged(warm.logger)).toContain(
+      'The long-term token for hapoalim:hapoalim was not accepted, so this run logs in with an SMS code',
+    );
+  });
 
   describe('when a login outlasts its try', () => {
     beforeEach(() => {

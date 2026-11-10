@@ -7,8 +7,10 @@ import type { ScraperOptions } from '@sergienko4/israeli-bank-scrapers';
 import { createScraper } from '@sergienko4/israeli-bank-scrapers';
 
 import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
-import { attachAuthFlowCapture, buildTokenStoreKey } from '../../Tokens/AuthFlowCapture.js';
-import { NO_LOGIN, requiresColdOtp } from '../../Tokens/BankTokenRecords.js';
+import {
+  attachAuthFlowCapture, buildTokenStoreKey, isApiDirectBank,
+} from '../../Tokens/AuthFlowCapture.js';
+import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
 import loginFingerprint from '../../Tokens/LoginFingerprint.js';
 import { attachDeviceAuth } from '../../Tokens/PepperDeviceState.js';
 import type { AttemptLogin } from './AttemptLogin.js';
@@ -159,11 +161,10 @@ export function buildBaseScraperOptions(scrapeOpts: LiveOpts): ScraperOptions {
 
 /**
  * Attaches the OTP adapter expected by the provider package.
- * Only attaches for banks that use OtpHandler (beinleumi). Banks that read
- * otpCodeRetriever from credentials (OneZero, Pepper, PayBox) already have
- * it attached by buildCredentials and should NOT get it in ScraperOptions
- * to avoid double OTP prompts. Those are exactly the API-direct banks, so the
- * set is shared with the token capture rather than restated.
+ * Warm-start token banks (`isApiDirectBank`) receive their watched
+ * `otpCodeRetriever` on credentials via `buildCredentials`, so they must not
+ * also get the unwrapped retriever in `ScraperOptions` (which upstream's
+ * `{ ...creds, ...opts }` merge would overwrite).
  * @param target - Provider options object that receives the adapter.
  * @param otpRetriever - Optional OTP retriever attached for 2FA banks.
  * @param companyId - CompanyType enum value to determine if bank uses OtpHandler.
@@ -172,7 +173,7 @@ export function buildBaseScraperOptions(scrapeOpts: LiveOpts): ScraperOptions {
 export function attachOtpRetriever(
   target: ScraperOptions, otpRetriever: OtpRetriever, companyId: string,
 ): boolean {
-  if (!otpRetriever || requiresColdOtp(companyId)) return false;
+  if (!otpRetriever || isApiDirectBank(companyId)) return false;
   target.otpCodeRetriever = otpRetriever;
   return true;
 }
