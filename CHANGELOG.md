@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.45.0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.44.5...v1.45.0) (2026-11-10)
+
+
+### Added
+
+* **scraper:** support v10.0.0 warm-start and device-memory banks ([#884](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/884)) ([7af83e7](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/7af83e7aa7bf22fdc68f08b26e83355652c7c60e))
+
+
+### Fixed
+
+* **deps:** bump @sergienko4/israeli-bank-scrapers from 9.0.0 to 10.0.0 ([#882](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/882)) ([ef78052](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/ef78052acaefb157ece00e15304211a197d78ae7))
+
 ## [1.44.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.44.4...v1.44.5) (2026-11-07)
 
 
