@@ -253,11 +253,16 @@ volumes:
 Inside Docker the portal does not see the browser's address; it sees the address
 of the container that opened the socket — Caddy. `PORTAL_TRUST_PROXY` must name
 **that** address, so the portal believes `X-Forwarded-For` only from Caddy and
-the per-IP rate limits count the real caller. Caddy's address can change when the
-container is recreated on Docker's default bridge, so pin it (as above) or trust
-the dedicated subnet instead, for example `PORTAL_TRUST_PROXY=172.28.0.0/24`.
-Trusting the subnet also trusts every other container on it, so keep that
-network limited to the proxy and the portal. Pick a subnet that does not overlap
+the per-IP rate limits count the real caller. Pin it, as above: that trusts
+exactly one container.
+
+If you cannot pin the address, trusting the dedicated subnet (for example
+`PORTAL_TRUST_PROXY=172.28.0.0/24`) is the fallback, but it is weaker. Every
+container on that network is trusted — and so is a process on the Docker host
+that reaches the portal through the network's bridge address, which is also
+inside the subnet. Such a process could set `X-Forwarded-For` itself and bypass
+the per-IP limits. Keep the network limited to the proxy and the portal, and
+prefer the fixed address wherever you can. Pick a subnet that does not overlap
 your LAN or another Docker network.
 
 > A hop count is not an option. `PORTAL_TRUST_PROXY=1` is refused since 1.42.12
