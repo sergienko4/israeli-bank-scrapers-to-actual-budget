@@ -383,7 +383,6 @@ describe('forgetRefusedState', () => {
 
     it.each([
       ['local decoding rejection', 'GENERIC', 'persistent auth state invalid: deviceId'],
-      ['upstream generic flow failure', 'GENERIC', 'persistent auth failed: flow'],
       ['upstream missing-OTP flow fallback', 'TWO_FACTOR_RETRIEVER_MISSING', 'persistent auth failed: flow'],
       ['upstream rejected-OTP flow failure', 'INVALID_OTP', 'persistent auth failed: flow'],
     ] as const)('removes a rejected FIBI device-memory state on %s (%s)', (_label, errorType, errorMessage) => {
@@ -399,8 +398,8 @@ describe('forgetRefusedState', () => {
     });
 
     it.each([
-      'TIMEOUT', 'WAF_BLOCKED', 'ACCOUNT_BLOCKED', 'CHANGE_PASSWORD',
-    ] as const)('preserves a FIBI device-memory state on transient or account error %s', (errorType) => {
+      'GENERIC', 'TIMEOUT', 'WAF_BLOCKED', 'ACCOUNT_BLOCKED', 'CHANGE_PASSWORD',
+    ] as const)('preserves a FIBI device-memory state on ambiguous, transient, or account error %s', (errorType) => {
       const { store, fileSystem } = makeStore();
       const fibiKey = `beinleumi-device:${ACCOUNT_KEY}`;
       const record = { token: fakeToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN };

@@ -41,9 +41,8 @@ const STATE_INVALID = 'persistent auth state invalid: ';
 /** How the provider words a device-memory flow failure. */
 const FLOW_FAILED = 'persistent auth failed: flow';
 
-/** Error types on a device-memory flow failure that prove the remembered device was not accepted. */
+/** Error types on a device-memory flow failure that prove the remembered device fell back to OTP. */
 const DEAD_FLOW_ERROR_TYPES: ReadonlySet<string> = new Set([
-  'GENERIC',
   'TWO_FACTOR_RETRIEVER_MISSING',
   'INVALID_OTP',
 ]);
