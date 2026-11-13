@@ -92,7 +92,7 @@
     "husky": "^9.1.7",
     "jsdom": "^31.0.0",
     "license-compliance": "^4.0.0",
-    "markdownlint-cli2": "^0.24.0",
+    "markdownlint-cli2": "^0.24.1",
     "patch-package": "^8.0.1",
     "playwright-core": "~1.64.0",
     "semver": "^7.8.5",
