@@ -62,7 +62,7 @@
     "@fastify/type-provider-typebox": "^6.2.0",
     "@sergienko4/israeli-bank-scrapers": "^10.0.1",
     "@sinclair/typebox": "^0.34.52",
-    "cron-parser": "^5.10.4",
+    "cron-parser": "^5.10.5",
     "fastify": "^5.12.4",
     "pino": "^10.4.0",
     "pino-pretty": "^13.2.0",
