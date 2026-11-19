@@ -76,7 +76,7 @@ function warn(params: Pick<ITokenChoiceParams, 'logger'>, message: string): true
  * Warns that no token is sent, and why.
  * @param params - Attempt parameters carrying the logger.
  * @param message - Why, naming the account but not the token.
- * @returns {@link NOT_SENT}, so callers can refuse in one step.
+ * @returns A choice with source `none`, so callers can refuse in one step.
  */
 function refuse(params: ITokenChoiceParams, message: string): ITokenChoice {
   warn(params, message);
@@ -127,7 +127,7 @@ function readView(params: ITokenChoiceParams): Procedure<ITokenView> {
  * token must not be sent for this login, and neither may the configured one,
  * which is at least as old.
  * @param params - Attempt parameters carrying the logger and key.
- * @returns {@link NOT_SENT}.
+ * @returns A choice with source `none`.
  */
 function boundElsewhere(params: ITokenChoiceParams): ITokenChoice {
   params.logger.info(
@@ -150,7 +150,7 @@ function configuredTokenOf(params: ITokenChoiceParams): string {
  * Sends a vouched configured token unless it was not accepted before.
  * @param params - Attempt parameters carrying the key and refusals.
  * @param seed - The trimmed, non-blank configured token.
- * @returns The seed, or {@link NOT_SENT}.
+ * @returns The seed, or a choice with source `none`.
  */
 function sendConfigured(params: ITokenChoiceParams, seed: string): ITokenChoice {
   if (isOversizedOtpToken(seed)) {
@@ -206,7 +206,7 @@ function dropOversizedStored(params: ITokenChoiceParams, token: string): true {
  * read in full cannot say another entry did not retire this token.
  * @param params - Attempt parameters carrying the key and refusals.
  * @param seed - The trimmed, non-blank configured token.
- * @returns The seed, or {@link NOT_SENT}.
+ * @returns The seed, or a choice with source `none`.
  */
 function fromUnboundSeed(params: ITokenChoiceParams, seed: string): ITokenChoice {
   if (params.refused.isIntact || wasRefused(params, seed)) return sendConfigured(params, seed);
@@ -222,7 +222,7 @@ function fromUnboundSeed(params: ITokenChoiceParams, seed: string): ITokenChoice
  * @param params - Attempt parameters carrying the key and login.
  * @param view - The account's view of the store.
  * @param seed - The trimmed, non-blank configured token.
- * @returns The seed, or {@link NOT_SENT}.
+ * @returns The seed, or a choice with source `none`.
  */
 function fromVouchedSeed(
   params: ITokenChoiceParams, view: ITokenView, seed: string,
@@ -245,7 +245,7 @@ function fromVouchedSeed(
  * the warning does not claim it was this one.
  * @param params - Attempt parameters carrying the key and logger.
  * @param view - The account's view of the store.
- * @returns {@link NOT_SENT}.
+ * @returns A choice with source `none`.
  */
 function noneConfigured(params: ITokenChoiceParams, view: ITokenView): ITokenChoice {
   if (view.isIntact) return NOT_SENT;
@@ -263,7 +263,7 @@ function noneConfigured(params: ITokenChoiceParams, view: ITokenView): ITokenCho
  * @param params - Attempt parameters carrying the key.
  * @param view - The account's view of the store.
  * @param seed - The entry's `otpLongTermToken`, as loaded.
- * @returns The trimmed seed, or {@link NOT_SENT}.
+ * @returns The trimmed seed, or a choice with source `none`.
  */
 function fromSeed(params: ITokenChoiceParams, view: ITokenView, seed: unknown): ITokenChoice {
   if (seed === undefined || seed === null) return noneConfigured(params, view);
@@ -283,7 +283,7 @@ function fromSeed(params: ITokenChoiceParams, view: ITokenView, seed: unknown): 
  * @param params - Attempt parameters carrying the login and refusals.
  * @param view - The account's view of the store, holding a usable record.
  * @param seed - The entry's `otpLongTermToken`, as loaded.
- * @returns The token to send, or {@link NOT_SENT}.
+ * @returns The token to send, or a choice with source `none`.
  */
 function fromStored(
   params: ITokenChoiceParams, view: ITokenView, seed: unknown,
@@ -306,7 +306,7 @@ function fromStored(
  * Chooses the token the store vouches for, failing closed on every doubt.
  * @param params - Attempt parameters carrying the store, key, login and refusals.
  * @param seed - The entry's `otpLongTermToken`, as loaded.
- * @returns The token to send and its source, or {@link NOT_SENT}.
+ * @returns The token to send and its source, or a choice with source `none`.
  */
 export function chooseToken(params: ITokenChoiceParams, seed: unknown): ITokenChoice {
   const key = params.storeKey;
