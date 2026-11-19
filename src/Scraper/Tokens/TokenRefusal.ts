@@ -19,7 +19,7 @@
  * warnings name the account but never the token or its digest.
  */
 
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
+import { type IScraperScrapingResult, ScraperErrorTypes } from '@sergienko4/israeli-bank-scrapers';
 
 import { BUDGET_SPENT_PATTERN } from '../../Errors/ScraperErrorMessages.js';
 import type { Procedure } from '../../Types/Procedure.js';
@@ -47,7 +47,7 @@ interface ISentDigest {
  * @returns True only for that refusal under `GENERIC`.
  */
 function isBudgetFailure(result: IScraperScrapingResult): boolean {
-  if (result.success || String(result.errorType) !== 'GENERIC') return false;
+  if (result.success || result.errorType !== ScraperErrorTypes.Generic) return false;
   const message = result.errorMessage ?? '';
   return BUDGET_SPENT_PATTERN.test(message);
 }

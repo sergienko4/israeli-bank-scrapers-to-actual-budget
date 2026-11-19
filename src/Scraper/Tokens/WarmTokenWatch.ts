@@ -11,7 +11,7 @@
  * show it.
  */
 
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
+import { type IScraperScrapingResult, ScraperErrorTypes } from '@sergienko4/israeli-bank-scrapers';
 
 import type { ILogger } from '../../Logger/ILogger.js';
 
@@ -96,7 +96,7 @@ export function watchRetriever(watch: IWarmTokenWatch, retriever: Retriever): Re
  * @returns True when the warning was logged.
  */
 export function warnIfNotAccepted(watch: IWarmTokenWatch, result: IScraperScrapingResult): boolean {
-  const isStuck = String(result.errorType) === 'TWO_FACTOR_RETRIEVER_MISSING';
+  const isStuck = result.errorType === ScraperErrorTypes.TwoFactorRetrieverMissing;
   if (!hasSentToken(watch) || !isStuck) return false;
   watch.logger.warn(
     `${notAcceptedOf(watch)}, and this run cannot ask for an SMS code: `

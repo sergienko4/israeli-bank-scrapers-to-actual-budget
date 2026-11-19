@@ -26,7 +26,7 @@
  * `auth/login` reads as Pepper's own and costs one SMS code.
  */
 
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
+import { type IScraperScrapingResult, ScraperErrorTypes } from '@sergienko4/israeli-bank-scrapers';
 
 import type { Procedure } from '../../Types/Procedure.js';
 import { fail } from '../../Types/ProcedureHelpers.js';
@@ -43,9 +43,9 @@ const STATE_INVALID = 'persistent auth state invalid: ';
 const FLOW_FAILED = 'persistent auth failed: flow';
 
 /** Error types on a device-memory flow failure that prove the remembered device fell back to OTP. */
-const DEAD_FLOW_ERROR_TYPES: ReadonlySet<string> = new Set([
-  'TWO_FACTOR_RETRIEVER_MISSING',
-  'INVALID_OTP',
+const DEAD_FLOW_ERROR_TYPES: ReadonlySet<ScraperErrorTypes> = new Set([
+  ScraperErrorTypes.TwoFactorRetrieverMissing,
+  ScraperErrorTypes.InvalidOtp,
 ]);
 
 /** A renewal step's 4xx, as upstream's `sanitiseStepFailure` words it. */
@@ -82,8 +82,8 @@ function renewalVerdict(message: string): StateVerdict {
  *   remembered device was rejected or fell back to OTP, and `may-pass` for
  *   transient or account-status failures.
  */
-function flowVerdict(errorType: string): StateVerdict {
-  if (errorType === 'INVALID_PASSWORD') return 'password-refused';
+function flowVerdict(errorType: ScraperErrorTypes): StateVerdict {
+  if (errorType === ScraperErrorTypes.InvalidPassword) return 'password-refused';
   return DEAD_FLOW_ERROR_TYPES.has(errorType) ? 'dead' : 'may-pass';
 }
 
@@ -96,9 +96,9 @@ function flowVerdict(errorType: string): StateVerdict {
 function verdictOf(result: IScraperScrapingResult): StateVerdict {
   if (result.success) return 'may-pass';
   const message = result.errorMessage ?? '';
-  const errorType = String(result.errorType);
-  if (message === FLOW_FAILED) return flowVerdict(errorType);
-  if (errorType !== 'GENERIC') return 'may-pass';
+  const errorType = result.errorType;
+  if (message === FLOW_FAILED) return flowVerdict(errorType ?? ScraperErrorTypes.Generic);
+  if (errorType !== ScraperErrorTypes.Generic) return 'may-pass';
   if (message.startsWith(STATE_INVALID)) return 'dead';
   return renewalVerdict(message);
 }

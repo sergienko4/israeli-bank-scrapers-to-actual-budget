@@ -3,7 +3,7 @@
  * @internal
  */
 
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
+import { type IScraperScrapingResult, ScraperErrorTypes } from '@sergienko4/israeli-bank-scrapers';
 
 import type { IRawScrape, Procedure } from '../../../Types/Index.js';
 import { fail, succeed } from '../../../Types/Index.js';
@@ -31,7 +31,7 @@ export function resolveLiveOpts(
  */
 export function isInvalidOtpFailure(result: IScraperScrapingResult): boolean {
   const didFail = !result.success;
-  const isOtpError = String(result.errorType) === 'INVALID_OTP';
+  const isOtpError = result.errorType === ScraperErrorTypes.InvalidOtp;
   return didFail && isOtpError;
 }
 
