@@ -14,6 +14,7 @@
 import type api from '@actual-app/api';
 
 import { getLogger } from '../../Logger/Index.js';
+import asActualQuery from '../ActualQuery.js';
 
 /**
  * Wraps the AQL query that fetches every `imported_id` value already in
@@ -53,9 +54,10 @@ export default class DedupQuery {
   private async queryImportedIdRows(
     accountId: string,
   ): Promise<{ imported_id: string | null }[] | undefined> {
-    const query = this._api.q('transactions')
+    const builtQuery = this._api.q('transactions')
       .filter({ account: accountId })
       .select(['imported_id']);
+    const query = asActualQuery(builtQuery);
     const result = await this._api.aqlQuery(query);
     return (result as { data?: { imported_id: string | null }[] } | null)?.data;
   }
