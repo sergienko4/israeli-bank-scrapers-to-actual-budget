@@ -215,6 +215,17 @@ describe('ScraperErrorMessages', () => {
       expect(getScraperErrorAdvice('GENERIC navigation timed out'))
         .not.toContain('rejected a credential');
     });
+
+    it.each([
+      'startDate must be a valid date',
+      'futureMonthsToScrape must be an integer between 0 and ',
+      'persistentAuthState must be a string',
+      'persistentAuthState exceeds ',
+      'credentials must be an object',
+      'Missing or malformed credentials: ',
+    ])('still matches the wording the installed scraper sends: %s', (phrase) => {
+      expect(providerBundle()).toContain(phrase);
+    });
   });
 });
 
