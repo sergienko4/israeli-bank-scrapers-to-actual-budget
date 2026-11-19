@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.45.3](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.45.2...v1.45.3) (2026-11-19)
+
+
+### Fixed
+
+* **actual:** type factory queries for aqlQuery ([#916](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/916)) ([cea280b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/cea280bf6a48484e143b4233bc602a2b26336ac2))
+* **deps:** bump @fastify/static from 10.1.11 to 10.1.12 ([#909](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/909)) ([addf85b](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/addf85b4e18555199a6b33b6a6f6e70ab5e1747c))
+* **deps:** bump @sergienko4/israeli-bank-scrapers from 10.0.1 to 10.1.0 ([#908](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/908)) ([fac92b0](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fac92b010df73db9d846822845ced6e411d1322f))
+* **deps:** refresh 12 runtime and 42 dev lockfile pins ([#918](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/918)) ([35ef24a](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/35ef24a076ff6c9163fe411ddc6ace3235f0823b))
+* **scraper:** adapt to scraper 10.1.0 boundaries ([#913](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/913)) ([fc6a679](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/fc6a679d79b7d9746ffb1121143ccd1a80f3391a))
+
 ## [1.45.2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.45.1...v1.45.2) (2026-11-15)
 
 
