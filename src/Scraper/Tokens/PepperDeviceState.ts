@@ -28,13 +28,15 @@ import type { IBankConfig } from '../../Types/Index.js';
 import type { Procedure } from '../../Types/Procedure.js';
 import { fail } from '../../Types/ProcedureHelpers.js';
 import { errorMessage } from '../../Utils/Index.js';
-import {
-  isOversizedDeviceState,
-  MAX_PERSISTENT_AUTH_STATE_CHARS,
-} from '../ProviderLimits.js';
 import type { IAuthFlowCaptureParams } from './AuthFlowCapture.js';
 import { buildTokenStoreKey } from './AuthFlowCapture.js';
-import { isDeviceAuthBank, isLoginFingerprint, NO_TOKEN } from './BankTokenRecords.js';
+import {
+  isDeviceAuthBank,
+  isLoginFingerprint,
+  isOversizedDeviceState,
+  MAX_PERSISTENT_AUTH_STATE_CHARS,
+  NO_TOKEN,
+} from './BankTokenRecords.js';
 import type { IBankTokenWrite, ITokenView, TokenRetirement } from './BankTokenStore.js';
 import tokenDigest from './TokenDigest.js';
 

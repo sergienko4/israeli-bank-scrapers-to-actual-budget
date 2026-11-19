@@ -17,11 +17,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ILogger } from '../../src/Logger/ILogger.js';
 import redactSecrets from '../../src/Logger/SecretRedaction.js';
-import {
-  MAX_OTP_LONG_TERM_TOKEN_CHARS,
-} from '../../src/Scraper/ProviderLimits.js';
 import type { IAuthFlowCaptureParams } from '../../src/Scraper/Tokens/AuthFlowCapture.js';
-import { NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
+import { MAX_OTP_LONG_TERM_TOKEN_CHARS, NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
 import type { IBankTokenStore } from '../../src/Scraper/Tokens/BankTokenStore.js';
 import type { IRefusedTokens } from '../../src/Scraper/Tokens/RefusedTokens.js';
 import tokenDigest from '../../src/Scraper/Tokens/TokenDigest.js';

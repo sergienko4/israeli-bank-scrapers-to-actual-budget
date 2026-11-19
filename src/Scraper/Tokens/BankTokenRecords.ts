@@ -13,6 +13,10 @@
  * a token is usable only while the file binds it to exactly one login. A
  * Pepper or PayBox token logs in by itself, so a token the file cannot vouch
  * for would import whichever account it belongs to.
+ *
+ * <p>The provider also caps the length of the opaque values the importer
+ * stores. A value over the cap is rejected before any bank request, so the
+ * predicates here keep a saved token or device state from failing every run.
  */
 
 /** Absence of a token, shared by every "nothing stored" outcome. */
@@ -32,6 +36,47 @@ const DEVICE_AUTH_BANKS: ReadonlySet<string> = new Set<string>([
   'otsarHahayal',
   'pagi',
 ]);
+
+/**
+ * Longest `otpLongTermToken` the provider accepts, in characters.
+ *
+ * Scraper 10.1.0 validates the value before any bank request. The importer
+ * stores and re-sends it, so this cap keeps a saved token from failing every
+ * run; the drift test in `BankTokenRecords.test.ts` pins it to the installed
+ * provider bundle.
+ */
+export const MAX_OTP_LONG_TERM_TOKEN_CHARS = 16_384;
+
+/** Longest `persistentAuthState` the provider accepts, in characters. */
+export const MAX_PERSISTENT_AUTH_STATE_CHARS = 32_768;
+
+/**
+ * Tells whether a value exceeds a cap the provider enforces.
+ * @param value - Value about to be sent to the provider.
+ * @param cap - Provider's maximum length, in characters.
+ * @returns True when the provider would reject the value before any request.
+ */
+function exceedsCap(value: string, cap: number): boolean {
+  return value.length > cap;
+}
+
+/**
+ * Tells whether a long-term token is too long for the provider.
+ * @param token - Token about to be sent as `otpLongTermToken`.
+ * @returns True when the provider would reject it before any request.
+ */
+export function isOversizedOtpToken(token: string): boolean {
+  return exceedsCap(token, MAX_OTP_LONG_TERM_TOKEN_CHARS);
+}
+
+/**
+ * Tells whether a stored device state is too long for the provider.
+ * @param state - State about to be sent as `persistentAuthState`.
+ * @returns True when the provider would reject it before any request.
+ */
+export function isOversizedDeviceState(state: string): boolean {
+  return exceedsCap(state, MAX_PERSISTENT_AUTH_STATE_CHARS);
+}
 
 /**
  * Tells whether a bank's cold login always requires an SMS code.

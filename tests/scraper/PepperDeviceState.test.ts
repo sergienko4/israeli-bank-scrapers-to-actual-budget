@@ -17,9 +17,11 @@ import { describe, expect, it, vi } from 'vitest';
 import StorageError from '../../src/Errors/StorageError.js';
 import type { ILogger } from '../../src/Logger/ILogger.js';
 import redactSecrets from '../../src/Logger/SecretRedaction.js';
-import { MAX_PERSISTENT_AUTH_STATE_CHARS } from '../../src/Scraper/ProviderLimits.js';
 import type { IAuthFlowCaptureParams } from '../../src/Scraper/Tokens/AuthFlowCapture.js';
-import { NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
+import {
+  MAX_PERSISTENT_AUTH_STATE_CHARS,
+  NO_LOGIN,
+} from '../../src/Scraper/Tokens/BankTokenRecords.js';
 import type { IBankTokenStore } from '../../src/Scraper/Tokens/BankTokenStore.js';
 import type { IDeviceAuthTarget } from '../../src/Scraper/Tokens/PepperDeviceState.js';
 import {

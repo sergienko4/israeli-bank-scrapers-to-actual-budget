@@ -1,36 +1,11 @@
 /**
- * Chooses the long-term token an API-direct login sends.
+ * Resolves the long-term token one API-direct attempt sends, and the watch on it.
  *
- * <p>A PayBox token logs in by itself (the provider skips every login step on
- * the warm path), so the token an attempt sends decides which account it
- * imports. A token is sent only when the store vouches that it belongs to this
- * attempt's login. The order is: the entry's own stored token, then the
- * configured one while the store holds none for the entry, then none, so the
- * provider logs in cold with an SMS.
- *
- * <p>A token that was not accepted before is not sent again, by any entry,
- * while the list of tokens that were not accepted holds it, since a token logs
- * in to one account whichever entry sends it. A stored one is skipped in
- * favour of the configured one, which is checked the same way.
- *
- * <p>Pepper never asks here: its enrolled-device state replaced its long-term
+ * <p>The choice policy lives in {@link chooseToken}. This module reads the
+ * refusal list, warns when a cold login cannot ask for a code, registers the
+ * sent value with the masker, and tags the attempt with the token's digest.
+ * Pepper never asks here: its enrolled-device state replaced its long-term
  * token, and `PepperDeviceState` chooses what it sends.
- *
- * <p>Every doubt about whose a token is fails closed. If the store cannot be
- * read, or the file is damaged, a configured token is never sent, because the
- * store could not say whose it is. The list of tokens that were not accepted
- * is the exception for tokens the store binds to this login: if it cannot be
- * read in full, they are sent unless what it could read names them, with a
- * warning. Retiring a token
- * removes the record that bound it to its login, so for a configured token the
- * store binds to no login, that list is the only record of whose it was; such
- * a token is not sent unless the list was read in full.
- * Nothing here logs a token or its digest, and the token sent is registered
- * with the value masker, so no other output shows it.
- *
- * <p>A token longer than the provider's public boundary accepts is never sent.
- * The provider rejects it before any bank request, so a stored one is removed
- * and a configured one earns a warning until the operator removes it.
  */
 
 import { registerSecretValues } from '../../Logger/SecretValues.js';
@@ -38,14 +13,12 @@ import type { IBankConfig } from '../../Types/Index.js';
 import type { Procedure } from '../../Types/Procedure.js';
 import { fail } from '../../Types/ProcedureHelpers.js';
 import { errorMessage } from '../../Utils/Index.js';
-import { isOversizedOtpToken, MAX_OTP_LONG_TERM_TOKEN_CHARS } from '../ProviderLimits.js';
 import type { IAuthFlowCaptureParams } from './AuthFlowCapture.js';
-import { isLoginFingerprint, NO_LOGIN, NO_TOKEN, requiresColdOtp } from './BankTokenRecords.js';
-import type { ITokenView } from './BankTokenStore.js';
-import { dropOversizedStoredToken } from './OversizedToken.js';
+import { NO_TOKEN, requiresColdOtp } from './BankTokenRecords.js';
 import type { IRefusalView, IRefusedTokens } from './RefusedTokens.js';
+import { chooseToken, type ITokenChoice } from './StoredTokenChoice.js';
 import tokenDigest from './TokenDigest.js';
-import type { WarmTokenDecision, WarmTokenSource } from './WarmTokenWatch.js';
+import type { WarmTokenDecision } from './WarmTokenWatch.js';
 import { NO_TOKEN_SENT } from './WarmTokenWatch.js';
 
 /** What one attempt logs in with, beyond the capture bundle. */
@@ -70,18 +43,6 @@ export interface IWarmTokenChoice {
   readonly decision: WarmTokenDecision;
 }
 
-/** Account key, login, store and logger for one attempt, and the refusals it honours. */
-type Params = IAuthFlowCaptureParams & { readonly refused: IRefusalView };
-
-/** The token an attempt sends, and where it came from. */
-interface ISentToken {
-  readonly source: WarmTokenSource | 'none';
-  readonly token: string;
-}
-
-/** What an attempt sends when it sends no token. */
-const NOT_SENT: ISentToken = { source: 'none', token: NO_TOKEN };
-
 /** A refusal view that names no token and vouches for none, for a list that could not be read. */
 const NO_REFUSALS: IRefusalView = {
   /**
@@ -98,225 +59,9 @@ const NO_REFUSALS: IRefusalView = {
  * @param message - What to warn.
  * @returns True once logged.
  */
-function warn(params: Pick<Params, 'logger'>, message: string): true {
+function warn(params: Pick<IAuthFlowCaptureParams, 'logger'>, message: string): true {
   params.logger.warn(`  ⚠️  ${message}`);
   return true;
-}
-
-/**
- * Warns that no token is sent, and why.
- * @param params - Attempt parameters carrying the logger.
- * @param message - Why, naming the account but not the token.
- * @returns {@link NOT_SENT}, so callers can refuse in one step.
- */
-function refuse(params: Params, message: string): ISentToken {
-  warn(params, message);
-  return NOT_SENT;
-}
-
-/**
- * Says at INFO which token is sent, without showing the token.
- * @param params - Attempt parameters carrying the logger and key.
- * @param source - Where the token came from: `stored` or `configured`.
- * @param token - The token to send.
- * @returns The token and its source.
- */
-function send(params: Params, source: WarmTokenSource, token: string): ISentToken {
-  params.logger.info(`  🔐 Using the ${source} long-term token for ${params.storeKey}`);
-  return { source, token };
-}
-
-/**
- * Tells whether a token was not accepted before, for any entry.
- * @param params - Attempt parameters carrying the refusals.
- * @param token - A token the attempt could send.
- * @returns True when the token must not be sent.
- */
-function wasRefused(params: Params, token: string): boolean {
-  const digest = tokenDigest(token);
-  return params.refused.has(digest);
-}
-
-/**
- * Reads the account's view of the store, turning a throw into a failure.
- * @param params - Attempt parameters carrying the store and key.
- * @returns The view, or why the store could not be read.
- */
-function readView(params: Params): Procedure<ITokenView> {
-  try {
-    return params.store.read(params.storeKey);
-  } catch (error: unknown) {
-    const detail = errorMessage(error);
-    return fail(detail);
-  }
-}
-
-/**
- * Says at INFO that the stored token is for another login, so none is sent.
- *
- * <p>The entry's email or phone has changed since the token was minted. That
- * token must not be sent for this login, and neither may the configured one,
- * which is at least as old.
- * @param params - Attempt parameters carrying the logger and key.
- * @returns {@link NOT_SENT}.
- */
-function boundElsewhere(params: Params): ISentToken {
-  params.logger.info(
-    `  🔐 The stored long-term token for ${params.storeKey} belongs to another login; `
-    + 'logging in with an SMS',
-  );
-  return NOT_SENT;
-}
-
-/**
- * Names an entry's configured token in a warning, without the token.
- * @param params - Attempt parameters carrying the key.
- * @returns The phrase `configured long-term token for <key>`.
- */
-function configuredTokenOf(params: Params): string {
-  return `configured long-term token for ${params.storeKey}`;
-}
-
-/**
- * Sends a vouched configured token unless it was not accepted before.
- * @param params - Attempt parameters carrying the key and refusals.
- * @param seed - The trimmed, non-blank configured token.
- * @returns The seed, or {@link NOT_SENT}.
- */
-function sendConfigured(params: Params, seed: string): ISentToken {
-  if (isOversizedOtpToken(seed)) {
-    return refuse(
-      params,
-      `The ${configuredTokenOf(params)} is longer than the provider accepts `
-      + `(${String(MAX_OTP_LONG_TERM_TOKEN_CHARS)} characters), so it is not sent `
-      + '— remove or replace otpLongTermToken',
-    );
-  }
-  if (!wasRefused(params, seed)) return send(params, 'configured', seed);
-  return refuse(
-    params,
-    `The ${configuredTokenOf(params)} was not accepted before, so it is not sent `
-    + '— remove or replace otpLongTermToken',
-  );
-}
-
-/**
- * Sends a configured token the store binds to no login, only when the refusals were read in full.
- *
- * <p>Retiring a stored token removes the record that bound it to its login,
- * so the refusal list is then the only record of it. A list that could not be
- * read in full cannot say another entry did not retire this token.
- * @param params - Attempt parameters carrying the key and refusals.
- * @param seed - The trimmed, non-blank configured token.
- * @returns The seed, or {@link NOT_SENT}.
- */
-function fromUnboundSeed(params: Params, seed: string): ISentToken {
-  if (params.refused.isIntact || wasRefused(params, seed)) return sendConfigured(params, seed);
-  return refuse(
-    params,
-    `The ${configuredTokenOf(params)} is not saved for this login, and the list of tokens `
-    + 'that were not accepted could not be fully read, so it is not sent',
-  );
-}
-
-/**
- * Sends a configured token only when the file is intact and binds it to no other login.
- * @param params - Attempt parameters carrying the key and login.
- * @param view - The account's view of the store.
- * @param seed - The trimmed, non-blank configured token.
- * @returns The seed, or {@link NOT_SENT}.
- */
-function fromVouchedSeed(params: Params, view: ITokenView, seed: string): ISentToken {
-  const configured = configuredTokenOf(params);
-  if (!view.isIntact) {
-    return refuse(params, `The token file is damaged, so the ${configured} is not sent`);
-  }
-  const bound = view.loginOf(seed);
-  if (bound === NO_LOGIN) return fromUnboundSeed(params, seed);
-  if (bound === params.login) return sendConfigured(params, seed);
-  return refuse(params, `The ${configured} belongs to another login, so it is not sent`);
-}
-
-/**
- * Sends no token for an entry that configures none, warning when the file is damaged.
- *
- * <p>The damage may have cost the entry its stored token, which would explain
- * the SMS login that follows. The view cannot say whose entry was damaged, so
- * the warning does not claim it was this one.
- * @param params - Attempt parameters carrying the key and logger.
- * @param view - The account's view of the store.
- * @returns {@link NOT_SENT}.
- */
-function noneConfigured(params: Params, view: ITokenView): ISentToken {
-  if (view.isIntact) return NOT_SENT;
-  return refuse(
-    params, `The token file is damaged and holds no usable long-term token for ${params.storeKey}`,
-  );
-}
-
-/**
- * Sends the configured token when the store holds none for the entry.
- *
- * <p>No configured token, or a blank one (the example config ships `""`), just
- * means no token, which warns only when the file is damaged. A value that is
- * not text is a config mistake, so it warns.
- * @param params - Attempt parameters carrying the key.
- * @param view - The account's view of the store.
- * @param seed - The entry's `otpLongTermToken`, as loaded.
- * @returns The trimmed seed, or {@link NOT_SENT}.
- */
-function fromSeed(params: Params, view: ITokenView, seed: unknown): ISentToken {
-  if (seed === undefined || seed === null) return noneConfigured(params, view);
-  if (typeof seed !== 'string') {
-    return refuse(params, `The ${configuredTokenOf(params)} is not text, so it is not sent`);
-  }
-  const trimmed = seed.trim();
-  if (trimmed === NO_TOKEN) return noneConfigured(params, view);
-  return fromVouchedSeed(params, view, trimmed);
-}
-
-/**
- * Sends the entry's stored token when it is bound to this login and was not refused.
- *
- * <p>A stored token that was not accepted before is skipped, and the configured
- * one is considered as if the store held none for the entry.
- * @param params - Attempt parameters carrying the login and refusals.
- * @param view - The account's view of the store, holding a usable record.
- * @param seed - The entry's `otpLongTermToken`, as loaded.
- * @returns The token to send, or {@link NOT_SENT}.
- */
-function fromStored(params: Params, view: ITokenView, seed: unknown): ISentToken {
-  const { record } = view;
-  if (record.login !== params.login) return boundElsewhere(params);
-  if (isOversizedOtpToken(record.token)) {
-    dropOversizedStoredToken(params, record.token);
-    return fromSeed(params, view, seed);
-  }
-  if (!wasRefused(params, record.token)) return send(params, 'stored', record.token);
-  warn(
-    params,
-    `The stored long-term token for ${params.storeKey} was not accepted before, so it is not sent`,
-  );
-  return fromSeed(params, view, seed);
-}
-
-/**
- * Chooses the token the store vouches for, failing closed on every doubt.
- * @param params - Attempt parameters carrying the store, key, login and refusals.
- * @param seed - The entry's `otpLongTermToken`, as loaded.
- * @returns The token to send and its source, or {@link NOT_SENT}.
- */
-function chooseToken(params: Params, seed: unknown): ISentToken {
-  const key = params.storeKey;
-  if (!isLoginFingerprint(params.login)) {
-    return refuse(params, `No login identity for ${key}, so no long-term token is sent`);
-  }
-  const view = readView(params);
-  if (!view.success) {
-    return refuse(params, `Could not read the long-term token for ${key}: ${view.message}`);
-  }
-  if (view.data.record.token !== NO_TOKEN) return fromStored(params, view.data, seed);
-  return fromSeed(params, view.data, seed);
 }
 
 /**
@@ -371,7 +116,10 @@ function readRefusals(context: ILoginContext): IRefusalView {
  * @param canAskForOtp - Whether the attempt has an OTP retriever.
  * @returns True when the warning was logged.
  */
-function warnIfStuck(params: Params, canAskForOtp: boolean): boolean {
+function warnIfStuck(
+  params: Pick<IAuthFlowCaptureParams, 'companyType' | 'storeKey' | 'logger'>,
+  canAskForOtp: boolean,
+): boolean {
   if (canAskForOtp || !requiresColdOtp(params.companyType)) return false;
   return warn(
     params,
@@ -399,7 +147,7 @@ function withToken(bankConfig: IBankConfig, token: string): IBankConfig {
  * @param sent - The token the attempt sends, and its source.
  * @returns The decision the attempt's watch carries.
  */
-function decisionOf(sent: ISentToken): WarmTokenDecision {
+function decisionOf(sent: ITokenChoice): WarmTokenDecision {
   if (sent.source === 'none') return NO_TOKEN_SENT;
   const digest = tokenDigest(sent.token);
   return { source: sent.source, digest };
@@ -416,7 +164,7 @@ export default function resolveWarmToken(
   context: ILoginContext, request: IWarmTokenRequest,
 ): IWarmTokenChoice {
   const refused = readRefusals(context);
-  const params: Params = { ...context.capture, refused };
+  const params = { ...context.capture, refused };
   const sent = chooseToken(params, request.bankConfig.otpLongTermToken);
   if (sent.source === 'none') warnIfStuck(params, request.canAskForOtp);
   else registerSecretValues([sent.token]);
