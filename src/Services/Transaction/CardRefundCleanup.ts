@@ -30,6 +30,7 @@ import { getLogger } from '../../Logger/Index.js';
 import { CREDIT_CARD_BANKS } from '../../Types/BankCatalog.js';
 import type { IBankConfig, IImporterConfig } from '../../Types/Index.js';
 import { errorMessage } from '../../Utils/Index.js';
+import asActualQuery from '../ActualQuery.js';
 import type { IStaleRefundCandidate, IStaleRefundRow } from './StaleRefundFinder.js';
 import findStaleRefundCandidates from './StaleRefundFinder.js';
 
@@ -142,9 +143,10 @@ export function cardAccountIds(config: IImporterConfig): string[] {
  * @returns The account's rows, or an empty array when Actual yields none.
  */
 async function queryRows(accountId: string): Promise<IStaleRefundRow[]> {
-  const query = api.q('transactions')
+  const builtQuery = api.q('transactions')
     .filter({ account: accountId })
     .select(['id', 'date', 'amount', 'imported_id', 'imported_payee']);
+  const query = asActualQuery(builtQuery);
   const result = await api.aqlQuery(query);
   const payload = result as { data?: IStaleRefundRow[] } | null;
   return payload?.data ?? [];

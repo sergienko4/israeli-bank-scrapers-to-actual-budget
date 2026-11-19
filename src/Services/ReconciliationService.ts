@@ -10,6 +10,7 @@ import type api from '@actual-app/api';
 import type { Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import { extractQueryData,formatDate, toCents } from '../Utils/Index.js';
+import asActualQuery from './ActualQuery.js';
 
 export interface IReconciliationResult {
   status: 'created' | 'skipped' | 'already-reconciled';
@@ -68,9 +69,10 @@ export class ReconciliationService {
    * @returns The current balance in cents as a number.
    */
   private async getCurrentBalance(accountId: string): Promise<number> {
-    const query = this._api.q('transactions')
+    const builtQuery = this._api.q('transactions')
       .filter({ account: accountId })
       .calculate({ $sum: '$amount' });
+    const query = asActualQuery(builtQuery);
     const queryResult = await this._api.aqlQuery(query);
     return extractQueryData(queryResult, 0);
   }
