@@ -35,7 +35,8 @@ import {
 import type { IAuthFlowCaptureParams } from './AuthFlowCapture.js';
 import { buildTokenStoreKey } from './AuthFlowCapture.js';
 import { isDeviceAuthBank, isLoginFingerprint, NO_TOKEN } from './BankTokenRecords.js';
-import type { IBankTokenWrite, ITokenView } from './BankTokenStore.js';
+import type { IBankTokenWrite, ITokenView, TokenRetirement } from './BankTokenStore.js';
+import tokenDigest from './TokenDigest.js';
 
 export { isDeviceAuthBank };
 
@@ -195,7 +196,7 @@ function startFromView(params: IAuthFlowCaptureParams, view: ITokenView): IDevic
     return ENROLL_START;
   }
   if (isOversizedDeviceState(record.token)) {
-    dropOversizedState(params);
+    dropOversizedState(params, record.token);
     return ENROLL_START;
   }
   params.logger.info(`  🔐 Using the stored ${label} device state for ${key}`);
@@ -239,11 +240,15 @@ function writeState(params: IAuthFlowCaptureParams, state: string): Procedure<IB
 /**
  * Removes one device state, turning a throw into a failure.
  * @param params - Device parameters carrying the store and key.
- * @returns Whether the file was replaced, or why it was not.
+ * @param state - The stored state to remove.
+ * @returns What the entry held, or why the file could not be replaced.
  */
-function removeState(params: IAuthFlowCaptureParams): Procedure<IBankTokenWrite> {
+function removeState(
+  params: IAuthFlowCaptureParams, state: string,
+): Procedure<TokenRetirement> {
   try {
-    return params.store.remove(params.storeKey);
+    const digest = tokenDigest(state);
+    return params.store.removeMatching(params.storeKey, digest);
   } catch (error: unknown) {
     const detail = errorMessage(error);
     const label = deviceBankLabel(params.companyType);
@@ -258,13 +263,14 @@ function removeState(params: IAuthFlowCaptureParams): Procedure<IBankTokenWrite>
  * attempt removes it and enrolls this device instead. A store that cannot
  * remove it costs a warning, never the scrape.
  * @param params - Device parameters carrying the store, key, login and logger.
+ * @param state - The oversized stored state.
  * @returns True once the discard was attempted.
  */
-function dropOversizedState(params: IAuthFlowCaptureParams): true {
+function dropOversizedState(params: IAuthFlowCaptureParams, state: string): true {
   const label = deviceBankLabel(params.companyType);
   const reason = `The stored ${label} device state for ${params.storeKey} is longer than `
     + `the provider accepts (${String(MAX_PERSISTENT_AUTH_STATE_CHARS)} characters)`;
-  const removed = removeState(params);
+  const removed = removeState(params, state);
   if (!removed.success) {
     warnOf(params, `${reason}, so it is not sent; removing it failed: ${removed.message}`);
     return true;

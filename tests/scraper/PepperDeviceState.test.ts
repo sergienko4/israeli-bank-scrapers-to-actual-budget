@@ -345,8 +345,8 @@ describe('attachDeviceAuth', () => {
       const store: IBankTokenStore = {
         read: (key) => real.read(key),
         write: (key, token, login) => real.write(key, token, login),
-        remove: () => fail('read-only store'),
-        removeMatching: (key, digest) => real.removeMatching(key, digest),
+        remove: (key) => real.remove(key),
+        removeMatching: () => fail('read-only store'),
         sweepStagedLeftovers: () => real.sweepStagedLeftovers(),
       };
 
