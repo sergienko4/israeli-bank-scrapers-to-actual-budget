@@ -9,6 +9,29 @@ the new image.
 
 ---
 
+## Next release — Hapoalim re-enrolls its app device (scraper 10.1.0)
+
+**Affects:** deployments with a Hapoalim entry in `banks`. No other bank is
+affected, and no configuration change is required.
+
+Scraper 10.1.0 signs in to Hapoalim through the bank's app edge. The token
+saved by the previous release is a cookie session, not the new carry bundle
+that holds the session and a device seed, so the first Hapoalim run after
+the upgrade refuses it and enrolls this host again. That run asks for **two
+SMS codes**: the login code first, then the device step-up code.
+
+**What to do:** keep `twoFactorAuth: true` on the Hapoalim entry and answer
+both prompts. Leave `bank-tokens.json` in place; the importer replaces the
+old token automatically after enrollment. Do not copy an old
+`otpLongTermToken` into the new release. After a password change, expect one
+cold login while a new token is published.
+
+**Rollback:** an earlier scraper cannot use the new carry bundle. A rollback
+keeps the file, logs in cold, and saves a token in the older format, so
+expect another enrollment with its SMS prompts.
+
+---
+
 ## 1.44.2 — Node.js 24.11 and a new Camoufox build outside Docker
 
 **Affects:** deployments that run the importer with Node.js directly instead of

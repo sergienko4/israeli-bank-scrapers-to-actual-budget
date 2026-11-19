@@ -49,11 +49,24 @@
 }
 ```
 
-The Telegram bot prompts for a code when Hapoalim requests one. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
+The bot prompts for a code when Hapoalim requests one. Hapoalim's app flow can
+ask for **two codes in the same run**: the login code first, then a device
+step-up code when the importer enrolls this host as a device. Answer both
+prompts. For automated handling, see [OTP auto-forward](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/OTP-AUTOFORWARD.md).
 
 ## Known gotchas
 
-After a successful login, the importer automatically saves Hapoalim's warm-start cookie bundle in `bank-tokens.json` and reuses it on later runs to skip SMS verification while the session remains valid.
+Hapoalim signs in through the bank's app edge. After a successful login, the
+importer saves the warm-start token in `bank-tokens.json` and reuses it on
+later runs to skip SMS verification while the session remains valid. The token
+holds the session and a device seed, so treat the file as a secret.
+
+The first run after upgrading to scraper 10.1.0 re-enrolls the device. The
+token saved by the previous scraper is a cookie session, not the new carry
+bundle, so the importer refuses it, enrolls again with two SMS codes, and
+replaces the old token automatically. Later runs skip SMS until the session
+expires or the password changes. After a password change, expect one cold
+login while a new token is published.
 
 ## See also
 
