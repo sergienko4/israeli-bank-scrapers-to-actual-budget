@@ -27,6 +27,10 @@
  * a token is not sent unless the list was read in full.
  * Nothing here logs a token or its digest, and the token sent is registered
  * with the value masker, so no other output shows it.
+ *
+ * <p>A token longer than the provider's public boundary accepts is never sent.
+ * The provider rejects it before any bank request, so a stored one is removed
+ * and a configured one earns a warning until the operator removes it.
  */
 
 import { registerSecretValues } from '../../Logger/SecretValues.js';
@@ -34,9 +38,11 @@ import type { IBankConfig } from '../../Types/Index.js';
 import type { Procedure } from '../../Types/Procedure.js';
 import { fail } from '../../Types/ProcedureHelpers.js';
 import { errorMessage } from '../../Utils/Index.js';
+import { isOversizedOtpToken, MAX_OTP_LONG_TERM_TOKEN_CHARS } from '../ProviderLimits.js';
 import type { IAuthFlowCaptureParams } from './AuthFlowCapture.js';
 import { isLoginFingerprint, NO_LOGIN, NO_TOKEN, requiresColdOtp } from './BankTokenRecords.js';
 import type { ITokenView } from './BankTokenStore.js';
+import { dropOversizedStoredToken } from './OversizedToken.js';
 import type { IRefusalView, IRefusedTokens } from './RefusedTokens.js';
 import tokenDigest from './TokenDigest.js';
 import type { WarmTokenDecision, WarmTokenSource } from './WarmTokenWatch.js';
@@ -178,6 +184,14 @@ function configuredTokenOf(params: Params): string {
  * @returns The seed, or {@link NOT_SENT}.
  */
 function sendConfigured(params: Params, seed: string): ISentToken {
+  if (isOversizedOtpToken(seed)) {
+    return refuse(
+      params,
+      `The ${configuredTokenOf(params)} is longer than the provider accepts `
+      + `(${String(MAX_OTP_LONG_TERM_TOKEN_CHARS)} characters), so it is not sent `
+      + '— remove or replace otpLongTermToken',
+    );
+  }
   if (!wasRefused(params, seed)) return send(params, 'configured', seed);
   return refuse(
     params,
@@ -274,6 +288,10 @@ function fromSeed(params: Params, view: ITokenView, seed: unknown): ISentToken {
 function fromStored(params: Params, view: ITokenView, seed: unknown): ISentToken {
   const { record } = view;
   if (record.login !== params.login) return boundElsewhere(params);
+  if (isOversizedOtpToken(record.token)) {
+    dropOversizedStoredToken(params, record.token);
+    return fromSeed(params, view, seed);
+  }
   if (!wasRefused(params, record.token)) return send(params, 'stored', record.token);
   warn(
     params,
