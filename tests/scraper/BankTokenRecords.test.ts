@@ -11,9 +11,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { IBankTokenRecord } from '../../src/Scraper/Tokens/BankTokenRecords.js';
 import {
-  isLoginFingerprint, NO_LOGIN, NO_TOKEN, readTokenRecords, toStoreRecords,
+  isLoginFingerprint, isOversizedDeviceState, isOversizedOtpToken,
+  MAX_OTP_LONG_TERM_TOKEN_CHARS, MAX_PERSISTENT_AUTH_STATE_CHARS, NO_LOGIN, NO_TOKEN,
+  readTokenRecords, toStoreRecords,
 } from '../../src/Scraper/Tokens/BankTokenRecords.js';
 import { fakeLoginFingerprint, fakeUuid } from '../helpers/factories.js';
+import { anchored, providerBundle } from '../helpers/UpstreamBundle.js';
 
 /** Capture moment used where the exact value is asserted. */
 const CAPTURED_AT = '2026-09-23T15:11:00.000Z';
@@ -212,6 +215,64 @@ describe('BankTokenRecords', () => {
       ['a digest with a trailing newline', `${'b'.repeat(64)}\n`],
     ])('refuses %s', (_label: string, login: string) => {
       expect(isLoginFingerprint(login)).toBe(false);
+    });
+  });
+
+  describe('provider length caps', () => {
+    /**
+     * Reads the provider's token cap from its installed bundle.
+     * @returns The cap in characters.
+     */
+    function providerTokenCap(): number {
+      const value = anchored(providerBundle(), /var MAX_TOKEN_LENGTH = (?<value>\d+);/u);
+      return Number(value);
+    }
+
+    /**
+     * Reads the provider's device-state cap from its installed bundle.
+     * @returns The cap in characters.
+     */
+    function providerDeviceStateCap(): number {
+      const factors = anchored(providerBundle(), /var MAX_ENCODED_CHARS = (?<value>\d+ \* \d+);/u)
+        .split(' * ')
+        .map(Number);
+      return factors.reduce((product, factor) => product * factor, 1);
+    }
+
+    it('matches the provider token cap', () => {
+      expect(MAX_OTP_LONG_TERM_TOKEN_CHARS).toBe(providerTokenCap());
+    });
+
+    it('matches the provider device-state cap', () => {
+      expect(MAX_PERSISTENT_AUTH_STATE_CHARS).toBe(providerDeviceStateCap());
+    });
+
+    describe('isOversizedOtpToken', () => {
+      it('accepts a token exactly at the cap', () => {
+        expect(isOversizedOtpToken('x'.repeat(MAX_OTP_LONG_TERM_TOKEN_CHARS))).toBe(false);
+      });
+
+      it('rejects one character over the cap', () => {
+        expect(isOversizedOtpToken('x'.repeat(MAX_OTP_LONG_TERM_TOKEN_CHARS + 1))).toBe(true);
+      });
+
+      it('accepts an ordinary token', () => {
+        expect(isOversizedOtpToken('v1.carry-bundle')).toBe(false);
+      });
+    });
+
+    describe('isOversizedDeviceState', () => {
+      it('accepts a state exactly at the cap', () => {
+        expect(isOversizedDeviceState('x'.repeat(MAX_PERSISTENT_AUTH_STATE_CHARS))).toBe(false);
+      });
+
+      it('rejects one character over the cap', () => {
+        expect(isOversizedDeviceState('x'.repeat(MAX_PERSISTENT_AUTH_STATE_CHARS + 1))).toBe(true);
+      });
+
+      it('accepts an ordinary state', () => {
+        expect(isOversizedDeviceState('v1.device-state')).toBe(false);
+      });
     });
   });
 

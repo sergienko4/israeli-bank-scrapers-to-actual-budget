@@ -113,6 +113,11 @@ it on later logins (skipping SMS for OneZero, PayBox and Hapoalim, skipping
 device re-registration for Yahav, and resuming key/biometric login for
 Visa Cal, Isracard and Amex). You do not need to set anything.
 
+For Hapoalim the saved value is a carry bundle holding the session and a
+device seed. The first run after scraper 10.1.0 refuses the older cookie
+token, enrolls the device again with two SMS codes (login and device step-up),
+and replaces it. See [Hapoalim](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/banks/hapoalim.md#known-gotchas).
+
 Pepper and the FIBI family (Beinleumi, Massad, Otsar Hahayal and Pagi) keep
 their login another way: the importer saves a bound-device or device-memory
 state in the same file, under `<bank id>-device:<entry name>` (for example
@@ -152,6 +157,11 @@ sends `otpLongTermToken`. See
   re-registers the device and saves a new device bundle; for Visa Cal, Isracard
   and Amex, the scraper falls back to its key/biometric login flow and saves
   the refreshed token.
+- **A saved value longer than the scraper accepts is removed.** The scraper
+  rejects an `otpLongTermToken` over 16,384 characters or a device state over
+  32,768 before any bank request. The importer removes such a saved value and
+  logs in cold instead. An oversized configured `otpLongTermToken` is skipped
+  with a warning until you remove or replace it.
 - **If the file is damaged or cannot be read**, the configured
   `otpLongTermToken` is not sent, because the file cannot say whose it is.
   Tokens the importer can still read from a damaged file keep working;

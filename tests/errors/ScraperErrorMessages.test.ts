@@ -188,6 +188,45 @@ describe('ScraperErrorMessages', () => {
       expect(BUDGET_SPENT_PATTERN.test('GENERIC cold login timed out')).toBe(false);
     });
   });
+
+  /**
+   * Scraper 10.1.0 validates options and credentials at its public boundary and
+   * fails before any bank request. The message names only the field, so the
+   * catch-all advice would tell the operator to check for a scraper update for
+   * a value they can correct themselves.
+   */
+  describe('pre-request boundary validation (scraper 10.1.0)', () => {
+    it.each([
+      'GENERIC otpLongTermToken exceeds 16384 characters',
+      'GENERIC persistentAuthState exceeds 32768 characters',
+      'GENERIC persistentAuthState must be a string',
+      'GENERIC Missing or malformed credentials: password, userCode',
+      'GENERIC password exceeds 256 characters',
+      'GENERIC startDate must be a valid date',
+    ])('explains %s as a config problem, not a bank fault', (errorText) => {
+      const advice = getScraperErrorAdvice(errorText);
+
+      expect(advice).toContain('rejected a credential or saved value');
+      expect(advice).toContain('No bank request was sent');
+      expect(advice).not.toContain('check for scraper updates');
+    });
+
+    it('does not fire on an ordinary GENERIC failure', () => {
+      expect(getScraperErrorAdvice('GENERIC navigation timed out'))
+        .not.toContain('rejected a credential');
+    });
+
+    it.each([
+      'startDate must be a valid date',
+      'futureMonthsToScrape must be an integer between 0 and ',
+      'persistentAuthState must be a string',
+      'persistentAuthState exceeds ',
+      'credentials must be an object',
+      'Missing or malformed credentials: ',
+    ])('still matches the wording the installed scraper sends: %s', (phrase) => {
+      expect(providerBundle()).toContain(phrase);
+    });
+  });
 });
 
 /**

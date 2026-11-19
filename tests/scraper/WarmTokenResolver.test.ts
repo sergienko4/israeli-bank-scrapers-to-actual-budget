@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ILogger } from '../../src/Logger/ILogger.js';
 import redactSecrets from '../../src/Logger/SecretRedaction.js';
 import type { IAuthFlowCaptureParams } from '../../src/Scraper/Tokens/AuthFlowCapture.js';
-import { NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
+import { MAX_OTP_LONG_TERM_TOKEN_CHARS, NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
 import type { IBankTokenStore } from '../../src/Scraper/Tokens/BankTokenStore.js';
 import type { IRefusedTokens } from '../../src/Scraper/Tokens/RefusedTokens.js';
 import tokenDigest from '../../src/Scraper/Tokens/TokenDigest.js';
@@ -31,7 +31,7 @@ import { fakeBankConfig, fakeLoginFingerprint } from '../helpers/factories.js';
 import FakeFileSystem from '../storage/FakeFileSystem.js';
 import {
   ACCOUNT_LOGIN, CAPTURED_AT, fakeToken, makeRefusals, makeStore, OWNER_ONLY, REFUSED_PATH,
-  seedRaw, seedRecords,
+  seedRaw, seedRecords, storedRecords,
 } from './BankTokenStoreFixture.js';
 
 /** The key a `oneZero` config entry resolves to. */
@@ -189,6 +189,25 @@ function linesLogged(logger: SpyLogger): LoggedLine[] {
 }
 
 /**
+ * Builds a store that reads and writes normally but cannot remove a token.
+ * @param store - Real store to delegate every other operation to.
+ * @param removeMatching - What the matching removal does; a read-only failure unless given.
+ * @returns A store whose matching removal is replaced.
+ */
+function withFailingRemoval(
+  store: IBankTokenStore,
+  removeMatching: IBankTokenStore['removeMatching'] = () => fail('read-only store'),
+): IBankTokenStore {
+  return {
+    read: (key) => store.read(key),
+    write: (key, token, login) => store.write(key, token, login),
+    remove: (key) => store.remove(key),
+    removeMatching,
+    sweepStagedLeftovers: () => store.sweepStagedLeftovers(),
+  };
+}
+
+/**
  * Builds a store whose read reports a failure, and counts its reads.
  * @param read - What `read` does.
  * @returns A store that never vouches for a token.
@@ -315,6 +334,129 @@ describe('resolveWarmToken', () => {
         'info',
         `  🔐 The stored long-term token for ${STORE_KEY} belongs to another login; logging in with an SMS`,
       ]]);
+    });
+  });
+
+  describe('with a token longer than the provider accepts', () => {
+    /**
+     * Builds a token one character over the provider's cap.
+     * @returns The oversized token.
+     */
+    function oversizedToken(): string {
+      return 'x'.repeat(MAX_OTP_LONG_TERM_TOKEN_CHARS + 1);
+    }
+
+    it('removes an oversized stored token and sends none', () => {
+      const { store, fileSystem } = makeStore();
+      seedRecords(fileSystem, {
+        [STORE_KEY]: { token: oversizedToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+      });
+
+      const { bankConfig, logger } = resolveOver(store);
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(storedRecords(fileSystem)).not.toHaveProperty(STORE_KEY);
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  The stored long-term token for ${STORE_KEY} is longer than the provider accepts `
+        + `(${String(MAX_OTP_LONG_TERM_TOKEN_CHARS)} characters), so it is removed and not sent again`,
+      ]]);
+    });
+
+    it('falls through to a configured token the provider accepts', () => {
+      const { store, fileSystem } = makeStore();
+      seedRecords(fileSystem, {
+        [STORE_KEY]: { token: oversizedToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+      });
+      const seed = fakeToken();
+
+      const { bankConfig, logger } = resolveOver(store, { seed });
+
+      expect(bankConfig.otpLongTermToken).toBe(seed);
+      expect(storedRecords(fileSystem)).not.toHaveProperty(STORE_KEY);
+      expect(linesLogged(logger)).toEqual([
+        ['info', `  🔐 Using the configured long-term token for ${STORE_KEY}`],
+        [
+          'warn',
+          `  ⚠️  The stored long-term token for ${STORE_KEY} is longer than the provider accepts `
+          + `(${String(MAX_OTP_LONG_TERM_TOKEN_CHARS)} characters), so it is removed and not sent again`,
+        ],
+      ]);
+    });
+
+    it('sends no configured token longer than the provider accepts, and warns', () => {
+      const { store } = makeStore();
+
+      const { bankConfig, logger } = resolveOver(store, { seed: oversizedToken() });
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  The configured long-term token for ${STORE_KEY} is longer than the provider accepts `
+        + `(${String(MAX_OTP_LONG_TERM_TOKEN_CHARS)} characters), so it is not sent — `
+        + 'remove or replace otpLongTermToken',
+      ]]);
+    });
+
+    it('sends a stored token exactly at the provider cap', () => {
+      const { store, fileSystem } = makeStore();
+      const stored = 'x'.repeat(MAX_OTP_LONG_TERM_TOKEN_CHARS);
+      seedRecords(fileSystem, {
+        [STORE_KEY]: { token: stored, capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+      });
+
+      const { bankConfig } = resolveOver(store);
+
+      expect(bankConfig.otpLongTermToken).toBe(stored);
+    });
+
+    it('still sends none when an oversized stored token cannot be removed, and warns', () => {
+      const { store: real, fileSystem } = makeStore();
+      seedRecords(fileSystem, {
+        [STORE_KEY]: { token: oversizedToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+      });
+
+      const { bankConfig, logger } = resolveOver(withFailingRemoval(real));
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  The stored long-term token for ${STORE_KEY} is longer than the provider accepts `
+        + `(${String(MAX_OTP_LONG_TERM_TOKEN_CHARS)} characters), so it is not sent; `
+        + 'removing it failed: read-only store',
+      ]]);
+    });
+
+    it('still sends none when removing an oversized stored token throws, and warns', () => {
+      const { store: real, fileSystem } = makeStore();
+      seedRecords(fileSystem, {
+        [STORE_KEY]: { token: oversizedToken(), capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+      });
+      const throwingRemoval: IBankTokenStore['removeMatching'] = () => {
+        throw new Error('disk vanished');
+      };
+
+      const { bankConfig, logger } = resolveOver(withFailingRemoval(real, throwingRemoval));
+
+      expect(bankConfig.otpLongTermToken).toBeUndefined();
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  The stored long-term token for ${STORE_KEY} is longer than the provider accepts `
+        + `(${String(MAX_OTP_LONG_TERM_TOKEN_CHARS)} characters), so it is not sent; `
+        + 'removing it failed: disk vanished',
+      ]]);
+    });
+
+    it('never logs the oversized token', () => {
+      const { store, fileSystem } = makeStore();
+      const oversized = oversizedToken();
+      seedRecords(fileSystem, {
+        [STORE_KEY]: { token: oversized, capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+      });
+
+      const { logger } = resolveOver(store);
+
+      expect(everythingLogged(logger)).not.toContain(oversized);
     });
   });
 

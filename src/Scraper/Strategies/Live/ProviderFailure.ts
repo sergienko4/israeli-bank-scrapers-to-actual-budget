@@ -14,26 +14,27 @@
  * @internal
  */
 
-import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
+import { type IScraperScrapingResult, ScraperErrorTypes } from '@sergienko4/israeli-bank-scrapers';
+
+import { PRE_REQUEST_VALIDATION_PATTERN } from '../../../Errors/ScraperErrorMessages.js';
 
 /**
  * Failures that another attempt cannot fix.
  *
- * These mirror the upstream `ScraperErrorTypes` string values. The enum is
- * declared but not exported as a value by the provider package, so the wire
- * strings are matched directly.
+ * These use the provider's exported `ScraperErrorTypes`, so a renamed member
+ * fails at compile time and a changed wire value follows the package.
  *
  * INVALID_OTP stays permanent here so this classifier returns it unchanged.
  * AttemptRunner then recognizes it and requests a fresh code; a blind retry
  * with the same rejected digits would defeat that flow.
  */
-const PERMANENT_ERROR_TYPES = new Set<string>([
-  'INVALID_PASSWORD',
-  'CHANGE_PASSWORD',
-  'ACCOUNT_BLOCKED',
-  'INVALID_OTP',
-  'INVALID_PHONE_NUMBER',
-  'TWO_FACTOR_RETRIEVER_MISSING',
+const PERMANENT_ERROR_TYPES: ReadonlySet<ScraperErrorTypes> = new Set<ScraperErrorTypes>([
+  ScraperErrorTypes.InvalidPassword,
+  ScraperErrorTypes.ChangePassword,
+  ScraperErrorTypes.AccountBlocked,
+  ScraperErrorTypes.InvalidOtp,
+  ScraperErrorTypes.InvalidPhoneNumber,
+  ScraperErrorTypes.TwoFactorRetrieverMissing,
 ]);
 
 /**
@@ -62,6 +63,20 @@ const TERMINAL_LANDING_MESSAGE =
  */
 function isTerminalLanding(result: IScraperScrapingResult): boolean {
   return TERMINAL_LANDING_MESSAGE.test(result.errorMessage ?? '');
+}
+
+/**
+ * Reports whether the provider refused its input before any bank request.
+ *
+ * <p>Scraper 10.1.0 validates options and credentials at its public boundary
+ * and returns `GENERIC` naming only the field. Another attempt sends the same
+ * value, so a retry cannot change the outcome.
+ * @param result - Provider result reporting the failure.
+ * @returns True for a pre-request validation failure.
+ */
+function isPreRequestValidation(result: IScraperScrapingResult): boolean {
+  if (result.success || result.errorType !== ScraperErrorTypes.Generic) return false;
+  return PRE_REQUEST_VALIDATION_PATTERN.test(result.errorMessage ?? '');
 }
 
 /**
@@ -107,8 +122,9 @@ export class RetryableProviderFailure extends Error {
 export function isRetryableProviderFailure(result: IScraperScrapingResult): boolean {
   if (result.success) return false;
   if (isTerminalLanding(result)) return false;
-  const errorType = String(result.errorType);
-  return !PERMANENT_ERROR_TYPES.has(errorType);
+  if (isPreRequestValidation(result)) return false;
+  if (result.errorType === undefined) return true;
+  return !PERMANENT_ERROR_TYPES.has(result.errorType);
 }
 
 /**

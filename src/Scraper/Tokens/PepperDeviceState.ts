@@ -10,6 +10,8 @@
  * <p>The state lives in the bank token store under its own key,
  * `pepper-device:<entry>`, bound to the login that enrolled it, so the store's
  * rules on damage, logins and secrets cover it as they cover the tokens.
+ * A state longer than the provider's public boundary accepts is removed and
+ * the attempt enrolls again, so the rejection never repeats run after run.
  *
  * <p>The provider fails a run that attaches the callback for an entry without
  * a phone number, and saving the state is its proof the device is kept. When
@@ -28,8 +30,15 @@ import { fail } from '../../Types/ProcedureHelpers.js';
 import { errorMessage } from '../../Utils/Index.js';
 import type { IAuthFlowCaptureParams } from './AuthFlowCapture.js';
 import { buildTokenStoreKey } from './AuthFlowCapture.js';
-import { isDeviceAuthBank, isLoginFingerprint, NO_TOKEN } from './BankTokenRecords.js';
-import type { IBankTokenWrite, ITokenView } from './BankTokenStore.js';
+import {
+  isDeviceAuthBank,
+  isLoginFingerprint,
+  isOversizedDeviceState,
+  MAX_PERSISTENT_AUTH_STATE_CHARS,
+  NO_TOKEN,
+} from './BankTokenRecords.js';
+import type { IBankTokenWrite, ITokenView, TokenRetirement } from './BankTokenStore.js';
+import tokenDigest from './TokenDigest.js';
 
 export { isDeviceAuthBank };
 
@@ -169,7 +178,9 @@ function enrollUnstored(params: IAuthFlowCaptureParams, view: ITokenView): IDevi
  * Resumes a stored state bound to this login, or enrolls this one instead.
  *
  * <p>A state bound to another login was enrolled before the entry's phone
- * changed, so it is not sent for this one.
+ * changed, so it is not sent for this one. A state the provider's boundary
+ * would reject as too long is removed first, so later runs do not repeat the
+ * failure, and this attempt enrolls instead.
  * @param params - Device parameters carrying the key, login and logger.
  * @param view - The entry's view of the store.
  * @returns The start the store vouches for.
@@ -184,6 +195,10 @@ function startFromView(params: IAuthFlowCaptureParams, view: ITokenView): IDevic
       `  🔐 The stored ${label} device state for ${key} belongs to another login; `
       + enrollHint(params.companyType),
     );
+    return ENROLL_START;
+  }
+  if (isOversizedDeviceState(record.token)) {
+    dropOversizedState(params, record.token);
     return ENROLL_START;
   }
   params.logger.info(`  🔐 Using the stored ${label} device state for ${key}`);
@@ -222,6 +237,48 @@ function writeState(params: IAuthFlowCaptureParams, state: string): Procedure<IB
     const label = deviceBankLabel(params.companyType);
     return fail(`Could not store the ${label} device state for ${params.storeKey}: ${detail}`);
   }
+}
+
+/**
+ * Removes one device state, turning a throw into a failure.
+ * @param params - Device parameters carrying the store and key.
+ * @param state - The stored state to remove.
+ * @returns What the entry held, or why the file could not be replaced.
+ */
+function removeState(
+  params: IAuthFlowCaptureParams, state: string,
+): Procedure<TokenRetirement> {
+  try {
+    const digest = tokenDigest(state);
+    return params.store.removeMatching(params.storeKey, digest);
+  } catch (error: unknown) {
+    const detail = errorMessage(error);
+    const label = deviceBankLabel(params.companyType);
+    return fail(`Could not remove the ${label} device state for ${params.storeKey}: ${detail}`);
+  }
+}
+
+/**
+ * Drops a stored state the provider would reject before it sends anything.
+ *
+ * <p>Leaving it in place would fail every later run the same way, so the
+ * attempt removes it and enrolls this device instead. A store that cannot
+ * remove it costs a warning, never the scrape.
+ * @param params - Device parameters carrying the store, key, login and logger.
+ * @param state - The oversized stored state.
+ * @returns True once the discard was attempted.
+ */
+function dropOversizedState(params: IAuthFlowCaptureParams, state: string): true {
+  const label = deviceBankLabel(params.companyType);
+  const reason = `The stored ${label} device state for ${params.storeKey} is longer than `
+    + `the provider accepts (${String(MAX_PERSISTENT_AUTH_STATE_CHARS)} characters)`;
+  const removed = removeState(params, state);
+  if (!removed.success) {
+    warnOf(params, `${reason}, so it is not sent; removing it failed: ${removed.message}`);
+    return true;
+  }
+  warnOf(params, `${reason}, so it is removed; ${enrollHint(params.companyType)}`);
+  return true;
 }
 
 /**

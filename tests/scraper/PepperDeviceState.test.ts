@@ -18,7 +18,10 @@ import StorageError from '../../src/Errors/StorageError.js';
 import type { ILogger } from '../../src/Logger/ILogger.js';
 import redactSecrets from '../../src/Logger/SecretRedaction.js';
 import type { IAuthFlowCaptureParams } from '../../src/Scraper/Tokens/AuthFlowCapture.js';
-import { NO_LOGIN } from '../../src/Scraper/Tokens/BankTokenRecords.js';
+import {
+  MAX_PERSISTENT_AUTH_STATE_CHARS,
+  NO_LOGIN,
+} from '../../src/Scraper/Tokens/BankTokenRecords.js';
 import type { IBankTokenStore } from '../../src/Scraper/Tokens/BankTokenStore.js';
 import type { IDeviceAuthTarget } from '../../src/Scraper/Tokens/PepperDeviceState.js';
 import {
@@ -270,6 +273,94 @@ describe('attachDeviceAuth', () => {
         'info',
         `  🔐 The stored beinleumi device state for ${fibiKey} belongs to another login; `
         + 'enrolling this device again and may ask for an SMS code',
+      ]]);
+    });
+
+    it('removes an oversized stored state, sends none, and enrolls this device', () => {
+      const { store, fileSystem } = makeStore();
+      seedRecords(fileSystem, {
+        [DEVICE_KEY]: {
+          token: 'x'.repeat(MAX_PERSISTENT_AUTH_STATE_CHARS + 1),
+          capturedAt: CAPTURED_AT,
+          login: ACCOUNT_LOGIN,
+        },
+      });
+
+      const { target, stateWasSent, logger } = attachOver(store);
+
+      expect(target).not.toHaveProperty('persistentAuthState');
+      expect(target.onPersistentAuthStateUpdate).toBeTypeOf('function');
+      expect(stateWasSent).toBe(false);
+      expect(storedRecords(fileSystem)).not.toHaveProperty(DEVICE_KEY);
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  The stored Pepper device state for ${DEVICE_KEY} is longer than the provider accepts `
+        + `(${String(MAX_PERSISTENT_AUTH_STATE_CHARS)} characters), so it is removed; `
+        + 'enrolling this device with an SMS code',
+      ]]);
+    });
+
+    it('names a FIBI bank and its conditional SMS hint when a stored FIBI state is oversized', () => {
+      const { store, fileSystem } = makeStore();
+      const fibiKey = `beinleumi-device:${ACCOUNT_KEY}`;
+      seedRecords(fileSystem, {
+        [fibiKey]: {
+          token: 'x'.repeat(MAX_PERSISTENT_AUTH_STATE_CHARS + 1),
+          capturedAt: CAPTURED_AT,
+          login: ACCOUNT_LOGIN,
+        },
+      });
+
+      const { stateWasSent, logger } = attachOver(store, { companyType: CompanyTypes.Beinleumi });
+
+      expect(stateWasSent).toBe(false);
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  The stored beinleumi device state for ${fibiKey} is longer than the provider accepts `
+        + `(${String(MAX_PERSISTENT_AUTH_STATE_CHARS)} characters), so it is removed; `
+        + 'enrolling this device again and may ask for an SMS code',
+      ]]);
+    });
+
+    it('sends a stored state exactly at the provider cap', () => {
+      const { store, fileSystem } = makeStore();
+      const state = 'x'.repeat(MAX_PERSISTENT_AUTH_STATE_CHARS);
+      seedRecords(fileSystem, {
+        [DEVICE_KEY]: { token: state, capturedAt: CAPTURED_AT, login: ACCOUNT_LOGIN },
+      });
+
+      const { target, stateWasSent } = attachOver(store);
+
+      expect(target.persistentAuthState).toBe(state);
+      expect(stateWasSent).toBe(true);
+    });
+
+    it('sends none when an oversized stored state cannot be removed, and warns', () => {
+      const { store: real, fileSystem } = makeStore();
+      seedRecords(fileSystem, {
+        [DEVICE_KEY]: {
+          token: 'x'.repeat(MAX_PERSISTENT_AUTH_STATE_CHARS + 1),
+          capturedAt: CAPTURED_AT,
+          login: ACCOUNT_LOGIN,
+        },
+      });
+      const store: IBankTokenStore = {
+        read: (key) => real.read(key),
+        write: (key, token, login) => real.write(key, token, login),
+        remove: (key) => real.remove(key),
+        removeMatching: () => fail('read-only store'),
+        sweepStagedLeftovers: () => real.sweepStagedLeftovers(),
+      };
+
+      const { target, stateWasSent, logger } = attachOver(store);
+
+      expect(target).not.toHaveProperty('persistentAuthState');
+      expect(stateWasSent).toBe(false);
+      expect(linesLogged(logger)).toEqual([[
+        'warn',
+        `  ⚠️  The stored Pepper device state for ${DEVICE_KEY} is longer than the provider accepts `
+        + `(${String(MAX_PERSISTENT_AUTH_STATE_CHARS)} characters), so it is not sent; `
+        + 'removing it failed: read-only store',
       ]]);
     });
   });
