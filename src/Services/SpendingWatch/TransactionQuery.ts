@@ -1,11 +1,11 @@
 import type api from '@actual-app/api';
 
 import { getLogger } from '../../Logger/Index.js';
+import asActualQuery, { type ActualQuery } from '../ActualQuery.js';
 import { buildStartDate } from './ThresholdEvaluator.js';
 import type { ITransactionRow } from './Types.js';
 interface ITransactionQueryResult { data?: ITransactionRow[] }
 type TransactionQueryResult = ITransactionQueryResult | null;
-type ActualQuery = Parameters<typeof api.aqlQuery>[0];
 /** Queries Actual Budget for debit transactions in the requested window.
  * @param actualApi Actual Budget API module.
  * @param maxDays widest spending-watch window in days.
@@ -23,10 +23,11 @@ export default async function queryTransactions(
  * @returns Actual AQL query object. */
 function buildDebitTransactionQuery(actualApi: typeof api, maxDays: number): ActualQuery {
   const startDate = buildStartDate(maxDays);
-  return actualApi.q('transactions')
+  const builtQuery = actualApi.q('transactions')
     .filter({ date: { $gte: startDate }, amount: { $lt: 0 } })
     .select(['date', 'imported_payee', 'amount'])
     .orderBy({ date: 'desc' });
+  return asActualQuery(builtQuery);
 }
 /** Extracts query rows while preserving the legacy no-data warning.
  * @param result Actual Budget AQL result.

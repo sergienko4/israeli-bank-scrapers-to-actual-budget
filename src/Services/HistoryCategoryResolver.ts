@@ -10,6 +10,7 @@ import { getLogger } from '../Logger/Index.js';
 import type { IResolvedCategory, Procedure } from '../Types/Index.js';
 import { fail, succeed } from '../Types/Index.js';
 import { errorMessage } from '../Utils/Index.js';
+import asActualQuery from './ActualQuery.js';
 import type { ICategoryResolver } from './ICategoryResolver.js';
 
 interface IPayeeCategory {
@@ -91,10 +92,11 @@ export default class HistoryCategoryResolver implements ICategoryResolver {
    * @returns Array of IPayeeCategory rows from the most recent transactions first.
    */
   private async queryPayeeCategories(): Promise<IPayeeCategory[]> {
-    const query = this._actualApi.q('transactions')
+    const builtQuery = this._actualApi.q('transactions')
       .filter({ category: { $ne: null } })
       .select(['imported_payee', 'category', 'date'])
       .orderBy({ date: 'desc' });
+    const query = asActualQuery(builtQuery);
     const result = await this._actualApi.aqlQuery(query);
     const data = (result as { data?: IPayeeCategory[] } | null)?.data;
     if (!data) {
