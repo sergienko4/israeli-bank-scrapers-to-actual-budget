@@ -16,6 +16,8 @@
 
 import type { IScraperScrapingResult } from '@sergienko4/israeli-bank-scrapers';
 
+import { PRE_REQUEST_VALIDATION_PATTERN } from '../../../Errors/ScraperErrorMessages.js';
+
 /**
  * Failures that another attempt cannot fix.
  *
@@ -65,6 +67,20 @@ function isTerminalLanding(result: IScraperScrapingResult): boolean {
 }
 
 /**
+ * Reports whether the provider refused its input before any bank request.
+ *
+ * <p>Scraper 10.1.0 validates options and credentials at its public boundary
+ * and returns `GENERIC` naming only the field. Another attempt sends the same
+ * value, so a retry cannot change the outcome.
+ * @param result - Provider result reporting the failure.
+ * @returns True for a pre-request validation failure.
+ */
+function isPreRequestValidation(result: IScraperScrapingResult): boolean {
+  if (result.success || String(result.errorType) !== 'GENERIC') return false;
+  return PRE_REQUEST_VALIDATION_PATTERN.test(result.errorMessage ?? '');
+}
+
+/**
  * Builds the message shown in retry logs for a provider failure.
  * @param result - Provider result reporting the failure.
  * @returns Error text from the provider, or a typed fallback.
@@ -107,6 +123,7 @@ export class RetryableProviderFailure extends Error {
 export function isRetryableProviderFailure(result: IScraperScrapingResult): boolean {
   if (result.success) return false;
   if (isTerminalLanding(result)) return false;
+  if (isPreRequestValidation(result)) return false;
   const errorType = String(result.errorType);
   return !PERMANENT_ERROR_TYPES.has(errorType);
 }

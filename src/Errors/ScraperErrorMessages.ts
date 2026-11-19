@@ -88,11 +88,44 @@ export interface IFailureSignature {
 export const BUDGET_SPENT_PATTERN = /already spent its one cold login/iu;
 
 /**
+ * Messages scraper 10.1.0 returns from its public boundary before any bank
+ * request. The message names only the field, never its value.
+ *
+ * Shared with the retry classifier, so a failure no retry can fix and the
+ * advice shown for it always match the same wording. It has no `g` flag, so
+ * `test()` keeps no state between calls.
+ */
+export const PRE_REQUEST_VALIDATION_PATTERN = new RegExp(
+  [
+    'startDate must be a valid date',
+    'futureMonthsToScrape must be an integer between 0 and 24',
+    'persistentAuthState must be a string',
+    'persistentAuthState exceeds \\d+ characters',
+    'credentials must be an object',
+    'Missing or malformed credentials: [A-Za-z_]\\w*(?:, [A-Za-z_]\\w*)*',
+    '[A-Za-z_]\\w* exceeds \\d+ characters',
+  ].join('|'),
+  'u',
+);
+
+/**
  * Upstream failures whose own message points the reader at the wrong cause.
  *
  * OCP: add a signature here rather than teaching call sites about bank quirks.
  */
 export const UPSTREAM_FAILURE_SIGNATURES: readonly IFailureSignature[] = [
+  {
+    // Scraper 10.1.0 refuses invalid options and credentials before any bank
+    // request. The catch-all GENERIC advice sends the operator looking for a
+    // scraper update for a value only they can correct.
+    pattern: PRE_REQUEST_VALIDATION_PATTERN,
+    advice: {
+      message: 'The scraper rejected a credential or saved value before contacting the bank',
+      action:
+        'Correct the field named in the message in config.json, or remove the saved token '
+        + 'or device state it names. No bank request was sent',
+    },
+  },
   {
     // israeli-bank-scrapers ends a zero-account scrape with "Re-authenticate;
     // a logged-in customer always has at least one account", which reads as a

@@ -66,6 +66,24 @@ describe('isRetryableProviderFailure', () => {
     expect(isRetryableProviderFailure(failure(errorType))).toBe(true);
   });
 
+  it.each([
+    'startDate must be a valid date',
+    'futureMonthsToScrape must be an integer between 0 and 24',
+    'persistentAuthState must be a string',
+    'persistentAuthState exceeds 32768 characters',
+    'credentials must be an object',
+    'Missing or malformed credentials: password, userCode',
+    'otpLongTermToken exceeds 16384 characters',
+    'password exceeds 256 characters',
+  ])('does not retry the pre-request validation failure %s', (message) => {
+    expect(isRetryableProviderFailure(failure('GENERIC', message))).toBe(false);
+  });
+
+  it('still retries a GENERIC message that merely mentions a credential', () => {
+    expect(isRetryableProviderFailure(failure('GENERIC', 'login failed: password was rejected')))
+      .toBe(true);
+  });
+
   it('retries an unrecognised error type rather than giving up', () => {
     expect(isRetryableProviderFailure(failure('SOMETHING_NEW'))).toBe(true);
   });
@@ -98,6 +116,11 @@ describe('throwIfRetryable', () => {
 
   it('returns a gone landing document untouched so it fails fast', () => {
     const result = failure('GENERIC', landingFailure(404));
+    expect(throwIfRetryable(result)).toBe(result);
+  });
+
+  it('returns a pre-request validation failure untouched so it fails fast', () => {
+    const result = failure('GENERIC', 'otpLongTermToken exceeds 16384 characters');
     expect(throwIfRetryable(result)).toBe(result);
   });
 
