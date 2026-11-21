@@ -116,11 +116,12 @@ SMS. If the bank accepts the new session, that run saves the replacement, and
 later runs go back to skipping the SMS.
 
 **Fix:** with `twoFactorAuth: true`, run the import once more and answer the
-code. If the cold login's fresh token also fails at `getKey`, the bank has
-changed its API rather than refused one session: every cycle then costs one
-SMS, so check for an importer or scraper update, or disable this bank until one
-is available. With `twoFactorAuth: false` the run cannot ask for a code and
-fails with `TWO_FACTOR_RETRIEVER_MISSING`.
+code. If the cold login's fresh token also fails at `getKey`, the bank may have
+changed its API; a competing login may also have replaced that session before
+`getKey`. Each cycle then costs one SMS, so check for competing logins and for
+an importer or scraper update, or disable this bank until one is available.
+With `twoFactorAuth: false` the run cannot ask for a code and fails with
+`TWO_FACTOR_RETRIEVER_MISSING`.
 
 ## "The scraper hid the real reason behind its one-SMS-login limit"
 
