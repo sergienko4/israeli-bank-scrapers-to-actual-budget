@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   BUDGET_SPENT_PATTERN,
   SCRAPER_ERROR_ADVICE,
+  WARM_SESSION_REJECTED_PATTERN,
   getScraperErrorAdvice,
 } from '../../src/Errors/ScraperErrorMessages.js';
 import { anchored, providerBundle } from '../helpers/UpstreamBundle.js';
@@ -186,6 +187,64 @@ describe('ScraperErrorMessages', () => {
     it('shares its pattern, so token retirement fires on the same wording', () => {
       expect(BUDGET_SPENT_PATTERN.test(providerBudgetMessage())).toBe(true);
       expect(BUDGET_SPENT_PATTERN.test('GENERIC cold login timed out')).toBe(false);
+    });
+  });
+
+  /**
+   * A warm login never contacts the bank, so a revoked session passes every
+   * local check and fails at the first authenticated data call. The catch-all
+   * advice would send the operator looking for a scraper update; the bank has
+   * only refused the session.
+   */
+  describe('a warm session refused at the first data call', () => {
+    const SESSION_ADVICE = 'A bank call after login was refused. '
+      + 'If this is a GENERIC failure and this run sent a long-term token, the '
+      + 'importer tries to retire it, so the next run either asks for one SMS code or '
+      + 'shows the real error; otherwise retry later and check for an update if it repeats.';
+
+    it.each([
+      'GENERIC getKey missing key material (code=404 keys=[explanation,code,name,message])',
+      'getKey missing key material (code=404 keys=[explanation,code,name,message])',
+    ])('names the refused session for %s', (errorText) => {
+      expect(getScraperErrorAdvice(errorText)).toBe(SESSION_ADVICE);
+    });
+
+    it.each([
+      'GENERIC getKey missing key material (code=500 keys=[explanation,code,name,message])',
+      'GENERIC getKey missing key material (code=n/a keys=[explanation,code,name,message])',
+      'GENERIC bootstrap HTTP 401',
+      'GENERIC bootstrap HTTP 403',
+      'GENERIC bootstrap HTTP 404',
+      'GENERIC bootstrap HTTP 4040',
+      'GENERIC POST /login HTTP 404: not found',
+      'GENERIC navigation timed out',
+    ])('keeps the catch-all advice for %s', (errorText) => {
+      const advice = getScraperErrorAdvice(errorText);
+
+      expect(advice).toContain('Scraping failed unexpectedly');
+      expect(advice).not.toContain('A bank call after login was refused');
+    });
+
+    it('shares its pattern, so token retirement fires on the same wording', () => {
+      expect(WARM_SESSION_REJECTED_PATTERN.test(
+        'getKey missing key material (code=404 keys=[explanation,code,name,message])',
+      )).toBe(true);
+      expect(WARM_SESSION_REJECTED_PATTERN.test('getKey missing key material (code=500 keys=[])')).toBe(false);
+      expect(WARM_SESSION_REJECTED_PATTERN.test('bootstrap HTTP 404')).toBe(false);
+      expect(WARM_SESSION_REJECTED_PATTERN.test('GENERIC navigation timed out')).toBe(false);
+    });
+
+    it('matches the wording the installed scraper sends', () => {
+      const template = anchored(providerBundle(), /`(?<value>getKey missing key material \(\$\{shape\}\))`/u);
+      const shape = anchored(providerBundle(), /`(?<value>code=\$\{code\} keys=\[\$\{keys\}\])`/u);
+      const body = shape.replace('${code}', '404').replace('${keys}', 'explanation,code,name,message');
+      const message = template.replace('${shape}', body);
+
+      expect(message).toBe(
+        'getKey missing key material (code=404 keys=[explanation,code,name,message])',
+      );
+      expect(WARM_SESSION_REJECTED_PATTERN.test(message)).toBe(true);
+      expect(WARM_SESSION_REJECTED_PATTERN.test(message.replace('code=404', 'code=500'))).toBe(false);
     });
   });
 

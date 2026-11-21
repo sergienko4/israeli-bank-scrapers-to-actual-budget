@@ -20,6 +20,11 @@
  *       (`otp/prepare` 429). Upstream then tries a second cold login when the
  *       credentials carry a token, so the budget failure hides the 429; with
  *       no token the 429 itself is reported;</li>
+ *   <li>a case can make a warmed session fail at its first data call, after
+ *       the login callback, as PayBox answers a revoked session at
+ *       `getKey`;</li>
+ *   <li>a case can make every published token a new string that maps to the
+ *       same session, as PayBox's `v1.` envelope does on every warm login;</li>
  *   <li>a warm login opens the account the token belongs to, whatever login
  *       sent it, because a Pepper or PayBox token logs in by itself;</li>
  *   <li>like upstream, it reports the token it holds through
@@ -95,6 +100,19 @@ export interface IFakeApiDirectBank {
    * @returns Nothing.
    */
   readonly refuseCodeRequests: (times?: number) => void;
+  /**
+   * Fails the next warmed session at its first data call, after the login
+   * callback, as PayBox answers a revoked session at `getKey`.
+   * @param message - The `GENERIC` failure upstream reports.
+   * @returns Nothing.
+   */
+  readonly refuseNextWarmDataCall: (message: string) => void;
+  /**
+   * Re-wraps every token the login callback publishes into a new string that
+   * maps to the same session, as PayBox does on every warm login.
+   * @returns Nothing.
+   */
+  readonly rewrapPublishedTokens: () => void;
 }
 
 /** A logged-in session: whose account it is, and the token the bank now honours for it. */
@@ -120,6 +138,12 @@ interface IBankState {
   readonly codeRejections: { left: number };
   /** How many coming cold logins the bank refuses to send an SMS code for. */
   readonly codeRequestRefusals: { left: number };
+  /** Failures the next warmed sessions hit at their first data call, in order. */
+  readonly warmDataCallRefusals: string[];
+  /** Whether a published token is re-wrapped into a new string for the same session. */
+  shouldRewrap: boolean;
+  /** How many tokens have been re-wrapped. */
+  wrapCount: number;
 }
 
 /** What a cold login answers when the bank rejects its SMS code. */
@@ -311,14 +335,35 @@ function refused(errorType: string, errorMessage: string): IScraperScrapingResul
 }
 
 /**
+ * Names the token the login callback publishes for a session.
+ *
+ * <p>PayBox re-wraps the same session into a new `v1.` envelope on every warm
+ * login, so the published string differs from the one the attempt sent while
+ * both map to one account. A case opts into that shape.
+ * @param state - The bank's memory.
+ * @param session - The logged-in session.
+ * @returns The token the callback publishes.
+ */
+function publishedToken(state: IBankState, session: ISession): string {
+  if (!state.shouldRewrap) return session.token;
+  state.wrapCount += 1;
+  const token = `${session.token}.rewrap${String(state.wrapCount)}`;
+  state.ownerOf.set(token, session.account);
+  state.latestOf.set(session.account, token);
+  state.minted.push(token);
+  return token;
+}
+
+/**
  * Builds the result of a scrape of one account.
  * @param session - The logged-in session.
- * @returns A successful scrape of the session's account, carrying its token.
+ * @param published - The token the login callback published.
+ * @returns A successful scrape of the session's account, carrying that token.
  */
-function scrapeOf(session: ISession): IScraperScrapingResult {
+function scrapeOf(session: ISession, published: string): IScraperScrapingResult {
   const txns = fakeBankTransactions(2, { date: new Date().toISOString() });
   const account = fakeCanonicalAccount({ accountNumber: accountNumberOf(session.account), txns });
-  return { success: true, accounts: [account], persistentOtpToken: session.token } as IScraperScrapingResult;
+  return { success: true, accounts: [account], persistentOtpToken: published } as IScraperScrapingResult;
 }
 
 /**
@@ -336,10 +381,15 @@ async function scrape(
   if (options.companyId !== state.bank.companyType) return refused('GENERIC', 'another bank\'s scraper');
   const account = customerOf(state, credentials);
   if (account === undefined) return refused('INVALID_PASSWORD', 'unknown login');
-  const session = warmSession(state, token) ?? await coldSession(state, credentials, account);
+  const warm = warmSession(state, token);
+  const session = warm ?? await coldSession(state, credentials, account);
   if (session === undefined || typeof session === 'string') return coldFailure(state, token, session);
-  await options.onAuthFlowComplete?.({ longTermToken: session.token, bearer: `bearer-${fakeUuid()}` });
-  return scrapeOf(session);
+  const published = publishedToken(state, session);
+  await options.onAuthFlowComplete?.({ longTermToken: published, bearer: `bearer-${fakeUuid()}` });
+  if (warm !== undefined && state.warmDataCallRefusals.length > 0) {
+    return refused('GENERIC', state.warmDataCallRefusals.shift() ?? '');
+  }
+  return scrapeOf(session, published);
 }
 
 /**
@@ -435,6 +485,17 @@ function controlsOf(state: IBankState): IFakeApiDirectBank {
      * @returns Nothing.
      */
     refuseCodeRequests: (times = Number.POSITIVE_INFINITY): void => { state.codeRequestRefusals.left += times; },
+    /**
+     * Fails the next warmed session at its first data call.
+     * @param message - The `GENERIC` failure upstream reports.
+     * @returns Nothing.
+     */
+    refuseNextWarmDataCall: (message): void => { state.warmDataCallRefusals.push(message); },
+    /**
+     * Re-wraps every token the login callback publishes into a new string.
+     * @returns Nothing.
+     */
+    rewrapPublishedTokens: (): void => { state.shouldRewrap = true; },
   };
 }
 
@@ -448,6 +509,7 @@ export function openApiDirectBank(createScraper: Mock, bank: IApiDirectBank): IF
   const state: IBankState = {
     bank, sent: [], minted: [], customers: new Map(), ownerOf: new Map(), latestOf: new Map(),
     clock: { now: Math.floor(Date.now() / 1000) }, codeRejections: { left: 0 }, codeRequestRefusals: { left: 0 },
+    warmDataCallRefusals: [], shouldRewrap: false, wrapCount: 0,
   };
   createScraper.mockImplementation((options: ScraperOptions) => ({
     /**

@@ -71,6 +71,12 @@ export interface IInitializedLiveScrape {
   readonly tokenWatch: IWarmTokenWatch;
   /** Whether Pepper's stored device state was sent, so a refusal can remove it. */
   readonly deviceWatch: IDeviceStateWatch;
+  /**
+   * The token the login callback published most recently, or an empty string.
+   * PayBox re-wraps a warm session into a new string, so this can differ from
+   * the token the attempt sent while unwrapping to the same session.
+   */
+  readonly latestCapturedToken: () => string;
 }
 
 /** Timeout wrapper input bundle for one provider scrape invocation. */
