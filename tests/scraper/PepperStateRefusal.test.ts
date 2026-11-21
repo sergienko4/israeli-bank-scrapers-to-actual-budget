@@ -494,7 +494,8 @@ describe('the upstream wording the refusal rule reads', () => {
 
   it('words a non-2xx step answer as `<step.name> HTTP <status>`, so a login refusal removes the state', () => {
     expect(bundle).toContain('if (status.length > 0) return `HTTP ${status}`;');
-    expect(bundle).toContain('return { ...failure, errorType, errorMessage: `${step.name} ${detail}` };');
+    expect(bundle).toContain('const errorType = typeByStatus(step, failure);');
+    expect(bundle).toContain('errorMessage: `${step.name} ${detail}`');
     expect(removesOn(sanitisedStepFailure(LOGIN_STEP, '401'))).toBe(true);
     expect(removesOn(sanitisedStepFailure(LOGIN_STEP, '403'))).toBe(true);
     expect(removesOn(sanitisedStepFailure(ASSERT_STEP, '401'))).toBe(false);
