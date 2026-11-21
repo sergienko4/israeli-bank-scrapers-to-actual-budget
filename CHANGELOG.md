@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.45.5](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.45.4...v1.45.5) (2026-11-21)
+
+
+### Fixed
+
+* **scraper:** retire a token refused at getKey ([#924](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/issues/924)) ([bcaced2](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/commit/bcaced27e6b5204e00b85de067d9e7fe2471c688))
+
 ## [1.45.4](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/compare/v1.45.3...v1.45.4) (2026-11-21)
 
 
