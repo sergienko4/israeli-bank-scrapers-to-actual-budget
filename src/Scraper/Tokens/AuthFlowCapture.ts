@@ -63,6 +63,17 @@ export interface IAuthFlowCaptureParams {
   readonly login: string;
   readonly store: IBankTokenStore;
   readonly logger: ILogger;
+  /**
+   * Receives each token the provider publishes, before the store sees it.
+   *
+   * <p>PayBox publishes a fresh `v1.` envelope for the same session on every
+   * warm login, so a token's published string can differ from the one the
+   * attempt sent. The attempt runner uses this to retire the stored copy when
+   * the bank refuses that session.
+   * @param token - The token the provider published.
+   * @returns True once the capture sink has it.
+   */
+  readonly onCaptured?: (token: string) => boolean;
 }
 
 /**
@@ -117,6 +128,7 @@ function warnOf(params: IAuthFlowCaptureParams, message: string): false {
  * @returns True when the file now holds a token it did not hold before.
  */
 function persistToken(token: string, params: IAuthFlowCaptureParams): boolean {
+  if (token.length > 0) params.onCaptured?.(token);
   try {
     const result = params.store.write(params.storeKey, token, params.login);
     if (!result.success) return warnOf(params, result.message);

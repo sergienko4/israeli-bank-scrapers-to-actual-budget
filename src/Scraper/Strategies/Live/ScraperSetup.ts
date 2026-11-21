@@ -10,7 +10,7 @@ import type { IAuthFlowCaptureParams } from '../../Tokens/AuthFlowCapture.js';
 import {
   attachAuthFlowCapture, buildTokenStoreKey, isApiDirectBank,
 } from '../../Tokens/AuthFlowCapture.js';
-import { NO_LOGIN } from '../../Tokens/BankTokenRecords.js';
+import { NO_LOGIN, NO_TOKEN } from '../../Tokens/BankTokenRecords.js';
 import loginFingerprint from '../../Tokens/LoginFingerprint.js';
 import { attachDeviceAuth } from '../../Tokens/PepperDeviceState.js';
 import type { AttemptLogin } from './AttemptLogin.js';
@@ -50,10 +50,46 @@ export function initScrape(deps: LiveDeps, scrapeOpts: LiveOpts): IInitializedLi
   const retriever = resolveOtpRetriever(deps, scrapeOpts);
   const options = buildScraperOptions(scrapeOpts, retriever);
   const captureParams = buildTokenCaptureParams(deps, scrapeOpts);
-  const hooks = attachLoginHooks(options, captureParams, { scrapeOpts, retriever });
+  const captured = captureSinkOf(captureParams);
+  const hooks = attachLoginHooks(options, captured.params, { scrapeOpts, retriever });
   const scraper = prepareScraper(scrapeOpts, options);
-  const login = attemptLoginOf(deps, { scrapeOpts, retriever }, captureParams);
-  return { scraper, ...login, ...hooks };
+  const login = attemptLoginOf(deps, { scrapeOpts, retriever }, captured.params);
+  return { scraper, ...login, ...hooks, latestCapturedToken: captured.latest };
+}
+
+/** One attempt's token capture: its parameters, and the last token they saw. */
+interface ICaptureSink {
+  readonly params: IAuthFlowCaptureParams;
+  /** The token the provider published most recently, or {@link NO_TOKEN}. */
+  readonly latest: () => string;
+}
+
+/**
+ * Adds the attempt's capture sink to its token parameters.
+ *
+ * <p>The callback and the attempt runner share one object, so the runner can
+ * retire the published envelope even when a warm login re-wrapped the session
+ * into a different string.
+ * @param params - Account key, login, store and logger for this attempt.
+ * @returns The same parameters plus the sink, and a reader for the last token.
+ */
+function captureSinkOf(params: IAuthFlowCaptureParams): ICaptureSink {
+  let latest: string = NO_TOKEN;
+  /**
+   * Records the token the provider just published.
+   * @param token - The published token.
+   * @returns True once recorded.
+   */
+  const remember = (token: string): boolean => {
+    latest = token;
+    return true;
+  };
+  /**
+   * Reads the last published token.
+   * @returns The token, or an empty string before the first capture.
+   */
+  const readLatest = (): string => latest;
+  return { params: { ...params, onCaptured: remember }, latest: readLatest };
 }
 
 /** The attempt a login hook is attached for: its options and its OTP retriever. */

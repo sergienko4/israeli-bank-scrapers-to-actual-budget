@@ -88,6 +88,28 @@ export interface IFailureSignature {
 export const BUDGET_SPENT_PATTERN = /already spent its one cold login/iu;
 
 /**
+ * A business-level refusal of the session a warm login sent.
+ *
+ * <p>A warm login is resolved entirely from the saved token, so the provider
+ * cannot see that the bank has already revoked the session. PayBox answers its
+ * `getKey` key exchange with a body carrying `code: 404`, which upstream
+ * reports as `GENERIC` with "getKey missing key material (code=404 …)". Every
+ * later run sends the same token and fails the same way, so the importer
+ * retires it.
+ *
+ * <p>An HTTP-level 404 is deliberately absent: it means the endpoint is gone
+ * or a proxy refused it, which no stored token can cause. A 401 or 403 is
+ * absent too: upstream treats those as an expired session and recovers with a
+ * cold login itself.
+ *
+ * <p>Shared with token retirement, so the retirement decision and the advice
+ * shown to the operator always match the same wording. It has no `g` flag, so
+ * `test()` keeps no state between calls.
+ */
+export const WARM_SESSION_REJECTED_PATTERN =
+  /getKey missing key material \(code=404\b/iu;
+
+/**
  * Messages scraper 10.1.0 returns from its public boundary before any bank
  * request. The message names only the field, never its value.
  *
@@ -169,6 +191,21 @@ export const UPSTREAM_FAILURE_SIGNATURES: readonly IFailureSignature[] = [
         + 'next run logs in without it and either asks for one SMS code or shows the real '
         + 'reason. If this repeats, remove otpLongTermToken for this bank and keep '
         + 'twoFactorAuth on',
+    },
+  },
+  {
+    // A warm login never contacts the bank, so a session the bank revoked
+    // locally passes every check and fails at the first authenticated data
+    // call. Replaying the token cannot help; retiring it lets the next run log
+    // in cold and mint a replacement. The wording is conditional because the
+    // lookup also sees a cold run that never sent a token, and a non-GENERIC
+    // failure whose text quotes the same wording.
+    pattern: WARM_SESSION_REJECTED_PATTERN,
+    advice: {
+      message: 'A bank call after login was refused',
+      action: 'If this is a GENERIC failure and this run sent a long-term token, the '
+        + 'importer tries to retire it, so the next run either asks for one SMS code or '
+        + 'shows the real error; otherwise retry later and check for an update if it repeats',
     },
   },
 ];

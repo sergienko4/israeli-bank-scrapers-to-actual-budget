@@ -65,6 +65,10 @@ interface IBrokenStore {
 /** What upstream returns when a cold login is due and the credentials carry no SMS code retriever. */
 const NO_RETRIEVER = { success: false, errorType: 'TWO_FACTOR_RETRIEVER_MISSING' };
 
+/** What upstream reports when PayBox refuses a warmed session at its key exchange. */
+const PAYBOX_KEY_REJECTED = 'getKey missing key material '
+  + '(code=404 keys=[explanation,code,name,message])';
+
 /**
  * How a run ends when the cold login after an expired token fails.
  *
@@ -290,6 +294,98 @@ describe.each(LONG_TERM_TOKEN_BANKS)('E2E: long-term token replay, $name', (row:
 
     expect([cold, warm, moved].map((run) => run.smsCount)).toEqual([1, 0, 1]);
     expect([cold, warm, moved].flatMap(notAcceptedWarnings)).toEqual([]);
+  });
+
+  /**
+   * A warm login never contacts the bank, so a session the bank has revoked
+   * passes every local check and fails at the first authenticated data call.
+   * Upstream reports PayBox's answer as `getKey missing key material`, which
+   * is not the one-login-budget wording. Sending the same token again fails
+   * identically, so the run that hits it must retire the token.
+   */
+  describe('a warm session rejected at its first data call', () => {
+    it('retires the stored token, then logs in with one SMS and warms with its replacement', async () => {
+      const entry = bank.customer();
+      const first = await importOnce(FIRST, entry);
+      bank.refuseNextWarmDataCall(PAYBOX_KEY_REJECTED);
+
+      const refused = await importOnce(FIRST, entry);
+      const cold = await importOnce(FIRST, entry);
+      const warm = await importOnce(FIRST, entry);
+
+      expect(refused.result).toMatchObject({
+        success: false, errorType: 'GENERIC', errorMessage: expect.stringContaining('getKey missing key material'),
+      });
+      expect([refused.smsCount, cold.smsCount, warm.smsCount]).toEqual([0, 1, 0]);
+      expect(bank.sent).toEqual([undefined, bank.minted[0], undefined, bank.minted[1]]);
+      expect(bank.minted).toHaveLength(2);
+      expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[1]);
+      expect(importedAccount(warm)).toBe(accountNumberFor(entry));
+      expect(said(refused.logger.warn)).toContain(`The stored long-term token for ${keyOf(FIRST)} `
+        + 'was not accepted; it is retired, so the next run logs in without it');
+      expect(readFileSync(refusedPath(), 'utf8')).not.toContain(bank.minted[0]);
+      expect(JSON.parse(readFileSync(refusedPath(), 'utf8'))[keyOf(FIRST)]).toEqual([tokenDigest(bank.minted[0])]);
+
+      const logged = [first, refused, cold, warm].map((run) => everythingLogged(run.logger)).join('\n');
+      for (const token of bank.minted) {
+        expect(logged).not.toContain(token);
+        expect(logged).not.toContain(tokenDigest(token));
+      }
+    });
+
+    it('removes a refused configured token the warm login had just persisted', async () => {
+      const entry = bank.customer();
+      const configured = bank.mintElsewhere(entry);
+      bank.refuseNextWarmDataCall(PAYBOX_KEY_REJECTED);
+
+      const refused = await importOnce(FIRST, { ...entry, otpLongTermToken: configured });
+      const afterRefusal = storedTokens(store.tokensPath)[keyOf(FIRST)];
+      const cold = await importOnce(FIRST, { ...entry, otpLongTermToken: configured });
+      const warm = await importOnce(FIRST, { ...entry, otpLongTermToken: configured });
+
+      expect(afterRefusal).toBeUndefined();
+      expect([refused.smsCount, cold.smsCount, warm.smsCount]).toEqual([0, 1, 0]);
+      expect(bank.sent).toEqual([configured, undefined, bank.minted[1]]);
+      expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[1]);
+      expect(said(refused.logger.warn)).toContain(`The configured long-term token for ${keyOf(FIRST)} `
+        + 'was not accepted; it is retired, so the next run logs in without it');
+      expect(JSON.parse(readFileSync(refusedPath(), 'utf8'))[keyOf(FIRST)]).toEqual([tokenDigest(configured)]);
+
+      const logged = [refused, cold, warm].map((run) => everythingLogged(run.logger)).join('\n');
+      for (const token of bank.minted) {
+        expect(logged).not.toContain(token);
+        expect(logged).not.toContain(tokenDigest(token));
+      }
+    });
+
+    it('removes the re-wrapped copy of the same refused session', async () => {
+      const entry = bank.customer();
+      bank.rewrapPublishedTokens();
+      await importOnce(FIRST, entry);
+      bank.refuseNextWarmDataCall(PAYBOX_KEY_REJECTED);
+
+      const refused = await importOnce(FIRST, entry);
+      expect(storedTokens(store.tokensPath)[keyOf(FIRST)]).toBeUndefined();
+
+      const cold = await importOnce(FIRST, entry);
+      const warm = await importOnce(FIRST, entry);
+
+      expect([refused.smsCount, cold.smsCount, warm.smsCount]).toEqual([0, 1, 0]);
+      expect(importedAccount(warm)).toBe(accountNumberFor(entry));
+      expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted.at(-1));
+    });
+
+    it('does not retire the token while the bank still accepts it', async () => {
+      const entry = bank.customer();
+      await importOnce(FIRST, entry);
+
+      const warm = await importOnce(FIRST, entry);
+
+      expect(warm.smsCount).toBe(0);
+      expect(bank.sent).toEqual([undefined, bank.minted[0]]);
+      expect(existsSync(refusedPath())).toBe(false);
+      expect(storedTokens(store.tokensPath)[keyOf(FIRST)]?.token).toBe(bank.minted[0]);
+    });
   });
 
   /**

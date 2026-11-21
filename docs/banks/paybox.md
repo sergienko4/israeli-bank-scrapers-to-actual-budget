@@ -70,8 +70,9 @@ never re-sent. Run the import again for a fresh one.
 - `twoFactorAuth: true` is **always required** on first login.
 - PayBox uses the API-direct path — there is no browser session, so `clearSession` and Camoufox-related settings have no effect.
 - The `phoneNumber` must be the one registered with PayBox; the bank rejects unknown numbers with an authentication error.
-- Leave `otpLongTermToken` as an **empty string** on first login. Do **not** insert placeholder text — the importer treats any non-empty value as a warm-start token; if it is invalid, the upstream library falls back to a cold (OTP) login, which the importer now correctly handles by always attaching the OTP retriever.
+- Leave `otpLongTermToken` as an **empty string** on first login. Do **not** insert placeholder text — the importer treats any non-empty value as a warm-start token. An expired or malformed token is rejected locally during the warm login, so the run falls back to a cold SMS login. A token the bank has revoked but that still looks unexpired is only detected at the first bank call (`getKey missing key material`); the importer then retires it and the next run logs in cold. The OTP retriever is attached to every API-direct attempt, so both paths can ask for the SMS code.
 - Production crash signature `POST /phoneValidate 400 {"errors":"Validation Error"}` indicates the `phoneNumber` was sent in an unsupported form (e.g. raw `+972…` slipped past upstream's international validator). The current importer prevents this by normalising at the credential boundary; if you still hit it, check that your `phoneNumber` contains only digits / `+` / `-` / spaces — no letters or extension suffixes.
+- `getKey missing key material (code=404 …)` means PayBox no longer recognises the saved session: the token logged in warm, so there was no bank call to reject it until the scrape's first request. The importer retires the token, and the next run logs in with one SMS and saves a replacement. See [Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md#paybox-fails-with-getkey-missing-key-material).
 
 ## See also
 

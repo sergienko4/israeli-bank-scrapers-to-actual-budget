@@ -89,6 +89,39 @@ it does not ask again. Other banks still ask for a fresh code in the same run.
 
 **Fix:** run the import again and enter the new code.
 
+## PayBox fails with `getKey missing key material`
+
+**Symptom:** a PayBox import fails with
+`GENERIC — getKey missing key material (code=404 keys=[explanation,code,name,message])`,
+often right after `Using the stored long-term token`. Running again fails the
+same way and asks for no SMS.
+
+**Cause:** the saved long-term token logged in warm, so neither the importer nor
+the scraper contacted the bank until the scrape's first request (`getKey`).
+PayBox answered that request with a business-level 404, so it returned no key
+material for the session — for example because a newer login replaced it. The
+token still looks unexpired locally, and the scraper treats only a
+401 or 403 as an expired session, so it never falls back for this refusal and
+every run replays the same dead token.
+
+**What the importer does:** it retires the token (it logs
+`The stored long-term token for <key> was not accepted; it is retired, so the
+next run logs in without it`, or `configured` when the value came from
+`otpLongTermToken`), records it in `bank-tokens.refused.json`, and removes its
+stored copy when `bank-tokens.json` still holds it. That includes the
+re-wrapped envelope the failed warm login published, which carries the same
+session under a different string. The next run sends no stored token; it may
+still send a different configured `otpLongTermToken`, or logs in cold with one
+SMS. If the bank accepts the new session, that run saves the replacement, and
+later runs go back to skipping the SMS.
+
+**Fix:** with `twoFactorAuth: true`, run the import once more and answer the
+code. If the cold login's fresh token also fails at `getKey`, the bank has
+changed its API rather than refused one session: every cycle then costs one
+SMS, so check for an importer or scraper update, or disable this bank until one
+is available. With `twoFactorAuth: false` the run cannot ask for a code and
+fails with `TWO_FACTOR_RETRIEVER_MISSING`.
+
 ## "The scraper hid the real reason behind its one-SMS-login limit"
 
 **Symptom:** a OneZero or PayBox import fails with `already spent its one

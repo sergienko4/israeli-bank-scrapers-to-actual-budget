@@ -11,7 +11,7 @@ import { DEFAULT_RESILIENCE_CONFIG } from '../../../Types/Index.js';
 import { captureResultToken, isApiDirectBank, sweepTokenLeftovers } from '../../Tokens/AuthFlowCapture.js';
 import type { IDeviceStateWatch } from '../../Tokens/PepperDeviceState.js';
 import forgetRefusedState from '../../Tokens/PepperStateRefusal.js';
-import retireRefusedToken from '../../Tokens/TokenRefusal.js';
+import retireRefusedToken, { retireCapturedToken } from '../../Tokens/TokenRefusal.js';
 import type { IWarmTokenWatch } from '../../Tokens/WarmTokenWatch.js';
 import { warnIfNotAccepted } from '../../Tokens/WarmTokenWatch.js';
 import type { IBankScrapeStrategyOpts } from '../IBankScrapeStrategy.js';
@@ -125,12 +125,21 @@ async function handleOtpReject(
 async function executeAttempt(
   deps: ILiveScrapeDependencies, scrapeOpts: IResolvedLiveOpts,
 ): Promise<IScraperScrapingResult> {
-  const { hasTokenCapture, tokenWatch, deviceWatch, ...prepared } = initScrape(deps, scrapeOpts);
-  const retryStrategy = pickRetryStrategy(deps, scrapeOpts.bankConfig, hasTokenCapture);
-  const label = `Scraping ${scrapeOpts.bankId}`;
-  const params = { deps, ...prepared, logger: scrapeOpts.logger, label };
-  const result = await runRetries(retryStrategy, params);
-  return settleToken(deps, scrapeOpts, { result, tokenWatch, deviceWatch });
+  const { hasTokenCapture, tokenWatch, deviceWatch, latestCapturedToken, ...prepared } =
+    initScrape(deps, scrapeOpts);
+  const retry = pickRetryStrategy(deps, scrapeOpts.bankConfig, hasTokenCapture);
+  const params = { deps, ...prepared, logger: scrapeOpts.logger, label: labelOf(scrapeOpts) };
+  const result = await runRetries(retry, params);
+  return settleToken(deps, scrapeOpts, { result, tokenWatch, deviceWatch, latestCapturedToken });
+}
+
+/**
+ * Names one attempt in retry logs.
+ * @param scrapeOpts - Resolved scrape options for the current bank.
+ * @returns The attempt label.
+ */
+function labelOf(scrapeOpts: IResolvedLiveOpts): string {
+  return `Scraping ${scrapeOpts.bankId}`;
 }
 
 /** An attempt's provider result, and the watches on the token and device state it sent. */
@@ -138,16 +147,18 @@ interface IFinishedAttempt {
   readonly result: IScraperScrapingResult;
   readonly tokenWatch: IWarmTokenWatch;
   readonly deviceWatch: IDeviceStateWatch;
+  readonly latestCapturedToken: () => string;
 }
 
 /**
  * Acts on what an attempt's result says about its token.
  *
  * Warns when a sent token did not log in and the run could not ask for a
- * code, removes a Pepper device state the result proves refused, retires a
- * long-term token that left upstream needing a second cold login, then stores
- * any token the result carried. Retiring first is safe: it removes a stored
- * token only while the store still holds it, and that failure carries none.
+ * code, removes a Pepper device state the result proves refused, stores any
+ * token the result carried, and only then retires a long-term token that
+ * cannot be used again. Storing first keeps a failed result that carries the
+ * same token from writing it back after retirement; retirement still removes
+ * only the exact digest it was given, so a replacement is kept.
  * @param deps - Strategy dependencies exposing the token stores.
  * @param scrapeOpts - Resolved scrape options for the current bank.
  * @param attempt - The attempt's result and watches.
@@ -158,8 +169,22 @@ function settleToken(
 ): IScraperScrapingResult {
   warnIfNotAccepted(attempt.tokenWatch, attempt.result);
   forgetRefusedState(attempt.deviceWatch, attempt.result);
+  const settled = keepMintedToken(deps, scrapeOpts, attempt.result);
+  retireAttemptTokens(attempt, deps);
+  return settled;
+}
+
+/**
+ * Retires the token the attempt sent and the envelope its login published.
+ * @param attempt - The attempt's result, sent-token watch and captured token.
+ * @param deps - Strategy dependencies exposing the token stores.
+ * @returns True when the captured copy was retired.
+ */
+function retireAttemptTokens(attempt: IFinishedAttempt, deps: ILiveScrapeDependencies): boolean {
   retireRefusedToken(attempt.tokenWatch, attempt.result, deps);
-  return keepMintedToken(deps, scrapeOpts, attempt.result);
+  const captured = attempt.latestCapturedToken();
+  const request = { watch: attempt.tokenWatch, captured, result: attempt.result };
+  return retireCapturedToken(request, deps);
 }
 
 /**

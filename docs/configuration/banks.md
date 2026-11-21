@@ -167,16 +167,19 @@ sends `otpLongTermToken`. See
   Tokens the importer can still read from a damaged file keep working;
   otherwise the run warns and logs in with an SMS. A damaged file is set aside
   before the next token is saved.
-- **A token that ends a run with the one-SMS-login error is retired.** When a
-  run sends a token and fails with `already spent its one cold login`, the
-  bank library has hidden the real reason, and the same token may fail the
-  same way on every run. So the importer records the token as not accepted,
-  removes it from `bank-tokens.json` if it was the saved one, and skips it
-  from then on. The next run may still send `otpLongTermToken`, if it holds a
-  different token that passes the checks above; otherwise it logs in with
-  one SMS, or shows the real error. A token that was still valid can be
-  retired too, which may cost one SMS login. See
-  [Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md#the-scraper-hid-the-real-reason-behind-its-one-sms-login-limit).
+- **A token the bank rejects is retired.** When a run sends a token and the
+  bank refuses it, the same token may fail every later run, so the importer
+  records it as not accepted, removes its stored copy when `bank-tokens.json`
+  still holds it (including the envelope the failed login re-wrapped that
+  session into), and skips it from then on. Two failures count: upstream's
+  `already spent its one cold login` (the library hid the real login failure),
+  and the PayBox `getKey missing key material` refusal from a warm session's
+  first data call. The next run may still send
+  `otpLongTermToken`, if it holds a different token that passes the checks
+  above; otherwise it logs in with one SMS, or shows the real error. A token
+  that was still valid can be retired too, which may cost one SMS login. See
+  [Troubleshooting](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md#the-scraper-hid-the-real-reason-behind-its-one-sms-login-limit)
+  and [PayBox `getKey missing key material`](https://github.com/sergienko4/israeli-bank-scrapers-to-actual-budget/blob/main/docs/troubleshooting.md#paybox-fails-with-getkey-missing-key-material).
   - The record is `bank-tokens.refused.json`, beside the token file. It holds
     a one-way digest of each retired token, never the token, and keeps the
     last 8 per entry.
@@ -223,7 +226,7 @@ the `<bank id>:<entry name>` above):
 | `Could not read the long-term token for <key>` | The file could not be read, so no token was sent; the warning names the cause. |
 | `No usable long-term token for <key>, and this run cannot ask for an SMS code` | Turn on `twoFactorAuth` for one SMS login, or restore the token file. |
 | `Could not store the long-term token for <key>` | The next run needs an SMS; check that `/app/data` is writable. |
-| `The stored long-term token for <key> was not accepted; it is retired, so the next run logs in without it` | The run failed with `already spent its one cold login` after sending the saved token. The token was recorded as retired, and its saved copy removed unless a warning before this one says otherwise; later runs skip it. The next run may still send `otpLongTermToken`, if it holds a different usable token; otherwise it asks for one SMS code, or shows the real error. |
+| `The stored long-term token for <key> was not accepted; it is retired, so the next run logs in without it` | The run sent the saved token and failed with `already spent its one cold login`, or the bank refused the warm session at the first data call (`getKey missing key material`). The token was recorded as retired, and its saved copy removed unless a warning before this one says otherwise; later runs skip it. The next run may still send `otpLongTermToken`, if it holds a different usable token; otherwise it asks for one SMS code, or shows the real error. |
 | `The configured long-term token for <key> was not accepted; it is retired, so the next run logs in without it` | As above, for `otpLongTermToken`. Later runs skip it, so remove or replace it. |
 | `The <stored or configured> long-term token for <key> was not accepted and could not be retired, so the next run may repeat this — remove otpLongTermToken` | The run could not record the token as retired; a warning before it names the cause. Check that `/app/data` is writable, and remove `otpLongTermToken`. |
 | `Could not record the refused long-term token for <key>` / `Could not remove the long-term token for <key>` | A step of retiring a token failed; the warning names the cause. The `was not accepted` warning that follows says whether the token is retired. A token that is retired but could not be removed stays in the file and is skipped. |
